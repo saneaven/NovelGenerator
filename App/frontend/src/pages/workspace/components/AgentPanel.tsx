@@ -302,9 +302,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             return filtered;
         })
     );
-    const hasBlockingSubAgentInvocations = useSubAgentRuntimeStore(
-        (state) => state.hasBlockingInvocationsForAgent(selectedAgentId ?? '')
-    );
+    const invocationsByKey = useSubAgentRuntimeStore((state) => state.invocationsByKey);
 
     const agentSessionByMessageId = useMemo(() => {
         const map: Record<string, any> = {};
@@ -532,9 +530,9 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 selectedAgentId,
                 messages: storedMessages,
                 sessions: Object.values(projectAgentSessions),
-                hasBlockingSubAgent: hasBlockingSubAgentInvocations,
+                invocationsByKey,
             }),
-        [selectedAgentId, storedMessages, projectAgentSessions, hasBlockingSubAgentInvocations]
+        [selectedAgentId, storedMessages, projectAgentSessions, invocationsByKey]
     );
 
     const sendBlockedReason = useMemo(() => {

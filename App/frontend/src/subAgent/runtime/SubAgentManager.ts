@@ -718,6 +718,54 @@ async function runTurn(invocationKey: string): Promise<void> {
   }
 }
 
+function collectInvocationTreeKeysByParentMessage(params: {
+  agentId: string;
+  parentMessageId: string;
+}): string[] {
+  const { agentId, parentMessageId } = params;
+  const runtime = useSubAgentRuntimeStore.getState();
+  const entries = Object.entries(runtime.invocationsByKey);
+  const targetMessageId = String(parentMessageId);
+  const targetAgentId = String(agentId);
+
+  const collectedKeys = new Set<string>();
+  const persistentParentIds = new Set<string>();
+
+  for (const [key, invocation] of entries) {
+    if (!invocation) continue;
+    if (invocation.parentType !== 'agent') continue;
+    if (String(invocation.parentId) !== targetAgentId) continue;
+    if (String(invocation.parentMessageId) !== targetMessageId) continue;
+
+    collectedKeys.add(key);
+    if (invocation.persistentId) {
+      persistentParentIds.add(String(invocation.persistentId));
+    }
+  }
+
+  if (collectedKeys.size === 0) return [];
+
+  let added = true;
+  while (added) {
+    added = false;
+
+    for (const [key, invocation] of entries) {
+      if (!invocation) continue;
+      if (invocation.parentType !== 'sub_agent') continue;
+      if (collectedKeys.has(key)) continue;
+      if (!persistentParentIds.has(String(invocation.parentId))) continue;
+
+      collectedKeys.add(key);
+      added = true;
+      if (invocation.persistentId) {
+        persistentParentIds.add(String(invocation.persistentId));
+      }
+    }
+  }
+
+  return Array.from(collectedKeys);
+}
+
 export const SubAgentManager = {
   async reconcileParentToolCall(invocationKey: string): Promise<void> {
     const runtime = useSubAgentRuntimeStore.getState();
@@ -735,6 +783,42 @@ export const SubAgentManager = {
     }
 
     await syncParentToolCallRunning(invocation);
+  },
+
+  /**
+   * Discard local Sub Agent runtime state rooted at an agent message.
+   * Backend persistence is cleaned by agent message delete route.
+   */
+  async discardByParentAgentMessage(params: {
+    agentId: string;
+    parentMessageId: string;
+    reason?: string;
+  }): Promise<void> {
+    const { agentId, parentMessageId, reason } = params;
+    const invocationKeys = collectInvocationTreeKeysByParentMessage({ agentId, parentMessageId });
+    if (invocationKeys.length === 0) return;
+
+    const runtime = useSubAgentRuntimeStore.getState();
+    const errorMessage = reason ?? 'Parent message deleted';
+
+    for (const key of invocationKeys) {
+      const invocation = runtime.getInvocationByKey(key);
+      if (!invocation) continue;
+
+      if (invocation.activeSessionId) {
+        useLLMSessionStore.getState().cancelSession(invocation.activeSessionId);
+      }
+
+      clearControlIntent(key);
+
+      const completion = completions.get(key);
+      if (completion) {
+        completion.reject(new Error(errorMessage));
+        completions.delete(key);
+      }
+
+      runtime.clearInvocation(key);
+    }
   },
 
   /**

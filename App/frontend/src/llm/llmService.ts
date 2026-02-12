@@ -40,6 +40,76 @@ export class BackendError extends Error {
     }
 }
 
+type StreamChunk = {
+    content: string | null;
+    tool_calls?: any[];
+    thinking?: string;
+    thinking_details?: ThinkingDetail[];
+    thinking_text?: string;
+    thinking_signature?: string;
+    usage?: TokenUsage;
+};
+
+type StreamYield = string | StreamChunk;
+
+type FrameSeparator = {
+    index: number;
+    length: number;
+};
+
+function findSSEFrameSeparator(buffer: string): FrameSeparator | null {
+    const lfIndex = buffer.indexOf("\n\n");
+    const crlfIndex = buffer.indexOf("\r\n\r\n");
+
+    if (lfIndex === -1 && crlfIndex === -1) {
+        return null;
+    }
+    if (lfIndex === -1) {
+        return { index: crlfIndex, length: 4 };
+    }
+    if (crlfIndex === -1) {
+        return { index: lfIndex, length: 2 };
+    }
+    return lfIndex < crlfIndex
+        ? { index: lfIndex, length: 2 }
+        : { index: crlfIndex, length: 4 };
+}
+
+function normalizeSSEFrame(frame: string): string {
+    return frame.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function isSSEErrorFrame(frame: string): boolean {
+    const lines = normalizeSSEFrame(frame).split("\n");
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("event:")) {
+            return trimmed.slice(6).trim() === "error";
+        }
+    }
+    return false;
+}
+
+function extractSSEDataLines(frame: string): string[] {
+    const lines = normalizeSSEFrame(frame).split("\n");
+    const dataLines: string[] = [];
+
+    for (const rawLine of lines) {
+        const line = rawLine.trimStart();
+        if (!line.startsWith("data:")) {
+            continue;
+        }
+
+        let payload = line.slice(5);
+        if (payload.startsWith(" ")) {
+            payload = payload.slice(1);
+        }
+        dataLines.push(payload);
+    }
+
+    return dataLines;
+}
+
 /**
  * Stream LLM completions from any provider
  */
@@ -62,7 +132,7 @@ export async function* streamLLM(
         retryConfig?: RetryConfig;
         native_tool_call?: boolean;
     }
-): AsyncGenerator<string | { content: string | null; tool_calls?: any[]; thinking?: string; thinking_details?: ThinkingDetail[]; thinking_text?: string; thinking_signature?: string; usage?: TokenUsage }>
+): AsyncGenerator<StreamYield>
 {
     const endpoint = `${API_BASE}/chat/completions/${provider}/stream`;
 
@@ -176,7 +246,132 @@ export async function* streamLLM(
             // 3. SSE stream processing (INSIDE retry loop)
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
-            let receivedProperTermination = false;
+            let receivedDoneSignal = false;
+            let receivedFinishReason = false;
+
+            const processFrame = function* (rawFrame: string): Generator<StreamYield, void, unknown> {
+                const frame = normalizeSSEFrame(rawFrame).trimEnd();
+                if (!frame || frame.startsWith(":")) {
+                    return;
+                }
+
+                // Track last frame for debugging
+                lastFrame = frame;
+
+                const dataLines = extractSSEDataLines(frame);
+
+                // Handle SSE error events - extract status code
+                if (isSSEErrorFrame(frame)) {
+                    const payload = dataLines.join("\n").trim();
+                    if (payload) {
+                        try {
+                            const errorData = JSON.parse(payload);
+                            const statusCode = typeof errorData?.status === "number" ? errorData.status : null;
+                            throw new BackendError(
+                                `Backend Error: ${errorData?.message || "Unknown error"}`,
+                                statusCode
+                            );
+                        } catch (parseError) {
+                            if (parseError instanceof BackendError) {
+                                throw parseError;
+                            }
+                            throw new BackendError(`Backend Error: ${payload}`, null);
+                        }
+                    }
+                    throw new BackendError("Backend Error: Unknown error occurred", null);
+                }
+
+                for (const rawData of dataLines) {
+                    const data = rawData.trim();
+                    if (!data) {
+                        continue;
+                    }
+
+                    if (data === "[DONE]") {
+                        receivedDoneSignal = true;
+                        return;
+                    }
+
+                    try {
+                        const chunk = JSON.parse(data);
+
+                        // Handle error objects in data frames
+                        if (chunk?.error) {
+                            const errMsg = chunk.error.message || chunk.error.code || JSON.stringify(chunk.error);
+                            const statusCode = chunk.error.status || chunk.error.code || null;
+                            throw new BackendError(`Backend Error: ${errMsg}`, typeof statusCode === "number" ? statusCode : null);
+                        }
+
+                        // Handle usage information (emitted before [DONE])
+                        if (chunk?.usage) {
+                            yield {
+                                content: null,
+                                usage: chunk.usage,
+                            };
+                        }
+
+                        const delta = chunk?.choices?.[0]?.delta;
+                        const contentRaw = delta?.content;
+                        const content = typeof contentRaw === "string" ? contentRaw : undefined;
+                        const tool_calls = delta?.tool_calls;
+                        const thinking_details: ThinkingDetail[] | undefined = delta?.thinking_details;
+                        const thinking_text: string | undefined = delta?.thinking?.text;
+                        const thinking_signature: string | undefined = delta?.thinking?.signature;
+                        const hasMeta = Boolean(tool_calls || thinking_details || thinking_text || thinking_signature);
+
+                        if (hasMeta) {
+                            hasYieldedContent = true;
+                            yield {
+                                content: content ?? null,
+                                tool_calls,
+                                thinking_details,
+                                thinking_text,
+                                thinking_signature,
+                            };
+                        } else if (content) {
+                            hasYieldedContent = true;
+                            yield content;
+                        }
+
+                        const finish = chunk?.choices?.[0]?.finish_reason;
+                        if (finish !== undefined && finish !== null) {
+                            receivedFinishReason = true;
+                        }
+                    } catch (error) {
+                        if (error instanceof BackendError) {
+                            throw error;
+                        }
+                        // If not JSON, yield as-is
+                        hasYieldedContent = true;
+                        yield data;
+                    }
+                }
+            };
+
+            const drainBufferedFrames = function* (): Generator<StreamYield, void, unknown> {
+                while (true) {
+                    const separator = findSSEFrameSeparator(streamBuffer);
+                    if (!separator) {
+                        return;
+                    }
+                    const frame = streamBuffer.slice(0, separator.index);
+                    streamBuffer = streamBuffer.slice(separator.index + separator.length);
+                    yield* processFrame(frame);
+                    if (receivedDoneSignal) {
+                        return;
+                    }
+                }
+            };
+
+            const drainTrailingFrame = function* (): Generator<StreamYield, void, unknown> {
+                if (!streamBuffer.trim()) {
+                    streamBuffer = "";
+                    return;
+                }
+                const trailingFrame = streamBuffer;
+                streamBuffer = "";
+                yield* processFrame(trailingFrame);
+            };
 
             while (true)
             {
@@ -184,116 +379,31 @@ export async function* streamLLM(
                 if (done) break;
                 streamBuffer += decoder.decode(value, { stream: true });
 
-                let sep: number;
-                while ((sep = streamBuffer.indexOf("\n\n")) !== -1)
-                {
-                    const frame = streamBuffer.slice(0, sep);
-                    streamBuffer = streamBuffer.slice(sep + 2);
+                for (const output of drainBufferedFrames()) {
+                    yield output;
+                }
 
-                    if (!frame || frame.startsWith(":")) continue;
+                if (receivedDoneSignal) {
+                    break;
+                }
+            }
 
-                    // Track last frame for debugging
-                    lastFrame = frame;
+            if (!receivedDoneSignal) {
+                streamBuffer += decoder.decode();
 
-                    // Handle SSE error events - extract status code!
-                    if (frame.startsWith("event: error"))
-                    {
-                        const dataMatch = frame.match(/data:\s*(.+)/);
-                        if (dataMatch)
-                        {
-                            try
-                            {
-                                const errorData = JSON.parse(dataMatch[1]);
-                                const statusCode = errorData.status || null;
-                                throw new BackendError(
-                                    `Backend Error: ${errorData.message || 'Unknown error'}`,
-                                    statusCode
-                                );
-                            } catch (parseError)
-                            {
-                                if (parseError instanceof BackendError) throw parseError;
-                                throw new BackendError(`Backend Error: ${dataMatch[1]}`, null);
-                            }
-                        }
-                        throw new BackendError('Backend Error: Unknown error occurred', null);
-                    }
+                for (const output of drainBufferedFrames()) {
+                    yield output;
+                }
 
-                    // Extract data: lines
-                    const dataLines = frame
-                        .split("\n")
-                        .map((l) => l.trim())
-                        .filter((l) => l.startsWith("data:"))
-                        .map((l) => l.slice(5).trim());
-
-                    for (const data of dataLines)
-                    {
-                        if (!data) continue;
-                        if (data === "[DONE]") {
-                            receivedProperTermination = true;
-                            return;
-                        }
-
-                        try
-                        {
-                            const chunk = JSON.parse(data);
-
-                            // Handle error objects in data frames
-                            if (chunk?.error) {
-                                const errMsg = chunk.error.message || chunk.error.code || JSON.stringify(chunk.error);
-                                const statusCode = chunk.error.status || chunk.error.code || null;
-                                throw new BackendError(`Backend Error: ${errMsg}`, typeof statusCode === 'number' ? statusCode : null);
-                            }
-
-                            // Handle usage information (emitted before [DONE])
-                            if (chunk?.usage) {
-                                yield {
-                                    content: null,
-                                    usage: chunk.usage,
-                                };
-                                continue;
-                            }
-
-                            const delta = chunk?.choices?.[0]?.delta;
-                            const content: string | undefined = delta?.content;
-                            const tool_calls = delta?.tool_calls;
-                            const thinking_details: ThinkingDetail[] | undefined = delta?.thinking_details;
-                            const thinking_text: string | undefined = delta?.thinking?.text;
-                            const thinking_signature: string | undefined = delta?.thinking?.signature;
-
-                            if (tool_calls || thinking_details || thinking_text || thinking_signature)
-                            {
-                                hasYieldedContent = true;
-                                yield {
-                                    content: null,
-                                    tool_calls,
-                                    thinking_details,
-                                    thinking_text,
-                                    thinking_signature,
-                                };
-                            } else if (content)
-                            {
-                                hasYieldedContent = true;
-                                yield content;
-                            }
-
-                            const finish = chunk?.choices?.[0]?.finish_reason;
-                            if (finish && finish !== null) {
-                                receivedProperTermination = true;
-                                return;
-                            }
-                        } catch (error)
-                        {
-                            if (error instanceof BackendError) throw error;
-                            // If not JSON, yield as-is
-                            hasYieldedContent = true;
-                            yield data;
-                        }
+                if (!receivedDoneSignal) {
+                    for (const output of drainTrailingFrame()) {
+                        yield output;
                     }
                 }
             }
 
             // Check if stream ended properly
-            if (!receivedProperTermination) {
+            if (!receivedDoneSignal && !receivedFinishReason) {
                 if (opts?.signal?.aborted) {
                     return;
                 }

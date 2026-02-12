@@ -31,6 +31,7 @@ type AgentSidebarSignals = {
 const RUNNING_SESSION_STATUSES = new Set(['running', 'applying']);
 const TERMINAL_SESSION_STATUSES = new Set(['success', 'error', 'cancelled']);
 const PENDING_TOOL_STATUSES = new Set(['pending', 'validating', 'processing', 'running']);
+const BLOCKING_SUB_AGENT_STATUSES = new Set(['running', 'waiting', 'paused', 'error']);
 
 function getSessionAgentId(session: AnySession): string | null {
   const agentId = (session.input as any)?.agentId;
@@ -44,6 +45,28 @@ function hasPendingToolCallsInMessages(agent: Agent): boolean {
       PENDING_TOOL_STATUSES.has(String(toolCall?.status ?? ''))
     )
   );
+}
+
+function buildParentToolCallKey(messageId: string, toolCallId: string): string {
+  return `${messageId}::${toolCallId}`;
+}
+
+function collectLiveParentToolCallKeys(agent: Agent): Set<string> {
+  const keys = new Set<string>();
+
+  for (const message of agent.messages ?? []) {
+    if (message.role !== 'assistant') continue;
+    if (!Array.isArray(message.toolCalls) || message.toolCalls.length === 0) continue;
+
+    const messageId = String(message.id);
+    for (const toolCall of message.toolCalls) {
+      const toolCallId = String(toolCall?.id ?? '');
+      if (!toolCallId) continue;
+      keys.add(buildParentToolCallKey(messageId, toolCallId));
+    }
+  }
+
+  return keys;
 }
 
 const AgentSidebar: React.FC<AgentSidebarProps> = ({
@@ -89,22 +112,26 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
   const blockingSubAgentByAgentId = useMemo(() => {
     const result: Record<string, boolean> = {};
     const agentIds = new Set(agents.map((agent) => agent.id));
+    const liveParentToolCallKeysByAgentId = new Map<string, Set<string>>();
     for (const agent of agents) {
       result[agent.id] = false;
+      liveParentToolCallKeysByAgentId.set(agent.id, collectLiveParentToolCallKeys(agent));
     }
 
     for (const invocation of Object.values(invocationsByKey)) {
       if (!invocation) continue;
       if (invocation.parentType !== 'agent') continue;
       if (!agentIds.has(invocation.parentId)) continue;
-      if (
-        invocation.status !== 'running' &&
-        invocation.status !== 'waiting' &&
-        invocation.status !== 'paused' &&
-        invocation.status !== 'error'
-      ) {
-        continue;
-      }
+      if (!BLOCKING_SUB_AGENT_STATUSES.has(invocation.status)) continue;
+
+      const liveParentKeys = liveParentToolCallKeysByAgentId.get(invocation.parentId);
+      if (!liveParentKeys || liveParentKeys.size === 0) continue;
+      const parentKey = buildParentToolCallKey(
+        String(invocation.parentMessageId),
+        String(invocation.parentToolCallId)
+      );
+      if (!liveParentKeys.has(parentKey)) continue;
+
       result[invocation.parentId] = true;
     }
 

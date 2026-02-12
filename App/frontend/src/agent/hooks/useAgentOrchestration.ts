@@ -15,7 +15,9 @@ import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings, useSettingsStore } from '../../store/settingsStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { useSubAgentRuntimeStore } from '../../store/subAgentRuntimeStore';
+import { useErrorStore } from '../../store/errorStore';
 import { AgentExecutor } from '../AgentExecutor';
+import { SubAgentManager } from '../../subAgent/runtime/SubAgentManager';
 import { AgentMemoryManager } from '../memory/AgentMemoryManager';
 import type { AgentOrchestrationConfig, AgentOrchestrationReturn, AgentHandlersReturn, ContextIdState } from './types';
 import { getSendBlockingState } from '../../toolCall/viewModel/blockingSelectors';
@@ -52,6 +54,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
   const markAgentViewed = useAgentUIStore(state => state.markAgentViewed);
   const closeSidebar = useSidebarStore(state => state.closeSidebar);
   const getObjectsMissingMainLanguage = useUnifiedObjectStore(state => state.getObjectsMissingMainLanguage);
+  const showError = useErrorStore(state => state.showError);
 
   // ============================================================================
   // Context ID management (auto-select newly created objects)
@@ -353,10 +356,28 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     const agentId = getSelectedAgentId(projectId);
     if (!agentId) return;
 
-    if (confirm('Are you sure you want to delete this message?')) {
-      deleteMessage(projectId, agentId, messageId);
-    }
-  }, [projectId, getSelectedAgentId, deleteMessage]);
+    if (!confirm('Are you sure you want to delete this message?')) return;
+
+    void (async () => {
+      try {
+        await deleteMessage(projectId, agentId, messageId);
+      } catch (error) {
+        console.error('Failed to delete message:', error);
+        showError('Delete Failed', error instanceof Error ? error.message : 'Failed to delete message.');
+        return;
+      }
+
+      try {
+        await SubAgentManager.discardByParentAgentMessage({
+          agentId,
+          parentMessageId: messageId,
+          reason: 'Parent message deleted',
+        });
+      } catch (error) {
+        console.error('Failed to discard local Sub Agent runtime state after message delete:', error);
+      }
+    })();
+  }, [projectId, getSelectedAgentId, deleteMessage, showError]);
 
   const triggerAutoContinue = useCallback(async () => {
     if (!projectId) return;
