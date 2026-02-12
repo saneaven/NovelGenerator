@@ -45,7 +45,7 @@ function getHandlerOptions(journey: Journey): HandlerOptions {
 
 function isPendingStatus(status: string | undefined): boolean {
   const normalized = (status ?? 'pending') as ToolCallStatus;
-  return normalized === 'pending' || normalized === 'validating' || normalized === 'running';
+  return normalized === 'pending' || normalized === 'validating' || normalized === 'processing' || normalized === 'running';
 }
 
 export const JourneyDetailModal: React.FC = () => {

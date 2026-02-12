@@ -1,10 +1,12 @@
 import { startLLMSession } from '../../llmSession';
+import { useAgentStore } from '../../store/agentStore';
 import { useCredentialsStore } from '../../store/credentialsStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useSubAgentStore } from '../../store/subAgentStore';
 import {
   buildSubAgentInvocationKey,
+  type SubAgentInvocation,
   type SubAgentParentType,
   useSubAgentRuntimeStore,
 } from '../../store/subAgentRuntimeStore';
@@ -20,7 +22,7 @@ import {
   markToolCallsRunning,
 } from '../../toolCall/runtime';
 import type { HandlerOptions } from '../../toolCall/apply/types';
-import type { ToolCallDecisionMap } from '../../toolCall/types';
+import type { ApplicationResult, ToolCallDecisionMap } from '../../toolCall/types';
 import { generateTempId } from '../../utils/tempId';
 import type { SubAgentDefinition } from '../../types/subAgents';
 import { buildCallToolSchema } from '../tools/SubAgentCallTools';
@@ -29,6 +31,7 @@ import { subAgentInvocationService } from '../../api/subAgentInvocationService';
 import { evaluateToolCallAutoContinue } from '../../agent/utils/autoContinuePolicy';
 
 type Completion = { resolve: (output: string) => void; reject: (error: Error) => void };
+type InvocationControlIntent = 'pause' | 'cancel';
 
 type InvocationConfig = {
   projectId: string;
@@ -45,10 +48,25 @@ type InvocationConfig = {
 };
 
 const completions = new Map<string, Completion>();
+const invocationControlIntents = new Map<string, InvocationControlIntent>();
 const RETURN_RESULT_TOOL_NAME = 'return_sub_agent_result';
 const RETURN_RESULT_RULE_REASON =
   'return_sub_agent_result must be called exactly once and must be the ONLY tool call in the final message of the Sub Agent invocation. ' +
   'Do other tool calls first. When finished, call return_sub_agent_result alone with a non-empty string field "result".';
+
+function setControlIntent(invocationKey: string, intent: InvocationControlIntent): void {
+  invocationControlIntents.set(invocationKey, intent);
+}
+
+function consumeControlIntent(invocationKey: string): InvocationControlIntent | undefined {
+  const intent = invocationControlIntents.get(invocationKey);
+  if (intent) invocationControlIntents.delete(invocationKey);
+  return intent;
+}
+
+function clearControlIntent(invocationKey: string): void {
+  invocationControlIntents.delete(invocationKey);
+}
 
 function stringifyInputForUserMessage(input: string): string {
   return (input ?? '').trim();
@@ -173,6 +191,36 @@ async function buildToolSchemas(definition: SubAgentDefinition): Promise<ToolCal
   return schemas;
 }
 
+async function ensureInvocationRuntimeConfig(invocationKey: string): Promise<SubAgentInvocation | undefined> {
+  const runtime = useSubAgentRuntimeStore.getState();
+  const invocation = runtime.getInvocationByKey(invocationKey);
+  if (!invocation) return undefined;
+  if (invocation.llmConfig && invocation.tools) return invocation;
+
+  const definition = await loadDefinitionOrThrow(invocation.subAgentId);
+  if (!definition.enabled) {
+    throw new Error(`Sub Agent is disabled: ${invocation.subAgentId}`);
+  }
+  if (!definition.allowed_invocation_modes.includes(invocation.caller)) {
+    throw new Error(`Sub Agent not allowed from caller: ${invocation.caller}`);
+  }
+
+  const tools = await buildToolSchemas(definition);
+  const settingsStore = useSettingsStore.getState();
+  const globalConfig = settingsStore.getTaskConfig('subAgent');
+  const llmConfig: TaskAIConfig = definition.use_custom_llm_config ? definition.llm_config_override! : globalConfig;
+
+  runtime.updateInvocation(invocationKey, {
+    agentName: definition.agent_name,
+    displayName: definition.display_name,
+    llmConfig,
+    tools,
+    handlerOptions: invocation.handlerOptions ?? { userRequest: 'SubAgent' },
+  });
+
+  return runtime.getInvocationByKey(invocationKey);
+}
+
 function applyReturnResultBatchRules(toolCalls: ToolCallMetadata[]): ToolCallMetadata[] {
   const returnCalls = toolCalls.filter((toolCall) => toolCall.tool_name === RETURN_RESULT_TOOL_NAME);
   if (returnCalls.length === 0) return toolCalls;
@@ -228,6 +276,173 @@ function appendAssistantMessage(invocationKey: string, message: ChatMessage): bo
 
   runtime.replaceHistory(invocationKey, [...invocation.history, message]);
   return true;
+}
+
+async function updateAgentParentToolCall(params: {
+  invocation: SubAgentInvocation;
+  patch: (toolCall: ToolCallMetadata) => ToolCallMetadata;
+}): Promise<void> {
+  const { invocation, patch } = params;
+  const agentStore = useAgentStore.getState();
+  const agent = agentStore.getAgent(invocation.projectId, invocation.agentId);
+  const message = agent?.messages.find((msg) => String(msg.id) === String(invocation.parentMessageId));
+  if (!message || !Array.isArray(message.toolCalls)) return;
+
+  let changed = false;
+  const nextToolCalls = message.toolCalls.map((toolCall) => {
+    if (toolCall.id !== invocation.parentToolCallId) return toolCall;
+    changed = true;
+    return patch(toolCall as ToolCallMetadata);
+  });
+  if (!changed) return;
+
+  await agentStore.updateMessageToolCalls(
+    invocation.projectId,
+    invocation.agentId,
+    String(invocation.parentMessageId),
+    nextToolCalls as ToolCallMetadata[]
+  );
+}
+
+function findInvocationKeyByPersistentId(parentPersistentId: string): string | undefined {
+  const runtime = useSubAgentRuntimeStore.getState();
+  for (const [key, invocation] of Object.entries(runtime.invocationsByKey)) {
+    if (!invocation) continue;
+    if (invocation.persistentId === parentPersistentId) return key;
+  }
+  return undefined;
+}
+
+function findHistoryMessageIndexById(history: ChatMessage[], messageId: string): number {
+  for (let i = 0; i < history.length; i++) {
+    if (String(history[i]?.id) === String(messageId)) return i;
+  }
+  return -1;
+}
+
+function findHistoryMessageIndexByToolCallId(history: ChatMessage[], toolCallId: string): number {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const toolCalls = history[i]?.toolCalls ?? [];
+    if (!Array.isArray(toolCalls)) continue;
+    if (toolCalls.some((toolCall) => String((toolCall as any)?.id) === String(toolCallId))) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+async function updateSubAgentParentToolCall(params: {
+  invocation: SubAgentInvocation;
+  patch: (toolCall: ToolCallMetadata) => ToolCallMetadata;
+}): Promise<void> {
+  const { invocation, patch } = params;
+  const parentKey = findInvocationKeyByPersistentId(String(invocation.parentId));
+  if (!parentKey) return;
+
+  const runtime = useSubAgentRuntimeStore.getState();
+  const parentInvocation = runtime.getInvocationByKey(parentKey);
+  if (!parentInvocation) return;
+
+  const nextHistory = parentInvocation.history.slice();
+  let targetIndex = findHistoryMessageIndexById(nextHistory, String(invocation.parentMessageId));
+  if (targetIndex < 0) {
+    targetIndex = findHistoryMessageIndexByToolCallId(nextHistory, invocation.parentToolCallId);
+  }
+  if (targetIndex < 0) return;
+
+  const targetMessage = nextHistory[targetIndex];
+  const toolCalls = targetMessage.toolCalls ?? [];
+  if (!Array.isArray(toolCalls)) return;
+
+  let changed = false;
+  const nextToolCalls = toolCalls.map((toolCall) => {
+    if (String((toolCall as any)?.id) !== String(invocation.parentToolCallId)) return toolCall as ToolCallMetadata;
+    changed = true;
+    return patch(toolCall as ToolCallMetadata);
+  });
+  if (!changed) return;
+
+  nextHistory[targetIndex] = {
+    ...targetMessage,
+    toolCalls: nextToolCalls as any,
+  };
+  runtime.replaceHistory(parentKey, nextHistory);
+  await persistInvocationState(parentKey);
+}
+
+async function syncParentToolCall(params: {
+  invocation: SubAgentInvocation;
+  patch: (toolCall: ToolCallMetadata) => ToolCallMetadata;
+}): Promise<void> {
+  const { invocation, patch } = params;
+  if (invocation.parentType === 'agent') {
+    await updateAgentParentToolCall({ invocation, patch });
+    return;
+  }
+  if (invocation.parentType === 'sub_agent') {
+    await updateSubAgentParentToolCall({ invocation, patch });
+  }
+}
+
+async function syncParentToolCallRunning(invocation: SubAgentInvocation): Promise<void> {
+  await syncParentToolCall({
+    invocation,
+    patch: (toolCall) => ({
+      ...toolCall,
+      status: 'running',
+      reason: undefined,
+      failureType: undefined,
+      result: undefined,
+      acceptedAt: undefined,
+    }),
+  });
+}
+
+async function syncParentToolCallAccepted(invocation: SubAgentInvocation, output: string): Promise<void> {
+  const result: ApplicationResult = {
+    success: true,
+    message: output,
+    data: {
+      subAgentId: invocation.subAgentId,
+      agentName: invocation.agentName,
+    },
+  };
+
+  await syncParentToolCall({
+    invocation,
+    patch: (toolCall) => ({
+      ...toolCall,
+      status: 'accepted',
+      reason: undefined,
+      failureType: undefined,
+      result,
+      acceptedAt: new Date(),
+    }),
+  });
+}
+
+async function syncParentToolCallFailed(invocation: SubAgentInvocation, reason: string): Promise<void> {
+  const result: ApplicationResult = {
+    success: false,
+    message: `Error executing call_${invocation.agentName}`,
+    error: reason,
+    data: {
+      subAgentId: invocation.subAgentId,
+      agentName: invocation.agentName,
+    },
+  };
+
+  await syncParentToolCall({
+    invocation,
+    patch: (toolCall) => ({
+      ...toolCall,
+      status: 'failed',
+      reason,
+      failureType: 'execution',
+      result,
+      acceptedAt: undefined,
+    }),
+  });
 }
 
 async function persistInvocationState(invocationKey: string): Promise<void> {
@@ -288,7 +503,7 @@ async function runTurn(invocationKey: string): Promise<void> {
   const runtime = useSubAgentRuntimeStore.getState();
   const invocation = runtime.getInvocationByKey(invocationKey);
   if (!invocation) return;
-  if (invocation.status === 'completed' || invocation.status === 'error' || invocation.status === 'cancelled') return;
+  if (invocation.status === 'completed' || invocation.status === 'cancelled') return;
 
   if (!invocation.llmConfig || !invocation.tools) {
     runtime.updateInvocation(invocationKey, {
@@ -297,20 +512,20 @@ async function runTurn(invocationKey: string): Promise<void> {
       activeSessionId: null,
     });
     await persistInvocationState(invocationKey);
-    const completion = completions.get(invocationKey);
-    completion?.reject(new Error('Missing runtime configuration for Sub Agent invocation'));
-    completions.delete(invocationKey);
+    await syncParentToolCallRunning(invocation);
     return;
   }
 
   const settingsStore = useSettingsStore.getState();
   const credentialsStore = useCredentialsStore.getState();
+  clearControlIntent(invocationKey);
 
   runtime.updateInvocation(invocationKey, {
     status: 'running',
     error: undefined,
     finalOutput: undefined,
   });
+  await syncParentToolCallRunning(invocation);
 
   const provider = invocation.llmConfig.provider;
   const providerConfig = credentialsStore.getProviderConfigForBackend(provider);
@@ -367,16 +582,40 @@ async function runTurn(invocationKey: string): Promise<void> {
     const latest = sessionStore.getSessionById(handle.sessionId) ?? finalSession;
 
     if (latest.status !== 'success') {
-      const errorMessage = latest.error || 'Sub Agent session failed';
+      const intent = consumeControlIntent(invocationKey);
+
+      if (latest.status === 'cancelled') {
+        if (intent === 'pause') {
+          runtime.updateInvocation(invocationKey, {
+            status: 'paused',
+            activeSessionId: null,
+          });
+          await persistInvocationState(invocationKey);
+          await syncParentToolCallRunning(invocation);
+          return;
+        }
+
+        if (intent === 'cancel') {
+          return;
+        }
+
+        runtime.updateInvocation(invocationKey, {
+          status: 'error',
+          error: latest.error || 'Sub Agent session was cancelled unexpectedly.',
+          activeSessionId: null,
+        });
+        await persistInvocationState(invocationKey);
+        await syncParentToolCallRunning(invocation);
+        return;
+      }
+
       runtime.updateInvocation(invocationKey, {
-        status: latest.status === 'cancelled' ? 'cancelled' : 'error',
-        error: errorMessage,
+        status: 'error',
+        error: latest.error || 'Sub Agent session failed',
         activeSessionId: null,
       });
       await persistInvocationState(invocationKey);
-      const completion = completions.get(invocationKey);
-      completion?.reject(new Error(errorMessage));
-      completions.delete(invocationKey);
+      await syncParentToolCallRunning(invocation);
       return;
     }
 
@@ -396,6 +635,7 @@ async function runTurn(invocationKey: string): Promise<void> {
         activeSessionId: null,
       });
       await persistInvocationState(invocationKey);
+      await syncParentToolCallRunning(invocation);
       return;
     }
 
@@ -407,6 +647,7 @@ async function runTurn(invocationKey: string): Promise<void> {
         activeSessionId: null,
       });
       await persistInvocationState(invocationKey);
+      await syncParentToolCallAccepted(invocation, output);
       const completion = completions.get(invocationKey);
       completion?.resolve(output);
       completions.delete(invocationKey);
@@ -432,16 +673,18 @@ async function runTurn(invocationKey: string): Promise<void> {
         activeSessionId: null,
       });
       await persistInvocationState(invocationKey);
+      await syncParentToolCallRunning(invocation);
       return;
     }
 
     const autoContinue = evaluateToolCallAutoContinue(adjustedToolCalls);
     if (autoContinue.hasPending) {
       runtime.updateInvocation(invocationKey, {
-        status: 'awaiting_confirmation',
+        status: 'waiting',
         activeSessionId: null,
       });
       await persistInvocationState(invocationKey);
+      await syncParentToolCallRunning(invocation);
       return;
     }
 
@@ -460,25 +703,40 @@ async function runTurn(invocationKey: string): Promise<void> {
       activeSessionId: null,
     });
     await persistInvocationState(invocationKey);
+    await syncParentToolCallRunning(invocation);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Sub Agent turn failed unexpectedly';
     console.error('[SubAgentManager] runTurn error:', error);
 
-    const runtime = useSubAgentRuntimeStore.getState();
     runtime.updateInvocation(invocationKey, {
       status: 'error',
       error: errorMessage,
       activeSessionId: null,
     });
     await persistInvocationState(invocationKey);
-
-    const completion = completions.get(invocationKey);
-    completion?.reject(error instanceof Error ? error : new Error(errorMessage));
-    completions.delete(invocationKey);
+    await syncParentToolCallRunning(invocation);
   }
 }
 
 export const SubAgentManager = {
+  async reconcileParentToolCall(invocationKey: string): Promise<void> {
+    const runtime = useSubAgentRuntimeStore.getState();
+    const invocation = runtime.getInvocationByKey(invocationKey);
+    if (!invocation) return;
+
+    if (invocation.status === 'completed') {
+      await syncParentToolCallAccepted(invocation, invocation.finalOutput ?? '');
+      return;
+    }
+
+    if (invocation.status === 'cancelled') {
+      await syncParentToolCallFailed(invocation, 'Cancelled');
+      return;
+    }
+
+    await syncParentToolCallRunning(invocation);
+  },
+
   /**
    * Start a Sub Agent invocation and return a promise that resolves with the final output.
    * The invocation UI is rendered under the parent tool call card.
@@ -556,8 +814,11 @@ export const SubAgentManager = {
       await persistInvocationState(invocationKey);
     } else if (existing.status === 'completed' && typeof existing.finalOutput === 'string') {
       return existing.finalOutput;
+    } else if (existing.status === 'cancelled') {
+      throw new Error('Cancelled');
     }
 
+    await ensureInvocationRuntimeConfig(invocationKey);
     const done = ensureCompletion(invocationKey);
 
     void runTurn(invocationKey);
@@ -577,6 +838,7 @@ export const SubAgentManager = {
 
     await persistInvocationState(invocationKey);
 
+    await ensureInvocationRuntimeConfig(invocationKey);
     const runtime = useSubAgentRuntimeStore.getState();
     const invocation = runtime.getInvocationByKey(invocationKey);
     if (!invocation) return;
@@ -590,6 +852,7 @@ export const SubAgentManager = {
       if (!autoContinue) {
         runtime.updateInvocation(invocationKey, { status: 'paused', activeSessionId: null });
         await persistInvocationState(invocationKey);
+        await syncParentToolCallRunning(invocation);
         return;
       }
       await runTurn(invocationKey);
@@ -628,10 +891,11 @@ export const SubAgentManager = {
     const autoContinueState = evaluateToolCallAutoContinue(applied.toolCalls);
     if (autoContinueState.hasPending) {
       runtime.updateInvocation(invocationKey, {
-        status: 'awaiting_confirmation',
+        status: 'waiting',
         activeSessionId: null,
       });
       await persistInvocationState(invocationKey);
+      await syncParentToolCallRunning(invocation);
       return;
     }
 
@@ -648,6 +912,7 @@ export const SubAgentManager = {
         activeSessionId: null,
       });
       await persistInvocationState(invocationKey);
+      await syncParentToolCallAccepted(invocation, output);
       const completion = completions.get(invocationKey);
       completion?.resolve(output);
       completions.delete(invocationKey);
@@ -660,17 +925,53 @@ export const SubAgentManager = {
         activeSessionId: null,
       });
       await persistInvocationState(invocationKey);
+      await syncParentToolCallRunning(invocation);
       return;
     }
 
     await runTurn(invocationKey);
   },
 
-  async resume(invocationKey: string): Promise<void> {
+  async pause(invocationKey: string): Promise<void> {
     const runtime = useSubAgentRuntimeStore.getState();
     const invocation = runtime.getInvocationByKey(invocationKey);
     if (!invocation) return;
-    if (invocation.status !== 'paused') return;
+    if (invocation.status !== 'running' && invocation.status !== 'waiting') return;
+
+    const sessionId = invocation.activeSessionId;
+    if (sessionId) {
+      setControlIntent(invocationKey, 'pause');
+      useLLMSessionStore.getState().cancelSession(sessionId);
+    } else {
+      clearControlIntent(invocationKey);
+    }
+
+    runtime.updateInvocation(invocationKey, {
+      status: 'paused',
+      activeSessionId: null,
+    });
+    await persistInvocationState(invocationKey);
+    await syncParentToolCallRunning(invocation);
+  },
+
+  async retry(invocationKey: string): Promise<void> {
+    const runtime = useSubAgentRuntimeStore.getState();
+    const invocation = runtime.getInvocationByKey(invocationKey);
+    if (!invocation) return;
+    if (invocation.status !== 'paused' && invocation.status !== 'error') return;
+
+    await ensureInvocationRuntimeConfig(invocationKey);
+    const latest = runtime.getInvocationByKey(invocationKey);
+    if (!latest) return;
+
+    clearControlIntent(invocationKey);
+    runtime.updateInvocation(invocationKey, {
+      status: 'running',
+      error: undefined,
+      activeSessionId: null,
+    });
+    await persistInvocationState(invocationKey);
+    await syncParentToolCallRunning(latest);
     await runTurn(invocationKey);
   },
 
@@ -678,10 +979,14 @@ export const SubAgentManager = {
     const runtime = useSubAgentRuntimeStore.getState();
     const invocation = runtime.getInvocationByKey(invocationKey);
     if (!invocation) return;
+    if (invocation.status === 'completed' || invocation.status === 'cancelled') return;
 
     const sessionId = invocation.activeSessionId;
     if (sessionId) {
+      setControlIntent(invocationKey, 'cancel');
       useLLMSessionStore.getState().cancelSession(sessionId);
+    } else {
+      clearControlIntent(invocationKey);
     }
 
     runtime.updateInvocation(invocationKey, {
@@ -690,6 +995,7 @@ export const SubAgentManager = {
       activeSessionId: null,
     });
     await persistInvocationState(invocationKey);
+    await syncParentToolCallFailed(invocation, 'Cancelled');
 
     const completion = completions.get(invocationKey);
     completion?.reject(new Error('Cancelled'));

@@ -27,7 +27,7 @@ function messageText(message: ChatMessage): string {
 }
 
 function hasPendingStatus(status: string | undefined): boolean {
-  return status === 'pending' || status === 'validating' || status === 'running';
+  return status === 'pending' || status === 'validating' || status === 'processing' || status === 'running';
 }
 
 export interface SubAgentPeekTimelineProps {
@@ -45,6 +45,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
 }) => {
   const { t } = useTranslation();
   const [isApplying, setIsApplying] = useState(false);
+  const [actionInFlight, setActionInFlight] = useState<'pause' | 'retry' | 'cancel' | null>(null);
 
   const lastAssistantIndex = useMemo(() => {
     for (let i = invocation.history.length - 1; i >= 0; i--) {
@@ -59,19 +60,6 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
       await SubAgentManager.applyAndContinue({
         invocationKey,
         decisions,
-        autoContinue: true,
-      });
-    } finally {
-      setIsApplying(false);
-    }
-  }, [invocationKey]);
-
-  const handleConfirmAndPause = useCallback(async (decisions: ToolCallDecisionMap) => {
-    setIsApplying(true);
-    try {
-      await SubAgentManager.applyAndContinue({
-        invocationKey,
-        decisions,
         autoContinue: false,
       });
     } finally {
@@ -79,22 +67,39 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     }
   }, [invocationKey]);
 
-  const handleResume = useCallback(() => {
-    void SubAgentManager.resume(invocationKey);
+  const handlePause = useCallback(() => {
+    if (actionInFlight) return;
+    setActionInFlight('pause');
+    void SubAgentManager.pause(invocationKey).finally(() => {
+      setActionInFlight(null);
+    });
+  }, [actionInFlight, invocationKey]);
+
+  const handleRetry = useCallback(() => {
+    if (actionInFlight) return;
+    setActionInFlight('retry');
+    void SubAgentManager.retry(invocationKey).finally(() => {
+      setActionInFlight(null);
+    });
   }, [invocationKey]);
 
-  const handleStop = useCallback(() => {
-    void SubAgentManager.cancel(invocationKey);
-  }, [invocationKey]);
+  const handleCancel = useCallback(() => {
+    if (actionInFlight) return;
+    setActionInFlight('cancel');
+    void SubAgentManager.cancel(invocationKey).finally(() => {
+      setActionInFlight(null);
+    });
+  }, [actionInFlight, invocationKey]);
 
   const streamingText = useMemo(() => {
     if (!activeSession || activeSession.status !== 'running') return '';
     return collapseContentParts(activeSession.contentParts ?? []).content.trim();
   }, [activeSession]);
+  const actionDisabled = isApplying || actionInFlight !== null;
 
   return (
     <div className="sub-agent-peek-timeline">
-      {invocation.error && invocation.status === 'error' && (
+      {invocation.error && (invocation.status === 'error' || invocation.status === 'paused') && (
         <div className="sub-agent-peek-alert sub-agent-peek-alert--error">{invocation.error}</div>
       )}
 
@@ -102,7 +107,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
         const text = messageText(message);
         const toolCalls = (message.toolCalls ?? []) as ToolCallMetadata[];
         const isLatestAssistant = message.role === 'assistant' && index === lastAssistantIndex;
-        const awaitingDecision = isLatestAssistant && invocation.status === 'awaiting_confirmation';
+        const waitingDecision = isLatestAssistant && invocation.status === 'waiting';
         const cards = toolCalls.length > 0 ? buildEditCardsFromToolCallMetadata(toolCalls) : [];
         const hasPendingCards = cards.some((card) => hasPendingStatus(card.toolCall.status));
         const showApplyingBanner = isApplying && isLatestAssistant && hasPendingCards;
@@ -123,10 +128,9 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
                 <div className="message-function-calls">
                   <FunctionCallsThread
                     threadId={`${threadId}:message:${invocation.id}:${message.id}`}
-                    mode={awaitingDecision && hasPendingCards ? 'pending' : 'confirmed'}
+                    mode={waitingDecision && hasPendingCards ? 'pending' : 'confirmed'}
                     cards={cards}
-                    onCommitDecisions={awaitingDecision && hasPendingCards ? handleConfirm : undefined}
-                    onCommitDecisionsAndPause={awaitingDecision && hasPendingCards ? handleConfirmAndPause : undefined}
+                    onCommitDecisions={waitingDecision && hasPendingCards ? handleConfirm : undefined}
                     projectId={invocation.projectId}
                     isApplyDisabled={isApplying}
                     applyDisabledReason={showApplyingBanner ? 'Applying changes...' : undefined}
@@ -175,15 +179,38 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
       )}
 
       <div className="sub-agent-peek-actions">
-        {invocation.status === 'paused' && (
-          <TextButton size="sm" variant="secondary" onClick={handleResume}>
-            Continue
+        {(invocation.status === 'running' || invocation.status === 'waiting') && (
+          <TextButton
+            size="sm"
+            variant="secondary"
+            onClick={handlePause}
+            disabled={actionDisabled}
+            loading={actionInFlight === 'pause'}
+          >
+            {t('subAgent.pause')}
           </TextButton>
         )}
-        {(invocation.status === 'running' || invocation.status === 'awaiting_confirmation' || invocation.status === 'paused') && (
-          <TextButton size="sm" variant="danger" onClick={handleStop}>
-            {t('agent.stop')}
-          </TextButton>
+        {(invocation.status === 'paused' || invocation.status === 'error') && (
+          <>
+            <TextButton
+              size="sm"
+              variant="primary"
+              onClick={handleRetry}
+              disabled={actionDisabled}
+              loading={actionInFlight === 'retry'}
+            >
+              {t('common.retry')}
+            </TextButton>
+            <TextButton
+              size="sm"
+              variant="warning"
+              onClick={handleCancel}
+              disabled={actionDisabled}
+              loading={actionInFlight === 'cancel'}
+            >
+              {t('common.cancel')}
+            </TextButton>
+          </>
         )}
       </div>
     </div>

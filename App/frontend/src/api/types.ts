@@ -292,6 +292,13 @@ export interface AgentMessageResponse {
 }
 
 export type SubAgentParentType = 'agent' | 'sub_agent';
+export type SubAgentInvocationStatus =
+  | 'running'
+  | 'waiting'
+  | 'paused'
+  | 'completed'
+  | 'error'
+  | 'cancelled';
 
 export interface SubAgentInvocationStateMessage {
   role: string;
@@ -312,7 +319,7 @@ export interface SubAgentInvocationStateRequest {
   caller: string;
   language: string;
   input: string;
-  status: string;
+  status: SubAgentInvocationStatus;
   final_output?: string;
   error?: string;
   history: SubAgentInvocationStateMessage[];
@@ -343,7 +350,7 @@ export interface SubAgentInvocationResponse {
   caller: string;
   language: string;
   input: string;
-  status: string;
+  status: SubAgentInvocationStatus;
   final_output?: string;
   error?: string;
   created_at: string;
@@ -357,7 +364,7 @@ export interface SubAgentInvocationStateResponse {
 
 export interface SubAgentInvocationQueryByMessagesRequest {
   message_ids: string[];
-  status_filter?: string[];
+  status_filter?: SubAgentInvocationStatus[];
 }
 
 export interface SubAgentInvocationQueryByMessagesResponse {

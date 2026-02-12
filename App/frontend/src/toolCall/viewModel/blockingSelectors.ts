@@ -60,7 +60,7 @@ function hasBlockingSubAgentInvocations(
     if (!invocation) return false;
     if (invocation.parentType !== 'agent') return false;
     if (invocation.parentId !== selectedAgentId) return false;
-    return invocation.status === 'running' || invocation.status === 'awaiting_confirmation' || invocation.status === 'paused';
+    return invocation.status === 'running' || invocation.status === 'waiting' || invocation.status === 'paused' || invocation.status === 'error';
   });
 }
 

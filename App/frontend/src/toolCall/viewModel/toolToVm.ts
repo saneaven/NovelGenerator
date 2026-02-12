@@ -36,6 +36,7 @@ function normalizeStoredStatus(status?: string): HeaderStatus {
   switch (status) {
     case 'validating':
     case 'pending':
+    case 'processing':
     case 'running':
     case 'failed':
     case 'accepted':
@@ -223,7 +224,7 @@ export function mapToolToOperationVM(params: MapToolToVmParams): OperationVM {
   const status = normalizeStatus(params.status, source);
   const decisionEligible = DECISION_ELIGIBLE_STATUSES.has(status);
   const isValidationFailure = status === 'failed' && failureType === 'validation';
-  const isRunning = status === 'running' || status === 'collecting';
+  const isRunning = status === 'running' || status === 'processing' || status === 'collecting';
 
   if (category === 'call_agent') {
     const { agentName, displayName } = callAgentDisplay(toolName);

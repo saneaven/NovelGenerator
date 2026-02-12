@@ -4,14 +4,47 @@ import { type ChatMessage, type ToolCallMetadata, type ContentPart, type Role } 
 import { type LanguageData } from '../types/multilingual';
 import { type ToolCallStatus, type ToolCallFailureType, type ApplicationResult } from '../toolCall/types';
 
-const BACKEND_TOOL_CALL_STATUSES = new Set(['failed', 'pending', 'rejected', 'accepted']);
+const BACKEND_TOOL_CALL_STATUSES = new Set(['failed', 'pending', 'running', 'rejected', 'accepted']);
 
-function canSyncToolCalls(toolCalls?: ToolCallMetadata[] | null): boolean {
-  if (!Array.isArray(toolCalls)) return true;
-  return toolCalls.every((tc) => {
-    const status = (tc as any)?.status;
-    if (status == null) return true;
-    return BACKEND_TOOL_CALL_STATUSES.has(String(status));
+type BackendToolCallStatus = 'failed' | 'pending' | 'running' | 'rejected' | 'accepted';
+
+function sanitizeToolCallStatusForBackend(toolCall: ToolCallMetadata): BackendToolCallStatus {
+  const rawStatus = String((toolCall as any)?.status ?? 'pending');
+  const isSubAgentCall = typeof toolCall?.tool_name === 'string' && toolCall.tool_name.startsWith('call_');
+
+  if (rawStatus === 'processing' || rawStatus === 'validating') {
+    return 'pending';
+  }
+
+  if (rawStatus === 'running') {
+    return isSubAgentCall ? 'running' : 'pending';
+  }
+
+  if (BACKEND_TOOL_CALL_STATUSES.has(rawStatus)) {
+    return rawStatus as BackendToolCallStatus;
+  }
+
+  return 'pending';
+}
+
+function sanitizeToolCallsForBackend(toolCalls?: ToolCallMetadata[] | null): ToolCallMetadata[] {
+  if (!Array.isArray(toolCalls)) return [];
+
+  return toolCalls.map((toolCall) => {
+    const sanitizedStatus = sanitizeToolCallStatusForBackend(toolCall);
+    const normalized: ToolCallMetadata = {
+      ...toolCall,
+      status: sanitizedStatus,
+    };
+
+    if (sanitizedStatus === 'pending') {
+      normalized.reason = undefined;
+      normalized.failureType = undefined;
+      normalized.result = undefined;
+      normalized.acceptedAt = undefined;
+    }
+
+    return normalized;
   });
 }
 
@@ -578,8 +611,6 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       },
     }));
 
-    if (!canSyncToolCalls(toolCalls)) return;
-
     // Sync to backend
     try {
       const agent = get().getAgent(projectId, agentId);
@@ -590,10 +621,12 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       const primaryLanguage = Object.keys(message.data)[0] || 'English';
       const contentParts = message.data[primaryLanguage]?.contentParts;
 
+      const sanitizedToolCalls = sanitizeToolCallsForBackend(toolCalls);
+
       await agentService.updateMessage(projectId, agentId, messageId, {
         content_parts: contentParts,
         language: primaryLanguage,
-        tool_calls: toolCalls,
+        tool_calls: sanitizedToolCalls,
       });
     } catch (error) {
       console.error('Failed to sync tool calls to backend:', error);
@@ -652,16 +685,15 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       const message = agent?.messages.find((msg) => msg.id === messageId);
       if (!message || !message.toolCalls) return;
 
-      if (!canSyncToolCalls(message.toolCalls)) return;
-
       // Get the primary language content for this message
       const primaryLanguage = Object.keys(message.data)[0] || 'English';
       const contentParts = message.data[primaryLanguage]?.contentParts;
+      const sanitizedToolCalls = sanitizeToolCallsForBackend(message.toolCalls);
 
       await agentService.updateMessage(projectId, agentId, messageId, {
         content_parts: contentParts,
         language: primaryLanguage,
-        tool_calls: message.toolCalls,
+        tool_calls: sanitizedToolCalls,
       });
     } catch (error) {
       console.error('Failed to sync tool call status to backend:', error);

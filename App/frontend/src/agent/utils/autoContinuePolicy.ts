@@ -6,7 +6,7 @@ function normalizeToolCallStatus(status: ToolCallMetadata['status']): ToolCallSt
 }
 
 function isPendingStatus(status: ToolCallStatus): boolean {
-  return status === 'pending' || status === 'validating' || status === 'running';
+  return status === 'pending' || status === 'validating' || status === 'processing' || status === 'running';
 }
 
 export interface ToolCallAutoContinueState {

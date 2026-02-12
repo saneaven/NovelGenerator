@@ -30,7 +30,8 @@ import { buildEditCardsFromToolCallMetadata } from '../../../toolCall';
 import type { ToolCallDecisionMap } from '../../../toolCall/types';
 import type { AgentRunMode, WorkspaceSurface } from '../../../types/agentRuntime';
 import { subAgentInvocationService } from '../../../api/subAgentInvocationService';
-import { useSubAgentRuntimeStore } from '../../../store/subAgentRuntimeStore';
+import { buildSubAgentInvocationKey, useSubAgentRuntimeStore } from '../../../store/subAgentRuntimeStore';
+import { SubAgentManager } from '../../../subAgent/runtime/SubAgentManager';
 import { getSendBlockingState } from '../../../toolCall/viewModel/blockingSelectors';
 
 interface AgentPanelProps
@@ -567,16 +568,34 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         if (subAgentRootMessageIds.length === 0) return;
 
         let cancelled = false;
+        const navigationEntry =
+            typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function'
+                ? (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)
+                : undefined;
+        const legacyNavigationType = typeof performance !== 'undefined' ? (performance as any)?.navigation?.type : undefined;
+        const isReloadNavigation = navigationEntry?.type === 'reload' || legacyNavigationType === 1;
 
         void subAgentInvocationService
             .queryByMessages(projectId, selectedAgentId, {
                 message_ids: subAgentRootMessageIds,
+                status_filter: ['running', 'waiting', 'paused', 'completed', 'error', 'cancelled'],
             })
-            .then((response) => {
+            .then(async (response) => {
                 if (cancelled) return;
                 const runtime = useSubAgentRuntimeStore.getState();
+                const interruptionMessage = t('subAgent.interruptedAfterRefresh');
+                const interruptedUpserts: Promise<unknown>[] = [];
+                const parentReconciliations: Promise<unknown>[] = [];
 
                 for (const item of response.items ?? []) {
+                    if (cancelled) return;
+                    const invocationKey = buildSubAgentInvocationKey({
+                        parentType: item.parent_type as any,
+                        parentId: item.parent_id,
+                        parentMessageId: item.parent_message_id,
+                        parentToolCallId: item.parent_tool_call_id,
+                    });
+                    const localInvocation = runtime.getInvocationByKey(invocationKey);
                     const history = [...(item.messages ?? [])]
                         .sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
                         .map((msg) => ({
@@ -592,28 +611,78 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                         item.caller === 'planMode' || item.caller === 'agentMode' || item.caller === 'subAgent'
                             ? item.caller
                             : 'subAgent';
+                    const wasInterrupted =
+                        !localInvocation &&
+                        isReloadNavigation &&
+                        (item.status === 'running' || item.status === 'waiting');
+                    const restoredStatus = wasInterrupted ? 'paused' : item.status;
+                    const restoredError = wasInterrupted ? interruptionMessage : (item.error ?? undefined);
 
-                    runtime.upsertInvocation({
-                        id: item.id,
-                        persistentId: item.id,
-                        parentType: item.parent_type as any,
-                        parentId: item.parent_id,
-                        parentMessageId: item.parent_message_id,
-                        parentToolCallId: item.parent_tool_call_id,
-                        projectId: item.project_id,
-                        agentId: item.agent_id,
-                        language: item.language,
-                        caller,
-                        agentName: item.agent_name,
-                        subAgentId: item.sub_agent_id,
-                        displayName: item.display_name,
-                        input: item.input ?? '',
-                        status: item.status as any,
-                        history: history as any,
-                        activeSessionId: null,
-                        finalOutput: item.final_output ?? undefined,
-                        error: item.error ?? undefined,
-                    });
+                    if (!localInvocation) {
+                        runtime.upsertInvocation({
+                            id: item.id,
+                            persistentId: item.id,
+                            parentType: item.parent_type as any,
+                            parentId: item.parent_id,
+                            parentMessageId: item.parent_message_id,
+                            parentToolCallId: item.parent_tool_call_id,
+                            projectId: item.project_id,
+                            agentId: item.agent_id,
+                            language: item.language,
+                            caller,
+                            agentName: item.agent_name,
+                            subAgentId: item.sub_agent_id,
+                            displayName: item.display_name,
+                            input: item.input ?? '',
+                            status: restoredStatus as any,
+                            history: history as any,
+                            activeSessionId: null,
+                            finalOutput: item.final_output ?? undefined,
+                            error: restoredError,
+                        });
+                    }
+
+                    if (wasInterrupted) {
+                        interruptedUpserts.push(
+                            subAgentInvocationService.upsertState(projectId, selectedAgentId, {
+                                parent_type: item.parent_type as any,
+                                parent_id: item.parent_id,
+                                parent_message_id: item.parent_message_id,
+                                parent_tool_call_id: item.parent_tool_call_id,
+                                sub_agent_id: item.sub_agent_id,
+                                agent_name: item.agent_name,
+                                display_name: item.display_name,
+                                caller,
+                                language: item.language,
+                                input: item.input ?? '',
+                                status: 'paused',
+                                final_output: item.final_output ?? undefined,
+                                error: interruptionMessage,
+                                history: [...(item.messages ?? [])]
+                                    .sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
+                                    .map((msg) => ({
+                                        role: msg.role,
+                                        content_parts: (msg.content_parts ?? []) as any,
+                                        tool_calls: (msg.tool_calls ?? undefined) as any,
+                                        thinking_details: (msg.thinking_details ?? undefined) as any,
+                                        created_at: msg.created_at,
+                                    })),
+                            })
+                            .catch((error) => {
+                                console.error('Failed to persist interrupted Sub Agent invocation:', error);
+                            })
+                        );
+                    }
+
+                    parentReconciliations.push(
+                        SubAgentManager.reconcileParentToolCall(invocationKey).catch((error) => {
+                            console.error('Failed to reconcile parent Sub Agent tool call state:', error);
+                        })
+                    );
+                }
+
+                if (interruptedUpserts.length > 0 || parentReconciliations.length > 0) {
+                    await Promise.all([...interruptedUpserts, ...parentReconciliations]);
                 }
             })
             .catch((error) => {
@@ -623,7 +692,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         return () => {
             cancelled = true;
         };
-    }, [projectId, selectedAgentId, subAgentRootMessageIds, subAgentRootMessageKey]);
+    }, [projectId, selectedAgentId, subAgentRootMessageIds, subAgentRootMessageKey, t]);
 
     useEffect(() => {
         function processFinished() {
@@ -875,7 +944,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     const isApplying = applyingMessageEdits[message.chatMessage.id] === true;
                     const hasPendingCards = storedToolCalls.some((toolCall: any) => {
                         const status = String(toolCall?.status ?? 'pending');
-                        return status === 'pending' || status === 'validating' || status === 'running';
+                        return status === 'pending' || status === 'validating' || status === 'processing' || status === 'running';
                     });
                     const cardMode = hasPendingCards || isApplying ? 'pending' : 'confirmed';
                     const functionThreadId = `agent:${selectedAgentId ?? 'none'}:${message.chatMessage.id}`;

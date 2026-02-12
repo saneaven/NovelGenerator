@@ -25,7 +25,7 @@ export const CallAgentCard: React.FC<CallAgentCardProps> = ({
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}
       onReject={onReject}
-      defaultExpanded={operation.status === 'pending' || operation.status === 'running'}
+      defaultExpanded={operation.status === 'pending' || operation.status === 'processing' || operation.status === 'running'}
       islands={[
         <div className="function-call-call-agent-body" key="body">
           <div className="function-call-call-agent-body__label">Sub-agent request</div>

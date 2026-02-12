@@ -26,6 +26,7 @@ export type HeaderStatus =
   | 'collecting'
   | 'validating'
   | 'pending'
+  | 'processing'
   | 'running'
   | 'accepted'
   | 'rejected'
@@ -96,11 +97,13 @@ export const DECISION_ELIGIBLE_STATUSES: ReadonlySet<HeaderStatus | ToolCallStat
 export const BLOCKING_STATUSES: ReadonlySet<HeaderStatus | ToolCallStatus> = new Set([
   'pending',
   'validating',
+  'processing',
   'running',
 ]);
 
 export const STREAMING_STATUSES: ReadonlySet<HeaderStatus> = new Set([
   'collecting',
   'validating',
+  'processing',
   'running',
 ]);

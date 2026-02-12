@@ -155,7 +155,7 @@ export function buildConversationBlocksWithMeta(
       // Add tool_results message if this assistant message had tool_calls with results
       if (block.tool_calls && block.tool_calls.length > 0 && msg.toolCalls) {
         const toolResults = msg.toolCalls
-          .filter((fc) => fc.status !== 'pending' && fc.status !== 'running')
+          .filter((fc) => fc.status !== 'pending' && fc.status !== 'processing' && fc.status !== 'running')
           .map((fc) => {
             let content: string;
             switch (fc.status) {

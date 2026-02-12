@@ -24,6 +24,7 @@ function isPendingOperation(operation: ObjectOperationVM): boolean {
 
 function buildStatusSummary(operations: ObjectOperationVM[]): string {
   const pending = operations.filter((operation) => operation.status === 'pending' || operation.status === 'validating').length;
+  const processing = operations.filter((operation) => operation.status === 'processing').length;
   const running = operations.filter((operation) => operation.status === 'running').length;
   const accepted = operations.filter((operation) => operation.status === 'accepted').length;
   const failed = operations.filter((operation) => operation.status === 'failed').length;
@@ -31,6 +32,7 @@ function buildStatusSummary(operations: ObjectOperationVM[]): string {
 
   const parts: string[] = [];
   if (pending > 0) parts.push(`Pending ${pending}`);
+  if (processing > 0) parts.push(`Processing ${processing}`);
   if (running > 0) parts.push(`Running ${running}`);
   if (accepted > 0) parts.push(`Applied ${accepted}`);
   if (rejected > 0) parts.push(`Rejected ${rejected}`);
@@ -118,6 +120,8 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
   const disabled = Boolean(decisionDisabled || isCommitting);
   const groupStatus = operations.some((operation) => operation.status === 'running')
     ? 'running'
+    : operations.some((operation) => operation.status === 'processing')
+      ? 'processing'
     : operations.some((operation) => operation.status === 'pending' || operation.status === 'validating')
       ? 'pending'
       : operations.every((operation) => operation.status === 'accepted')
@@ -148,7 +152,7 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
       title={displayName}
       subtitle={statusSummary}
       rightActions={headerActions}
-      defaultExpanded={operations.some((operation) => operation.status === 'pending' || operation.status === 'running')}
+      defaultExpanded={operations.some((operation) => operation.status === 'pending' || operation.status === 'processing' || operation.status === 'running')}
       islands={[
         ...operations.map((operation) => {
           const field = typeof operation.args.field === 'string' ? operation.args.field : 'content';

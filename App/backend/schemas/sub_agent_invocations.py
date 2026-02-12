@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 ParentType = Literal["agent", "sub_agent"]
+SubAgentInvocationStatus = Literal["running", "waiting", "paused", "completed", "error", "cancelled"]
 
 
 class SubAgentInvocationMessageState(BaseModel):
@@ -39,7 +40,7 @@ class SubAgentInvocationStateRequest(BaseModel):
 
     language: str = Field(..., min_length=1, max_length=50)
     input: str = Field(default="")
-    status: str = Field(..., min_length=1, max_length=50)
+    status: SubAgentInvocationStatus
     final_output: Optional[str] = None
     error: Optional[str] = None
 
@@ -80,7 +81,7 @@ class SubAgentInvocationResponse(BaseModel):
 
     language: str
     input: str
-    status: str
+    status: SubAgentInvocationStatus
     final_output: Optional[str] = None
     error: Optional[str] = None
 
@@ -100,7 +101,7 @@ class SubAgentInvocationQueryByMessagesRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     message_ids: List[uuid.UUID] = Field(default_factory=list)
-    status_filter: Optional[List[str]] = Field(default_factory=lambda: ["completed"])
+    status_filter: Optional[List[SubAgentInvocationStatus]] = None
 
 
 class SubAgentInvocationQueryByMessagesResponse(BaseModel):

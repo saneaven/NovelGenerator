@@ -8,7 +8,7 @@ import type { InvocationCaller } from '../types/agentRuntime';
 
 export type SubAgentInvocationStatus =
   | 'running'
-  | 'awaiting_confirmation'
+  | 'waiting'
   | 'paused'
   | 'completed'
   | 'error'
@@ -56,7 +56,7 @@ export interface SubAgentInvocation {
   status: SubAgentInvocationStatus;
   history: ChatMessage[];
 
-  /** Current LLM session id (streaming / pending_confirmation applies to this session) */
+  /** Current LLM session id for an active Sub Agent turn. */
   activeSessionId: string | null;
 
   finalOutput?: string;
@@ -106,8 +106,9 @@ export const useSubAgentRuntimeStore = create<SubAgentRuntimeState & SubAgentRun
       if (invocation.parentId !== agentId) return false;
       return (
         invocation.status === 'running' ||
-        invocation.status === 'awaiting_confirmation' ||
-        invocation.status === 'paused'
+        invocation.status === 'waiting' ||
+        invocation.status === 'paused' ||
+        invocation.status === 'error'
       );
     }),
 

@@ -30,7 +30,7 @@ type AgentSidebarSignals = {
 
 const RUNNING_SESSION_STATUSES = new Set(['running', 'applying']);
 const TERMINAL_SESSION_STATUSES = new Set(['success', 'error', 'cancelled']);
-const PENDING_TOOL_STATUSES = new Set(['pending', 'validating', 'running']);
+const PENDING_TOOL_STATUSES = new Set(['pending', 'validating', 'processing', 'running']);
 
 function getSessionAgentId(session: AnySession): string | null {
   const agentId = (session.input as any)?.agentId;
@@ -99,8 +99,9 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
       if (!agentIds.has(invocation.parentId)) continue;
       if (
         invocation.status !== 'running' &&
-        invocation.status !== 'awaiting_confirmation' &&
-        invocation.status !== 'paused'
+        invocation.status !== 'waiting' &&
+        invocation.status !== 'paused' &&
+        invocation.status !== 'error'
       ) {
         continue;
       }

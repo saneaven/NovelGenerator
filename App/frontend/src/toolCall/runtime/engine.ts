@@ -94,7 +94,7 @@ function isDecisionEligibleStatus(status: ToolCallStatus): boolean {
 }
 
 function isDecisionProcessableStatus(status: ToolCallStatus): boolean {
-  return status === 'pending' || status === 'validating' || status === 'running';
+  return status === 'pending' || status === 'validating' || status === 'processing' || status === 'running';
 }
 
 function evaluateToolCallStatus(toolCalls: ToolCallMetadata[]): Omit<ToolCallRunResult, 'toolCalls'> {
@@ -102,7 +102,7 @@ function evaluateToolCallStatus(toolCalls: ToolCallMetadata[]): Omit<ToolCallRun
   const rejectedCount = toolCalls.filter((c) => normalizeStatus(c.status) === 'rejected').length;
   const pendingCount = toolCalls.filter((c) => {
     const status = normalizeStatus(c.status);
-    return status === 'pending' || status === 'validating' || status === 'running';
+    return status === 'pending' || status === 'validating' || status === 'processing' || status === 'running';
   }).length;
   const failedValidationCount = toolCalls.filter((c) => {
     const status = normalizeStatus(c.status);
@@ -163,7 +163,7 @@ export function markToolCallsRunning(params: {
 
     return {
       ...toolCall,
-      status: 'running',
+      status: isCallToolName(toolCall.tool_name) ? 'running' : 'processing',
       reason: undefined,
       failureType: undefined,
     };

@@ -8,6 +8,7 @@ const STATUS_LABEL_KEYS: Record<HeaderStatus, string> = {
   collecting: 'operationStatus.streaming',
   validating: 'operationStatus.validating',
   pending: 'operationStatus.pending',
+  processing: 'operationStatus.processing',
   running: 'operationStatus.running',
   accepted: 'operationStatus.applied',
   rejected: 'operationStatus.skipped',

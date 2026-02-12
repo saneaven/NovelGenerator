@@ -14,6 +14,29 @@ interface InvocationEntry {
   invocation: SubAgentInvocation;
 }
 
+function invocationPriority(status: string): number {
+  switch (status) {
+    case 'running':
+      return 0;
+    case 'waiting':
+      return 1;
+    case 'paused':
+      return 2;
+    case 'error':
+      return 3;
+    case 'completed':
+      return 4;
+    case 'cancelled':
+      return 5;
+    default:
+      return 6;
+  }
+}
+
+function isBlockingInvocationStatus(status: string): boolean {
+  return status === 'running' || status === 'waiting' || status === 'paused' || status === 'error';
+}
+
 function hasPendingToolDecisions(invocation: SubAgentInvocation): number {
   for (let i = invocation.history.length - 1; i >= 0; i--) {
     const message = invocation.history[i];
@@ -22,6 +45,7 @@ function hasPendingToolDecisions(invocation: SubAgentInvocation): number {
     return toolCalls.filter((toolCall: any) =>
       toolCall?.status === 'pending' ||
       toolCall?.status === 'validating' ||
+      toolCall?.status === 'processing' ||
       toolCall?.status === 'running'
     ).length;
   }
@@ -124,20 +148,53 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   }, [entries]);
 
   const orderedKeys = useMemo(() => entries.map((entry) => entry.key), [entries]);
-  const pendingKeys = useMemo(
-    () => orderedKeys.filter((key) => (pendingCountByKey[key] ?? 0) > 0),
-    [orderedKeys, pendingCountByKey]
-  );
+  const entryByKey = useMemo(() => {
+    const map: Record<string, InvocationEntry | undefined> = {};
+    for (const entry of entries) {
+      map[entry.key] = entry;
+    }
+    return map;
+  }, [entries]);
+  const prioritizedKeys = useMemo(() => {
+    const next = [...orderedKeys];
+    next.sort((left, right) => {
+      const leftEntry = entryByKey[left];
+      const rightEntry = entryByKey[right];
+      if (!leftEntry || !rightEntry) return 0;
+
+      const leftPriority = invocationPriority(leftEntry.invocation.status);
+      const rightPriority = invocationPriority(rightEntry.invocation.status);
+      if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+
+      const leftPending = pendingCountByKey[left] ?? 0;
+      const rightPending = pendingCountByKey[right] ?? 0;
+      if (leftPending !== rightPending) return rightPending - leftPending;
+
+      return 0;
+    });
+    return next;
+  }, [orderedKeys, entryByKey, pendingCountByKey]);
 
   useEffect(() => {
     if (orderedKeys.length === 0) return;
     let nextSelectedKey = selectedKey;
     if (!selectedKey || !orderedKeys.includes(selectedKey)) {
-      nextSelectedKey = orderedKeys[0];
+      nextSelectedKey = prioritizedKeys[0] ?? orderedKeys[0];
     } else if (isActiveParent) {
-      const selectedHasPending = (pendingCountByKey[selectedKey] ?? 0) > 0;
-      if (!selectedHasPending && pendingKeys.length > 0) {
-        nextSelectedKey = pendingKeys[0];
+      const selectedEntry = entryByKey[selectedKey];
+      const prioritized = prioritizedKeys[0] ? entryByKey[prioritizedKeys[0]] : undefined;
+      if (selectedEntry && prioritized) {
+        const selectedBlocking = isBlockingInvocationStatus(selectedEntry.invocation.status);
+        const prioritizedBlocking = isBlockingInvocationStatus(prioritized.invocation.status);
+        const selectedPriority = invocationPriority(selectedEntry.invocation.status);
+        const prioritizedPriority = invocationPriority(prioritized.invocation.status);
+
+        if (
+          (!selectedBlocking && prioritizedBlocking) ||
+          (prioritizedPriority === 0 && selectedPriority !== 0)
+        ) {
+          nextSelectedKey = prioritized.key;
+        }
       }
     }
 
@@ -150,15 +207,17 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     setSelectedPeekInvocation,
     threadId,
     isActiveParent,
-    pendingCountByKey,
-    pendingKeys,
+    entryByKey,
+    prioritizedKeys,
   ]);
 
   const selectedEntry = useMemo(() => {
     if (orderedKeys.length === 0) return undefined;
-    const effective = selectedKey && orderedKeys.includes(selectedKey) ? selectedKey : orderedKeys[0];
+    const effective = selectedKey && orderedKeys.includes(selectedKey)
+      ? selectedKey
+      : prioritizedKeys[0] ?? orderedKeys[0];
     return entries.find((entry) => entry.key === effective);
-  }, [entries, orderedKeys, selectedKey]);
+  }, [entries, orderedKeys, selectedKey, prioritizedKeys]);
 
   if (entries.length === 0 || !selectedEntry) return null;
 

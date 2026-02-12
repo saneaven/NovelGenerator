@@ -3,23 +3,6 @@ import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import type { SearchCardProps } from './types';
 import { extractSearchPayload } from '../../viewModel/searchPayload';
 
-function querySummary(operation: SearchCardProps['operation']): string {
-  if (operation.searchType === 'rag') {
-    const queries = Array.isArray(operation.args.queries)
-      ? operation.args.queries.filter((q): q is string => typeof q === 'string' && q.trim().length > 0)
-      : [];
-
-    if (queries.length === 0) return 'No query yet';
-    if (queries.length === 1) return queries[0];
-    return `${queries[0]} (+${queries.length - 1})`;
-  }
-
-  const keyword = typeof operation.args.keyword === 'string' ? operation.args.keyword : '';
-  const page = typeof operation.args.page === 'number' ? operation.args.page : 1;
-  if (!keyword.trim()) return 'No keyword yet';
-  return `${keyword} (page ${page})`;
-}
-
 export const SearchCallCard: React.FC<SearchCardProps> = ({
   threadId,
   operation,
@@ -28,8 +11,6 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
   onAccept,
   onReject,
 }) => {
-  const summary = useMemo(() => querySummary(operation), [operation]);
-
   const payload = useMemo(
     () => extractSearchPayload({
       resultData: operation.result?.data,
@@ -67,7 +48,7 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
         </div>
       )}
     </div>
-  ) : operation.status === 'running' ? (
+  ) : operation.status === 'processing' || operation.status === 'running' ? (
     <div className="function-call-search-results-island function-call-search-results-island--standalone">
       <div className="function-call-search-results-island__empty">Searching...</div>
     </div>
@@ -84,7 +65,7 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}
       onReject={onReject}
-      defaultExpanded={operation.status === 'pending' || operation.status === 'running'}
+      defaultExpanded={operation.status === 'pending' || operation.status === 'processing' || operation.status === 'running'}
       islands={[
         <div className="function-call-search-query-island" key="query">
           <div className="function-call-search-query-island__label">Query</div>

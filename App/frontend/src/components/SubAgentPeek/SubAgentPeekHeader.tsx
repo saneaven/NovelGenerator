@@ -20,7 +20,7 @@ function statusClass(status: string): string {
   switch (status) {
     case 'running':
       return 'sub-agent-peek-header__status--running';
-    case 'awaiting_confirmation':
+    case 'waiting':
     case 'paused':
       return 'sub-agent-peek-header__status--pending';
     case 'completed':

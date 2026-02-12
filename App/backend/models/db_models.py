@@ -1,5 +1,5 @@
 """SQLAlchemy database models for Novel Buds"""
-from sqlalchemy import Column, String, Integer, BigInteger, DateTime, Boolean, Text, ForeignKey, Index, UniqueConstraint
+from sqlalchemy import Column, String, Integer, BigInteger, DateTime, Boolean, Text, ForeignKey, Index, UniqueConstraint, CheckConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from datetime import datetime
@@ -708,6 +708,10 @@ class SubAgentInvocationModel(Base):
             'parent_message_id',
             'parent_tool_call_id',
             name='uq_sub_agent_invocation_parent_tool',
+        ),
+        CheckConstraint(
+            "status IN ('running','waiting','paused','completed','error','cancelled')",
+            name='ck_sub_agent_invocations_status',
         ),
         Index('ix_sub_agent_invocations_project_agent_parent_message', 'project_id', 'agent_id', 'parent_message_id'),
         Index('ix_sub_agent_invocations_parent_ref', 'parent_type', 'parent_id', 'parent_message_id'),

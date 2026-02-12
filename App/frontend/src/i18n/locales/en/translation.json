@@ -1027,6 +1027,7 @@
     "ready": "Ready",
     "error": "Error",
     "pending": "Pending",
+    "processing": "Processing",
     "running": "Running",
     "applied": "Applied",
     "skipped": "Skipped",
@@ -1295,7 +1296,9 @@
     "noDescription": "No description available."
   },
   "subAgent": {
-    "parentAgent": "Parent Agent"
+    "parentAgent": "Parent Agent",
+    "pause": "Pause",
+    "interruptedAfterRefresh": "Interrupted by browser refresh. Retry is required."
   },
   "manuscriptEditor": {
     "toolbar": {
