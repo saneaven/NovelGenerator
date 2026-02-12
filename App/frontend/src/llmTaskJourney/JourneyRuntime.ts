@@ -315,8 +315,8 @@ function startAttempt(params: { journeyId: string }): AttemptContext {
     mode: llmConfig.mode,
     projectId: llmConfig.projectId,
     promptContext: llmConfig.promptContext,
-    thinkingMode: llmConfig.thinkingMode as any,
-    thinkingConfig: llmConfig.thinkingConfig as any,
+    thinking_mode: llmConfig.thinking_mode as any,
+    thinking_config: llmConfig.thinking_config as any,
     history,
   });
 

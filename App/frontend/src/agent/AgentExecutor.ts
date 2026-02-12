@@ -235,8 +235,8 @@ export const AgentExecutor = {
       projectId: input.projectId,
       outputLanguage: language,
       outputMode,
-      enablePrefill: agentConfig.advanced.enablePrefill,
-      thinkingMode: agentConfig.advanced.thinkingMode,
+      enable_prefill: agentConfig.advanced.enable_prefill,
+      thinking_mode: agentConfig.advanced.thinking_mode,
       tools,
       runMode: input.runMode,
       surface: input.surface,
@@ -261,8 +261,8 @@ export const AgentExecutor = {
       providerConfig,
       model: agentConfig.model,
       temperature: agentConfig.temperature,
-      thinkingMode: agentConfig.advanced.thinkingMode as any,
-      thinkingConfig: agentConfig.advanced.thinkingConfig,
+      thinking_mode: agentConfig.advanced.thinking_mode as any,
+      thinking_config: agentConfig.advanced.thinking_config,
       retryConfig: settings.retryConfig,
       history,
     });
@@ -413,8 +413,8 @@ export const AgentExecutor = {
       sourceContent: input.sourceContent,
       outputMode: 'raw_output',
       outputLanguage: input.targetLanguage,
-      enablePrefill: translationConfig.advanced.enablePrefill,
-      thinkingMode: translationConfig.advanced.thinkingMode,
+      enable_prefill: translationConfig.advanced.enable_prefill,
+      thinking_mode: translationConfig.advanced.thinking_mode,
     };
 
     const handle = startLLMSession<AgentTranslationInput, AgentTranslationResult>({
@@ -428,8 +428,8 @@ export const AgentExecutor = {
       providerConfig,
       model: translationConfig.model,
       temperature: translationConfig.temperature,
-      thinkingMode: translationConfig.advanced.thinkingMode as any,
-      thinkingConfig: translationConfig.advanced.thinkingConfig,
+      thinking_mode: translationConfig.advanced.thinking_mode as any,
+      thinking_config: translationConfig.advanced.thinking_config,
       retryConfig: settingsStore.getSettings().retryConfig,
       history: createEmptyUserHistory(),
     });

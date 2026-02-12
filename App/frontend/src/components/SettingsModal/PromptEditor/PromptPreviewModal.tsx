@@ -69,10 +69,10 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
   // Get fields for the current prompt type
   const promptTypeFields = useMemo(() => getPromptTypeFields(taskType), [taskType]);
 
-  const thinkingModeOptions = [
-    { value: 'off', label: t('settings.promptEditor.preview.thinkingMode.off') },
-    { value: 'model', label: t('settings.promptEditor.preview.thinkingMode.model') },
-    { value: 'custom', label: t('settings.promptEditor.preview.thinkingMode.custom') },
+  const thinking_modeOptions = [
+    { value: 'off', label: t('settings.promptEditor.preview.thinking_mode.off') },
+    { value: 'model', label: t('settings.promptEditor.preview.thinking_mode.model') },
+    { value: 'custom', label: t('settings.promptEditor.preview.thinking_mode.custom') },
   ];
 
   const outputModeOptions = [
@@ -267,11 +267,11 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
               <div className="prompt-preview-overrides-grid">
                 {/* Thinking Mode */}
                 <div className="prompt-preview-override-item">
-                  <label>thinkingMode</label>
+                  <label>thinking_mode</label>
                   <CustomSelect
-                    value={(configOverrides.thinkingMode as string) || 'off'}
-                    onChange={(value) => setConfigOverride('thinkingMode', value as ConfigData['thinkingMode'])}
-                    options={thinkingModeOptions}
+                    value={(configOverrides.thinking_mode as string) || 'off'}
+                    onChange={(value) => setConfigOverride('thinking_mode', value as ConfigData['thinking_mode'])}
+                    options={thinking_modeOptions}
                   />
                 </div>
 

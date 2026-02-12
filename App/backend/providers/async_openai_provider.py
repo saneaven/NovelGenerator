@@ -69,7 +69,7 @@ class AsyncOpenAIProvider(BaseProvider):
         max_tokens: Optional[int],
         provider_preference: Optional[Dict],
         thinking_config: Optional[Dict],
-        custom_api_format: Optional[str] = None,
+        thinking_format: Optional[str] = None,
     ) -> Dict[str, object]:
         is_gpt5 = self._is_gpt5_model(model)
 
@@ -297,7 +297,8 @@ class AsyncOpenAIProvider(BaseProvider):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
-        custom_api_format: Optional[str] = None,
+        thinking_format: Optional[str] = None,
+        request_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
@@ -319,7 +320,7 @@ class AsyncOpenAIProvider(BaseProvider):
             max_tokens,
             provider_preference,
             thinking_config,
-            custom_api_format,
+            thinking_format,
         )
 
         # Check if prefill has unclosed <thinking> tag - parser should start inside thinking block

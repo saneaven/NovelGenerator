@@ -1,5 +1,13 @@
 import { type ConversationBlock, type ThinkingDetail, type TokenUsage } from "./requestTypes";
-import { type ProviderType, type ProviderConfig, type ProviderPreference, type ThinkingConfig, type RetryConfig, type CustomApiFormat } from "../store/settingsStore";
+import {
+    type ProviderType,
+    type ProviderConfig,
+    type ProviderPreference,
+    type ThinkingConfig,
+    type RetryConfig,
+    type ThinkingFormat,
+    type RequestFormat,
+} from "../store/settingsStore";
 
 import { apiClient, API_BASE_URL } from "../api/client";
 
@@ -43,15 +51,16 @@ export async function* streamLLM(
         signal?: AbortSignal;
         temperature?: number;
         model?: string;
-        maxTokens?: number;
+        max_tokens?: number;
         tools?: any[];
-        toolChoice?: 'auto' | 'required' | 'none';
-        providerPreference?: ProviderPreference;
-        thinkingConfig?: ThinkingConfig;
-        thinkingMode?: 'off' | 'custom' | 'model';
-        customApiFormat?: CustomApiFormat;
+        tool_choice?: 'auto' | 'required' | 'none';
+        provider_preference?: ProviderPreference;
+        thinking_config?: ThinkingConfig;
+        thinking_mode?: 'off' | 'custom' | 'model';
+        thinking_format?: ThinkingFormat;
+        request_format?: RequestFormat;
         retryConfig?: RetryConfig;
-        nativeToolCall?: boolean;
+        native_tool_call?: boolean;
     }
 ): AsyncGenerator<string | { content: string | null; tool_calls?: any[]; thinking?: string; thinking_details?: ThinkingDetail[]; thinking_text?: string; thinking_signature?: string; usage?: TokenUsage }>
 {
@@ -64,15 +73,22 @@ export async function* streamLLM(
         additional_headers: providerConfig.additionalHeaders
     };
 
+    const backendMessages = messages.map((message) => ({
+        role: message.role,
+        content_parts: message.contentParts,
+        tool_calls: message.tool_calls,
+        tool_results: message.tool_results,
+    }));
+
     const requestBody: any = {
-        messages,
+        messages: backendMessages,
         model: opts?.model || 'gpt-5',
         temperature: opts?.temperature ?? 0.7,
-        config: backendConfig
+        provider_config: backendConfig,
     };
 
-    if (typeof opts?.maxTokens === 'number') {
-        requestBody.max_tokens = opts.maxTokens;
+    if (typeof opts?.max_tokens === 'number') {
+        requestBody.max_tokens = opts.max_tokens;
     }
 
     if (opts?.tools)
@@ -80,32 +96,36 @@ export async function* streamLLM(
         requestBody.tools = opts.tools;
     }
 
-    if (opts?.toolChoice)
+    if (opts?.tool_choice)
     {
-        requestBody.tool_choice = opts.toolChoice;
+        requestBody.tool_choice = opts.tool_choice;
     }
 
-    if (provider === 'openrouter' && opts?.providerPreference)
+    if (provider === 'openrouter' && opts?.provider_preference)
     {
-        requestBody.provider_preference = opts.providerPreference;
+        requestBody.provider_preference = opts.provider_preference;
     }
 
-    if (opts?.thinkingConfig)
+    if (opts?.thinking_config)
     {
-        requestBody.thinking_config = opts.thinkingConfig;
+        requestBody.thinking_config = opts.thinking_config;
     }
 
-    if (opts?.thinkingMode)
+    if (opts?.thinking_mode)
     {
-        requestBody.thinking_mode = opts.thinkingMode;
+        requestBody.thinking_mode = opts.thinking_mode;
     }
 
-    if (opts?.customApiFormat)
+    if (opts?.thinking_format)
     {
-        requestBody.custom_api_format = opts.customApiFormat;
+        requestBody.thinking_format = opts.thinking_format;
     }
 
-    if (opts?.nativeToolCall === true)
+    if (opts?.request_format) {
+        requestBody.request_format = opts.request_format;
+    }
+
+    if (opts?.native_tool_call === true)
     {
         requestBody.native_tool_call = true;
     }
@@ -367,21 +387,26 @@ export async function* streamLLM(
  */
 export async function fetchModels(
     provider: ProviderType,
-    config: ProviderConfig
+    config: ProviderConfig,
+    request_format?: RequestFormat
 ): Promise<any>
 {
     const endpoint = `${API_BASE}/providers/${provider}/models`;
 
-    const backendConfig = {
+    const provider_config = {
         api_key: config.apiKey,
         base_url: config.baseUrl,
-        additional_headers: config.additionalHeaders
+        additional_headers: config.additionalHeaders,
     };
+    const requestBody: Record<string, unknown> = { provider_config };
+    if (provider === "custom") {
+        requestBody.request_format = request_format ?? "openai_sdk";
+    }
 
     const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify(backendConfig)
+        body: JSON.stringify(requestBody)
     });
 
     if (!response.ok)

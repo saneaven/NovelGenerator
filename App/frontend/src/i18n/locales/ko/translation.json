@@ -525,6 +525,9 @@
       },
       "apiFormat": "사고 형식",
       "apiFormatHint": "커스텀 엔드포인트에서 사고 설정에 사용할 방언을 선택하세요",
+      "requestFormat": "요청 형식",
+      "requestFormatHint": "커스텀 엔드포인트가 사용하는 SDK 요청 스키마를 선택하세요",
+      "requestFormatCustomOnlyHint": "요청 형식은 커스텀 엔드포인트 프로바이더에서만 사용됩니다",
       "aiModel": "AI 모델",
       "browse": "찾아보기",
       "hide": "숨기기",
@@ -539,11 +542,11 @@
       "temperatureHint": "낮은 값은 더 집중되고 결정적인 출력을 생성합니다. 높은 값은 창의성과 무작위성을 증가시킵니다.",
       "temperatureGpt5Hint": "GPT-5 모델에서는 온도가 지원되지 않습니다. 대신 추론 노력을 사용하세요.",
       "advancedSettings": "고급 설정",
-      "enablePrefill": "어시스턴트 프리필 활성화",
+      "enable_prefill": "어시스턴트 프리필 활성화",
       "prefillDisabled": "OpenAI는 어시스턴트 프리필을 지원하지 않습니다",
       "prefillHint": "출력 형식을 안내하기 위해 어시스턴트의 응답을 미리 채웁니다",
-      "thinkingMode": "사고 모드",
-      "thinkingModes": {
+      "thinking_mode": "사고 모드",
+      "thinking_modes": {
         "off": "끄기",
         "offDescription": "사고 표시 안 함",
         "offGeminiDisabled": "Gemini는 사고 비활성화를 지원하지 않습니다",
@@ -552,7 +555,7 @@
         "custom": "사용자 정의 사고",
         "customDescription": "<thinking> 태그를 사용한 프롬프트 기반 사고 연쇄"
       },
-      "thinkingConfig": {
+      "thinking_config": {
         "title": "사고 구성",
         "effortLevel": "노력 수준",
         "reasoningEffort": "추론 노력 (GPT-5)",
@@ -565,6 +568,7 @@
           "mediumPercent": "중간 (최대 토큰의 ~50%)",
           "high": "높음 - 깊은 추론",
           "highPercent": "높음 (최대 토큰의 ~80%)",
+          "max": "최대 - 가능한 최고 추론",
           "xhigh": "매우 높음 - 최대 추론"
         },
         "effortHint": "GPT-5가 응답하기 전에 수행하는 추론의 양을 제어합니다",
@@ -579,9 +583,6 @@
         "maxThinkingTokens": "최대 사고 토큰 (선택사항)",
         "maxThinkingTokensPlaceholder": "자동 (노력 기반)",
         "maxThinkingTokensHint": "사고 토큰 예산을 직접 지정합니다. 노력 기반 할당을 사용하려면 비워두세요.",
-        "claudeBudgetTokens": "Claude 사고 예산 (토큰)",
-        "claudeBudgetTokensPlaceholder": "자동",
-        "claudeBudgetTokensHint": "모델 기본 예산을 사용하려면 비워두세요.",
         "thinkingBudget": "사고 예산 (토큰)",
         "thinkingBudgetHint": "최소 1024 토큰. 모델 기본값은 비워두세요.",
         "thinkingLevel": "사고 수준",
@@ -597,11 +598,11 @@
       "tokenizer": "토크나이저",
       "tokenizerHint": "토큰 수 추정에 사용할 토크나이저를 선택하세요",
       "tokenLimits": {
-        "contextWindowTokens": "컨텍스트 윈도우 토큰 수",
-        "contextWindowTokensHint": "로컬 프롬프트 예산 계산(예: 에이전트 메모리 preflight)에 사용됩니다. 실제 모델 컨텍스트 윈도우를 변경하진 않습니다.",
-        "maxOutputTokens": "응답 최대 토큰 수 (max_tokens)",
-        "maxOutputTokensPlaceholder": "기본값(프로바이더)",
-        "maxOutputTokensHint": "응답 생성 토큰 수 상한입니다. 비워두면 프로바이더 기본값을 사용합니다."
+        "context_window_tokens": "컨텍스트 윈도우 토큰 수",
+        "context_window_tokensHint": "로컬 프롬프트 예산 계산(예: 에이전트 메모리 preflight)에 사용됩니다. 비워두면 제한 없이 계산하며, 실제 모델 컨텍스트 윈도우를 변경하진 않습니다.",
+        "max_output_tokens": "응답 최대 토큰 수 (max_tokens)",
+        "max_output_tokensPlaceholder": "기본값(프로바이더)",
+        "max_output_tokensHint": "응답 생성 토큰 수 상한입니다. 비워두면 프로바이더 기본값을 사용합니다."
       }
     },
     "llmLog": {
@@ -614,7 +615,7 @@
       "provider": "제공자:",
       "model": "모델:",
       "temperature": "온도:",
-      "thinkingMode": "사고 모드:",
+      "thinking_mode": "사고 모드:",
       "tools": "도구:",
       "toolsDefined": "{{count}}개 정의됨",
       "messages": "메시지 ({{count}})",
@@ -889,7 +890,7 @@
         "characterCount": "{{count}}자",
         "tokenCount": "{{count}} 토큰",
         "tokenEstimateHint": "tiktoken으로 추정 (실제 API 결과와 다를 수 있음)",
-        "thinkingMode": {
+        "thinking_mode": {
           "off": "끄기",
           "model": "모델",
           "custom": "커스텀"

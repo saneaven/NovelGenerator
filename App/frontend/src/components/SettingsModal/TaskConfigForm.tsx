@@ -6,7 +6,8 @@ import type {
   AITaskType,
   ProviderCredentials,
   ThinkingConfig,
-  CustomApiFormat,
+  ThinkingFormat,
+  RequestFormat,
   TokenizerOverride,
 } from '../../store/settingsStore';
 import ModelBrowser from './ModelBrowser';
@@ -34,14 +35,19 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   const isGpt5 = config.provider === 'openai' && /gpt-?5/i.test(config.model);
   // GPT-5.2+ supports additional effort levels (minimal, xhigh)
   const isGpt52Plus = config.provider === 'openai' && /gpt-?5\.[2-9]/i.test(config.model);
+  const isCustomProvider = config.provider === 'custom';
+  const customRequestFormat: RequestFormat = config.advanced.request_format ?? 'openai_sdk';
+  const isCustomClaudeSdk = isCustomProvider && customRequestFormat === 'claude_sdk';
+  const effectiveThinkingFormat: ThinkingFormat =
+    isCustomClaudeSdk ? 'claude' : (config.advanced.thinking_format ?? 'openai');
 
   const handleProviderChange = (provider: ProviderType) => {
     // If switching to Gemini and thinking mode is 'off', change to 'model'
     // because Gemini doesn't support disabling thinking
     const newThinkingMode =
-      provider === 'gemini' && config.advanced.thinkingMode === 'off'
+      provider === 'gemini' && config.advanced.thinking_mode === 'off'
         ? 'model'
-        : config.advanced.thinkingMode;
+        : config.advanced.thinking_mode;
 
     // Close model browser when provider changes
     setShowModelBrowser(false);
@@ -50,10 +56,10 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
       ...config,
       provider,
       model: '',  // Clear model when provider changes
-      providerPreference: provider === 'openrouter' ? config.providerPreference : undefined,
+      provider_preference: provider === 'openrouter' ? config.provider_preference : undefined,
       advanced: {
         ...config.advanced,
-        thinkingMode: newThinkingMode,
+        thinking_mode: newThinkingMode,
       },
     });
   };
@@ -67,14 +73,14 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   };
 
   const handleMaxOutputTokensChange = (value: number | undefined) => {
-    onChange({ ...config, maxOutputTokens: value });
+    onChange({ ...config, max_output_tokens: value });
   };
 
   const handleContextWindowTokensChange = (value: number | undefined) => {
-    onChange({ ...config, contextWindowTokens: value });
+    onChange({ ...config, context_window_tokens: value });
   };
 
-  const handleAdvancedChange = (key: 'enablePrefill', value: boolean) => {
+  const handleAdvancedChange = (key: 'enable_prefill', value: boolean) => {
     onChange({
       ...config,
       advanced: {
@@ -89,7 +95,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
       ...config,
       advanced: {
         ...config.advanced,
-        thinkingMode: mode,
+        thinking_mode: mode,
       },
     });
   };
@@ -102,20 +108,33 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
       ...config,
       advanced: {
         ...config.advanced,
-        thinkingConfig: {
-          ...config.advanced.thinkingConfig,
+        thinking_config: {
+          ...config.advanced.thinking_config,
           [key]: value,
         },
       },
     });
   };
 
-  const handleCustomApiFormatChange = (format: CustomApiFormat | undefined) => {
+  const handleThinkingFormatChange = (format: ThinkingFormat | undefined) => {
     onChange({
       ...config,
       advanced: {
         ...config.advanced,
-        customApiFormat: format,
+        thinking_format: format,
+      },
+    });
+  };
+
+  const handleRequestFormatChange = (format: RequestFormat) => {
+    onChange({
+      ...config,
+      advanced: {
+        ...config.advanced,
+        request_format: format,
+        thinking_format: format === 'claude_sdk'
+          ? 'claude'
+          : (config.advanced.thinking_format ?? 'openai'),
       },
     });
   };
@@ -125,7 +144,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
       ...config,
       advanced: {
         ...config.advanced,
-        tokenizerOverride: tokenizer,
+        tokenizer_override: tokenizer,
       },
     });
   };
@@ -156,16 +175,33 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
             {config.provider === 'claude' && t('settings.taskConfig.providerDescriptions.claude')}
             {config.provider === 'openrouter' && t('settings.taskConfig.providerDescriptions.openrouter')}
             {config.provider === 'xai' && t('settings.taskConfig.providerDescriptions.xai')}
-            {config.provider === 'custom' && t('settings.taskConfig.providerDescriptions.custom')}
+            {isCustomProvider && t('settings.taskConfig.providerDescriptions.custom')}
           </p>
         </div>
 
+        {isCustomProvider && (
+          <div className="form-field">
+            <label>{t('settings.taskConfig.requestFormat')}</label>
+            <CustomSelect
+              value={customRequestFormat}
+              onChange={(value) =>
+                handleRequestFormatChange(value as RequestFormat)
+              }
+              options={[
+                { value: 'openai_sdk', label: 'OpenAI SDK' },
+                { value: 'claude_sdk', label: 'Claude SDK' },
+              ]}
+            />
+            <p className="field-hint">{t('settings.taskConfig.requestFormatHint')}</p>
+          </div>
+        )}
+
         {/* Tokenizer selector for OpenRouter and Custom providers */}
-        {(config.provider === 'openrouter' || config.provider === 'custom') && (
+        {(config.provider === 'openrouter' || isCustomProvider) && (
           <div className="form-field">
             <label>{t('settings.taskConfig.tokenizer')}</label>
             <CustomSelect
-              value={config.advanced.tokenizerOverride || 'openai'}
+              value={config.advanced.tokenizer_override || 'openai'}
               onChange={(value) => handleTokenizerOverrideChange(value as TokenizerOverride)}
               options={[
                 { value: 'openai', label: 'OpenAI (tiktoken)' },
@@ -208,12 +244,13 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
               key={config.provider}  // Remount when provider changes
               autoExpand={true}
               provider={config.provider}
+              request_format={config.provider === 'custom' ? customRequestFormat : undefined}
               currentModel={config.model}
-              providerPreference={config.providerPreference}
+              provider_preference={config.provider_preference}
               credentials={credentials}
               onSelectModel={handleModelChange}
               onUpdateProviderPreference={(pref) =>
-                onChange({ ...config, providerPreference: pref })
+                onChange({ ...config, provider_preference: pref })
               }
             />
           )}
@@ -246,12 +283,12 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
         </div>
 
         <div className="form-field">
-          <label>{t('settings.taskConfig.tokenLimits.contextWindowTokens')}</label>
+          <label>{t('settings.taskConfig.tokenLimits.context_window_tokens')}</label>
           <input
             type="number"
             min="1024"
             max="1000000"
-            value={config.contextWindowTokens ?? ''}
+            value={config.context_window_tokens ?? ''}
             onChange={(e) =>
               handleContextWindowTokensChange(
                 e.target.value ? parseInt(e.target.value) : undefined
@@ -260,25 +297,25 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
             placeholder="32000"
             className="config-input"
           />
-          <p className="field-hint">{t('settings.taskConfig.tokenLimits.contextWindowTokensHint')}</p>
+          <p className="field-hint">{t('settings.taskConfig.tokenLimits.context_window_tokensHint')}</p>
         </div>
 
         <div className="form-field">
-          <label>{t('settings.taskConfig.tokenLimits.maxOutputTokens')}</label>
+          <label>{t('settings.taskConfig.tokenLimits.max_output_tokens')}</label>
           <input
             type="number"
             min="1"
             max="1000000"
-            value={config.maxOutputTokens ?? ''}
+            value={config.max_output_tokens ?? ''}
             onChange={(e) =>
               handleMaxOutputTokensChange(
                 e.target.value ? parseInt(e.target.value) : undefined
               )
             }
-            placeholder={t('settings.taskConfig.tokenLimits.maxOutputTokensPlaceholder')}
+            placeholder={t('settings.taskConfig.tokenLimits.max_output_tokensPlaceholder')}
             className="config-input"
           />
-          <p className="field-hint">{t('settings.taskConfig.tokenLimits.maxOutputTokensHint')}</p>
+          <p className="field-hint">{t('settings.taskConfig.tokenLimits.max_output_tokensHint')}</p>
         </div>
       </div>
 
@@ -288,14 +325,14 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
         <h4 className="section-title"><Advenced size="lg" />{t('settings.taskConfig.advancedSettings')}</h4>
 
         <div className="advanced-options">
-          {/* Custom endpoint - thinking format selector */}
-          {config.provider === 'custom' && (
+          {/* Custom endpoint - thinking format selector (OpenAI SDK transport only) */}
+          {isCustomProvider && customRequestFormat === 'openai_sdk' && (
             <div className="form-field">
               <label>{t('settings.taskConfig.apiFormat')}</label>
               <CustomSelect
-                value={config.advanced.customApiFormat || 'openai'}
+                value={config.advanced.thinking_format || 'openai'}
                 onChange={(value) =>
-                  handleCustomApiFormatChange(value as CustomApiFormat)
+                  handleThinkingFormatChange(value as ThinkingFormat)
                 }
                 options={[
                   { value: 'openai', label: 'OpenAI' },
@@ -311,12 +348,12 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
             <label className="checkbox-label">
               <input
                 type="checkbox"
-                checked={config.advanced.enablePrefill}
-                onChange={(e) => handleAdvancedChange('enablePrefill', e.target.checked)}
+                checked={config.advanced.enable_prefill}
+                onChange={(e) => handleAdvancedChange('enable_prefill', e.target.checked)}
                 disabled={config.provider === 'openai'}
               />
               <div className="checkbox-content">
-                <span className="checkbox-title">{t('settings.taskConfig.enablePrefill')}</span>
+                <span className="checkbox-title">{t('settings.taskConfig.enable_prefill')}</span>
                 <span className="checkbox-description">
                   {config.provider === 'openai'
                     ? t('settings.taskConfig.prefillDisabled')
@@ -327,23 +364,23 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
           </div>
 
           <div className="thinking-mode-field">
-            <label className="field-label">{t('settings.taskConfig.thinkingMode')}</label>
+            <label className="field-label">{t('settings.taskConfig.thinking_mode')}</label>
             <div className="radio-group">
               <label className={`radio-option ${config.provider === 'gemini' ? 'disabled' : ''}`}>
                 <input
                   type="radio"
                   name={`thinking-mode-${taskType}`}
                   value="off"
-                  checked={config.advanced.thinkingMode === 'off'}
+                  checked={config.advanced.thinking_mode === 'off'}
                   onChange={() => handleThinkingModeChange('off')}
                   disabled={config.provider === 'gemini'}
                 />
                 <div className="radio-content">
-                  <span className="radio-title">{t('settings.taskConfig.thinkingModes.off')}</span>
+                  <span className="radio-title">{t('settings.taskConfig.thinking_modes.off')}</span>
                   <span className="radio-description">
                     {config.provider === 'gemini'
-                      ? t('settings.taskConfig.thinkingModes.offGeminiDisabled')
-                      : t('settings.taskConfig.thinkingModes.offDescription')}
+                      ? t('settings.taskConfig.thinking_modes.offGeminiDisabled')
+                      : t('settings.taskConfig.thinking_modes.offDescription')}
                   </span>
                 </div>
               </label>
@@ -353,13 +390,13 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                   type="radio"
                   name={`thinking-mode-${taskType}`}
                   value="model"
-                  checked={config.advanced.thinkingMode === 'model'}
+                  checked={config.advanced.thinking_mode === 'model'}
                   onChange={() => handleThinkingModeChange('model')}
                 />
                 <div className="radio-content">
-                  <span className="radio-title">{t('settings.taskConfig.thinkingModes.model')}</span>
+                  <span className="radio-title">{t('settings.taskConfig.thinking_modes.model')}</span>
                   <span className="radio-description">
-                    {t('settings.taskConfig.thinkingModes.modelDescription')}
+                    {t('settings.taskConfig.thinking_modes.modelDescription')}
                   </span>
                 </div>
               </label>
@@ -369,62 +406,62 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                   type="radio"
                   name={`thinking-mode-${taskType}`}
                   value="custom"
-                  checked={config.advanced.thinkingMode === 'custom'}
+                  checked={config.advanced.thinking_mode === 'custom'}
                   onChange={() => handleThinkingModeChange('custom')}
                 />
                 <div className="radio-content">
-                  <span className="radio-title">{t('settings.taskConfig.thinkingModes.custom')}</span>
+                  <span className="radio-title">{t('settings.taskConfig.thinking_modes.custom')}</span>
                   <span className="radio-description">
-                    {t('settings.taskConfig.thinkingModes.customDescription')}
+                    {t('settings.taskConfig.thinking_modes.customDescription')}
                   </span>
                 </div>
               </label>
             </div>
 
             {/* Thinking Config (only shown for model mode) */}
-            {config.advanced.thinkingMode === 'model' && (
+            {config.advanced.thinking_mode === 'model' && (
               <div className="thinking-config">
-                <h5 className="subsection-title"><Settings size="sm" />{t('settings.taskConfig.thinkingConfig.title')}</h5>
+                <h5 className="subsection-title"><Settings size="sm" />{t('settings.taskConfig.thinking_config.title')}</h5>
 
                 {/* Generic settings for OpenRouter/OpenAI (not custom) */}
                 {(config.provider === 'openrouter' || config.provider === 'openai' || config.provider === 'xai') && (
                   <>
                     <div className="form-field">
-                      <label>{isGpt5 ? t('settings.taskConfig.thinkingConfig.reasoningEffort') : t('settings.taskConfig.thinkingConfig.effortLevel')}</label>
+                      <label>{isGpt5 ? t('settings.taskConfig.thinking_config.reasoningEffort') : t('settings.taskConfig.thinking_config.effortLevel')}</label>
                       <CustomSelect
-                        value={config.advanced.thinkingConfig?.effort || 'medium'}
+                        value={config.advanced.thinking_config?.effort || 'medium'}
                         onChange={(value) => handleThinkingConfigChange('effort', value)}
                         options={[
-                          ...(isGpt5 ? [{ value: 'none', label: t('settings.taskConfig.thinkingConfig.effortOptions.none') }] : []),
-                          ...(isGpt52Plus ? [{ value: 'minimal', label: t('settings.taskConfig.thinkingConfig.effortOptions.minimal') }] : []),
-                          { value: 'low', label: isGpt5 ? t('settings.taskConfig.thinkingConfig.effortOptions.lowPercent') : t('settings.taskConfig.thinkingConfig.effortOptions.low') },
-                          { value: 'medium', label: isGpt5 ? t('settings.taskConfig.thinkingConfig.effortOptions.mediumPercent') : t('settings.taskConfig.thinkingConfig.effortOptions.medium') },
-                          { value: 'high', label: isGpt5 ? t('settings.taskConfig.thinkingConfig.effortOptions.highPercent') : t('settings.taskConfig.thinkingConfig.effortOptions.high') },
-                          ...(isGpt52Plus ? [{ value: 'xhigh', label: t('settings.taskConfig.thinkingConfig.effortOptions.xhigh') }] : []),
+                          ...(isGpt5 ? [{ value: 'none', label: t('settings.taskConfig.thinking_config.effortOptions.none') }] : []),
+                          ...(isGpt52Plus ? [{ value: 'minimal', label: t('settings.taskConfig.thinking_config.effortOptions.minimal') }] : []),
+                          { value: 'low', label: isGpt5 ? t('settings.taskConfig.thinking_config.effortOptions.lowPercent') : t('settings.taskConfig.thinking_config.effortOptions.low') },
+                          { value: 'medium', label: isGpt5 ? t('settings.taskConfig.thinking_config.effortOptions.mediumPercent') : t('settings.taskConfig.thinking_config.effortOptions.medium') },
+                          { value: 'high', label: isGpt5 ? t('settings.taskConfig.thinking_config.effortOptions.highPercent') : t('settings.taskConfig.thinking_config.effortOptions.high') },
+                          ...(isGpt52Plus ? [{ value: 'xhigh', label: t('settings.taskConfig.thinking_config.effortOptions.xhigh') }] : []),
                         ]}
                       />
                       <p className="field-hint">
                         {isGpt5
-                          ? t('settings.taskConfig.thinkingConfig.effortHint')
-                          : t('settings.taskConfig.thinkingConfig.effortHintGeneric')}
+                          ? t('settings.taskConfig.thinking_config.effortHint')
+                          : t('settings.taskConfig.thinking_config.effortHintGeneric')}
                       </p>
                     </div>
 
                     {/* Verbosity dropdown - GPT-5 only */}
                     {isGpt5 && (
                       <div className="form-field">
-                        <label>{t('settings.taskConfig.thinkingConfig.verbosity')}</label>
+                        <label>{t('settings.taskConfig.thinking_config.verbosity')}</label>
                         <CustomSelect
-                          value={config.advanced.thinkingConfig?.verbosity || 'medium'}
+                          value={config.advanced.thinking_config?.verbosity || 'medium'}
                           onChange={(value) => handleThinkingConfigChange('verbosity', value)}
                           options={[
-                            { value: 'low', label: t('settings.taskConfig.thinkingConfig.verbosityOptions.low') },
-                            { value: 'medium', label: t('settings.taskConfig.thinkingConfig.verbosityOptions.medium') },
-                            { value: 'high', label: t('settings.taskConfig.thinkingConfig.verbosityOptions.high') },
+                            { value: 'low', label: t('settings.taskConfig.thinking_config.verbosityOptions.low') },
+                            { value: 'medium', label: t('settings.taskConfig.thinking_config.verbosityOptions.medium') },
+                            { value: 'high', label: t('settings.taskConfig.thinking_config.verbosityOptions.high') },
                           ]}
                         />
                         <p className="field-hint">
-                          {t('settings.taskConfig.thinkingConfig.verbosityHint')}
+                          {t('settings.taskConfig.thinking_config.verbosityHint')}
                         </p>
                       </div>
                     )}
@@ -432,23 +469,23 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                     {/* Max tokens - not for GPT-5 (uses max_output_tokens automatically) */}
                     {!isGpt5 && (
                       <div className="form-field">
-                        <label>{t('settings.taskConfig.thinkingConfig.maxThinkingTokens')}</label>
+                        <label>{t('settings.taskConfig.thinking_config.maxThinkingTokens')}</label>
                         <input
                           type="number"
                           min="1024"
                           max="32000"
-                          value={config.advanced.thinkingConfig?.maxTokens || ''}
+                          value={config.advanced.thinking_config?.max_tokens || ''}
                           onChange={(e) =>
                             handleThinkingConfigChange(
-                              'maxTokens',
+                              'max_tokens',
                               e.target.value ? parseInt(e.target.value) : undefined
                             )
                           }
-                          placeholder={t('settings.taskConfig.thinkingConfig.maxThinkingTokensPlaceholder')}
+                          placeholder={t('settings.taskConfig.thinking_config.maxThinkingTokensPlaceholder')}
                           className="config-input"
                         />
                         <p className="field-hint">
-                          {t('settings.taskConfig.thinkingConfig.maxThinkingTokensHint')}
+                          {t('settings.taskConfig.thinking_config.maxThinkingTokensHint')}
                         </p>
                       </div>
                     )}
@@ -459,68 +496,65 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                 {config.provider === 'custom' && (
                   <>
                     {/* OpenAI format options */}
-                    {config.advanced.customApiFormat === 'openai' && (
+                    {effectiveThinkingFormat === 'openai' && (
                       <>
                         <div className="form-field">
-                          <label>{t('settings.taskConfig.thinkingConfig.reasoningEffort')}</label>
+                          <label>{t('settings.taskConfig.thinking_config.reasoningEffort')}</label>
                           <CustomSelect
-                            value={config.advanced.thinkingConfig?.effort || 'medium'}
+                            value={config.advanced.thinking_config?.effort || 'medium'}
                             onChange={(value) => handleThinkingConfigChange('effort', value)}
                             options={[
-                              { value: 'none', label: t('settings.taskConfig.thinkingConfig.effortOptions.none') },
-                              { value: 'minimal', label: t('settings.taskConfig.thinkingConfig.effortOptions.minimal') },
-                              { value: 'low', label: t('settings.taskConfig.thinkingConfig.effortOptions.lowPercent') },
-                              { value: 'medium', label: t('settings.taskConfig.thinkingConfig.effortOptions.mediumPercent') },
-                              { value: 'high', label: t('settings.taskConfig.thinkingConfig.effortOptions.highPercent') },
-                              { value: 'xhigh', label: t('settings.taskConfig.thinkingConfig.effortOptions.xhigh') },
+                              { value: 'none', label: t('settings.taskConfig.thinking_config.effortOptions.none') },
+                              { value: 'minimal', label: t('settings.taskConfig.thinking_config.effortOptions.minimal') },
+                              { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.lowPercent') },
+                              { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.mediumPercent') },
+                              { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.highPercent') },
+                              { value: 'xhigh', label: t('settings.taskConfig.thinking_config.effortOptions.xhigh') },
                             ]}
                           />
-                          <p className="field-hint">{t('settings.taskConfig.thinkingConfig.effortHint')}</p>
+                          <p className="field-hint">{t('settings.taskConfig.thinking_config.effortHint')}</p>
                         </div>
                         <div className="form-field">
-                          <label>{t('settings.taskConfig.thinkingConfig.verbosity')}</label>
+                          <label>{t('settings.taskConfig.thinking_config.verbosity')}</label>
                           <CustomSelect
-                            value={config.advanced.thinkingConfig?.verbosity || 'medium'}
+                            value={config.advanced.thinking_config?.verbosity || 'medium'}
                             onChange={(value) => handleThinkingConfigChange('verbosity', value)}
                             options={[
-                              { value: 'low', label: t('settings.taskConfig.thinkingConfig.verbosityOptions.low') },
-                              { value: 'medium', label: t('settings.taskConfig.thinkingConfig.verbosityOptions.medium') },
-                              { value: 'high', label: t('settings.taskConfig.thinkingConfig.verbosityOptions.high') },
+                              { value: 'low', label: t('settings.taskConfig.thinking_config.verbosityOptions.low') },
+                              { value: 'medium', label: t('settings.taskConfig.thinking_config.verbosityOptions.medium') },
+                              { value: 'high', label: t('settings.taskConfig.thinking_config.verbosityOptions.high') },
                             ]}
                           />
-                          <p className="field-hint">{t('settings.taskConfig.thinkingConfig.verbosityHint')}</p>
+                          <p className="field-hint">{t('settings.taskConfig.thinking_config.verbosityHint')}</p>
                         </div>
                       </>
                     )}
 
                     {/* Claude format options */}
-                    {config.advanced.customApiFormat === 'claude' && (
+                    {effectiveThinkingFormat === 'claude' && (
                       <div className="form-field">
-                        <label>{t('settings.taskConfig.thinkingConfig.thinkingBudget')}</label>
-                        <input
-                          type="number"
-                          min="1024"
-                          value={config.advanced.thinkingConfig?.claudeBudgetTokens || ''}
-                          onChange={(e) =>
-                            handleThinkingConfigChange(
-                              'claudeBudgetTokens',
-                              e.target.value ? parseInt(e.target.value) : undefined
-                            )
-                          }
-                          placeholder={t('settings.taskConfig.thinkingConfig.claudeBudgetTokensPlaceholder')}
-                          className="config-input"
+                        <label>{t('settings.taskConfig.thinking_config.effortLevel')}</label>
+                        <CustomSelect
+                          value={config.advanced.thinking_config?.effort || 'high'}
+                          onChange={(value) => handleThinkingConfigChange('effort', value)}
+                          options={[
+                            { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
+                            { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
+                            { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
+                            { value: 'max', label: t('settings.taskConfig.thinking_config.effortOptions.max') },
+                          ]}
                         />
-                        <p className="field-hint">{t('settings.taskConfig.thinkingConfig.thinkingBudgetHint')}</p>
+                        <p className="field-hint">{t('settings.taskConfig.thinking_config.effortHintGeneric')}</p>
                       </div>
                     )}
 
                     {/* Gemini format options */}
-                    {config.advanced.customApiFormat === 'gemini' && (
+                    {effectiveThinkingFormat === 'gemini' && (
                       <>
                         <div className="form-field">
-                          <label>{t('settings.taskConfig.thinkingConfig.reasoningEffort')}</label>
+                          <label>{t('settings.taskConfig.thinking_config.reasoningEffort')}</label>
                           <CustomSelect
-                            value={config.advanced.thinkingConfig?.effort || ''}
+                            value={config.advanced.thinking_config?.effort || ''}
                             onChange={(value) =>
                               handleThinkingConfigChange(
                                 'effort',
@@ -529,55 +563,55 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                             }
                             options={[
                               { value: '', label: t('common.auto') },
-                              { value: 'none', label: t('settings.taskConfig.thinkingConfig.effortOptions.none') },
-                              { value: 'low', label: t('settings.taskConfig.thinkingConfig.effortOptions.low') },
-                              { value: 'medium', label: t('settings.taskConfig.thinkingConfig.effortOptions.medium') },
-                              { value: 'high', label: t('settings.taskConfig.thinkingConfig.effortOptions.high') },
+                              { value: 'none', label: t('settings.taskConfig.thinking_config.effortOptions.none') },
+                              { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
+                              { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
+                              { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
                             ]}
                           />
-                          <p className="field-hint">{t('settings.taskConfig.thinkingConfig.geminiCompatEffortHint')}</p>
+                          <p className="field-hint">{t('settings.taskConfig.thinking_config.geminiCompatEffortHint')}</p>
                         </div>
 
                         <div className="form-field">
-                          <label>{t('settings.taskConfig.thinkingConfig.thinkingLevel')}</label>
+                          <label>{t('settings.taskConfig.thinking_config.thinkingLevel')}</label>
                           <CustomSelect
-                            value={config.advanced.thinkingConfig?.geminiThinkingLevel || ''}
+                            value={config.advanced.thinking_config?.gemini_thinking_level || ''}
                             onChange={(value) =>
                               handleThinkingConfigChange(
-                                'geminiThinkingLevel',
+                                'gemini_thinking_level',
                                 value === '' ? undefined : value
                               )
                             }
                             options={[
                               { value: '', label: t('common.auto') },
-                              { value: 'minimal', label: t('settings.taskConfig.thinkingConfig.effortOptions.minimal') },
-                              { value: 'low', label: t('settings.taskConfig.thinkingConfig.effortOptions.low') },
-                              { value: 'medium', label: t('settings.taskConfig.thinkingConfig.effortOptions.medium') },
-                              { value: 'high', label: t('settings.taskConfig.thinkingConfig.effortOptions.high') },
+                              { value: 'minimal', label: t('settings.taskConfig.thinking_config.effortOptions.minimal') },
+                              { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
+                              { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
+                              { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
                             ]}
                           />
-                          <p className="field-hint">{t('settings.taskConfig.thinkingConfig.thinkingLevelHint')}</p>
+                          <p className="field-hint">{t('settings.taskConfig.thinking_config.thinkingLevelHint')}</p>
                         </div>
 
                         <div className="form-field">
-                          <label>{t('settings.taskConfig.thinkingConfig.thinkingBudget25')}</label>
+                          <label>{t('settings.taskConfig.thinking_config.thinkingBudget25')}</label>
                           <input
                             type="number"
                             min="0"
-                            value={config.advanced.thinkingConfig?.geminiBudgetTokens ?? ''}
+                            value={config.advanced.thinking_config?.gemini_budget_tokens ?? ''}
                             onChange={(e) =>
                               handleThinkingConfigChange(
-                                'geminiBudgetTokens',
+                                'gemini_budget_tokens',
                                 e.target.value === '' ? undefined : parseInt(e.target.value)
                               )
                             }
-                            placeholder={t('settings.taskConfig.thinkingConfig.thinkingBudget25Placeholder')}
+                            placeholder={t('settings.taskConfig.thinking_config.thinkingBudget25Placeholder')}
                             className="config-input"
                           />
-                          <p className="field-hint">{t('settings.taskConfig.thinkingConfig.thinkingBudget25Hint')}</p>
+                          <p className="field-hint">{t('settings.taskConfig.thinking_config.thinkingBudget25Hint')}</p>
                         </div>
 
-                        <p className="field-hint">{t('settings.taskConfig.thinkingConfig.geminiCompatConflictHint')}</p>
+                        <p className="field-hint">{t('settings.taskConfig.thinking_config.geminiCompatConflictHint')}</p>
                       </>
                     )}
 
@@ -587,21 +621,18 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                 {/* Claude-specific */}
                 {config.provider === 'claude' && (
                   <div className="form-field">
-                    <label>{t('settings.taskConfig.thinkingConfig.claudeBudgetTokens')}</label>
-                    <input
-                      type="number"
-                      min="256"
-                      value={config.advanced.thinkingConfig?.claudeBudgetTokens || ''}
-                      onChange={(e) =>
-                        handleThinkingConfigChange(
-                          'claudeBudgetTokens',
-                          e.target.value ? parseInt(e.target.value) : undefined
-                        )
-                      }
-                      placeholder={t('common.auto')}
-                      className="config-input"
+                    <label>{t('settings.taskConfig.thinking_config.effortLevel')}</label>
+                    <CustomSelect
+                      value={config.advanced.thinking_config?.effort || 'high'}
+                      onChange={(value) => handleThinkingConfigChange('effort', value)}
+                      options={[
+                        { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
+                        { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
+                        { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
+                        { value: 'max', label: t('settings.taskConfig.thinking_config.effortOptions.max') },
+                      ]}
                     />
-                    <p className="field-hint">{t('settings.taskConfig.thinkingConfig.claudeBudgetTokensHint')}</p>
+                    <p className="field-hint">{t('settings.taskConfig.thinking_config.effortHintGeneric')}</p>
                   </div>
                 )}
 
@@ -610,27 +641,27 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                   <>
                     {config.model.toLowerCase().includes('gemini-3') && (
                       <div className="form-field">
-                        <label>{t('settings.taskConfig.thinkingConfig.thinkingLevelGemini3')}</label>
+                        <label>{t('settings.taskConfig.thinking_config.thinkingLevelGemini3')}</label>
                         {/*
                           Gemini 3 supports only 'low' | 'high'. Default to 'high' if legacy value exists.
                         */}
                         {(() => {
-                          const lvl = config.advanced.thinkingConfig?.geminiThinkingLevel === 'low' ? 'low' : 'high';
-                          if (config.advanced.thinkingConfig?.geminiThinkingLevel !== lvl) {
-                            handleThinkingConfigChange('geminiThinkingLevel', lvl);
+                          const lvl = config.advanced.thinking_config?.gemini_thinking_level === 'low' ? 'low' : 'high';
+                          if (config.advanced.thinking_config?.gemini_thinking_level !== lvl) {
+                            handleThinkingConfigChange('gemini_thinking_level', lvl);
                           }
                           return null;
                         })()}
                         <CustomSelect
                           value={
-                            config.advanced.thinkingConfig?.geminiThinkingLevel === 'low'
+                            config.advanced.thinking_config?.gemini_thinking_level === 'low'
                               ? 'low'
                               : 'high'
                           }
                           onChange={(value) =>
                             handleThinkingConfigChange(
-                              'geminiThinkingLevel',
-                              value as ThinkingConfig['geminiThinkingLevel']
+                              'gemini_thinking_level',
+                              value as ThinkingConfig['gemini_thinking_level']
                             )
                           }
                           options={[
@@ -638,27 +669,27 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                             { value: 'high', label: t('common.high') },
                           ]}
                         />
-                        <p className="field-hint">{t('settings.taskConfig.thinkingConfig.thinkingLevelGemini3Hint')}</p>
+                        <p className="field-hint">{t('settings.taskConfig.thinking_config.thinkingLevelGemini3Hint')}</p>
                       </div>
                     )}
 
                     {config.model.toLowerCase().includes('2.5') && (
                       <div className="form-field">
-                        <label>{t('settings.taskConfig.thinkingConfig.thinkingBudget25')}</label>
+                        <label>{t('settings.taskConfig.thinking_config.thinkingBudget25')}</label>
                         <input
                           type="number"
                           min="0"
-                          value={config.advanced.thinkingConfig?.geminiBudgetTokens ?? ''}
+                          value={config.advanced.thinking_config?.gemini_budget_tokens ?? ''}
                           onChange={(e) =>
                             handleThinkingConfigChange(
-                              'geminiBudgetTokens',
+                              'gemini_budget_tokens',
                               e.target.value === '' ? undefined : parseInt(e.target.value)
                             )
                           }
-                          placeholder={t('settings.taskConfig.thinkingConfig.thinkingBudget25Placeholder')}
+                          placeholder={t('settings.taskConfig.thinking_config.thinkingBudget25Placeholder')}
                           className="config-input"
                         />
-                        <p className="field-hint">{t('settings.taskConfig.thinkingConfig.thinkingBudget25Hint')}</p>
+                        <p className="field-hint">{t('settings.taskConfig.thinking_config.thinkingBudget25Hint')}</p>
                       </div>
                     )}
                   </>

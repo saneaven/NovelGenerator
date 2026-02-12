@@ -180,7 +180,8 @@ class OpenAIResponsesProvider(BaseProvider):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
-        custom_api_format: Optional[str] = None,
+        thinking_format: Optional[str] = None,
+        request_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:

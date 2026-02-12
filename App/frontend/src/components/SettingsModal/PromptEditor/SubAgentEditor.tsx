@@ -293,7 +293,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   const credentials = useCredentialsStore((s) => s.credentials);
   const settings = useSettings();
   const { subAgents, deleteSubAgent } = useSubAgentStore();
-  const globalSubAgentConfig = settings.taskConfigs.subAgent;
+  const globalSubAgentConfig = settings.task_configs.subAgent;
 
   const agent = useMemo(() => {
     return selectedId ? subAgents.find((s) => s.id === selectedId) : undefined;

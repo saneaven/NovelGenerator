@@ -54,8 +54,8 @@ export type PreSessionInput = {
   userInput: string;
   outputLanguage: string;
   outputMode: 'tool_call' | 'native_tool_call' | 'raw_output';
-  enablePrefill: boolean;
-  thinkingMode: 'off' | 'model' | 'custom';
+  enable_prefill: boolean;
+  thinking_mode: 'off' | 'model' | 'custom';
   contextObjectIds?: string[];
 };
 
@@ -425,8 +425,8 @@ async function runMemorySummarySession(args: {
     projectId: args.projectId,
     outputLanguage: args.language,
     outputMode: 'raw_output',
-    enablePrefill: summaryConfig.advanced.enablePrefill,
-    thinkingMode: summaryConfig.advanced.thinkingMode,
+    enable_prefill: summaryConfig.advanced.enable_prefill,
+    thinking_mode: summaryConfig.advanced.thinking_mode,
     memorySummary: {
       previousSummary: args.previousSummaryText || '',
       messages: args.messagesToArchive.map((m) => ({
@@ -456,8 +456,8 @@ async function runMemorySummarySession(args: {
     providerConfig,
     model: summaryConfig.model,
     temperature: summaryConfig.temperature,
-    thinkingMode: summaryConfig.advanced.thinkingMode as any,
-    thinkingConfig: summaryConfig.advanced.thinkingConfig,
+    thinking_mode: summaryConfig.advanced.thinking_mode as any,
+    thinking_config: summaryConfig.advanced.thinking_config,
     retryConfig: settingsStore.getSettings().retryConfig,
     history: createEmptyUserHistory(),
   });
@@ -544,21 +544,21 @@ export const AgentMemoryManager = {
     let memory = await buildMemoryContext(input, status, activeHistory, options);
 
     const agentTaskConfig = settingsStore.getTaskConfig('agent');
-    const contextWindowTokens =
-      typeof agentTaskConfig.contextWindowTokens === 'number'
-        ? agentTaskConfig.contextWindowTokens
-        : DEFAULT_POLICY.maxContextTokens;
+    const contextWindowTokens = agentTaskConfig.context_window_tokens;
+    const context_window_tokens =
+      typeof contextWindowTokens === 'number' ? contextWindowTokens : Number.POSITIVE_INFINITY;
     const reservedCompletionTokens =
-      typeof agentTaskConfig.maxOutputTokens === 'number'
-        ? agentTaskConfig.maxOutputTokens
+      typeof agentTaskConfig.max_output_tokens === 'number'
+        ? agentTaskConfig.max_output_tokens
         : DEFAULT_POLICY.reservedCompletionTokens;
 
-    const budgetTokens =
-      contextWindowTokens - reservedCompletionTokens - DEFAULT_POLICY.safetyMarginTokens;
+    const budgetTokens = Number.isFinite(context_window_tokens)
+      ? context_window_tokens - reservedCompletionTokens - DEFAULT_POLICY.safetyMarginTokens
+      : Number.POSITIVE_INFINITY;
 
-    if (budgetTokens <= 0) {
+    if (Number.isFinite(budgetTokens) && budgetTokens <= 0) {
       throw new Error(
-        `Invalid token budget. contextWindowTokens=${contextWindowTokens}, maxOutputTokens=${reservedCompletionTokens}, safetyMarginTokens=${DEFAULT_POLICY.safetyMarginTokens}`
+        `Invalid token budget. context_window_tokens=${context_window_tokens}, max_output_tokens=${reservedCompletionTokens}, safetyMarginTokens=${DEFAULT_POLICY.safetyMarginTokens}`
       );
     }
 
@@ -569,8 +569,8 @@ export const AgentMemoryManager = {
         projectId: input.projectId,
         outputLanguage: input.outputLanguage,
         outputMode: input.outputMode,
-        enablePrefill: input.enablePrefill,
-        thinkingMode: input.thinkingMode,
+        enable_prefill: input.enable_prefill,
+        thinking_mode: input.thinking_mode,
         runMode: input.runMode,
         surface: input.surface,
         contextObjectIds: input.contextObjectIds,

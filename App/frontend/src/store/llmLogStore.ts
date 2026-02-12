@@ -8,7 +8,7 @@ export interface LLMLogRequest {
   provider: ProviderType;
   model: string;
   temperature: number;
-  thinkingMode: 'off' | 'model' | 'custom';
+  thinking_mode: 'off' | 'model' | 'custom';
   outputMode?: OutputMode;
   tools?: any[];
   messages: ConversationBlock[];

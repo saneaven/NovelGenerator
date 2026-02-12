@@ -207,8 +207,8 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   const { t } = useTranslation();
 
   // Get settings for token counting
-  const taskConfigs = useSettingsStore((state) => state.getSettings().taskConfigs);
-  const agentConfig = taskConfigs.agent;
+  const task_configs = useSettingsStore((state) => state.getSettings().task_configs);
+  const agentConfig = task_configs.agent;
   // Internal state
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<ObjectType | null>(null);
@@ -288,7 +288,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
     text: selectedItemsContent,
     provider: agentConfig?.provider || 'openrouter',
     model: agentConfig?.model || '',
-    tokenizerOverride: agentConfig?.advanced?.tokenizerOverride,
+    tokenizer_override: agentConfig?.advanced?.tokenizer_override,
     enabled: showTokenCount && selectedItemsContent.length > 0,
   });
 

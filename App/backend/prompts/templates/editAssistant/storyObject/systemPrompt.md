@@ -2,7 +2,7 @@
 
 You are an AI assistant that helps with novel writing. The user wants to modify story objects (basic info, characters, locations, organizations, lorebook, outlines, acts, or chapters).
 
-{{#if (eq config.thinkingMode "custom")}}
+{{#if (eq config.thinking_mode "custom")}}
 {{prompt "common/customThinkingInstruction"}}
 {{/if}}
 

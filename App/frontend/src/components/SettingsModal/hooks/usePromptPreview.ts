@@ -72,8 +72,8 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
   const userVariables = useVariableStore(state => state.variables);
 
   // Get task config for token counting
-  const taskConfigs = useSettingsStore((state) => state.getSettings().taskConfigs);
-  const taskConfig = taskConfigs[taskType as keyof typeof taskConfigs];
+  const task_configs = useSettingsStore((state) => state.getSettings().task_configs);
+  const taskConfig = task_configs[taskType as keyof typeof task_configs];
 
   // State
   const [renderedPreview, setRenderedPreview] = useState<string>('');
@@ -194,7 +194,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
     text: renderedPreview,
     provider: taskConfig?.provider || 'openrouter',
     model: taskConfig?.model || '',
-    tokenizerOverride: taskConfig?.advanced?.tokenizerOverride,
+    tokenizer_override: taskConfig?.advanced?.tokenizer_override,
     enabled: !isLoading && !error,
   });
 

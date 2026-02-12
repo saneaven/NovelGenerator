@@ -1,5 +1,5 @@
 import type { ContentPart, ToolCallMetadata, ToolCallProgress, TokenUsage } from './requestTypes';
-import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig, CustomApiFormat } from '../store/settingsStore';
+import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig, ThinkingFormat, RequestFormat } from '../store/settingsStore';
 import type { ToolCallSchema } from '../toolCall';
 import type { AgentRunMode, WorkspaceSurface } from '../types/agentRuntime';
 
@@ -75,7 +75,7 @@ export interface TemplateData {
     mainLanguage: string;
     displayLanguage: string;
     today: string;
-    thinkingMode: ThinkingMode;
+    thinking_mode: ThinkingMode;
     isPrefillEnabled: boolean;
     outputMode: OutputMode;
   };
@@ -198,8 +198,8 @@ export interface TemplateData {
 export interface BasePromptContext {
   projectId?: string;  // For fetching project data from unifiedObjectStore
   outputLanguage?: string;
-  enablePrefill?: boolean;
-  thinkingMode?: ThinkingMode;
+  enable_prefill?: boolean;
+  thinking_mode?: ThinkingMode;
   outputMode?: OutputMode;
   /** Frozen project data snapshot for auto-continue context drift prevention.
    *  When set, PromptManager uses this instead of reading live data from unifiedObjectStore. */
@@ -393,9 +393,10 @@ export interface LLMTaskConfig {
   // Model overrides (optional - defaults from settings)
   model?: string;
   temperature?: number;
-  thinkingMode?: 'off' | 'model' | 'custom';
-  thinkingConfig?: ThinkingConfig;
-  customApiFormat?: CustomApiFormat;  // OpenAI-compatible dialect for custom provider
+  thinking_mode?: 'off' | 'model' | 'custom';
+  thinking_config?: ThinkingConfig;
+  thinking_format?: ThinkingFormat;  // OpenAI-compatible dialect for custom provider
+  request_format?: RequestFormat;
   retryConfig?: RetryConfig;
 }
 

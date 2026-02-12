@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from .models.requests import ChatCompletionRequest, ProviderConfig
+from .models.requests import ChatCompletionRequest, ProviderConfig, ProviderModelsRequest
 from .providers.registry import ProviderRegistry
 from .providers.openrouter import OpenRouterProvider
 from .providers.custom import CustomProvider
@@ -177,16 +177,17 @@ async def list_providers():
 @app.post("/api/v1/providers/{provider}/models")
 async def get_models(
     provider: str,
-    config: ProviderConfig,
+    request: ProviderModelsRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get available models for a specific provider"""
     try:
-        provider_instance = ProviderRegistry.get_provider(
-            provider,
-            config.model_dump()
-        )
+        provider_config = request.provider_config.model_dump(exclude_none=True)
+        if provider == "custom":
+            provider_config["request_format"] = request.request_format or "openai_sdk"
+
+        provider_instance = ProviderRegistry.get_provider(provider, provider_config)
 
         # All providers now require API key for model listing
         if not provider_instance.validate_config():
@@ -220,7 +221,7 @@ async def get_embedding_models(
     try:
         provider_instance = ProviderRegistry.get_provider(
             provider,
-            config.model_dump(),
+            config.model_dump(exclude_none=True),
         )
 
         # Keep parity with /models: require a valid provider configuration to list.
@@ -260,7 +261,7 @@ async def stream_chat(
 
         provider_instance = ProviderRegistry.get_provider(
             provider,
-            request.config.model_dump()
+            request.provider_config.model_dump(exclude_none=True)
         )
 
         if not provider_instance.validate_config():
@@ -304,7 +305,8 @@ async def stream_chat(
                 provider_preference=provider_pref,
                 thinking_config=thinking_cfg,
                 thinking_mode=request.thinking_mode,
-                custom_api_format=request.custom_api_format,
+                thinking_format=request.thinking_format,
+                request_format=request.request_format,
                 retry_config=retry_cfg,
                 native_tool_call=request.native_tool_call,
             )

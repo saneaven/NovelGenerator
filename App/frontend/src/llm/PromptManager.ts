@@ -235,7 +235,7 @@ export class PromptManager {
       firstUserPrompt: firstTemplate ?? undefined,   // Optional template for first message
       lastUserPrompt: lastTemplate ?? undefined,     // Optional template for last message
       messageInputKey: 'userMessage',
-      prefill: prefillTemplate && context.enablePrefill
+      prefill: prefillTemplate && context.enable_prefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
       templateData,
@@ -270,7 +270,7 @@ export class PromptManager {
       memoryPrompt: '',
       userPrompt: userTemplate!,
       messageInputKey: 'agentMessage',
-      prefill: prefillTemplate && context.enablePrefill
+      prefill: prefillTemplate && context.enable_prefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
       templateData,
@@ -343,7 +343,7 @@ export class PromptManager {
       firstUserPrompt: firstTemplate ?? undefined,
       lastUserPrompt: lastTemplate ?? undefined,
       messageInputKey: 'userMessage',
-      prefill: prefillTemplate && context.enablePrefill
+      prefill: prefillTemplate && context.enable_prefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
       templateData,
@@ -396,7 +396,7 @@ export class PromptManager {
       firstUserPrompt: firstTemplate ?? undefined,
       lastUserPrompt: lastTemplate ?? undefined,
       messageInputKey: 'userMessage',
-      prefill: prefillTemplate && context.enablePrefill
+      prefill: prefillTemplate && context.enable_prefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
       templateData,
@@ -434,7 +434,7 @@ export class PromptManager {
       memoryPrompt: '',
       userPrompt: renderTemplate(userTemplate!, templateData),
       messageInputKey: 'userMessage',
-      prefill: prefillTemplate && context.enablePrefill
+      prefill: prefillTemplate && context.enable_prefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
       templateData,
@@ -510,7 +510,7 @@ export class PromptManager {
       firstUserPrompt: firstTemplate ?? undefined,
       lastUserPrompt: lastTemplate ?? undefined,
       messageInputKey: 'userMessage',
-      prefill: prefillTemplate && context.enablePrefill
+      prefill: prefillTemplate && context.enable_prefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
       templateData,
@@ -556,7 +556,7 @@ export class PromptManager {
       firstUserPrompt: firstTemplate ?? undefined,
       lastUserPrompt: lastTemplate ?? undefined,
       messageInputKey: 'userMessage',
-      prefill: prefillTemplate && context.enablePrefill
+      prefill: prefillTemplate && context.enable_prefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
       templateData,
@@ -606,7 +606,7 @@ export class PromptManager {
       firstUserPrompt: firstTemplate ?? undefined,
       lastUserPrompt: lastTemplate ?? undefined,
       messageInputKey: 'userMessage',
-      prefill: prefillTemplate && context.enablePrefill
+      prefill: prefillTemplate && context.enable_prefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
       templateData,
@@ -616,12 +616,12 @@ export class PromptManager {
   // ==================== Helpers ====================
 
   private static buildConfigData(context: {
-    thinkingMode?: ThinkingMode;
-    enablePrefill?: boolean;
+    thinking_mode?: ThinkingMode;
+    enable_prefill?: boolean;
     outputMode?: OutputMode;
   }): TemplateData['config'] {
     const store = useSettingsStore.getState();
-    const settings = store.settings;
+    const settings = store.getSettings();
     const preferredDisplayLanguage = useDisplayLanguageStore.getState().preferredDisplayLanguage;
     const allowedDisplayLanguages = new Set([settings.mainLanguage, ...settings.subLanguages].filter(Boolean));
     const displayLanguage =
@@ -634,8 +634,8 @@ export class PromptManager {
       mainLanguage: settings.mainLanguage,
       displayLanguage,
       today: new Date().toISOString().split('T')[0],
-      thinkingMode: context.thinkingMode ?? 'off',
-      isPrefillEnabled: context.enablePrefill ?? false,
+      thinking_mode: context.thinking_mode ?? 'off',
+      isPrefillEnabled: context.enable_prefill ?? false,
       outputMode,
     };
   }

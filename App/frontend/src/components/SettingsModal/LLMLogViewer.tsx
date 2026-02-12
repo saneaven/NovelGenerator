@@ -141,8 +141,8 @@ const LLMLogViewer: React.FC = () => {
                                                     <span>{log.request.temperature}</span>
                                                 </div>
                                                 <div className="param">
-                                                    <label>{t('settings.llmLog.thinkingMode')}:</label>
-                                                    <span>{log.request.thinkingMode}</span>
+                                                    <label>{t('settings.llmLog.thinking_mode')}:</label>
+                                                    <span>{log.request.thinking_mode}</span>
                                                 </div>
                                                 {log.request.tools && (
                                                     <div className="param">

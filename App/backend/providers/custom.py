@@ -1,30 +1,73 @@
-"""Custom endpoint provider using OpenAI-compatible Chat Completions only.
+"""Custom endpoint provider with explicit request format routing.
 
-The custom provider always uses the OpenAI SDK transport and maps dialect-specific
-extensions via `custom_api_format`:
-- "openai": OpenAI-compatible fields (`reasoning_effort`)
-- "claude": Anthropic OpenAI compatibility (`extra_body.thinking`)
-- "gemini": Gemini OpenAI compatibility (`reasoning_effort` OR `extra_body.google.thinking_config`)
+Supported request formats:
+- openai_sdk: OpenAI-compatible Chat Completions transport + thinking_format mapping.
+- claude_sdk: Anthropic Messages transport + Claude-native request shape.
 """
 
 from __future__ import annotations
 
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import AsyncGenerator, Dict, List, Optional, Literal, cast
+
+from anthropic import AsyncAnthropic
 
 from .async_openai_provider import AsyncOpenAIProvider
+from .claude_provider import ClaudeProvider
 from .registry import ProviderRegistry
 from ..utils.outbound_http import filter_additional_headers, validate_outbound_base_url
 
 
-@ProviderRegistry.register
-class CustomProvider(AsyncOpenAIProvider):
-    """Custom OpenAI-compatible endpoint provider."""
+RequestFormat = Literal["openai_sdk", "claude_sdk"]
+ThinkingFormat = Literal["openai", "claude", "gemini"]
+
+
+class _CustomClaudeSDKProvider(ClaudeProvider):
+    """Internal Claude SDK transport for custom endpoints."""
 
     def __init__(self, config: Dict):
         self._api_key = config.get("api_key")
         raw_base_url = (config.get("base_url") or "").strip()
         self._base_url = validate_outbound_base_url(raw_base_url) if raw_base_url else ""
         self._additional_headers = filter_additional_headers(config.get("additional_headers"))
+        super().__init__(config)
+
+    @property
+    def name(self) -> str:
+        # Must start with custom_ to allow base_url override in parent implementation.
+        return "custom_claude_sdk"
+
+    @property
+    def display_name(self) -> str:
+        return "Custom Claude SDK"
+
+    @property
+    def api_key(self) -> Optional[str]:
+        return self._api_key
+
+    def validate_config(self) -> bool:
+        # Base URL is required. API key can be optional for self-hosted gateways.
+        return bool(self._base_url)
+
+    def _build_client(self) -> AsyncAnthropic:
+        kwargs: Dict[str, object] = {
+            "api_key": (self._api_key or "custom-endpoint-key"),
+            "base_url": self._base_url.rstrip("/"),
+        }
+        if self._additional_headers:
+            kwargs["default_headers"] = self._additional_headers
+        return AsyncAnthropic(**kwargs)
+
+
+@ProviderRegistry.register
+class CustomProvider(AsyncOpenAIProvider):
+    """Custom endpoint provider supporting OpenAI/Claude SDK request formats."""
+
+    def __init__(self, config: Dict):
+        self._api_key = config.get("api_key")
+        raw_base_url = (config.get("base_url") or "").strip()
+        self._base_url = validate_outbound_base_url(raw_base_url) if raw_base_url else ""
+        self._additional_headers = filter_additional_headers(config.get("additional_headers"))
+        self._request_format = self._normalize_request_format(config.get("request_format"))
         super().__init__(config)
 
     @property
@@ -52,11 +95,18 @@ class CustomProvider(AsyncOpenAIProvider):
         return self._additional_headers
 
     @staticmethod
-    def _normalize_custom_format(custom_api_format: Optional[str]) -> str:
-        fmt = (custom_api_format or "openai").strip().lower()
+    def _normalize_request_format(request_format: Optional[str]) -> RequestFormat:
+        value = (request_format or "openai_sdk").strip().lower()
+        if value not in {"openai_sdk", "claude_sdk"}:
+            raise ValueError("request_format must be one of: openai_sdk, claude_sdk")
+        return cast(RequestFormat, value)
+
+    @staticmethod
+    def _normalize_thinking_format(thinking_format: Optional[str]) -> ThinkingFormat:
+        fmt = (thinking_format or "openai").strip().lower()
         if fmt not in {"openai", "claude", "gemini"}:
-            raise ValueError("custom_api_format must be one of: openai, claude, gemini")
-        return fmt
+            raise ValueError("thinking_format must be one of: openai, claude, gemini")
+        return cast(ThinkingFormat, fmt)
 
     @staticmethod
     def _coerce_extra_body(request: Dict[str, object]) -> Dict[str, object]:
@@ -73,9 +123,9 @@ class CustomProvider(AsyncOpenAIProvider):
         max_tokens: Optional[int],
         provider_preference: Optional[Dict],
         thinking_config: Optional[Dict],
-        custom_api_format: Optional[str] = None,
+        thinking_format: Optional[str] = None,
     ) -> Dict[str, object]:
-        fmt = self._normalize_custom_format(custom_api_format)
+        fmt = self._normalize_thinking_format(thinking_format)
         request = super()._prepare_request_kwargs(
             messages=messages,
             model=model,
@@ -85,12 +135,11 @@ class CustomProvider(AsyncOpenAIProvider):
             max_tokens=max_tokens,
             provider_preference=provider_preference,
             thinking_config=thinking_config,
-            custom_api_format=custom_api_format,
+            thinking_format=thinking_format,
         )
 
         cfg = thinking_config or {}
         effort = cfg.get("effort")
-        claude_budget = cfg.get("claude_budget_tokens")
         gemini_level = cfg.get("gemini_thinking_level")
         gemini_budget = cfg.get("gemini_budget_tokens")
 
@@ -101,10 +150,19 @@ class CustomProvider(AsyncOpenAIProvider):
 
         if fmt == "claude":
             extra_body = self._coerce_extra_body(request)
-            thinking_payload: Dict[str, object] = {"type": "enabled"}
-            if claude_budget is not None:
-                thinking_payload["budget_tokens"] = claude_budget
+            normalized_effort = "high"
+            if isinstance(effort, str) and effort.strip():
+                normalized_effort = effort.strip().lower()
+            if normalized_effort not in {"low", "medium", "high", "max"}:
+                raise ValueError(
+                    "thinking_format=claude supports effort values: low, medium, high, max."
+                )
+
+            thinking_payload: Dict[str, object] = {"type": "adaptive"}
+            output_config = dict(extra_body.get("output_config") or {})
+            output_config["effort"] = normalized_effort
             extra_body["thinking"] = thinking_payload
+            extra_body["output_config"] = output_config
             request["extra_body"] = extra_body
             return request
 
@@ -114,14 +172,14 @@ class CustomProvider(AsyncOpenAIProvider):
 
         if has_reasoning_effort and has_gemini_thinking_config:
             raise ValueError(
-                "custom_api_format=gemini requires choosing either reasoning_effort "
+                "thinking_format=gemini requires choosing either reasoning_effort "
                 "or google.thinking_config (thinking_level/thinking_budget), not both."
             )
 
         if has_reasoning_effort:
             if effort not in {"none", "low", "medium", "high"}:
                 raise ValueError(
-                    "custom_api_format=gemini supports reasoning_effort values: none, low, medium, high."
+                    "thinking_format=gemini supports reasoning_effort values: none, low, medium, high."
                 )
             request["reasoning_effort"] = effort
             return request
@@ -152,10 +210,45 @@ class CustomProvider(AsyncOpenAIProvider):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
-        custom_api_format: Optional[str] = None,
+        thinking_format: Optional[str] = None,
+        request_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
+        effective_request_format = self._normalize_request_format(request_format or self._request_format)
+
+        if effective_request_format == "claude_sdk":
+            if thinking_format and thinking_format != "claude":
+                raise ValueError(
+                    "request_format=claude_sdk does not support thinking_format values other than 'claude'."
+                )
+
+            claude_provider = _CustomClaudeSDKProvider(
+                {
+                    "api_key": self._api_key,
+                    "base_url": self._base_url,
+                    "additional_headers": self._additional_headers,
+                }
+            )
+            async for chunk in claude_provider.stream_chat(
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                tools=tools,
+                tool_choice=tool_choice,
+                max_tokens=max_tokens,
+                provider_preference=provider_preference,
+                thinking_config=thinking_config,
+                thinking_mode=thinking_mode,
+                thinking_format=thinking_format,
+                request_format=effective_request_format,
+                retry_config=retry_config,
+                native_tool_call=native_tool_call,
+            ):
+                yield chunk
+            return
+
+        # openai_sdk path
         # Custom dialect-specific thinking fields are only sent in model thinking mode.
         effective_thinking_config = thinking_config if thinking_mode == "model" else None
         async for chunk in super().stream_chat(
@@ -168,8 +261,23 @@ class CustomProvider(AsyncOpenAIProvider):
             provider_preference=provider_preference,
             thinking_config=effective_thinking_config,
             thinking_mode=thinking_mode,
-            custom_api_format=custom_api_format,
+            thinking_format=thinking_format,
+            request_format=effective_request_format,
             retry_config=retry_config,
             native_tool_call=native_tool_call,
         ):
             yield chunk
+
+    async def get_models(self) -> Dict:
+        effective_request_format = self._normalize_request_format(self._request_format)
+        if effective_request_format == "claude_sdk":
+            claude_provider = _CustomClaudeSDKProvider(
+                {
+                    "api_key": self._api_key,
+                    "base_url": self._base_url,
+                    "additional_headers": self._additional_headers,
+                }
+            )
+            return await claude_provider.get_models()
+
+        return await super().get_models()

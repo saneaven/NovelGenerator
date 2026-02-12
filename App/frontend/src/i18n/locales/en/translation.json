@@ -525,6 +525,9 @@
       },
       "apiFormat": "Thinking Format",
       "apiFormatHint": "Select the dialect used for thinking settings on your custom endpoint",
+      "requestFormat": "Request Format",
+      "requestFormatHint": "Choose the SDK request schema used by your custom endpoint",
+      "requestFormatCustomOnlyHint": "Request format is used only when provider is Custom Endpoint",
       "aiModel": "AI Model",
       "browse": "Browse",
       "hide": "Hide",
@@ -539,11 +542,11 @@
       "temperatureHint": "Lower values produce more focused and deterministic outputs. Higher values increase creativity and randomness.",
       "temperatureGpt5Hint": "Temperature is not supported for GPT-5 models. Use Reasoning Effort instead.",
       "advancedSettings": "Advanced Settings",
-      "enablePrefill": "Enable Assistant Prefill",
+      "enable_prefill": "Enable Assistant Prefill",
       "prefillDisabled": "OpenAI does not support assistant prefill",
       "prefillHint": "Pre-fill the assistant's response to guide output format",
-      "thinkingMode": "Thinking Mode",
-      "thinkingModes": {
+      "thinking_mode": "Thinking Mode",
+      "thinking_modes": {
         "off": "Off",
         "offDescription": "No thinking shown",
         "offGeminiDisabled": "Gemini does not support disabling thinking",
@@ -552,7 +555,7 @@
         "custom": "Custom Thinking",
         "customDescription": "Prompt-based Chain-of-Thought with <thinking> tags"
       },
-      "thinkingConfig": {
+      "thinking_config": {
         "title": "Thinking Configuration",
         "effortLevel": "Effort Level",
         "reasoningEffort": "Reasoning Effort (GPT-5)",
@@ -565,6 +568,7 @@
           "mediumPercent": "Medium (~50% of max tokens)",
           "high": "High - Deep reasoning",
           "highPercent": "High (~80% of max tokens)",
+          "max": "Max - Highest available reasoning",
           "xhigh": "Extra High - Maximum reasoning"
         },
         "effortHint": "Controls how much reasoning GPT-5 performs before responding",
@@ -579,9 +583,6 @@
         "maxThinkingTokens": "Max Thinking Tokens (optional)",
         "maxThinkingTokensPlaceholder": "Auto (based on effort)",
         "maxThinkingTokensHint": "Directly specify thinking token budget. Leave empty to use effort-based allocation.",
-        "claudeBudgetTokens": "Claude Thinking Budget (tokens)",
-        "claudeBudgetTokensPlaceholder": "Auto",
-        "claudeBudgetTokensHint": "Leave blank to use the model default budget.",
         "thinkingBudget": "Thinking Budget (tokens)",
         "thinkingBudgetHint": "Minimum 1024 tokens. Leave blank for model default.",
         "thinkingLevel": "Thinking Level",
@@ -597,11 +598,11 @@
       "tokenizer": "Tokenizer",
       "tokenizerHint": "Select which tokenizer to use for token counting estimates",
       "tokenLimits": {
-        "contextWindowTokens": "Context Window Tokens",
-        "contextWindowTokensHint": "Used for local prompt budgeting (e.g. agent memory preflight). Does not change the model's actual context window.",
-        "maxOutputTokens": "Max Output Tokens (max_tokens)",
-        "maxOutputTokensPlaceholder": "Default (provider)",
-        "maxOutputTokensHint": "Limits the maximum tokens generated in the response. Leave empty to use the provider default."
+        "context_window_tokens": "Context Window Tokens",
+        "context_window_tokensHint": "Used for local prompt budgeting (e.g. agent memory preflight). Leave empty for no local limit. Does not change the model's actual context window.",
+        "max_output_tokens": "Max Output Tokens (max_tokens)",
+        "max_output_tokensPlaceholder": "Default (provider)",
+        "max_output_tokensHint": "Limits the maximum tokens generated in the response. Leave empty to use the provider default."
       }
     },
     "llmLog": {
@@ -614,7 +615,7 @@
       "provider": "Provider:",
       "model": "Model:",
       "temperature": "Temperature:",
-      "thinkingMode": "Thinking Mode:",
+      "thinking_mode": "Thinking Mode:",
       "tools": "Tools:",
       "toolsDefined": "{{count}} defined",
       "messages": "Messages ({{count}})",
@@ -889,7 +890,7 @@
         "characterCount": "{{count}} characters",
         "tokenCount": "{{count}} tokens",
         "tokenEstimateHint": "Estimated using tiktoken (may differ from actual API count)",
-        "thinkingMode": {
+        "thinking_mode": {
           "off": "Off",
           "model": "Model",
           "custom": "Custom"

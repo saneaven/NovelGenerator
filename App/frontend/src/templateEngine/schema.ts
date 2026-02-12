@@ -23,7 +23,7 @@ export const UNIFIED_SCHEMA = {
     mainLanguage: { desc: "Primary language", example: "Korean" as string },
     displayLanguage: { desc: "Current display language", example: "English" as string },
     today: { desc: "Current date (YYYY-MM-DD)", example: "2025-01-15" as string },
-    thinkingMode: { desc: "Thinking mode ('off' | 'model' | 'custom')", example: "off" as 'off' | 'model' | 'custom' },
+    thinking_mode: { desc: "Thinking mode ('off' | 'model' | 'custom')", example: "off" as 'off' | 'model' | 'custom' },
     isPrefillEnabled: { desc: "Prefill enabled", example: true as boolean },
     outputMode: { desc: "LLM output mode ('tool_call' | 'native_tool_call' | 'raw_output')", example: "tool_call" as 'tool_call' | 'native_tool_call' | 'raw_output' },
   },

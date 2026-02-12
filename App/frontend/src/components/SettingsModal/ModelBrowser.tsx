@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ProviderType, ProviderPreference, ProviderCredentials } from '../../store/settingsStore';
+import type { ProviderType, ProviderPreference, ProviderCredentials, RequestFormat } from '../../store/settingsStore';
 import { fetchModels, fetchEmbeddingModels, fetchModelEndpoints } from '../../llm/llmService';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
@@ -9,9 +9,10 @@ import './ModelBrowser.css';
 
 interface ModelBrowserProps {
   provider: ProviderType;
+  request_format?: RequestFormat;
   mode?: 'chat' | 'embedding';
   currentModel: string;
-  providerPreference?: ProviderPreference;
+  provider_preference?: ProviderPreference;
   credentials: ProviderCredentials;
   onSelectModel: (modelId: string) => void;
   onUpdateProviderPreference: (pref?: ProviderPreference) => void;
@@ -235,9 +236,10 @@ const buildOpenAITree = (models: any[]): TreeNode[] => {
 
 const ModelBrowser: React.FC<ModelBrowserProps> = ({
   provider,
+  request_format,
   mode = 'chat',
   currentModel,
-  providerPreference,
+  provider_preference,
   credentials,
   onSelectModel,
   onUpdateProviderPreference,
@@ -281,7 +283,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
 
       const data = mode === 'embedding'
         ? await fetchEmbeddingModels(provider, config)
-        : await fetchModels(provider, config);
+        : await fetchModels(provider, config, request_format);
       setModelsData(data);
     } catch (error) {
       setModelsError(error instanceof Error ? error.message : 'Failed to fetch models');
@@ -372,7 +374,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
   };
 
   const toggleProviderOnly = (_modelId: string, providerName: string) => {
-    const currentPref = providerPreference || {};
+    const currentPref = provider_preference || {};
     const currentOnly = currentPref.only || [];
     const currentIgnore = currentPref.ignore || [];
 
@@ -397,7 +399,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
   };
 
   const toggleProviderIgnore = (_modelId: string, providerName: string) => {
-    const currentPref = providerPreference || {};
+    const currentPref = provider_preference || {};
     const currentOnly = currentPref.only || [];
     const currentIgnore = currentPref.ignore || [];
 
@@ -644,7 +646,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
           <div className="model-card__details">
             <div className="model-card__details-header">
               <h5>{t('settings.modelBrowser.availableProviders')}</h5>
-              {providerPreference && (
+              {provider_preference && (
                 <TextButton
                   variant="ghost"
                   size="sm"
@@ -658,23 +660,23 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
               <p className="model-card__loading">{t('settings.modelBrowser.loadingProviders')}</p>
             ) : modelEndpoints[model.id]?.data?.endpoints ? (
               <>
-                {providerPreference && (providerPreference.only || providerPreference.ignore) && (
+                {provider_preference && (provider_preference.only || provider_preference.ignore) && (
                   <div className="model-card__filters">
-                    {providerPreference.only && (
+                    {provider_preference.only && (
                       <span className="model-card__filter model-card__filter--only">
-                        {t('settings.modelBrowser.only')}: {providerPreference.only.join(', ')}
+                        {t('settings.modelBrowser.only')}: {provider_preference.only.join(', ')}
                       </span>
                     )}
-                    {providerPreference.ignore && (
+                    {provider_preference.ignore && (
                       <span className="model-card__filter model-card__filter--ignore">
-                        {t('settings.modelBrowser.ignore')}: {providerPreference.ignore.join(', ')}
+                        {t('settings.modelBrowser.ignore')}: {provider_preference.ignore.join(', ')}
                       </span>
                     )}
                   </div>
                 )}
                 <div className="model-card__endpoints">
                   {modelEndpoints[model.id].data.endpoints.map((endpoint: any, idx: number) => {
-                    const pref = providerPreference || {};
+                    const pref = provider_preference || {};
                     const isInOnly = pref.only?.includes(endpoint.provider_name);
                     const isInIgnore = pref.ignore?.includes(endpoint.provider_name);
 

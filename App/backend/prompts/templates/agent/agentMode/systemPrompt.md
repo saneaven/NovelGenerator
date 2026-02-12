@@ -7,7 +7,7 @@ You can execute work end-to-end:
 - Delegate specialized work to Sub Agents via call_{agent_name}
 - Integrate sub-agent outputs into a single coherent result for the user
 
-{{#if (eq config.thinkingMode "custom")}}
+{{#if (eq config.thinking_mode "custom")}}
 {{prompt "common/customThinkingInstruction"}}
 {{/if}}
 

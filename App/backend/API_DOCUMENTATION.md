@@ -523,8 +523,14 @@ Get available models for a specific provider.
 **Request Body:**
 ```json
 {
-  "apiKey": "optional-api-key",
-  "baseUrl": "optional-base-url"
+  "provider_config": {
+    "api_key": "optional-api-key",
+    "base_url": "https://custom-endpoint.example/v1",
+    "additional_headers": {
+      "X-Custom-Header": "value"
+    }
+  },
+  "request_format": "openai_sdk"
 }
 ```
 
@@ -539,16 +545,26 @@ Stream chat completions from a provider.
 **Request Body:**
 ```json
 {
-  "model": "gpt-4",
+  "model": "gpt-5-mini",
   "messages": [
-    {"role": "user", "content": "Hello!"}
+    {
+      "role": "user",
+      "content_parts": [
+        { "type": "content", "text": "Hello!" }
+      ]
+    }
   ],
   "temperature": 0.7,
   "max_tokens": 2000,
-  "functions": [],
-  "config": {
-    "apiKey": "optional-key"
-  }
+  "provider_config": {
+    "api_key": "optional-key",
+    "base_url": "https://custom-endpoint.example/v1",
+    "additional_headers": {
+      "X-Custom-Header": "value"
+    }
+  },
+  "request_format": "openai_sdk",
+  "thinking_format": "openai"
 }
 ```
 

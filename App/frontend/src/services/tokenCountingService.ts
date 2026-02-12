@@ -69,11 +69,11 @@ function countTokensLocal(text: string, model: string): number {
  */
 function resolveTokenizer(
   provider: ProviderType,
-  tokenizerOverride?: TokenizerType
+  tokenizer_override?: TokenizerType
 ): TokenizerType {
   // If override is specified, use it
-  if (tokenizerOverride) {
-    return tokenizerOverride;
+  if (tokenizer_override) {
+    return tokenizer_override;
   }
 
   // Map provider to default tokenizer
@@ -100,14 +100,14 @@ function resolveTokenizer(
  * @param text - The text to count tokens for
  * @param provider - The LLM provider type
  * @param model - The model name
- * @param tokenizerOverride - Optional tokenizer override (for OpenRouter/Custom)
+ * @param tokenizer_override - Optional tokenizer override (for OpenRouter/Custom)
  * @param signal - Optional AbortSignal for cancellation
  */
 export async function countTokens(
   text: string,
   provider: ProviderType,
   model: string,
-  tokenizerOverride?: TokenizerType,
+  tokenizer_override?: TokenizerType,
   signal?: AbortSignal
 ): Promise<TokenCountResult> {
   // Empty text = 0 tokens
@@ -119,7 +119,7 @@ export async function countTokens(
     };
   }
 
-  const effectiveTokenizer = resolveTokenizer(provider, tokenizerOverride);
+  const effectiveTokenizer = resolveTokenizer(provider, tokenizer_override);
 
   // Local counting with tiktoken (OpenAI-compatible)
   if (effectiveTokenizer === 'openai') {

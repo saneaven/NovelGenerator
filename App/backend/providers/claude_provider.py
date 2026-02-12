@@ -156,19 +156,24 @@ class ClaudeProvider(BaseProvider):
         self,
         thinking_mode: Optional[str],
         thinking_config: Optional[Dict],
-    ) -> Optional[Dict]:
-        """Translate neutral thinking config into Anthropic's shape."""
+    ) -> Tuple[Optional[Dict], Optional[Dict]]:
+        """Translate neutral thinking config into Anthropic adaptive thinking shape."""
         if thinking_mode != "model":
-            return None
+            return None, None
 
-        budget = None
+        effort = "high"
         if thinking_config:
-            budget = thinking_config.get("claude_budget_tokens") or thinking_config.get("max_tokens")
+            raw_effort = thinking_config.get("effort")
+            if isinstance(raw_effort, str) and raw_effort.strip():
+                effort = raw_effort.strip().lower()
 
-        thinking: Dict[str, object] = {"type": "enabled"}
-        if budget is not None:
-            thinking["budget_tokens"] = budget
-        return thinking
+        # Adaptive thinking currently accepts low|medium|high|max.
+        if effort not in {"low", "medium", "high", "max"}:
+            raise ValueError("Claude adaptive thinking effort must be one of: low, medium, high, max")
+
+        thinking: Dict[str, object] = {"type": "adaptive"}
+        output_config: Dict[str, object] = {"effort": effort}
+        return thinking, output_config
 
     # ------------------------------------------------------------------ #
     # Streaming
@@ -191,7 +196,8 @@ class ClaudeProvider(BaseProvider):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
-        custom_api_format: Optional[str] = None,
+        thinking_format: Optional[str] = None,
+        request_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
@@ -212,9 +218,11 @@ class ClaudeProvider(BaseProvider):
         if system_prompt:
             request["system"] = system_prompt
 
-        thinking_kwargs = self._build_thinking_kwargs(thinking_mode, thinking_config)
+        thinking_kwargs, output_config = self._build_thinking_kwargs(thinking_mode, thinking_config)
         if thinking_kwargs:
             request["thinking"] = thinking_kwargs
+        if output_config:
+            request["output_config"] = output_config
 
         if tools:
             # Anthropic native tool format (NOT OpenAI format)
@@ -301,7 +309,9 @@ class ClaudeProvider(BaseProvider):
                         continue
 
                     if etype == "content_block_delta":
-                        idx = getattr(event, "index", None) or (event.get("index") if isinstance(event, dict) else None)
+                        idx = getattr(event, "index", None)
+                        if idx is None and isinstance(event, dict):
+                            idx = event.get("index")
                         delta_obj = getattr(event, "delta", None)
                         if delta_obj is None and hasattr(event, "model_dump"):
                             delta_obj = event.model_dump().get("delta")
@@ -311,22 +321,49 @@ class ClaudeProvider(BaseProvider):
                         meta = block_meta.get(idx, {})
                         block_type = meta.get("type")
 
+                        delta_type = None
                         delta_text = None
+                        delta_thinking = None
+                        delta_signature = None
+                        delta_partial_json = None
                         if delta_obj is not None:
+                            delta_type = getattr(delta_obj, "type", None)
                             delta_text = getattr(delta_obj, "text", None)
-                            if delta_text is None and isinstance(delta_obj, dict):
-                                delta_text = delta_obj.get("text") or delta_obj.get("partial_json")
+                            delta_thinking = getattr(delta_obj, "thinking", None)
+                            delta_signature = getattr(delta_obj, "signature", None)
+                            delta_partial_json = getattr(delta_obj, "partial_json", None)
+                            if isinstance(delta_obj, dict):
+                                delta_type = delta_type or delta_obj.get("type")
+                                delta_text = delta_text or delta_obj.get("text")
+                                delta_thinking = delta_thinking or delta_obj.get("thinking")
+                                delta_signature = delta_signature or delta_obj.get("signature")
+                                delta_partial_json = delta_partial_json or delta_obj.get("partial_json")
 
                         extra_chunks: List[Dict] = []
 
-                        if block_type == "thinking" and delta_text:
-                            chunk = {"choices": [{"delta": {"thinking": {"text": delta_text}}}]}
-                            yield self._format_sse(chunk)
+                        if block_type == "thinking":
+                            if delta_type == "thinking_delta" and delta_thinking:
+                                chunk = {"choices": [{"delta": {"thinking": {"text": delta_thinking}}}]}
+                                if self._has_meaningful_payload(chunk):
+                                    yield self._format_sse(chunk)
+                            elif delta_type == "signature_delta" and delta_signature:
+                                chunk = {"choices": [{"delta": {"thinking": {"signature": delta_signature}}}]}
+                                if self._has_meaningful_payload(chunk):
+                                    yield self._format_sse(chunk)
+                            elif delta_text:
+                                # Fallback for gateways that emit plain text deltas on thinking blocks.
+                                chunk = {"choices": [{"delta": {"thinking": {"text": delta_text}}}]}
+                                if self._has_meaningful_payload(chunk):
+                                    yield self._format_sse(chunk)
                             continue
 
                         if block_type == "tool_use":
                             tool_id = meta.get("id") or f"tool_{idx}"
-                            delta_fragment = delta_text or ""
+                            delta_fragment = (
+                                delta_partial_json
+                                if isinstance(delta_partial_json, str)
+                                else (delta_text if isinstance(delta_text, str) else "")
+                            )
                             tool_buffers[tool_id] = tool_buffers.get(tool_id, "") + delta_fragment
 
                             payload = {
@@ -347,14 +384,15 @@ class ClaudeProvider(BaseProvider):
                                     }
                                 ]
                             }
-                            if self._has_meaningful_payload(payload):
+                            if delta_fragment and self._has_meaningful_payload(payload):
                                 yield self._format_sse(payload)
                             continue
 
-                        if delta_text:
-                            text_to_emit = delta_text
+                        text_for_content = delta_text if isinstance(delta_text, str) else None
+                        if text_for_content:
+                            text_to_emit = text_for_content
                             if parser:
-                                clean, thinking_block = parser.process_chunk(delta_text)
+                                clean, thinking_block = parser.process_chunk(text_for_content)
                                 text_to_emit = clean
                                 if thinking_block:
                                     extra_chunks.append(
@@ -440,7 +478,7 @@ class ClaudeProvider(BaseProvider):
                 yield b"data: [DONE]\n\n"
 
         except Exception as exc:  # Broad catch to stream error via SSE
-            yield self._format_error(str(exc))
+            yield self._format_error(str(exc), getattr(exc, "status_code", None))
             yield b"data: [DONE]\n\n"
 
     async def get_models(self) -> Dict:

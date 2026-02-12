@@ -81,14 +81,6 @@ function computeOutputMode(rawMode?: boolean): OutputMode {
   return settingsStore.getSettings().nativeOutputMode ? 'native_tool_call' : 'tool_call';
 }
 
-function getObjectLabel(obj: any, language: string): { name: string; description: string } {
-  const data = obj?.data?.[language] || (obj?.data ? Object.values(obj.data)[0] : {}) || {};
-  return {
-    name: (data as any).name || (data as any).title || '',
-    description: (data as any).description || (data as any).logline || '',
-  };
-}
-
 function getObjectTextFields(obj: any, language: string): { name: string; description: string; content: string } {
   const data = obj?.data?.[language] || (obj?.data ? Object.values(obj.data)[0] : {}) || {};
   return {
@@ -255,8 +247,8 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
         objectIds: contextIds.length > 0 ? contextIds : undefined,
         outputMode,
         outputLanguage: mainLanguage,
-        enablePrefill: editAssistantConfig.advanced.enablePrefill,
-        thinkingMode: editAssistantConfig.advanced.thinkingMode,
+        enable_prefill: editAssistantConfig.advanced.enable_prefill,
+        thinking_mode: editAssistantConfig.advanced.thinking_mode,
       };
 
       return {
@@ -268,8 +260,8 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
           tools: PromptManager.getToolsForMode(LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT, promptContext),
           outputMode,
         },
-        thinkingMode: editAssistantConfig.advanced.thinkingMode,
-        thinkingConfig: editAssistantConfig.advanced.thinkingConfig,
+        thinking_mode: editAssistantConfig.advanced.thinking_mode,
+        thinking_config: editAssistantConfig.advanced.thinking_config,
       };
     }
 
@@ -279,8 +271,8 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
       contextIds: contextIds.length > 0 ? contextIds : undefined,
       outputMode,
       outputLanguage: mainLanguage,
-      enablePrefill: editAssistantConfig.advanced.enablePrefill,
-      thinkingMode: editAssistantConfig.advanced.thinkingMode,
+      enable_prefill: editAssistantConfig.advanced.enable_prefill,
+      thinking_mode: editAssistantConfig.advanced.thinking_mode,
     };
 
     return {
@@ -292,8 +284,8 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
         tools: PromptManager.getToolsForMode(LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT, promptContext),
         outputMode,
       },
-      thinkingMode: editAssistantConfig.advanced.thinkingMode,
-      thinkingConfig: editAssistantConfig.advanced.thinkingConfig,
+      thinking_mode: editAssistantConfig.advanced.thinking_mode,
+      thinking_config: editAssistantConfig.advanced.thinking_config,
     };
   },
 
@@ -368,8 +360,8 @@ const translateObjectsSpec: JourneySpec<TranslateObjectsInput> = {
       }),
       outputMode,
       outputLanguage: input.targetLanguage,
-      enablePrefill: translationConfig.advanced.enablePrefill,
-      thinkingMode: translationConfig.advanced.thinkingMode,
+      enable_prefill: translationConfig.advanced.enable_prefill,
+      thinking_mode: translationConfig.advanced.thinking_mode,
     };
 
     return {
@@ -381,8 +373,8 @@ const translateObjectsSpec: JourneySpec<TranslateObjectsInput> = {
         tools: PromptManager.getToolsForMode(LLMTaskMode.TRANSLATION, promptContext),
         outputMode,
       },
-      thinkingMode: translationConfig.advanced.thinkingMode,
-      thinkingConfig: translationConfig.advanced.thinkingConfig,
+      thinking_mode: translationConfig.advanced.thinking_mode,
+      thinking_config: translationConfig.advanced.thinking_config,
     };
   },
 
@@ -485,16 +477,16 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
         },
         outputMode,
         outputLanguage: mainLanguage,
-        enablePrefill: imagePromptConfig.advanced.enablePrefill,
-        thinkingMode: imagePromptConfig.advanced.thinkingMode,
+        enable_prefill: imagePromptConfig.advanced.enable_prefill,
+        thinking_mode: imagePromptConfig.advanced.thinking_mode,
       };
 
       return {
         mode: LLMTaskMode.COVER_IMAGE_PROMPT,
         projectId: input.projectId,
         promptContext,
-        thinkingMode: imagePromptConfig.advanced.thinkingMode,
-        thinkingConfig: imagePromptConfig.advanced.thinkingConfig,
+        thinking_mode: imagePromptConfig.advanced.thinking_mode,
+        thinking_config: imagePromptConfig.advanced.thinking_config,
       };
     }
 
@@ -503,12 +495,13 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
         .map((id) => unifiedStore.objects[id])
         .filter(Boolean)
         .map((obj: any) => {
-          const data = getObjectLabel(obj, mainLanguage);
+          const data = getObjectTextFields(obj, mainLanguage);
           return {
             id: obj.id,
             type: obj.type,
             name: data.name,
             description: data.description,
+            content: data.content,
             imagePrompt: obj.metadata?.image_prompt,
           };
         });
@@ -521,16 +514,16 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
         selectedObjects,
         outputMode,
         outputLanguage: mainLanguage,
-        enablePrefill: imagePromptConfig.advanced.enablePrefill,
-        thinkingMode: imagePromptConfig.advanced.thinkingMode,
+        enable_prefill: imagePromptConfig.advanced.enable_prefill,
+        thinking_mode: imagePromptConfig.advanced.thinking_mode,
       };
 
       return {
         mode: LLMTaskMode.SCENE_IMAGE_PROMPT,
         projectId: input.projectId,
         promptContext,
-        thinkingMode: imagePromptConfig.advanced.thinkingMode,
-        thinkingConfig: imagePromptConfig.advanced.thinkingConfig,
+        thinking_mode: imagePromptConfig.advanced.thinking_mode,
+        thinking_config: imagePromptConfig.advanced.thinking_config,
       };
     }
 
@@ -560,16 +553,16 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
       },
       outputMode,
       outputLanguage: mainLanguage,
-      enablePrefill: imagePromptConfig.advanced.enablePrefill,
-      thinkingMode: imagePromptConfig.advanced.thinkingMode,
+      enable_prefill: imagePromptConfig.advanced.enable_prefill,
+      thinking_mode: imagePromptConfig.advanced.thinking_mode,
     };
 
     return {
       mode: LLMTaskMode.OBJECT_IMAGE_PROMPT,
       projectId: input.projectId,
       promptContext,
-      thinkingMode: imagePromptConfig.advanced.thinkingMode,
-      thinkingConfig: imagePromptConfig.advanced.thinkingConfig,
+      thinking_mode: imagePromptConfig.advanced.thinking_mode,
+      thinking_config: imagePromptConfig.advanced.thinking_config,
     };
   },
 

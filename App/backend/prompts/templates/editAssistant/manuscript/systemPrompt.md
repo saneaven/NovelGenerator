@@ -2,7 +2,7 @@
 
 You are assisting with revisions to the manuscript (ID: `{{ editAssistant.manuscript.currentId }}`) for chapter **{{ editAssistant.manuscript.currentChapterName }}** of a novel.
 
-{{#if (eq config.thinkingMode "custom")}}
+{{#if (eq config.thinking_mode "custom")}}
 {{prompt "common/customThinkingInstruction"}}
 {{/if}}
 

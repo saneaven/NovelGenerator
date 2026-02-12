@@ -52,12 +52,12 @@ class UserSettings(Base):
 
     # Task-based configuration (provider, model, temperature, advanced settings per task)
     task_configs = Column(JSONB, nullable=False, server_default="""{
-        "agent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "maxOutputTokens": null, "contextWindowTokens": 32000, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
-        "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "maxOutputTokens": null, "contextWindowTokens": 32000, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
-        "editAssistant": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "maxOutputTokens": null, "contextWindowTokens": 32000, "advanced": {"enablePrefill": true, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
-        "imagePrompt": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "maxOutputTokens": null, "contextWindowTokens": 32000, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
-        "summary": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.2, "maxOutputTokens": null, "contextWindowTokens": 32000, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
-        "subAgent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "maxOutputTokens": null, "contextWindowTokens": 32000, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}}
+        "agent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk", "thinking_format": "openai"}},
+        "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk", "thinking_format": "openai"}},
+        "editAssistant": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": true, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk", "thinking_format": "openai"}},
+        "imagePrompt": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk", "thinking_format": "openai"}},
+        "summary": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.2, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk", "thinking_format": "openai"}},
+        "subAgent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk", "thinking_format": "openai"}}
     }""")
 
     # Language settings

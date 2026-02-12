@@ -58,17 +58,17 @@ export interface ProviderPreference {
     ignore?: string[];
 }
 
-// Custom API format for custom endpoints (controls both thinking and tool calling)
-export type CustomApiFormat = 'openai' | 'claude' | 'gemini';
+// Thinking format for custom OpenAI-SDK compatible endpoints
+export type ThinkingFormat = 'openai' | 'claude' | 'gemini';
+export type RequestFormat = 'openai_sdk' | 'claude_sdk';
 
 // Thinking configuration for model-native thinking
 export interface ThinkingConfig {
-    effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';  // GPT-5.2+ supports minimal/xhigh
-    maxTokens?: number;
+    effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';  // Claude adaptive uses low|medium|high|max
+    max_tokens?: number;
     verbosity?: 'low' | 'medium' | 'high';  // GPT-5 output verbosity
-    claudeBudgetTokens?: number;
-    geminiThinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';  // Gemini 3 Flash supports all, Pro only low/high
-    geminiBudgetTokens?: number;
+    gemini_thinking_level?: 'minimal' | 'low' | 'medium' | 'high';  // Gemini 3 Flash supports all, Pro only low/high
+    gemini_budget_tokens?: number;
 }
 
 // Retry configuration for error handling
@@ -94,11 +94,12 @@ export type TokenizerOverride = 'openai' | 'claude' | 'gemini';
 
 // Advanced settings for AI functions
 export interface AdvancedTaskSettings {
-    enablePrefill: boolean;
-    thinkingMode: 'off' | 'model' | 'custom';
-    thinkingConfig?: ThinkingConfig;
-    customApiFormat?: CustomApiFormat;  // OpenAI-compatible dialect for custom endpoints
-    tokenizerOverride?: TokenizerOverride;  // For openrouter/custom providers: which tokenizer to use for token counting
+    enable_prefill: boolean;
+    thinking_mode: 'off' | 'model' | 'custom';
+    thinking_config?: ThinkingConfig;
+    thinking_format?: ThinkingFormat;  // OpenAI-compatible dialect for custom endpoints
+    tokenizer_override?: TokenizerOverride;  // For openrouter/custom providers: which tokenizer to use for token counting
+    request_format?: RequestFormat;
 }
 
 // Complete configuration for a single AI function
@@ -106,13 +107,13 @@ export interface TaskAIConfig {
     provider: ProviderType;
     model: string;
     temperature: number;
-    providerPreference?: ProviderPreference;
+    provider_preference?: ProviderPreference;
     // Max output tokens for the LLM response (maps to backend `max_tokens`)
     // If omitted, provider defaults are used.
-    maxOutputTokens?: number;
+    max_output_tokens?: number;
     // Context window upper bound (used for local budgeting like agent memory preflight)
     // If omitted, falls back to conservative defaults.
-    contextWindowTokens?: number;
+    context_window_tokens?: number;
     advanced: AdvancedTaskSettings;
 }
 
@@ -188,7 +189,7 @@ export interface ImageGenConfig {
 // Main settings interface
 export interface Settings {
     // Per-function complete configurations
-    taskConfigs: {
+    task_configs: {
         [K in AITaskType]: TaskAIConfig;
     };
 
@@ -400,8 +401,8 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
             return {
                 settings: {
                     ...settings,
-                    taskConfigs: {
-                        ...settings.taskConfigs,
+                    task_configs: {
+                        ...settings.task_configs,
                         [functionType]: config,
                     },
                 },
@@ -415,15 +416,15 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
             return {
                 settings: {
                     ...settings,
-                    taskConfigs: {
-                        ...settings.taskConfigs,
+                    task_configs: {
+                        ...settings.task_configs,
                         [functionType]: {
-                            ...settings.taskConfigs[functionType],
+                            ...settings.task_configs[functionType],
                             provider,
                             // Clear provider preferences if switching away from OpenRouter
-                            providerPreference:
+                            provider_preference:
                                 provider === 'openrouter'
-                                    ? settings.taskConfigs[functionType].providerPreference
+                                    ? settings.task_configs[functionType].provider_preference
                                     : undefined,
                         },
                     },
@@ -438,10 +439,10 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
             return {
                 settings: {
                     ...settings,
-                    taskConfigs: {
-                        ...settings.taskConfigs,
+                    task_configs: {
+                        ...settings.task_configs,
                         [functionType]: {
-                            ...settings.taskConfigs[functionType],
+                            ...settings.task_configs[functionType],
                             model,
                         },
                     },
@@ -456,10 +457,10 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
             return {
                 settings: {
                     ...settings,
-                    taskConfigs: {
-                        ...settings.taskConfigs,
+                    task_configs: {
+                        ...settings.task_configs,
                         [functionType]: {
-                            ...settings.taskConfigs[functionType],
+                            ...settings.task_configs[functionType],
                             temperature,
                         },
                     },
@@ -474,11 +475,11 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
             return {
                 settings: {
                     ...settings,
-                    taskConfigs: {
-                        ...settings.taskConfigs,
+                    task_configs: {
+                        ...settings.task_configs,
                         [functionType]: {
-                            ...settings.taskConfigs[functionType],
-                            providerPreference: pref,
+                            ...settings.task_configs[functionType],
+                            provider_preference: pref,
                         },
                     },
                 },
@@ -492,12 +493,12 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
             return {
                 settings: {
                     ...settings,
-                    taskConfigs: {
-                        ...settings.taskConfigs,
+                    task_configs: {
+                        ...settings.task_configs,
                         [functionType]: {
-                            ...settings.taskConfigs[functionType],
+                            ...settings.task_configs[functionType],
                             advanced: {
-                                ...settings.taskConfigs[functionType].advanced,
+                                ...settings.task_configs[functionType].advanced,
                                 ...advanced,
                             },
                         },
@@ -509,7 +510,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
 
     // Getters
     getTaskConfig: (functionType) => {
-        return get().getSettings().taskConfigs[functionType];
+        return get().getSettings().task_configs[functionType];
     },
 
     // Image generation config

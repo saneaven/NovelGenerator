@@ -1,4 +1,4 @@
-{{#if (eq config.thinkingMode "model")}}<thinking>
+{{#if (eq config.thinking_mode "model")}}<thinking>
 Let me execute this carefully:
 - Run mode: Agent Mode
 - Surface: {{agent.surface}}

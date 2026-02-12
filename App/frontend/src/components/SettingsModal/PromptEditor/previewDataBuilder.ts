@@ -164,8 +164,8 @@ export function buildModeSpecificData(
   promptName: string,
   filteredIds: FilteredIds,
   promptTypeOverrides?: Record<string, any>
-): Partial<Pick<TemplateData, 'agent' | 'editAssistant' | 'translation' | 'imagePrompt'>> {
-  let modeData: Partial<Pick<TemplateData, 'agent' | 'editAssistant' | 'translation' | 'imagePrompt'>> = {};
+): Partial<Pick<TemplateData, 'agent' | 'memorySummary' | 'editAssistant' | 'translation' | 'imagePrompt'>> {
+  let modeData: Partial<Pick<TemplateData, 'agent' | 'memorySummary' | 'editAssistant' | 'translation' | 'imagePrompt'>> = {};
 
   switch (taskType) {
     case 'agent':
@@ -299,7 +299,7 @@ function buildConfigData(overrides?: Partial<ConfigData>): ConfigData {
     mainLanguage: settings.mainLanguage || 'English',
     displayLanguage,
     today: new Date().toISOString().split('T')[0],
-    thinkingMode: 'off',
+    thinking_mode: 'off',
     isPrefillEnabled: false,
     outputMode: 'tool_call',
   };

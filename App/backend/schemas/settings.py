@@ -1,6 +1,6 @@
 """Pydantic schemas for user settings"""
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Literal
 from enum import Enum
 
 
@@ -41,21 +41,21 @@ class ProviderPreference(BaseModel):
 
 class ThinkingConfig(BaseModel):
     """Thinking configuration for model-native thinking"""
-    effort: Optional[str] = None  # legacy OpenRouter-style effort
-    maxTokens: Optional[int] = None
+    effort: Optional[Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]] = None
+    max_tokens: Optional[int] = None
     verbosity: Optional[str] = None  # GPT-5 output verbosity: 'low' | 'medium' | 'high'
-    claudeBudgetTokens: Optional[int] = None
-    geminiThinkingLevel: Optional[str] = None  # 'minimal' | 'low' | 'medium' | 'high'
-    geminiBudgetTokens: Optional[int] = None
+    gemini_thinking_level: Optional[str] = None  # 'minimal' | 'low' | 'medium' | 'high'
+    gemini_budget_tokens: Optional[int] = None
 
 
 class AdvancedTaskSettings(BaseModel):
     """Advanced settings for AI tasks"""
-    enablePrefill: bool = False
-    thinkingMode: str = "off"  # 'off' | 'model' | 'custom'
-    thinkingConfig: Optional[ThinkingConfig] = Field(default_factory=lambda: ThinkingConfig())
-    customApiFormat: str = "openai"  # OpenAI-compatible dialect: 'openai' | 'claude' | 'gemini'
-    tokenizerOverride: Optional[str] = None  # 'openai' | 'claude' | 'gemini' (used for token counting)
+    enable_prefill: bool = False
+    thinking_mode: Literal["off", "model", "custom"] = "off"
+    thinking_config: Optional[ThinkingConfig] = Field(default_factory=lambda: ThinkingConfig())
+    thinking_format: Literal["openai", "claude", "gemini"] = "openai"
+    tokenizer_override: Optional[Literal["openai", "claude", "gemini"]] = None
+    request_format: Literal["openai_sdk", "claude_sdk"] = "openai_sdk"
 
 
 class TaskAIConfig(BaseModel):
@@ -63,12 +63,12 @@ class TaskAIConfig(BaseModel):
     provider: ProviderType
     model: str = Field(..., min_length=1, max_length=200)
     temperature: float = Field(default=0.7, ge=0, le=2)
-    providerPreference: Optional[ProviderPreference] = None
+    provider_preference: Optional[ProviderPreference] = None
     # Max output tokens for the response (maps to backend `max_tokens`).
     # Leave unset to use provider defaults.
-    maxOutputTokens: Optional[int] = Field(default=None, ge=1, le=1000000)
+    max_output_tokens: Optional[int] = Field(default=None, ge=1, le=1000000)
     # Context window upper bound used for local prompt budgeting (e.g. agent memory preflight).
-    contextWindowTokens: Optional[int] = Field(default=None, ge=1024, le=1000000)
+    context_window_tokens: Optional[int] = Field(default=None, ge=1024, le=1000000)
     advanced: AdvancedTaskSettings = Field(default_factory=AdvancedTaskSettings)
 
     class Config:
@@ -221,7 +221,7 @@ class ImageGenConfig(BaseModel):
 
 class UserSettingsResponse(BaseModel):
     """User settings response"""
-    taskConfigs: Dict[str, TaskAIConfig]
+    task_configs: Dict[str, TaskAIConfig]
     mainLanguage: str
     subLanguages: List[str] = []
     defaultSubLanguage: Optional[str] = None
@@ -253,7 +253,7 @@ class UserSettingsResponse(BaseModel):
 
 class UserSettingsUpdate(BaseModel):
     """Update user settings"""
-    taskConfigs: Optional[Dict[str, TaskAIConfig]] = None
+    task_configs: Optional[Dict[str, TaskAIConfig]] = None
     mainLanguage: Optional[str] = None
     subLanguages: Optional[List[str]] = None
     defaultSubLanguage: Optional[str] = None

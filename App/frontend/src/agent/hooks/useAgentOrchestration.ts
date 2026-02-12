@@ -228,8 +228,8 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         userInput: userInput?.trim() ?? '',
         outputLanguage: mainLanguage,
         outputMode,
-        enablePrefill: agentConfig.advanced.enablePrefill,
-        thinkingMode: agentConfig.advanced.thinkingMode,
+        enable_prefill: agentConfig.advanced.enable_prefill,
+        thinking_mode: agentConfig.advanced.thinking_mode,
         contextObjectIds: selectedContextIds,
       }, {
         signal: abortController.signal,
@@ -385,8 +385,8 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         userInput: '',
         outputLanguage: mainLanguage,
         outputMode,
-        enablePrefill: agentConfig.advanced.enablePrefill,
-        thinkingMode: agentConfig.advanced.thinkingMode,
+        enable_prefill: agentConfig.advanced.enable_prefill,
+        thinking_mode: agentConfig.advanced.thinking_mode,
         contextObjectIds: selectedContextIds,
       }, {
         signal: abortController.signal,

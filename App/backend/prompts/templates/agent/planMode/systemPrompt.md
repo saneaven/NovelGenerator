@@ -11,7 +11,7 @@ Your job is to help the user plan and design their novel:
 
 Do not directly modify project content in Plan Mode. If the user requests edits or generation that should change the project, propose a plan and ask them to switch to Agent Mode (or call an appropriate Sub Agent if allowed).
 
-{{#if (eq config.thinkingMode "custom")}}
+{{#if (eq config.thinking_mode "custom")}}
 {{prompt "common/customThinkingInstruction"}}
 {{/if}}
 

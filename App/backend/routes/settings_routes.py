@@ -43,9 +43,11 @@ async def get_user_settings(
                     'model': 'gpt-5-mini',
                     'temperature': 0.7,
                     'advanced': {
-                        'enablePrefill': False,
-                        'thinkingMode': 'off',
-                        'thinkingConfig': {'effort': 'medium'}
+                        'enable_prefill': False,
+                        'thinking_mode': 'off',
+                        'thinking_config': {'effort': 'medium'},
+                        'request_format': 'openai_sdk',
+                        'thinking_format': 'openai',
                     },
                 },
                 'subAgent': {
@@ -53,9 +55,11 @@ async def get_user_settings(
                     'model': 'gpt-5-mini',
                     'temperature': 0.7,
                     'advanced': {
-                        'enablePrefill': False,
-                        'thinkingMode': 'off',
-                        'thinkingConfig': {'effort': 'medium'}
+                        'enable_prefill': False,
+                        'thinking_mode': 'off',
+                        'thinking_config': {'effort': 'medium'},
+                        'request_format': 'openai_sdk',
+                        'thinking_format': 'openai',
                     },
                 },
                 'translation': {
@@ -63,9 +67,11 @@ async def get_user_settings(
                     'model': 'gpt-5',
                     'temperature': 0.2,
                     'advanced': {
-                        'enablePrefill': False,
-                        'thinkingMode': 'off',
-                        'thinkingConfig': {'effort': 'medium'}
+                        'enable_prefill': False,
+                        'thinking_mode': 'off',
+                        'thinking_config': {'effort': 'medium'},
+                        'request_format': 'openai_sdk',
+                        'thinking_format': 'openai',
                     },
                 },
                 'editAssistant': {
@@ -73,9 +79,11 @@ async def get_user_settings(
                     'model': 'gpt-5',
                     'temperature': 0.7,
                     'advanced': {
-                        'enablePrefill': True,
-                        'thinkingMode': 'off',
-                        'thinkingConfig': {'effort': 'medium'}
+                        'enable_prefill': True,
+                        'thinking_mode': 'off',
+                        'thinking_config': {'effort': 'medium'},
+                        'request_format': 'openai_sdk',
+                        'thinking_format': 'openai',
                     },
                 },
                 'imagePrompt': {
@@ -83,9 +91,11 @@ async def get_user_settings(
                     'model': 'gpt-5',
                     'temperature': 0.7,
                     'advanced': {
-                        'enablePrefill': False,
-                        'thinkingMode': 'off',
-                        'thinkingConfig': {'effort': 'medium'}
+                        'enable_prefill': False,
+                        'thinking_mode': 'off',
+                        'thinking_config': {'effort': 'medium'},
+                        'request_format': 'openai_sdk',
+                        'thinking_format': 'openai',
                     },
                 },
                 'summary': {
@@ -93,9 +103,11 @@ async def get_user_settings(
                     'model': 'gpt-5-mini',
                     'temperature': 0.2,
                     'advanced': {
-                        'enablePrefill': False,
-                        'thinkingMode': 'off',
-                        'thinkingConfig': {'effort': 'medium'}
+                        'enable_prefill': False,
+                        'thinking_mode': 'off',
+                        'thinking_config': {'effort': 'medium'},
+                        'request_format': 'openai_sdk',
+                        'thinking_format': 'openai',
                     },
                 },
             },
@@ -141,7 +153,7 @@ async def get_user_settings(
     embedding_configs_dict = merge_embedding_configs(getattr(settings, "embedding_configs", None))
 
     return UserSettingsResponse(
-        taskConfigs=settings.task_configs,
+        task_configs=settings.task_configs,
         mainLanguage=settings.main_language,
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
@@ -188,11 +200,11 @@ async def update_user_settings(
         )
 
     # Update fields if provided
-    if update_data.taskConfigs is not None:
+    if update_data.task_configs is not None:
         # Convert Pydantic models to dict for JSONB storage
         settings.task_configs = {
             k: v.model_dump(exclude_none=True)
-            for k, v in update_data.taskConfigs.items()
+            for k, v in update_data.task_configs.items()
         }
 
     if update_data.mainLanguage is not None:
@@ -327,7 +339,7 @@ async def update_user_settings(
     embedding_configs_dict = merge_embedding_configs(getattr(settings, "embedding_configs", None))
 
     return UserSettingsResponse(
-        taskConfigs=settings.task_configs,
+        task_configs=settings.task_configs,
         mainLanguage=settings.main_language,
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
@@ -416,7 +428,7 @@ async def update_task_config(
     embedding_configs_dict = merge_embedding_configs(getattr(settings, "embedding_configs", None))
 
     return UserSettingsResponse(
-        taskConfigs=settings.task_configs,
+        task_configs=settings.task_configs,
         mainLanguage=settings.main_language,
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
@@ -487,7 +499,7 @@ async def sync_settings_from_client(
         embedding_configs = merge_embedding_configs(client_settings.get("embeddingConfigs"))
         settings = UserSettings(
             user_id=current_user.id,
-            task_configs=client_settings.get('taskConfigs', {}),
+            task_configs=client_settings.get('task_configs', {}),
             main_language=client_settings.get('mainLanguage', 'English'),
             sub_languages=client_settings.get('subLanguages', []),
             default_sub_language=client_settings.get('defaultSubLanguage'),
@@ -523,7 +535,7 @@ async def sync_settings_from_client(
         db.add(settings)
     else:
         # Update existing settings
-        settings.task_configs = client_settings.get('taskConfigs', settings.task_configs)  # type: ignore
+        settings.task_configs = client_settings.get('task_configs', settings.task_configs)  # type: ignore
         settings.main_language = client_settings.get('mainLanguage', settings.main_language)  # type: ignore
         settings.sub_languages = client_settings.get('subLanguages', settings.sub_languages)  # type: ignore
         settings.default_sub_language = client_settings.get('defaultSubLanguage', settings.default_sub_language)  # type: ignore

@@ -2,7 +2,6 @@ import type {
   ChatMessage,
   ContentPart,
   ContentPartType,
-  ConversationBlock,
   ToolCallMetadata,
   ToolCallProgress,
 } from './requestTypes';
@@ -16,7 +15,6 @@ import type {
   LLMTaskCallbacks,
   LLMTaskResult,
   OutputMode,
-  PromptBundle,
   LLMTaskModeType,
 } from './types';
 import { LLMTaskMode } from './types';
@@ -97,16 +95,21 @@ export class LLMTask {
 
       // Get task type for this mode to lookup settings
       const taskType = MODE_TO_TASK_TYPE[this.config.mode];
-      const taskConfig = settings.taskConfigs[taskType];
+      const taskConfig = settings.task_configs[taskType];
 
       const provider = this.config.provider ?? taskConfig.provider;
       const providerConfig = this.config.providerConfig ?? credentialsStore.getProviderConfigForBackend(provider);
       const model = this.config.model ?? taskConfig.model;
       const temperature = this.config.temperature ?? taskConfig.temperature;
-      const maxTokens = taskConfig.maxOutputTokens;
-      const thinkingMode = this.config.thinkingMode ?? taskConfig.advanced.thinkingMode;
-      const thinkingConfig = this.config.thinkingConfig ?? taskConfig.advanced.thinkingConfig;
-      const customApiFormat = this.config.customApiFormat ?? taskConfig.advanced.customApiFormat;
+      const max_tokens = taskConfig.max_output_tokens;
+      const thinking_mode = this.config.thinking_mode ?? taskConfig.advanced.thinking_mode;
+      const thinking_config = this.config.thinking_config ?? taskConfig.advanced.thinking_config;
+      const thinking_format = this.config.thinking_format ?? taskConfig.advanced.thinking_format;
+      const request_format = this.config.request_format ?? taskConfig.advanced.request_format;
+      const effective_thinking_format =
+        provider === 'custom' && request_format === 'openai_sdk'
+          ? thinking_format
+          : undefined;
       const retryConfig = this.config.retryConfig ?? settings.retryConfig;
 
       // 2. Generate prompt bundle
@@ -151,7 +154,7 @@ export class LLMTask {
         provider,
         model,
         temperature,
-        thinkingMode,
+        thinking_mode,
         outputMode,
         tools,
         messages,
@@ -166,7 +169,7 @@ export class LLMTask {
             provider,
             model,
             temperature,
-            thinkingMode,
+            thinking_mode,
             outputMode,
             tools,
             messages,
@@ -231,12 +234,13 @@ export class LLMTask {
           tools,
           model,
           temperature,
-          maxTokens,
-          thinkingConfig: thinkingMode === 'model' ? thinkingConfig : undefined,
-          thinkingMode,
-          customApiFormat,
+          max_tokens,
+          thinking_config: thinking_mode === 'model' ? thinking_config : undefined,
+          thinking_mode,
+          thinking_format: effective_thinking_format,
+          request_format,
           retryConfig,
-          nativeToolCall,
+          native_tool_call: nativeToolCall,
         }
       )) {
         // Handle string chunk (content)

@@ -108,7 +108,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const validateTaskModels = (): { taskType: AITaskType; message: string } | null => {
     const taskTypes: AITaskType[] = ['agent', 'translation', 'editAssistant', 'imagePrompt', 'summary', 'subAgent'];
     for (const taskType of taskTypes) {
-      const cfg = localSettings.taskConfigs?.[taskType];
+      const cfg = localSettings.task_configs?.[taskType];
       const model = (cfg as any)?.model;
       if (typeof model !== 'string' || !model.trim()) {
         const label = t(`settings.general.tasks.${taskType}.label`);
@@ -570,15 +570,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
         {mainTab === 'general' && (
           <GeneralPanel
-            taskConfigs={localSettings.taskConfigs}
+            task_configs={localSettings.task_configs}
             credentials={localCredentials}
             activeTask={activeTask}
             onTaskChange={setActiveTask}
             onConfigChange={(taskType, config) =>
               setLocalSettings({
                 ...localSettings,
-                taskConfigs: {
-                  ...localSettings.taskConfigs,
+                task_configs: {
+                  ...localSettings.task_configs,
                   [taskType]: config,
                 },
               })

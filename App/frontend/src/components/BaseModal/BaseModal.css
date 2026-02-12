@@ -49,12 +49,12 @@
 
 .base-modal--medium {
   width: 40dvw;
-  height: 85dvh;
+  max-height: 85dvh;
 }
 
 .base-modal--large {
   width: 50dvw;
-  height: 90dvh;
+  max-height: 90dvh;
 }
 
 .base-modal--xlarge {

@@ -18,19 +18,17 @@ class ThinkingConfig(BaseModel):
 
     Fields are optional; providers pick what they understand.
     """
-    # Common - effort now includes 'none', 'minimal', 'xhigh' for GPT-5.2+
-    effort: Optional[Literal["none", "minimal", "low", "medium", "high", "xhigh"]] = None
-    max_tokens: Optional[int] = Field(default=None, alias="maxTokens")
+    # Common effort values across providers.
+    # Claude adaptive thinking uses: low | medium | high | max
+    effort: Optional[Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]] = None
+    max_tokens: Optional[int] = None
 
     # GPT-5 specific - output verbosity
     verbosity: Optional[Literal["low", "medium", "high"]] = None
 
-    # Claude (Anthropic)
-    claude_budget_tokens: Optional[int] = Field(default=None, alias="claudeBudgetTokens")
-
     # Gemini - now supports 'minimal' and 'medium' for Gemini 3 Flash
-    gemini_thinking_level: Optional[Literal["minimal", "low", "medium", "high"]] = Field(default=None, alias="geminiThinkingLevel")
-    gemini_budget_tokens: Optional[int] = Field(default=None, alias="geminiBudgetTokens")
+    gemini_thinking_level: Optional[Literal["minimal", "low", "medium", "high"]] = None
+    gemini_budget_tokens: Optional[int] = None
 
 
 class RetryConfig(BaseModel):
@@ -65,13 +63,13 @@ class ToolResult(BaseModel):
 
 class Message(BaseModel):
     role: Literal["system", "user", "assistant", "tool_results"]
-    contentParts: List[ContentPart] = []
+    content_parts: List[ContentPart] = Field(default_factory=list)
     tool_calls: Optional[List[ToolCall]] = None
     tool_results: Optional[List[ToolResult]] = None
 
     def get_content_text(self) -> str:
-        """Extract text content from contentParts for LLM providers"""
-        return "".join(part.text for part in self.contentParts if part.type == "content")
+        """Extract text content from content_parts for LLM providers"""
+        return "".join(part.text for part in self.content_parts if part.type == "content")
 
 class ChatCompletionRequest(BaseModel):
     messages: List[Message]
@@ -80,10 +78,16 @@ class ChatCompletionRequest(BaseModel):
     tools: Optional[List[Dict]] = None
     tool_choice: Optional[Literal["auto", "required", "none"]] = None
     max_tokens: Optional[int] = None
-    config: ProviderConfig = Field(default_factory=ProviderConfig)
+    provider_config: ProviderConfig = Field(default_factory=ProviderConfig)
     provider_preference: Optional[ProviderPreference] = None
     thinking_mode: Optional[Literal["off", "custom", "model"]] = "off"
     thinking_config: Optional[ThinkingConfig] = None
-    custom_api_format: Optional[Literal["openai", "claude", "gemini"]] = None  # For custom provider
+    thinking_format: Optional[Literal["openai", "claude", "gemini"]] = None  # For custom provider(openai_sdk only)
+    request_format: Optional[Literal["openai_sdk", "claude_sdk"]] = "openai_sdk"
     retry_config: Optional[RetryConfig] = None
     native_tool_call: bool = False
+
+
+class ProviderModelsRequest(BaseModel):
+    provider_config: ProviderConfig = Field(default_factory=ProviderConfig)
+    request_format: Optional[Literal["openai_sdk", "claude_sdk"]] = "openai_sdk"

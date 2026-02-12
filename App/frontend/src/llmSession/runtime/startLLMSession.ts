@@ -1,6 +1,6 @@
 import type { ChatMessage, ContentPart, ToolCallProgress, ToolCallMetadata } from '../../llm/requestTypes';
 import type { LLMTaskModeType, PromptContext } from '../../llm/types';
-import type { ProviderType, ProviderConfig, ThinkingConfig, CustomApiFormat, RetryConfig } from '../../store/settingsStore';
+import type { ProviderType, ProviderConfig, ThinkingConfig, ThinkingFormat, RequestFormat, RetryConfig } from '../../store/settingsStore';
 import { LLMTask } from '../../llm/LLMTask';
 import { BackendError } from '../../llm/llmService';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
@@ -17,9 +17,10 @@ export interface LLMRunConfig {
   providerConfig?: ProviderConfig;
   model?: string;
   temperature?: number;
-  thinkingMode?: 'off' | 'model' | 'custom';
-  thinkingConfig?: ThinkingConfig;
-  customApiFormat?: CustomApiFormat;
+  thinking_mode?: 'off' | 'model' | 'custom';
+  thinking_config?: ThinkingConfig;
+  thinking_format?: ThinkingFormat;
+  request_format?: RequestFormat;
   retryConfig?: RetryConfig;
 }
 
@@ -108,9 +109,10 @@ export function startLLMSession<TInput = unknown, TResult = unknown>(
           providerConfig: input.providerConfig,
           model: input.model,
           temperature: input.temperature,
-          thinkingMode: input.thinkingMode,
-          thinkingConfig: input.thinkingConfig,
-          customApiFormat: input.customApiFormat,
+          thinking_mode: input.thinking_mode,
+          thinking_config: input.thinking_config,
+          thinking_format: input.thinking_format,
+          request_format: input.request_format,
           retryConfig: input.retryConfig,
           sessionId,
         },

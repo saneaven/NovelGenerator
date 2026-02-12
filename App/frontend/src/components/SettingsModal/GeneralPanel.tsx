@@ -6,7 +6,7 @@ import { SpeechBubble, Globe, Edit, Palette, Document, People } from '../icons';
 import './GeneralPanel.css';
 
 interface GeneralPanelProps {
-  taskConfigs: Record<AITaskType, TaskAIConfig>;
+  task_configs: Record<AITaskType, TaskAIConfig>;
   credentials: ProviderCredentials;
   activeTask: AITaskType;
   onTaskChange: (taskType: AITaskType) => void;
@@ -23,14 +23,14 @@ const TASK_ICONS: Record<AITaskType, React.ReactNode> = {
 };
 
 const GeneralPanel: React.FC<GeneralPanelProps> = ({
-  taskConfigs,
+  task_configs,
   credentials,
   activeTask,
   onTaskChange,
   onConfigChange,
 }) => {
   const { t } = useTranslation();
-  const currentConfig = taskConfigs[activeTask];
+  const currentConfig = task_configs[activeTask];
 
   const taskTypes: AITaskType[] = ['agent', 'translation', 'editAssistant', 'imagePrompt', 'summary', 'subAgent'];
 

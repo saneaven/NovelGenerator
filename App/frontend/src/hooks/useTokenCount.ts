@@ -14,7 +14,7 @@ export interface UseTokenCountOptions {
   /** The model name */
   model: string;
   /** Optional tokenizer override (for OpenRouter/Custom) */
-  tokenizerOverride?: TokenizerType;
+  tokenizer_override?: TokenizerType;
   /** Debounce delay in milliseconds (default: 500) */
   debounceMs?: number;
   /** Whether token counting is enabled (default: true) */
@@ -58,7 +58,7 @@ export function useTokenCount(options: UseTokenCountOptions): UseTokenCountResul
     text,
     provider,
     model,
-    tokenizerOverride,
+    tokenizer_override,
     debounceMs = 500,
     enabled = true,
   } = options;
@@ -75,8 +75,8 @@ export function useTokenCount(options: UseTokenCountOptions): UseTokenCountResul
 
   // Generate cache key
   const cacheKey = useMemo(
-    () => getCacheKey(text, provider, model, tokenizerOverride),
-    [text, provider, model, tokenizerOverride]
+    () => getCacheKey(text, provider, model, tokenizer_override),
+    [text, provider, model, tokenizer_override]
   );
 
   useEffect(() => {
@@ -123,7 +123,7 @@ export function useTokenCount(options: UseTokenCountOptions): UseTokenCountResul
           text,
           provider,
           model,
-          tokenizerOverride,
+          tokenizer_override,
           abortRef.current.signal
         );
 
@@ -164,7 +164,7 @@ export function useTokenCount(options: UseTokenCountOptions): UseTokenCountResul
         abortRef.current.abort();
       }
     };
-  }, [text, provider, model, tokenizerOverride, debounceMs, enabled, cacheKey]);
+  }, [text, provider, model, tokenizer_override, debounceMs, enabled, cacheKey]);
 
   return result;
 }
