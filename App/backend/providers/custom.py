@@ -14,7 +14,12 @@ from anthropic import AsyncAnthropic
 from .async_openai_provider import AsyncOpenAIProvider
 from .claude_provider import ClaudeProvider
 from .registry import ProviderRegistry
-from ..utils.outbound_http import filter_additional_headers, validate_outbound_base_url
+from ..utils.outbound_http import (
+    filter_additional_body,
+    filter_additional_headers,
+    merge_user_overrides,
+    validate_outbound_base_url,
+)
 
 
 RequestFormat = Literal["openai_sdk", "claude_sdk"]
@@ -29,6 +34,7 @@ class _CustomClaudeSDKProvider(ClaudeProvider):
         raw_base_url = (config.get("base_url") or "").strip()
         self._base_url = validate_outbound_base_url(raw_base_url) if raw_base_url else ""
         self._additional_headers = filter_additional_headers(config.get("additional_headers"))
+        self._additional_body = filter_additional_body(config.get("additional_body"))
         super().__init__(config)
 
     @property
@@ -57,6 +63,9 @@ class _CustomClaudeSDKProvider(ClaudeProvider):
             kwargs["default_headers"] = self._additional_headers
         return AsyncAnthropic(**kwargs)
 
+    def _additional_request_body(self) -> Dict[str, object]:
+        return dict(self._additional_body)
+
 
 @ProviderRegistry.register
 class CustomProvider(AsyncOpenAIProvider):
@@ -67,6 +76,7 @@ class CustomProvider(AsyncOpenAIProvider):
         raw_base_url = (config.get("base_url") or "").strip()
         self._base_url = validate_outbound_base_url(raw_base_url) if raw_base_url else ""
         self._additional_headers = filter_additional_headers(config.get("additional_headers"))
+        self._additional_body = filter_additional_body(config.get("additional_body"))
         self._request_format = self._normalize_request_format(config.get("request_format"))
         super().__init__(config)
 
@@ -113,6 +123,13 @@ class CustomProvider(AsyncOpenAIProvider):
         existing = request.get("extra_body")
         return dict(existing) if isinstance(existing, dict) else {}
 
+    def _apply_additional_body(self, request: Dict[str, object]) -> Dict[str, object]:
+        if not self._additional_body:
+            return request
+        extra_body = self._coerce_extra_body(request)
+        request["extra_body"] = merge_user_overrides(extra_body, self._additional_body)
+        return request
+
     def _prepare_request_kwargs(
         self,
         messages: List[Dict],
@@ -146,7 +163,7 @@ class CustomProvider(AsyncOpenAIProvider):
         if fmt == "openai":
             if effort is not None:
                 request["reasoning_effort"] = effort
-            return request
+            return self._apply_additional_body(request)
 
         if fmt == "claude":
             extra_body = self._coerce_extra_body(request)
@@ -164,7 +181,7 @@ class CustomProvider(AsyncOpenAIProvider):
             extra_body["thinking"] = thinking_payload
             extra_body["output_config"] = output_config
             request["extra_body"] = extra_body
-            return request
+            return self._apply_additional_body(request)
 
         # fmt == "gemini"
         has_reasoning_effort = effort is not None
@@ -182,7 +199,7 @@ class CustomProvider(AsyncOpenAIProvider):
                     "thinking_format=gemini supports reasoning_effort values: none, low, medium, high."
                 )
             request["reasoning_effort"] = effort
-            return request
+            return self._apply_additional_body(request)
 
         if has_gemini_thinking_config:
             extra_body = self._coerce_extra_body(request)
@@ -195,9 +212,9 @@ class CustomProvider(AsyncOpenAIProvider):
             google_body["thinking_config"] = thinking_payload
             extra_body["google"] = google_body
             request["extra_body"] = extra_body
-            return request
+            return self._apply_additional_body(request)
 
-        return request
+        return self._apply_additional_body(request)
 
     async def stream_chat(
         self,
@@ -228,6 +245,7 @@ class CustomProvider(AsyncOpenAIProvider):
                     "api_key": self._api_key,
                     "base_url": self._base_url,
                     "additional_headers": self._additional_headers,
+                    "additional_body": self._additional_body,
                 }
             )
             async for chunk in claude_provider.stream_chat(
@@ -276,6 +294,7 @@ class CustomProvider(AsyncOpenAIProvider):
                     "api_key": self._api_key,
                     "base_url": self._base_url,
                     "additional_headers": self._additional_headers,
+                    "additional_body": self._additional_body,
                 }
             )
             return await claude_provider.get_models()

@@ -24,6 +24,7 @@ export interface ProviderConfig {
     apiKey?: string;
     baseUrl?: string;
     additionalHeaders?: Record<string, string>;
+    additionalBody?: Record<string, unknown>;
 }
 
 // Provider configurations (credentials only - shared across functions)
@@ -43,6 +44,8 @@ export interface ProviderCredentials {
     custom: {
         baseUrl: string;
         apiKey?: string;
+        additionalHeadersJson: string;
+        additionalBodyJson: string;
     };
     xai: {
         apiKey: string;

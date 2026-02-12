@@ -84,6 +84,20 @@ function getMessageText(msg: ChatMessage): string {
     .join('');
 }
 
+function parseCustomAdditionalHeaders(raw: unknown): Record<string, string> | undefined {
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    const headers = Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).filter(([, value]) => typeof value === 'string')
+    ) as Record<string, string>;
+    return Object.keys(headers).length > 0 ? headers : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 type ToolCallLocator = { kind: 'id'; id: string } | { kind: 'index'; index: number };
 
 function parseToolCallLocatorFromFieldPath(fieldPath?: string | null): ToolCallLocator | null {
@@ -279,6 +293,10 @@ async function buildMemoryContext(
   if (profile.provider === 'custom') {
     config.api_key = creds.custom?.apiKey || undefined;
     config.base_url = creds.custom?.baseUrl || undefined;
+    const additionalHeaders = parseCustomAdditionalHeaders(creds.custom?.additionalHeadersJson);
+    if (additionalHeaders) {
+      config.additional_headers = additionalHeaders;
+    }
   } else {
     config.api_key = creds?.[profile.provider]?.apiKey || undefined;
   }
@@ -637,6 +655,10 @@ export const AgentMemoryManager = {
       if (profile.provider === 'custom') {
         embedding_config.api_key = creds.custom?.apiKey || undefined;
         embedding_config.base_url = creds.custom?.baseUrl || undefined;
+        const additionalHeaders = parseCustomAdditionalHeaders(creds.custom?.additionalHeadersJson);
+        if (additionalHeaders) {
+          embedding_config.additional_headers = additionalHeaders;
+        }
       } else {
         embedding_config.api_key = creds?.[profile.provider]?.apiKey || undefined;
       }

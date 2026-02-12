@@ -168,6 +168,55 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     return null;
   };
 
+  const validateCustomCredentialJson = (): { tab: MainTab; message: string } | null => {
+    const targets: Array<{ label: string; raw: string | undefined; requireStringValues: boolean }> = [
+      {
+        label: t('settings.credentials.custom.additionalHeaders'),
+        raw: localCredentials.custom?.additionalHeadersJson,
+        requireStringValues: true,
+      },
+      {
+        label: t('settings.credentials.custom.additionalBody'),
+        raw: localCredentials.custom?.additionalBodyJson,
+        requireStringValues: false,
+      },
+    ];
+
+    for (const target of targets) {
+      let parsed: unknown;
+      try {
+        const value = (target.raw || '').trim();
+        parsed = value ? JSON.parse(value) : {};
+      } catch {
+        return {
+          tab: 'credentials',
+          message: t('settings.credentials.validation.invalidJson', { field: target.label }),
+        };
+      }
+
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return {
+          tab: 'credentials',
+          message: t('settings.credentials.validation.invalidJsonObject', { field: target.label }),
+        };
+      }
+
+      if (target.requireStringValues) {
+        const hasInvalidValue = Object.values(parsed as Record<string, unknown>).some(
+          (value) => typeof value !== 'string'
+        );
+        if (hasInvalidValue) {
+          return {
+            tab: 'credentials',
+            message: t('settings.credentials.validation.invalidHeaderValue'),
+          };
+        }
+      }
+    }
+
+    return null;
+  };
+
   const handleSave = async () => {
     if (isSaving) return;
 
@@ -192,18 +241,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             setMainTab(embeddingError.tab);
             showToast('error', embeddingError.message);
           } else {
-            try {
-              settingsStore.updateSettings(localSettings);
-              credentialsStore.setCredentials(localCredentials);
+            const customJsonError = validateCustomCredentialJson();
+            if (customJsonError) {
+              setMainTab(customJsonError.tab);
+              showToast('error', customJsonError.message);
+            } else {
+              try {
+                settingsStore.updateSettings(localSettings);
+                credentialsStore.setCredentials(localCredentials);
 
-              await settingsStore.saveToServer();
-              settingsSnapshotRef.current = JSON.stringify(localSettings);
-              credentialsSnapshotRef.current = JSON.stringify(localCredentials);
-              showToast('success', t('settings.savedSuccessfully'));
-            } catch (error) {
-              console.error('Failed to save settings:', error);
-              const message = error instanceof Error ? error.message : t('settings.saveError');
-              showToast('error', message);
+                await settingsStore.saveToServer();
+                settingsSnapshotRef.current = JSON.stringify(localSettings);
+                credentialsSnapshotRef.current = JSON.stringify(localCredentials);
+                showToast('success', t('settings.savedSuccessfully'));
+              } catch (error) {
+                console.error('Failed to save settings:', error);
+                const message = error instanceof Error ? error.message : t('settings.saveError');
+                showToast('error', message);
+              }
             }
           }
         }

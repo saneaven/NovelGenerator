@@ -345,7 +345,18 @@
         "baseUrlPlaceholder": "https://api.openai.com/v1",
         "baseUrlHint": "OpenAI 호환 API 엔드포인트",
         "apiKeyPlaceholder": "sk-...",
-        "apiKeyHint": "엔드포인트에 인증이 필요한 경우 필수"
+        "apiKeyHint": "엔드포인트에 인증이 필요한 경우 필수",
+        "additionalHeaders": "커스텀 헤더 (JSON)",
+        "additionalHeadersPlaceholder": "{\"X-Custom-Header\":\"value\"}",
+        "additionalHeadersHint": "커스텀 프로바이더 요청에 추가할 선택 헤더입니다. 문자열 값만 가진 JSON 객체여야 합니다.",
+        "additionalBody": "커스텀 바디 (JSON)",
+        "additionalBodyPlaceholder": "{\"reasoning\":{\"effort\":\"high\"}}",
+        "additionalBodyHint": "커스텀 LLM 요청(openai_sdk, claude_sdk)에 병합할 선택 JSON 바디입니다."
+      },
+      "validation": {
+        "invalidJson": "{{field}}은(는) 올바른 JSON이어야 합니다.",
+        "invalidJsonObject": "{{field}}은(는) JSON 객체여야 합니다.",
+        "invalidHeaderValue": "커스텀 헤더 JSON의 값은 모두 문자열이어야 합니다."
       }
     },
     "general": {

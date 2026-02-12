@@ -77,6 +77,20 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(precision)} ${units[unitIndex]}`;
 }
 
+function parseCustomAdditionalHeaders(raw: unknown): Record<string, string> | undefined {
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    const headers = Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).filter(([, value]) => typeof value === 'string')
+    ) as Record<string, string>;
+    return Object.keys(headers).length > 0 ? headers : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }) => {
   const { t } = useTranslation();
   const { showError } = useErrorStore();
@@ -381,6 +395,10 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       if (provider === 'custom') {
         config.api_key = credentials.custom?.apiKey || undefined;
         config.base_url = credentials.custom?.baseUrl || undefined;
+        const additionalHeaders = parseCustomAdditionalHeaders(credentials.custom?.additionalHeadersJson);
+        if (additionalHeaders) {
+          config.additional_headers = additionalHeaders;
+        }
       } else {
         config.api_key = (credentials as any)[provider]?.apiKey || undefined;
       }

@@ -28,10 +28,45 @@ const defaultCredentials: ProviderCredentials = {
   gemini: { apiKey: '' },
   claude: { apiKey: '' },
   openrouter: { apiKey: '' },
-  custom: { baseUrl: '', apiKey: '' },
+  custom: { baseUrl: '', apiKey: '', additionalHeadersJson: '{}', additionalBodyJson: '{}' },
   xai: { apiKey: '' },
   novelai: { apiKey: '' },
 };
+
+function parseJsonObject(value: string | undefined): Record<string, unknown> | undefined {
+  if (!value?.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function toStringRecord(value: Record<string, unknown> | undefined): Record<string, string> | undefined {
+  if (!value) return undefined;
+  const output: Record<string, string> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (typeof v === 'string') {
+      output[k] = v;
+    }
+  }
+  return Object.keys(output).length > 0 ? output : undefined;
+}
+
+function normalizeCredentials(credentials: Partial<ProviderCredentials>): ProviderCredentials {
+  return {
+    ...defaultCredentials,
+    ...credentials,
+    custom: {
+      ...defaultCredentials.custom,
+      ...(credentials.custom || {}),
+    },
+  };
+}
 
 export const useCredentialsStore = create<CredentialsStore>()(
   persist(
@@ -40,14 +75,18 @@ export const useCredentialsStore = create<CredentialsStore>()(
       backupStatus: null,
       isSyncing: false,
 
-      setCredentials: (credentials) => set({ credentials }),
+      setCredentials: (credentials) => set({ credentials: normalizeCredentials(credentials) }),
 
       getProviderConfig: (provider) => {
         const creds = get().credentials;
         if (provider === 'custom') {
+          const parsedHeaders = parseJsonObject(creds.custom.additionalHeadersJson);
+          const parsedBody = parseJsonObject(creds.custom.additionalBodyJson);
           return {
             apiKey: creds.custom.apiKey || undefined,
             baseUrl: creds.custom.baseUrl || undefined,
+            additionalHeaders: toStringRecord(parsedHeaders),
+            additionalBody: parsedBody && Object.keys(parsedBody).length > 0 ? parsedBody : undefined,
           };
         }
         return { apiKey: (creds as any)[provider]?.apiKey || undefined };
@@ -70,7 +109,7 @@ export const useCredentialsStore = create<CredentialsStore>()(
       backupToServer: async (password: string, credentials?: ProviderCredentials) => {
         set({ isSyncing: true });
         try {
-          const creds = credentials ?? get().credentials;
+          const creds = normalizeCredentials(credentials ?? get().credentials);
           const blob = await encryptCredentialsForBackup(creds, password);
           const status = await credentialsBackupService.upload(password, blob);
           set({ backupStatus: status });
@@ -83,7 +122,7 @@ export const useCredentialsStore = create<CredentialsStore>()(
         set({ isSyncing: true });
         try {
           const res = await credentialsBackupService.download(password);
-          const creds = await decryptCredentialsFromBackup(res.blob, password);
+          const creds = normalizeCredentials(await decryptCredentialsFromBackup(res.blob, password));
           set({ credentials: creds, backupStatus: { hasBackup: true, updatedAt: res.updatedAt } });
           return creds;
         } finally {
@@ -123,10 +162,7 @@ export const useCredentialsStore = create<CredentialsStore>()(
       merge: (persistedState: any, currentState: CredentialsStore) => {
         return {
           ...currentState,
-          credentials: {
-            ...defaultCredentials,
-            ...(persistedState?.credentials || {}),
-          },
+          credentials: normalizeCredentials((persistedState?.credentials || {}) as Partial<ProviderCredentials>),
           backupStatus: persistedState?.backupStatus ?? null,
         };
       },

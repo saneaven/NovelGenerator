@@ -79,6 +79,19 @@ const parseOpenAIModelId = (id: string): { series: string; version: string } | n
 // Capitalize first letter
 const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
+const parseJsonObject = (raw: string | undefined): Record<string, unknown> | undefined => {
+  if (!raw?.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // ignore invalid JSON and continue without additional fields
+  }
+  return undefined;
+};
+
 // Build tree for OpenRouter (1-level: Family -> Models)
 const buildOpenRouterTree = (models: any[]): TreeNode[] => {
   const familyMap: Record<string, TreeNode> = {};
@@ -272,13 +285,28 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
 
     try {
       const config: any = {};
-      const providerCreds = credentials[provider];
+      const providerCreds = credentials[provider] as any;
 
       if ('apiKey' in providerCreds && providerCreds.apiKey) {
         config.apiKey = providerCreds.apiKey;
       }
       if ('baseUrl' in providerCreds && providerCreds.baseUrl) {
         config.baseUrl = providerCreds.baseUrl;
+      }
+      if (provider === 'custom') {
+        const headerObject = parseJsonObject(providerCreds.additionalHeadersJson);
+        if (headerObject) {
+          const additionalHeaders = Object.fromEntries(
+            Object.entries(headerObject).filter(([, value]) => typeof value === 'string')
+          );
+          if (Object.keys(additionalHeaders).length > 0) {
+            config.additionalHeaders = additionalHeaders;
+          }
+        }
+        const additionalBody = parseJsonObject(providerCreds.additionalBodyJson);
+        if (additionalBody && Object.keys(additionalBody).length > 0) {
+          config.additionalBody = additionalBody;
+        }
       }
 
       const data = mode === 'embedding'

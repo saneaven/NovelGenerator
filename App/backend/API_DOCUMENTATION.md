@@ -528,6 +528,11 @@ Get available models for a specific provider.
     "base_url": "https://custom-endpoint.example/v1",
     "additional_headers": {
       "X-Custom-Header": "value"
+    },
+    "additional_body": {
+      "reasoning": {
+        "effort": "high"
+      }
     }
   },
   "request_format": "openai_sdk"
@@ -561,12 +566,20 @@ Stream chat completions from a provider.
     "base_url": "https://custom-endpoint.example/v1",
     "additional_headers": {
       "X-Custom-Header": "value"
+    },
+    "additional_body": {
+      "reasoning": {
+        "effort": "high"
+      }
     }
   },
   "request_format": "openai_sdk",
   "thinking_format": "openai"
 }
 ```
+
+`additional_headers` and `additional_body` are custom endpoint extension fields.
+`additional_body` is applied only for the `custom` provider (`openai_sdk` and `claude_sdk` request formats).
 
 **Response:** Server-Sent Events stream
 

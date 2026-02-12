@@ -70,7 +70,8 @@ export async function* streamLLM(
     const backendConfig = {
         api_key: providerConfig.apiKey,
         base_url: providerConfig.baseUrl,
-        additional_headers: providerConfig.additionalHeaders
+        additional_headers: providerConfig.additionalHeaders,
+        additional_body: providerConfig.additionalBody,
     };
 
     const backendMessages = messages.map((message) => ({
@@ -397,6 +398,7 @@ export async function fetchModels(
         api_key: config.apiKey,
         base_url: config.baseUrl,
         additional_headers: config.additionalHeaders,
+        additional_body: config.additionalBody,
     };
     const requestBody: Record<string, unknown> = { provider_config };
     if (provider === "custom") {

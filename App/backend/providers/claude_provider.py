@@ -7,7 +7,7 @@ from .base import BaseProvider
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
-from ..utils.outbound_http import validate_outbound_base_url
+from ..utils.outbound_http import merge_user_overrides, validate_outbound_base_url
 
 
 @ProviderRegistry.register
@@ -175,6 +175,10 @@ class ClaudeProvider(BaseProvider):
         output_config: Dict[str, object] = {"effort": effort}
         return thinking, output_config
 
+    def _additional_request_body(self) -> Dict[str, object]:
+        """Additional request payload for subclasses (e.g., custom gateways)."""
+        return {}
+
     # ------------------------------------------------------------------ #
     # Streaming
     # ------------------------------------------------------------------ #
@@ -235,6 +239,10 @@ class ClaudeProvider(BaseProvider):
                 })
             request["tools"] = anthropic_tools
             request["tool_choice"] = self.TOOL_CHOICE_MAP.get(tool_choice or "auto", {"type": "auto"})
+
+        additional_body = self._additional_request_body()
+        if additional_body:
+            request = merge_user_overrides(request, additional_body)
 
         # Check if prefill has unclosed <thinking> tag - parser should start inside thinking block
         # Always parse <thinking> tags from text content to prevent leakage into regular content

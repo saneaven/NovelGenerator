@@ -29,6 +29,20 @@ function error(message: string): ApplicationResult {
   return { success: false, message, error: message };
 }
 
+function parseCustomAdditionalHeaders(raw: unknown): Record<string, string> | undefined {
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    const headers = Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).filter(([, value]) => typeof value === 'string')
+    ) as Record<string, string>;
+    return Object.keys(headers).length > 0 ? headers : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // ============================================================================
 // READ HANDLERS
 // ============================================================================
@@ -169,6 +183,10 @@ export async function ragSearch(
   if (provider === 'custom') {
     config.api_key = creds.custom?.apiKey || undefined;
     config.base_url = creds.custom?.baseUrl || undefined;
+    const additionalHeaders = parseCustomAdditionalHeaders(creds.custom?.additionalHeadersJson);
+    if (additionalHeaders) {
+      config.additional_headers = additionalHeaders;
+    }
   } else {
     config.api_key = creds[provider]?.apiKey || undefined;
   }

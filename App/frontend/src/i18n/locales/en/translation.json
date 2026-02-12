@@ -345,7 +345,18 @@
         "baseUrlPlaceholder": "https://api.openai.com/v1",
         "baseUrlHint": "OpenAI-compatible API endpoint",
         "apiKeyPlaceholder": "sk-...",
-        "apiKeyHint": "Required if your endpoint requires authentication"
+        "apiKeyHint": "Required if your endpoint requires authentication",
+        "additionalHeaders": "Custom Headers (JSON)",
+        "additionalHeadersPlaceholder": "{\"X-Custom-Header\":\"value\"}",
+        "additionalHeadersHint": "Optional HTTP headers added to custom provider requests. Must be a JSON object with string values.",
+        "additionalBody": "Custom Body (JSON)",
+        "additionalBodyPlaceholder": "{\"reasoning\":{\"effort\":\"high\"}}",
+        "additionalBodyHint": "Optional JSON body merged into custom LLM requests (openai_sdk and claude_sdk)."
+      },
+      "validation": {
+        "invalidJson": "{{field}} must be valid JSON.",
+        "invalidJsonObject": "{{field}} must be a JSON object.",
+        "invalidHeaderValue": "Custom Headers JSON values must all be strings."
       }
     },
     "general": {

@@ -248,6 +248,44 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
             />
             <p className="field-hint">{t('settings.credentials.custom.apiKeyHint')}</p>
           </div>
+          <div className="form-field">
+            <label>{t('settings.credentials.custom.additionalHeaders')}</label>
+            <textarea
+              value={credentials.custom.additionalHeadersJson || '{}'}
+              onChange={(e) =>
+                onChange({
+                  ...credentials,
+                  custom: {
+                    ...credentials.custom,
+                    additionalHeadersJson: e.target.value,
+                  },
+                })
+              }
+              placeholder={t('settings.credentials.custom.additionalHeadersPlaceholder')}
+              className="credential-textarea"
+              spellCheck={false}
+            />
+            <p className="field-hint">{t('settings.credentials.custom.additionalHeadersHint')}</p>
+          </div>
+          <div className="form-field">
+            <label>{t('settings.credentials.custom.additionalBody')}</label>
+            <textarea
+              value={credentials.custom.additionalBodyJson || '{}'}
+              onChange={(e) =>
+                onChange({
+                  ...credentials,
+                  custom: {
+                    ...credentials.custom,
+                    additionalBodyJson: e.target.value,
+                  },
+                })
+              }
+              placeholder={t('settings.credentials.custom.additionalBodyPlaceholder')}
+              className="credential-textarea"
+              spellCheck={false}
+            />
+            <p className="field-hint">{t('settings.credentials.custom.additionalBodyHint')}</p>
+          </div>
         </div>
       </div>
 

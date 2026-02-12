@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import ipaddress
 import socket
-from typing import Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional
 from urllib.parse import urlsplit, urlunsplit
 
 
@@ -35,6 +36,15 @@ _DISALLOWED_HEADER_NAMES = {
     "cookie",
     "set-cookie",
 }
+
+_MAX_ADDITIONAL_BODY_DEPTH = 8
+_MAX_ADDITIONAL_BODY_KEYS = 200
+_MAX_ADDITIONAL_BODY_LIST_ITEMS = 200
+_MAX_ADDITIONAL_BODY_KEY_LEN = 128
+_MAX_ADDITIONAL_BODY_STRING_LEN = 8192
+_MAX_ADDITIONAL_BODY_BYTES = 65536
+
+_DROP = object()
 
 
 def _is_disallowed_ip(ip: ipaddress._BaseAddress) -> bool:  # type: ignore[name-defined]
@@ -139,4 +149,89 @@ def filter_additional_headers(headers: Optional[Dict[str, object]]) -> Dict[str,
             break
 
     return out
+
+
+def _sanitize_additional_body_value(value: object, *, depth: int, state: Dict[str, int]) -> object:
+    if depth > _MAX_ADDITIONAL_BODY_DEPTH:
+        return _DROP
+
+    if value is None:
+        return None
+
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, int):
+        return value
+
+    if isinstance(value, float):
+        if value != value or value in (float("inf"), float("-inf")):  # NaN/Infinity
+            return _DROP
+        return value
+
+    if isinstance(value, str):
+        if len(value) > _MAX_ADDITIONAL_BODY_STRING_LEN:
+            return _DROP
+        return value
+
+    if isinstance(value, list):
+        out_list = []
+        for item in value[:_MAX_ADDITIONAL_BODY_LIST_ITEMS]:
+            cleaned = _sanitize_additional_body_value(item, depth=depth + 1, state=state)
+            if cleaned is _DROP:
+                continue
+            out_list.append(cleaned)
+        return out_list
+
+    if isinstance(value, dict):
+        out_dict: Dict[str, Any] = {}
+        for k, v in value.items():
+            if state["keys"] >= _MAX_ADDITIONAL_BODY_KEYS:
+                break
+            if not isinstance(k, str):
+                continue
+            key = k.strip()
+            if not key or len(key) > _MAX_ADDITIONAL_BODY_KEY_LEN:
+                continue
+            cleaned = _sanitize_additional_body_value(v, depth=depth + 1, state=state)
+            if cleaned is _DROP:
+                continue
+            out_dict[key] = cleaned
+            state["keys"] += 1
+        return out_dict
+
+    return _DROP
+
+
+def filter_additional_body(body: Optional[Dict[str, object]]) -> Dict[str, Any]:
+    """Sanitize user-supplied JSON body extensions for outbound LLM requests."""
+    if not isinstance(body, dict) or not body:
+        return {}
+
+    state = {"keys": 0}
+    cleaned = _sanitize_additional_body_value(body, depth=0, state=state)
+    if cleaned is _DROP or not isinstance(cleaned, dict):
+        return {}
+
+    try:
+        encoded = json.dumps(cleaned, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    except Exception:
+        return {}
+
+    if len(encoded) > _MAX_ADDITIONAL_BODY_BYTES:
+        return {}
+
+    return cleaned
+
+
+def merge_user_overrides(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Deep merge two dictionaries with user override precedence."""
+    merged: Dict[str, Any] = dict(base)
+    for key, value in override.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = merge_user_overrides(existing, value)
+        else:
+            merged[key] = value
+    return merged
 

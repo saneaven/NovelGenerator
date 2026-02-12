@@ -102,12 +102,30 @@ interface UnifiedObjectStore {
 // ============================================================================
 
 export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
+  const parseCustomAdditionalHeaders = (raw: unknown): Record<string, string> | undefined => {
+    if (typeof raw !== 'string' || !raw.trim()) return undefined;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+      const headers = Object.fromEntries(
+        Object.entries(parsed as Record<string, unknown>).filter(([, value]) => typeof value === 'string')
+      ) as Record<string, string>;
+      return Object.keys(headers).length > 0 ? headers : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
   const buildProviderConfig = (provider: string, creds: any): any | null => {
     const config: any = {};
 
     if (provider === 'custom') {
       config.api_key = creds.custom?.apiKey || undefined;
       config.base_url = creds.custom?.baseUrl || undefined;
+      const additionalHeaders = parseCustomAdditionalHeaders(creds.custom?.additionalHeadersJson);
+      if (additionalHeaders) {
+        config.additional_headers = additionalHeaders;
+      }
     } else {
       config.api_key = creds?.[provider]?.apiKey || undefined;
     }

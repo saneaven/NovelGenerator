@@ -6,6 +6,7 @@ class ProviderConfig(BaseModel):
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     additional_headers: Optional[Dict[str, str]] = None
+    additional_body: Optional[Dict[str, Any]] = None
 
 class ProviderPreference(BaseModel):
     """Provider preference for OpenRouter (only/ignore lists)"""
