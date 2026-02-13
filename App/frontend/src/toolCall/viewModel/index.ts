@@ -6,8 +6,8 @@ export { extractSearchPayload } from './searchPayload';
 export {
   getSendBlockingState,
   hasRootSessionBlocker,
-  summarizeMessageToolCallBlocking,
-  isBlockingToolStatus,
+  summarizeRunToolCallBlocking,
+  isBlockingRunToolStatus,
   type SendBlockingState,
   type ToolCallBlockingSummary,
 } from './blockingSelectors';

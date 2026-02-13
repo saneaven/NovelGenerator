@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from ..models.db_models import AgentRunModel, RunMessageModel
-from ..schemas.runs import AddRunMessageRequest, PatchRunMessageRequest
+from ..schemas.runs import AddRunMessageRequest, PatchRunMessageRequest, TranslateRunMessageRequest
 
 
 class RunMessageService:
@@ -47,13 +47,18 @@ class RunMessageService:
         seq = int(run.next_message_seq or 1)
         run.next_message_seq = seq + 1
 
+        lang_entry: dict = {}
+        if data.content_parts:
+            lang_entry["contentParts"] = list(data.content_parts)
+        if data.thinking_details is not None:
+            lang_entry["thinkingDetails"] = data.thinking_details
+
         message = RunMessageModel(
             id=uuid.uuid4(),
             run_id=run.id,
             seq=seq,
             role=data.role,
-            content_parts=list(data.content_parts or []),
-            thinking_details=data.thinking_details,
+            data={data.language: lang_entry},
             created_at=datetime.utcnow(),
         )
         db.add(message)
@@ -84,12 +89,55 @@ class RunMessageService:
         if not message:
             raise ValueError("Run message not found")
 
+        msg_data = dict(message.data or {})
+        lang_entry = dict(msg_data.get(data.language) or {})
+
         if data.content_parts is not None:
-            message.content_parts = list(data.content_parts)
-            flag_modified(message, "content_parts")
+            lang_entry["contentParts"] = list(data.content_parts)
         if data.thinking_details is not None:
-            message.thinking_details = data.thinking_details
-            flag_modified(message, "thinking_details")
+            lang_entry["thinkingDetails"] = data.thinking_details
+
+        msg_data[data.language] = lang_entry
+        message.data = msg_data
+        flag_modified(message, "data")
+
+        db.commit()
+        db.refresh(message)
+        return message
+
+    def translate_run_message(
+        self,
+        db: Session,
+        *,
+        project_id: uuid.UUID,
+        agent_id: uuid.UUID,
+        run_id: uuid.UUID,
+        message_id: uuid.UUID,
+        data: TranslateRunMessageRequest,
+    ) -> RunMessageModel:
+        run = self._get_run(db, project_id=project_id, agent_id=agent_id, run_id=run_id, for_update=False)
+
+        message = (
+            db.query(RunMessageModel)
+            .filter(
+                RunMessageModel.id == message_id,
+                RunMessageModel.run_id == run.id,
+            )
+            .first()
+        )
+        if not message:
+            raise ValueError("Run message not found")
+
+        msg_data = dict(message.data or {})
+        lang_entry: dict = {}
+        if data.content_parts:
+            lang_entry["contentParts"] = list(data.content_parts)
+        if data.thinking_details is not None:
+            lang_entry["thinkingDetails"] = data.thinking_details
+
+        msg_data[data.language] = lang_entry
+        message.data = msg_data
+        flag_modified(message, "data")
 
         db.commit()
         db.refresh(message)
@@ -97,4 +145,3 @@ class RunMessageService:
 
 
 run_message_service = RunMessageService()
-

@@ -802,15 +802,16 @@ export function isReadTool(name: string): boolean {
 }
 
 /** Auto-approve category keys matching ToolCallAutoApproveConfig */
-export type AutoApproveCategory = 'read' | 'search' | 'create' | 'delete' | 'replace' | 'patch';
+export type AutoApproveCategory = 'read' | 'search' | 'create' | 'delete' | 'replace' | 'patch' | 'subAgent';
 
 /**
  * Maps a tool name to its auto-approve config key.
- * Returns undefined for tools that cannot be auto-approved (e.g., call_* sub-agent tools).
+ * Returns undefined for tools that cannot be auto-approved.
  */
 export function getAutoApproveCategory(toolName: string): AutoApproveCategory | undefined {
   if (toolName === 'rag_search' || toolName === 'keyword_search') return 'search';
   if (toolName === 'return_sub_agent_result') return 'read';
+  if (toolName.startsWith('call_')) return 'subAgent';
   if (toolName.startsWith('read_')) return 'read';
   if (toolName.startsWith('create_')) return 'create';
   if (toolName.startsWith('delete_')) return 'delete';

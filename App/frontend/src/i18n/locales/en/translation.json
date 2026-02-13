@@ -444,7 +444,8 @@
         "patch": "Auto-approve Patch",
         "replace": "Auto-approve Replace",
         "read": "Auto-approve Read",
-        "search": "Auto-approve Search"
+        "search": "Auto-approve Search",
+        "subAgent": "Auto-approve Sub-Agent Calls"
       },
       "toolCallHistory": {
         "title": "Tool Call History",

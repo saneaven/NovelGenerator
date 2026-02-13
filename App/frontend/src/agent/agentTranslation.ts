@@ -1,4 +1,3 @@
-import { useAgentStore } from '../store/agentStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useCredentialsStore } from '../store/credentialsStore';
 import { useLLMSessionStore } from '../store/llmSessionStore';
@@ -11,11 +10,15 @@ import {
 import type { ContentPart } from '../llm/requestTypes';
 import { registerSessionNotification, updateSessionNotification } from '../llmTask/notificationHelpers';
 import { useAgentUIStore } from '../store/agentUIStore';
+import { runService } from '../api/runService';
+import { useRuntimeStore } from '../runtime';
+import { buildLangEntry } from '../runtime/utils/displayMessage';
 
 export interface AgentTranslationInput {
   projectId: string;
   agentId: string;
-  messageId: string;
+  runId: string;
+  runMessageId: string;
   sourceLanguage: string;
   targetLanguage: string;
   sourceContent: string;
@@ -24,7 +27,7 @@ export interface AgentTranslationInput {
 
 export interface AgentTranslationResult {
   agentId: string;
-  messageId: string;
+  runMessageId: string;
   targetLanguage: string;
 }
 
@@ -32,7 +35,6 @@ export async function runAgentTranslation(
   input: AgentTranslationInput,
   onSessionCreated?: (sessionId: string) => void,
 ): Promise<string> {
-  const agentStore = useAgentStore.getState();
   const settingsStore = useSettingsStore.getState();
   const credentialsStore = useCredentialsStore.getState();
   const sessionStore = useLLMSessionStore.getState();
@@ -111,17 +113,35 @@ export async function runAgentTranslation(
       return part;
     });
 
-    await agentStore.addTranslatedMessage(
-      input.projectId,
-      input.agentId,
-      input.messageId,
-      { contentParts: translatedContentParts },
+    const langEntry = buildLangEntry(translatedContentParts as Array<{ type: string; text: string }>);
+
+    // Persist to backend
+    try {
+      await runService.translateRunMessage(
+        input.projectId,
+        input.agentId,
+        input.runId,
+        input.runMessageId,
+        {
+          language: input.targetLanguage,
+          content_parts: translatedContentParts as Array<Record<string, any>>,
+        },
+      );
+    } catch (error) {
+      console.error('Failed to persist translation to backend:', error);
+    }
+
+    // Update local store
+    useRuntimeStore.getState().addRunMessageTranslation(
+      input.runId,
+      input.runMessageId,
       input.targetLanguage,
+      langEntry,
     );
 
     useLLMSessionStore.getState().updateSession(sessionId, {
       status: 'success',
-      result: { agentId: input.agentId, messageId: input.messageId, targetLanguage: input.targetLanguage },
+      result: { agentId: input.agentId, runMessageId: input.runMessageId, targetLanguage: input.targetLanguage },
     } as any);
     const updated = useLLMSessionStore.getState().getSessionById(sessionId);
     if (updated) updateSessionNotification(sessionId, updated);

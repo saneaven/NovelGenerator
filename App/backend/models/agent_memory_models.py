@@ -34,7 +34,7 @@ class AgentMemorySummary(Base):
     agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
 
     language = Column(String(50), nullable=False)
-    to_message_id = Column(UUID(as_uuid=True), ForeignKey("agent_messages.id", ondelete="CASCADE"), nullable=False)
+    to_message_id = Column(UUID(as_uuid=True), ForeignKey("run_messages.id", ondelete="CASCADE"), nullable=False)
     summary_text = Column(Text, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
@@ -54,7 +54,7 @@ class AgentRagSource(Base):
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    message_id = Column(UUID(as_uuid=True), ForeignKey("agent_messages.id", ondelete="CASCADE"), nullable=False)
+    message_id = Column(UUID(as_uuid=True), ForeignKey("run_messages.id", ondelete="CASCADE"), nullable=False)
     language = Column(String(50), nullable=False)
 
     content_hash = Column(String(64), nullable=True)

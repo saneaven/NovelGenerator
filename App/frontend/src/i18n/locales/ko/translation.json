@@ -444,7 +444,8 @@
         "patch": "부분 수정(Patch) 자동 승인",
         "replace": "전체 교체(Replace) 자동 승인",
         "read": "읽기(Read) 자동 승인",
-        "search": "검색(Search) 자동 승인"
+        "search": "검색(Search) 자동 승인",
+        "subAgent": "서브 에이전트 호출 자동 승인"
       },
       "toolCallHistory": {
         "title": "도구 호출 기록",

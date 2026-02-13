@@ -118,22 +118,51 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
     if (!hasDecisionFlow || isApplyDisabled || unresolvedIds.length === 0) return;
     setPatchDecisionsBulk(threadId, unresolvedIds, 'accept');
 
+    // Mark all operations as committing for per-card button blocking
+    setCommittingById((prev) => {
+      const next = { ...prev };
+      for (const id of unresolvedIds) next[id] = true;
+      return next;
+    });
+
     const decisions: ToolCallDecisionMap = {};
     for (const operationId of unresolvedIds) {
       decisions[operationId] = 'accept';
     }
-    await commitDecisions(decisions);
+    try {
+      await commitDecisions(decisions);
+    } finally {
+      setCommittingById((prev) => {
+        const next = { ...prev };
+        for (const id of unresolvedIds) delete next[id];
+        return next;
+      });
+    }
   }, [hasDecisionFlow, isApplyDisabled, unresolvedIds, setPatchDecisionsBulk, threadId, commitDecisions]);
 
   const handleRejectAll = useCallback(async () => {
     if (!hasDecisionFlow || isApplyDisabled || unresolvedIds.length === 0) return;
     setPatchDecisionsBulk(threadId, unresolvedIds, 'reject');
 
+    setCommittingById((prev) => {
+      const next = { ...prev };
+      for (const id of unresolvedIds) next[id] = true;
+      return next;
+    });
+
     const decisions: ToolCallDecisionMap = {};
     for (const operationId of unresolvedIds) {
       decisions[operationId] = 'reject';
     }
-    await commitDecisions(decisions);
+    try {
+      await commitDecisions(decisions);
+    } finally {
+      setCommittingById((prev) => {
+        const next = { ...prev };
+        for (const id of unresolvedIds) delete next[id];
+        return next;
+      });
+    }
   }, [hasDecisionFlow, isApplyDisabled, unresolvedIds, setPatchDecisionsBulk, threadId, commitDecisions]);
 
   if (operations.length === 0) return null;
@@ -261,7 +290,7 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
 
       <StickyDecisionBar
         visible={hasDecisionFlow && unresolvedIds.length > 0}
-        disabled={isApplyDisabled}
+        disabled={isApplyDisabled || Object.keys(committingById).length > 0}
         unresolvedCount={unresolvedIds.length}
         onAcceptAll={() => void handleAcceptAll()}
         onRejectAll={() => void handleRejectAll()}

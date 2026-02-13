@@ -385,6 +385,13 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                         label={t('settings.advanced.toolCallAutoApprove.delete')}
                     />
                 </div>
+                <div className="form-field">
+                    <ToggleSwitch
+                        checked={toolCallAutoApprove.subAgent ?? false}
+                        onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, subAgent: checked })}
+                        label={t('settings.advanced.toolCallAutoApprove.subAgent')}
+                    />
+                </div>
             </div>
 
             {/* Tool Call History */}

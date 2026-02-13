@@ -18,7 +18,6 @@ import type {
   RunToolCall,
   RuntimeOrchestrator,
 } from './types';
-import { useAgentStore } from '../store/agentStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useCredentialsStore } from '../store/credentialsStore';
 import { useLLMSessionStore } from '../store/llmSessionStore';
@@ -44,7 +43,7 @@ import {
 import { evaluateToolCallAutoContinue } from '../agent/utils/autoContinuePolicy';
 import { useAgentPromptSnapshotStore } from '../store/agentPromptSnapshotStore';
 import type { ApplicationResult } from '../toolCall/types';
-import { generateTempId } from '../utils/tempId';
+import { resolveRunMessageDisplay } from './utils/displayMessage';
 
 const MAX_CHILD_DEPTH = 3;
 const RUN_TIMEOUT_MS = 120_000;
@@ -121,8 +120,7 @@ function mapRunMessage(apiMessage: RunMessageResponse): RunMessage {
     runId: apiMessage.run_id,
     seq: apiMessage.seq,
     role: apiMessage.role,
-    contentParts: (apiMessage.content_parts ?? []) as Array<{ type: string; text: string }>,
-    thinkingDetails: (apiMessage.thinking_details ?? undefined) as Array<Record<string, unknown>> | undefined,
+    data: (apiMessage.data ?? {}) as Record<string, { contentParts: Array<{ type: string; text: string }>; thinkingDetails?: Array<Record<string, unknown>> }>,
     createdAt: apiMessage.created_at,
   };
 }
@@ -146,7 +144,8 @@ function mapRunToolCall(apiToolCall: RunToolCallResponse): RunToolCall {
   };
 }
 
-function getMessageText(contentParts: Array<{ type: string; text: string }>): string {
+function getMessageText(contentParts: Array<{ type: string; text: string }> | undefined): string {
+  if (!contentParts) return '';
   return contentParts
     .filter((part) => part.type === 'content')
     .map((part) => part.text)
@@ -202,15 +201,17 @@ function toRunToolCalls(params: {
 function toChatMessage(params: {
   message: RunMessage;
   toolCalls: RunToolCall[];
+  language: string;
 }): ChatMessage {
-  const { message, toolCalls } = params;
+  const { message, toolCalls, language } = params;
+  const display = resolveRunMessageDisplay(message, language);
   return {
     id: message.id,
     seq: message.seq,
     role: message.role,
-    contentParts: message.contentParts as any,
+    contentParts: display.contentParts as any,
     toolCalls: message.role === 'assistant' ? toolCalls.map(toToolCallMetadata) : undefined,
-    thinking_details: message.thinkingDetails as any,
+    thinking_details: display.thinkingDetails as any,
     timestamp: new Date(message.createdAt),
   };
 }
@@ -236,6 +237,7 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
   private readonly runCompletions = new Map<string, RunCompletionEntry>();
   private readonly controlIntents = new Map<string, RunControlIntent>();
   private readonly nextRunOverrides = new Map<string, RunOverrides>();
+  private readonly parentToolCallLocks = new Map<string, Promise<void>>();
 
   async startRootRun(input: {
     projectId: string;
@@ -264,21 +266,9 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     const run = this.hydrateRunBundle(runResponse.run);
 
     if (input.userInput.trim()) {
-      const agentStore = useAgentStore.getState();
-      await agentStore.addMessage(
-        input.projectId,
-        input.agentId,
-        {
-          id: generateTempId(),
-          role: 'user',
-          contentParts: [{ type: 'content', text: input.userInput }],
-          timestamp: new Date(),
-        },
-        input.language,
-      );
-
       const runMessageResponse = await runService.addRunMessage(input.projectId, input.agentId, run.id, {
         role: 'user',
+        language: input.language,
         content_parts: [{ type: 'content', text: input.userInput }],
         thinking_details: [],
       });
@@ -361,6 +351,7 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     if (input.inputText.trim()) {
       const messageResponse = await runService.addRunMessage(input.projectId, input.agentId, run.id, {
         role: 'user',
+        language: input.language,
         content_parts: [{ type: 'content', text: input.inputText }],
         thinking_details: [],
       });
@@ -416,16 +407,37 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
       runCaller: run.caller,
     });
 
+    // Merge results into the latest store state (not the stale snapshot from above)
+    // to prevent concurrent applyRunToolCallDecisions calls from overwriting each other.
+    const appliedById = new Map(
+      applied.toolCalls
+        .filter((tc) => input.decisions[tc.id])
+        .map((tc) => [tc.id, tc]),
+    );
+
+    const latestRunToolCalls = useRuntimeStore.getState().getRunToolCalls(input.runMessageId);
+    const now = new Date().toISOString();
+    const mergedToolCalls = latestRunToolCalls.map((rtc) => {
+      const appliedTc = appliedById.get(rtc.llmCallId);
+      if (!appliedTc) return rtc;
+      // Patch only mutable fields; preserve callSeq, id, createdAt, etc.
+      return {
+        ...rtc,
+        status: normalizeRunToolCallStatus(appliedTc.status),
+        failureType: appliedTc.failureType as RunToolCall['failureType'],
+        reason: appliedTc.reason,
+        result: (appliedTc.result ?? undefined) as Record<string, unknown> | undefined,
+        acceptedAt: appliedTc.acceptedAt ? appliedTc.acceptedAt.toISOString() : undefined,
+        updatedAt: now,
+      };
+    });
+
     const persisted = await this.upsertRunToolCalls({
       projectId: run.projectId,
       agentId: run.agentId,
       runId: run.id,
       runMessageId: input.runMessageId,
-      toolCalls: toRunToolCalls({
-        runId: run.id,
-        runMessageId: input.runMessageId,
-        toolCalls: applied.toolCalls,
-      }),
+      toolCalls: mergedToolCalls,
     });
 
     const hasPending = hasPendingOrRunning(persisted);
@@ -437,6 +449,14 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     }
 
     if (hasRejectedCalls) {
+      if (run.runKind === 'child') {
+        // Child runs continue with rejection info so the LLM can adapt
+        if (canTransitionRunStatus(run.status, 'running')) {
+          await this.patchRunStatus(run.id, 'running', { error: null });
+        }
+        await this.resumeRunLoop({ runId: run.id });
+        return;
+      }
       await this.patchRunStatus(run.id, 'paused');
       return;
     }
@@ -499,7 +519,6 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
 
   async recoverRuns(projectId: string, agentId: string): Promise<void> {
     const response = await runService.queryRuns(projectId, agentId, {
-      statuses: ['running', 'waiting', 'paused', 'error'],
       root_only: false,
       include_messages: true,
       include_tool_calls: true,
@@ -527,12 +546,14 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     projectId: string;
     agentId: string;
     runId: string;
+    language: string;
     role: 'user' | 'assistant' | 'system';
     contentParts: Array<{ type: string; text: string }>;
     thinkingDetails?: Array<Record<string, unknown>>;
   }): Promise<RunMessage> {
     const response = await runService.addRunMessage(input.projectId, input.agentId, input.runId, {
       role: input.role,
+      language: input.language,
       content_parts: input.contentParts,
       thinking_details: (input.thinkingDetails ?? []) as Array<Record<string, any>>,
     });
@@ -611,51 +632,8 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     return mapped;
   }
 
-  setAgentMessageRunLink(agentMessageId: string, runId: string, runMessageId: string): void {
-    useRuntimeStore.getState().setAgentMessageRunLink(agentMessageId, { runId, runMessageId });
-  }
-
-  getLinkedRunMessage(agentMessageId: string): { runId: string; runMessageId: string } | undefined {
-    return useRuntimeStore.getState().getAgentMessageRunLink(agentMessageId);
-  }
-
   findLatestOpenRootRunId(projectId: string, agentId: string): string | undefined {
     return useRuntimeStore.getState().findLatestOpenRootRunId(projectId, agentId);
-  }
-
-  async discardChildRunsByParentAgentMessage(params: {
-    parentAgentMessageId: string;
-  }): Promise<void> {
-    const runtime = useRuntimeStore.getState();
-    const link = runtime.getAgentMessageRunLink(params.parentAgentMessageId);
-    if (!link) return;
-
-    const allRuns = runtime.listRuns();
-    const toDelete = new Set<string>();
-
-    const seed = allRuns
-      .filter((run) => run.runKind === 'child' && run.parentRunMessageId === link.runMessageId)
-      .map((run) => run.id);
-
-    for (const runId of seed) {
-      toDelete.add(runId);
-    }
-
-    let frontier = seed;
-    while (frontier.length > 0) {
-      const next: string[] = [];
-      for (const run of allRuns) {
-        if (run.runKind !== 'child') continue;
-        if (!run.parentRunId) continue;
-        if (!frontier.includes(run.parentRunId)) continue;
-        if (toDelete.has(run.id)) continue;
-        toDelete.add(run.id);
-        next.push(run.id);
-      }
-      frontier = next;
-    }
-
-    runtime.removeRunsByIds([...toDelete]);
   }
 
   async reconcileParentToolCall(runId: string): Promise<void> {
@@ -755,10 +733,12 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     }
 
     const runtime = useRuntimeStore.getState();
+    const run = runtime.getRun(runId);
+    const language = run?.language ?? 'English';
     const messages = runtime.getRunMessages(runId);
     return messages.map((message) => {
       const toolCalls = runtime.getRunToolCalls(message.id);
-      return toChatMessage({ message, toolCalls });
+      return toChatMessage({ message, toolCalls, language });
     });
   }
 
@@ -773,12 +753,9 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
       return baseTools;
     }
 
-    const subAgentStore = useSubAgentStore.getState();
-    if (subAgentStore.subAgents.length === 0 && !subAgentStore.isLoading) {
-      await subAgentStore.loadSubAgents();
-    }
+    await useSubAgentStore.getState().ensureLoaded();
 
-    const dynamicSubAgentTools = subAgentStore.subAgents
+    const dynamicSubAgentTools = useSubAgentStore.getState().subAgents
       .filter((subAgent) => subAgent.enabled && subAgent.allowed_invocation_modes.includes(run.caller))
       .sort((left, right) => left.display_name.localeCompare(right.display_name))
       .map(buildCallToolSchema);
@@ -791,12 +768,10 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
       throw new Error('Missing subAgentId for child run');
     }
 
-    const subAgentStore = useSubAgentStore.getState();
-    if (subAgentStore.subAgents.length === 0 && !subAgentStore.isLoading) {
-      await subAgentStore.loadSubAgents();
-    }
+    await useSubAgentStore.getState().ensureLoaded();
 
-    const definition = subAgentStore.getById(run.subAgentId);
+    const subAgentState = useSubAgentStore.getState();
+    const definition = subAgentState.subAgents.find((s) => s.id === run.subAgentId);
     if (!definition) {
       throw new Error(`Sub Agent not found: ${run.subAgentId}`);
     }
@@ -826,7 +801,7 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
 
     for (const subAgentId of definition.allowed_sub_agent_ids ?? []) {
       if (subAgentId === definition.id) continue;
-      const target = subAgentStore.getById(subAgentId);
+      const target = subAgentState.subAgents.find((s) => s.id === subAgentId);
       if (!target || !target.enabled) continue;
       schemas.push(buildCallToolSchema(target));
     }
@@ -841,35 +816,16 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     createNewVersion?: boolean;
     userRequest?: string;
     agentId?: string;
-    parentAgentMessageId?: string;
     parentSubRunId?: string;
     parentSubMessageId?: string;
   } {
     const { run, runMessageId } = params;
 
-    if (run.runKind === 'child') {
-      return {
-        userRequest: 'SubAgent',
-        agentId: run.agentId,
-        parentSubRunId: run.id,
-        parentSubMessageId: runMessageId,
-      };
-    }
-
-    const runtime = useRuntimeStore.getState();
-    let parentAgentMessageId: string | undefined;
-    for (const [agentMessageId, link] of Object.entries(runtime.runLinkByAgentMessageId)) {
-      if (!link) continue;
-      if (link.runId !== run.id) continue;
-      if (link.runMessageId !== runMessageId) continue;
-      parentAgentMessageId = agentMessageId;
-      break;
-    }
-
     return {
-      userRequest: 'Agent',
+      userRequest: run.runKind === 'child' ? 'SubAgent' : 'Agent',
       agentId: run.agentId,
-      parentAgentMessageId,
+      parentSubRunId: run.id,
+      parentSubMessageId: runMessageId,
     };
   }
 
@@ -980,36 +936,6 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     };
   }
 
-  private async createRootAssistantPlaceholder(run: Run): Promise<string> {
-    const agentStore = useAgentStore.getState();
-    return agentStore.addMessage(
-      run.projectId,
-      run.agentId,
-      {
-        id: generateTempId(),
-        role: 'assistant',
-        contentParts: [],
-        timestamp: new Date(),
-      },
-      run.language,
-    );
-  }
-
-  private async removePlaceholderMessage(params: {
-    projectId: string;
-    agentId: string;
-    assistantMessageId?: string;
-  }): Promise<void> {
-    const { projectId, agentId, assistantMessageId } = params;
-    if (!assistantMessageId) return;
-
-    try {
-      await useAgentStore.getState().deleteMessage(projectId, agentId, assistantMessageId);
-    } catch (error) {
-      console.error('Failed to remove placeholder assistant message:', error);
-    }
-  }
-
   private async executeRunStep(runId: string): Promise<RunStepResult> {
     const runtime = useRuntimeStore.getState();
     const run = runtime.getRun(runId);
@@ -1019,11 +945,6 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
 
     const overrides = this.consumeRunOverride(runId);
     const executionConfig = await this.buildRunExecutionConfig(run, overrides);
-
-    let assistantMessageId: string | undefined;
-    if (run.runKind === 'root') {
-      assistantMessageId = await this.createRootAssistantPlaceholder(run);
-    }
 
     const handle = startLLMSession({
       kind: executionConfig.kind,
@@ -1058,15 +979,6 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
       error: undefined,
     });
 
-    if (assistantMessageId) {
-      useLLMSessionStore.getState().updateSession(handle.sessionId, {
-        result: {
-          agentId: run.agentId,
-          assistantMessageId,
-        },
-      } as any);
-    }
-
     const timeout = new Promise<{ type: 'timeout' }>((resolve) => {
       setTimeout(() => resolve({ type: 'timeout' }), RUN_TIMEOUT_MS);
     });
@@ -1080,23 +992,12 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
 
     if (completion.type === 'timeout') {
       useLLMSessionStore.getState().cancelSession(handle.sessionId);
-      await this.removePlaceholderMessage({
-        projectId: run.projectId,
-        agentId: run.agentId,
-        assistantMessageId,
-      });
       return { action: 'error', error: `Run timed out after ${RUN_TIMEOUT_MS}ms` };
     }
 
     const finalSession = completion.session;
 
     if (finalSession.status !== 'success') {
-      await this.removePlaceholderMessage({
-        projectId: run.projectId,
-        agentId: run.agentId,
-        assistantMessageId,
-      });
-
       const intent = this.controlIntents.get(run.id);
       if (intent === 'pause') {
         this.controlIntents.delete(run.id);
@@ -1120,43 +1021,15 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     const assistantContentParts = (finalSession.contentParts ?? []) as Array<{ type: string; text: string }>;
     const thinkingDetails = (finalSession.thinkingDetails ?? []) as Array<Record<string, unknown>>;
 
-    if (run.runKind === 'root' && assistantMessageId) {
-      const agentStore = useAgentStore.getState();
-      agentStore.updateMessageContentLocal(
-        run.projectId,
-        run.agentId,
-        assistantMessageId,
-        finalSession.contentParts,
-        run.language,
-        finalSession.thinkingDetails,
-      );
-
-      try {
-        await agentStore.updateMessage(
-          run.projectId,
-          run.agentId,
-          assistantMessageId,
-          finalSession.contentParts,
-          run.language,
-          finalSession.thinkingDetails,
-        );
-      } catch (error) {
-        console.error('Failed to sync assistant message to backend:', error);
-      }
-    }
-
     const runMessage = await this.appendRunMessage({
       projectId: run.projectId,
       agentId: run.agentId,
       runId: run.id,
+      language: run.language,
       role: 'assistant',
       contentParts: assistantContentParts,
       thinkingDetails,
     });
-
-    if (run.runKind === 'root' && assistantMessageId) {
-      this.setAgentMessageRunLink(assistantMessageId, run.id, runMessage.id);
-    }
 
     const toolCalls = ((finalSession.toolCalls ?? []) as ToolCallMetadata[]).map((toolCall) => ({
       ...toolCall,
@@ -1174,7 +1047,6 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     return this.processRunToolCalls({
       run,
       runMessageId: runMessage.id,
-      assistantMessageId,
       toolCalls,
       toolSchemas: executionConfig.toolSchemas,
     });
@@ -1183,7 +1055,6 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
   private async processRunToolCalls(params: {
     run: Run;
     runMessageId: string;
-    assistantMessageId?: string;
     toolCalls: ToolCallMetadata[];
     toolSchemas: ToolCallSchema[] | undefined;
   }): Promise<RunStepResult> {
@@ -1334,25 +1205,14 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
       }
 
       if (result.action === 'waiting') {
-        if (latest.runKind === 'child') {
-          const error = 'Child run waiting for manual approval';
-          await this.patchRunStatus(latest.id, 'error', { error });
-          await this.syncParentToolCallFailed(latest, error);
-          this.rejectRunCompletion(latest.id, error);
-          return;
-        }
-
         await this.patchRunStatus(latest.id, 'waiting');
         return;
       }
 
       if (result.action === 'paused') {
         if (latest.runKind === 'child') {
-          const error = 'Child run paused';
-          await this.patchRunStatus(latest.id, 'error', { error });
-          await this.syncParentToolCallFailed(latest, error);
-          this.rejectRunCompletion(latest.id, error);
-          return;
+          // Child runs auto-continue with rejection info so the LLM can adapt
+          continue;
         }
 
         await this.patchRunStatus(latest.id, 'paused');
@@ -1389,44 +1249,61 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     const { run, patch } = params;
     if (!run.parentRunId || !run.parentRunMessageId || !run.parentRunToolCallId) return;
 
-    const runtime = useRuntimeStore.getState();
-    const parentRun = runtime.getRun(run.parentRunId);
-    if (!parentRun) return;
-
     const parentMessageId = run.parentRunMessageId;
-    const current = runtime.getRunToolCalls(parentMessageId);
 
-    let changed = false;
-    const next = current.map((toolCall) => {
-      if (toolCall.llmCallId !== run.parentRunToolCallId) return toolCall;
-      changed = true;
-      return patch(toolCall);
-    });
+    // Serialize concurrent updates to the same parent message's tool calls
+    // to prevent read-modify-write race conditions between parallel child runs.
+    const prev = this.parentToolCallLocks.get(parentMessageId) ?? Promise.resolve();
+    let release!: () => void;
+    const next = new Promise<void>((r) => (release = r));
+    const tail = prev.then(() => next);
+    this.parentToolCallLocks.set(parentMessageId, tail);
 
-    if (!changed) {
-      next.push(
-        patch({
-          id: `${parentMessageId}:${run.parentRunToolCallId}`,
-          runId: parentRun.id,
-          messageId: parentMessageId,
-          llmCallId: run.parentRunToolCallId,
-          callSeq: next.length + 1,
-          toolName: 'call_sub_agent',
-          arguments: {},
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }),
-      );
+    await prev;
+    try {
+      const runtime = useRuntimeStore.getState();
+      const parentRun = runtime.getRun(run.parentRunId);
+      if (!parentRun) return;
+
+      const current = runtime.getRunToolCalls(parentMessageId);
+
+      let changed = false;
+      const patched = current.map((toolCall) => {
+        if (toolCall.llmCallId !== run.parentRunToolCallId) return toolCall;
+        changed = true;
+        return patch(toolCall);
+      });
+
+      if (!changed) {
+        patched.push(
+          patch({
+            id: `${parentMessageId}:${run.parentRunToolCallId}`,
+            runId: parentRun.id,
+            messageId: parentMessageId,
+            llmCallId: run.parentRunToolCallId,
+            callSeq: patched.length + 1,
+            toolName: 'call_sub_agent',
+            arguments: {},
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }),
+        );
+      }
+
+      await this.upsertRunToolCalls({
+        projectId: parentRun.projectId,
+        agentId: parentRun.agentId,
+        runId: parentRun.id,
+        runMessageId: parentMessageId,
+        toolCalls: patched,
+      });
+    } finally {
+      release();
+      if (this.parentToolCallLocks.get(parentMessageId) === tail) {
+        this.parentToolCallLocks.delete(parentMessageId);
+      }
     }
-
-    await this.upsertRunToolCalls({
-      projectId: parentRun.projectId,
-      agentId: parentRun.agentId,
-      runId: parentRun.id,
-      runMessageId: parentMessageId,
-      toolCalls: next,
-    });
   }
 
   private async syncParentToolCallRunning(run: Run): Promise<void> {

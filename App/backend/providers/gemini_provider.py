@@ -174,7 +174,7 @@ class GeminiProvider(BaseProvider):
                                 response={"result": tr.get("content", "")},
                             )
                         )
-                    contents.append(types.Content(role="tool", parts=parts))
+                    contents.append(types.Content(role="user", parts=parts))
                 continue
 
             mapped_role = "user" if role == "user" else "model"

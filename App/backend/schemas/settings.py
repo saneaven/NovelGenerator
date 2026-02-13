@@ -145,6 +145,7 @@ class ToolCallAutoApprove(BaseModel):
     replace: bool = False
     read: bool = False
     search: bool = False
+    subAgent: bool = False
 
 
 # Embedding settings

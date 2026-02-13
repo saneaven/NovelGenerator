@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
-import { useAgentStore, type StoredAgentMessage } from '../../../store/agentStore';
+import { useAgentStore } from '../../../store/agentStore';
 import { makeProjectAgentKey, useAgentUIStore } from '../../../store/agentUIStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useProjectStore } from '../../../store/projectStore';
@@ -23,13 +23,19 @@ import AgentRunModeToggle from '../../../components/ui/AgentRunModeToggle';
 import { collapseContentParts } from '../../../agent/utils/contentParts';
 import { Settings, Edit, Trash, Globe, CircularArrow, ChevronDown, Send, Stop } from '../../../components/icons';
 import { useAgentOrchestration } from '../../../agent/hooks';
-import { getBestLanguageData } from '../../../utils/languageData';
 import { runAgentTranslation } from '../../../agent';
 import { buildEditCardsFromToolCallMetadata } from '../../../toolCall';
 import type { ToolCallDecisionMap } from '../../../toolCall/types';
 import type { AgentRunMode, WorkspaceSurface } from '../../../types/agentRuntime';
 import { getSendBlockingState } from '../../../toolCall/viewModel/blockingSelectors';
-import { runtimeOrchestrator, useRuntimeStore, type RunToolCall } from '../../../runtime';
+import {
+    runtimeOrchestrator,
+    useRuntimeStore,
+    useConversationTimeline,
+    resolveRunMessageDisplay,
+    type ConversationMessage,
+    type RunToolCall,
+} from '../../../runtime';
 
 interface AgentPanelProps
 {
@@ -191,13 +197,12 @@ const MessageEditForm: React.FC<MessageEditFormProps> = React.memo(({
 
 interface DisplayMessageInfo
 {
-    storedMessage: StoredAgentMessage;
+    source: ConversationMessage;
     chatMessage: ChatMessage;
     requestedLanguage: string;
     displayLanguage: string;
     hasRequestedLanguage: boolean;
     fallbackLanguage: string | null;
-    sessionError?: string;
 }
 
 function toToolCallMetadata(toolCall: RunToolCall): ToolCallMetadata {
@@ -249,7 +254,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const [isContextDropdownOpen, setIsContextDropdownOpen] = useState(false);
     const contextDropdownRef = useRef<HTMLDivElement>(null);
     const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
-    const { convertToDisplayMessage } = useAgentStore();
 
     const selectedAgentId = useAgentStore((state) => state.selectedAgentByProject[projectId]);
     const isLoading = useAgentUIStore((state) => {
@@ -284,7 +288,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const mainLanguage = settings.mainLanguage;
     const defaultSubLanguage = settings.defaultSubLanguage;
 
-    // Memoize the selector function to avoid creating new function references on each render
+    // Get selected agent for name + archive boundary
     const agentSelector = useMemo(
         () => (state: ReturnType<typeof useAgentStore.getState>) => {
             const agentId = state.selectedAgentByProject[projectId];
@@ -294,10 +298,12 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         [projectId]
     );
     const selectedAgent = useAgentStore(agentSelector);
-    const storedMessages = useMemo(() => selectedAgent?.messages ?? [], [selectedAgent]);
     const archiveBoundaryId = selectedAgent?.archived_until_message_id ?? null;
 
-    // Only subscribe to agent sessions for this project (reduces re-renders from other sessions)
+    // Conversation timeline — single source of truth for messages
+    const { messages: timelineMessages, runMessageIds } = useConversationTimeline(projectId, selectedAgentId);
+
+    // Only subscribe to agent sessions for this project (for blocking state checks)
     const projectAgentSessions = useLLMSessionStore(
         useShallow((state) => {
             const filtered: Record<string, any> = {};
@@ -311,29 +317,13 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             return filtered;
         })
     );
-    const { runsById, runLinkByAgentMessageId, runToolCallsByMessageId } = useRuntimeStore(
+
+    const { runToolCallsByMessageId, runsById } = useRuntimeStore(
         useShallow((state) => ({
-            runsById: state.runsById,
-            runLinkByAgentMessageId: state.runLinkByAgentMessageId,
             runToolCallsByMessageId: state.runToolCallsByMessageId,
+            runsById: state.runsById,
         }))
     );
-
-    const agentSessionByMessageId = useMemo(() => {
-        const map: Record<string, any> = {};
-        for (const session of Object.values(projectAgentSessions)) {
-            if (!session) continue;
-
-            const assistantMessageId = (session.result as any)?.assistantMessageId as string | undefined;
-            if (!assistantMessageId) continue;
-
-            const existing = map[assistantMessageId];
-            if (!existing || (existing.createdAt ?? 0) < session.createdAt) {
-                map[assistantMessageId] = session;
-            }
-        }
-        return map;
-    }, [projectAgentSessions]);
 
     const [translatingMessages, setTranslatingMessages] = useState<Record<string, boolean>>({});
     const [translationErrors, setTranslationErrors] = useState<Record<string, string | null>>({});
@@ -345,7 +335,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
     // Per-message language view: tracks which messages are showing translation
     const [messageLanguageView, setMessageLanguageView] = useState<Record<string, 'primary' | 'secondary'>>({});
-    const [applyingMessageEdits, setApplyingMessageEdits] = useState<Record<string, boolean>>({});
     // Mobile agent overlay closing animation state
     const [isOverlayClosing, setIsOverlayClosing] = useState(false);
 
@@ -453,7 +442,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 behavior: 'instant'
             });
         }
-    }, [storedMessages, isLoading]);
+    }, [timelineMessages, isLoading]);
 
     // Hide scroll button when streaming stops
     useEffect(() => {
@@ -464,92 +453,79 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
 
     const resolveDisplayInfo = useCallback(
-        (message: StoredAgentMessage): DisplayMessageInfo =>
+        (msg: ConversationMessage): DisplayMessageInfo =>
         {
-            // Check per-message language preference
-            const messageView = messageLanguageView[message.id];
-            const wantsTranslation = Boolean(messageView === 'secondary' && defaultSubLanguage);
-            const requestedLanguage = wantsTranslation && defaultSubLanguage ? defaultSubLanguage : mainLanguage;
-            const hasRequestedLanguage = Boolean(requestedLanguage && message.data[requestedLanguage]);
-
-            // Check for streaming content from llmSession (takes priority during active streaming)
-            const agentSession = agentSessionByMessageId[message.id];
-            const streaming = agentSession?.status === 'running'
-                ? { contentParts: agentSession.contentParts, thinkingDetails: agentSession.thinkingDetails }
-                : undefined;
-            const sessionError = agentSession?.status === 'error' ? agentSession.error : undefined;
-
-            if (hasRequestedLanguage)
-            {
-                const baseChatMessage = convertToDisplayMessage(message, requestedLanguage);
-                // Override with streaming content if available
-                const chatMessage = streaming
-                    ? { ...baseChatMessage, contentParts: streaming.contentParts, thinking_details: streaming.thinkingDetails }
-                    : baseChatMessage;
-
+            // For virtual streaming messages, use streaming data directly
+            if (msg.isStreaming) {
                 return {
-                    storedMessage: message,
-                    chatMessage,
-                    requestedLanguage,
-                    displayLanguage: requestedLanguage,
+                    source: msg,
+                    chatMessage: {
+                        id: msg.id,
+                        role: msg.role,
+                        contentParts: (msg.streamingContentParts ?? []) as any,
+                        thinking_details: msg.streamingThinkingDetails,
+                        timestamp: msg.createdAt,
+                    } as any,
+                    requestedLanguage: mainLanguage,
+                    displayLanguage: mainLanguage,
                     hasRequestedLanguage: true,
                     fallbackLanguage: null,
-                    sessionError,
                 };
             }
 
-            const fallback = getBestLanguageData(
-                message.data,
-                mainLanguage,
-                defaultSubLanguage ?? undefined
+            // Check per-message language preference
+            const messageView = messageLanguageView[msg.id];
+            const wantsTranslation = Boolean(messageView === 'secondary' && defaultSubLanguage);
+            const requestedLanguage = wantsTranslation && defaultSubLanguage ? defaultSubLanguage : mainLanguage;
+
+            const resolved = resolveRunMessageDisplay(
+                msg,
+                requestedLanguage,
+                defaultSubLanguage ?? undefined,
             );
 
-            const displayLanguage = fallback?.language ?? requestedLanguage ?? mainLanguage;
-            const fallbackLanguage = fallback ? fallback.language : null;
-            const baseChatMessage = convertToDisplayMessage(message, displayLanguage);
-            // Override with streaming content if available
-            const chatMessage = streaming
-                ? { ...baseChatMessage, contentParts: streaming.contentParts, thinking_details: streaming.thinkingDetails }
-                : baseChatMessage;
-
             return {
-                storedMessage: message,
-                chatMessage,
+                source: msg,
+                chatMessage: {
+                    id: msg.id,
+                    role: msg.role,
+                    contentParts: resolved.contentParts as any,
+                    thinking_details: resolved.thinkingDetails,
+                    timestamp: msg.createdAt,
+                } as any,
                 requestedLanguage,
-                displayLanguage,
-                hasRequestedLanguage: false,
-                fallbackLanguage,
-                sessionError,
+                displayLanguage: resolved.displayLanguage,
+                hasRequestedLanguage: !resolved.isFallback,
+                fallbackLanguage: resolved.isFallback ? resolved.displayLanguage : null,
             };
         },
-        [messageLanguageView, mainLanguage, defaultSubLanguage, convertToDisplayMessage, agentSessionByMessageId]
+        [messageLanguageView, mainLanguage, defaultSubLanguage]
     );
 
     const displayMessages = useMemo(
-        () => storedMessages.map(resolveDisplayInfo),
-        [storedMessages, resolveDisplayInfo]
+        () => timelineMessages.map(resolveDisplayInfo),
+        [timelineMessages, resolveDisplayInfo]
     );
 
     const lastAssistantMessageId = useMemo(() => {
-        for (let i = storedMessages.length - 1; i >= 0; i--) {
-            if (storedMessages[i]?.role === 'assistant') {
-                return String(storedMessages[i].id);
+        for (let i = timelineMessages.length - 1; i >= 0; i--) {
+            const msg = timelineMessages[i];
+            if (msg.role === 'assistant' && !msg.isStreaming) {
+                return msg.id;
             }
         }
         return null;
-    }, [storedMessages]);
+    }, [timelineMessages]);
 
     const sendBlockingState = useMemo(
         () =>
             getSendBlockingState({
                 selectedAgentId,
-                messages: storedMessages,
+                runMessageIds,
                 sessions: Object.values(projectAgentSessions),
-                runsById,
-                runLinkByAgentMessageId,
                 runToolCallsByMessageId,
             }),
-        [selectedAgentId, storedMessages, projectAgentSessions, runsById, runLinkByAgentMessageId, runToolCallsByMessageId]
+        [selectedAgentId, runMessageIds, projectAgentSessions, runToolCallsByMessageId]
     );
 
     const sendBlockedReason = useMemo(() => {
@@ -629,7 +605,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         return unsubscribe;
     }, [showError]);
 
-    const translateMessage = async (message: StoredAgentMessage) =>
+    const translateMessage = async (msg: ConversationMessage) =>
     {
         if (!defaultSubLanguage)
         {
@@ -644,9 +620,19 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
         const preferredSourceLanguage = mainLanguage;
         const targetLanguage = defaultSubLanguage;
-        const sourceEntry = message.data[preferredSourceLanguage]
-            ? { language: preferredSourceLanguage, data: message.data[preferredSourceLanguage] }
-            : getBestLanguageData(message.data, preferredSourceLanguage);
+        const sourceEntry = msg.data[preferredSourceLanguage]
+            ? { language: preferredSourceLanguage, data: msg.data[preferredSourceLanguage] }
+            : (() => {
+                const languages = Object.keys(msg.data);
+                if (languages.length === 0) return undefined;
+                // Prefer mainLanguage, then defaultSubLanguage, then first available
+                const lang = languages.includes(preferredSourceLanguage)
+                    ? preferredSourceLanguage
+                    : defaultSubLanguage && languages.includes(defaultSubLanguage)
+                        ? defaultSubLanguage
+                        : languages[0];
+                return { language: lang, data: msg.data[lang] };
+            })();
 
         if (!sourceEntry)
         {
@@ -655,8 +641,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         }
 
         const sourceLanguage = sourceEntry.language;
-        const contentParts = (sourceEntry.data as any)?.contentParts ?? [];
-        const { content: sourceContent } = collapseContentParts(contentParts);
+        const contentParts = sourceEntry.data?.contentParts ?? [];
+        const { content: sourceContent } = collapseContentParts(contentParts as any);
 
         if (!sourceContent.trim())
         {
@@ -664,19 +650,20 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             return;
         }
 
-        setTranslatingMessages(prev => ({ ...prev, [message.id]: true }));
-        setTranslationErrors(prev => ({ ...prev, [message.id]: null }));
+        setTranslatingMessages(prev => ({ ...prev, [msg.id]: true }));
+        setTranslationErrors(prev => ({ ...prev, [msg.id]: null }));
 
         void runAgentTranslation({
             projectId,
             agentId: selectedAgentId,
-            messageId: message.id,
+            runId: msg.runId,
+            runMessageId: msg.id,
             sourceLanguage,
             targetLanguage,
             sourceContent,
             originalContentParts: contentParts as any,
         }).then((sessionId) => {
-            setTranslationSessionByMessageId(prev => ({ ...prev, [message.id]: sessionId }));
+            setTranslationSessionByMessageId(prev => ({ ...prev, [msg.id]: sessionId }));
         });
     };
 
@@ -693,18 +680,11 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     </div>
                 )}
                 {processed.displayContent}
-                {isLoading &&
-                    message.chatMessage.role === 'assistant' &&
-                    message === displayMessages[displayMessages.length - 1] && (
-                        <div className="typing-indicator inline">
-                            <div className="loading-track">
-                                <div className="loading-bar" />
-                            </div>
+                {message.source.isStreaming && (
+                    <div className="typing-indicator inline">
+                        <div className="loading-track">
+                            <div className="loading-bar" />
                         </div>
-                    )}
-                {message.sessionError && (
-                    <div className="message-error">
-                        {message.sessionError}
                     </div>
                 )}
             </div>
@@ -743,6 +723,15 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
     const translationEnabled = Boolean(defaultSubLanguage && defaultSubLanguage !== mainLanguage);
     const translationTargetLabel = defaultSubLanguage || 'secondary language';
+
+    // Compute latest run error (shown on last message)
+    const latestRunError = useMemo(() => {
+        if (timelineMessages.length === 0) return undefined;
+        const lastMsg = timelineMessages[timelineMessages.length - 1];
+        if (lastMsg.isStreaming) return undefined;
+        const run = runsById[lastMsg.runId];
+        return run?.status === 'error' ? run.error : undefined;
+    }, [timelineMessages, runsById]);
 
     return (
         <div className={`agent-panel ${isAgentVisible ? 'visible' : 'hidden'}`}>
@@ -788,42 +777,48 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     const isUser = message.chatMessage.role === 'user';
                     const isEditing = editingMessageId === message.chatMessage.id;
                     const processingResult = displayProcessor.process(message.chatMessage as any, { projectId, surface } as any);
-                    const isTranslating = Boolean(translatingMessages[message.storedMessage.id]);
-                    const primaryMessage = message.storedMessage.data[mainLanguage]
-                        ? convertToDisplayMessage(message.storedMessage, mainLanguage)
-                        : message.chatMessage;
-                    const { content: primaryPlainContent } = collapseContentParts(primaryMessage.contentParts);
-                    const translationAvailable = defaultSubLanguage ? Boolean(message.storedMessage.data[defaultSubLanguage]) : false;
+                    const isTranslating = Boolean(translatingMessages[message.source.id]);
+                    const isStreamingMessage = message.source.isStreaming === true;
+
+                    // Get primary language content for edit button
+                    const primaryEntry = message.source.data[mainLanguage];
+                    const primaryContentParts = primaryEntry?.contentParts ?? message.chatMessage.contentParts;
+                    const { content: primaryPlainContent } = collapseContentParts(primaryContentParts as any);
+
+                    const translationAvailable = defaultSubLanguage ? Boolean(message.source.data[defaultSubLanguage]) : false;
                     const translateButtonLabel = translationAvailable
                         ? t('agent.refreshTranslation', { language: translationTargetLabel })
                         : t('agent.translateTo', { language: translationTargetLabel });
                     const translateDisabled = !translationEnabled || isTranslating;
-                    const agentSession = agentSessionByMessageId[message.chatMessage.id];
+
+                    // Streaming tool call progress (only for virtual streaming messages)
                     const hasStreamingCalls = Boolean(
-                        agentSession &&
-                        agentSession.status === 'running' &&
-                        agentSession.toolCallProgress?.length > 0
+                        isStreamingMessage &&
+                        message.source.streamingToolCallProgress?.length > 0
                     );
-                    const runLink = runLinkByAgentMessageId[String(message.chatMessage.id)];
-                    const storedToolCalls = runLink
-                        ? (runToolCallsByMessageId[runLink.runMessageId] ?? []).map(toToolCallMetadata)
+
+                    // Persisted tool calls (for real messages)
+                    const storedToolCalls = !isStreamingMessage
+                        ? (runToolCallsByMessageId[message.source.id] ?? []).map(toToolCallMetadata)
                         : [];
                     const cardsToRender = storedToolCalls.length > 0
                         ? buildEditCardsFromToolCallMetadata(storedToolCalls)
                         : [];
                     const hasEditCards = cardsToRender.length > 0;
-                    const isApplying = applyingMessageEdits[message.chatMessage.id] === true;
                     const hasPendingCards = storedToolCalls.some((toolCall: any) => {
                         const status = String(toolCall?.status ?? 'pending');
                         return status === 'pending' || status === 'running';
                     });
-                    const cardMode = hasPendingCards || isApplying ? 'pending' : 'confirmed';
-                    const functionThreadId = `agent:${selectedAgentId ?? 'none'}:${message.chatMessage.id}`;
+                    const cardMode = hasPendingCards ? 'pending' : 'confirmed';
+                    const functionThreadId = `agent:${selectedAgentId ?? 'none'}:${message.source.id}`;
                     const subAgentToolCallIds = cardsToRender
                         .filter((card: any) => typeof card?.toolCall?.toolName === 'string' && card.toolCall.toolName.startsWith('call_'))
                         .map((card: any) => card.toolCall.id);
                     const hasSubAgentCalls = subAgentToolCallIds.length > 0;
-                    const isActiveSubAgentParent = message.chatMessage.id === lastAssistantMessageId;
+                    const isActiveSubAgentParent = message.source.id === lastAssistantMessageId;
+
+                    // Run error — show only on the last message
+                    const showRunError = latestRunError && index === displayMessages.length - 1;
 
                     return (
                         <React.Fragment key={message.chatMessage.id}>
@@ -853,19 +848,19 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                     <ThinkingDisplay
                                                         messageId={message.chatMessage.id}
                                                         contentParts={message.chatMessage.contentParts}
-                                                        isStreaming={isLoading && message.chatMessage.id === storedMessages[storedMessages.length - 1]?.id}
+                                                        isStreaming={isStreamingMessage}
                                                     />
                                                 )}
-                                                {renderMessageContent(message, processingResult)}
+                                                {(primaryPlainContent.trim() || isStreamingMessage) && renderMessageContent(message, processingResult)}
                                                 {hasStreamingCalls && (
                                                     <div
                                                         className="message-function-calls"
-                                                        data-function-call-message-id={message.chatMessage.id}
+                                                        data-function-call-message-id={message.source.id}
                                                     >
                                                         <FunctionCallsThread
                                                             threadId={`${functionThreadId}:stream`}
                                                             mode="streaming"
-                                                            streamingProgress={agentSession.toolCallProgress}
+                                                            streamingProgress={message.source.streamingToolCallProgress}
                                                             projectId={projectId}
                                                         />
                                                     </div>
@@ -874,7 +869,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                 {hasEditCards && (
                                                     <div
                                                         className="message-function-calls"
-                                                        data-function-call-message-id={message.chatMessage.id}
+                                                        data-function-call-message-id={message.source.id}
                                                     >
                                                         <FunctionCallsThread
                                                             threadId={`${functionThreadId}:cards`}
@@ -888,18 +883,13 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                             return;
                                                                         }
 
-                                                                        if (!runLink || storedToolCalls.length === 0) return;
+                                                                        if (storedToolCalls.length === 0) return;
 
-                                                                        setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: true }));
-                                                                        try {
-                                                                            await runtimeOrchestrator.applyRunToolCallDecisions({
-                                                                                runId: runLink.runId,
-                                                                                runMessageId: runLink.runMessageId,
-                                                                                decisions,
-                                                                            });
-                                                                        } finally {
-                                                                            setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: false }));
-                                                                        }
+                                                                        await runtimeOrchestrator.applyRunToolCallDecisions({
+                                                                            runId: message.source.runId,
+                                                                            runMessageId: message.source.id,
+                                                                            decisions,
+                                                                        });
                                                                     }
                                                                     : undefined
                                                             }
@@ -911,108 +901,110 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                             return;
                                                                         }
 
-                                                                        if (!runLink || storedToolCalls.length === 0) return;
+                                                                        if (storedToolCalls.length === 0) return;
 
-                                                                        setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: true }));
-                                                                        try {
-                                                                            await runtimeOrchestrator.applyRunToolCallDecisions({
-                                                                                runId: runLink.runId,
-                                                                                runMessageId: runLink.runMessageId,
-                                                                                decisions,
-                                                                            });
-                                                                            await runtimeOrchestrator.pauseRun(runLink.runId);
-                                                                        } finally {
-                                                                            setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: false }));
-                                                                        }
+                                                                        await runtimeOrchestrator.applyRunToolCallDecisions({
+                                                                            runId: message.source.runId,
+                                                                            runMessageId: message.source.id,
+                                                                            decisions,
+                                                                        });
+                                                                        await runtimeOrchestrator.pauseRun(message.source.runId);
                                                                     }
                                                                     : undefined
                                                             }
                                                             projectId={projectId}
-                                                            isApplyDisabled={hasUnsavedChanges || isApplying}
+                                                            isApplyDisabled={hasUnsavedChanges}
                                                             applyDisabledReason={
                                                                 hasUnsavedChanges
                                                                     ? 'Save your changes first - unsaved work will be overwritten'
-                                                                    : isApplying
-                                                                        ? 'Applying changes...'
-                                                                        : undefined
+                                                                    : undefined
                                                             }
                                                         />
                                                     </div>
                                                 )}
-                                                                                <div className="message-actions">
-                                            {translationErrors[message.storedMessage.id] && (
-                                                <div className="translation-error">{translationErrors[message.storedMessage.id]}</div>
-                                            )}
-                                            <div className="action-buttons">
-                                                {/* Per-message language toggle - only show when translation exists */}
-                                                {translationAvailable && (
-                                                    <IconButton
-                                                        icon={<Globe size="sm" />}
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        isActive={messageLanguageView[message.storedMessage.id] === 'secondary'}
-                                                        onClick={() => setMessageLanguageView(prev => ({
-                                                            ...prev,
-                                                            [message.storedMessage.id]: prev[message.storedMessage.id] === 'secondary' ? 'primary' : 'secondary'
-                                                        }))}
-                                                        title={messageLanguageView[message.storedMessage.id] === 'secondary'
-                                                            ? t('agent.switchToLanguage', { language: mainLanguage })
-                                                            : t('agent.switchToLanguage', { language: defaultSubLanguage })
-                                                        }
-                                                    />
+
+                                                {showRunError && (
+                                                    <div className="message-error">
+                                                        {latestRunError}
+                                                    </div>
                                                 )}
-                                                {translationEnabled && (
-                                                    <IconButton
-                                                        icon={isTranslating ? <CircularArrow size="sm" /> : translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />}
-                                                        onClick={() => translateMessage(message.storedMessage)}
-                                                        disabled={translateDisabled}
-                                                        title={translateButtonLabel}
-                                                        variant="ghost"
-                                                        size="sm"
-                                                    />
+
+                                                {!isStreamingMessage && (
+                                                    <div className="message-actions">
+                                                        {translationErrors[message.source.id] && (
+                                                            <div className="translation-error">{translationErrors[message.source.id]}</div>
+                                                        )}
+                                                        <div className="action-buttons">
+                                                            {/* Per-message language toggle - only show when translation exists */}
+                                                            {translationAvailable && (
+                                                                <IconButton
+                                                                    icon={<Globe size="sm" />}
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    isActive={messageLanguageView[message.source.id] === 'secondary'}
+                                                                    onClick={() => setMessageLanguageView(prev => ({
+                                                                        ...prev,
+                                                                        [message.source.id]: prev[message.source.id] === 'secondary' ? 'primary' : 'secondary'
+                                                                    }))}
+                                                                    title={messageLanguageView[message.source.id] === 'secondary'
+                                                                        ? t('agent.switchToLanguage', { language: mainLanguage })
+                                                                        : t('agent.switchToLanguage', { language: defaultSubLanguage })
+                                                                    }
+                                                                />
+                                                            )}
+                                                            {translationEnabled && (
+                                                                <IconButton
+                                                                    icon={isTranslating ? <CircularArrow size="sm" /> : translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />}
+                                                                    onClick={() => translateMessage(message.source)}
+                                                                    disabled={translateDisabled}
+                                                                    title={translateButtonLabel}
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                />
+                                                            )}
+                                                            <IconButton
+                                                                icon={<Edit size="sm" />}
+                                                                onClick={() => {
+                                                                    // Switch to primary view for this message when editing
+                                                                    setMessageLanguageView(prev => ({
+                                                                        ...prev,
+                                                                        [message.source.id]: 'primary'
+                                                                    }));
+                                                                    onEditMessage(message.chatMessage.id, primaryPlainContent, mainLanguage);
+                                                                }}
+                                                                disabled={isTranslating || !primaryPlainContent.trim()}
+                                                                title={t('agent.edit')}
+                                                                variant="ghost"
+                                                                size="sm"
+                                                            />
+                                                            <IconButton
+                                                                icon={<Trash size="sm" />}
+                                                                onClick={() => onDeleteMessage(message.chatMessage.id)}
+                                                                disabled={isTranslating}
+                                                                title={t('agent.delete')}
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="icon-button--ghost-danger"
+                                                            />
+                                                        </div>
+                                                    </div>
                                                 )}
-                                                <IconButton
-                                                    icon={<Edit size="sm" />}
-                                                    onClick={() => {
-                                                        // Switch to primary view for this message when editing
-                                                        setMessageLanguageView(prev => ({
-                                                            ...prev,
-                                                            [message.storedMessage.id]: 'primary'
-                                                        }));
-                                                        onEditMessage(message.chatMessage.id, primaryPlainContent, mainLanguage);
-                                                    }}
-                                                    disabled={isTranslating || !primaryPlainContent.trim()}
-                                                    title={t('agent.edit')}
-                                                    variant="ghost"
-                                                    size="sm"
-                                                />
-                                                <IconButton
-                                                    icon={<Trash size="sm" />}
-                                                    onClick={() => onDeleteMessage(message.chatMessage.id)}
-                                                    disabled={isTranslating}
-                                                    title={t('agent.delete')}
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="icon-button--ghost-danger"
-                                                />
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
+                                            </>
+                                        )}
                                 </div>
                             </div>
 
-                            {selectedAgentId && hasSubAgentCalls && runLink && (
+                            {selectedAgentId && hasSubAgentCalls && (
                                 <SubAgentPeekDock
                                     threadId={`${functionThreadId}:peek`}
-                                    parentRunId={runLink.runId}
-                                    parentRunMessageId={runLink.runMessageId}
+                                    parentRunId={message.source.runId}
+                                    parentRunMessageId={message.source.id}
                                     parentToolCallIds={subAgentToolCallIds}
                                     isActiveParent={isActiveSubAgentParent}
                                 />
                             )}
 
-                            {archiveBoundaryId === message.chatMessage.id && (
+                            {archiveBoundaryId === message.source.id && (
                                 <div className="agent-archive-divider" role="separator" aria-label="Memory boundary">
                                     <div className="agent-archive-divider-line" />
                                     <span className="agent-archive-divider-label">Memory boundary</span>

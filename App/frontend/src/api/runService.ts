@@ -15,6 +15,8 @@ import type {
   PatchUnifiedRunResponse,
   QueryRunsRequest,
   QueryRunsResponse,
+  TranslateRunMessageRequest,
+  TranslateRunMessageResponse,
   UpsertRunToolCallsRequest,
   UpsertRunToolCallsResponse,
 } from './types';
@@ -90,6 +92,29 @@ export const runService = {
     return apiClient.patch<PatchRunMessageResponse>(
       `${basePath(projectId, agentId)}/${encodeURIComponent(runId)}/messages/${encodeURIComponent(runMessageId)}`,
       data
+    );
+  },
+
+  async translateRunMessage(
+    projectId: string,
+    agentId: string,
+    runId: string,
+    runMessageId: string,
+    data: TranslateRunMessageRequest
+  ): Promise<TranslateRunMessageResponse> {
+    return apiClient.put<TranslateRunMessageResponse>(
+      `${basePath(projectId, agentId)}/${encodeURIComponent(runId)}/messages/${encodeURIComponent(runMessageId)}/translate`,
+      data
+    );
+  },
+
+  async deleteRun(
+    projectId: string,
+    agentId: string,
+    runId: string
+  ): Promise<void> {
+    return apiClient.delete<void>(
+      `${basePath(projectId, agentId)}/${encodeURIComponent(runId)}`
     );
   },
 

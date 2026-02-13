@@ -268,51 +268,45 @@ class RunService:
             AgentRunModel.id.asc(),
         ).all()
 
-    def delete_tree_for_agent_message(
+    def delete_run_tree(
         self,
         db: Session,
         *,
         project_id: uuid.UUID,
         agent_id: uuid.UUID,
-        message_id: uuid.UUID,
-    ) -> int:
-        """Delete child run trees rooted at an agent assistant message."""
-        root_rows = (
-            db.query(AgentRunModel.id)
+        run_id: uuid.UUID,
+    ) -> None:
+        """Delete a run and all its child runs (cascading via DB)."""
+        run = (
+            db.query(AgentRunModel)
             .filter(
+                AgentRunModel.id == run_id,
                 AgentRunModel.project_id == project_id,
                 AgentRunModel.agent_id == agent_id,
-                AgentRunModel.parent_run_message_id == message_id,
             )
-            .all()
+            .first()
         )
-        root_ids = [row.id for row in root_rows]
-        if not root_ids:
-            return 0
+        if not run:
+            raise ValueError("Run not found")
 
-        to_delete: set[uuid.UUID] = set(root_ids)
-        frontier: List[uuid.UUID] = list(root_ids)
-
+        # Collect all descendant run IDs via BFS
+        to_delete = [run.id]
+        frontier = [run.id]
         while frontier:
-            child_rows = (
+            children = (
                 db.query(AgentRunModel.id)
-                .filter(
-                    AgentRunModel.project_id == project_id,
-                    AgentRunModel.agent_id == agent_id,
-                    AgentRunModel.parent_run_id.in_(frontier),
-                )
+                .filter(AgentRunModel.parent_run_id.in_(frontier))
                 .all()
             )
-            next_frontier: List[uuid.UUID] = []
-            for row in child_rows:
-                if row.id in to_delete:
-                    continue
-                to_delete.add(row.id)
-                next_frontier.append(row.id)
-            frontier = next_frontier
+            child_ids = [c[0] for c in children]
+            to_delete.extend(child_ids)
+            frontier = child_ids
 
-        db.query(AgentRunModel).filter(AgentRunModel.id.in_(list(to_delete))).delete(synchronize_session=False)
-        return len(to_delete)
+        # Delete all collected runs (messages + tool calls cascade via FK)
+        db.query(AgentRunModel).filter(AgentRunModel.id.in_(to_delete)).delete(
+            synchronize_session="fetch"
+        )
+        db.commit()
 
 
 run_service = RunService()

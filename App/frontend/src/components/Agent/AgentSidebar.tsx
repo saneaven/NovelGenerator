@@ -8,8 +8,7 @@ import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { useSettings } from '../../store/settingsStore';
 import { useErrorStore } from '../../store/errorStore';
 import type { TaskSessionState } from '../../llmTask/types';
-import { useRuntimeStore } from '../../runtime';
-import { getBestLanguageData } from '../../utils/languageData';
+import { useRuntimeStore, resolveRunMessageDisplay, type Run, type RunMessage } from '../../runtime';
 import { BaseSidebar } from '../BaseSidebar';
 import { IconButton } from '../IconButton';
 import { SpeechBubble, Plus, Trash, Edit, Close } from '../icons';
@@ -39,21 +38,27 @@ function getSessionAgentId(session: AnySession): string | null {
 }
 
 function hasPendingRunToolCallsForAgent(params: {
-  agent: Agent;
-  runLinkByAgentMessageId: Record<string, { runId: string; runMessageId: string } | undefined>;
+  agentId: string;
+  projectId: string;
+  runsById: Record<string, Run | undefined>;
+  runMessagesByRunId: Record<string, RunMessage[] | undefined>;
   runToolCallsByMessageId: Record<string, Array<{ status: string }> | undefined>;
 }): boolean {
-  const { agent, runLinkByAgentMessageId, runToolCallsByMessageId } = params;
+  const { agentId, projectId, runsById, runMessagesByRunId, runToolCallsByMessageId } = params;
 
-  for (const message of agent.messages ?? []) {
-    if (message.role !== 'assistant') continue;
-    const link = runLinkByAgentMessageId[String(message.id)];
-    if (!link) continue;
+  for (const run of Object.values(runsById)) {
+    if (!run) continue;
+    if (run.projectId !== projectId) continue;
+    if (run.agentId !== agentId) continue;
+    if (run.runKind !== 'root') continue;
 
-    const toolCalls = runToolCallsByMessageId[link.runMessageId] ?? [];
-    for (const toolCall of toolCalls) {
-      if (PENDING_TOOL_STATUSES.has(String(toolCall?.status ?? ''))) {
-        return true;
+    const messages = runMessagesByRunId[run.id] ?? [];
+    for (const message of messages) {
+      const toolCalls = runToolCallsByMessageId[message.id] ?? [];
+      for (const toolCall of toolCalls) {
+        if (PENDING_TOOL_STATUSES.has(String(toolCall?.status ?? ''))) {
+          return true;
+        }
       }
     }
   }
@@ -100,10 +105,10 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
 
   const agents = getAgents(projectId);
   const selectedAgentId = getSelectedAgentId(projectId);
-  const { runsById, runLinkByAgentMessageId, runToolCallsByMessageId } = useRuntimeStore(
+  const { runsById, runMessagesByRunId, runToolCallsByMessageId } = useRuntimeStore(
     useShallow((state) => ({
       runsById: state.runsById,
-      runLinkByAgentMessageId: state.runLinkByAgentMessageId,
+      runMessagesByRunId: state.runMessagesByRunId,
       runToolCallsByMessageId: state.runToolCallsByMessageId,
     })),
   );
@@ -152,8 +157,10 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
         return session.status === 'running' || session.status === 'applying';
       });
       const hasPendingToolRequestFromMessage = hasPendingRunToolCallsForAgent({
-        agent,
-        runLinkByAgentMessageId,
+        agentId: agent.id,
+        projectId,
+        runsById,
+        runMessagesByRunId,
         runToolCallsByMessageId: runToolCallsByMessageId as Record<string, Array<{ status: string }> | undefined>,
       });
       const hasPendingToolRequestFromSubAgent = blockingSubAgentByAgentId[agent.id] ?? false;
@@ -173,7 +180,8 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
     loadingByProjectAgent,
     lastViewedAtByProjectAgent,
     blockingSubAgentByAgentId,
-    runLinkByAgentMessageId,
+    runsById,
+    runMessagesByRunId,
     runToolCallsByMessageId,
   ]);
 
@@ -218,40 +226,33 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
   };
 
   const resolvePreviewContent = (agent: Agent): string => {
-    if (!agent.messages || agent.messages.length === 0) {
-      return t('agent.sidebar.noMessagesYet');
-    }
-
-    const lastMessage = agent.messages[agent.messages.length - 1];
     const mainLanguage = settings.mainLanguage;
     const defaultSubLanguage = settings.defaultSubLanguage ?? undefined;
 
-    const extractText = (messageData: any): string => {
-      const parts = messageData.contentParts || [];
-      return parts
-        .filter((p: any) => p.type === 'content')
-        .map((p: any) => p.text)
-        .join(' ');
-    };
+    // Find the latest root run for this agent and get its last message
+    const rootRuns = Object.values(runsById)
+      .filter((r): r is Run => Boolean(r) && r.projectId === projectId && r.agentId === agent.id && r.runKind === 'root')
+      .sort((a, b) => {
+        const aSeq = a.rootRunSeq ?? Number.MAX_SAFE_INTEGER;
+        const bSeq = b.rootRunSeq ?? Number.MAX_SAFE_INTEGER;
+        if (aSeq !== bSeq) return aSeq - bSeq;
+        return a.createdAt.localeCompare(b.createdAt);
+      });
 
-    if (lastMessage.data[mainLanguage]) {
-      const content = extractText(lastMessage.data[mainLanguage]);
-      return content.length > 50 ? `${content.substring(0, 50)}...` : content || t('agent.sidebar.noContent');
-    }
+    if (rootRuns.length === 0) return t('agent.sidebar.noMessagesYet');
 
-    const fallback = getBestLanguageData(lastMessage.data, mainLanguage, defaultSubLanguage);
-    if (fallback) {
-      const content = extractText(fallback.data);
-      return content.length > 50 ? `${content.substring(0, 50)}...` : content || t('agent.sidebar.noContent');
-    }
+    const latestRun = rootRuns[rootRuns.length - 1];
+    const messages = runMessagesByRunId[latestRun.id] ?? [];
+    if (messages.length === 0) return t('agent.sidebar.noMessagesYet');
 
-    const availableLanguages = Object.keys(lastMessage.data);
-    if (availableLanguages.length > 0) {
-      const content = extractText(lastMessage.data[availableLanguages[0]]);
-      return content.length > 50 ? `${content.substring(0, 50)}...` : content || t('agent.sidebar.noContent');
-    }
+    const lastMessage = messages[messages.length - 1];
+    const resolved = resolveRunMessageDisplay(lastMessage, mainLanguage, defaultSubLanguage);
+    const content = resolved.contentParts
+      .filter(p => p.type === 'content')
+      .map(p => p.text)
+      .join(' ');
 
-    return t('agent.sidebar.noMessagesYet');
+    return content.length > 50 ? `${content.substring(0, 50)}...` : content || t('agent.sidebar.noContent');
   };
 
   const formatTime = (date: Date | string): string => {

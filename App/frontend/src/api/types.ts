@@ -255,40 +255,11 @@ export interface AgentResponse extends BaseMetadata {
   project_id: string;
   name: string;
   archived_until_message_id?: string | null;
-  messages: AgentMessageResponse[];
 }
 
 export interface ContentPart {
   type: 'content' | 'thinking';
   text: string;
-}
-
-export interface AgentMessageCreate {
-  role: string;
-  content_parts?: ContentPart[];
-  language?: string;
-  tool_calls?: any;
-  thinking_details?: any[];
-}
-
-export interface AgentMessageUpdate {
-  content_parts?: ContentPart[];
-  language?: string;
-  tool_calls?: any;
-  thinking_details?: any[];
-}
-
-export interface AgentMessageResponse {
-  id: string;
-  agent_id: string;
-  seq: number;
-  role: string;
-  data: LanguageData<{
-    contentParts: ContentPart[];
-    thinking_details?: any[];
-  }>;
-  tool_calls?: any;
-  created_at: string;
 }
 
 // ============================================================================
@@ -354,8 +325,7 @@ export interface RunMessageResponse extends BaseMetadata {
   run_id: string;
   seq: number;
   role: RunMessageRole;
-  content_parts: Array<Record<string, any>>;
-  thinking_details?: Array<Record<string, any>> | null;
+  data: Record<string, any>;
   tool_calls: RunToolCallResponse[];
 }
 
@@ -399,12 +369,20 @@ export interface QueryRunsResponse {
 
 export interface AddRunMessageRequest {
   role: RunMessageRole;
+  language: string;
   content_parts?: Array<Record<string, any>>;
   thinking_details?: Array<Record<string, any>>;
 }
 
 export interface PatchRunMessageRequest {
+  language: string;
   content_parts?: Array<Record<string, any>>;
+  thinking_details?: Array<Record<string, any>>;
+}
+
+export interface TranslateRunMessageRequest {
+  language: string;
+  content_parts: Array<Record<string, any>>;
   thinking_details?: Array<Record<string, any>>;
 }
 
@@ -413,6 +391,10 @@ export interface AddRunMessageResponse {
 }
 
 export interface PatchRunMessageResponse {
+  message: RunMessageResponse;
+}
+
+export interface TranslateRunMessageResponse {
   message: RunMessageResponse;
 }
 

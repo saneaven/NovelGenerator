@@ -1,4 +1,4 @@
-"""Agent and message schemas"""
+"""Agent schemas"""
 from pydantic import BaseModel, Field
 from datetime import datetime
 from uuid import UUID
@@ -69,43 +69,6 @@ class AgentResponse(BaseModel):
     archived_until_message_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
-    messages: List['MessageResponse'] = []
 
     class Config:
         from_attributes = True
-
-
-class MessageCreate(BaseModel):
-    role: str = Field(..., pattern="^(user|assistant|system)$")
-    content_parts: Optional[List[ContentPart]] = None
-    language: str = "English"
-    thinking_details: Optional[List[Dict[str, Any]]] = None
-
-
-class MessageUpdate(BaseModel):
-    content_parts: Optional[List[ContentPart]] = None
-    language: str = "English"
-    thinking_details: Optional[List[Dict[str, Any]]] = None
-
-
-class MessageResponse(BaseModel):
-    """Message response"""
-    id: UUID
-    agent_id: UUID
-    seq: int
-    role: str
-    data: Dict[str, Any]  # Multilingual content
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class AgentWithMessagesResponse(BaseModel):
-    """Agent with messages response"""
-    agent: AgentResponse
-    messages: List[MessageResponse]
-
-
-# Update forward references for AgentResponse
-AgentResponse.model_rebuild()

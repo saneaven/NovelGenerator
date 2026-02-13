@@ -34,13 +34,17 @@ export interface Run {
   updatedAt: string;
 }
 
+export interface RunMessageLangEntry {
+  contentParts: Array<{ type: string; text: string }>;
+  thinkingDetails?: Array<Record<string, unknown>>;
+}
+
 export interface RunMessage {
   id: string;
   runId: string;
   seq: number;
   role: RunMessageRole;
-  contentParts: Array<{ type: string; text: string }>;
-  thinkingDetails?: Array<Record<string, unknown>>;
+  data: Record<string, RunMessageLangEntry>;
   createdAt: string;
 }
 
@@ -104,11 +108,5 @@ export interface RuntimeOrchestrator {
   cancelRun(runId: string): Promise<void>;
   recoverRuns(projectId: string, agentId: string): Promise<void>;
 
-  discardChildRunsByParentAgentMessage(input: {
-    parentAgentMessageId: string;
-  }): Promise<void>;
-
-  setAgentMessageRunLink(agentMessageId: string, runId: string, runMessageId: string): void;
-  getLinkedRunMessage(agentMessageId: string): { runId: string; runMessageId: string } | undefined;
   findLatestOpenRootRunId(projectId: string, agentId: string): string | undefined;
 }

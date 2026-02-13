@@ -10,7 +10,7 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
 from ..models.agent_memory_models import AgentMemorySummary, AgentRagChunk, AgentRagSource
-from ..models.db_models import Agent, AgentMessage, User
+from ..models.db_models import Agent, AgentRunModel, RunMessageModel, User
 from .embedding_config_service import get_embedding_profile, set_embedding_dimensions
 from .rag_embedding_service import embed_many
 from .rag_chunker import merge_blocks_by_length, split_plaintext_blocks
@@ -245,11 +245,12 @@ async def archive_until(
             "indexed_count": 0,
         }
 
-    # Determine message range to archive (by stable per-agent seq order)
-    ordered_messages: List[AgentMessage] = (
-        db.query(AgentMessage)
-        .filter(AgentMessage.agent_id == agent.id)
-        .order_by(AgentMessage.seq.asc())
+    # Determine message range to archive (by run → message ordering)
+    ordered_messages: List[RunMessageModel] = (
+        db.query(RunMessageModel)
+        .join(AgentRunModel, RunMessageModel.run_id == AgentRunModel.id)
+        .filter(AgentRunModel.agent_id == agent.id)
+        .order_by(AgentRunModel.root_run_seq.asc().nullslast(), AgentRunModel.created_at.asc(), RunMessageModel.seq.asc())
         .all()
     )
     ordered_ids = [m.id for m in ordered_messages]
@@ -532,13 +533,14 @@ async def search_memory(
         return []
 
     # Load full message rows for role/content/timestamp
-    msg_rows: List[AgentMessage] = (
-        db.query(AgentMessage)
-        .filter(AgentMessage.agent_id == agent_id, AgentMessage.id.in_(list(best_by_message.keys())))
+    msg_rows: List[RunMessageModel] = (
+        db.query(RunMessageModel)
+        .join(AgentRunModel, RunMessageModel.run_id == AgentRunModel.id)
+        .filter(AgentRunModel.agent_id == agent_id, RunMessageModel.id.in_(list(best_by_message.keys())))
         .all()
     )
 
-    by_id: Dict[UUID, AgentMessage] = {m.id: m for m in msg_rows}
+    by_id: Dict[UUID, RunMessageModel] = {m.id: m for m in msg_rows}
     results: List[Dict[str, Any]] = []
     for mid, info in best_by_message.items():
         m = by_id.get(mid)

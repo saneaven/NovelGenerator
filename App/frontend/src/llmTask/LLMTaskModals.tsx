@@ -48,8 +48,8 @@ export const LLMTaskModals: React.FC = () => {
     detailSessionId ? state.sessions[detailSessionId] : null
   );
   const cancelSession = useLLMSessionStore((state) => state.cancelSession);
-  const runLinkByAgentMessageId = useRuntimeStore((state) => state.runLinkByAgentMessageId);
   const runToolCallsByMessageId = useRuntimeStore((state) => state.runToolCallsByMessageId);
+  const runMessagesByRunId = useRuntimeStore((state) => state.runMessagesByRunId);
 
   const [outputExpanded, setOutputExpanded] = useState(false);
   const [errorExpanded, setErrorExpanded] = useState(false);
@@ -84,19 +84,20 @@ export const LLMTaskModals: React.FC = () => {
   const agentContext = useMemo(() => {
     if (!session || session.kind !== 'agent') return null;
     const input = session.input as any;
-    const result = session.result as any;
-    const assistantMessageId = result?.assistantMessageId as string | undefined;
-    const runLink = assistantMessageId ? runLinkByAgentMessageId[String(assistantMessageId)] : undefined;
-    const runId = runLink?.runId ?? (input?.runId as string | undefined);
+    const runId = input?.runId as string | undefined;
     if (!runId) return null;
 
+    // Find the latest assistant message in this run (for tool call lookup)
+    const messages = runMessagesByRunId[runId] ?? [];
+    const assistantMessage = [...messages].reverse().find(m => m.role === 'assistant');
+
     return {
-      projectId: input.projectId,
-      agentId: input.agentId,
+      projectId: input.projectId as string,
+      agentId: input.agentId as string,
       runId,
-      runMessageId: runLink?.runMessageId,
+      runMessageId: assistantMessage?.id,
     };
-  }, [session?.id, session?.kind, session?.input, session?.result, runLinkByAgentMessageId]);
+  }, [session?.id, session?.kind, session?.input, runMessagesByRunId]);
 
   const displayedToolCalls = useMemo(() => {
     if (agentContext?.runMessageId) {

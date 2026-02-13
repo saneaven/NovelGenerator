@@ -88,6 +88,7 @@ class AddRunMessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     role: RunRole
+    language: str = Field(..., min_length=1, max_length=50)
     content_parts: List[Dict[str, Any]] = Field(default_factory=list)
     thinking_details: Optional[List[Dict[str, Any]]] = None
 
@@ -95,7 +96,16 @@ class AddRunMessageRequest(BaseModel):
 class PatchRunMessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    language: str = Field(..., min_length=1, max_length=50)
     content_parts: Optional[List[Dict[str, Any]]] = None
+    thinking_details: Optional[List[Dict[str, Any]]] = None
+
+
+class TranslateRunMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    language: str = Field(..., min_length=1, max_length=50)
+    content_parts: List[Dict[str, Any]] = Field(default_factory=list)
     thinking_details: Optional[List[Dict[str, Any]]] = None
 
 
@@ -144,8 +154,7 @@ class RunMessageResponse(BaseModel):
     run_id: uuid.UUID
     seq: int
     role: RunRole
-    content_parts: List[Dict[str, Any]]
-    thinking_details: Optional[List[Dict[str, Any]]] = None
+    data: Dict[str, Any]
     created_at: datetime
     tool_calls: List[RunToolCallResponse] = Field(default_factory=list)
 
@@ -201,6 +210,10 @@ class PatchRunMessageResponse(BaseModel):
     message: RunMessageResponse
 
 
+class TranslateRunMessageResponse(BaseModel):
+    message: RunMessageResponse
+
+
 class UpsertRunToolCallsResponse(BaseModel):
     tool_calls: List[RunToolCallResponse]
 
@@ -223,4 +236,3 @@ class TimelineItem(BaseModel):
 class TimelineResponse(BaseModel):
     items: List[TimelineItem]
     next_cursor: Optional[str] = None
-

@@ -90,6 +90,7 @@ export interface ToolCallAutoApproveConfig {
     replace: boolean;
     read: boolean;
     search: boolean;
+    subAgent: boolean;
 }
 
 // Tokenizer type for token counting (used with openrouter/custom providers)

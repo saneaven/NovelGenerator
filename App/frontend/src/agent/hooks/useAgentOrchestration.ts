@@ -18,8 +18,10 @@ import { useErrorStore } from '../../store/errorStore';
 import { AgentMemoryManager } from '../memory/AgentMemoryManager';
 import type { AgentOrchestrationConfig, AgentOrchestrationReturn, AgentHandlersReturn, ContextIdState } from './types';
 import { getSendBlockingState } from '../../toolCall/viewModel/blockingSelectors';
+import { getAgentRunMessageIds } from '../../runtime/selectors/conversationTimeline';
 import { runtimeOrchestrator } from '../../runtime';
 import { useRuntimeStore } from '../../runtime';
+import { runService } from '../../api/runService';
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
@@ -30,9 +32,6 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
   const { t } = useTranslation();
 
   const {
-    updateMessage,
-    deleteMessage,
-    clearMessageTranslations,
     getSelectedAgentId,
     selectAgent,
   } = useAgentStore();
@@ -143,8 +142,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     if (!agentId) return;
     if (useAgentUIStore.getState().isLoading(projectId, agentId)) return;
 
-    const selectedAgent = useAgentStore.getState().getSelectedAgent(projectId);
-    const messages = selectedAgent?.messages ?? [];
+    const runMessageIds = getAgentRunMessageIds(projectId, agentId);
     const sessions = Object.values(useLLMSessionStore.getState().sessions)
       .filter((session): session is NonNullable<typeof session> => Boolean(session))
       .filter((session) => {
@@ -153,10 +151,8 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       });
     const sendBlockingState = getSendBlockingState({
       selectedAgentId: agentId,
-      messages,
+      runMessageIds,
       sessions,
-      runsById: useRuntimeStore.getState().runsById,
-      runLinkByAgentMessageId: useRuntimeStore.getState().runLinkByAgentMessageId,
       runToolCallsByMessageId: useRuntimeStore.getState().runToolCallsByMessageId,
     });
     if (sendBlockingState.blocked) {
@@ -341,10 +337,39 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     const editing = getEditing(projectId);
     if (!editing.messageId) return;
 
-    updateMessage(projectId, agentId, editing.messageId, [{ type: 'content', text: editing.content }] as any, mainLanguage);
-    clearMessageTranslations(projectId, agentId, editing.messageId, [mainLanguage]);
+    // Find the RunMessage's runId
+    const runtime = useRuntimeStore.getState();
+    let runId: string | undefined;
+    for (const [rId, messages] of Object.entries(runtime.runMessagesByRunId)) {
+      if (messages?.some(m => m.id === editing.messageId)) {
+        runId = rId;
+        break;
+      }
+    }
+
+    if (!runId) {
+      showError('Edit Failed', 'Could not find the message run.');
+      return;
+    }
+
+    const newContentParts = [{ type: 'content', text: editing.content }];
+
+    // Update local store
+    runtime.updateRunMessageData(runId, editing.messageId, mainLanguage, {
+      contentParts: newContentParts,
+    });
+    runtime.clearRunMessageTranslations(runId, editing.messageId, [mainLanguage]);
+
+    // Persist to backend
+    void runService.patchRunMessage(projectId, agentId, runId, editing.messageId, {
+      language: mainLanguage,
+      content_parts: newContentParts as Array<Record<string, any>>,
+    }).catch((error) => {
+      console.error('Failed to persist message edit:', error);
+    });
+
     cancelEditing(projectId);
-  }, [projectId, getSelectedAgentId, getEditing, updateMessage, clearMessageTranslations, mainLanguage, cancelEditing]);
+  }, [projectId, getSelectedAgentId, getEditing, mainLanguage, cancelEditing, showError]);
 
   const handleCancelEdit = useCallback(() => {
     if (!projectId) return;
@@ -359,24 +384,51 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     if (!confirm('Are you sure you want to delete this message?')) return;
 
     void (async () => {
+      // Find the RunMessage's runId
+      const runtime = useRuntimeStore.getState();
+      let runId: string | undefined;
+      for (const [rId, messages] of Object.entries(runtime.runMessagesByRunId)) {
+        if (messages?.some(m => m.id === messageId)) {
+          runId = rId;
+          break;
+        }
+      }
+
+      if (!runId) {
+        showError('Delete Failed', 'Could not find the message run.');
+        return;
+      }
+
+      // Walk the run tree to find all descendant runs
+      const allRuns = runtime.listRuns();
+      const toDelete = new Set<string>([runId]);
+      let frontier = [runId];
+
+      while (frontier.length > 0) {
+        const next: string[] = [];
+        for (const run of allRuns) {
+          if (run.runKind !== 'child') continue;
+          if (!run.parentRunId || !frontier.includes(run.parentRunId)) continue;
+          if (toDelete.has(run.id)) continue;
+          toDelete.add(run.id);
+          next.push(run.id);
+        }
+        frontier = next;
+      }
+
+      // Delete from backend
       try {
-        await deleteMessage(projectId, agentId, messageId);
-        useRuntimeStore.getState().clearAgentMessageRunLink(messageId);
+        await runService.deleteRun(projectId, agentId, runId);
       } catch (error) {
-        console.error('Failed to delete message:', error);
+        console.error('Failed to delete run from backend:', error);
         showError('Delete Failed', error instanceof Error ? error.message : 'Failed to delete message.');
         return;
       }
 
-      try {
-        await runtimeOrchestrator.discardChildRunsByParentAgentMessage({
-          parentAgentMessageId: messageId,
-        });
-      } catch (error) {
-        console.error('Failed to discard local child run state after message delete:', error);
-      }
+      // Clean up local state
+      runtime.removeRunsByIds([...toDelete]);
     })();
-  }, [projectId, getSelectedAgentId, deleteMessage, showError]);
+  }, [projectId, getSelectedAgentId, showError]);
 
   const triggerAutoContinue = useCallback(async () => {
     if (!projectId) return;

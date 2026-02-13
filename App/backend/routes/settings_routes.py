@@ -148,6 +148,7 @@ async def get_user_settings(
         "replace": False,
         "read": False,
         "search": False,
+        "subAgent": False,
     }
 
     embedding_configs_dict = merge_embedding_configs(getattr(settings, "embedding_configs", None))
@@ -334,6 +335,7 @@ async def update_user_settings(
         "replace": False,
         "read": False,
         "search": False,
+        "subAgent": False,
     }
 
     embedding_configs_dict = merge_embedding_configs(getattr(settings, "embedding_configs", None))
@@ -423,6 +425,7 @@ async def update_task_config(
         "replace": False,
         "read": False,
         "search": False,
+        "subAgent": False,
     }
 
     embedding_configs_dict = merge_embedding_configs(getattr(settings, "embedding_configs", None))
@@ -529,6 +532,7 @@ async def sync_settings_from_client(
                 "replace": False,
                 "read": False,
                 "search": False,
+                "subAgent": False,
             }),
             ui_language=client_settings.get('uiLanguage', 'en')
         )
@@ -564,6 +568,7 @@ async def sync_settings_from_client(
             "replace": False,
             "read": False,
             "search": False,
+            "subAgent": False,
         }))  # type: ignore
         settings.ui_language = client_settings.get('uiLanguage', getattr(settings, 'ui_language', 'en'))  # type: ignore
 

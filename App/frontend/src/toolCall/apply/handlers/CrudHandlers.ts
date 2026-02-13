@@ -55,8 +55,8 @@ export async function createStoryObject(
   const { store, projectId, language } = context;
   const userRequest = context.options.userRequest ?? 'AI Edit';
 
-  await store.createObject(objectType, projectId, { name, description: description ?? '', content }, language, undefined, userRequest);
-  return ok(`Created ${type}: ${name}`);
+  const newObject = await store.createObject(objectType, projectId, { name, description: description ?? '', content }, language, undefined, userRequest);
+  return ok(`Created ${type}: ${name} (id: ${newObject.id})`, { id: newObject.id });
 }
 
 /**
@@ -109,8 +109,8 @@ export async function createOutline(
   const outlines = await store.listObjects('outline', projectId);
   const order = outlines.length;
 
-  await store.createObject('outline', projectId, { name, description: description ?? '', content }, language, { order }, userRequest);
-  return ok(`Created outline: ${name}`);
+  const newObject = await store.createObject('outline', projectId, { name, description: description ?? '', content }, language, { order }, userRequest);
+  return ok(`Created outline: ${name} (id: ${newObject.id})`, { id: newObject.id });
 }
 
 /**
@@ -156,7 +156,7 @@ export async function createOutlineAct(
   const existingInOutline = acts.filter((act: UnifiedObject) => act.metadata?.outline_id === outlineId);
   const order = existingInOutline.length;
 
-  await store.createObject(
+  const newObject = await store.createObject(
     'act',
     projectId,
     { name, description: description ?? '', content },
@@ -165,7 +165,7 @@ export async function createOutlineAct(
     userRequest
   );
 
-  return ok(`Created act: ${name}`);
+  return ok(`Created act: ${name} (id: ${newObject.id})`, { id: newObject.id });
 }
 
 /**
@@ -211,7 +211,7 @@ export async function createOutlineChapter(
   const existingInAct = chapters.filter((ch: UnifiedObject) => ch.metadata?.act_id === actId);
   const order = existingInAct.length;
 
-  await store.createObject(
+  const newObject = await store.createObject(
     'chapter',
     projectId,
     { name, description: description ?? '', content },
@@ -220,7 +220,7 @@ export async function createOutlineChapter(
     userRequest
   );
 
-  return ok(`Created chapter: ${name}`);
+  return ok(`Created chapter: ${name} (id: ${newObject.id})`, { id: newObject.id });
 }
 
 /**

@@ -22,6 +22,8 @@ from ..schemas.runs import (
     PatchRunResponse,
     QueryRunsRequest,
     QueryRunsResponse,
+    TranslateRunMessageRequest,
+    TranslateRunMessageResponse,
     UpsertRunToolCallsRequest,
     UpsertRunToolCallsResponse,
 )
@@ -105,6 +107,30 @@ async def patch_run(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return {"run": run}
+
+
+@router.delete("/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_run(
+    project_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    run_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a run and all its child runs."""
+    await verify_agent_access(project_id, agent_id, current_user, db)
+
+    try:
+        run_service.delete_run_tree(
+            db=db,
+            project_id=project_id,
+            agent_id=agent_id,
+            run_id=run_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    return None
 
 
 @router.get("/{run_id}", response_model=GetRunResponse, status_code=status.HTTP_200_OK)
@@ -191,6 +217,37 @@ async def patch_run_message(
 
     try:
         message = run_message_service.patch_run_message(
+            db=db,
+            project_id=project_id,
+            agent_id=agent_id,
+            run_id=run_id,
+            message_id=run_message_id,
+            data=data,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    return {"message": message}
+
+
+@router.put(
+    "/{run_id}/messages/{run_message_id}/translate",
+    response_model=TranslateRunMessageResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def translate_run_message(
+    project_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    run_id: uuid.UUID,
+    run_message_id: uuid.UUID,
+    data: TranslateRunMessageRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    await verify_agent_access(project_id, agent_id, current_user, db)
+
+    try:
+        message = run_message_service.translate_run_message(
             db=db,
             project_id=project_id,
             agent_id=agent_id,

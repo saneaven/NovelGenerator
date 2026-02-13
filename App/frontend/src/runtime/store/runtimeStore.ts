@@ -1,17 +1,11 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { Run, RunMessage, RunToolCall } from '../types';
-
-type AgentMessageRunLink = {
-  runId: string;
-  runMessageId: string;
-};
+import type { Run, RunMessage, RunMessageLangEntry, RunToolCall } from '../types';
 
 interface RuntimeState {
   runsById: Record<string, Run | undefined>;
   runMessagesByRunId: Record<string, RunMessage[] | undefined>;
   runToolCallsByMessageId: Record<string, RunToolCall[] | undefined>;
-  runLinkByAgentMessageId: Record<string, AgentMessageRunLink | undefined>;
 }
 
 interface RuntimeActions {
@@ -28,12 +22,12 @@ interface RuntimeActions {
   appendRunMessage: (message: RunMessage) => void;
   patchRunMessage: (runId: string, messageId: string, partial: Partial<RunMessage>) => void;
   getRunMessages: (runId: string) => RunMessage[];
+  updateRunMessageData: (runId: string, messageId: string, language: string, entry: RunMessageLangEntry) => void;
+  addRunMessageTranslation: (runId: string, messageId: string, language: string, entry: RunMessageLangEntry) => void;
+  clearRunMessageTranslations: (runId: string, messageId: string, preserveLanguages: string[]) => void;
   upsertRunToolCalls: (runMessageId: string, toolCalls: RunToolCall[]) => void;
   getRunToolCalls: (runMessageId: string) => RunToolCall[];
   removeRunsByIds: (runIds: string[]) => void;
-  setAgentMessageRunLink: (agentMessageId: string, link: AgentMessageRunLink) => void;
-  clearAgentMessageRunLink: (agentMessageId: string) => void;
-  getAgentMessageRunLink: (agentMessageId: string) => AgentMessageRunLink | undefined;
 }
 
 export const useRuntimeStore = create<RuntimeState & RuntimeActions>()(
@@ -42,13 +36,11 @@ export const useRuntimeStore = create<RuntimeState & RuntimeActions>()(
       runsById: {},
       runMessagesByRunId: {},
       runToolCallsByMessageId: {},
-      runLinkByAgentMessageId: {},
 
       clearAll: () => set({
         runsById: {},
         runMessagesByRunId: {},
         runToolCallsByMessageId: {},
-        runLinkByAgentMessageId: {},
       }),
 
       upsertRun: (run) => set((state) => ({
@@ -182,6 +174,64 @@ export const useRuntimeStore = create<RuntimeState & RuntimeActions>()(
 
       getRunMessages: (runId) => [...(get().runMessagesByRunId[runId] ?? [])].sort((a, b) => a.seq - b.seq),
 
+      updateRunMessageData: (runId, messageId, language, entry) => set((state) => {
+        const messages = state.runMessagesByRunId[runId] ?? [];
+        if (messages.length === 0) return state;
+        const next = messages.map((message) => {
+          if (message.id !== messageId) return message;
+          return {
+            ...message,
+            data: { ...message.data, [language]: entry },
+          };
+        });
+        return {
+          runMessagesByRunId: {
+            ...state.runMessagesByRunId,
+            [runId]: next,
+          },
+        };
+      }),
+
+      addRunMessageTranslation: (runId, messageId, language, entry) => set((state) => {
+        const messages = state.runMessagesByRunId[runId] ?? [];
+        if (messages.length === 0) return state;
+        const next = messages.map((message) => {
+          if (message.id !== messageId) return message;
+          return {
+            ...message,
+            data: { ...message.data, [language]: entry },
+          };
+        });
+        return {
+          runMessagesByRunId: {
+            ...state.runMessagesByRunId,
+            [runId]: next,
+          },
+        };
+      }),
+
+      clearRunMessageTranslations: (runId, messageId, preserveLanguages) => set((state) => {
+        const messages = state.runMessagesByRunId[runId] ?? [];
+        if (messages.length === 0) return state;
+        const preserveSet = new Set(preserveLanguages);
+        const next = messages.map((message) => {
+          if (message.id !== messageId) return message;
+          const filteredData: Record<string, RunMessageLangEntry> = {};
+          for (const [lang, entry] of Object.entries(message.data)) {
+            if (preserveSet.has(lang)) {
+              filteredData[lang] = entry;
+            }
+          }
+          return { ...message, data: filteredData };
+        });
+        return {
+          runMessagesByRunId: {
+            ...state.runMessagesByRunId,
+            [runId]: next,
+          },
+        };
+      }),
+
       upsertRunToolCalls: (runMessageId, toolCalls) => set((state) => ({
         runToolCallsByMessageId: {
           ...state.runToolCallsByMessageId,
@@ -194,7 +244,6 @@ export const useRuntimeStore = create<RuntimeState & RuntimeActions>()(
 
       removeRunsByIds: (runIds) => set((state) => {
         if (runIds.length === 0) return state;
-        const runIdSet = new Set(runIds);
 
         const nextRuns = { ...state.runsById };
         const nextMessages = { ...state.runMessagesByRunId };
@@ -208,43 +257,16 @@ export const useRuntimeStore = create<RuntimeState & RuntimeActions>()(
           }
         }
 
-        const nextLinks = { ...state.runLinkByAgentMessageId };
-        for (const [agentMessageId, link] of Object.entries(nextLinks)) {
-          if (!link) continue;
-          if (!runIdSet.has(link.runId)) continue;
-          delete nextLinks[agentMessageId];
-        }
-
         return {
           runsById: nextRuns,
           runMessagesByRunId: nextMessages,
           runToolCallsByMessageId: nextToolCalls,
-          runLinkByAgentMessageId: nextLinks,
         };
       }),
-
-      setAgentMessageRunLink: (agentMessageId, link) => set((state) => ({
-        runLinkByAgentMessageId: {
-          ...state.runLinkByAgentMessageId,
-          [agentMessageId]: link,
-        },
-      })),
-
-      clearAgentMessageRunLink: (agentMessageId) => set((state) => {
-        if (!state.runLinkByAgentMessageId[agentMessageId]) return state;
-        const next = { ...state.runLinkByAgentMessageId };
-        delete next[agentMessageId];
-        return { runLinkByAgentMessageId: next };
-      }),
-
-      getAgentMessageRunLink: (agentMessageId) => get().runLinkByAgentMessageId[agentMessageId],
     }),
     {
       name: 'runtime-store',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        runLinkByAgentMessageId: state.runLinkByAgentMessageId,
-      }),
     },
   ),
 );

@@ -70,11 +70,9 @@ export interface HandlerOptions {
   userRequest?: string;
   /** Root agent id scope (required for Sub Agent persistence). */
   agentId?: string;
-  /** Parent agent assistant message id (for root Sub Agent calls). */
-  parentAgentMessageId?: string;
-  /** Parent Sub Agent run id (for nested Sub Agent calls). */
+  /** Parent run id (for Sub Agent calls). */
   parentSubRunId?: string;
-  /** Parent Sub Agent assistant message id (for nested Sub Agent calls). */
+  /** Parent run message id (for Sub Agent calls). */
   parentSubMessageId?: string;
 }
 

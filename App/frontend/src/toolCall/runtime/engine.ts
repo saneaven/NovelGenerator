@@ -229,17 +229,8 @@ async function applyToolCall(params: {
         };
       }
 
-      let parentRunId: string | undefined;
-      let parentRunMessageId: string | undefined;
-
-      if (context.options?.parentSubRunId && context.options?.parentSubMessageId) {
-        parentRunId = context.options.parentSubRunId;
-        parentRunMessageId = context.options.parentSubMessageId;
-      } else if (context.options?.parentAgentMessageId) {
-        const parentRunLink = runtimeOrchestrator.getLinkedRunMessage(context.options.parentAgentMessageId);
-        parentRunId = parentRunLink?.runId;
-        parentRunMessageId = parentRunLink?.runMessageId;
-      }
+      const parentRunId = context.options?.parentSubRunId;
+      const parentRunMessageId = context.options?.parentSubMessageId;
 
       if (!parentRunId || !parentRunMessageId) {
         return {
@@ -258,12 +249,9 @@ async function applyToolCall(params: {
         };
       }
 
-      const subAgentStore = useSubAgentStore.getState();
-      if (subAgentStore.subAgents.length === 0 && !subAgentStore.isLoading) {
-        await subAgentStore.loadSubAgents();
-      }
+      await useSubAgentStore.getState().ensureLoaded();
 
-      const def = subAgentStore.getByAgentName(agentName);
+      const def = useSubAgentStore.getState().getByAgentName(agentName);
       if (!def) {
         return {
           success: false,
@@ -299,7 +287,6 @@ async function applyToolCall(params: {
         subAgentId: def.id,
         caller,
       });
-
       return { success: true, message: output, data: { subAgentId: def.id, agentName } };
     }
 

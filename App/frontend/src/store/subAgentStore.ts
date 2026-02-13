@@ -10,6 +10,7 @@ interface SubAgentState {
 
 interface SubAgentActions {
   loadSubAgents: () => Promise<void>;
+  ensureLoaded: () => Promise<void>;
   createSubAgent: (data: SubAgentCreate) => Promise<SubAgentDefinition>;
   updateSubAgent: (id: string, data: SubAgentUpdate) => Promise<SubAgentDefinition>;
   deleteSubAgent: (id: string) => Promise<void>;
@@ -30,6 +31,22 @@ export const useSubAgentStore = create<SubAgentState & SubAgentActions>((set, ge
     } catch (error) {
       set({ isLoading: false, error: error instanceof Error ? error.message : String(error) });
     }
+  },
+
+  ensureLoaded: async () => {
+    if (get().subAgents.length > 0) return;
+    if (get().isLoading) {
+      await new Promise<void>((resolve) => {
+        const unsub = useSubAgentStore.subscribe((s) => {
+          if (!s.isLoading) {
+            unsub();
+            resolve();
+          }
+        });
+      });
+      return;
+    }
+    await get().loadSubAgents();
   },
 
   createSubAgent: async (data) => {

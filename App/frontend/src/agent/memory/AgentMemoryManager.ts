@@ -205,8 +205,23 @@ function toRunBackedToolCall(tc: any): ToolCallMetadata {
   };
 }
 
+function resolveContentParts(message: { data: Record<string, { contentParts?: any[]; thinkingDetails?: any[] }> }, language: string): { contentParts: ContentPart[]; thinkingDetails?: any[] } {
+  const entry = message.data[language];
+  if (entry) {
+    return { contentParts: (entry.contentParts ?? []) as ContentPart[], thinkingDetails: entry.thinkingDetails };
+  }
+  // Fallback to first available language
+  const languages = Object.keys(message.data);
+  if (languages.length > 0) {
+    const fallback = message.data[languages[0]];
+    return { contentParts: (fallback.contentParts ?? []) as ContentPart[], thinkingDetails: fallback.thinkingDetails };
+  }
+  return { contentParts: [] };
+}
+
 function getRunBackedHistory(projectId: string, agentId: string): ChatMessage[] {
   const runtime = useRuntimeStore.getState();
+  const language = useSettingsStore.getState().getSettings().mainLanguage;
   const rootRuns = runtime
     .listRuns({ projectId, agentId, runKind: 'root' })
     .sort((a, b) => {
@@ -223,41 +238,27 @@ function getRunBackedHistory(projectId: string, agentId: string): ChatMessage[] 
       const toolCalls = message.role === 'assistant'
         ? runtime.getRunToolCalls(message.id).map(toRunBackedToolCall)
         : undefined;
+      const resolved = resolveContentParts(message, language);
       history.push({
         id: message.id,
         seq: message.seq,
         role: message.role as any,
-        contentParts: (message.contentParts ?? []) as ContentPart[],
+        contentParts: resolved.contentParts,
         toolCalls,
-        thinking_details: message.thinkingDetails as any,
+        thinking_details: resolved.thinkingDetails as any,
         timestamp: message.createdAt ? new Date(message.createdAt) : new Date(),
       });
     }
-
-    const childRuns = runtime.findChildRuns(rootRun.id);
-    for (const child of childRuns) {
-      const output = String(child.finalOutput ?? '').trim();
-      if (child.status !== 'completed' || !output) continue;
-      history.push({
-        id: `child-final:${child.id}`,
-        role: 'assistant',
-        contentParts: [{ type: 'content', text: output }],
-        timestamp: child.updatedAt ? new Date(child.updatedAt) : new Date(),
-      } as ChatMessage);
-    }
   }
 
-  if (history.length > 0) {
-    history.sort((a, b) => {
-      const aTs = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-      const bTs = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-      if (aTs !== bTs) return aTs - bTs;
-      return String(a.id).localeCompare(String(b.id));
-    });
-    return history;
-  }
+  history.sort((a, b) => {
+    const aTs = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const bTs = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    if (aTs !== bTs) return aTs - bTs;
+    return String(a.id).localeCompare(String(b.id));
+  });
 
-  return useAgentStore.getState().getMessages(projectId, agentId, useSettingsStore.getState().getSettings().mainLanguage);
+  return history;
 }
 
 function serializeConversationBlock(block: any): string {
@@ -593,7 +594,6 @@ async function runMemorySummarySession(args: {
 
 export const AgentMemoryManager = {
   async prepare(input: PreSessionInput, options?: AgentMemoryPrepareOptions): Promise<PreSessionOutput> {
-    const agentStore = useAgentStore.getState();
     const settingsStore = useSettingsStore.getState();
     const settings = settingsStore.getSettings();
 
@@ -606,7 +606,6 @@ export const AgentMemoryManager = {
       options?.signal ? { signal: options.signal } : undefined
     );
     const archivedUntilMessageId = status.archivedUntilMessageId ?? null;
-    agentStore.setArchivedUntilMessageId(input.projectId, input.agentId, archivedUntilMessageId);
 
     // Build initial active history from current boundary
     const fullHistory = getRunBackedHistory(input.projectId, input.agentId);
@@ -774,7 +773,7 @@ export const AgentMemoryManager = {
       );
 
       currentBoundary = archiveResp.archived_until_message_id ?? currentBoundary;
-      agentStore.setArchivedUntilMessageId(input.projectId, input.agentId, currentBoundary ?? null);
+      useAgentStore.getState().setArchivedUntilMessageId(input.projectId, input.agentId, currentBoundary ?? null);
       const nextSummary = archiveResp.summary_text ?? '';
       memory = {
         previousSummaries: nextSummary ? [nextSummary] : memory.previousSummaries,

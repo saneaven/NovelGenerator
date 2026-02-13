@@ -139,6 +139,7 @@ class UserSettings(Base):
             "replace": False,
             "read": False,
             "search": False,
+            "subAgent": False,
         },
     )
 
@@ -622,8 +623,6 @@ class Agent(Base):
     # Long-term memory boundary cache (UI divider + idempotency for archive)
     archived_until_message_id = Column(UUID(as_uuid=True), nullable=True, index=True)
 
-    # Stable per-agent message ordering (1-based)
-    next_message_seq = Column(BigInteger, default=1, nullable=False)
     # Stable per-agent root run ordering (1-based)
     next_root_run_seq = Column(BigInteger, default=1, nullable=False)
 
@@ -632,28 +631,7 @@ class Agent(Base):
 
     # Relationships
     project = relationship("Project", back_populates="agents")
-    messages = relationship("AgentMessage", back_populates="agent", cascade="all, delete-orphan", order_by="AgentMessage.seq")
     runs = relationship("AgentRunModel", back_populates="agent", cascade="all, delete-orphan", order_by="AgentRunModel.created_at")
-
-
-class AgentMessage(Base):
-    """Agent messages with multilingual content only (execution state lives in run_* tables)."""
-    __tablename__ = 'agent_messages'
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    agent_id = Column(UUID(as_uuid=True), ForeignKey('agents.id', ondelete='CASCADE'), nullable=False, index=True)
-    seq = Column(BigInteger, nullable=False)
-
-    role = Column(String(50), nullable=False)
-
-    # Multilingual content stored as JSONB
-    # Format: { "English": { "content": "..." }, "Korean": { "content": "..." } }
-    data = Column(JSONB, nullable=False)
-
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
-    # Relationships
-    agent = relationship("Agent", back_populates="messages")
 
 
 # ============================================================================
@@ -740,8 +718,8 @@ class RunMessageModel(Base):
     run_id = Column(UUID(as_uuid=True), ForeignKey('agent_runs.id', ondelete='CASCADE'), nullable=False, index=True)
     seq = Column(BigInteger, nullable=False)
     role = Column(String(16), nullable=False)
-    content_parts = Column(JSONB, nullable=False, default=list)
-    thinking_details = Column(JSONB, nullable=True)
+    # Multilingual content: { "English": { "contentParts": [...], "thinkingDetails": [...] }, ... }
+    data = Column(JSONB, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     run = relationship("AgentRunModel", back_populates="messages")
