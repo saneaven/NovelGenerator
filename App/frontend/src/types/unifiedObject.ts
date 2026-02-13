@@ -129,6 +129,9 @@ export type BasicInfoObject = UnifiedObject<BasicInfoData>;
 export type StoryObject = UnifiedObject<StoryObjectData>;
 export type ManuscriptObject = UnifiedObject<ManuscriptData>;
 export type GuidelinesObject = UnifiedObject<GuidelinesData>;
+export type OutlineObject = StoryObject;
+export type ActObject = StoryObject;
+export type ChapterObject = StoryObject;
 
 // ============================================================================
 // REQUEST TYPES

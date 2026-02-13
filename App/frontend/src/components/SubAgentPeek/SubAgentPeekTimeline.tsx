@@ -1,12 +1,12 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import type { TaskSessionState } from '../../llmTask/types';
 import type { ChatMessage, ToolCallMetadata } from '../../llm/requestTypes';
 import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { collapseContentParts } from '../../agent/utils/contentParts';
-import { SubAgentManager } from '../../subAgent/runtime/SubAgentManager';
-import type { SubAgentRun } from '../../store/subAgentRuntimeStore';
+import { runtimeOrchestrator, useRuntimeStore, type Run, type RunToolCall } from '../../runtime';
 import { FunctionCallsThread } from '../../toolCall/ui';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import { TextButton } from '../TextButton';
@@ -17,10 +17,11 @@ function formatRole(role: string, t: (key: string) => string): string {
   return role;
 }
 
-function formatTime(input?: Date): string {
+function formatTime(input?: Date | string): string {
   if (!input) return '';
-  if (Number.isNaN(input.getTime())) return '';
-  return input.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const date = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 function messageText(message: ChatMessage): string {
@@ -28,19 +29,43 @@ function messageText(message: ChatMessage): string {
 }
 
 function hasPendingStatus(status: string | undefined): boolean {
-  return status === 'pending' || status === 'validating' || status === 'processing' || status === 'running';
+  return status === 'pending' || status === 'running';
+}
+
+function toToolCallMetadata(toolCall: RunToolCall): ToolCallMetadata {
+  return {
+    id: toolCall.llmCallId,
+    tool_name: toolCall.toolName,
+    arguments: toolCall.arguments,
+    status: toolCall.status,
+    reason: toolCall.reason,
+    failureType: toolCall.failureType,
+    result: toolCall.result as any,
+    acceptedAt: toolCall.acceptedAt ? new Date(toolCall.acceptedAt) : undefined,
+  };
+}
+
+function toChatMessage(message: any): ChatMessage {
+  return {
+    id: message.id,
+    seq: message.seq,
+    role: message.role,
+    contentParts: message.contentParts,
+    timestamp: new Date(message.createdAt),
+    thinking_details: message.thinkingDetails,
+  } as ChatMessage;
 }
 
 export interface SubAgentPeekTimelineProps {
   threadId: string;
-  runKey: string;
-  run: SubAgentRun;
+  runId: string;
+  run: Run;
   activeSession?: TaskSessionState<any, any>;
 }
 
 export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   threadId,
-  runKey,
+  runId,
   run,
   activeSession,
 }) => {
@@ -48,45 +73,61 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   const [isApplying, setIsApplying] = useState(false);
   const [actionInFlight, setActionInFlight] = useState<'pause' | 'retry' | 'cancel' | null>(null);
 
-  const lastAssistantIndex = useMemo(() => {
-    for (let i = run.history.length - 1; i >= 0; i--) {
-      if (run.history[i]?.role === 'assistant') return i;
-    }
-    return -1;
-  }, [run.history]);
+  const { runMessagesByRunId, runToolCallsByMessageId } = useRuntimeStore(
+    useShallow((state) => ({
+      runMessagesByRunId: state.runMessagesByRunId,
+      runToolCallsByMessageId: state.runToolCallsByMessageId,
+    })),
+  );
 
-  const handleConfirm = useCallback(async (decisions: ToolCallDecisionMap) => {
+  const messages = useMemo(() => {
+    const history = runMessagesByRunId[runId] ?? [];
+    return [...history].sort((a, b) => a.seq - b.seq);
+  }, [runMessagesByRunId, runId]);
+
+  const lastAssistantMessageId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]?.role === 'assistant') return String(messages[i].id);
+    }
+    return null;
+  }, [messages]);
+
+  const handleConfirm = useCallback(async (runMessageId: string, decisions: ToolCallDecisionMap) => {
     setIsApplying(true);
     try {
-      await SubAgentManager.applyAndContinue(runKey, decisions);
+      await runtimeOrchestrator.applyRunToolCallDecisions({
+        runId,
+        runMessageId,
+        decisions,
+      });
     } finally {
       setIsApplying(false);
     }
-  }, [runKey]);
+  }, [runId]);
 
   const handlePause = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('pause');
-    void SubAgentManager.pause(runKey).finally(() => {
+    void runtimeOrchestrator.pauseRun(runId).finally(() => {
       setActionInFlight(null);
     });
-  }, [actionInFlight, runKey]);
+  }, [actionInFlight, runId]);
 
   const handleRetry = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('retry');
-    void SubAgentManager.retry(runKey).finally(() => {
+    void runtimeOrchestrator.retryRun(runId).finally(() => {
       setActionInFlight(null);
     });
-  }, [runKey]);
+  }, [actionInFlight, runId]);
 
   const handleCancel = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('cancel');
-    void SubAgentManager.cancel(runKey).finally(() => {
+    void runtimeOrchestrator.cancelRun(runId).finally(() => {
       setActionInFlight(null);
     });
-  }, [actionInFlight, runKey]);
+  }, [actionInFlight, runId]);
 
   const streamingText = useMemo(() => {
     if (!activeSession || activeSession.status !== 'running') return '';
@@ -100,13 +141,14 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
         <div className="sub-agent-peek-alert sub-agent-peek-alert--error">{run.error}</div>
       )}
 
-      {run.history.map((message, index) => {
-        const text = messageText(message);
-        const toolCalls = (message.toolCalls ?? []) as ToolCallMetadata[];
-        const isLatestAssistant = message.role === 'assistant' && index === lastAssistantIndex;
+      {messages.map((message) => {
+        const chatMessage = toChatMessage(message);
+        const text = messageText(chatMessage);
+        const toolCalls = (runToolCallsByMessageId[message.id] ?? []).map(toToolCallMetadata);
+        const isLatestAssistant = message.role === 'assistant' && String(message.id) === lastAssistantMessageId;
         const waitingDecision = isLatestAssistant && run.status === 'waiting';
         const cards = toolCalls.length > 0 ? buildEditCardsFromToolCallMetadata(toolCalls) : [];
-        const hasPendingCards = cards.some((card) => hasPendingStatus(card.toolCall.status));
+        const hasPendingCards = cards.some((card) => hasPendingStatus(String(card.toolCall.status)));
         const showApplyingBanner = isApplying && isLatestAssistant && hasPendingCards;
 
         return (
@@ -117,12 +159,12 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
             <div className="message-wrapper">
               <div className="message-header">
                 <span className="message-role">{formatRole(message.role, t)}</span>
-                <span className="message-time">{formatTime(message.timestamp as Date)}</span>
+                <span className="message-time">{formatTime(message.createdAt)}</span>
               </div>
               {message.role === 'assistant' && (
                 <ThinkingDisplay
                   messageId={String(message.id)}
-                  contentParts={message.contentParts}
+                  contentParts={chatMessage.contentParts}
                   isStreaming={false}
                 />
               )}
@@ -134,7 +176,11 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
                     threadId={`${threadId}:message:${run.id}:${message.id}`}
                     mode={waitingDecision && hasPendingCards ? 'pending' : 'confirmed'}
                     cards={cards}
-                    onCommitDecisions={waitingDecision && hasPendingCards ? handleConfirm : undefined}
+                    onCommitDecisions={
+                      waitingDecision && hasPendingCards
+                        ? (decisions) => handleConfirm(String(message.id), decisions)
+                        : undefined
+                    }
                     projectId={run.projectId}
                     isApplyDisabled={isApplying}
                     applyDisabledReason={showApplyingBanner ? 'Applying changes...' : undefined}

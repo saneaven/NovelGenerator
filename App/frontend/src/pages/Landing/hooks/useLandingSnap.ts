@@ -8,15 +8,23 @@ function usePrefersReducedMotion() {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   useEffect(() => {
-    const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mq: MediaQueryList = window.matchMedia('(prefers-reduced-motion: reduce)');
     if (!mq) return;
 
     const update = () => setPrefersReducedMotion(mq.matches);
     update();
 
-    if (mq.addEventListener) {
-      mq.addEventListener('change', update);
-      return () => mq.removeEventListener('change', update);
+    const mqWithEventTarget = mq as MediaQueryList & {
+      addEventListener?: (type: string, listener: EventListenerOrEventListenerObject) => void;
+      removeEventListener?: (type: string, listener: EventListenerOrEventListenerObject) => void;
+    };
+    if (typeof mqWithEventTarget.addEventListener === 'function' && typeof mqWithEventTarget.removeEventListener === 'function') {
+      mqWithEventTarget.addEventListener('change', update);
+      return () => mqWithEventTarget.removeEventListener?.('change', update);
     }
 
     // Safari < 14 fallback
@@ -40,7 +48,7 @@ export function useLandingSnap({
   useEffect(() => {
     if (!containerEl) return;
 
-    if (!('IntersectionObserver' in window)) {
+    if (typeof IntersectionObserver === 'undefined') {
       let rafId = 0;
 
       const update = () => {

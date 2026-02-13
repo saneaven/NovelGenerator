@@ -2,8 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
-import type { SubAgentRun, SubAgentParentType } from '../../store/subAgentRuntimeStore';
-import { useSubAgentRuntimeStore } from '../../store/subAgentRuntimeStore';
+import { useRuntimeStore, type Run } from '../../runtime';
 import { useFunctionCallUIStore } from '../../toolCall/ui/store';
 import { SubAgentPeekHeader } from './SubAgentPeekHeader';
 import { SubAgentPeekTimeline } from './SubAgentPeekTimeline';
@@ -11,7 +10,7 @@ import './subAgentPeek.css';
 
 interface RunEntry {
   key: string;
-  run: SubAgentRun;
+  run: Run;
 }
 
 function runPriority(status: string): number {
@@ -37,17 +36,19 @@ function isBlockingRunStatus(status: string): boolean {
   return status === 'running' || status === 'waiting' || status === 'paused' || status === 'error';
 }
 
-function hasPendingToolDecisions(run: SubAgentRun): number {
-  for (let i = run.history.length - 1; i >= 0; i--) {
-    const message = run.history[i];
-    if (message.role !== 'assistant') continue;
-    const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
-    return toolCalls.filter((toolCall: any) =>
-      toolCall?.status === 'pending' ||
-      toolCall?.status === 'validating' ||
-      toolCall?.status === 'processing' ||
-      toolCall?.status === 'running'
-    ).length;
+function hasPendingToolDecisions(params: {
+  runId: string;
+  runMessagesByRunId: Record<string, any[] | undefined>;
+  runToolCallsByMessageId: Record<string, any[] | undefined>;
+}): number {
+  const { runId, runMessagesByRunId, runToolCallsByMessageId } = params;
+  const messages = runMessagesByRunId[runId] ?? [];
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message?.role !== 'assistant') continue;
+    const toolCalls = runToolCallsByMessageId[message.id] ?? [];
+    return toolCalls.filter((toolCall: any) => toolCall?.status === 'pending' || toolCall?.status === 'running').length;
   }
 
   return 0;
@@ -63,46 +64,52 @@ function buildToolCallOrder(parentToolCallIds: string[]): Map<string, number> {
 
 export interface SubAgentPeekDockProps {
   threadId: string;
-  parentType: SubAgentParentType;
-  parentId: string;
-  parentMessageId: string;
+  parentRunId: string;
+  parentRunMessageId: string;
   parentToolCallIds: string[];
   isActiveParent: boolean;
 }
 
 export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   threadId,
-  parentType,
-  parentId,
-  parentMessageId,
+  parentRunId,
+  parentRunMessageId,
   parentToolCallIds,
   isActiveParent,
 }) => {
-  const runsByKey = useSubAgentRuntimeStore((state) => state.runsByKey);
+  const { runsById, runMessagesByRunId, runToolCallsByMessageId } = useRuntimeStore(
+    useShallow((state) => ({
+      runsById: state.runsById,
+      runMessagesByRunId: state.runMessagesByRunId,
+      runToolCallsByMessageId: state.runToolCallsByMessageId,
+    })),
+  );
 
   const setPeekOpen = useFunctionCallUIStore((state) => state.setPeekOpen);
   const setSelectedPeekRun = useFunctionCallUIStore((state) => state.setSelectedPeekRun);
 
   const peekOpen = useFunctionCallUIStore(
-    (state) => state.peekOpenByThread[threadId] ?? isActiveParent
+    (state) => state.peekOpenByThread[threadId] ?? isActiveParent,
   );
   const selectedKey = useFunctionCallUIStore(
-    (state) => state.selectedPeekRunByThread[threadId]
+    (state) => state.selectedPeekRunByThread[threadId],
   );
 
   const relevantRuns = useMemo(() => {
     const allowedToolCalls = new Set(parentToolCallIds);
-    const result: Record<string, SubAgentRun> = {};
-    for (const [key, run] of Object.entries(runsByKey)) {
+    const result: Record<string, Run> = {};
+    for (const run of Object.values(runsById)) {
       if (!run) continue;
-      if (run.parentType !== parentType) continue;
-      if (run.parentId !== parentId) continue;
-      if (run.parentMessageId !== parentMessageId) continue;
-      if (allowedToolCalls.size > 0 && !allowedToolCalls.has(run.parentToolCallId)) continue;
-      result[key] = run;
+      if (run.runKind !== 'child') continue;
+      if (run.parentRunId !== parentRunId) continue;
+      if (run.parentRunMessageId !== parentRunMessageId) continue;
+      if (allowedToolCalls.size > 0 && (!run.parentRunToolCallId || !allowedToolCalls.has(run.parentRunToolCallId))) {
+        continue;
+      }
+      result[run.id] = run;
     }
     return result;
-  }, [runsByKey, parentToolCallIds, parentType, parentId, parentMessageId]);
+  }, [runsById, parentRunId, parentRunMessageId, parentToolCallIds]);
 
   const entries = useMemo<RunEntry[]>(() => {
     const order = buildToolCallOrder(parentToolCallIds);
@@ -111,8 +118,10 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
       .map(([key, run]) => ({ key, run }));
 
     filtered.sort((a, b) => {
-      const ai = order.get(a.run.parentToolCallId);
-      const bi = order.get(b.run.parentToolCallId);
+      const aToolCallId = a.run.parentRunToolCallId ?? '';
+      const bToolCallId = b.run.parentRunToolCallId ?? '';
+      const ai = order.get(aToolCallId);
+      const bi = order.get(bToolCallId);
       if (typeof ai === 'number' && typeof bi === 'number' && ai !== bi) return ai - bi;
       if (typeof ai === 'number') return -1;
       if (typeof bi === 'number') return 1;
@@ -124,7 +133,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
   const activeSessionIds = useMemo(
     () => entries.map((entry) => entry.run.activeSessionId).filter((id): id is string => typeof id === 'string' && id.length > 0),
-    [entries]
+    [entries],
   );
 
   const activeSessionSelector = useMemo(
@@ -135,17 +144,21 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
       }
       return sessions;
     },
-    [activeSessionIds]
+    [activeSessionIds],
   );
   const activeSessionsById = useLLMSessionStore(useShallow(activeSessionSelector));
 
   const pendingCountByKey = useMemo(() => {
     const map: Record<string, number> = {};
     for (const entry of entries) {
-      map[entry.key] = hasPendingToolDecisions(entry.run);
+      map[entry.key] = hasPendingToolDecisions({
+        runId: entry.run.id,
+        runMessagesByRunId,
+        runToolCallsByMessageId,
+      });
     }
     return map;
-  }, [entries]);
+  }, [entries, runMessagesByRunId, runToolCallsByMessageId]);
 
   const orderedKeys = useMemo(() => entries.map((entry) => entry.key), [entries]);
   const entryByKey = useMemo(() => {
@@ -223,7 +236,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
   const items = entries.map((entry) => ({
     key: entry.key,
-    displayName: entry.run.displayName || entry.run.agentName || entry.run.subAgentId,
+    displayName: entry.run.subAgentId ?? entry.run.id,
     status: entry.run.status,
     pendingCount: pendingCountByKey[entry.key] ?? 0,
     selected: selectedEntry.key === entry.key,
@@ -253,7 +266,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
           >
             <SubAgentPeekTimeline
               threadId={threadId}
-              runKey={selectedEntry.key}
+              runId={selectedEntry.run.id}
               run={selectedEntry.run}
               activeSession={selectedSession}
             />

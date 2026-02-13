@@ -79,14 +79,12 @@ class MessageCreate(BaseModel):
     role: str = Field(..., pattern="^(user|assistant|system)$")
     content_parts: Optional[List[ContentPart]] = None
     language: str = "English"
-    tool_calls: Optional[List[ToolCallSchema]] = None
     thinking_details: Optional[List[Dict[str, Any]]] = None
 
 
 class MessageUpdate(BaseModel):
     content_parts: Optional[List[ContentPart]] = None
     language: str = "English"
-    tool_calls: Optional[List[ToolCallSchema]] = None
     thinking_details: Optional[List[Dict[str, Any]]] = None
 
 
@@ -97,7 +95,6 @@ class MessageResponse(BaseModel):
     seq: int
     role: str
     data: Dict[str, Any]  # Multilingual content
-    tool_calls: Optional[List[Dict[str, Any]]]
     created_at: datetime
 
     class Config:

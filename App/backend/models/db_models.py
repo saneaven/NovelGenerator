@@ -624,6 +624,8 @@ class Agent(Base):
 
     # Stable per-agent message ordering (1-based)
     next_message_seq = Column(BigInteger, default=1, nullable=False)
+    # Stable per-agent root run ordering (1-based)
+    next_root_run_seq = Column(BigInteger, default=1, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -631,10 +633,11 @@ class Agent(Base):
     # Relationships
     project = relationship("Project", back_populates="agents")
     messages = relationship("AgentMessage", back_populates="agent", cascade="all, delete-orphan", order_by="AgentMessage.seq")
+    runs = relationship("AgentRunModel", back_populates="agent", cascade="all, delete-orphan", order_by="AgentRunModel.created_at")
 
 
 class AgentMessage(Base):
-    """Agent messages with multilingual support and tool calls"""
+    """Agent messages with multilingual content only (execution state lives in run_* tables)."""
     __tablename__ = 'agent_messages'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -647,9 +650,6 @@ class AgentMessage(Base):
     # Format: { "English": { "content": "..." }, "Korean": { "content": "..." } }
     data = Column(JSONB, nullable=False)
 
-    # Tool calls metadata (if any) stored as JSONB array
-    tool_calls = Column(JSONB)
-
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
@@ -657,101 +657,143 @@ class AgentMessage(Base):
 
 
 # ============================================================================
-# SUB AGENT RUNS
+# RUN RUNTIME (UNIFIED ROOT/CHILD RUNS)
 # ============================================================================
 
-class SubAgentRunModel(Base):
-    """Persistent Sub Agent run states."""
-    __tablename__ = 'sub_agent_runs'
+class AgentRunModel(Base):
+    """Unified root/child run state."""
+    __tablename__ = 'agent_runs'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
     agent_id = Column(UUID(as_uuid=True), ForeignKey('agents.id', ondelete='CASCADE'), nullable=False, index=True)
 
-    # Polymorphic parent reference:
-    # - parent_type='agent': parent_id -> agents.id, parent_message_id -> agent_messages.id
-    # - parent_type='sub_agent': parent_id -> sub_agent_runs.id, parent_message_id -> sub_agent_run_messages.id
-    parent_type = Column(String(20), nullable=False)
-    parent_id = Column(UUID(as_uuid=True), nullable=False)
-    parent_message_id = Column(UUID(as_uuid=True), nullable=False)
-    parent_tool_call_id = Column(String(255), nullable=False)
-
-    sub_agent_id = Column(UUID(as_uuid=True), ForeignKey('sub_agent_definitions.id', ondelete='CASCADE'), nullable=False, index=True)
-    agent_name = Column(String(50), nullable=False)
-    display_name = Column(String(200), nullable=False)
+    run_kind = Column(String(16), nullable=False)
     caller = Column(String(20), nullable=False)
+    status = Column(String(20), nullable=False)
 
     language = Column(String(50), nullable=False)
-    input = Column(Text, nullable=False)
-    status = Column(String(50), nullable=False)
+    input_text = Column(Text, nullable=False, default='')
     final_output = Column(Text, nullable=True)
     error = Column(Text, nullable=True)
 
-    # Stable per-run message ordering (1-based, allocated by add_message)
+    # Root-only metadata
+    run_mode = Column(String(20), nullable=True)
+    surface = Column(String(40), nullable=True)
+    context_object_ids = Column(JSONB, nullable=False, default=list)
+    root_run_seq = Column(BigInteger, nullable=True)
+
+    # Child-only metadata
+    parent_run_id = Column(UUID(as_uuid=True), ForeignKey('agent_runs.id', ondelete='CASCADE'), nullable=True, index=True)
+    parent_run_message_id = Column(UUID(as_uuid=True), nullable=True)
+    parent_run_tool_call_id = Column(String(255), nullable=True)
+    sub_agent_id = Column(UUID(as_uuid=True), ForeignKey('sub_agent_definitions.id', ondelete='SET NULL'), nullable=True, index=True)
+
     next_message_seq = Column(BigInteger, default=1, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    # Relationships
     project = relationship("Project")
-    agent = relationship("Agent")
+    agent = relationship("Agent", back_populates="runs")
     sub_agent = relationship("SubAgentDefinitionModel")
+    parent_run = relationship("AgentRunModel", remote_side=[id], backref="child_runs")
     messages = relationship(
-        "SubAgentRunMessageModel",
+        "RunMessageModel",
         back_populates="run",
         cascade="all, delete-orphan",
-        order_by="SubAgentRunMessageModel.seq",
+        order_by="RunMessageModel.seq",
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            'parent_type',
-            'parent_id',
-            'parent_message_id',
-            'parent_tool_call_id',
-            name='uq_sub_agent_run_parent_tool',
+        CheckConstraint(
+            "run_kind IN ('root','child')",
+            name='ck_agent_runs_kind',
+        ),
+        CheckConstraint(
+            "caller IN ('planMode','agentMode','subAgent')",
+            name='ck_agent_runs_caller',
         ),
         CheckConstraint(
             "status IN ('running','waiting','paused','completed','error','cancelled')",
-            name='ck_sub_agent_runs_status',
+            name='ck_agent_runs_status',
         ),
-        Index('ix_sub_agent_runs_project_agent_parent_message', 'project_id', 'agent_id', 'parent_message_id'),
-        Index('ix_sub_agent_runs_parent_ref', 'parent_type', 'parent_id', 'parent_message_id'),
-        Index('ix_sub_agent_runs_status', 'status'),
+        CheckConstraint(
+            "("
+            "(run_kind = 'root' AND parent_run_id IS NULL AND parent_run_message_id IS NULL AND parent_run_tool_call_id IS NULL AND sub_agent_id IS NULL)"
+            " OR "
+            "(run_kind = 'child' AND parent_run_id IS NOT NULL AND parent_run_message_id IS NOT NULL AND parent_run_tool_call_id IS NOT NULL AND sub_agent_id IS NOT NULL)"
+            ")",
+            name='ck_agent_runs_parent_fields',
+        ),
+        Index('ix_agent_runs_agent_status', 'agent_id', 'status'),
+        Index('ix_agent_runs_parent', 'parent_run_id'),
+        # Root run order guarantee (partial unique; implemented via migration SQL for PostgreSQL).
     )
 
 
-class SubAgentRunMessageModel(Base):
-    """Persistent message history for a Sub Agent run."""
-    __tablename__ = 'sub_agent_run_messages'
+class RunMessageModel(Base):
+    """Message history for unified runs."""
+    __tablename__ = 'run_messages'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    run_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey('sub_agent_runs.id', ondelete='CASCADE'),
-        nullable=False,
-        index=True,
-    )
+    run_id = Column(UUID(as_uuid=True), ForeignKey('agent_runs.id', ondelete='CASCADE'), nullable=False, index=True)
     seq = Column(BigInteger, nullable=False)
-    role = Column(String(50), nullable=False)
-
-    content_parts = Column(JSONB, nullable=False)
-    tool_calls = Column(JSONB, nullable=True)
+    role = Column(String(16), nullable=False)
+    content_parts = Column(JSONB, nullable=False, default=list)
     thinking_details = Column(JSONB, nullable=True)
-
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    # Relationships
-    run = relationship("SubAgentRunModel", back_populates="messages")
+    run = relationship("AgentRunModel", back_populates="messages")
+    tool_calls = relationship(
+        "RunToolCallModel",
+        back_populates="message",
+        cascade="all, delete-orphan",
+        order_by="RunToolCallModel.call_seq",
+    )
 
     __table_args__ = (
-        UniqueConstraint(
-            'run_id',
-            'seq',
-            name='uq_sub_agent_run_messages_run_seq',
+        CheckConstraint("role IN ('user','assistant','system')", name='ck_run_messages_role'),
+        UniqueConstraint('run_id', 'seq', name='uq_run_messages_run_seq'),
+        Index('ix_run_messages_run_created', 'run_id', 'created_at'),
+    )
+
+
+class RunToolCallModel(Base):
+    """Tool calls emitted by a run assistant message."""
+    __tablename__ = 'run_tool_calls'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    run_id = Column(UUID(as_uuid=True), ForeignKey('agent_runs.id', ondelete='CASCADE'), nullable=False, index=True)
+    message_id = Column(UUID(as_uuid=True), ForeignKey('run_messages.id', ondelete='CASCADE'), nullable=False, index=True)
+    call_seq = Column(Integer, nullable=False)
+    llm_call_id = Column(String(255), nullable=False)
+    tool_name = Column(String(120), nullable=False)
+    arguments = Column(JSONB, nullable=False, default=dict)
+    status = Column(String(20), nullable=False)
+    failure_type = Column(String(20), nullable=True)
+    reason = Column(Text, nullable=True)
+    result = Column(JSONB, nullable=True)
+    accepted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    message = relationship("RunMessageModel", back_populates="tool_calls")
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','running','accepted','rejected','failed')",
+            name='ck_run_tool_calls_status',
         ),
-        Index('ix_sub_agent_run_messages_run_created', 'run_id', 'created_at'),
+        CheckConstraint(
+            "(failure_type IS NULL) OR (failure_type IN ('validation','execution','partial'))",
+            name='ck_run_tool_calls_failure_type',
+        ),
+        UniqueConstraint('message_id', 'llm_call_id', name='uq_run_tool_calls_message_llm_call_id'),
+        UniqueConstraint('message_id', 'call_seq', name='uq_run_tool_calls_message_call_seq'),
+        Index('ix_run_tool_calls_message', 'message_id'),
+        Index('ix_run_tool_calls_status', 'status'),
+        Index('ix_run_tool_calls_name', 'tool_name'),
     )
 
 

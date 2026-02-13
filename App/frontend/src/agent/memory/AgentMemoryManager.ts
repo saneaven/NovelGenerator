@@ -17,6 +17,7 @@ import { useAgentUIStore } from '../../store/agentUIStore';
 import { useCredentialsStore } from '../../store/credentialsStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useRuntimeStore } from '../../runtime';
 import { registerSessionNotification, updateSessionNotification } from '../../llmTask/notificationHelpers';
 import { countTokens } from '../../services/tokenCountingService';
 import { generateTempId } from '../../utils/tempId';
@@ -191,6 +192,74 @@ function formatMessageForSummary(msg: ChatMessage): string {
   return parts.join('\n\n').trim();
 }
 
+function toRunBackedToolCall(tc: any): ToolCallMetadata {
+  return {
+    id: String(tc?.llmCallId ?? tc?.id ?? ''),
+    tool_name: String(tc?.toolName ?? tc?.tool_name ?? ''),
+    arguments: (tc?.arguments ?? {}) as Record<string, any>,
+    status: String(tc?.status ?? 'pending') as any,
+    reason: tc?.reason,
+    failureType: tc?.failureType ?? tc?.failure_type,
+    result: tc?.result,
+    acceptedAt: tc?.acceptedAt ? new Date(tc.acceptedAt) : tc?.accepted_at ? new Date(tc.accepted_at) : undefined,
+  };
+}
+
+function getRunBackedHistory(projectId: string, agentId: string): ChatMessage[] {
+  const runtime = useRuntimeStore.getState();
+  const rootRuns = runtime
+    .listRuns({ projectId, agentId, runKind: 'root' })
+    .sort((a, b) => {
+      const aSeq = a.rootRunSeq ?? Number.MAX_SAFE_INTEGER;
+      const bSeq = b.rootRunSeq ?? Number.MAX_SAFE_INTEGER;
+      if (aSeq !== bSeq) return aSeq - bSeq;
+      return a.createdAt.localeCompare(b.createdAt);
+    });
+
+  const history: ChatMessage[] = [];
+  for (const rootRun of rootRuns) {
+    const rootMessages = runtime.getRunMessages(rootRun.id);
+    for (const message of rootMessages) {
+      const toolCalls = message.role === 'assistant'
+        ? runtime.getRunToolCalls(message.id).map(toRunBackedToolCall)
+        : undefined;
+      history.push({
+        id: message.id,
+        seq: message.seq,
+        role: message.role as any,
+        contentParts: (message.contentParts ?? []) as ContentPart[],
+        toolCalls,
+        thinking_details: message.thinkingDetails as any,
+        timestamp: message.createdAt ? new Date(message.createdAt) : new Date(),
+      });
+    }
+
+    const childRuns = runtime.findChildRuns(rootRun.id);
+    for (const child of childRuns) {
+      const output = String(child.finalOutput ?? '').trim();
+      if (child.status !== 'completed' || !output) continue;
+      history.push({
+        id: `child-final:${child.id}`,
+        role: 'assistant',
+        contentParts: [{ type: 'content', text: output }],
+        timestamp: child.updatedAt ? new Date(child.updatedAt) : new Date(),
+      } as ChatMessage);
+    }
+  }
+
+  if (history.length > 0) {
+    history.sort((a, b) => {
+      const aTs = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const bTs = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      if (aTs !== bTs) return aTs - bTs;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    return history;
+  }
+
+  return useAgentStore.getState().getMessages(projectId, agentId, useSettingsStore.getState().getSettings().mainLanguage);
+}
+
 function serializeConversationBlock(block: any): string {
   const contentText = Array.isArray(block.contentParts)
     ? block.contentParts.map((p: any) => p?.text ?? '').join('')
@@ -308,8 +377,7 @@ async function buildMemoryContext(
     throw new Error('Missing baseUrl for custom embedding provider (Settings > Credentials).');
   }
 
-  const agentStore = useAgentStore.getState();
-  const fullHistory = agentStore.getMessages(input.projectId, input.agentId, input.outputLanguage);
+  const fullHistory = getRunBackedHistory(input.projectId, input.agentId);
   const messageById = new Map<string, ChatMessage>(fullHistory.map((m) => [m.id, m]));
 
   const resp = await agentMemoryService.search(input.projectId, input.agentId, {
@@ -541,7 +609,7 @@ export const AgentMemoryManager = {
     agentStore.setArchivedUntilMessageId(input.projectId, input.agentId, archivedUntilMessageId);
 
     // Build initial active history from current boundary
-    const fullHistory = agentStore.getMessages(input.projectId, input.agentId, input.outputLanguage);
+    const fullHistory = getRunBackedHistory(input.projectId, input.agentId);
     let activeHistory = sliceAfterBoundary(fullHistory, archivedUntilMessageId);
 
     // Append the current user message (not yet stored), so we can budget correctly.

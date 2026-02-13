@@ -1,7 +1,7 @@
 /**
  * Unified Agent Orchestration Hook
  *
- * Starts agent requests via AgentExecutor and provides UI helpers
+ * Starts agent requests via RuntimeOrchestrator and provides UI helpers
  * (context selection, abort, edit/delete message).
  */
 
@@ -14,20 +14,15 @@ import { useSidebarStore } from '../../store/sidebarStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings, useSettingsStore } from '../../store/settingsStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
-import { useSubAgentRuntimeStore } from '../../store/subAgentRuntimeStore';
 import { useErrorStore } from '../../store/errorStore';
-import { AgentExecutor } from '../AgentExecutor';
-import { SubAgentManager } from '../../subAgent/runtime/SubAgentManager';
 import { AgentMemoryManager } from '../memory/AgentMemoryManager';
 import type { AgentOrchestrationConfig, AgentOrchestrationReturn, AgentHandlersReturn, ContextIdState } from './types';
 import { getSendBlockingState } from '../../toolCall/viewModel/blockingSelectors';
+import { runtimeOrchestrator } from '../../runtime';
+import { useRuntimeStore } from '../../runtime';
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
-}
-
-function isAgentSessionActive(status: string | undefined): boolean {
-  return status === 'running' || status === 'applying';
 }
 
 export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOrchestrationReturn {
@@ -82,51 +77,32 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
   // Active session tracking (for Stop button + loading state)
   // ============================================================================
 
-  const [activeSessionIdByAgent, setActiveSessionIdByAgent] = useState<Record<string, string>>({});
-  const activeSessionIdByAgentRef = useRef<Record<string, string>>({});
   const preflightAbortControllerByAgentRef = useRef<Record<string, AbortController>>({});
-
-  // Keep ref in sync for handleStop to avoid stale closure
-  useEffect(() => {
-    activeSessionIdByAgentRef.current = activeSessionIdByAgent;
-  }, [activeSessionIdByAgent]);
 
   useEffect(() => {
     if (!projectId) return;
-    const currentProjectId = projectId;
+    const activeProjectId = projectId;
+    function syncLoadingFromSessions() {
+      const agentId = getSelectedAgentId(activeProjectId);
+      if (!agentId) return;
 
-    function processFinishedSessions() {
-      const activeMap = activeSessionIdByAgentRef.current;
-      if (Object.keys(activeMap).length === 0) return;
+      const allSessions = Object.values(useLLMSessionStore.getState().sessions)
+        .filter((session): session is NonNullable<typeof session> => Boolean(session));
 
-      const allSessions = useLLMSessionStore.getState().sessions;
-      const finishedAgentIds: string[] = [];
-
-      for (const [agentId, sessionId] of Object.entries(activeMap)) {
-        const status = allSessions[sessionId]?.status;
-        if (isAgentSessionActive(status)) continue;
-        useAgentUIStore.getState().setLoading(currentProjectId, agentId, false);
-        finishedAgentIds.push(agentId);
-      }
-
-      if (finishedAgentIds.length === 0) return;
-
-      setActiveSessionIdByAgent((prev) => {
-        const next = { ...prev };
-        for (const agentId of finishedAgentIds) {
-          delete next[agentId];
-        }
-        return next;
+      const hasRunning = allSessions.some((session) => {
+        if (session.kind !== 'agent') return false;
+        if ((session.input as any)?.projectId !== activeProjectId) return false;
+        if ((session.input as any)?.agentId !== agentId) return false;
+        return session.status === 'running' || session.status === 'applying';
       });
+
+      useAgentUIStore.getState().setLoading(activeProjectId, agentId, hasRunning);
     }
 
-    // Process immediately in case sessions already finished
-    processFinishedSessions();
-
-    // Subscribe to LLM session store to detect when agent sessions complete
-    const unsubscribe = useLLMSessionStore.subscribe(processFinishedSessions);
+    syncLoadingFromSessions();
+    const unsubscribe = useLLMSessionStore.subscribe(syncLoadingFromSessions);
     return unsubscribe;
-  }, [projectId]);
+  }, [projectId, getSelectedAgentId]);
 
   useEffect(() => {
     return () => {
@@ -136,20 +112,21 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     };
   }, []);
 
+  useEffect(() => {
+    if (!projectId) return;
+    const agentId = getSelectedAgentId(projectId);
+    if (!agentId) return;
+
+    void runtimeOrchestrator.recoverRuns(projectId, agentId).catch((error) => {
+      console.warn('Failed to recover interrupted runs:', error);
+    });
+  }, [projectId, getSelectedAgentId]);
+
   // ============================================================================
   // Agent handlers
   // ============================================================================
 
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  // Stable ref-based callback for auto-continue chaining.
-  // Uses a ref to avoid circular dependency: triggerAutoContinue uses handleAutoContinueReady,
-  // and handleAutoContinueReady delegates to triggerAutoContinue.
-  const autoContinueReadyRef = useRef<(() => void) | undefined>(undefined);
-
-  const handleAutoContinueReady = useCallback(() => {
-    autoContinueReadyRef.current?.();
-  }, []);
 
   const handleSelectAgent = useCallback((agentId: string) => {
     if (!projectId) return;
@@ -178,7 +155,9 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       selectedAgentId: agentId,
       messages,
       sessions,
-      runsByKey: useSubAgentRuntimeStore.getState().runsByKey,
+      runsById: useRuntimeStore.getState().runsById,
+      runLinkByAgentMessageId: useRuntimeStore.getState().runLinkByAgentMessageId,
+      runToolCallsByMessageId: useRuntimeStore.getState().runToolCallsByMessageId,
     });
     if (sendBlockingState.blocked) {
       useAgentUIStore.getState().setPreflightToast(projectId, {
@@ -276,27 +255,31 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     delete preflightAbortControllerByAgentRef.current[agentId];
     useAgentUIStore.getState().setPreflightToast(projectId, null);
 
-    // Use AgentExecutor directly (no JourneyRuntime)
-    // Pass callback to get sessionId immediately for stop button to work
-    void AgentExecutor.start(
-      {
+    try {
+      await runtimeOrchestrator.startRootRun({
         projectId,
         agentId,
         runMode,
         surface,
         userInput: userInput?.trim() ?? '',
-        outputLanguage: mainLanguage,
+        language: mainLanguage,
+        caller: runMode,
         contextObjectIds: selectedContextIds,
         historyOverride,
         promptContextOverride,
-      },
-      (sessionId) => setActiveSessionIdByAgent((prev) => ({ ...prev, [agentId]: sessionId })),
-      handleAutoContinueReady,
-    ).catch((error) => {
-      console.error('AgentExecutor.start failed:', error);
+      });
+    } catch (error) {
+      console.error('Failed to start root run:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      useAgentUIStore.getState().setPreflightToast(projectId, {
+        type: 'error',
+        message: t('agent.memory.preflightFailed', { error: errorMessage }),
+      });
+      useAgentUIStore.getState().setInput(projectId, userInput);
       useAgentUIStore.getState().setLoading(projectId, agentId, false);
-    });
-  }, [projectId, getSelectedAgentId, getObjectsMissingMainLanguage, mainLanguage, clearInput, runMode, surface, selectedContextIds, handleAutoContinueReady, t]);
+      return;
+    }
+  }, [projectId, getSelectedAgentId, getObjectsMissingMainLanguage, mainLanguage, clearInput, runMode, surface, selectedContextIds, t]);
 
   const handleStop = useCallback(() => {
     if (!projectId) return;
@@ -309,9 +292,26 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       delete preflightAbortControllerByAgentRef.current[agentId];
       return;
     }
-    const sessionId = activeSessionIdByAgentRef.current[agentId];
-    if (!sessionId) return;
-    useLLMSessionStore.getState().cancelSession(sessionId);
+
+    const runId = runtimeOrchestrator.findLatestOpenRootRunId(projectId, agentId);
+    if (runId) {
+      void runtimeOrchestrator.cancelRun(runId).catch((error) => {
+        console.error('Failed to cancel root run:', error);
+      });
+      return;
+    }
+
+    const fallbackSession = Object.values(useLLMSessionStore.getState().sessions)
+      .filter((session): session is NonNullable<typeof session> => Boolean(session))
+      .find((session) => {
+        if (session.kind !== 'agent') return false;
+        if ((session.input as any)?.projectId !== projectId) return false;
+        if ((session.input as any)?.agentId !== agentId) return false;
+        return session.status === 'running' || session.status === 'applying';
+      });
+    if (fallbackSession) {
+      useLLMSessionStore.getState().cancelSession(fallbackSession.id);
+    }
   }, [projectId, getSelectedAgentId]);
 
   const adjustTextareaHeight = useCallback(() => {
@@ -361,6 +361,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     void (async () => {
       try {
         await deleteMessage(projectId, agentId, messageId);
+        useRuntimeStore.getState().clearAgentMessageRunLink(messageId);
       } catch (error) {
         console.error('Failed to delete message:', error);
         showError('Delete Failed', error instanceof Error ? error.message : 'Failed to delete message.');
@@ -368,13 +369,11 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       }
 
       try {
-        await SubAgentManager.discardByParentAgentMessage({
-          agentId,
-          parentMessageId: messageId,
-          reason: 'Parent message deleted',
+        await runtimeOrchestrator.discardChildRunsByParentAgentMessage({
+          parentAgentMessageId: messageId,
         });
       } catch (error) {
-        console.error('Failed to discard local Sub Agent runtime state after message delete:', error);
+        console.error('Failed to discard local child run state after message delete:', error);
       }
     })();
   }, [projectId, getSelectedAgentId, deleteMessage, showError]);
@@ -447,32 +446,21 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
 
     delete preflightAbortControllerByAgentRef.current[agentId];
     useAgentUIStore.getState().setPreflightToast(projectId, null);
+    const rootRunId = runtimeOrchestrator.findLatestOpenRootRunId(projectId, agentId);
+    if (!rootRunId) {
+      useAgentUIStore.getState().setLoading(projectId, agentId, false);
+      return;
+    }
 
-    // Empty userInput - tool results are already in the message history
-    void AgentExecutor.start(
-      {
-        projectId,
-        agentId,
-        runMode,
-        surface,
-        userInput: '',
-        outputLanguage: mainLanguage,
-        contextObjectIds: selectedContextIds,
-        historyOverride,
-        promptContextOverride,
-      },
-      (sessionId) => setActiveSessionIdByAgent((prev) => ({ ...prev, [agentId]: sessionId })),
-      handleAutoContinueReady,
-    ).catch((error) => {
-      console.error('AgentExecutor.start (auto-continue) failed:', error);
+    void runtimeOrchestrator.resumeRunLoop({
+      runId: rootRunId,
+      historyOverride,
+      promptContextOverride,
+    }).catch((error) => {
+      console.error('RuntimeOrchestrator.resumeRunLoop (auto-continue) failed:', error);
       useAgentUIStore.getState().setLoading(projectId, agentId, false);
     });
-  }, [projectId, getSelectedAgentId, runMode, surface, mainLanguage, selectedContextIds, handleAutoContinueReady, t]);
-
-  // Keep autoContinueReadyRef in sync with latest triggerAutoContinue
-  useEffect(() => {
-    autoContinueReadyRef.current = () => void triggerAutoContinue();
-  }, [triggerAutoContinue]);
+  }, [projectId, getSelectedAgentId, runMode, surface, mainLanguage, selectedContextIds, t]);
 
   const agentHandlers: AgentHandlersReturn = {
     editTextareaRef,

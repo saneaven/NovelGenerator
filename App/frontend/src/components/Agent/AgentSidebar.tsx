@@ -6,9 +6,9 @@ import { makeProjectAgentKey, useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { useSettings } from '../../store/settingsStore';
-import { useSubAgentRuntimeStore } from '../../store/subAgentRuntimeStore';
 import { useErrorStore } from '../../store/errorStore';
 import type { TaskSessionState } from '../../llmTask/types';
+import { useRuntimeStore } from '../../runtime';
 import { getBestLanguageData } from '../../utils/languageData';
 import { BaseSidebar } from '../BaseSidebar';
 import { IconButton } from '../IconButton';
@@ -30,7 +30,7 @@ type AgentSidebarSignals = {
 
 const RUNNING_SESSION_STATUSES = new Set(['running', 'applying']);
 const TERMINAL_SESSION_STATUSES = new Set(['success', 'error', 'cancelled']);
-const PENDING_TOOL_STATUSES = new Set(['pending', 'validating', 'processing', 'running']);
+const PENDING_TOOL_STATUSES = new Set(['pending', 'running']);
 const BLOCKING_SUB_AGENT_STATUSES = new Set(['running', 'waiting', 'paused', 'error']);
 
 function getSessionAgentId(session: AnySession): string | null {
@@ -38,35 +38,27 @@ function getSessionAgentId(session: AnySession): string | null {
   return typeof agentId === 'string' && agentId ? agentId : null;
 }
 
-function hasPendingToolCallsInMessages(agent: Agent): boolean {
-  return (agent.messages ?? []).some((message) =>
-    Array.isArray(message.toolCalls) &&
-    message.toolCalls.some((toolCall: any) =>
-      PENDING_TOOL_STATUSES.has(String(toolCall?.status ?? ''))
-    )
-  );
-}
-
-function buildParentToolCallKey(messageId: string, toolCallId: string): string {
-  return `${messageId}::${toolCallId}`;
-}
-
-function collectLiveParentToolCallKeys(agent: Agent): Set<string> {
-  const keys = new Set<string>();
+function hasPendingRunToolCallsForAgent(params: {
+  agent: Agent;
+  runLinkByAgentMessageId: Record<string, { runId: string; runMessageId: string } | undefined>;
+  runToolCallsByMessageId: Record<string, Array<{ status: string }> | undefined>;
+}): boolean {
+  const { agent, runLinkByAgentMessageId, runToolCallsByMessageId } = params;
 
   for (const message of agent.messages ?? []) {
     if (message.role !== 'assistant') continue;
-    if (!Array.isArray(message.toolCalls) || message.toolCalls.length === 0) continue;
+    const link = runLinkByAgentMessageId[String(message.id)];
+    if (!link) continue;
 
-    const messageId = String(message.id);
-    for (const toolCall of message.toolCalls) {
-      const toolCallId = String(toolCall?.id ?? '');
-      if (!toolCallId) continue;
-      keys.add(buildParentToolCallKey(messageId, toolCallId));
+    const toolCalls = runToolCallsByMessageId[link.runMessageId] ?? [];
+    for (const toolCall of toolCalls) {
+      if (PENDING_TOOL_STATUSES.has(String(toolCall?.status ?? ''))) {
+        return true;
+      }
     }
   }
 
-  return keys;
+  return false;
 }
 
 const AgentSidebar: React.FC<AgentSidebarProps> = ({
@@ -108,35 +100,29 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
 
   const agents = getAgents(projectId);
   const selectedAgentId = getSelectedAgentId(projectId);
-  const runsByKey = useSubAgentRuntimeStore((state) => state.runsByKey);
+  const { runsById, runLinkByAgentMessageId, runToolCallsByMessageId } = useRuntimeStore(
+    useShallow((state) => ({
+      runsById: state.runsById,
+      runLinkByAgentMessageId: state.runLinkByAgentMessageId,
+      runToolCallsByMessageId: state.runToolCallsByMessageId,
+    })),
+  );
   const blockingSubAgentByAgentId = useMemo(() => {
     const result: Record<string, boolean> = {};
-    const agentIds = new Set(agents.map((agent) => agent.id));
-    const liveParentToolCallKeysByAgentId = new Map<string, Set<string>>();
     for (const agent of agents) {
       result[agent.id] = false;
-      liveParentToolCallKeysByAgentId.set(agent.id, collectLiveParentToolCallKeys(agent));
     }
 
-    for (const run of Object.values(runsByKey)) {
+    for (const run of Object.values(runsById)) {
       if (!run) continue;
-      if (run.parentType !== 'agent') continue;
-      if (!agentIds.has(run.parentId)) continue;
+      if (run.runKind !== 'child') continue;
+      if (!agents.some((agent) => agent.id === run.agentId)) continue;
       if (!BLOCKING_SUB_AGENT_STATUSES.has(run.status)) continue;
-
-      const liveParentKeys = liveParentToolCallKeysByAgentId.get(run.parentId);
-      if (!liveParentKeys || liveParentKeys.size === 0) continue;
-      const parentKey = buildParentToolCallKey(
-        String(run.parentMessageId),
-        String(run.parentToolCallId)
-      );
-      if (!liveParentKeys.has(parentKey)) continue;
-
-      result[run.parentId] = true;
+      result[run.agentId] = true;
     }
 
     return result;
-  }, [agents, runsByKey]);
+  }, [agents, runsById]);
 
   const agentSignalsById = useMemo<Record<string, AgentSidebarSignals>>(() => {
     const sessionsByAgent: Record<string, AnySession[]> = {};
@@ -165,7 +151,11 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
       const hasPendingToolRequestFromSession = sessions.some((session) => {
         return session.status === 'running' || session.status === 'applying';
       });
-      const hasPendingToolRequestFromMessage = hasPendingToolCallsInMessages(agent);
+      const hasPendingToolRequestFromMessage = hasPendingRunToolCallsForAgent({
+        agent,
+        runLinkByAgentMessageId,
+        runToolCallsByMessageId: runToolCallsByMessageId as Record<string, Array<{ status: string }> | undefined>,
+      });
       const hasPendingToolRequestFromSubAgent = blockingSubAgentByAgentId[agent.id] ?? false;
 
       signals[agent.id] = {
@@ -175,7 +165,17 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
       };
     }
     return signals;
-  }, [agents, selectedAgentId, projectId, projectAgentSessions, loadingByProjectAgent, lastViewedAtByProjectAgent, blockingSubAgentByAgentId]);
+  }, [
+    agents,
+    selectedAgentId,
+    projectId,
+    projectAgentSessions,
+    loadingByProjectAgent,
+    lastViewedAtByProjectAgent,
+    blockingSubAgentByAgentId,
+    runLinkByAgentMessageId,
+    runToolCallsByMessageId,
+  ]);
 
   useEffect(() => {
     if (editingAgentId && editInputRef.current) {

@@ -1,5 +1,4 @@
 import copy
-import logging
 from typing import AsyncGenerator, Dict, List, Optional, Tuple
 
 from openai import (
@@ -14,13 +13,9 @@ from openai import (
 
 from .base import BaseProvider
 from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
-from .final_mappers import map_chat_completion_to_snapshot
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 from ..utils.outbound_http import validate_outbound_base_url
-
-logger = logging.getLogger(__name__)
-
 
 class AsyncOpenAIProvider(BaseProvider):
     """Reusable base class for providers backed by OpenAI-compatible chat completions."""
@@ -394,7 +389,6 @@ class AsyncOpenAIProvider(BaseProvider):
         native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
         last_finish_reason = None
         captured_usage: Optional[Dict] = None
-        native_completion = None
 
         def _update_meta_from_chunk(chunk_dict: Dict) -> None:
             nonlocal captured_usage, last_finish_reason
@@ -441,51 +435,23 @@ class AsyncOpenAIProvider(BaseProvider):
             return events, should_stop
 
         try:
-            stream_helper = getattr(client.chat.completions, "stream", None)
-            if callable(stream_helper):
-                async with stream_helper(**request_kwargs) as stream:
-                    async for event in stream:
-                        event_type = getattr(event, "type", None)
-                        if event_type != "chunk":
-                            continue
+            # Chat Completions stream API does not provide a native final completion object.
+            raw_stream = await client.chat.completions.create(**request_kwargs)
+            try:
+                async for chunk in raw_stream:
+                    chunk_dict = chunk.model_dump(exclude_none=True)
+                    if not isinstance(chunk_dict, dict):
+                        continue
 
-                        chunk = getattr(event, "chunk", None)
-                        if chunk is None:
-                            continue
-
-                        chunk_dict = (
-                            chunk.model_dump(exclude_none=True)
-                            if hasattr(chunk, "model_dump")
-                            else {}
-                        )
-                        if not isinstance(chunk_dict, dict):
-                            continue
-
-                        _update_meta_from_chunk(chunk_dict)
-                        stream_events, should_stop = _collect_events_from_chunk(chunk_dict)
-                        for stream_event in stream_events:
-                            yield stream_event
-                        if should_stop:
-                            return
-
-                    native_completion = await stream.get_final_completion()
-            else:
-                raw_stream = await client.chat.completions.create(**request_kwargs)
-                try:
-                    async for chunk in raw_stream:
-                        chunk_dict = chunk.model_dump(exclude_none=True)
-                        if not isinstance(chunk_dict, dict):
-                            continue
-
-                        _update_meta_from_chunk(chunk_dict)
-                        stream_events, should_stop = _collect_events_from_chunk(chunk_dict)
-                        for stream_event in stream_events:
-                            yield stream_event
-                        if should_stop:
-                            return
-                finally:
-                    if raw_stream is not None:
-                        await raw_stream.close()
+                    _update_meta_from_chunk(chunk_dict)
+                    stream_events, should_stop = _collect_events_from_chunk(chunk_dict)
+                    for stream_event in stream_events:
+                        yield stream_event
+                    if should_stop:
+                        return
+            finally:
+                if raw_stream is not None:
+                    await raw_stream.close()
 
         except (APIConnectionError, RateLimitError, AuthenticationError, BadRequestError, APIStatusError) as exc:
             status = getattr(exc, "status_code", None)
@@ -526,23 +492,6 @@ class AsyncOpenAIProvider(BaseProvider):
         if last_finish_reason == "content_filter":
             yield self._error_event("Content blocked by filter (content_filter)")
             return
-
-        if native_completion is not None:
-            try:
-                native_snapshot = map_chat_completion_to_snapshot(
-                    native_completion,
-                    provider=self.name,
-                    model=model,
-                )
-                yield ProviderEvent(kind="final_native", final_native=native_snapshot)
-            except Exception as exc:
-                logger.warning(
-                    "Native final mapping failed in %s provider (model=%s); falling back to snapshot assembler: %s",
-                    self.name,
-                    model,
-                    exc,
-                    exc_info=True,
-                )
 
         # Emit usage as metadata for final snapshot assembly.
         if captured_usage:

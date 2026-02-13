@@ -6,7 +6,7 @@
 
 import type { ObjectType, UnifiedObject, UpdateObjectRequest } from '../../types/unifiedObject';
 import type { ExecutionContext, ApplicationResult } from '../types';
-import type { InvocationCaller } from '../../types/agentRuntime';
+import type { RunCaller } from '../../types/agentRuntime';
 
 // ============================================================================
 // STORE ACTIONS INTERFACE
@@ -54,7 +54,7 @@ export interface HandlerContext extends ExecutionContext {
   /** Tool call ID (stable per call within a message/session) */
   callId: string;
   /** Who initiated this tool-call batch (root planMode/agentMode, or subAgent). */
-  invocationCaller?: InvocationCaller;
+  runCaller?: RunCaller;
   store: StoreActions;
   options: HandlerOptions;
 }

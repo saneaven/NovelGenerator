@@ -13,7 +13,7 @@ import { useLLMSessionStore } from '../../../store/llmSessionStore';
 import ObjectPicker from '../../../components/ObjectPicker/ObjectPicker';
 import AgentSidebar from '../../../components/Agent/AgentSidebar';
 import { DefaultDisplayProcessor } from '../../../agent/processors/DisplayProcessor';
-import type { ChatMessage } from '../../../llm/requestTypes';
+import type { ChatMessage, ToolCallMetadata } from '../../../llm/requestTypes';
 import ThinkingDisplay from '../../../components/common/ThinkingDisplay';
 import { FunctionCallsThread } from '../../../toolCall/ui';
 import { SubAgentPeekDock } from '../../../components/SubAgentPeek';
@@ -24,16 +24,12 @@ import { collapseContentParts } from '../../../agent/utils/contentParts';
 import { Settings, Edit, Trash, Globe, CircularArrow, ChevronDown, Send, Stop } from '../../../components/icons';
 import { useAgentOrchestration } from '../../../agent/hooks';
 import { getBestLanguageData } from '../../../utils/languageData';
-import { AgentExecutor, executeAgentToolCalls } from '../../../agent';
-import { CRUD_OPTIONS } from '../../../toolCall/apply/types';
+import { runAgentTranslation } from '../../../agent';
 import { buildEditCardsFromToolCallMetadata } from '../../../toolCall';
 import type { ToolCallDecisionMap } from '../../../toolCall/types';
 import type { AgentRunMode, WorkspaceSurface } from '../../../types/agentRuntime';
-import { subAgentRunService } from '../../../api/subAgentRunService';
-import { buildSubAgentRunKey, useSubAgentRuntimeStore } from '../../../store/subAgentRuntimeStore';
-import { mapPersistedMessagesToHistory, buildIdMapFromServerMessages } from '../../../subAgent/runtime/SubAgentManager';
-import { SubAgentManager } from '../../../subAgent/runtime/SubAgentManager';
 import { getSendBlockingState } from '../../../toolCall/viewModel/blockingSelectors';
+import { runtimeOrchestrator, useRuntimeStore, type RunToolCall } from '../../../runtime';
 
 interface AgentPanelProps
 {
@@ -204,6 +200,19 @@ interface DisplayMessageInfo
     sessionError?: string;
 }
 
+function toToolCallMetadata(toolCall: RunToolCall): ToolCallMetadata {
+    return {
+        id: toolCall.llmCallId,
+        tool_name: toolCall.toolName,
+        arguments: toolCall.arguments,
+        status: toolCall.status,
+        failureType: toolCall.failureType,
+        reason: toolCall.reason,
+        result: toolCall.result as any,
+        acceptedAt: toolCall.acceptedAt ? new Date(toolCall.acceptedAt) : undefined,
+    };
+}
+
 const AgentPanel: React.FC<AgentPanelProps> = ({
     projectId,
     runMode,
@@ -232,7 +241,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         handleDeleteMessage: onDeleteMessage,
         handleSelectAgent: onSelectAgent,
         editTextareaRef,
-        triggerAutoContinue,
     } = agentHandlers;
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -303,7 +311,13 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             return filtered;
         })
     );
-    const runsByKey = useSubAgentRuntimeStore((state) => state.runsByKey);
+    const { runsById, runLinkByAgentMessageId, runToolCallsByMessageId } = useRuntimeStore(
+        useShallow((state) => ({
+            runsById: state.runsById,
+            runLinkByAgentMessageId: state.runLinkByAgentMessageId,
+            runToolCallsByMessageId: state.runToolCallsByMessageId,
+        }))
+    );
 
     const agentSessionByMessageId = useMemo(() => {
         const map: Record<string, any> = {};
@@ -531,9 +545,11 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 selectedAgentId,
                 messages: storedMessages,
                 sessions: Object.values(projectAgentSessions),
-                runsByKey,
+                runsById,
+                runLinkByAgentMessageId,
+                runToolCallsByMessageId,
             }),
-        [selectedAgentId, storedMessages, projectAgentSessions, runsByKey]
+        [selectedAgentId, storedMessages, projectAgentSessions, runsById, runLinkByAgentMessageId, runToolCallsByMessageId]
     );
 
     const sendBlockedReason = useMemo(() => {
@@ -546,126 +562,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         }
         return 'Resolve pending operations before sending.';
     }, [sendBlockingState]);
-
-    const subAgentRootMessageIds = useMemo(() => {
-        return storedMessages
-            .filter((msg) =>
-                msg.role === 'assistant' &&
-                Array.isArray(msg.toolCalls) &&
-                msg.toolCalls.some((tc: any) => typeof tc?.tool_name === 'string' && tc.tool_name.startsWith('call_'))
-            )
-            .map((msg) => msg.id);
-    }, [storedMessages]);
-
-    const subAgentRootMessageKey = useMemo(
-        () => [...subAgentRootMessageIds].sort().join('|'),
-        [subAgentRootMessageIds]
-    );
-
-    useEffect(() => {
-        if (!projectId || !selectedAgentId) return;
-        if (subAgentRootMessageIds.length === 0) return;
-
-        let cancelled = false;
-        const navigationEntry =
-            typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function'
-                ? (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)
-                : undefined;
-        const legacyNavigationType = typeof performance !== 'undefined' ? (performance as any)?.navigation?.type : undefined;
-        const isReloadNavigation = navigationEntry?.type === 'reload' || legacyNavigationType === 1;
-
-        void subAgentRunService
-            .queryByMessages(projectId, selectedAgentId, {
-                message_ids: subAgentRootMessageIds,
-                status_filter: ['running', 'waiting', 'paused', 'completed', 'error', 'cancelled'],
-            })
-            .then(async (response) => {
-                if (cancelled) return;
-                const runtime = useSubAgentRuntimeStore.getState();
-                const interruptionMessage = t('subAgent.interruptedAfterRefresh');
-                const interruptedPatches: Promise<unknown>[] = [];
-                const parentReconciliations: Promise<unknown>[] = [];
-
-                for (const item of response.items ?? []) {
-                    if (cancelled) return;
-                    const runKey = buildSubAgentRunKey({
-                        parentType: item.parent_type as any,
-                        parentId: item.parent_id,
-                        parentMessageId: item.parent_message_id,
-                        parentToolCallId: item.parent_tool_call_id,
-                    });
-                    const localRun = runtime.getRunByKey(runKey);
-                    const history = mapPersistedMessagesToHistory(item.messages ?? []);
-                    const messageIdMap = buildIdMapFromServerMessages(item.messages ?? []);
-
-                    const caller =
-                        item.caller === 'planMode' || item.caller === 'agentMode' || item.caller === 'subAgent'
-                            ? item.caller
-                            : 'subAgent';
-                    const wasInterrupted =
-                        !localRun &&
-                        isReloadNavigation &&
-                        (item.status === 'running' || item.status === 'waiting');
-                    const restoredStatus = wasInterrupted ? 'paused' : item.status;
-                    const restoredError = wasInterrupted ? interruptionMessage : (item.error ?? undefined);
-
-                    if (!localRun) {
-                        runtime.upsertRun({
-                            id: item.id,
-                            persistentId: item.id,
-                            parentType: item.parent_type as any,
-                            parentId: item.parent_id,
-                            parentMessageId: item.parent_message_id,
-                            parentToolCallId: item.parent_tool_call_id,
-                            projectId: item.project_id,
-                            agentId: item.agent_id,
-                            language: item.language,
-                            caller,
-                            agentName: item.agent_name,
-                            subAgentId: item.sub_agent_id,
-                            displayName: item.display_name,
-                            input: item.input ?? '',
-                            status: restoredStatus as any,
-                            history,
-                            turnCount: 0,
-                            messageIdMap,
-                            activeSessionId: null,
-                            finalOutput: item.final_output ?? undefined,
-                            error: restoredError,
-                        });
-                    }
-
-                    if (wasInterrupted) {
-                        interruptedPatches.push(
-                            subAgentRunService.patchRun(projectId, selectedAgentId, item.id, {
-                                status: 'paused',
-                                error: interruptionMessage,
-                            })
-                            .catch((error) => {
-                                console.error('Failed to persist interrupted Sub Agent run:', error);
-                            })
-                        );
-                    }
-
-                    parentReconciliations.push(
-                        SubAgentManager.reconcileParentToolCall(runKey).catch((error) => {
-                            console.error('Failed to reconcile parent Sub Agent tool call state:', error);
-                        })
-                    );
-                }
-
-                if (interruptedPatches.length > 0 || parentReconciliations.length > 0) {
-                    await Promise.all([...interruptedPatches, ...parentReconciliations]);
-                }
-            })
-            .catch((error) => {
-                console.error('Failed to restore Sub Agent runs:', error);
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [projectId, selectedAgentId, subAgentRootMessageIds, subAgentRootMessageKey, t]);
 
     useEffect(() => {
         function processFinished() {
@@ -771,8 +667,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         setTranslatingMessages(prev => ({ ...prev, [message.id]: true }));
         setTranslationErrors(prev => ({ ...prev, [message.id]: null }));
 
-        // Use AgentExecutor directly for translation
-        void AgentExecutor.translate({
+        void runAgentTranslation({
             projectId,
             agentId: selectedAgentId,
             messageId: message.id,
@@ -909,7 +804,10 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                         agentSession.status === 'running' &&
                         agentSession.toolCallProgress?.length > 0
                     );
-                    const storedToolCalls = message.storedMessage.toolCalls ?? [];
+                    const runLink = runLinkByAgentMessageId[String(message.chatMessage.id)];
+                    const storedToolCalls = runLink
+                        ? (runToolCallsByMessageId[runLink.runMessageId] ?? []).map(toToolCallMetadata)
+                        : [];
                     const cardsToRender = storedToolCalls.length > 0
                         ? buildEditCardsFromToolCallMetadata(storedToolCalls)
                         : [];
@@ -917,7 +815,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     const isApplying = applyingMessageEdits[message.chatMessage.id] === true;
                     const hasPendingCards = storedToolCalls.some((toolCall: any) => {
                         const status = String(toolCall?.status ?? 'pending');
-                        return status === 'pending' || status === 'validating' || status === 'processing' || status === 'running';
+                        return status === 'pending' || status === 'running';
                     });
                     const cardMode = hasPendingCards || isApplying ? 'pending' : 'confirmed';
                     const functionThreadId = `agent:${selectedAgentId ?? 'none'}:${message.chatMessage.id}`;
@@ -990,22 +888,15 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                             return;
                                                                         }
 
-                                                                        if (!selectedAgentId || storedToolCalls.length === 0) return;
+                                                                        if (!runLink || storedToolCalls.length === 0) return;
 
                                                                         setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: true }));
                                                                         try {
-                                                                            const result = await executeAgentToolCalls({
-                                                                                projectId,
-                                                                                agentId: selectedAgentId,
-                                                                                assistantMessageId: message.chatMessage.id,
-                                                                                language: mainLanguage,
+                                                                            await runtimeOrchestrator.applyRunToolCallDecisions({
+                                                                                runId: runLink.runId,
+                                                                                runMessageId: runLink.runMessageId,
                                                                                 decisions,
-                                                                                options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
-                                                                                invocationCaller: runMode,
                                                                             });
-                                                                            if (result.shouldAutoContinue) {
-                                                                                await triggerAutoContinue();
-                                                                            }
                                                                         } finally {
                                                                             setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: false }));
                                                                         }
@@ -1020,19 +911,16 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                             return;
                                                                         }
 
-                                                                        if (!selectedAgentId || storedToolCalls.length === 0) return;
+                                                                        if (!runLink || storedToolCalls.length === 0) return;
 
                                                                         setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: true }));
                                                                         try {
-                                                                            await executeAgentToolCalls({
-                                                                                projectId,
-                                                                                agentId: selectedAgentId,
-                                                                                assistantMessageId: message.chatMessage.id,
-                                                                                language: mainLanguage,
+                                                                            await runtimeOrchestrator.applyRunToolCallDecisions({
+                                                                                runId: runLink.runId,
+                                                                                runMessageId: runLink.runMessageId,
                                                                                 decisions,
-                                                                                options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
-                                                                                invocationCaller: runMode,
                                                                             });
+                                                                            await runtimeOrchestrator.pauseRun(runLink.runId);
                                                                         } finally {
                                                                             setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: false }));
                                                                         }
@@ -1114,12 +1002,11 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                 </div>
                             </div>
 
-                            {selectedAgentId && hasSubAgentCalls && (
+                            {selectedAgentId && hasSubAgentCalls && runLink && (
                                 <SubAgentPeekDock
                                     threadId={`${functionThreadId}:peek`}
-                                    parentType="agent"
-                                    parentId={selectedAgentId}
-                                    parentMessageId={String(message.chatMessage.id)}
+                                    parentRunId={runLink.runId}
+                                    parentRunMessageId={runLink.runMessageId}
                                     parentToolCallIds={subAgentToolCallIds}
                                     isActiveParent={isActiveSubAgentParent}
                                 />

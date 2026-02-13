@@ -1,33 +1,38 @@
-"""Routes for persistent Sub Agent runs — incremental persistence."""
+"""Unified run runtime routes."""
 
 from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import get_db
 from ..models.db_models import Agent, Project, User
-from ..schemas.sub_agent_runs import (
-    AddMessageRequest,
-    AddMessageResponse,
+from ..schemas.runs import (
+    AddRunMessageRequest,
+    AddRunMessageResponse,
     CreateRunRequest,
     CreateRunResponse,
+    GetRunResponse,
+    PatchRunMessageRequest,
+    PatchRunMessageResponse,
     PatchRunRequest,
     PatchRunResponse,
-    SubAgentRunQueryByMessagesRequest,
-    SubAgentRunQueryByMessagesResponse,
-    UpdateMessageRequest,
-    UpdateMessageResponse,
+    QueryRunsRequest,
+    QueryRunsResponse,
+    UpsertRunToolCallsRequest,
+    UpsertRunToolCallsResponse,
 )
-from ..services.sub_agent_run_service import sub_agent_run_service
+from ..services.run_message_service import run_message_service
+from ..services.run_service import run_service
+from ..services.run_tool_call_service import run_tool_call_service
 
 
 router = APIRouter(
-    prefix="/api/v1/projects/{project_id}/agents/{agent_id}/sub-agent-runs",
-    tags=["SubAgentRuns"],
+    prefix="/api/v1/projects/{project_id}/agents/{agent_id}/runs",
+    tags=["runs"],
 )
 
 
@@ -54,12 +59,8 @@ async def verify_agent_access(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
 
-# ---------------------------------------------------------------------------
-# POST /sub-agent-runs — create run
-# ---------------------------------------------------------------------------
-
 @router.post("", response_model=CreateRunResponse, status_code=status.HTTP_201_CREATED)
-async def create_sub_agent_run(
+async def create_run(
     project_id: uuid.UUID,
     agent_id: uuid.UUID,
     data: CreateRunRequest,
@@ -69,7 +70,7 @@ async def create_sub_agent_run(
     await verify_agent_access(project_id, agent_id, current_user, db)
 
     try:
-        run = sub_agent_run_service.create_run(
+        run = run_service.create_run(
             db=db,
             project_id=project_id,
             agent_id=agent_id,
@@ -81,12 +82,8 @@ async def create_sub_agent_run(
     return {"run": run}
 
 
-# ---------------------------------------------------------------------------
-# PATCH /sub-agent-runs/{run_id} — patch run
-# ---------------------------------------------------------------------------
-
 @router.patch("/{run_id}", response_model=PatchRunResponse, status_code=status.HTTP_200_OK)
-async def patch_sub_agent_run(
+async def patch_run(
     project_id: uuid.UUID,
     agent_id: uuid.UUID,
     run_id: uuid.UUID,
@@ -97,7 +94,7 @@ async def patch_sub_agent_run(
     await verify_agent_access(project_id, agent_id, current_user, db)
 
     try:
-        run = sub_agent_run_service.patch_run(
+        run = run_service.patch_run(
             db=db,
             project_id=project_id,
             agent_id=agent_id,
@@ -110,84 +107,130 @@ async def patch_sub_agent_run(
     return {"run": run}
 
 
-# ---------------------------------------------------------------------------
-# POST /sub-agent-runs/{run_id}/messages — add message
-# ---------------------------------------------------------------------------
-
-@router.post("/{run_id}/messages", response_model=AddMessageResponse, status_code=status.HTTP_201_CREATED)
-async def add_sub_agent_run_message(
+@router.get("/{run_id}", response_model=GetRunResponse, status_code=status.HTTP_200_OK)
+async def get_run(
     project_id: uuid.UUID,
     agent_id: uuid.UUID,
     run_id: uuid.UUID,
-    data: AddMessageRequest,
+    include_messages: bool = Query(True),
+    include_tool_calls: bool = Query(True),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     await verify_agent_access(project_id, agent_id, current_user, db)
 
     try:
-        message = sub_agent_run_service.add_message(
+        run = run_service.get_run(
             db=db,
             project_id=project_id,
             agent_id=agent_id,
             run_id=run_id,
-            data=data,
+            include_messages=include_messages,
+            include_tool_calls=include_tool_calls,
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
-    return {"message": message}
+    return {"run": run}
 
 
-# ---------------------------------------------------------------------------
-# PUT /sub-agent-runs/{run_id}/messages/{message_id} — update message
-# ---------------------------------------------------------------------------
-
-@router.put("/{run_id}/messages/{message_id}", response_model=UpdateMessageResponse, status_code=status.HTTP_200_OK)
-async def update_sub_agent_run_message(
+@router.post("/query", response_model=QueryRunsResponse, status_code=status.HTTP_200_OK)
+async def query_runs(
     project_id: uuid.UUID,
     agent_id: uuid.UUID,
-    run_id: uuid.UUID,
-    message_id: uuid.UUID,
-    data: UpdateMessageRequest,
+    data: QueryRunsRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     await verify_agent_access(project_id, agent_id, current_user, db)
-
-    try:
-        message = sub_agent_run_service.update_message(
-            db=db,
-            project_id=project_id,
-            agent_id=agent_id,
-            run_id=run_id,
-            message_id=message_id,
-            data=data,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-    return {"message": message}
-
-
-# ---------------------------------------------------------------------------
-# POST /sub-agent-runs/query-by-messages — query trees
-# ---------------------------------------------------------------------------
-
-@router.post("/query-by-messages", response_model=SubAgentRunQueryByMessagesResponse, status_code=status.HTTP_200_OK)
-async def query_sub_agent_runs_by_messages(
-    project_id: uuid.UUID,
-    agent_id: uuid.UUID,
-    data: SubAgentRunQueryByMessagesRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    await verify_agent_access(project_id, agent_id, current_user, db)
-
-    items = sub_agent_run_service.query_by_root_agent_messages(
+    items = run_service.query_runs(
         db=db,
         project_id=project_id,
         agent_id=agent_id,
         data=data,
     )
     return {"items": items}
+
+
+@router.post("/{run_id}/messages", response_model=AddRunMessageResponse, status_code=status.HTTP_201_CREATED)
+async def add_run_message(
+    project_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    run_id: uuid.UUID,
+    data: AddRunMessageRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    await verify_agent_access(project_id, agent_id, current_user, db)
+
+    try:
+        message = run_message_service.add_run_message(
+            db=db,
+            project_id=project_id,
+            agent_id=agent_id,
+            run_id=run_id,
+            data=data,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    return {"message": message}
+
+
+@router.patch("/{run_id}/messages/{run_message_id}", response_model=PatchRunMessageResponse, status_code=status.HTTP_200_OK)
+async def patch_run_message(
+    project_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    run_id: uuid.UUID,
+    run_message_id: uuid.UUID,
+    data: PatchRunMessageRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    await verify_agent_access(project_id, agent_id, current_user, db)
+
+    try:
+        message = run_message_service.patch_run_message(
+            db=db,
+            project_id=project_id,
+            agent_id=agent_id,
+            run_id=run_id,
+            message_id=run_message_id,
+            data=data,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    return {"message": message}
+
+
+@router.put(
+    "/{run_id}/messages/{run_message_id}/tool-calls",
+    response_model=UpsertRunToolCallsResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def upsert_run_tool_calls(
+    project_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    run_id: uuid.UUID,
+    run_message_id: uuid.UUID,
+    data: UpsertRunToolCallsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    await verify_agent_access(project_id, agent_id, current_user, db)
+
+    try:
+        rows = run_tool_call_service.upsert_run_tool_calls(
+            db=db,
+            project_id=project_id,
+            agent_id=agent_id,
+            run_id=run_id,
+            message_id=run_message_id,
+            data=data,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    return {"tool_calls": rows}
+

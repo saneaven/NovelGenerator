@@ -1,6 +1,5 @@
 import inspect
 import json
-import logging
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from google import genai
@@ -8,14 +7,10 @@ from google.genai import errors, types
 
 from .base import BaseProvider
 from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
-from .final_mappers import map_gemini_message_to_snapshot
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 from ..utils.outbound_http import validate_outbound_base_url
-
-logger = logging.getLogger(__name__)
-
 
 @ProviderRegistry.register
 class GeminiProvider(BaseProvider):
@@ -97,6 +92,16 @@ class GeminiProvider(BaseProvider):
             return "tool_calls"
 
         return reason_str.lower()
+
+    @staticmethod
+    def _to_chat_message_input(content: types.Content) -> Any:
+        """Convert Content into chats.send_message(_stream)-compatible input."""
+        parts = getattr(content, "parts", None) or []
+        if len(parts) == 1:
+            text = getattr(parts[0], "text", None)
+            if isinstance(text, str):
+                return text
+        return parts
 
     # ------------------------------------------------------------------ #
     # Thinking config mapping
@@ -302,11 +307,11 @@ class GeminiProvider(BaseProvider):
             # Fallback for SDK variants without create(history=...).
             if history and not used_history_arg and hasattr(chat, "send_message"):
                 for hist_item in history:
-                    send_hist = chat.send_message(hist_item)
+                    send_hist = chat.send_message(self._to_chat_message_input(hist_item))
                     if inspect.isawaitable(send_hist):
                         await send_hist
 
-            stream_result = chat.send_message_stream(current_input)
+            stream_result = chat.send_message_stream(self._to_chat_message_input(current_input))
             stream = await stream_result if inspect.isawaitable(stream_result) else stream_result
 
             async for chunk in stream:
@@ -450,42 +455,10 @@ class GeminiProvider(BaseProvider):
                 yield self._error_event(f"{GEMINI_ERROR_REASONS[reason_str]} ({reason_str})")
                 return
 
-            final_message = None
-            if chat is not None and hasattr(chat, "get_history"):
-                history_result = chat.get_history()
-                history_items = await history_result if inspect.isawaitable(history_result) else history_result
-                if isinstance(history_items, list):
-                    for msg in reversed(history_items):
-                        role = getattr(msg, "role", None)
-                        if role is None and isinstance(msg, dict):
-                            role = msg.get("role")
-                        if str(role).lower() in {"model", "assistant"}:
-                            final_message = msg
-                            break
-
             finish_reason = self._normalize_finish_reason(
                 last_finish_reason,
                 tool_calls_completed=bool(native_tc_parser and native_tc_parser.tool_calls_completed),
             )
-
-            if final_message is not None:
-                try:
-                    native_snapshot = map_gemini_message_to_snapshot(
-                        final_message,
-                        provider=self.name,
-                        model=model,
-                        usage=captured_usage,
-                        finish_reason=finish_reason,
-                    )
-                    yield ProviderEvent(kind="final_native", final_native=native_snapshot)
-                except Exception as exc:
-                    logger.warning(
-                        "Native final mapping failed in %s provider (model=%s); falling back to snapshot assembler: %s",
-                        self.name,
-                        model,
-                        exc,
-                        exc_info=True,
-                    )
 
             if captured_usage is not None or finish_reason is not None:
                 if tool_finish_emitted and finish_reason == "tool_calls":

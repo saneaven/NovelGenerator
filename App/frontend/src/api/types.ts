@@ -291,123 +291,169 @@ export interface AgentMessageResponse {
   created_at: string;
 }
 
-export type SubAgentParentType = 'agent' | 'sub_agent';
-export type SubAgentRunStatus =
-  | 'running'
-  | 'waiting'
-  | 'paused'
-  | 'completed'
-  | 'error'
-  | 'cancelled';
+// ============================================================================
+// UNIFIED RUN RUNTIME
+// ============================================================================
 
-// ---------------------------------------------------------------------------
-// Create Run
-// ---------------------------------------------------------------------------
+export type RunKind = 'root' | 'child';
+export type RunCaller = 'planMode' | 'agentMode' | 'subAgent';
+export type RunStatus = 'running' | 'waiting' | 'paused' | 'completed' | 'error' | 'cancelled';
+export type RunMode = 'planMode' | 'agentMode';
+export type RunSurface = 'story-object' | 'outline-manager' | 'novel-editor' | 'config';
+export type RunMessageRole = 'user' | 'assistant' | 'system';
+export type RunToolCallStatus = 'pending' | 'running' | 'accepted' | 'rejected' | 'failed';
+export type RunToolCallFailureType = 'validation' | 'execution' | 'partial';
 
-export interface CreateRunRequest {
-  parent_type: SubAgentParentType;
-  parent_id: string;
-  parent_message_id: string;
-  parent_tool_call_id: string;
-  sub_agent_id: string;
-  agent_name: string;
-  display_name: string;
-  caller: string;
+export interface CreateUnifiedRunRequest {
+  run_kind: RunKind;
+  caller: RunCaller;
   language: string;
-  input: string;
-  status: SubAgentRunStatus;
+  input_text?: string;
+
+  run_mode?: RunMode;
+  surface?: RunSurface;
+  context_object_ids?: string[];
+
+  parent_run_id?: string;
+  parent_run_message_id?: string;
+  parent_run_tool_call_id?: string;
+  sub_agent_id?: string;
+
+  status?: RunStatus;
 }
 
-// ---------------------------------------------------------------------------
-// Patch Run
-// ---------------------------------------------------------------------------
-
-export interface PatchRunRequest {
-  status?: SubAgentRunStatus;
-  final_output?: string;
-  error?: string;
+export interface PatchUnifiedRunRequest {
+  status?: RunStatus;
+  final_output?: string | null;
+  error?: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Add / Update Message
-// ---------------------------------------------------------------------------
-
-export interface AddMessageRequest {
-  role: string;
-  content_parts?: Array<Record<string, any>>;
-  tool_calls?: Array<Record<string, any>>;
-  thinking_details?: Array<Record<string, any>>;
+export interface QueryRunsRequest {
+  statuses?: RunStatus[];
+  root_only?: boolean;
+  parent_run_message_ids?: string[];
+  include_messages?: boolean;
+  include_tool_calls?: boolean;
 }
 
-export interface UpdateMessageRequest {
-  tool_calls?: Array<Record<string, any>>;
-  thinking_details?: Array<Record<string, any>>;
+export interface RunToolCallResponse extends BaseMetadata {
+  run_id: string;
+  message_id: string;
+  llm_call_id: string;
+  call_seq: number;
+  tool_name: string;
+  arguments: Record<string, any>;
+  status: RunToolCallStatus;
+  failure_type?: RunToolCallFailureType | null;
+  reason?: string | null;
+  result?: Record<string, any> | null;
+  accepted_at?: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Responses
-// ---------------------------------------------------------------------------
-
-export interface SubAgentRunMessageResponse {
-  id: string;
+export interface RunMessageResponse extends BaseMetadata {
   run_id: string;
   seq: number;
-  role: string;
+  role: RunMessageRole;
   content_parts: Array<Record<string, any>>;
-  tool_calls?: Array<Record<string, any>>;
-  thinking_details?: Array<Record<string, any>>;
-  created_at: string;
+  thinking_details?: Array<Record<string, any>> | null;
+  tool_calls: RunToolCallResponse[];
 }
 
-export interface SubAgentRunResponse {
-  id: string;
+export interface UnifiedRunResponse extends BaseMetadata {
   project_id: string;
   agent_id: string;
-  parent_type: SubAgentParentType;
-  parent_id: string;
-  parent_message_id: string;
-  parent_tool_call_id: string;
-  sub_agent_id: string;
-  agent_name: string;
-  display_name: string;
-  caller: string;
+  run_kind: RunKind;
+  caller: RunCaller;
+  status: RunStatus;
   language: string;
-  input: string;
-  status: SubAgentRunStatus;
-  final_output?: string;
-  error?: string;
-  created_at: string;
-  updated_at: string;
-  messages: SubAgentRunMessageResponse[];
+  input_text: string;
+  final_output?: string | null;
+  error?: string | null;
+  run_mode?: RunMode | null;
+  surface?: RunSurface | null;
+  context_object_ids: string[];
+  parent_run_id?: string | null;
+  parent_run_message_id?: string | null;
+  parent_run_tool_call_id?: string | null;
+  sub_agent_id?: string | null;
+  root_run_seq?: number | null;
+  next_message_seq: number;
+  messages: RunMessageResponse[];
 }
 
-export interface CreateRunResponse {
-  run: SubAgentRunResponse;
+export interface CreateUnifiedRunResponse {
+  run: UnifiedRunResponse;
 }
 
-export interface PatchRunResponse {
-  run: SubAgentRunResponse;
+export interface PatchUnifiedRunResponse {
+  run: UnifiedRunResponse;
 }
 
-export interface AddMessageResponse {
-  message: SubAgentRunMessageResponse;
+export interface GetUnifiedRunResponse {
+  run: UnifiedRunResponse;
 }
 
-export interface UpdateMessageResponse {
-  message: SubAgentRunMessageResponse;
+export interface QueryRunsResponse {
+  items: UnifiedRunResponse[];
 }
 
-// ---------------------------------------------------------------------------
-// Query
-// ---------------------------------------------------------------------------
-
-export interface SubAgentRunQueryByMessagesRequest {
-  message_ids: string[];
-  status_filter?: SubAgentRunStatus[];
+export interface AddRunMessageRequest {
+  role: RunMessageRole;
+  content_parts?: Array<Record<string, any>>;
+  thinking_details?: Array<Record<string, any>>;
 }
 
-export interface SubAgentRunQueryByMessagesResponse {
-  items: SubAgentRunResponse[];
+export interface PatchRunMessageRequest {
+  content_parts?: Array<Record<string, any>>;
+  thinking_details?: Array<Record<string, any>>;
+}
+
+export interface AddRunMessageResponse {
+  message: RunMessageResponse;
+}
+
+export interface PatchRunMessageResponse {
+  message: RunMessageResponse;
+}
+
+export interface UpsertRunToolCallRequestItem {
+  llm_call_id: string;
+  call_seq: number;
+  tool_name: string;
+  arguments: Record<string, any>;
+  status: RunToolCallStatus;
+  failure_type?: RunToolCallFailureType | null;
+  reason?: string | null;
+  result?: Record<string, any> | null;
+  accepted_at?: string | null;
+}
+
+export interface UpsertRunToolCallsRequest {
+  tool_calls: UpsertRunToolCallRequestItem[];
+}
+
+export interface UpsertRunToolCallsResponse {
+  tool_calls: RunToolCallResponse[];
+}
+
+export interface TimelineChildRunSummary {
+  run_id: string;
+  parent_run_tool_call_id: string;
+  status: RunStatus;
+  final_output?: string | null;
+}
+
+export interface TimelineItem {
+  root_run_id: string;
+  root_run_seq: number;
+  status: RunStatus;
+  messages: RunMessageResponse[];
+  child_runs: TimelineChildRunSummary[];
+}
+
+export interface TimelineResponse {
+  items: TimelineItem[];
+  next_cursor?: string | null;
 }
 
 // ============================================================================

@@ -2,7 +2,7 @@
 //
 // - WorkspaceSurface: right-side "work surface" the user is viewing.
 // - AgentRunMode: left-side main agent execution mode (Plan vs Agent).
-// - InvocationCaller: who is invoking a Sub Agent (root planMode/agentMode, or another sub agent).
+// - RunCaller: who is creating a run (root planMode/agentMode, or another sub agent).
 
 export type WorkspaceSurface =
   | 'story-object'
@@ -12,4 +12,4 @@ export type WorkspaceSurface =
 
 export type AgentRunMode = 'planMode' | 'agentMode';
 
-export type InvocationCaller = 'planMode' | 'agentMode' | 'subAgent';
+export type RunCaller = 'planMode' | 'agentMode' | 'subAgent';

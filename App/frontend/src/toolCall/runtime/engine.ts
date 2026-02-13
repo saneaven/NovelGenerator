@@ -21,9 +21,9 @@ import { READ_HANDLERS } from '../apply/handlers/ReadHandlers';
 import { SUB_AGENT_HANDLERS } from '../apply/handlers/SubAgentHandlers';
 import { ToolCallBatchSharedState, ToolCallBatchStore } from './ToolCallBatchStore';
 import { ManuscriptBatch } from './manuscriptBatch';
-import { SubAgentManager } from '../../subAgent/runtime/SubAgentManager';
 import { agentNameFromCallToolName, isCallToolName } from '../../subAgent/tools/SubAgentCallTools';
-import type { InvocationCaller } from '../../types/agentRuntime';
+import type { RunCaller } from '../../types/agentRuntime';
+import { runtimeOrchestrator } from '../../runtime';
 
 const HANDLERS: Record<string, Handler> = {
   ...CRUD_HANDLERS,
@@ -211,12 +211,12 @@ async function applyToolCall(params: {
         };
       }
 
-      const caller = context.invocationCaller;
+      const caller: RunCaller | undefined = context.options?.parentSubRunId ? 'subAgent' : context.runCaller;
       if (!caller) {
         return {
           success: false,
-          message: 'Missing invocationCaller for Sub Agent call',
-          error: 'Missing invocationCaller for Sub Agent call',
+          message: 'Missing runCaller for Sub Agent call',
+          error: 'Missing runCaller for Sub Agent call',
         };
       }
 
@@ -229,23 +229,23 @@ async function applyToolCall(params: {
         };
       }
 
-      let parentType: 'agent' | 'sub_agent';
-      let parentId: string;
-      let parentMessageId: string;
+      let parentRunId: string | undefined;
+      let parentRunMessageId: string | undefined;
 
       if (context.options?.parentSubRunId && context.options?.parentSubMessageId) {
-        parentType = 'sub_agent';
-        parentId = context.options.parentSubRunId;
-        parentMessageId = context.options.parentSubMessageId;
+        parentRunId = context.options.parentSubRunId;
+        parentRunMessageId = context.options.parentSubMessageId;
       } else if (context.options?.parentAgentMessageId) {
-        parentType = 'agent';
-        parentId = agentId;
-        parentMessageId = context.options.parentAgentMessageId;
-      } else {
+        const parentRunLink = runtimeOrchestrator.getLinkedRunMessage(context.options.parentAgentMessageId);
+        parentRunId = parentRunLink?.runId;
+        parentRunMessageId = parentRunLink?.runMessageId;
+      }
+
+      if (!parentRunId || !parentRunMessageId) {
         return {
           success: false,
           message: 'Missing parent context for Sub Agent call',
-          error: 'Missing parent context for Sub Agent call',
+          error: 'Missing parent run context for Sub Agent call',
         };
       }
 
@@ -272,18 +272,32 @@ async function applyToolCall(params: {
         };
       }
 
-      const output = await SubAgentManager.invoke({
+      if (!def.enabled) {
+        return {
+          success: false,
+          message: 'Sub Agent is disabled',
+          error: `Sub Agent is disabled: ${agentName}`,
+        };
+      }
+
+      if (!def.allowed_invocation_modes.includes(caller)) {
+        return {
+          success: false,
+          message: 'Sub Agent invocation not allowed',
+          error: `Sub Agent is not allowed from caller: ${caller}`,
+        };
+      }
+
+      const { output } = await runtimeOrchestrator.invokeChildRun({
         projectId: context.projectId,
         agentId,
         language: context.language,
-        parentType,
-        parentId,
-        parentMessageId,
-        parentToolCallId: normalized.id,
-        caller,
+        inputText: input,
+        parentRunId,
+        parentRunMessageId,
+        parentRunToolCallId: normalized.id,
         subAgentId: def.id,
-        input,
-        handlerOptions: { ...context.options, userRequest: 'SubAgent' },
+        caller,
       });
 
       return { success: true, message: output, data: { subAgentId: def.id, agentName } };
@@ -367,9 +381,9 @@ export async function applyToolCalls(params: {
   toolCalls: ToolCallMetadata[];
   decisions: ToolCallDecisionMap;
   options: HandlerOptions;
-  invocationCaller?: InvocationCaller;
+  runCaller?: RunCaller;
 }): Promise<ToolCallRunResult> {
-  const { projectId, language, toolCalls, decisions, options, invocationCaller } = params;
+  const { projectId, language, toolCalls, decisions, options, runCaller } = params;
 
   if (!toolCalls.length) {
     return { toolCalls: [], status: 'success' };
@@ -441,7 +455,7 @@ export async function applyToolCalls(params: {
       callStore.beginCall(rawToolCall.id);
       const result = await applyToolCall({
         toolCall: rawToolCall,
-        context: { projectId, language, options, invocationCaller },
+        context: { projectId, language, options, runCaller },
         store: callStore,
         manuscriptBatch,
       });
