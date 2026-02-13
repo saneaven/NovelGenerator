@@ -1,6 +1,6 @@
 import type { StoredAgentMessage } from '../../store/agentStore';
 import type { TaskSessionState } from '../../llmTask/types';
-import type { SubAgentInvocation } from '../../store/subAgentRuntimeStore';
+import type { SubAgentRun } from '../../store/subAgentRuntimeStore';
 import { BLOCKING_STATUSES } from './types';
 
 type AnySession = TaskSessionState<unknown, unknown>;
@@ -72,25 +72,25 @@ function collectLiveAgentParentToolCallKeys(messages: StoredAgentMessage[]): Set
   return liveKeys;
 }
 
-function hasBlockingSubAgentInvocations(
-  invocationsByKey: Record<string, SubAgentInvocation | undefined> | undefined,
+function hasBlockingSubAgentRuns(
+  runsByKey: Record<string, SubAgentRun | undefined> | undefined,
   selectedAgentId: string,
   messages: StoredAgentMessage[]
 ): boolean {
-  if (!invocationsByKey) return false;
+  if (!runsByKey) return false;
   const liveParentToolCallKeys = collectLiveAgentParentToolCallKeys(messages);
   if (liveParentToolCallKeys.size === 0) return false;
 
-  return Object.values(invocationsByKey).some((invocation) => {
-    if (!invocation) return false;
-    if (invocation.parentType !== 'agent') return false;
-    if (invocation.parentId !== selectedAgentId) return false;
+  return Object.values(runsByKey).some((run) => {
+    if (!run) return false;
+    if (run.parentType !== 'agent') return false;
+    if (run.parentId !== selectedAgentId) return false;
     const parentKey = buildLiveParentToolCallKey(
-      String(invocation.parentMessageId),
-      String(invocation.parentToolCallId)
+      String(run.parentMessageId),
+      String(run.parentToolCallId)
     );
     if (!liveParentToolCallKeys.has(parentKey)) return false;
-    return invocation.status === 'running' || invocation.status === 'waiting' || invocation.status === 'paused' || invocation.status === 'error';
+    return run.status === 'running' || run.status === 'waiting' || run.status === 'paused' || run.status === 'error';
   });
 }
 
@@ -98,10 +98,10 @@ export function getSendBlockingState(params: {
   selectedAgentId?: string;
   messages: StoredAgentMessage[];
   sessions: AnySession[];
-  invocationsByKey?: Record<string, SubAgentInvocation | undefined>;
+  runsByKey?: Record<string, SubAgentRun | undefined>;
   hasBlockingSubAgent?: boolean;
 }): SendBlockingState {
-  const { selectedAgentId, messages, sessions, invocationsByKey, hasBlockingSubAgent } = params;
+  const { selectedAgentId, messages, sessions, runsByKey, hasBlockingSubAgent } = params;
 
   if (!selectedAgentId) {
     return {
@@ -114,7 +114,7 @@ export function getSendBlockingState(params: {
   const unresolvedToolCalls = summarizeMessageToolCallBlocking(messages);
   const subAgentBlocked = typeof hasBlockingSubAgent === 'boolean'
     ? hasBlockingSubAgent
-    : hasBlockingSubAgentInvocations(invocationsByKey, selectedAgentId, messages);
+    : hasBlockingSubAgentRuns(runsByKey, selectedAgentId, messages);
   const rootSessionBlocked =
     hasRootSessionBlocker(sessions, selectedAgentId) || subAgentBlocked;
 

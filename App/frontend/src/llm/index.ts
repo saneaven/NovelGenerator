@@ -42,6 +42,17 @@ export {
   createEmptyUserHistory,
 } from './requestTypes';
 
+export {
+  type StreamToolCallDelta,
+  type FinalSnapshotToolCall,
+  type FinalSnapshot,
+  type LLMDeltaEvent,
+  type LLMFinalEvent,
+  type LLMErrorEvent,
+  type LLMDoneEvent,
+  type LLMStreamEvent,
+} from './streamProtocol';
+
 // Re-export LLM service functions (moved from llm_request/)
 export { streamLLM, BackendError, fetchModels, fetchProviders, fetchModelEndpoints } from './llmService';
 

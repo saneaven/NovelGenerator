@@ -178,7 +178,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       selectedAgentId: agentId,
       messages,
       sessions,
-      invocationsByKey: useSubAgentRuntimeStore.getState().invocationsByKey,
+      runsByKey: useSubAgentRuntimeStore.getState().runsByKey,
     });
     if (sendBlockingState.blocked) {
       useAgentUIStore.getState().setPreflightToast(projectId, {

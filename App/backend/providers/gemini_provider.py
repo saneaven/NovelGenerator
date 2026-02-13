@@ -1,14 +1,20 @@
+import inspect
 import json
+import logging
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from google import genai
-from google.genai import types, errors
+from google.genai import errors, types
 
 from .base import BaseProvider
+from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
+from .final_mappers import map_gemini_message_to_snapshot
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 from ..utils.outbound_http import validate_outbound_base_url
+
+logger = logging.getLogger(__name__)
 
 
 @ProviderRegistry.register
@@ -59,39 +65,38 @@ class GeminiProvider(BaseProvider):
             self._client = self._build_client()
         return self._client
 
-    # ------------------------------------------------------------------ #
-    # Utilities
-    # ------------------------------------------------------------------ #
-    def _format_sse(self, payload: Dict) -> bytes:
-        return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode("utf-8")
-
-    def _format_error(self, message: str, status: Optional[int] = None) -> bytes:
-        data: Dict[str, object] = {"message": message}
-        if status is not None:
-            data["status"] = status
-        return f"event: error\ndata: {json.dumps(data, separators=(',', ':'))}\n\n".encode("utf-8")
+    @staticmethod
+    def _error_event(message: str, status: Optional[int] = None) -> ProviderEvent:
+        return ProviderEvent(
+            kind="error",
+            error=ProviderErrorPayload(message=message, status=status),
+        )
 
     @staticmethod
-    def _has_meaningful_payload(chunk: Dict) -> bool:
-        choices = chunk.get("choices", [])
-        for choice in choices:
-            delta = choice.get("delta") or {}
-            if delta:
-                return True
-            if choice.get("finish_reason") is not None:
-                return True
-        return False
+    def _to_reason_str(reason: Any) -> Optional[str]:
+        if reason is None:
+            return None
+        if hasattr(reason, "name"):
+            return str(reason.name)
+        return str(reason)
 
-    def _finalize_parser(self, parser: Optional[ThinkingStreamParser]) -> List[Dict]:
-        if parser is None:
-            return []
-        final_chunks: List[Dict] = []
-        final_content, final_thinking = parser.finalize()
-        if final_content:
-            final_chunks.append({"choices": [{"delta": {"content": final_content}}]})
-        if final_thinking:
-            final_chunks.append({"choices": [{"delta": {"thinking": {"text": final_thinking}}}]})
-        return final_chunks
+    @classmethod
+    def _normalize_finish_reason(cls, reason: Any, tool_calls_completed: bool = False) -> Optional[str]:
+        if tool_calls_completed:
+            return "tool_calls"
+
+        reason_str = cls._to_reason_str(reason)
+        if not reason_str:
+            return None
+
+        if reason_str in {"STOP", "FINISH_REASON_UNSPECIFIED"}:
+            return "stop"
+        if reason_str in {"MAX_TOKENS"}:
+            return "length"
+        if reason_str in {"TOOL_CALLS", "TOOL_USE"}:
+            return "tool_calls"
+
+        return reason_str.lower()
 
     # ------------------------------------------------------------------ #
     # Thinking config mapping
@@ -108,7 +113,7 @@ class GeminiProvider(BaseProvider):
         self, model: str, thinking_mode: Optional[str], thinking_config: Optional[Dict]
     ) -> Optional[Dict]:
         if thinking_mode == "custom":
-            return None  # rely on <thinking> parser only
+            return None
 
         if thinking_mode == "off":
             if self._is_gemini25(model):
@@ -118,8 +123,7 @@ class GeminiProvider(BaseProvider):
         if thinking_mode != "model":
             return None
 
-        config: Dict[str, object] = {}
-        config["includeThoughts"] = True
+        config: Dict[str, object] = {"includeThoughts": True}
 
         if self._is_gemini3(model):
             level = "high"
@@ -129,7 +133,6 @@ class GeminiProvider(BaseProvider):
                     level = lvl
             config["thinkingLevel"] = level
         else:
-            # Gemini 2.5 budget-based thinking
             if thinking_config and thinking_config.get("gemini_budget_tokens") is not None:
                 config["thinkingBudget"] = thinking_config.get("gemini_budget_tokens")
         return config
@@ -140,8 +143,7 @@ class GeminiProvider(BaseProvider):
     def _convert_messages(self, messages: List[Dict]) -> Dict[str, object]:
         """Convert messages to Gemini format.
 
-        Handles tool_calls in assistant messages by converting to Gemini's
-        ToolCall parts.
+        Handles tool_calls in assistant messages by converting to Gemini function_call parts.
         """
         contents: List[types.Content] = []
         system_instruction: Optional[types.Content] = None
@@ -152,34 +154,30 @@ class GeminiProvider(BaseProvider):
             tool_calls = msg.get("tool_calls")
 
             if role == "system":
-                # First system message becomes systemInstruction; additional ones are appended as user content
                 if system_instruction is None:
                     system_instruction = types.Content(role="user", parts=[types.Part.from_text(text=text)])
                     continue
 
-            # Handle tool_results messages
             if role == "tool_results":
                 tool_results = msg.get("tool_results", [])
                 if tool_results:
                     parts = []
                     for tr in tool_results:
-                        # Gemini uses from_function_response with name and response dict
-                        parts.append(types.Part.from_function_response(
-                            name=tr.get("tool_name", ""),
-                            response={"result": tr.get("content", "")}
-                        ))
+                        parts.append(
+                            types.Part.from_function_response(
+                                name=tr.get("tool_name", ""),
+                                response={"result": tr.get("content", "")},
+                            )
+                        )
                     contents.append(types.Content(role="tool", parts=parts))
                 continue
 
             mapped_role = "user" if role == "user" else "model"
 
-            # Handle assistant messages with tool_calls
             if role == "assistant" and tool_calls:
                 parts = []
-                # Add text content if present
                 if text:
                     parts.append(types.Part.from_text(text=text))
-                # Convert tool_calls to Gemini ToolCall parts
                 for tc in tool_calls:
                     tc_function = tc.get("function", {})
                     args_str = tc_function.get("arguments", "{}")
@@ -187,11 +185,7 @@ class GeminiProvider(BaseProvider):
                         args = json.loads(args_str) if isinstance(args_str, str) else args_str
                     except json.JSONDecodeError:
                         args = {}
-                    # Create ToolCall part using the SDK's method
-                    parts.append(types.Part.from_function_call(
-                        name=tc_function.get("name", ""),
-                        args=args
-                    ))
+                    parts.append(types.Part.from_function_call(name=tc_function.get("name", ""), args=args))
                 contents.append(types.Content(role=mapped_role, parts=parts))
             else:
                 contents.append(types.Content(role=mapped_role, parts=[types.Part.from_text(text=text)]))
@@ -201,7 +195,6 @@ class GeminiProvider(BaseProvider):
     # ------------------------------------------------------------------ #
     # Streaming
     # ------------------------------------------------------------------ #
-    # Mapping from unified tool_choice to Gemini's FunctionCallingConfigMode
     TOOL_CHOICE_MODE_MAP = {
         "auto": types.FunctionCallingConfigMode.AUTO,
         "required": types.FunctionCallingConfigMode.ANY,
@@ -223,15 +216,19 @@ class GeminiProvider(BaseProvider):
         request_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[ProviderEvent, None]:
         if not self.validate_config():
-            yield self._format_error("Gemini API key is required")
+            yield self._error_event("Gemini API key is required")
             return
 
         client = self._ensure_client()
         msg_payload = self._convert_messages(messages)
-        contents = msg_payload["contents"]
+        contents: List[types.Content] = msg_payload["contents"]
         system_instruction = msg_payload.get("system_instruction")
+
+        if not contents:
+            yield self._error_event("Gemini stream request has no messages")
+            return
 
         config_dict: Dict[str, object] = {
             "temperature": temperature,
@@ -245,7 +242,6 @@ class GeminiProvider(BaseProvider):
         if thinking_cfg:
             config_dict["thinkingConfig"] = thinking_cfg
 
-        # Map tool definitions if provided
         if tools:
             function_declarations: List[types.FunctionDeclaration] = []
             for fn in tools:
@@ -258,7 +254,7 @@ class GeminiProvider(BaseProvider):
                     )
                     function_declarations.append(decl)
                 except Exception as exc:
-                    yield self._format_error(f"Gemini function schema error: {exc}", 400)
+                    yield self._error_event(f"Gemini function schema error: {exc}", 400)
                     return
 
             if function_declarations:
@@ -270,40 +266,60 @@ class GeminiProvider(BaseProvider):
                 "function_calling_config": {"mode": mode}
             }
 
-        # Convert to the SDK's strongly-typed config to avoid schema mismatches at runtime.
         config = types.GenerateContentConfig.model_validate(config_dict)
 
-        # Check if prefill has unclosed <thinking> tag - parser should start inside thinking block
-        # Always parse <thinking> tags from text content to prevent leakage into regular content
         prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
         parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
         native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
+
         tool_call_counter = 0
         stream = None
+        chat = None
+        captured_usage: Optional[Dict[str, int]] = None
+        last_finish_reason: Any = None
+        tool_finish_emitted = False
 
         try:
-            stream = await client.aio.models.generate_content_stream(
-                model=model,
-                contents=contents,
-                config=config,
-            )
+            history = contents[:-1]
+            current_input = contents[-1]
+            used_history_arg = True
 
-            last_finish_reason = None
-            captured_usage: Optional[Dict] = None
+            try:
+                create_result = client.aio.chats.create(
+                    model=model,
+                    config=config,
+                    history=history,
+                )
+            except TypeError:
+                used_history_arg = False
+                create_result = client.aio.chats.create(
+                    model=model,
+                    config=config,
+                )
+
+            chat = await create_result if inspect.isawaitable(create_result) else create_result
+
+            # Fallback for SDK variants without create(history=...).
+            if history and not used_history_arg and hasattr(chat, "send_message"):
+                for hist_item in history:
+                    send_hist = chat.send_message(hist_item)
+                    if inspect.isawaitable(send_hist):
+                        await send_hist
+
+            stream_result = chat.send_message_stream(current_input)
+            stream = await stream_result if inspect.isawaitable(stream_result) else stream_result
 
             async for chunk in stream:
-                # Capture usage_metadata from each chunk (the last one will have final totals)
                 usage_meta = getattr(chunk, "usage_metadata", None)
                 if usage_meta:
                     captured_usage = {
-                        "prompt_tokens": getattr(usage_meta, "prompt_token_count", 0) or 0,
-                        "completion_tokens": getattr(usage_meta, "candidates_token_count", 0) or 0,
-                        "total_tokens": getattr(usage_meta, "total_token_count", 0) or 0,
+                        "prompt_tokens": int(getattr(usage_meta, "prompt_token_count", 0) or 0),
+                        "completion_tokens": int(getattr(usage_meta, "candidates_token_count", 0) or 0),
+                        "total_tokens": int(getattr(usage_meta, "total_token_count", 0) or 0),
                     }
 
                 candidates = getattr(chunk, "candidates", None) or []
                 for cand in candidates:
-                    # Track finish_reason from each candidate
                     cand_finish_reason = getattr(cand, "finish_reason", None)
                     if cand_finish_reason is not None:
                         last_finish_reason = cand_finish_reason
@@ -314,175 +330,179 @@ class GeminiProvider(BaseProvider):
 
                     parts = getattr(content, "parts", None) or []
                     for part in parts:
-                        # Thinking / thought summaries
                         if getattr(part, "thought", False):
-                            thinking_payload = {
-                                "choices": [
-                                    {
-                                        "delta": {
-                                            "thinking": {
-                                                "text": getattr(part, "text", None) or ""
-                                            }
-                                        }
-                                    }
-                                ]
-                            }
-                            # Optional signature if present
-                            signature = getattr(part, "thought_signature", None) or (
-                                part.model_dump().get("thought_signature") if hasattr(part, "model_dump") else None
-                            )
+                            thought_text = getattr(part, "text", None) or ""
+                            if thought_text:
+                                yield ProviderEvent(
+                                    kind="delta",
+                                    delta=DeltaPayload(thinking_delta=thought_text),
+                                )
+
+                            signature = getattr(part, "thought_signature", None)
+                            if signature is None and hasattr(part, "model_dump"):
+                                signature = part.model_dump().get("thought_signature")
+
                             if signature:
-                                # thought_signature can be bytes; convert to base64 string to keep JSON serializable
                                 if isinstance(signature, (bytes, bytearray)):
                                     import base64
+
                                     signature = base64.b64encode(signature).decode("utf-8")
-                                thinking_payload["choices"][0]["delta"]["thinking"]["signature"] = signature
-                            if self._has_meaningful_payload(thinking_payload):
-                                yield self._format_sse(thinking_payload)
+                                yield ProviderEvent(
+                                    kind="delta",
+                                    delta=DeltaPayload(
+                                        thinking_details_delta=[
+                                            {"type": "signature", "signature": signature}
+                                        ]
+                                    ),
+                                )
                             continue
 
-                        # Tool calls (Gemini SDK uses function_call attribute)
                         if getattr(part, "function_call", None):
                             fc = part.function_call
                             arguments = fc.args or {}
-                            signature = getattr(part, "thought_signature", None) or (
-                                part.model_dump().get("thought_signature") if hasattr(part, "model_dump") else None
-                            )
-                            if signature and isinstance(signature, (bytes, bytearray)):
-                                import base64
-                                signature = base64.b64encode(signature).decode("utf-8")
-                            # Ensure each distinct tool call has a stable, unique id
-                            if getattr(fc, "id", None):
-                                # tool_call_id = fc.id
-                                tool_call_counter += 1
-                                tool_call_id = f"tool_call_{tool_call_counter}"
-                            else:
-                                tool_call_counter += 1
-                                tool_call_id = f"tool_call_{tool_call_counter}"
-                            delta: Dict[str, Any] = {
-                                "tool_calls": [
-                                    {
-                                        "id": tool_call_id,
-                                        "type": "function",
-                                        "function": {
-                                            "name": fc.name or "",
-                                            "arguments": json.dumps(arguments),
-                                        },
-                                    }
-                                ]
-                            }
-                            # Gemini 3 tool calls carry a thought signature that must be
-                            # returned on the next turn; expose it alongside the tool call.
-                            if signature:
-                                delta["thinking"] = {"signature": signature}
+                            tool_call_counter += 1
+                            tool_call_id = getattr(fc, "id", None) or f"tool_call_{tool_call_counter}"
 
-                            payload = {"choices": [{"delta": delta}]}
-                            if self._has_meaningful_payload(payload):
-                                yield self._format_sse(payload)
+                            yield ProviderEvent(
+                                kind="delta",
+                                delta=DeltaPayload(
+                                    tool_call_deltas=[
+                                        {
+                                            "index": tool_call_counter - 1,
+                                            "id": str(tool_call_id),
+                                            "type": "function",
+                                            "function": {
+                                                "name": fc.name or "",
+                                                "arguments": json.dumps(arguments, ensure_ascii=False),
+                                            },
+                                        }
+                                    ]
+                                ),
+                            )
                             continue
 
                         text = getattr(part, "text", None)
-                        if text:
-                            extra_chunks: List[Dict] = []
-                            text_to_emit = text
-                            if parser:
-                                clean, thinking_block = parser.process_chunk(text)
-                                text_to_emit = clean
-                                if thinking_block:
-                                    extra_chunks.append(
-                                        {"choices": [{"delta": {"thinking": {"text": thinking_block}}}]}
-                                    )
+                        if not text:
+                            continue
 
-                            if native_tc_parser and text_to_emit:
-                                clean_content, tool_calls = native_tc_parser.process_chunk(text_to_emit)
-                                text_to_emit = clean_content
-                                if tool_calls:
-                                    extra_chunks.append(
-                                        {"choices": [{"delta": {"tool_calls": tool_calls}}]}
-                                    )
+                        text_to_emit = text
+                        thinking_extra: Optional[str] = None
+                        if parser:
+                            clean, thinking_block = parser.process_chunk(text)
+                            text_to_emit = clean
+                            thinking_extra = thinking_block
 
-                            if text_to_emit:
-                                payload = {"choices": [{"delta": {"content": text_to_emit}}]}
-                                if self._has_meaningful_payload(payload):
-                                    yield self._format_sse(payload)
+                        tool_extra = None
+                        if native_tc_parser and text_to_emit:
+                            clean_content, tool_calls = native_tc_parser.process_chunk(text_to_emit)
+                            text_to_emit = clean_content
+                            tool_extra = tool_calls
 
-                            for extra in extra_chunks:
-                                if self._has_meaningful_payload(extra):
-                                    yield self._format_sse(extra)
+                        if text_to_emit:
+                            yield ProviderEvent(kind="delta", delta=DeltaPayload(content_delta=text_to_emit))
 
-                            # Stop streaming after tool_calls block completes
-                            if native_tc_parser and native_tc_parser.tool_calls_completed:
-                                yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
-                                return
+                        if thinking_extra:
+                            yield ProviderEvent(kind="delta", delta=DeltaPayload(thinking_delta=thinking_extra))
 
-            for final_chunk in self._finalize_parser(parser):
-                delta = (final_chunk.get("choices") or [{}])[0].get("delta") or {}
-                content = delta.get("content")
-                if native_tc_parser and isinstance(content, str) and content:
-                    clean_content, tool_calls = native_tc_parser.process_chunk(content)
+                        if tool_extra:
+                            yield ProviderEvent(kind="delta", delta=DeltaPayload(tool_call_deltas=tool_extra))
+
+                        if native_tc_parser and native_tc_parser.tool_calls_completed and not tool_finish_emitted:
+                            tool_finish_emitted = True
+                            yield ProviderEvent(kind="meta", meta=MetaPayload(finish_reason="tool_calls"))
+
+            final_content, final_thinking = parser.finalize()
+            if final_content:
+                if native_tc_parser:
+                    clean_content, tool_calls = native_tc_parser.process_chunk(final_content)
                     if clean_content:
-                        payload = {"choices": [{"delta": {"content": clean_content}}]}
-                        if self._has_meaningful_payload(payload):
-                            yield self._format_sse(payload)
+                        yield ProviderEvent(kind="delta", delta=DeltaPayload(content_delta=clean_content))
                     if tool_calls:
-                        payload = {"choices": [{"delta": {"tool_calls": tool_calls}}]}
-                        if self._has_meaningful_payload(payload):
-                            yield self._format_sse(payload)
+                        yield ProviderEvent(kind="delta", delta=DeltaPayload(tool_call_deltas=tool_calls))
                 else:
-                    if self._has_meaningful_payload(final_chunk):
-                        yield self._format_sse(final_chunk)
+                    yield ProviderEvent(kind="delta", delta=DeltaPayload(content_delta=final_content))
+
+            if final_thinking:
+                yield ProviderEvent(kind="delta", delta=DeltaPayload(thinking_delta=final_thinking))
 
             if native_tc_parser:
                 tail_text, tail_tool_calls = native_tc_parser.finalize()
                 if tail_text:
-                    payload = {"choices": [{"delta": {"content": tail_text}}]}
-                    if self._has_meaningful_payload(payload):
-                        yield self._format_sse(payload)
+                    yield ProviderEvent(kind="delta", delta=DeltaPayload(content_delta=tail_text))
                 if tail_tool_calls:
-                    payload = {"choices": [{"delta": {"tool_calls": tail_tool_calls}}]}
-                    if self._has_meaningful_payload(payload):
-                        yield self._format_sse(payload)
-                # Emit finish_reason if tool calls were completed
-                if native_tc_parser.tool_calls_completed:
-                    yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
-                    return
+                    yield ProviderEvent(kind="delta", delta=DeltaPayload(tool_call_deltas=tail_tool_calls))
+                if native_tc_parser.tool_calls_completed and not tool_finish_emitted:
+                    tool_finish_emitted = True
+                    yield ProviderEvent(kind="meta", meta=MetaPayload(finish_reason="tool_calls"))
 
-            # Check for error finish_reasons and emit error if needed
-            if last_finish_reason is not None:
-                reason_str = (
-                    last_finish_reason.name
-                    if hasattr(last_finish_reason, "name")
-                    else str(last_finish_reason)
+            reason_str = self._to_reason_str(last_finish_reason)
+            GEMINI_ERROR_REASONS = {
+                "SAFETY": "Content blocked by safety filters",
+                "MALFORMED_FUNCTION_CALL": "Function call was malformed",
+                "UNEXPECTED_TOOL_CALL": "Model tried to call an unregistered tool",
+                "RECITATION": "Response contained recited content",
+                "PROHIBITED_CONTENT": "Content prohibited",
+                "BLOCKLIST": "Content blocked by filter",
+                "IMAGE_SAFETY": "Image blocked by safety filters",
+                "SPII": "Sensitive personal information detected",
+            }
+            if reason_str in GEMINI_ERROR_REASONS:
+                yield self._error_event(f"{GEMINI_ERROR_REASONS[reason_str]} ({reason_str})")
+                return
+
+            final_message = None
+            if chat is not None and hasattr(chat, "get_history"):
+                history_result = chat.get_history()
+                history_items = await history_result if inspect.isawaitable(history_result) else history_result
+                if isinstance(history_items, list):
+                    for msg in reversed(history_items):
+                        role = getattr(msg, "role", None)
+                        if role is None and isinstance(msg, dict):
+                            role = msg.get("role")
+                        if str(role).lower() in {"model", "assistant"}:
+                            final_message = msg
+                            break
+
+            finish_reason = self._normalize_finish_reason(
+                last_finish_reason,
+                tool_calls_completed=bool(native_tc_parser and native_tc_parser.tool_calls_completed),
+            )
+
+            if final_message is not None:
+                try:
+                    native_snapshot = map_gemini_message_to_snapshot(
+                        final_message,
+                        provider=self.name,
+                        model=model,
+                        usage=captured_usage,
+                        finish_reason=finish_reason,
+                    )
+                    yield ProviderEvent(kind="final_native", final_native=native_snapshot)
+                except Exception as exc:
+                    logger.warning(
+                        "Native final mapping failed in %s provider (model=%s); falling back to snapshot assembler: %s",
+                        self.name,
+                        model,
+                        exc,
+                        exc_info=True,
+                    )
+
+            if captured_usage is not None or finish_reason is not None:
+                if tool_finish_emitted and finish_reason == "tool_calls":
+                    finish_reason = None
+                yield ProviderEvent(
+                    kind="meta",
+                    meta=MetaPayload(
+                        usage=captured_usage,
+                        finish_reason=finish_reason,
+                    ),
                 )
 
-                GEMINI_ERROR_REASONS = {
-                    "SAFETY": "Content blocked by safety filters",
-                    "MALFORMED_FUNCTION_CALL": "Function call was malformed",
-                    "UNEXPECTED_TOOL_CALL": "Model tried to call an unregistered tool",
-                    "RECITATION": "Response contained recited content",
-                    "PROHIBITED_CONTENT": "Content prohibited",
-                    "BLOCKLIST": "Content blocked by filter",
-                    "IMAGE_SAFETY": "Image blocked by safety filters",
-                    "SPII": "Sensitive personal information detected",
-                }
-
-                if reason_str in GEMINI_ERROR_REASONS:
-                    yield self._format_error(f"{GEMINI_ERROR_REASONS[reason_str]} ({reason_str})")
-                    return  # Don't yield [DONE] after error
-
-            # Emit usage information before [DONE]
-            if captured_usage:
-                usage_payload = {"usage": captured_usage}
-                yield self._format_sse(usage_payload)
-
-            yield b"data: [DONE]\n\n"
-
-        except Exception as exc:  # pragma: no cover - stream errors surfaced via SSE
-            # Prefer structured API errors from google.genai
+        except Exception as exc:  # pragma: no cover - stream errors surfaced via provider error event
             if isinstance(exc, errors.APIError):
                 message = getattr(exc, "message", None) or str(exc)
                 status = getattr(exc, "status", None) or getattr(exc, "code", None)
-                yield self._format_error(message, status)
+                yield self._error_event(message, status if isinstance(status, int) else None)
             else:
                 status = (
                     getattr(exc, "code", None)
@@ -491,19 +511,17 @@ class GeminiProvider(BaseProvider):
                     or getattr(exc, "http_status", None)
                 )
                 message = getattr(exc, "message", None) or str(exc)
-                yield self._format_error(message, status)
+                yield self._error_event(message, status if isinstance(status, int) else None)
+            return
         finally:
-            # Cleanup Gemini stream using standard async generator close
-            if stream is not None and hasattr(stream, 'aclose'):
+            if stream is not None and hasattr(stream, "aclose"):
                 try:
-                    await stream.aclose()  # type: ignore
+                    await stream.aclose()  # type: ignore[attr-defined]
                 except Exception:
-                    pass  # Ignore errors during cleanup
+                    pass
 
     async def get_models(self) -> Dict:
-        """
-        Fetch available Gemini models from Google API.
-        """
+        """Fetch available Gemini models from Google API."""
         if not self.validate_config():
             raise Exception("Gemini API key is required to fetch models")
 
@@ -511,15 +529,16 @@ class GeminiProvider(BaseProvider):
 
         models = []
         for model in client.models.list():
-            # Only include models that support generateContent
             supported_actions = getattr(model, "supported_actions", []) or []
             if "generateContent" in supported_actions:
                 model_name = getattr(model, "name", "") or ""
-                models.append({
-                    "id": model_name.replace("models/", ""),
-                    "display_name": getattr(model, "display_name", None) or model_name,
-                    "description": getattr(model, "description", None),
-                    "input_token_limit": getattr(model, "input_token_limit", None),
-                    "output_token_limit": getattr(model, "output_token_limit", None),
-                })
+                models.append(
+                    {
+                        "id": model_name.replace("models/", ""),
+                        "display_name": getattr(model, "display_name", None) or model_name,
+                        "description": getattr(model, "description", None),
+                        "input_token_limit": getattr(model, "input_token_limit", None),
+                        "output_token_limit": getattr(model, "output_token_limit", None),
+                    }
+                )
         return {"data": models}

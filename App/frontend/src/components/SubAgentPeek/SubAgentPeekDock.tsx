@@ -2,19 +2,19 @@ import React, { useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
-import type { SubAgentInvocation, SubAgentParentType } from '../../store/subAgentRuntimeStore';
+import type { SubAgentRun, SubAgentParentType } from '../../store/subAgentRuntimeStore';
 import { useSubAgentRuntimeStore } from '../../store/subAgentRuntimeStore';
 import { useFunctionCallUIStore } from '../../toolCall/ui/store';
 import { SubAgentPeekHeader } from './SubAgentPeekHeader';
 import { SubAgentPeekTimeline } from './SubAgentPeekTimeline';
 import './subAgentPeek.css';
 
-interface InvocationEntry {
+interface RunEntry {
   key: string;
-  invocation: SubAgentInvocation;
+  run: SubAgentRun;
 }
 
-function invocationPriority(status: string): number {
+function runPriority(status: string): number {
   switch (status) {
     case 'running':
       return 0;
@@ -33,13 +33,13 @@ function invocationPriority(status: string): number {
   }
 }
 
-function isBlockingInvocationStatus(status: string): boolean {
+function isBlockingRunStatus(status: string): boolean {
   return status === 'running' || status === 'waiting' || status === 'paused' || status === 'error';
 }
 
-function hasPendingToolDecisions(invocation: SubAgentInvocation): number {
-  for (let i = invocation.history.length - 1; i >= 0; i--) {
-    const message = invocation.history[i];
+function hasPendingToolDecisions(run: SubAgentRun): number {
+  for (let i = run.history.length - 1; i >= 0; i--) {
+    const message = run.history[i];
     if (message.role !== 'assistant') continue;
     const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
     return toolCalls.filter((toolCall: any) =>
@@ -78,41 +78,41 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   parentToolCallIds,
   isActiveParent,
 }) => {
-  const invocationsByKey = useSubAgentRuntimeStore((state) => state.invocationsByKey);
+  const runsByKey = useSubAgentRuntimeStore((state) => state.runsByKey);
 
   const setPeekOpen = useFunctionCallUIStore((state) => state.setPeekOpen);
-  const setSelectedPeekInvocation = useFunctionCallUIStore((state) => state.setSelectedPeekInvocation);
+  const setSelectedPeekRun = useFunctionCallUIStore((state) => state.setSelectedPeekRun);
 
   const peekOpen = useFunctionCallUIStore(
     (state) => state.peekOpenByThread[threadId] ?? isActiveParent
   );
   const selectedKey = useFunctionCallUIStore(
-    (state) => state.selectedPeekInvocationByThread[threadId]
+    (state) => state.selectedPeekRunByThread[threadId]
   );
 
-  const relevantInvocations = useMemo(() => {
+  const relevantRuns = useMemo(() => {
     const allowedToolCalls = new Set(parentToolCallIds);
-    const result: Record<string, SubAgentInvocation> = {};
-    for (const [key, invocation] of Object.entries(invocationsByKey)) {
-      if (!invocation) continue;
-      if (invocation.parentType !== parentType) continue;
-      if (invocation.parentId !== parentId) continue;
-      if (invocation.parentMessageId !== parentMessageId) continue;
-      if (allowedToolCalls.size > 0 && !allowedToolCalls.has(invocation.parentToolCallId)) continue;
-      result[key] = invocation;
+    const result: Record<string, SubAgentRun> = {};
+    for (const [key, run] of Object.entries(runsByKey)) {
+      if (!run) continue;
+      if (run.parentType !== parentType) continue;
+      if (run.parentId !== parentId) continue;
+      if (run.parentMessageId !== parentMessageId) continue;
+      if (allowedToolCalls.size > 0 && !allowedToolCalls.has(run.parentToolCallId)) continue;
+      result[key] = run;
     }
     return result;
-  }, [invocationsByKey, parentToolCallIds, parentType, parentId, parentMessageId]);
+  }, [runsByKey, parentToolCallIds, parentType, parentId, parentMessageId]);
 
-  const entries = useMemo<InvocationEntry[]>(() => {
+  const entries = useMemo<RunEntry[]>(() => {
     const order = buildToolCallOrder(parentToolCallIds);
 
-    const filtered = Object.entries(relevantInvocations)
-      .map(([key, invocation]) => ({ key, invocation }));
+    const filtered = Object.entries(relevantRuns)
+      .map(([key, run]) => ({ key, run }));
 
     filtered.sort((a, b) => {
-      const ai = order.get(a.invocation.parentToolCallId);
-      const bi = order.get(b.invocation.parentToolCallId);
+      const ai = order.get(a.run.parentToolCallId);
+      const bi = order.get(b.run.parentToolCallId);
       if (typeof ai === 'number' && typeof bi === 'number' && ai !== bi) return ai - bi;
       if (typeof ai === 'number') return -1;
       if (typeof bi === 'number') return 1;
@@ -120,10 +120,10 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     });
 
     return filtered;
-  }, [relevantInvocations, parentToolCallIds]);
+  }, [relevantRuns, parentToolCallIds]);
 
   const activeSessionIds = useMemo(
-    () => entries.map((entry) => entry.invocation.activeSessionId).filter((id): id is string => typeof id === 'string' && id.length > 0),
+    () => entries.map((entry) => entry.run.activeSessionId).filter((id): id is string => typeof id === 'string' && id.length > 0),
     [entries]
   );
 
@@ -142,14 +142,14 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   const pendingCountByKey = useMemo(() => {
     const map: Record<string, number> = {};
     for (const entry of entries) {
-      map[entry.key] = hasPendingToolDecisions(entry.invocation);
+      map[entry.key] = hasPendingToolDecisions(entry.run);
     }
     return map;
   }, [entries]);
 
   const orderedKeys = useMemo(() => entries.map((entry) => entry.key), [entries]);
   const entryByKey = useMemo(() => {
-    const map: Record<string, InvocationEntry | undefined> = {};
+    const map: Record<string, RunEntry | undefined> = {};
     for (const entry of entries) {
       map[entry.key] = entry;
     }
@@ -162,9 +162,9 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
       const rightEntry = entryByKey[right];
       if (!leftEntry || !rightEntry) return 0;
 
-      const leftPriority = invocationPriority(leftEntry.invocation.status);
-      const rightPriority = invocationPriority(rightEntry.invocation.status);
-      if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+      const leftPriorityVal = runPriority(leftEntry.run.status);
+      const rightPriorityVal = runPriority(rightEntry.run.status);
+      if (leftPriorityVal !== rightPriorityVal) return leftPriorityVal - rightPriorityVal;
 
       const leftPending = pendingCountByKey[left] ?? 0;
       const rightPending = pendingCountByKey[right] ?? 0;
@@ -184,14 +184,14 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
       const selectedEntry = entryByKey[selectedKey];
       const prioritized = prioritizedKeys[0] ? entryByKey[prioritizedKeys[0]] : undefined;
       if (selectedEntry && prioritized) {
-        const selectedBlocking = isBlockingInvocationStatus(selectedEntry.invocation.status);
-        const prioritizedBlocking = isBlockingInvocationStatus(prioritized.invocation.status);
-        const selectedPriority = invocationPriority(selectedEntry.invocation.status);
-        const prioritizedPriority = invocationPriority(prioritized.invocation.status);
+        const selectedBlocking = isBlockingRunStatus(selectedEntry.run.status);
+        const prioritizedBlocking = isBlockingRunStatus(prioritized.run.status);
+        const selectedPriorityVal = runPriority(selectedEntry.run.status);
+        const prioritizedPriorityVal = runPriority(prioritized.run.status);
 
         if (
           (!selectedBlocking && prioritizedBlocking) ||
-          (prioritizedPriority === 0 && selectedPriority !== 0)
+          (prioritizedPriorityVal === 0 && selectedPriorityVal !== 0)
         ) {
           nextSelectedKey = prioritized.key;
         }
@@ -199,12 +199,12 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     }
 
     if (nextSelectedKey !== selectedKey) {
-      setSelectedPeekInvocation(threadId, nextSelectedKey);
+      setSelectedPeekRun(threadId, nextSelectedKey);
     }
   }, [
     orderedKeys,
     selectedKey,
-    setSelectedPeekInvocation,
+    setSelectedPeekRun,
     threadId,
     isActiveParent,
     entryByKey,
@@ -223,14 +223,14 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
   const items = entries.map((entry) => ({
     key: entry.key,
-    displayName: entry.invocation.displayName || entry.invocation.agentName || entry.invocation.subAgentId,
-    status: entry.invocation.status,
+    displayName: entry.run.displayName || entry.run.agentName || entry.run.subAgentId,
+    status: entry.run.status,
     pendingCount: pendingCountByKey[entry.key] ?? 0,
     selected: selectedEntry.key === entry.key,
   }));
 
-  const selectedSession = selectedEntry.invocation.activeSessionId
-    ? activeSessionsById[selectedEntry.invocation.activeSessionId]
+  const selectedSession = selectedEntry.run.activeSessionId
+    ? activeSessionsById[selectedEntry.run.activeSessionId]
     : undefined;
 
   return (
@@ -239,7 +239,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
         open={peekOpen}
         onToggle={() => setPeekOpen(threadId, !peekOpen)}
         items={items}
-        onSelect={(invocationKey) => setSelectedPeekInvocation(threadId, invocationKey)}
+        onSelect={(runKey) => setSelectedPeekRun(threadId, runKey)}
       />
 
       <AnimatePresence initial={false}>
@@ -253,8 +253,8 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
           >
             <SubAgentPeekTimeline
               threadId={threadId}
-              invocationKey={selectedEntry.key}
-              invocation={selectedEntry.invocation}
+              runKey={selectedEntry.key}
+              run={selectedEntry.run}
               activeSession={selectedSession}
             />
           </motion.div>

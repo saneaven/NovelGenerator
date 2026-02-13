@@ -14,7 +14,7 @@ from ..schemas.agents import (
     AgentWithMessagesResponse
 )
 from ..auth import get_current_user
-from ..services.sub_agent_invocation_service import sub_agent_invocation_service
+from ..services.sub_agent_run_service import sub_agent_run_service
 
 router = APIRouter(prefix="/api/v1/projects/{project_id}/agents", tags=["Agents"])
 
@@ -339,8 +339,8 @@ async def delete_message(
             detail="Message not found"
         )
 
-    # Cleanup persisted Sub Agent invocation trees rooted at this agent message.
-    sub_agent_invocation_service.delete_tree_for_agent_message(
+    # Cleanup persisted Sub Agent run trees rooted at this agent message.
+    sub_agent_run_service.delete_tree_for_agent_message(
         db=db,
         project_id=project_id,
         agent_id=agent_id,

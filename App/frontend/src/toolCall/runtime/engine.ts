@@ -233,9 +233,9 @@ async function applyToolCall(params: {
       let parentId: string;
       let parentMessageId: string;
 
-      if (context.options?.parentSubInvocationId && context.options?.parentSubMessageId) {
+      if (context.options?.parentSubRunId && context.options?.parentSubMessageId) {
         parentType = 'sub_agent';
-        parentId = context.options.parentSubInvocationId;
+        parentId = context.options.parentSubRunId;
         parentMessageId = context.options.parentSubMessageId;
       } else if (context.options?.parentAgentMessageId) {
         parentType = 'agent';

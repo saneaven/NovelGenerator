@@ -5,7 +5,7 @@ interface FunctionCallUIState {
   expandedByThread: Record<string, Record<string, boolean> | undefined>;
   patchDecisionsByThread: Record<string, Record<string, PatchDecision> | undefined>;
   peekOpenByThread: Record<string, boolean | undefined>;
-  selectedPeekInvocationByThread: Record<string, string | undefined>;
+  selectedPeekRunByThread: Record<string, string | undefined>;
 }
 
 interface FunctionCallUIActions {
@@ -21,8 +21,8 @@ interface FunctionCallUIActions {
   setPeekOpen: (threadId: string, open: boolean) => void;
   togglePeekOpen: (threadId: string, defaultOpen?: boolean) => void;
 
-  getSelectedPeekInvocation: (threadId: string) => string | undefined;
-  setSelectedPeekInvocation: (threadId: string, invocationKey: string | undefined) => void;
+  getSelectedPeekRun: (threadId: string) => string | undefined;
+  setSelectedPeekRun: (threadId: string, runKey: string | undefined) => void;
 
   clearThread: (threadId: string) => void;
 }
@@ -31,7 +31,7 @@ export const useFunctionCallUIStore = create<FunctionCallUIState & FunctionCallU
   expandedByThread: {},
   patchDecisionsByThread: {},
   peekOpenByThread: {},
-  selectedPeekInvocationByThread: {},
+  selectedPeekRunByThread: {},
 
   isExpanded: (threadId, cardId, defaultExpanded = false) => {
     const thread = get().expandedByThread[threadId];
@@ -109,16 +109,16 @@ export const useFunctionCallUIStore = create<FunctionCallUIState & FunctionCallU
     get().setPeekOpen(threadId, !current);
   },
 
-  getSelectedPeekInvocation: (threadId) => get().selectedPeekInvocationByThread[threadId],
+  getSelectedPeekRun: (threadId) => get().selectedPeekRunByThread[threadId],
 
-  setSelectedPeekInvocation: (threadId, invocationKey) =>
+  setSelectedPeekRun: (threadId, runKey) =>
     set((state) => {
-      const current = state.selectedPeekInvocationByThread[threadId];
-      if (current === invocationKey) return state;
+      const current = state.selectedPeekRunByThread[threadId];
+      if (current === runKey) return state;
       return {
-        selectedPeekInvocationByThread: {
-          ...state.selectedPeekInvocationByThread,
-          [threadId]: invocationKey,
+        selectedPeekRunByThread: {
+          ...state.selectedPeekRunByThread,
+          [threadId]: runKey,
         },
       };
     }),
@@ -128,18 +128,18 @@ export const useFunctionCallUIStore = create<FunctionCallUIState & FunctionCallU
       const expandedByThread = { ...state.expandedByThread };
       const patchDecisionsByThread = { ...state.patchDecisionsByThread };
       const peekOpenByThread = { ...state.peekOpenByThread };
-      const selectedPeekInvocationByThread = { ...state.selectedPeekInvocationByThread };
+      const selectedPeekRunByThread = { ...state.selectedPeekRunByThread };
 
       delete expandedByThread[threadId];
       delete patchDecisionsByThread[threadId];
       delete peekOpenByThread[threadId];
-      delete selectedPeekInvocationByThread[threadId];
+      delete selectedPeekRunByThread[threadId];
 
       return {
         expandedByThread,
         patchDecisionsByThread,
         peekOpenByThread,
-        selectedPeekInvocationByThread,
+        selectedPeekRunByThread,
       };
     }),
 }));

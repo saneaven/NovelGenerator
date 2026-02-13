@@ -13,6 +13,7 @@ from anthropic import AsyncAnthropic
 
 from .async_openai_provider import AsyncOpenAIProvider
 from .claude_provider import ClaudeProvider
+from .contracts import ProviderEvent
 from .registry import ProviderRegistry
 from ..utils.outbound_http import (
     filter_additional_body,
@@ -231,7 +232,7 @@ class CustomProvider(AsyncOpenAIProvider):
         request_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[ProviderEvent, None]:
         effective_request_format = self._normalize_request_format(request_format or self._request_format)
 
         if effective_request_format == "claude_sdk":
@@ -248,7 +249,7 @@ class CustomProvider(AsyncOpenAIProvider):
                     "additional_body": self._additional_body,
                 }
             )
-            async for chunk in claude_provider.stream_chat(
+            async for event in claude_provider.stream_chat(
                 messages=messages,
                 model=model,
                 temperature=temperature,
@@ -263,13 +264,13 @@ class CustomProvider(AsyncOpenAIProvider):
                 retry_config=retry_config,
                 native_tool_call=native_tool_call,
             ):
-                yield chunk
+                yield event
             return
 
         # openai_sdk path
         # Custom dialect-specific thinking fields are only sent in model thinking mode.
         effective_thinking_config = thinking_config if thinking_mode == "model" else None
-        async for chunk in super().stream_chat(
+        async for event in super().stream_chat(
             messages=messages,
             model=model,
             temperature=temperature,
@@ -284,7 +285,7 @@ class CustomProvider(AsyncOpenAIProvider):
             retry_config=retry_config,
             native_tool_call=native_tool_call,
         ):
-            yield chunk
+            yield event
 
     async def get_models(self) -> Dict:
         effective_request_format = self._normalize_request_format(self._request_format)

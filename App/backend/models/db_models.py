@@ -657,12 +657,12 @@ class AgentMessage(Base):
 
 
 # ============================================================================
-# SUB AGENT INVOCATION LOGS
+# SUB AGENT RUNS
 # ============================================================================
 
-class SubAgentInvocationModel(Base):
-    """Persistent Sub Agent invocation states."""
-    __tablename__ = 'sub_agent_invocations'
+class SubAgentRunModel(Base):
+    """Persistent Sub Agent run states."""
+    __tablename__ = 'sub_agent_runs'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -670,7 +670,7 @@ class SubAgentInvocationModel(Base):
 
     # Polymorphic parent reference:
     # - parent_type='agent': parent_id -> agents.id, parent_message_id -> agent_messages.id
-    # - parent_type='sub_agent': parent_id -> sub_agent_invocations.id, parent_message_id -> sub_agent_invocation_messages.id
+    # - parent_type='sub_agent': parent_id -> sub_agent_runs.id, parent_message_id -> sub_agent_run_messages.id
     parent_type = Column(String(20), nullable=False)
     parent_id = Column(UUID(as_uuid=True), nullable=False)
     parent_message_id = Column(UUID(as_uuid=True), nullable=False)
@@ -687,6 +687,9 @@ class SubAgentInvocationModel(Base):
     final_output = Column(Text, nullable=True)
     error = Column(Text, nullable=True)
 
+    # Stable per-run message ordering (1-based, allocated by add_message)
+    next_message_seq = Column(BigInteger, default=1, nullable=False)
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -695,10 +698,10 @@ class SubAgentInvocationModel(Base):
     agent = relationship("Agent")
     sub_agent = relationship("SubAgentDefinitionModel")
     messages = relationship(
-        "SubAgentInvocationMessageModel",
-        back_populates="invocation",
+        "SubAgentRunMessageModel",
+        back_populates="run",
         cascade="all, delete-orphan",
-        order_by="SubAgentInvocationMessageModel.seq",
+        order_by="SubAgentRunMessageModel.seq",
     )
 
     __table_args__ = (
@@ -707,26 +710,26 @@ class SubAgentInvocationModel(Base):
             'parent_id',
             'parent_message_id',
             'parent_tool_call_id',
-            name='uq_sub_agent_invocation_parent_tool',
+            name='uq_sub_agent_run_parent_tool',
         ),
         CheckConstraint(
             "status IN ('running','waiting','paused','completed','error','cancelled')",
-            name='ck_sub_agent_invocations_status',
+            name='ck_sub_agent_runs_status',
         ),
-        Index('ix_sub_agent_invocations_project_agent_parent_message', 'project_id', 'agent_id', 'parent_message_id'),
-        Index('ix_sub_agent_invocations_parent_ref', 'parent_type', 'parent_id', 'parent_message_id'),
-        Index('ix_sub_agent_invocations_status', 'status'),
+        Index('ix_sub_agent_runs_project_agent_parent_message', 'project_id', 'agent_id', 'parent_message_id'),
+        Index('ix_sub_agent_runs_parent_ref', 'parent_type', 'parent_id', 'parent_message_id'),
+        Index('ix_sub_agent_runs_status', 'status'),
     )
 
 
-class SubAgentInvocationMessageModel(Base):
-    """Persistent message history for a Sub Agent invocation."""
-    __tablename__ = 'sub_agent_invocation_messages'
+class SubAgentRunMessageModel(Base):
+    """Persistent message history for a Sub Agent run."""
+    __tablename__ = 'sub_agent_run_messages'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    invocation_id = Column(
+    run_id = Column(
         UUID(as_uuid=True),
-        ForeignKey('sub_agent_invocations.id', ondelete='CASCADE'),
+        ForeignKey('sub_agent_runs.id', ondelete='CASCADE'),
         nullable=False,
         index=True,
     )
@@ -740,15 +743,15 @@ class SubAgentInvocationMessageModel(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
-    invocation = relationship("SubAgentInvocationModel", back_populates="messages")
+    run = relationship("SubAgentRunModel", back_populates="messages")
 
     __table_args__ = (
         UniqueConstraint(
-            'invocation_id',
+            'run_id',
             'seq',
-            name='uq_sub_agent_invocation_messages_invocation_seq',
+            name='uq_sub_agent_run_messages_run_seq',
         ),
-        Index('ix_sub_agent_invocation_messages_invocation_created', 'invocation_id', 'created_at'),
+        Index('ix_sub_agent_run_messages_run_created', 'run_id', 'created_at'),
     )
 
 

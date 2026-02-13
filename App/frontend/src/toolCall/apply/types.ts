@@ -72,8 +72,8 @@ export interface HandlerOptions {
   agentId?: string;
   /** Parent agent assistant message id (for root Sub Agent calls). */
   parentAgentMessageId?: string;
-  /** Parent Sub Agent invocation id (for nested Sub Agent calls). */
-  parentSubInvocationId?: string;
+  /** Parent Sub Agent run id (for nested Sub Agent calls). */
+  parentSubRunId?: string;
   /** Parent Sub Agent assistant message id (for nested Sub Agent calls). */
   parentSubMessageId?: string;
 }

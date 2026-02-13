@@ -5,7 +5,8 @@ import type {
   ToolCallMetadata,
   ToolCallProgress,
 } from './requestTypes';
-import { streamLLM } from './llmService';
+import type { FinalSnapshot } from './streamProtocol';
+import { BackendError, streamLLM } from './llmService';
 import { useSettingsStore, type AITaskType } from '../store/settingsStore';
 import { useLLMLogStore } from '../store/llmLogStore';
 import { ToolCallStreamTracker } from '../agent/streaming/ToolCallStreamTracker';
@@ -21,9 +22,6 @@ import { LLMTaskMode } from './types';
 import { useCredentialsStore } from '../store/credentialsStore';
 import { buildConversationBlocks } from './conversation/buildConversationBlocks';
 
-/**
- * Map LLMTaskMode to AITaskType for settings lookup
- */
 const MODE_TO_TASK_TYPE: Record<LLMTaskModeType, AITaskType> = {
   [LLMTaskMode.AGENT_PLAN_MODE]: 'agent',
   [LLMTaskMode.AGENT_AGENT_MODE]: 'agent',
@@ -38,17 +36,6 @@ const MODE_TO_TASK_TYPE: Record<LLMTaskModeType, AITaskType> = {
   [LLMTaskMode.SUB_AGENT]: 'subAgent',
 };
 
-/**
- * LLMTask - Core streaming class with interval-based smoothing
- *
- * Responsibilities:
- * - Message preparation (template rendering via PromptManager)
- * - Stream LLM response via streamChat()
- * - Content part accumulation (thinking, content)
- * - Interval-based updates for smooth streaming (50ms cadence)
- * - Tool call tracking via ToolCallStreamTracker
- * - Abort handling
- */
 export class LLMTask {
   private readonly config: LLMTaskConfig;
   private readonly callbacks: LLMTaskCallbacks;
@@ -57,7 +44,6 @@ export class LLMTask {
   private toolTracker: ToolCallStreamTracker | null = null;
   private pendingProgress: ToolCallProgress[] | null = null;
 
-  // Interval-based smoothing for consistent update cadence
   private updateIntervalId: number | null = null;
   private pendingContentUpdate = false;
   private pendingProgressUpdate = false;
@@ -68,10 +54,6 @@ export class LLMTask {
     this.callbacks = callbacks;
   }
 
-  /**
-   * Run the LLM task with the given message history
-   * @param history - Optional message history (AgentManager passes this, modals don't)
-   */
   async run(history: ChatMessage[] = []): Promise<LLMTaskResult> {
     if (this.isRunning) {
       console.warn('LLMTask: Already running');
@@ -81,7 +63,6 @@ export class LLMTask {
     this.isRunning = true;
     this.pendingParts = [];
 
-    // Initialize logging variables outside try block for catch block access
     const logStore = useLLMLogStore.getState();
     const settingsStore = useSettingsStore.getState();
     const isLoggingEnabled = settingsStore.getSettings().llmLoggingEnabled;
@@ -89,11 +70,9 @@ export class LLMTask {
     const requestStartTime = Date.now();
 
     try {
-      // 1. Get provider/model config (from settings or overrides)
       const settings = settingsStore.getSettings();
       const credentialsStore = useCredentialsStore.getState();
 
-      // Get task type for this mode to lookup settings
       const taskType = MODE_TO_TASK_TYPE[this.config.mode];
       const taskConfig = settings.task_configs[taskType];
 
@@ -112,16 +91,14 @@ export class LLMTask {
           : undefined;
       const retryConfig = this.config.retryConfig ?? settings.retryConfig;
 
-      // 2. Generate prompt bundle
       const promptBundle = await PromptManager.generatePromptBundle(
         this.config.mode,
-        this.config.promptContext
+        this.config.promptContext,
       );
 
-      // 3. Get tools for this mode
       const tools = PromptManager.getToolsForMode(
         this.config.mode,
-        this.config.promptContext
+        this.config.promptContext,
       );
 
       const context: any = this.config.promptContext;
@@ -135,7 +112,6 @@ export class LLMTask {
               : 'raw_output')
           : 'tool_call');
 
-      // 4. Prepare messages
       const messages = buildConversationBlocks(history, promptBundle, {
         toolCallHistoryLimit: settings.toolCallHistoryLimit,
         thinkingHistoryLimit: settings.thinkingHistoryLimit,
@@ -148,7 +124,6 @@ export class LLMTask {
         throw new Error(`${outputMode} requires tools to be omitted`);
       }
 
-      // Log LLM request structure for debugging
       console.log('LLM Request:', {
         mode: this.config.mode,
         provider,
@@ -160,7 +135,6 @@ export class LLMTask {
         messages,
       });
 
-      // Log to LLM Log Store if enabled
       if (isLoggingEnabled) {
         logEntryId = logStore.addLogEntry({
           status: 'pending',
@@ -177,14 +151,13 @@ export class LLMTask {
         });
       }
 
-      // 5. Initialize function tracker
       this.toolTracker = new ToolCallStreamTracker();
 
-      // 7. Stream with interval-based smoothing for consistent update cadence
       let currentPartType: ContentPartType | null = null;
       let currentBuffer = '';
       let accumulatedThinkingDetails: any[] | undefined;
-      let capturedUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined;
+      let finalSnapshot: FinalSnapshot | null = null;
+      let doneSeen = false;
 
       const finalizeCurrentBuffer = () => {
         if (currentPartType && currentBuffer) {
@@ -194,11 +167,27 @@ export class LLMTask {
         }
       };
 
-      // Start interval-based update loop for smooth streaming
+      const appendTextDelta = (partType: ContentPartType, rawText: string) => {
+        const isTypeSwitch = currentPartType !== partType;
+        const textToAdd = isTypeSwitch ? rawText.trimStart() : rawText;
+
+        if (isTypeSwitch) {
+          finalizeCurrentBuffer();
+          const lastPart = this.pendingParts[this.pendingParts.length - 1];
+          if (lastPart && lastPart.type === partType) {
+            this.pendingParts.pop();
+            currentBuffer = lastPart.text;
+          }
+          currentPartType = partType;
+        }
+
+        currentBuffer += textToAdd;
+        this.pendingContentUpdate = true;
+      };
+
       const startUpdateInterval = () => {
         if (this.updateIntervalId === null) {
           this.updateIntervalId = window.setInterval(() => {
-            // Update content if pending
             if (this.pendingContentUpdate) {
               this.pendingContentUpdate = false;
               if (currentPartType && currentBuffer) {
@@ -209,7 +198,7 @@ export class LLMTask {
                 this.callbacks.onUpdate(currentParts);
               }
             }
-            // Update tool call progress if pending
+
             if (this.pendingProgressUpdate && this.pendingProgress) {
               this.pendingProgressUpdate = false;
               if (this.callbacks.onToolCallProgress) {
@@ -220,12 +209,11 @@ export class LLMTask {
         }
       };
 
-      // Update log entry to streaming
       if (logEntryId) {
         logStore.updateLogEntry(logEntryId, { status: 'streaming' });
       }
 
-      for await (const chunk of streamLLM(
+      for await (const event of streamLLM(
         messages,
         provider,
         providerConfig,
@@ -241,110 +229,72 @@ export class LLMTask {
           request_format,
           retryConfig,
           native_tool_call: nativeToolCall,
-        }
+        },
       )) {
-        // Handle string chunk (content)
-        if (typeof chunk === 'string') {
-          // Apply trimStart() on first chunk after type switch
-          const isTypeSwitch = currentPartType !== 'content';
-          const chunkToAdd = isTypeSwitch ? chunk.trimStart() : chunk;
-
-          if (isTypeSwitch) {
-            finalizeCurrentBuffer();
-            // Merge with last content part if exists
-            const lastPart = this.pendingParts[this.pendingParts.length - 1];
-            if (lastPart && lastPart.type === 'content') {
-              this.pendingParts.pop();
-              currentBuffer = lastPart.text;
-            }
-            currentPartType = 'content';
+        if (event.type === 'delta') {
+          if (event.contentDelta) {
+            appendTextDelta('content', event.contentDelta);
+            startUpdateInterval();
           }
-          currentBuffer += chunkToAdd;
 
-          // Mark pending update and ensure interval is running
-          this.pendingContentUpdate = true;
-          startUpdateInterval();
+          if (event.thinkingDelta) {
+            appendTextDelta('thinking', event.thinkingDelta);
+            startUpdateInterval();
+          }
+
+          if (event.toolCallDeltas.length && this.toolTracker) {
+            const progressEvents = this.toolTracker.applyDelta(event.toolCallDeltas as any);
+            if (progressEvents.length && this.callbacks.onToolCallProgress) {
+              this.pendingProgress = progressEvents;
+              this.pendingProgressUpdate = true;
+              startUpdateInterval();
+            }
+          }
+
+          if (event.thinkingDetailsDelta.length) {
+            if (!accumulatedThinkingDetails) {
+              accumulatedThinkingDetails = [];
+            }
+            accumulatedThinkingDetails.push(...event.thinkingDetailsDelta);
+          }
+
           continue;
         }
 
-        // Handle thinking chunk
-        const thinkingText = (chunk as any).thinking_text;
-        if (thinkingText) {
-          // Apply trimStart() on first chunk after type switch
-          const isTypeSwitch = currentPartType !== 'thinking';
-          const textToAdd = isTypeSwitch ? thinkingText.trimStart() : thinkingText;
-
-          if (isTypeSwitch) {
-            finalizeCurrentBuffer();
-            const lastPart = this.pendingParts[this.pendingParts.length - 1];
-            if (lastPart && lastPart.type === 'thinking') {
-              this.pendingParts.pop();
-              currentBuffer = lastPart.text;
-            }
-            currentPartType = 'thinking';
+        if (event.type === 'final') {
+          if (finalSnapshot) {
+            throw new Error('Protocol violation: final event was emitted more than once');
           }
-          currentBuffer += textToAdd;
-
-          // Mark pending update and ensure interval is running
-          this.pendingContentUpdate = true;
-          startUpdateInterval();
+          finalSnapshot = event.snapshot;
+          continue;
         }
 
-        // Handle content in object form
-        if (chunk.content) {
-          // Apply trimStart() on first chunk after type switch
-          const isTypeSwitch = currentPartType !== 'content';
-          const contentToAdd = isTypeSwitch ? chunk.content.trimStart() : chunk.content;
-
-          if (isTypeSwitch) {
-            finalizeCurrentBuffer();
-            const lastPart = this.pendingParts[this.pendingParts.length - 1];
-            if (lastPart && lastPart.type === 'content') {
-              this.pendingParts.pop();
-              currentBuffer = lastPart.text;
-            }
-            currentPartType = 'content';
-          }
-          currentBuffer += contentToAdd;
-
-          // Mark pending update and ensure interval is running
-          this.pendingContentUpdate = true;
-          startUpdateInterval();
+        if (event.type === 'error') {
+          throw new BackendError(`Backend Error: ${event.message}`, event.status ?? null);
         }
 
-        // Handle tool calls (interval-throttled for smooth updates)
-        if (chunk.tool_calls && this.toolTracker) {
-          const progressEvents = this.toolTracker.applyDelta(chunk.tool_calls);
-          if (progressEvents.length && this.callbacks.onToolCallProgress) {
-            this.pendingProgress = progressEvents;
-            this.pendingProgressUpdate = true;
-            startUpdateInterval();
+        if (event.type === 'done') {
+          doneSeen = true;
+          if (!event.ok) {
+            throw new Error('Stream completed with done(ok=false)');
           }
-        }
-
-        // Handle thinking details
-        const thinkingDetails = (chunk as any).thinking_details;
-        if (thinkingDetails) {
-          if (!accumulatedThinkingDetails) {
-            accumulatedThinkingDetails = [];
-          }
-          accumulatedThinkingDetails.push(...thinkingDetails);
-        }
-
-        // Handle usage information
-        const usage = (chunk as any).usage;
-        if (usage) {
-          capturedUsage = usage;
+          break;
         }
       }
 
-      // 8. Finalize - stop interval and flush pending updates
+      if (!doneSeen) {
+        throw new Error('Stream ended without done event');
+      }
+
+      if (!finalSnapshot) {
+        throw new Error('Protocol violation: done received without final snapshot');
+      }
+
       if (this.updateIntervalId !== null) {
         clearInterval(this.updateIntervalId);
         this.updateIntervalId = null;
       }
 
-      // Flush any pending progress updates
       if (this.pendingProgress && this.callbacks.onToolCallProgress) {
         this.callbacks.onToolCallProgress(this.pendingProgress);
         this.pendingProgress = null;
@@ -352,28 +302,41 @@ export class LLMTask {
 
       finalizeCurrentBuffer();
 
-      // Final update
+      const normalizedContentParts: ContentPart[] = Array.isArray(finalSnapshot.contentParts)
+        ? finalSnapshot.contentParts
+            .filter((part): part is ContentPart => (
+              Boolean(part) &&
+              (part.type === 'content' || part.type === 'thinking') &&
+              typeof part.text === 'string'
+            ))
+            .map((part) => ({ type: part.type, text: part.text }))
+        : [];
+
+      this.pendingParts = normalizedContentParts;
       this.callbacks.onUpdate([...this.pendingParts]);
 
-      // 9. Complete with results
-      const rawToolCalls = this.toolTracker?.finalize() ?? [];
-      const toolCalls: ToolCallMetadata[] = rawToolCalls.map((fc: any) => ({
-        id: fc.id,
-        tool_name: fc.function?.name ?? '',
-        arguments: this.parseArguments(fc.function?.arguments),
-        extra_content: fc.extra_content,
-        status: 'pending',
-      }));
+      const toolCalls: ToolCallMetadata[] = Array.isArray(finalSnapshot.toolCalls)
+        ? finalSnapshot.toolCalls.map((fc: any) => ({
+            id: fc.id,
+            tool_name: fc.tool_name ?? '',
+            arguments: (fc.arguments && typeof fc.arguments === 'object') ? fc.arguments : {},
+            extra_content: fc.extra_content,
+            status: 'pending',
+          }))
+        : [];
 
-      // Log streaming completion
+      const snapshotThinkingDetails = Array.isArray(finalSnapshot.thinkingDetails)
+        ? finalSnapshot.thinkingDetails
+        : accumulatedThinkingDetails;
+
       console.log('✅ LLM Streaming Complete:', {
         success: true,
         contentParts: [...this.pendingParts],
         toolCallCount: toolCalls.length,
         toolCalls,
+        finalSource: finalSnapshot.finalSource,
       });
 
-      // Update log entry to success
       if (logEntryId) {
         logStore.updateLogEntry(logEntryId, {
           status: 'success',
@@ -381,7 +344,7 @@ export class LLMTask {
           response: {
             contentParts: [...this.pendingParts],
             toolCalls,
-            thinkingDetails: accumulatedThinkingDetails,
+            thinkingDetails: snapshotThinkingDetails,
           },
         });
       }
@@ -389,22 +352,20 @@ export class LLMTask {
       return {
         contentParts: [...this.pendingParts],
         toolCalls,
-        thinkingDetails: accumulatedThinkingDetails,
-        usage: capturedUsage,
+        thinkingDetails: snapshotThinkingDetails,
+        usage: finalSnapshot.usage ?? undefined,
         provider,
-        model,
+        model: finalSnapshot.model || model,
       };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
 
-      // Log streaming failure
       console.log('LLM Streaming Failed:', {
         success: false,
         error: err.message,
         contentParts: [...this.pendingParts],
       });
 
-      // Update log entry to error
       if (logEntryId) {
         logStore.updateLogEntry(logEntryId, {
           status: 'error',
@@ -425,9 +386,6 @@ export class LLMTask {
     }
   }
 
-  /**
-   * Abort the running task
-   */
   abort(): void {
     this.config.abortController.abort();
     if (this.updateIntervalId !== null) {
@@ -437,21 +395,5 @@ export class LLMTask {
     this.pendingContentUpdate = false;
     this.pendingProgressUpdate = false;
     this.isRunning = false;
-  }
-
-  /**
-   * Prepare messages from history and prompt bundle
-   */
-  /**
-   * Parse tool call arguments from JSON string to object
-   */
-  private parseArguments(args: string | undefined): any {
-    if (!args) return {};
-    try {
-      return JSON.parse(args);
-    } catch {
-      console.error('Failed to parse tool call arguments:', args);
-      return {};
-    }
   }
 }

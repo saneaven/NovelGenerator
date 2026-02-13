@@ -108,7 +108,7 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
 
   const agents = getAgents(projectId);
   const selectedAgentId = getSelectedAgentId(projectId);
-  const invocationsByKey = useSubAgentRuntimeStore((state) => state.invocationsByKey);
+  const runsByKey = useSubAgentRuntimeStore((state) => state.runsByKey);
   const blockingSubAgentByAgentId = useMemo(() => {
     const result: Record<string, boolean> = {};
     const agentIds = new Set(agents.map((agent) => agent.id));
@@ -118,25 +118,25 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
       liveParentToolCallKeysByAgentId.set(agent.id, collectLiveParentToolCallKeys(agent));
     }
 
-    for (const invocation of Object.values(invocationsByKey)) {
-      if (!invocation) continue;
-      if (invocation.parentType !== 'agent') continue;
-      if (!agentIds.has(invocation.parentId)) continue;
-      if (!BLOCKING_SUB_AGENT_STATUSES.has(invocation.status)) continue;
+    for (const run of Object.values(runsByKey)) {
+      if (!run) continue;
+      if (run.parentType !== 'agent') continue;
+      if (!agentIds.has(run.parentId)) continue;
+      if (!BLOCKING_SUB_AGENT_STATUSES.has(run.status)) continue;
 
-      const liveParentKeys = liveParentToolCallKeysByAgentId.get(invocation.parentId);
+      const liveParentKeys = liveParentToolCallKeysByAgentId.get(run.parentId);
       if (!liveParentKeys || liveParentKeys.size === 0) continue;
       const parentKey = buildParentToolCallKey(
-        String(invocation.parentMessageId),
-        String(invocation.parentToolCallId)
+        String(run.parentMessageId),
+        String(run.parentToolCallId)
       );
       if (!liveParentKeys.has(parentKey)) continue;
 
-      result[invocation.parentId] = true;
+      result[run.parentId] = true;
     }
 
     return result;
-  }, [agents, invocationsByKey]);
+  }, [agents, runsByKey]);
 
   const agentSignalsById = useMemo<Record<string, AgentSidebarSignals>>(() => {
     const sessionsByAgent: Record<string, AnySession[]> = {};

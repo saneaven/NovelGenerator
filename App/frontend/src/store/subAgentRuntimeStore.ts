@@ -6,7 +6,7 @@ import type { ToolCallSchema } from '../toolCall';
 import type { HandlerOptions } from '../toolCall/apply/types';
 import type { InvocationCaller } from '../types/agentRuntime';
 
-export type SubAgentInvocationStatus =
+export type SubAgentRunStatus =
   | 'running'
   | 'waiting'
   | 'paused'
@@ -16,18 +16,18 @@ export type SubAgentInvocationStatus =
 
 export type SubAgentParentType = 'agent' | 'sub_agent';
 
-export interface SubAgentInvocationRef {
+export interface SubAgentRunRef {
   parentType: SubAgentParentType;
   parentId: string;
   parentMessageId: string;
   parentToolCallId: string;
 }
 
-export function buildSubAgentInvocationKey(ref: SubAgentInvocationRef): string {
+export function buildSubAgentRunKey(ref: SubAgentRunRef): string {
   return `${ref.parentType}:${ref.parentId}:${ref.parentMessageId}:${ref.parentToolCallId}`;
 }
 
-export interface SubAgentInvocation {
+export interface SubAgentRun {
   /** Local runtime id */
   id: string;
   /** Persistent DB id (set once state is saved) */
@@ -53,8 +53,14 @@ export interface SubAgentInvocation {
   tools?: ToolCallSchema[];
   handlerOptions?: HandlerOptions;
 
-  status: SubAgentInvocationStatus;
+  status: SubAgentRunStatus;
   history: ChatMessage[];
+
+  /** Number of LLM turns executed in the current run loop. */
+  turnCount: number;
+
+  /** Maps local temp message IDs → server-assigned UUIDs. */
+  messageIdMap: Record<string, string>;
 
   /** Current LLM session id for an active Sub Agent turn. */
   activeSessionId: string | null;
@@ -67,76 +73,77 @@ export interface SubAgentInvocation {
 }
 
 interface SubAgentRuntimeState {
-  invocationsByKey: Record<string, SubAgentInvocation | undefined>;
+  runsByKey: Record<string, SubAgentRun | undefined>;
 }
 
 interface SubAgentRuntimeActions {
-  getInvocationByKey: (invocationKey: string) => SubAgentInvocation | undefined;
-  getInvocation: (ref: SubAgentInvocationRef) => SubAgentInvocation | undefined;
-  listInvocationsByParent: (parentType: SubAgentParentType, parentId: string, parentMessageId?: string) => SubAgentInvocation[];
-  hasBlockingInvocationsForAgent: (agentId: string) => boolean;
-  upsertInvocation: (invocation: SubAgentInvocation) => void;
-  updateInvocation: (invocationKey: string, partial: Partial<SubAgentInvocation>) => void;
-  appendHistory: (invocationKey: string, message: ChatMessage) => void;
-  replaceHistory: (invocationKey: string, history: ChatMessage[]) => void;
-  clearInvocation: (invocationKey: string) => void;
+  getRunByKey: (runKey: string) => SubAgentRun | undefined;
+  getRun: (ref: SubAgentRunRef) => SubAgentRun | undefined;
+  listRunsByParent: (parentType: SubAgentParentType, parentId: string, parentMessageId?: string) => SubAgentRun[];
+  hasBlockingRunsForAgent: (agentId: string) => boolean;
+  upsertRun: (run: SubAgentRun) => void;
+  updateRun: (runKey: string, partial: Partial<SubAgentRun>) => void;
+  setMessageServerId: (runKey: string, localMsgId: string, serverMsgId: string) => void;
+  appendHistory: (runKey: string, message: ChatMessage) => void;
+  replaceHistory: (runKey: string, history: ChatMessage[]) => void;
+  clearRun: (runKey: string) => void;
 }
 
 export const useSubAgentRuntimeStore = create<SubAgentRuntimeState & SubAgentRuntimeActions>((set, get) => ({
-  invocationsByKey: {},
+  runsByKey: {},
 
-  getInvocationByKey: (invocationKey) => get().invocationsByKey[invocationKey],
+  getRunByKey: (runKey) => get().runsByKey[runKey],
 
-  getInvocation: (ref) => get().invocationsByKey[buildSubAgentInvocationKey(ref)],
+  getRun: (ref) => get().runsByKey[buildSubAgentRunKey(ref)],
 
-  listInvocationsByParent: (parentType, parentId, parentMessageId) => {
-    return Object.values(get().invocationsByKey).filter((invocation): invocation is SubAgentInvocation => {
-      if (!invocation) return false;
-      if (invocation.parentType !== parentType) return false;
-      if (invocation.parentId !== parentId) return false;
-      if (parentMessageId && invocation.parentMessageId !== parentMessageId) return false;
+  listRunsByParent: (parentType, parentId, parentMessageId) => {
+    return Object.values(get().runsByKey).filter((run): run is SubAgentRun => {
+      if (!run) return false;
+      if (run.parentType !== parentType) return false;
+      if (run.parentId !== parentId) return false;
+      if (parentMessageId && run.parentMessageId !== parentMessageId) return false;
       return true;
     });
   },
 
-  hasBlockingInvocationsForAgent: (agentId) =>
-    Object.values(get().invocationsByKey).some((invocation) => {
-      if (!invocation) return false;
-      if (invocation.parentType !== 'agent') return false;
-      if (invocation.parentId !== agentId) return false;
+  hasBlockingRunsForAgent: (agentId) =>
+    Object.values(get().runsByKey).some((run) => {
+      if (!run) return false;
+      if (run.parentType !== 'agent') return false;
+      if (run.parentId !== agentId) return false;
       return (
-        invocation.status === 'running' ||
-        invocation.status === 'waiting' ||
-        invocation.status === 'paused' ||
-        invocation.status === 'error'
+        run.status === 'running' ||
+        run.status === 'waiting' ||
+        run.status === 'paused' ||
+        run.status === 'error'
       );
     }),
 
-  upsertInvocation: (invocation) =>
+  upsertRun: (run) =>
     set((state) => {
-      const key = buildSubAgentInvocationKey({
-        parentType: invocation.parentType,
-        parentId: invocation.parentId,
-        parentMessageId: invocation.parentMessageId,
-        parentToolCallId: invocation.parentToolCallId,
+      const key = buildSubAgentRunKey({
+        parentType: run.parentType,
+        parentId: run.parentId,
+        parentMessageId: run.parentMessageId,
+        parentToolCallId: run.parentToolCallId,
       });
 
       return {
-        invocationsByKey: {
-          ...state.invocationsByKey,
-          [key]: invocation,
+        runsByKey: {
+          ...state.runsByKey,
+          [key]: run,
         },
       };
     }),
 
-  updateInvocation: (invocationKey, partial) =>
+  updateRun: (runKey, partial) =>
     set((state) => {
-      const existing = state.invocationsByKey[invocationKey];
+      const existing = state.runsByKey[runKey];
       if (!existing) return state;
       return {
-        invocationsByKey: {
-          ...state.invocationsByKey,
-          [invocationKey]: {
+        runsByKey: {
+          ...state.runsByKey,
+          [runKey]: {
             ...existing,
             ...partial,
           },
@@ -144,14 +151,32 @@ export const useSubAgentRuntimeStore = create<SubAgentRuntimeState & SubAgentRun
       };
     }),
 
-  appendHistory: (invocationKey, message) =>
+  setMessageServerId: (runKey, localMsgId, serverMsgId) =>
     set((state) => {
-      const existing = state.invocationsByKey[invocationKey];
+      const existing = state.runsByKey[runKey];
       if (!existing) return state;
       return {
-        invocationsByKey: {
-          ...state.invocationsByKey,
-          [invocationKey]: {
+        runsByKey: {
+          ...state.runsByKey,
+          [runKey]: {
+            ...existing,
+            messageIdMap: {
+              ...existing.messageIdMap,
+              [localMsgId]: serverMsgId,
+            },
+          },
+        },
+      };
+    }),
+
+  appendHistory: (runKey, message) =>
+    set((state) => {
+      const existing = state.runsByKey[runKey];
+      if (!existing) return state;
+      return {
+        runsByKey: {
+          ...state.runsByKey,
+          [runKey]: {
             ...existing,
             history: [...existing.history, message],
           },
@@ -159,14 +184,14 @@ export const useSubAgentRuntimeStore = create<SubAgentRuntimeState & SubAgentRun
       };
     }),
 
-  replaceHistory: (invocationKey, history) =>
+  replaceHistory: (runKey, history) =>
     set((state) => {
-      const existing = state.invocationsByKey[invocationKey];
+      const existing = state.runsByKey[runKey];
       if (!existing) return state;
       return {
-        invocationsByKey: {
-          ...state.invocationsByKey,
-          [invocationKey]: {
+        runsByKey: {
+          ...state.runsByKey,
+          [runKey]: {
             ...existing,
             history,
           },
@@ -174,11 +199,11 @@ export const useSubAgentRuntimeStore = create<SubAgentRuntimeState & SubAgentRun
       };
     }),
 
-  clearInvocation: (invocationKey) =>
+  clearRun: (runKey) =>
     set((state) => {
-      if (!state.invocationsByKey[invocationKey]) return state;
-      const next = { ...state.invocationsByKey };
-      delete next[invocationKey];
-      return { invocationsByKey: next };
+      if (!state.runsByKey[runKey]) return state;
+      const next = { ...state.runsByKey };
+      delete next[runKey];
+      return { runsByKey: next };
     }),
 }));

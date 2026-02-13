@@ -292,7 +292,7 @@ export interface AgentMessageResponse {
 }
 
 export type SubAgentParentType = 'agent' | 'sub_agent';
-export type SubAgentInvocationStatus =
+export type SubAgentRunStatus =
   | 'running'
   | 'waiting'
   | 'paused'
@@ -300,15 +300,11 @@ export type SubAgentInvocationStatus =
   | 'error'
   | 'cancelled';
 
-export interface SubAgentInvocationStateMessage {
-  role: string;
-  content_parts?: Array<Record<string, any>>;
-  tool_calls?: Array<Record<string, any>>;
-  thinking_details?: Array<Record<string, any>>;
-  created_at?: string;
-}
+// ---------------------------------------------------------------------------
+// Create Run
+// ---------------------------------------------------------------------------
 
-export interface SubAgentInvocationStateRequest {
+export interface CreateRunRequest {
   parent_type: SubAgentParentType;
   parent_id: string;
   parent_message_id: string;
@@ -319,15 +315,42 @@ export interface SubAgentInvocationStateRequest {
   caller: string;
   language: string;
   input: string;
-  status: SubAgentInvocationStatus;
-  final_output?: string;
-  error?: string;
-  history: SubAgentInvocationStateMessage[];
+  status: SubAgentRunStatus;
 }
 
-export interface SubAgentInvocationMessageResponse {
+// ---------------------------------------------------------------------------
+// Patch Run
+// ---------------------------------------------------------------------------
+
+export interface PatchRunRequest {
+  status?: SubAgentRunStatus;
+  final_output?: string;
+  error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Add / Update Message
+// ---------------------------------------------------------------------------
+
+export interface AddMessageRequest {
+  role: string;
+  content_parts?: Array<Record<string, any>>;
+  tool_calls?: Array<Record<string, any>>;
+  thinking_details?: Array<Record<string, any>>;
+}
+
+export interface UpdateMessageRequest {
+  tool_calls?: Array<Record<string, any>>;
+  thinking_details?: Array<Record<string, any>>;
+}
+
+// ---------------------------------------------------------------------------
+// Responses
+// ---------------------------------------------------------------------------
+
+export interface SubAgentRunMessageResponse {
   id: string;
-  invocation_id: string;
+  run_id: string;
   seq: number;
   role: string;
   content_parts: Array<Record<string, any>>;
@@ -336,7 +359,7 @@ export interface SubAgentInvocationMessageResponse {
   created_at: string;
 }
 
-export interface SubAgentInvocationResponse {
+export interface SubAgentRunResponse {
   id: string;
   project_id: string;
   agent_id: string;
@@ -350,25 +373,41 @@ export interface SubAgentInvocationResponse {
   caller: string;
   language: string;
   input: string;
-  status: SubAgentInvocationStatus;
+  status: SubAgentRunStatus;
   final_output?: string;
   error?: string;
   created_at: string;
   updated_at: string;
-  messages: SubAgentInvocationMessageResponse[];
+  messages: SubAgentRunMessageResponse[];
 }
 
-export interface SubAgentInvocationStateResponse {
-  invocation: SubAgentInvocationResponse;
+export interface CreateRunResponse {
+  run: SubAgentRunResponse;
 }
 
-export interface SubAgentInvocationQueryByMessagesRequest {
+export interface PatchRunResponse {
+  run: SubAgentRunResponse;
+}
+
+export interface AddMessageResponse {
+  message: SubAgentRunMessageResponse;
+}
+
+export interface UpdateMessageResponse {
+  message: SubAgentRunMessageResponse;
+}
+
+// ---------------------------------------------------------------------------
+// Query
+// ---------------------------------------------------------------------------
+
+export interface SubAgentRunQueryByMessagesRequest {
   message_ids: string[];
-  status_filter?: SubAgentInvocationStatus[];
+  status_filter?: SubAgentRunStatus[];
 }
 
-export interface SubAgentInvocationQueryByMessagesResponse {
-  items: SubAgentInvocationResponse[];
+export interface SubAgentRunQueryByMessagesResponse {
+  items: SubAgentRunResponse[];
 }
 
 // ============================================================================

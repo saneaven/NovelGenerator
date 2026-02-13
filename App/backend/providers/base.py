@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, List, Dict, Optional
 
+from .contracts import ProviderEvent
+
 class BaseProvider(ABC):
     """Base class for all LLM providers"""
 
@@ -23,7 +25,7 @@ class BaseProvider(ABC):
         request_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[ProviderEvent, None]:
         """
         Stream chat completions from the provider
 
@@ -43,7 +45,7 @@ class BaseProvider(ABC):
             native_tool_call: If true, provider should parse <tool_calls> tags from text and emit tool_calls deltas.
 
         Yields:
-            SSE-formatted bytes
+            ProviderEvent objects. SSE formatting is handled by the API endpoint.
         """
         pass
 

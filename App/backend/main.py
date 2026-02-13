@@ -15,6 +15,16 @@ from .providers.claude_provider import ClaudeProvider
 from .providers.gemini_provider import GeminiProvider
 from .providers.openai_responses_provider import OpenAIResponsesProvider
 from .providers.xai_provider import XAIProvider
+from .providers.contracts import (
+    MetaPayload,
+    ProviderErrorPayload,
+    final_snapshot_to_wire,
+    delta_payload_to_wire,
+    merge_meta_payload,
+    patch_snapshot_with_meta,
+)
+from .providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
+from .providers.sse_encoder import encode_sse
 from .auth import get_current_user
 from .database import get_db
 from .models.db_models import User
@@ -61,7 +71,7 @@ from .routes.variable_routes import router as variable_router
 # Preset management routes
 from .routes.preset_routes import router as preset_router
 from .routes.sub_agent_routes import router as sub_agent_router
-from .routes.sub_agent_invocation_routes import router as sub_agent_invocation_router
+from .routes.sub_agent_run_routes import router as sub_agent_run_router
 
 # Token counting routes
 from .routes.token_routes import router as token_router
@@ -104,7 +114,7 @@ app.include_router(variable_router)
 # Include preset management router
 app.include_router(preset_router)
 app.include_router(sub_agent_router)
-app.include_router(sub_agent_invocation_router)
+app.include_router(sub_agent_run_router)
 
 # Include token counting router
 app.include_router(token_router)
@@ -311,26 +321,68 @@ async def stream_chat(
                 native_tool_call=request.native_tool_call,
             )
 
+            seq = 0
+            native_final = None
+            merged_meta: MetaPayload | None = None
+            assembler = FallbackSnapshotAssembler(provider=provider, model=request.model)
+
             try:
-                async for chunk in stream:
+                async for event in stream:
                     # Check if client disconnected
                     if await req.is_disconnected():
                         print("Client disconnected, stopping stream")
                         break
-                    yield chunk
+
+                    if event.kind == "delta" and event.delta is not None:
+                        seq += 1
+                        assembler.apply_delta(event.delta)
+                        yield encode_sse("delta", delta_payload_to_wire(seq, event.delta))
+                        continue
+
+                    if event.kind == "meta" and event.meta is not None:
+                        assembler.apply_meta(event.meta)
+                        merged_meta = merge_meta_payload(merged_meta, event.meta)
+                        continue
+
+                    if event.kind == "final_native" and event.final_native is not None:
+                        if native_final is not None:
+                            raise ValueError("Provider emitted multiple native final snapshots")
+                        native_final = event.final_native
+                        continue
+
+                    if event.kind == "error":
+                        err = event.error or ProviderErrorPayload(message="Unknown provider error", status=None)
+                        yield encode_sse("error", {"message": err.message, "status": err.status})
+                        yield encode_sse("done", {"ok": False})
+                        return
             except asyncio.CancelledError:
                 print("Stream cancelled due to client disconnect")
                 raise  # Re-raise to let FastAPI handle cleanup
+            except Exception as exc:
+                if not await req.is_disconnected():
+                    yield encode_sse("error", {"message": str(exc), "status": getattr(exc, "status_code", None)})
+                    yield encode_sse("done", {"ok": False})
+                return
             finally:
-                # Always yield [DONE] to signal proper termination
-                # This prevents "incomplete chunked read" errors on the frontend
-                try:
-                    yield b"data: [DONE]\n\n"
-                except Exception:
-                    pass  # Connection may already be closed
                 # Ensure generator is closed
                 if hasattr(stream, 'aclose'):
                     await stream.aclose()
+
+            if await req.is_disconnected():
+                return
+
+            try:
+                if native_final is not None:
+                    final_snapshot = patch_snapshot_with_meta(native_final, merged_meta)
+                else:
+                    final_snapshot = assembler.finalize_or_raise()
+
+                yield encode_sse("final", {"snapshot": final_snapshot_to_wire(final_snapshot)})
+                yield encode_sse("done", {"ok": True})
+            except Exception as exc:
+                yield encode_sse("error", {"message": str(exc), "status": getattr(exc, "status_code", None)})
+                yield encode_sse("done", {"ok": False})
+                return
 
         return StreamingResponse(
             event_gen(),

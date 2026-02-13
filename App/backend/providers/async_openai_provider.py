@@ -1,5 +1,5 @@
 import copy
-import json
+import logging
 from typing import AsyncGenerator, Dict, List, Optional, Tuple
 
 from openai import (
@@ -13,9 +13,13 @@ from openai import (
 )
 
 from .base import BaseProvider
+from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
+from .final_mappers import map_chat_completion_to_snapshot
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 from ..utils.outbound_http import validate_outbound_base_url
+
+logger = logging.getLogger(__name__)
 
 
 class AsyncOpenAIProvider(BaseProvider):
@@ -152,14 +156,74 @@ class AsyncOpenAIProvider(BaseProvider):
         return chunk, []
 
     # ----- Public API -----------------------------------------------------------------
-    def _format_sse(self, payload: Dict) -> bytes:
-        return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode("utf-8")
+    @staticmethod
+    def _error_event(message: str, status: Optional[int] = None) -> ProviderEvent:
+        return ProviderEvent(
+            kind="error",
+            error=ProviderErrorPayload(message=message, status=status),
+        )
 
-    def _format_error(self, message: str, status: Optional[int] = None) -> bytes:
-        data: Dict[str, object] = {"message": message}
-        if status is not None:
-            data["status"] = status
-        return f"event: error\ndata: {json.dumps(data, separators=(',', ':'))}\n\n".encode("utf-8")
+    @staticmethod
+    def _chunk_to_events(chunk: Optional[Dict]) -> List[ProviderEvent]:
+        if not isinstance(chunk, dict):
+            return []
+
+        events: List[ProviderEvent] = []
+
+        usage = chunk.get("usage")
+        if isinstance(usage, dict):
+            events.append(
+                ProviderEvent(
+                    kind="meta",
+                    meta=MetaPayload(
+                        usage={
+                            "prompt_tokens": int(usage.get("prompt_tokens", 0) or 0),
+                            "completion_tokens": int(usage.get("completion_tokens", 0) or 0),
+                            "total_tokens": int(usage.get("total_tokens", 0) or 0),
+                        }
+                    ),
+                )
+            )
+
+        choices = chunk.get("choices") or []
+        if not choices:
+            return events
+
+        choice = choices[0] if isinstance(choices[0], dict) else {}
+        finish_reason = choice.get("finish_reason")
+        if finish_reason is not None:
+            events.append(
+                ProviderEvent(
+                    kind="meta",
+                    meta=MetaPayload(finish_reason=str(finish_reason)),
+                )
+            )
+
+        delta = choice.get("delta") if isinstance(choice.get("delta"), dict) else {}
+        content_delta = delta.get("content") if isinstance(delta.get("content"), str) else None
+
+        thinking_delta = None
+        thinking_obj = delta.get("thinking")
+        if isinstance(thinking_obj, dict) and isinstance(thinking_obj.get("text"), str):
+            thinking_delta = thinking_obj.get("text")
+
+        tool_call_deltas = delta.get("tool_calls") if isinstance(delta.get("tool_calls"), list) else []
+        thinking_details = delta.get("thinking_details") if isinstance(delta.get("thinking_details"), list) else []
+
+        if content_delta or thinking_delta or tool_call_deltas or thinking_details:
+            events.append(
+                ProviderEvent(
+                    kind="delta",
+                    delta=DeltaPayload(
+                        content_delta=content_delta,
+                        thinking_delta=thinking_delta,
+                        tool_call_deltas=tool_call_deltas,
+                        thinking_details_delta=thinking_details,
+                    ),
+                )
+            )
+
+        return events
 
     @staticmethod
     def _has_meaningful_payload(chunk: Dict) -> bool:
@@ -301,9 +365,9 @@ class AsyncOpenAIProvider(BaseProvider):
         request_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[ProviderEvent, None]:
         if not self.validate_config():
-            yield self._format_error("Invalid provider configuration")
+            yield self._error_event("Invalid provider configuration")
             return
 
         client = self._ensure_client()
@@ -329,111 +393,169 @@ class AsyncOpenAIProvider(BaseProvider):
         parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
         native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
         last_finish_reason = None
-        stream = None
         captured_usage: Optional[Dict] = None
+        native_completion = None
+
+        def _update_meta_from_chunk(chunk_dict: Dict) -> None:
+            nonlocal captured_usage, last_finish_reason
+            if "usage" in chunk_dict and chunk_dict["usage"]:
+                captured_usage = chunk_dict["usage"]
+            for choice in chunk_dict.get("choices", []):
+                if choice.get("finish_reason"):
+                    last_finish_reason = choice.get("finish_reason")
+
+        def _collect_events_from_chunk(chunk_dict: Dict) -> tuple[List[ProviderEvent], bool]:
+            nonlocal native_tc_parser
+            events: List[ProviderEvent] = []
+            should_stop = False
+
+            chunk_dict, extra_chunks = self._mutate_chunk(chunk_dict, thinking_mode)
+            chunk_dict, parser_chunks = self._apply_thinking_parser(chunk_dict, parser)
+            extra_chunks.extend(parser_chunks)
+            chunk_dict, fc_chunks = self._apply_native_tool_calls_parser(chunk_dict, native_tc_parser)
+
+            if chunk_dict and self._has_meaningful_payload(chunk_dict):
+                events.extend(self._chunk_to_events(chunk_dict))
+
+            for extra in fc_chunks:
+                if self._has_meaningful_payload(extra):
+                    events.extend(self._chunk_to_events(extra))
+
+            if native_tc_parser and native_tc_parser.tool_calls_completed:
+                events.append(ProviderEvent(kind="meta", meta=MetaPayload(finish_reason="tool_calls")))
+                return events, True
+
+            for extra in extra_chunks:
+                extra, extra_fc_chunks = self._apply_native_tool_calls_parser(extra, native_tc_parser)
+                if extra and self._has_meaningful_payload(extra):
+                    events.extend(self._chunk_to_events(extra))
+                for extra_fc in extra_fc_chunks:
+                    if self._has_meaningful_payload(extra_fc):
+                        events.extend(self._chunk_to_events(extra_fc))
+
+                if native_tc_parser and native_tc_parser.tool_calls_completed:
+                    events.append(ProviderEvent(kind="meta", meta=MetaPayload(finish_reason="tool_calls")))
+                    should_stop = True
+                    break
+
+            return events, should_stop
 
         try:
-            stream = await client.chat.completions.create(**request_kwargs)
-            async for chunk in stream:
-                chunk_dict = chunk.model_dump(exclude_none=True)
+            stream_helper = getattr(client.chat.completions, "stream", None)
+            if callable(stream_helper):
+                async with stream_helper(**request_kwargs) as stream:
+                    async for event in stream:
+                        event_type = getattr(event, "type", None)
+                        if event_type != "chunk":
+                            continue
 
-                # Capture usage from final chunk (OpenAI sends it with stream_options.include_usage)
-                if "usage" in chunk_dict and chunk_dict["usage"]:
-                    captured_usage = chunk_dict["usage"]
+                        chunk = getattr(event, "chunk", None)
+                        if chunk is None:
+                            continue
 
-                # Track finish_reason from choices
-                for choice in chunk_dict.get("choices", []):
-                    if choice.get("finish_reason"):
-                        last_finish_reason = choice.get("finish_reason")
+                        chunk_dict = (
+                            chunk.model_dump(exclude_none=True)
+                            if hasattr(chunk, "model_dump")
+                            else {}
+                        )
+                        if not isinstance(chunk_dict, dict):
+                            continue
 
-                chunk_dict, extra_chunks = self._mutate_chunk(chunk_dict, thinking_mode)
+                        _update_meta_from_chunk(chunk_dict)
+                        stream_events, should_stop = _collect_events_from_chunk(chunk_dict)
+                        for stream_event in stream_events:
+                            yield stream_event
+                        if should_stop:
+                            return
 
-                chunk_dict, parser_chunks = self._apply_thinking_parser(chunk_dict, parser)
-                extra_chunks.extend(parser_chunks)
+                    native_completion = await stream.get_final_completion()
+            else:
+                raw_stream = await client.chat.completions.create(**request_kwargs)
+                try:
+                    async for chunk in raw_stream:
+                        chunk_dict = chunk.model_dump(exclude_none=True)
+                        if not isinstance(chunk_dict, dict):
+                            continue
 
-                chunk_dict, fc_chunks = self._apply_native_tool_calls_parser(chunk_dict, native_tc_parser)
-
-                if chunk_dict and self._has_meaningful_payload(chunk_dict):
-                    yield self._format_sse(chunk_dict)
-
-                for extra in fc_chunks:
-                    if self._has_meaningful_payload(extra):
-                        yield self._format_sse(extra)
-
-                # Stop streaming after tool_calls block completes
-                if native_tc_parser and native_tc_parser.tool_calls_completed:
-                    yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
-                    return
-
-                for extra in extra_chunks:
-                    extra, extra_fc_chunks = self._apply_native_tool_calls_parser(extra, native_tc_parser)
-                    if extra and self._has_meaningful_payload(extra):
-                        yield self._format_sse(extra)
-                    for extra_fc in extra_fc_chunks:
-                        if self._has_meaningful_payload(extra_fc):
-                            yield self._format_sse(extra_fc)
-
-                    # Stop streaming after tool_calls block completes
-                    if native_tc_parser and native_tc_parser.tool_calls_completed:
-                        yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
-                        return
+                        _update_meta_from_chunk(chunk_dict)
+                        stream_events, should_stop = _collect_events_from_chunk(chunk_dict)
+                        for stream_event in stream_events:
+                            yield stream_event
+                        if should_stop:
+                            return
+                finally:
+                    if raw_stream is not None:
+                        await raw_stream.close()
 
         except (APIConnectionError, RateLimitError, AuthenticationError, BadRequestError, APIStatusError) as exc:
             status = getattr(exc, "status_code", None)
-            yield self._format_error(str(exc), status)
-            yield b"data: [DONE]\n\n"
+            yield self._error_event(str(exc), status)
             return
         except OpenAIError as exc:
-            yield self._format_error(str(exc), getattr(exc, "status_code", None))
-            yield b"data: [DONE]\n\n"
+            yield self._error_event(str(exc), getattr(exc, "status_code", None))
             return
         except Exception as exc:
-            yield self._format_error(str(exc))
-            yield b"data: [DONE]\n\n"
+            yield self._error_event(str(exc))
             return
-        finally:
-            if stream is not None:
-                await stream.close()
 
         try:
             for final_chunk in self._finalize_parser(parser):
                 final_chunk, final_fc_chunks = self._apply_native_tool_calls_parser(final_chunk, native_tc_parser)
                 if final_chunk and self._has_meaningful_payload(final_chunk):
-                    yield self._format_sse(final_chunk)
+                    for event in self._chunk_to_events(final_chunk):
+                        yield event
                 for extra in final_fc_chunks:
                     if self._has_meaningful_payload(extra):
-                        yield self._format_sse(extra)
+                        for event in self._chunk_to_events(extra):
+                            yield event
 
             for final_fc_chunk in self._finalize_native_tool_calls_parser(native_tc_parser):
                 if self._has_meaningful_payload(final_fc_chunk):
-                    yield self._format_sse(final_fc_chunk)
+                    for event in self._chunk_to_events(final_fc_chunk):
+                        yield event
 
             # Emit finish_reason if tool calls were completed
             if native_tc_parser and native_tc_parser.tool_calls_completed:
-                yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
+                yield ProviderEvent(kind="meta", meta=MetaPayload(finish_reason="tool_calls"))
                 return
         except Exception as exc:
-            yield self._format_error(str(exc))
-            yield b"data: [DONE]\n\n"
+            yield self._error_event(str(exc))
             return
 
         # Check for error finish_reasons and emit error if needed
         if last_finish_reason == "content_filter":
-            yield self._format_error("Content blocked by filter (content_filter)")
-            return  # Don't yield [DONE] after error
+            yield self._error_event("Content blocked by filter (content_filter)")
+            return
 
-        # Emit usage information before [DONE]
+        if native_completion is not None:
+            try:
+                native_snapshot = map_chat_completion_to_snapshot(
+                    native_completion,
+                    provider=self.name,
+                    model=model,
+                )
+                yield ProviderEvent(kind="final_native", final_native=native_snapshot)
+            except Exception as exc:
+                logger.warning(
+                    "Native final mapping failed in %s provider (model=%s); falling back to snapshot assembler: %s",
+                    self.name,
+                    model,
+                    exc,
+                    exc_info=True,
+                )
+
+        # Emit usage as metadata for final snapshot assembly.
         if captured_usage:
-            usage_payload = {
-                "usage": {
-                    "prompt_tokens": captured_usage.get("prompt_tokens", 0),
-                    "completion_tokens": captured_usage.get("completion_tokens", 0),
-                    "total_tokens": captured_usage.get("total_tokens", 0),
-                }
-            }
-            yield self._format_sse(usage_payload)
-
-        yield b"data: [DONE]\n\n"
+            yield ProviderEvent(
+                kind="meta",
+                meta=MetaPayload(
+                    usage={
+                        "prompt_tokens": int(captured_usage.get("prompt_tokens", 0) or 0),
+                        "completion_tokens": int(captured_usage.get("completion_tokens", 0) or 0),
+                        "total_tokens": int(captured_usage.get("total_tokens", 0) or 0),
+                    }
+                ),
+            )
 
     async def get_models(self) -> Dict:
         client = self._ensure_client()

@@ -611,7 +611,7 @@
       "tokenLimits": {
         "context_window_tokens": "Context Window Tokens",
         "context_window_tokensHint": "Used for local prompt budgeting (e.g. agent memory preflight). Leave empty for no local limit. Does not change the model's actual context window.",
-        "max_output_tokens": "Max Output Tokens (max_tokens)",
+        "max_output_tokens": "Max Output Tokens",
         "max_output_tokensPlaceholder": "Default (provider)",
         "max_output_tokensHint": "Limits the maximum tokens generated in the response. Leave empty to use the provider default."
       }

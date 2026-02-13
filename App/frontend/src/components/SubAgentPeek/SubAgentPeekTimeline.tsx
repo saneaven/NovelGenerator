@@ -6,8 +6,9 @@ import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { collapseContentParts } from '../../agent/utils/contentParts';
 import { SubAgentManager } from '../../subAgent/runtime/SubAgentManager';
-import type { SubAgentInvocation } from '../../store/subAgentRuntimeStore';
+import type { SubAgentRun } from '../../store/subAgentRuntimeStore';
 import { FunctionCallsThread } from '../../toolCall/ui';
+import ThinkingDisplay from '../common/ThinkingDisplay';
 import { TextButton } from '../TextButton';
 
 function formatRole(role: string, t: (key: string) => string): string {
@@ -32,15 +33,15 @@ function hasPendingStatus(status: string | undefined): boolean {
 
 export interface SubAgentPeekTimelineProps {
   threadId: string;
-  invocationKey: string;
-  invocation: SubAgentInvocation;
+  runKey: string;
+  run: SubAgentRun;
   activeSession?: TaskSessionState<any, any>;
 }
 
 export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   threadId,
-  invocationKey,
-  invocation,
+  runKey,
+  run,
   activeSession,
 }) => {
   const { t } = useTranslation();
@@ -48,48 +49,44 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   const [actionInFlight, setActionInFlight] = useState<'pause' | 'retry' | 'cancel' | null>(null);
 
   const lastAssistantIndex = useMemo(() => {
-    for (let i = invocation.history.length - 1; i >= 0; i--) {
-      if (invocation.history[i]?.role === 'assistant') return i;
+    for (let i = run.history.length - 1; i >= 0; i--) {
+      if (run.history[i]?.role === 'assistant') return i;
     }
     return -1;
-  }, [invocation.history]);
+  }, [run.history]);
 
   const handleConfirm = useCallback(async (decisions: ToolCallDecisionMap) => {
     setIsApplying(true);
     try {
-      await SubAgentManager.applyAndContinue({
-        invocationKey,
-        decisions,
-        autoContinue: false,
-      });
+      await SubAgentManager.applyAndContinue(runKey, decisions);
     } finally {
       setIsApplying(false);
     }
-  }, [invocationKey]);
+  }, [runKey]);
 
   const handlePause = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('pause');
-    void SubAgentManager.pause(invocationKey).finally(() => {
+    void SubAgentManager.pause(runKey).finally(() => {
       setActionInFlight(null);
     });
-  }, [actionInFlight, invocationKey]);
+  }, [actionInFlight, runKey]);
 
   const handleRetry = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('retry');
-    void SubAgentManager.retry(invocationKey).finally(() => {
+    void SubAgentManager.retry(runKey).finally(() => {
       setActionInFlight(null);
     });
-  }, [invocationKey]);
+  }, [runKey]);
 
   const handleCancel = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('cancel');
-    void SubAgentManager.cancel(invocationKey).finally(() => {
+    void SubAgentManager.cancel(runKey).finally(() => {
       setActionInFlight(null);
     });
-  }, [actionInFlight, invocationKey]);
+  }, [actionInFlight, runKey]);
 
   const streamingText = useMemo(() => {
     if (!activeSession || activeSession.status !== 'running') return '';
@@ -99,22 +96,22 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
 
   return (
     <div className="sub-agent-peek-timeline">
-      {invocation.error && (invocation.status === 'error' || invocation.status === 'paused') && (
-        <div className="sub-agent-peek-alert sub-agent-peek-alert--error">{invocation.error}</div>
+      {run.error && (run.status === 'error' || run.status === 'paused') && (
+        <div className="sub-agent-peek-alert sub-agent-peek-alert--error">{run.error}</div>
       )}
 
-      {invocation.history.map((message, index) => {
+      {run.history.map((message, index) => {
         const text = messageText(message);
         const toolCalls = (message.toolCalls ?? []) as ToolCallMetadata[];
         const isLatestAssistant = message.role === 'assistant' && index === lastAssistantIndex;
-        const waitingDecision = isLatestAssistant && invocation.status === 'waiting';
+        const waitingDecision = isLatestAssistant && run.status === 'waiting';
         const cards = toolCalls.length > 0 ? buildEditCardsFromToolCallMetadata(toolCalls) : [];
         const hasPendingCards = cards.some((card) => hasPendingStatus(card.toolCall.status));
         const showApplyingBanner = isApplying && isLatestAssistant && hasPendingCards;
 
         return (
           <div
-            key={`${invocation.id}:${message.id}`}
+            key={`${run.id}:${message.id}`}
             className={`agent-message ${message.role === 'assistant' ? 'assistant' : 'user'}`}
           >
             <div className="message-wrapper">
@@ -122,16 +119,23 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
                 <span className="message-role">{formatRole(message.role, t)}</span>
                 <span className="message-time">{formatTime(message.timestamp as Date)}</span>
               </div>
+              {message.role === 'assistant' && (
+                <ThinkingDisplay
+                  messageId={String(message.id)}
+                  contentParts={message.contentParts}
+                  isStreaming={false}
+                />
+              )}
               {text && <div className="message-content">{text}</div>}
 
               {cards.length > 0 && (
                 <div className="message-function-calls">
                   <FunctionCallsThread
-                    threadId={`${threadId}:message:${invocation.id}:${message.id}`}
+                    threadId={`${threadId}:message:${run.id}:${message.id}`}
                     mode={waitingDecision && hasPendingCards ? 'pending' : 'confirmed'}
                     cards={cards}
                     onCommitDecisions={waitingDecision && hasPendingCards ? handleConfirm : undefined}
-                    projectId={invocation.projectId}
+                    projectId={run.projectId}
                     isApplyDisabled={isApplying}
                     applyDisabledReason={showApplyingBanner ? 'Applying changes...' : undefined}
                   />
@@ -149,16 +153,21 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
               <span className="message-role">{t('agent.ai')}</span>
               <span className="message-time">{t('operationStatus.streaming')}</span>
             </div>
+            <ThinkingDisplay
+              messageId={`stream:${run.id}`}
+              contentParts={activeSession.contentParts}
+              isStreaming={true}
+            />
             {streamingText && (
               <div className="message-content">{streamingText}</div>
             )}
             {Array.isArray(activeSession.toolCallProgress) && activeSession.toolCallProgress.length > 0 && (
               <div className="message-function-calls">
                 <FunctionCallsThread
-                  threadId={`${threadId}:stream:${invocation.id}`}
+                  threadId={`${threadId}:stream:${run.id}`}
                   mode="streaming"
                   streamingProgress={activeSession.toolCallProgress}
-                  projectId={invocation.projectId}
+                  projectId={run.projectId}
                 />
               </div>
             )}
@@ -166,20 +175,20 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
         </div>
       )}
 
-      {invocation.finalOutput && (
+      {run.finalOutput && (
         <div className="agent-message assistant">
           <div className="message-wrapper">
             <div className="message-header">
               <span className="message-role">{t('agent.ai')}</span>
               <span className="message-time">{t('operationStatus.applied')}</span>
             </div>
-            <div className="message-content">{invocation.finalOutput}</div>
+            <div className="message-content">{run.finalOutput}</div>
           </div>
         </div>
       )}
 
       <div className="sub-agent-peek-actions">
-        {(invocation.status === 'running' || invocation.status === 'waiting') && (
+        {(run.status === 'running' || run.status === 'waiting') && (
           <TextButton
             size="sm"
             variant="secondary"
@@ -190,7 +199,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
             {t('subAgent.pause')}
           </TextButton>
         )}
-        {(invocation.status === 'paused' || invocation.status === 'error') && (
+        {(run.status === 'paused' || run.status === 'error') && (
           <>
             <TextButton
               size="sm"

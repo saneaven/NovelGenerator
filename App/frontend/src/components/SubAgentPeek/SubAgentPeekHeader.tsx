@@ -13,7 +13,7 @@ export interface SubAgentPeekHeaderProps {
   open: boolean;
   onToggle: () => void;
   items: SubAgentPeekHeaderItem[];
-  onSelect: (invocationKey: string) => void;
+  onSelect: (runKey: string) => void;
 }
 
 function statusClass(status: string): string {
@@ -65,7 +65,7 @@ export const SubAgentPeekHeader: React.FC<SubAgentPeekHeaderProps> = ({
       </button>
 
       {items.length > 1 && (
-        <div className="sub-agent-peek-header__switches" role="tablist" aria-label="Sub-agent invocation switch">
+        <div className="sub-agent-peek-header__switches" role="tablist" aria-label="Sub-agent run switch">
           {items.map((item) => (
             <button
               key={item.key}

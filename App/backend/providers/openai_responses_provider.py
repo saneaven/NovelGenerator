@@ -12,7 +12,7 @@ Benefits:
 - Native reasoning parameter support
 """
 
-import json
+import logging
 import re
 from typing import AsyncGenerator, Dict, List, Optional
 
@@ -27,11 +27,14 @@ from openai import (
 )
 
 from .base import BaseProvider
+from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
+from .final_mappers import map_openai_response_to_snapshot
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 
 # Text/chat model patterns: gpt-* or o{number}*
 TEXT_MODEL_REGEX = re.compile(r'^(gpt-|o\d)')
+logger = logging.getLogger(__name__)
 
 
 @ProviderRegistry.register
@@ -158,16 +161,12 @@ class OpenAIResponsesProvider(BaseProvider):
 
         return result
 
-    def _format_sse(self, payload: Dict) -> bytes:
-        """Format payload as SSE data frame."""
-        return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode("utf-8")
-
-    def _format_error(self, message: str, status: Optional[int] = None) -> bytes:
-        """Format error as SSE error event."""
-        data: Dict[str, object] = {"message": message}
-        if status is not None:
-            data["status"] = status
-        return f"event: error\ndata: {json.dumps(data, separators=(',', ':'))}\n\n".encode("utf-8")
+    @staticmethod
+    def _error_event(message: str, status: Optional[int] = None) -> ProviderEvent:
+        return ProviderEvent(
+            kind="error",
+            error=ProviderErrorPayload(message=message, status=status),
+        )
 
     async def stream_chat(
         self,
@@ -184,7 +183,7 @@ class OpenAIResponsesProvider(BaseProvider):
         request_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[ProviderEvent, None]:
         """
         Stream chat using OpenAI Responses API.
 
@@ -192,7 +191,7 @@ class OpenAIResponsesProvider(BaseProvider):
         frontend compatibility.
         """
         if not self.validate_config():
-            yield self._format_error("Invalid provider configuration")
+            yield self._error_event("Invalid provider configuration")
             return
 
         client = self._ensure_client()
@@ -244,6 +243,8 @@ class OpenAIResponsesProvider(BaseProvider):
         stream = None
         native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
         tool_call_indices: Dict[str, int] = {}
+        native_response = None
+        tool_finish_emitted = False
 
         try:
             stream = await client.responses.create(**request)
@@ -261,58 +262,40 @@ class OpenAIResponsesProvider(BaseProvider):
                             text_to_emit, tool_calls = native_tc_parser.process_chunk(delta_text)
 
                         if text_to_emit:
-                            # Convert to Chat Completions format
-                            chunk = {
-                                "choices": [{
-                                    "index": 0,
-                                    "delta": {"content": text_to_emit},
-                                    "finish_reason": None
-                                }]
-                            }
-                            yield self._format_sse(chunk)
+                            yield ProviderEvent(
+                                kind="delta",
+                                delta=DeltaPayload(content_delta=text_to_emit),
+                            )
 
                         if tool_calls:
-                            tool_chunk = {
-                                "choices": [{
-                                    "index": 0,
-                                    "delta": {"tool_calls": tool_calls},
-                                    "finish_reason": None
-                                }]
-                            }
-                            yield self._format_sse(tool_chunk)
+                            yield ProviderEvent(
+                                kind="delta",
+                                delta=DeltaPayload(tool_call_deltas=tool_calls),
+                            )
 
-                        # Stop streaming after tool_calls block completes
+                        # Tool block completed (native_tool_call parsing mode).
                         if native_tc_parser and native_tc_parser.tool_calls_completed:
-                            yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
-                            return
+                            if not tool_finish_emitted:
+                                tool_finish_emitted = True
+                                yield ProviderEvent(kind="meta", meta=MetaPayload(finish_reason="tool_calls"))
 
                 # Handle reasoning/thinking text delta
                 elif event_type == "response.reasoning_text.delta":
                     delta_text = getattr(event, "delta", "")
                     if delta_text:
-                        # Emit thinking in same format as other providers
-                        chunk = {
-                            "choices": [{
-                                "index": 0,
-                                "delta": {"thinking": {"text": delta_text}},
-                                "finish_reason": None
-                            }]
-                        }
-                        yield self._format_sse(chunk)
+                        yield ProviderEvent(
+                            kind="delta",
+                            delta=DeltaPayload(thinking_delta=delta_text),
+                        )
 
                 # Handle reasoning summary text delta (like Google AI)
                 elif event_type == "response.reasoning_summary_text.delta":
                     delta_text = getattr(event, "delta", "")
                     if delta_text:
-                        # Emit summary as thinking delta
-                        chunk = {
-                            "choices": [{
-                                "index": 0,
-                                "delta": {"thinking": {"text": delta_text}},
-                                "finish_reason": None
-                            }]
-                        }
-                        yield self._format_sse(chunk)
+                        yield ProviderEvent(
+                            kind="delta",
+                            delta=DeltaPayload(thinking_delta=delta_text),
+                        )
 
                 # Handle tool call arguments delta (OpenAI Responses API event)
                 elif event_type == "response.function_call_arguments.delta":
@@ -324,57 +307,47 @@ class OpenAIResponsesProvider(BaseProvider):
                         if call_key not in tool_call_indices:
                             tool_call_indices[call_key] = len(tool_call_indices)
                         tool_index = tool_call_indices[call_key]
-                        chunk = {
-                            "choices": [{
-                                "index": 0,
-                                "delta": {
-                                    "tool_calls": [{
+                        yield ProviderEvent(
+                            kind="delta",
+                            delta=DeltaPayload(
+                                tool_call_deltas=[
+                                    {
                                         "index": tool_index,
                                         "id": call_id or call_key,
                                         "type": "function",
                                         "function": {
                                             "name": name,
-                                            "arguments": delta_args
-                                        }
-                                    }]
-                                },
-                                "finish_reason": None
-                            }]
-                        }
-                        yield self._format_sse(chunk)
+                                            "arguments": delta_args,
+                                        },
+                                    }
+                                ]
+                            ),
+                        )
 
                 # Handle response completion
                 elif event_type == "response.completed":
-                    # Flush any buffered tool_calls content before emitting finish_reason.
+                    # Flush any buffered tool_calls content before native final mapping.
                     if native_tc_parser:
                         tail_text, tail_tool_calls = native_tc_parser.finalize()
                         if tail_text:
-                            chunk = {
-                                "choices": [{
-                                    "index": 0,
-                                    "delta": {"content": tail_text},
-                                    "finish_reason": None
-                                }]
-                            }
-                            yield self._format_sse(chunk)
+                            yield ProviderEvent(
+                                kind="delta",
+                                delta=DeltaPayload(content_delta=tail_text),
+                            )
                         if tail_tool_calls:
-                            chunk = {
-                                "choices": [{
-                                    "index": 0,
-                                    "delta": {"tool_calls": tail_tool_calls},
-                                    "finish_reason": None
-                                }]
-                            }
-                            yield self._format_sse(chunk)
-                        # Emit finish_reason if tool calls were completed
+                            yield ProviderEvent(
+                                kind="delta",
+                                delta=DeltaPayload(tool_call_deltas=tail_tool_calls),
+                            )
                         if native_tc_parser.tool_calls_completed:
-                            yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
-                            return
+                            if not tool_finish_emitted:
+                                tool_finish_emitted = True
+                                yield ProviderEvent(kind="meta", meta=MetaPayload(finish_reason="tool_calls"))
                         native_tc_parser = None
 
                     response_obj = getattr(event, "response", None)
                     if response_obj:
-                        # Extract usage information
+                        native_response = response_obj
                         usage = getattr(response_obj, "usage", None)
                         if usage:
                             captured_usage = {
@@ -385,37 +358,24 @@ class OpenAIResponsesProvider(BaseProvider):
                                     getattr(usage, "output_tokens", 0)
                                 )
                             }
-
-                    # Send finish chunk
-                    finish_chunk = {
-                        "choices": [{
-                            "index": 0,
-                            "delta": {},
-                            "finish_reason": "stop"
-                        }]
-                    }
-                    yield self._format_sse(finish_chunk)
+                    yield ProviderEvent(kind="meta", meta=MetaPayload(finish_reason="stop"))
 
                 # Handle errors in stream
                 elif event_type == "error":
                     error_msg = getattr(event, "message", "Unknown error")
                     error_code = getattr(event, "code", None)
-                    yield self._format_error(error_msg, error_code)
-                    yield b"data: [DONE]\n\n"
+                    yield self._error_event(error_msg, error_code)
                     return
 
         except (APIConnectionError, RateLimitError, AuthenticationError, BadRequestError, APIStatusError) as exc:
             status = getattr(exc, "status_code", None)
-            yield self._format_error(str(exc), status)
-            yield b"data: [DONE]\n\n"
+            yield self._error_event(str(exc), status)
             return
         except OpenAIError as exc:
-            yield self._format_error(str(exc), getattr(exc, "status_code", None))
-            yield b"data: [DONE]\n\n"
+            yield self._error_event(str(exc), getattr(exc, "status_code", None))
             return
         except Exception as exc:
-            yield self._format_error(str(exc))
-            yield b"data: [DONE]\n\n"
+            yield self._error_event(str(exc))
             return
         finally:
             if stream is not None and hasattr(stream, "close"):
@@ -424,34 +384,40 @@ class OpenAIResponsesProvider(BaseProvider):
         if native_tc_parser:
             tail_text, tail_tool_calls = native_tc_parser.finalize()
             if tail_text:
-                chunk = {
-                    "choices": [{
-                        "index": 0,
-                        "delta": {"content": tail_text},
-                        "finish_reason": None
-                    }]
-                }
-                yield self._format_sse(chunk)
+                yield ProviderEvent(
+                    kind="delta",
+                    delta=DeltaPayload(content_delta=tail_text),
+                )
             if tail_tool_calls:
-                chunk = {
-                    "choices": [{
-                        "index": 0,
-                        "delta": {"tool_calls": tail_tool_calls},
-                        "finish_reason": None
-                    }]
-                }
-                yield self._format_sse(chunk)
-            # Emit finish_reason if tool calls were completed
+                yield ProviderEvent(
+                    kind="delta",
+                    delta=DeltaPayload(tool_call_deltas=tail_tool_calls),
+                )
             if native_tc_parser.tool_calls_completed:
-                yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
-                return
+                if not tool_finish_emitted:
+                    tool_finish_emitted = True
+                    yield ProviderEvent(kind="meta", meta=MetaPayload(finish_reason="tool_calls"))
 
-        # Emit usage information before [DONE]
+        if native_response is not None:
+            try:
+                native_snapshot = map_openai_response_to_snapshot(
+                    native_response,
+                    provider=self.name,
+                    model=model,
+                )
+                yield ProviderEvent(kind="final_native", final_native=native_snapshot)
+            except Exception as exc:
+                logger.warning(
+                    "Native final mapping failed in %s provider (model=%s); falling back to snapshot assembler: %s",
+                    self.name,
+                    model,
+                    exc,
+                    exc_info=True,
+                )
+
+        # Emit usage metadata (used to patch missing snapshot fields).
         if captured_usage:
-            usage_payload = {"usage": captured_usage}
-            yield self._format_sse(usage_payload)
-
-        yield b"data: [DONE]\n\n"
+            yield ProviderEvent(kind="meta", meta=MetaPayload(usage=captured_usage))
 
     async def get_models(self) -> Dict:
         """Fetch available OpenAI models, filtered to text/chat models only."""

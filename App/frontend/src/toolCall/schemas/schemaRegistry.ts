@@ -810,6 +810,7 @@ export type AutoApproveCategory = 'read' | 'search' | 'create' | 'delete' | 'rep
  */
 export function getAutoApproveCategory(toolName: string): AutoApproveCategory | undefined {
   if (toolName === 'rag_search' || toolName === 'keyword_search') return 'search';
+  if (toolName === 'return_sub_agent_result') return 'read';
   if (toolName.startsWith('read_')) return 'read';
   if (toolName.startsWith('create_')) return 'create';
   if (toolName.startsWith('delete_')) return 'delete';

@@ -611,7 +611,7 @@
       "tokenLimits": {
         "context_window_tokens": "컨텍스트 윈도우 토큰 수",
         "context_window_tokensHint": "로컬 프롬프트 예산 계산(예: 에이전트 메모리 preflight)에 사용됩니다. 비워두면 제한 없이 계산하며, 실제 모델 컨텍스트 윈도우를 변경하진 않습니다.",
-        "max_output_tokens": "응답 최대 토큰 수 (max_tokens)",
+        "max_output_tokens": "응답 최대 토큰 수",
         "max_output_tokensPlaceholder": "기본값(프로바이더)",
         "max_output_tokensHint": "응답 생성 토큰 수 상한입니다. 비워두면 프로바이더 기본값을 사용합니다."
       }
