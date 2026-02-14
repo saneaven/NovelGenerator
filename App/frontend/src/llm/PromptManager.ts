@@ -18,7 +18,7 @@ import {
   type PromptContext,
   type TemplateData,
   type AgentPromptContext,
-  type AgentMemorySummaryPromptContext,
+  type MemorySummaryPromptContext,
   type EditAssistantStoryObjectPromptContext,
   type EditAssistantManuscriptPromptContext,
   type StoryTranslationPromptContext,
@@ -137,7 +137,7 @@ export class PromptManager {
       case LLMTaskMode.SUB_AGENT:
         return this.generateSubAgentBundle(context as SubAgentPromptContext);
       case LLMTaskMode.AGENT_MEMORY_SUMMARY:
-        return this.generateAgentMemorySummaryBundle(context as AgentMemorySummaryPromptContext);
+        return this.generateAgentMemorySummaryBundle(context as MemorySummaryPromptContext);
       case LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT:
         return this.generateEditAssistantBundle(context as EditAssistantStoryObjectPromptContext, 'storyObject');
       case LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT:
@@ -444,7 +444,7 @@ export class PromptManager {
   // ==================== Agent Memory Summary ====================
 
   private static async generateAgentMemorySummaryBundle(
-    context: AgentMemorySummaryPromptContext
+    context: MemorySummaryPromptContext
   ): Promise<PromptBundle> {
     const [systemTemplate, userTemplate] = await Promise.all([
       this.getTemplate('agent', 'systemPrompt', 'memorySummary'),

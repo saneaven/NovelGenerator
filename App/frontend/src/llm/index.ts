@@ -13,7 +13,7 @@ export {
   type PromptContext,
   type BasePromptContext,
   type AgentPromptContext,
-  type AgentMemorySummaryPromptContext,
+  type MemorySummaryPromptContext,
   type EditAssistantStoryObjectPromptContext,
   type EditAssistantManuscriptPromptContext,
   type StoryTranslationPromptContext,

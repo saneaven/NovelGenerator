@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from ..models.db_models import AgentRunModel, RunMessageModel, RunToolCallModel
-from ..schemas.runs import UpsertRunToolCallsRequest
+from ..schemas.runs import UpsertRunToolCallsRequest, PatchRunToolCallsRequest
 
 
 class RunToolCallService:
@@ -110,6 +110,56 @@ class RunToolCallService:
             row.accepted_at = item.accepted_at
             row.updated_at = now
             flag_modified(row, "arguments")
+            if item.result is not None:
+                flag_modified(row, "result")
+
+        db.commit()
+
+        return (
+            db.query(RunToolCallModel)
+            .filter(RunToolCallModel.message_id == message.id)
+            .order_by(RunToolCallModel.call_seq.asc(), RunToolCallModel.created_at.asc())
+            .all()
+        )
+
+
+    def patch_run_tool_calls(
+        self,
+        db: Session,
+        *,
+        project_id: uuid.UUID,
+        agent_id: uuid.UUID,
+        run_id: uuid.UUID,
+        message_id: uuid.UUID,
+        data: PatchRunToolCallsRequest,
+    ) -> list[RunToolCallModel]:
+        run, message = self._get_run_and_message(
+            db,
+            project_id=project_id,
+            agent_id=agent_id,
+            run_id=run_id,
+            message_id=message_id,
+        )
+
+        existing = (
+            db.query(RunToolCallModel)
+            .filter(RunToolCallModel.message_id == message.id)
+            .all()
+        )
+        by_llm_call_id = {row.llm_call_id: row for row in existing}
+
+        now = datetime.utcnow()
+        for item in data.tool_calls:
+            row = by_llm_call_id.get(item.llm_call_id)
+            if row is None:
+                continue
+
+            row.status = item.status
+            row.failure_type = item.failure_type
+            row.reason = item.reason
+            row.result = item.result
+            row.accepted_at = item.accepted_at
+            row.updated_at = now
             if item.result is not None:
                 flag_modified(row, "result")
 

@@ -128,6 +128,22 @@ class UpsertRunToolCallsRequest(BaseModel):
     tool_calls: List[UpsertRunToolCallItem] = Field(default_factory=list)
 
 
+class PatchRunToolCallItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    llm_call_id: str = Field(..., min_length=1, max_length=255)
+    status: ToolCallStatus
+    failure_type: Optional[ToolCallFailureType] = None
+    reason: Optional[str] = None
+    result: Optional[Dict[str, Any]] = None
+    accepted_at: Optional[datetime] = None
+
+
+class PatchRunToolCallsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tool_calls: List[PatchRunToolCallItem] = Field(default_factory=list)
+
+
 class RunToolCallResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

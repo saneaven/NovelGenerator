@@ -418,6 +418,19 @@ export interface UpsertRunToolCallsResponse {
   tool_calls: RunToolCallResponse[];
 }
 
+export interface PatchRunToolCallRequestItem {
+  llm_call_id: string;
+  status: RunToolCallStatus;
+  failure_type?: RunToolCallFailureType | null;
+  reason?: string | null;
+  result?: Record<string, any> | null;
+  accepted_at?: string | null;
+}
+
+export interface PatchRunToolCallsRequest {
+  tool_calls: PatchRunToolCallRequestItem[];
+}
+
 export interface TimelineChildRunSummary {
   run_id: string;
   parent_run_tool_call_id: string;

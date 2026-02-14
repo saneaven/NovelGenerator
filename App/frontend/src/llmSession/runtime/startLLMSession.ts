@@ -22,6 +22,7 @@ export interface LLMRunConfig {
   thinking_format?: ThinkingFormat;
   request_format?: RequestFormat;
   retryConfig?: RetryConfig;
+  tool_choice?: 'auto' | 'required' | 'none';
 }
 
 export type StartLLMSessionInput<TInput = unknown> = LLMRunConfig & {
@@ -114,6 +115,7 @@ export function startLLMSession<TInput = unknown, TResult = unknown>(
           thinking_format: input.thinking_format,
           request_format: input.request_format,
           retryConfig: input.retryConfig,
+          tool_choice: input.tool_choice,
           sessionId,
         },
         {

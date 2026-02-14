@@ -19,21 +19,10 @@ import type {
   RuntimeOrchestrator,
 } from './types';
 import { useSettingsStore } from '../store/settingsStore';
-import { useCredentialsStore } from '../store/credentialsStore';
 import { useLLMSessionStore } from '../store/llmSessionStore';
-import { useSubAgentStore } from '../store/subAgentStore';
 import { startLLMSession } from '../llmSession';
-import {
-  LLMTaskMode,
-  type AgentPromptContext,
-} from '../llm';
-import type { SubAgentPromptContext } from '../llm/types';
-import { PromptManager } from '../llm/PromptManager';
-import type { ChatMessage, ToolCallMetadata } from '../llm/requestTypes';
+import type { ToolCallMetadata } from '../llm/requestTypes';
 import type { ToolCallSchema } from '../toolCall';
-import { getToolsForSet } from '../toolCall';
-import { schemaRegistry } from '../toolCall/schemas/schemaRegistry';
-import { buildCallToolSchema } from '../subAgent/tools/SubAgentCallTools';
 import {
   stageToolCalls,
   applyToolCalls,
@@ -41,20 +30,14 @@ import {
   buildAutoApproveDecisions,
 } from '../toolCall/runtime';
 import { evaluateToolCallAutoContinue } from '../agent/utils/autoContinuePolicy';
-import { useAgentPromptSnapshotStore } from '../store/agentPromptSnapshotStore';
 import type { ApplicationResult } from '../toolCall/types';
-import { resolveRunMessageDisplay } from './utils/displayMessage';
+import { buildRunContext, prepareRunMemory } from './context/RunContextBuilder';
+import type { MemoryPreflightStage } from './context/types';
 
 const MAX_CHILD_DEPTH = 3;
-const RUN_TIMEOUT_MS = 120_000;
 
 type RunControlIntent = 'pause' | 'cancel';
 type RunStepAction = 'completed' | 'continue' | 'waiting' | 'paused' | 'error' | 'cancelled';
-
-type RunOverrides = {
-  historyOverride?: ChatMessage[];
-  promptContextOverride?: Record<string, unknown>;
-};
 
 type RunStepResult = {
   action: RunStepAction;
@@ -66,23 +49,6 @@ type RunCompletionEntry = {
   promise: Promise<string>;
   resolve: (output: string) => void;
   reject: (error: Error) => void;
-};
-
-type RunExecutionConfig = {
-  mode: typeof LLMTaskMode[keyof typeof LLMTaskMode];
-  label: string;
-  kind: 'agent' | 'subAgent';
-  provider: string;
-  providerConfig: unknown;
-  model: string;
-  temperature: number;
-  thinkingMode: 'off' | 'model' | 'custom' | undefined;
-  thinkingConfig: unknown;
-  requestFormat: string | undefined;
-  thinkingFormat: string | undefined;
-  history: ChatMessage[];
-  promptContext: AgentPromptContext | SubAgentPromptContext;
-  toolSchemas: ToolCallSchema[] | undefined;
 };
 
 function mapRun(apiRun: UnifiedRunResponse, prev?: Run): Run {
@@ -109,6 +75,7 @@ function mapRun(apiRun: UnifiedRunResponse, prev?: Run): Run {
     runStepCount: prev?.runStepCount ?? 0,
     activeSessionId: prev?.activeSessionId ?? null,
     frozenProjectData: prev?.frozenProjectData,
+    memoryContext: prev?.memoryContext,
     createdAt: apiRun.created_at,
     updatedAt: apiRun.updated_at,
   };
@@ -198,24 +165,6 @@ function toRunToolCalls(params: {
   }));
 }
 
-function toChatMessage(params: {
-  message: RunMessage;
-  toolCalls: RunToolCall[];
-  language: string;
-}): ChatMessage {
-  const { message, toolCalls, language } = params;
-  const display = resolveRunMessageDisplay(message, language);
-  return {
-    id: message.id,
-    seq: message.seq,
-    role: message.role,
-    contentParts: display.contentParts as any,
-    toolCalls: message.role === 'assistant' ? toolCalls.map(toToolCallMetadata) : undefined,
-    thinking_details: display.thinkingDetails as any,
-    timestamp: new Date(message.createdAt),
-  };
-}
-
 function hasPendingOrRunning(toolCalls: RunToolCall[]): boolean {
   return toolCalls.some((toolCall) => toolCall.status === 'pending' || toolCall.status === 'running');
 }
@@ -236,7 +185,6 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
   private readonly runLoopPromises = new Map<string, Promise<void>>();
   private readonly runCompletions = new Map<string, RunCompletionEntry>();
   private readonly controlIntents = new Map<string, RunControlIntent>();
-  private readonly nextRunOverrides = new Map<string, RunOverrides>();
   private readonly parentToolCallLocks = new Map<string, Promise<void>>();
 
   async startRootRun(input: {
@@ -248,9 +196,22 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     language: string;
     caller?: 'planMode' | 'agentMode';
     contextObjectIds?: string[];
-    historyOverride?: Array<Record<string, unknown>>;
-    promptContextOverride?: Record<string, unknown>;
+    signal?: AbortSignal;
+    onMemoryStageChange?: (stage: MemoryPreflightStage) => void;
   }): Promise<{ runId: string }> {
+    // Prepare memory before creating the run (archive/RAG/summarize)
+    const memoryContext = await prepareRunMemory({
+      projectId: input.projectId,
+      agentId: input.agentId,
+      runMode: input.runMode,
+      surface: input.surface,
+      userInput: input.userInput,
+      language: input.language,
+      contextObjectIds: input.contextObjectIds,
+      signal: input.signal,
+      onStageChange: input.onMemoryStageChange,
+    });
+
     const payload: CreateUnifiedRunRequest = {
       run_kind: 'root',
       caller: input.caller ?? input.runMode,
@@ -265,6 +226,9 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     const runResponse = await runService.createRun(input.projectId, input.agentId, payload);
     const run = this.hydrateRunBundle(runResponse.run);
 
+    // Store memoryContext on the run
+    useRuntimeStore.getState().patchRun(run.id, { memoryContext });
+
     if (input.userInput.trim()) {
       const runMessageResponse = await runService.addRunMessage(input.projectId, input.agentId, run.id, {
         role: 'user',
@@ -275,12 +239,6 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
       useRuntimeStore.getState().appendRunMessage(mapRunMessage(runMessageResponse.message));
     }
 
-    const historyOverride = (input.historyOverride as ChatMessage[] | undefined)?.slice();
-    this.nextRunOverrides.set(run.id, {
-      historyOverride,
-      promptContextOverride: input.promptContextOverride,
-    });
-
     void this.resumeRunLoop({ runId: run.id });
 
     return { runId: run.id };
@@ -288,17 +246,27 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
 
   async resumeRunLoop(input: {
     runId: string;
-    historyOverride?: Array<Record<string, unknown>>;
-    promptContextOverride?: Record<string, unknown>;
+    refreshMemory?: boolean;
+    signal?: AbortSignal;
+    onMemoryStageChange?: (stage: MemoryPreflightStage) => void;
   }): Promise<void> {
     const run = useRuntimeStore.getState().getRun(input.runId);
     if (!run) return;
 
-    if (input.historyOverride || input.promptContextOverride) {
-      this.nextRunOverrides.set(input.runId, {
-        historyOverride: (input.historyOverride as ChatMessage[] | undefined)?.slice(),
-        promptContextOverride: input.promptContextOverride,
+    // Refresh memory if requested (e.g., auto-continue after tool acceptance)
+    if (input.refreshMemory && run.runKind === 'root') {
+      const refreshedMemory = await prepareRunMemory({
+        projectId: run.projectId,
+        agentId: run.agentId,
+        runMode: run.runMode ?? 'agentMode',
+        surface: run.surface ?? 'story-object',
+        userInput: run.inputText,
+        language: run.language,
+        contextObjectIds: run.contextObjectIds,
+        signal: input.signal,
+        onStageChange: input.onMemoryStageChange,
       });
+      useRuntimeStore.getState().patchRun(input.runId, { memoryContext: refreshedMemory });
     }
 
     if (this.runLoopPromises.has(input.runId)) {
@@ -333,6 +301,17 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
       throw new Error(`Child run depth exceeded (${MAX_CHILD_DEPTH})`);
     }
 
+    // Prepare sub-agent memory (archive/RAG/summarize with owner_id = subAgentId)
+    const childMemoryContext = await prepareRunMemory({
+      projectId: input.projectId,
+      agentId: input.agentId,
+      runMode: 'agentMode',
+      surface: 'story-object',
+      userInput: input.inputText,
+      language: input.language,
+      subAgentId: input.subAgentId,
+    });
+
     const payload: CreateUnifiedRunRequest = {
       run_kind: 'child',
       caller: input.caller ?? 'subAgent',
@@ -347,6 +326,9 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
 
     const runResponse = await runService.createRun(input.projectId, input.agentId, payload);
     const run = this.hydrateRunBundle(runResponse.run);
+
+    // Store memoryContext on the child run
+    useRuntimeStore.getState().patchRun(run.id, { memoryContext: childMemoryContext });
 
     if (input.inputText.trim()) {
       const messageResponse = await runService.addRunMessage(input.projectId, input.agentId, run.id, {
@@ -407,37 +389,21 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
       runCaller: run.caller,
     });
 
-    // Merge results into the latest store state (not the stale snapshot from above)
-    // to prevent concurrent applyRunToolCallDecisions calls from overwriting each other.
-    const appliedById = new Map(
-      applied.toolCalls
-        .filter((tc) => input.decisions[tc.id])
-        .map((tc) => [tc.id, tc]),
-    );
-
-    const latestRunToolCalls = useRuntimeStore.getState().getRunToolCalls(input.runMessageId);
-    const now = new Date().toISOString();
-    const mergedToolCalls = latestRunToolCalls.map((rtc) => {
-      const appliedTc = appliedById.get(rtc.llmCallId);
-      if (!appliedTc) return rtc;
-      // Patch only mutable fields; preserve callSeq, id, createdAt, etc.
-      return {
-        ...rtc,
-        status: normalizeRunToolCallStatus(appliedTc.status),
-        failureType: appliedTc.failureType as RunToolCall['failureType'],
-        reason: appliedTc.reason,
-        result: (appliedTc.result ?? undefined) as Record<string, unknown> | undefined,
-        acceptedAt: appliedTc.acceptedAt ? appliedTc.acceptedAt.toISOString() : undefined,
-        updatedAt: now,
-      };
+    // PATCH only the decided tool calls — other tool calls are left untouched in the DB,
+    // preventing concurrent decisions (e.g. sub-agent completion) from being overwritten.
+    const decidedToolCalls = applied.toolCalls.filter((tc) => input.decisions[tc.id]);
+    const decidedRunToolCalls = toRunToolCalls({
+      runId: run.id,
+      runMessageId: input.runMessageId,
+      toolCalls: decidedToolCalls,
     });
 
-    const persisted = await this.upsertRunToolCalls({
+    const persisted = await this.patchRunToolCalls({
       projectId: run.projectId,
       agentId: run.agentId,
       runId: run.id,
       runMessageId: input.runMessageId,
-      toolCalls: mergedToolCalls,
+      toolCalls: decidedRunToolCalls,
     });
 
     const hasPending = hasPendingOrRunning(persisted);
@@ -458,6 +424,22 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
         return;
       }
       await this.patchRunStatus(run.id, 'paused');
+      return;
+    }
+
+    // Short-circuit: if return_sub_agent_result was accepted, complete the child run immediately
+    const returnResultAccepted = persisted.find(
+      (tc) => tc.toolName === 'return_sub_agent_result' && tc.status === 'accepted'
+    );
+    if (returnResultAccepted && run.runKind === 'child') {
+      const output = (returnResultAccepted.result as any)?.message ?? '';
+      await this.patchRunStatus(run.id, 'completed', { finalOutput: output, error: null });
+      const completedRun = useRuntimeStore.getState().getRun(run.id);
+      if (completedRun) {
+        await this.syncParentToolCallAccepted(completedRun, output);
+        this.resolveRunCompletion(completedRun.id, output);
+        await this.tryResumeParentRun(completedRun);
+      }
       return;
     }
 
@@ -632,6 +614,35 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     return mapped;
   }
 
+  async patchRunToolCalls(input: {
+    projectId: string;
+    agentId: string;
+    runId: string;
+    runMessageId: string;
+    toolCalls: RunToolCall[];
+  }): Promise<RunToolCall[]> {
+    const response = await runService.patchRunToolCalls(
+      input.projectId,
+      input.agentId,
+      input.runId,
+      input.runMessageId,
+      {
+        tool_calls: input.toolCalls.map((toolCall) => ({
+          llm_call_id: toolCall.llmCallId,
+          status: toolCall.status,
+          failure_type: toolCall.failureType ?? null,
+          reason: toolCall.reason ?? null,
+          result: toolCall.result ?? null,
+          accepted_at: toolCall.acceptedAt ?? null,
+        })),
+      },
+    );
+
+    const mapped = response.tool_calls.map(mapRunToolCall);
+    useRuntimeStore.getState().upsertRunToolCalls(input.runMessageId, mapped);
+    return mapped;
+  }
+
   findLatestOpenRootRunId(projectId: string, agentId: string): string | undefined {
     return useRuntimeStore.getState().findLatestOpenRootRunId(projectId, agentId);
   }
@@ -704,13 +715,6 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     this.runCompletions.delete(runId);
   }
 
-  private consumeRunOverride(runId: string): RunOverrides | undefined {
-    const entry = this.nextRunOverrides.get(runId);
-    if (!entry) return undefined;
-    this.nextRunOverrides.delete(runId);
-    return entry;
-  }
-
   private computeChildDepth(parentRunId: string): number {
     let depth = 0;
     let cursor: string | undefined = parentRunId;
@@ -725,88 +729,6 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     }
 
     return depth;
-  }
-
-  private getRunHistory(runId: string, historyOverride?: ChatMessage[]): ChatMessage[] {
-    if (historyOverride && historyOverride.length > 0) {
-      return [...historyOverride];
-    }
-
-    const runtime = useRuntimeStore.getState();
-    const run = runtime.getRun(runId);
-    const language = run?.language ?? 'English';
-    const messages = runtime.getRunMessages(runId);
-    return messages.map((message) => {
-      const toolCalls = runtime.getRunToolCalls(message.id);
-      return toChatMessage({ message, toolCalls, language });
-    });
-  }
-
-  private async loadRootRunTools(run: Run): Promise<ToolCallSchema[] | undefined> {
-    const settings = useSettingsStore.getState().getSettings();
-    const toolSet = run.runMode === 'planMode' ? 'agent_plan_mode' : 'agent_agent_mode';
-    const baseTools = settings.nativeOutputMode
-      ? undefined
-      : getToolsForSet(toolSet, { ragSearchEnabled: settings.ragSearchEnabled });
-
-    if (settings.nativeOutputMode) {
-      return baseTools;
-    }
-
-    await useSubAgentStore.getState().ensureLoaded();
-
-    const dynamicSubAgentTools = useSubAgentStore.getState().subAgents
-      .filter((subAgent) => subAgent.enabled && subAgent.allowed_invocation_modes.includes(run.caller))
-      .sort((left, right) => left.display_name.localeCompare(right.display_name))
-      .map(buildCallToolSchema);
-
-    return [...(baseTools ?? []), ...dynamicSubAgentTools];
-  }
-
-  private async loadChildRunTools(run: Run): Promise<ToolCallSchema[]> {
-    if (!run.subAgentId) {
-      throw new Error('Missing subAgentId for child run');
-    }
-
-    await useSubAgentStore.getState().ensureLoaded();
-
-    const subAgentState = useSubAgentStore.getState();
-    const definition = subAgentState.subAgents.find((s) => s.id === run.subAgentId);
-    if (!definition) {
-      throw new Error(`Sub Agent not found: ${run.subAgentId}`);
-    }
-
-    if (!definition.enabled) {
-      throw new Error(`Sub Agent is disabled: ${run.subAgentId}`);
-    }
-
-    if (!definition.allowed_invocation_modes.includes(run.caller)) {
-      throw new Error(`Sub Agent not allowed from caller: ${run.caller}`);
-    }
-
-    const schemas: ToolCallSchema[] = [];
-
-    for (const name of definition.allowed_tool_names) {
-      if (name.startsWith('call_')) continue;
-      const schema = schemaRegistry.get(name);
-      if (!schema) {
-        throw new Error(`Unsupported tool in allowlist: ${name}`);
-      }
-      schemas.push({
-        name: schema.name,
-        description: schema.description,
-        parameters: schema.parameters,
-      });
-    }
-
-    for (const subAgentId of definition.allowed_sub_agent_ids ?? []) {
-      if (subAgentId === definition.id) continue;
-      const target = subAgentState.subAgents.find((s) => s.id === subAgentId);
-      if (!target || !target.enabled) continue;
-      schemas.push(buildCallToolSchema(target));
-    }
-
-    return schemas;
   }
 
   private getApplyHandlerOptions(params: {
@@ -829,113 +751,6 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     };
   }
 
-  private async buildRunExecutionConfig(run: Run, overrides?: RunOverrides): Promise<RunExecutionConfig> {
-    const settingsStore = useSettingsStore.getState();
-    const settings = settingsStore.getSettings();
-    const credentialsStore = useCredentialsStore.getState();
-
-    const outputMode = settings.nativeOutputMode ? 'native_tool_call' : 'tool_call';
-
-    if (run.runKind === 'root') {
-      const agentConfig = settingsStore.getTaskConfig('agent');
-      const providerConfig = credentialsStore.getProviderConfigForBackend(agentConfig.provider);
-      const llmMode = run.runMode === 'planMode'
-        ? LLMTaskMode.AGENT_PLAN_MODE
-        : LLMTaskMode.AGENT_AGENT_MODE;
-
-      let frozenProjectData = run.frozenProjectData;
-      if (!frozenProjectData) {
-        const snapshot = useAgentPromptSnapshotStore.getState().get(run.projectId, run.agentId);
-        frozenProjectData = snapshot?.projectData ?? PromptManager.buildProjectData(run.projectId, run.language);
-      }
-
-      const toolSchemas = await this.loadRootRunTools(run);
-      const promptContext: AgentPromptContext = {
-        projectId: run.projectId,
-        outputLanguage: run.language,
-        outputMode,
-        enable_prefill: agentConfig.advanced.enable_prefill,
-        thinking_mode: agentConfig.advanced.thinking_mode,
-        runMode: run.runMode ?? 'agentMode',
-        surface: run.surface ?? 'story-object',
-        contextObjectIds: run.contextObjectIds,
-        frozenProjectData: frozenProjectData as any,
-        tools: toolSchemas,
-        ...(overrides?.promptContextOverride ?? {}),
-      };
-
-      useRuntimeStore.getState().patchRun(run.id, {
-        frozenProjectData,
-      });
-
-      return {
-        mode: llmMode,
-        label: 'AI Response',
-        kind: 'agent',
-        provider: agentConfig.provider,
-        providerConfig,
-        model: agentConfig.model,
-        temperature: agentConfig.temperature,
-        thinkingMode: agentConfig.advanced.thinking_mode,
-        thinkingConfig: agentConfig.advanced.thinking_config,
-        requestFormat: agentConfig.advanced.request_format,
-        thinkingFormat: agentConfig.advanced.thinking_format,
-        history: this.getRunHistory(run.id, overrides?.historyOverride),
-        promptContext,
-        toolSchemas,
-      };
-    }
-
-    const subAgentConfig = settingsStore.getTaskConfig('subAgent');
-    const providerConfig = credentialsStore.getProviderConfigForBackend(subAgentConfig.provider);
-    const toolSchemas = await this.loadChildRunTools(run);
-
-    let frozenProjectData = run.frozenProjectData;
-    if (!frozenProjectData) {
-      frozenProjectData = PromptManager.buildProjectData(run.projectId, run.language);
-    }
-
-    const subAgentStore = useSubAgentStore.getState();
-    const definition = run.subAgentId ? subAgentStore.getById(run.subAgentId) : undefined;
-
-    const effectiveConfig = definition?.use_custom_llm_config && definition.llm_config_override
-      ? definition.llm_config_override
-      : subAgentConfig;
-
-    const promptContext: SubAgentPromptContext = {
-      projectId: run.projectId,
-      outputLanguage: run.language,
-      outputMode,
-      enable_prefill: effectiveConfig.advanced.enable_prefill,
-      thinking_mode: effectiveConfig.advanced.thinking_mode,
-      tools: toolSchemas,
-      frozenProjectData: frozenProjectData as any,
-      agentName: definition?.agent_name ?? 'sub_agent',
-      ...(overrides?.promptContextOverride ?? {}),
-    };
-
-    useRuntimeStore.getState().patchRun(run.id, {
-      frozenProjectData,
-    });
-
-    return {
-      mode: LLMTaskMode.SUB_AGENT,
-      label: 'Sub Agent',
-      kind: 'subAgent',
-      provider: effectiveConfig.provider,
-      providerConfig,
-      model: effectiveConfig.model,
-      temperature: effectiveConfig.temperature,
-      thinkingMode: effectiveConfig.advanced.thinking_mode,
-      thinkingConfig: effectiveConfig.advanced.thinking_config,
-      requestFormat: effectiveConfig.advanced.request_format,
-      thinkingFormat: effectiveConfig.advanced.thinking_format,
-      history: this.getRunHistory(run.id, overrides?.historyOverride),
-      promptContext,
-      toolSchemas,
-    };
-  }
-
   private async executeRunStep(runId: string): Promise<RunStepResult> {
     const runtime = useRuntimeStore.getState();
     const run = runtime.getRun(runId);
@@ -943,8 +758,7 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
       return { action: 'error', error: 'Run not found' };
     }
 
-    const overrides = this.consumeRunOverride(runId);
-    const executionConfig = await this.buildRunExecutionConfig(run, overrides);
+    const { executionConfig } = await buildRunContext(run);
 
     const handle = startLLMSession({
       kind: executionConfig.kind,
@@ -970,6 +784,7 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
       request_format: executionConfig.requestFormat as any,
       thinking_format: executionConfig.thinkingFormat as any,
       retryConfig: useSettingsStore.getState().getSettings().retryConfig,
+      tool_choice: executionConfig.toolChoice,
       history: executionConfig.history,
     });
 
@@ -979,23 +794,9 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
       error: undefined,
     });
 
-    const timeout = new Promise<{ type: 'timeout' }>((resolve) => {
-      setTimeout(() => resolve({ type: 'timeout' }), RUN_TIMEOUT_MS);
-    });
-
-    const completion = await Promise.race([
-      handle.done.then((session) => ({ type: 'session' as const, session })),
-      timeout,
-    ]);
+    const finalSession = await handle.done;
 
     runtime.patchRun(run.id, { activeSessionId: null });
-
-    if (completion.type === 'timeout') {
-      useLLMSessionStore.getState().cancelSession(handle.sessionId);
-      return { action: 'error', error: `Run timed out after ${RUN_TIMEOUT_MS}ms` };
-    }
-
-    const finalSession = completion.session;
 
     if (finalSession.status !== 'success') {
       const intent = this.controlIntents.get(run.id);
@@ -1097,16 +898,15 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
         decisions: autoDecisions,
       });
 
-      await this.upsertRunToolCalls({
+      // PATCH only auto-decided tool calls to 'running' status
+      const decidedRunning = toRunToolCalls({ runId: run.id, runMessageId, toolCalls: runningToolCalls })
+        .filter((rtc) => autoDecisions[rtc.llmCallId]);
+      await this.patchRunToolCalls({
         projectId: run.projectId,
         agentId: run.agentId,
         runId: run.id,
         runMessageId,
-        toolCalls: toRunToolCalls({
-          runId: run.id,
-          runMessageId,
-          toolCalls: runningToolCalls,
-        }),
+        toolCalls: decidedRunning,
       });
 
       const applied = await applyToolCalls({
@@ -1118,19 +918,29 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
         runCaller: run.caller,
       });
 
-      finalToolCalls = applied.toolCalls;
-
-      await this.upsertRunToolCalls({
+      // PATCH only auto-decided tool calls with their final status.
+      // This avoids overwriting concurrent user decisions made while a sub-agent was running.
+      const decidedApplied = toRunToolCalls({ runId: run.id, runMessageId, toolCalls: applied.toolCalls })
+        .filter((rtc) => autoDecisions[rtc.llmCallId]);
+      const persisted = await this.patchRunToolCalls({
         projectId: run.projectId,
         agentId: run.agentId,
         runId: run.id,
         runMessageId,
-        toolCalls: toRunToolCalls({
-          runId: run.id,
-          runMessageId,
-          toolCalls: finalToolCalls,
-        }),
+        toolCalls: decidedApplied,
       });
+
+      // Use the PATCH response (latest DB state) for evaluation,
+      // not the stale applied.toolCalls snapshot.
+      finalToolCalls = persisted.map(toToolCallMetadata);
+    }
+
+    // Short-circuit: if return_sub_agent_result was accepted, complete the run immediately
+    const returnResultCall = finalToolCalls.find(
+      (tc) => tc.tool_name === 'return_sub_agent_result' && tc.status === 'accepted'
+    );
+    if (returnResultCall) {
+      return { action: 'completed', output: returnResultCall.result?.message ?? '' };
     }
 
     const state = evaluateToolCallAutoContinue(finalToolCalls);
@@ -1195,6 +1005,7 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
         if (completedRun?.runKind === 'child') {
           await this.syncParentToolCallAccepted(completedRun, output);
           this.resolveRunCompletion(completedRun.id, output);
+          await this.tryResumeParentRun(completedRun);
         }
 
         return;
@@ -1252,7 +1063,7 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
     const parentMessageId = run.parentRunMessageId;
 
     // Serialize concurrent updates to the same parent message's tool calls
-    // to prevent read-modify-write race conditions between parallel child runs.
+    // to prevent out-of-order PATCH responses from overwriting each other in the store.
     const prev = this.parentToolCallLocks.get(parentMessageId) ?? Promise.resolve();
     let release!: () => void;
     const next = new Promise<void>((r) => (release = r));
@@ -1266,44 +1077,74 @@ class DefaultRuntimeOrchestrator implements RuntimeOrchestrator {
       if (!parentRun) return;
 
       const current = runtime.getRunToolCalls(parentMessageId);
+      const existing = current.find((tc) => tc.llmCallId === run.parentRunToolCallId);
 
-      let changed = false;
-      const patched = current.map((toolCall) => {
-        if (toolCall.llmCallId !== run.parentRunToolCallId) return toolCall;
-        changed = true;
-        return patch(toolCall);
-      });
-
-      if (!changed) {
-        patched.push(
-          patch({
-            id: `${parentMessageId}:${run.parentRunToolCallId}`,
-            runId: parentRun.id,
-            messageId: parentMessageId,
-            llmCallId: run.parentRunToolCallId,
-            callSeq: patched.length + 1,
-            toolName: 'call_sub_agent',
-            arguments: {},
-            status: 'pending',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }),
-        );
+      if (existing) {
+        // Normal case: PATCH only this tool call, leaving others untouched in the DB.
+        await this.patchRunToolCalls({
+          projectId: parentRun.projectId,
+          agentId: parentRun.agentId,
+          runId: parentRun.id,
+          runMessageId: parentMessageId,
+          toolCalls: [patch(existing)],
+        });
+      } else {
+        // Edge case: tool call not in store yet — create via full upsert.
+        const newToolCall = patch({
+          id: `${parentMessageId}:${run.parentRunToolCallId}`,
+          runId: parentRun.id,
+          messageId: parentMessageId,
+          llmCallId: run.parentRunToolCallId,
+          callSeq: current.length + 1,
+          toolName: 'call_sub_agent',
+          arguments: {},
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        await this.upsertRunToolCalls({
+          projectId: parentRun.projectId,
+          agentId: parentRun.agentId,
+          runId: parentRun.id,
+          runMessageId: parentMessageId,
+          toolCalls: [...current, newToolCall],
+        });
       }
-
-      await this.upsertRunToolCalls({
-        projectId: parentRun.projectId,
-        agentId: parentRun.agentId,
-        runId: parentRun.id,
-        runMessageId: parentMessageId,
-        toolCalls: patched,
-      });
     } finally {
       release();
       if (this.parentToolCallLocks.get(parentMessageId) === tail) {
         this.parentToolCallLocks.delete(parentMessageId);
       }
     }
+  }
+
+  private async tryResumeParentRun(childRun: Run): Promise<void> {
+    if (!childRun.parentRunId || !childRun.parentRunMessageId) return;
+
+    // If there's an active in-memory listener, the normal promise-based flow handles it
+    if (this.runCompletions.has(childRun.id)) return;
+
+    const runtime = useRuntimeStore.getState();
+    const parentRun = runtime.getRun(childRun.parentRunId);
+    if (!parentRun) return;
+
+    // Only resume if parent is stuck (paused/waiting/error — i.e. lost its run loop after refresh)
+    if (parentRun.status !== 'paused' && parentRun.status !== 'waiting' && parentRun.status !== 'error') return;
+
+    // Check if all tool calls in the parent message are resolved
+    const parentToolCalls = runtime.getRunToolCalls(childRun.parentRunMessageId);
+    if (parentToolCalls.length === 0) return;
+
+    const hasPendingOrRunningCalls = parentToolCalls.some(
+      (tc) => tc.status === 'pending' || tc.status === 'running'
+    );
+    if (hasPendingOrRunningCalls) return;
+
+    // All tool calls resolved — resume the parent run loop
+    if (canTransitionRunStatus(parentRun.status, 'running')) {
+      await this.patchRunStatus(parentRun.id, 'running', { error: null });
+    }
+    void this.resumeRunLoop({ runId: parentRun.id });
   }
 
   private async syncParentToolCallRunning(run: Run): Promise<void> {

@@ -26,6 +26,7 @@ from ..schemas.runs import (
     TranslateRunMessageResponse,
     UpsertRunToolCallsRequest,
     UpsertRunToolCallsResponse,
+    PatchRunToolCallsRequest,
 )
 from ..services.run_message_service import run_message_service
 from ..services.run_service import run_service
@@ -230,6 +231,32 @@ async def patch_run_message(
     return {"message": message}
 
 
+@router.delete("/{run_id}/messages/{run_message_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_run_message(
+    project_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    run_id: uuid.UUID,
+    run_message_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a single message from a run."""
+    await verify_agent_access(project_id, agent_id, current_user, db)
+
+    try:
+        run_message_service.delete_run_message(
+            db=db,
+            project_id=project_id,
+            agent_id=agent_id,
+            run_id=run_id,
+            message_id=run_message_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    return None
+
+
 @router.put(
     "/{run_id}/messages/{run_message_id}/translate",
     response_model=TranslateRunMessageResponse,
@@ -279,6 +306,37 @@ async def upsert_run_tool_calls(
 
     try:
         rows = run_tool_call_service.upsert_run_tool_calls(
+            db=db,
+            project_id=project_id,
+            agent_id=agent_id,
+            run_id=run_id,
+            message_id=run_message_id,
+            data=data,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    return {"tool_calls": rows}
+
+
+@router.patch(
+    "/{run_id}/messages/{run_message_id}/tool-calls",
+    response_model=UpsertRunToolCallsResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def patch_run_tool_calls(
+    project_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    run_id: uuid.UUID,
+    run_message_id: uuid.UUID,
+    data: PatchRunToolCallsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    await verify_agent_access(project_id, agent_id, current_user, db)
+
+    try:
+        rows = run_tool_call_service.patch_run_tool_calls(
             db=db,
             project_id=project_id,
             agent_id=agent_id,

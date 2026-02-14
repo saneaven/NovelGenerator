@@ -220,7 +220,11 @@ export async function createOutlineChapter(
     userRequest
   );
 
-  return ok(`Created chapter: ${name} (id: ${newObject.id})`, { id: newObject.id });
+  const manuscriptId = newObject.metadata?.manuscript_id;
+  return ok(
+    `Created chapter: ${name} (id: ${newObject.id}${manuscriptId ? `, manuscript_id: ${manuscriptId}` : ''})`,
+    { id: newObject.id, manuscript_id: manuscriptId }
+  );
 }
 
 /**

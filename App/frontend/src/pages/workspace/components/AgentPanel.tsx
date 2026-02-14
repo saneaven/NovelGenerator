@@ -923,6 +923,16 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                     </div>
                                                 )}
 
+                                                {selectedAgentId && hasSubAgentCalls && (
+                                                    <SubAgentPeekDock
+                                                        threadId={`${functionThreadId}:peek`}
+                                                        parentRunId={message.source.runId}
+                                                        parentRunMessageId={message.source.id}
+                                                        parentToolCallIds={subAgentToolCallIds}
+                                                        isActiveParent={isActiveSubAgentParent}
+                                                    />
+                                                )}
+
                                                 {showRunError && (
                                                     <div className="message-error">
                                                         {latestRunError}
@@ -993,16 +1003,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                         )}
                                 </div>
                             </div>
-
-                            {selectedAgentId && hasSubAgentCalls && (
-                                <SubAgentPeekDock
-                                    threadId={`${functionThreadId}:peek`}
-                                    parentRunId={message.source.runId}
-                                    parentRunMessageId={message.source.id}
-                                    parentToolCallIds={subAgentToolCallIds}
-                                    isActiveParent={isActiveSubAgentParent}
-                                />
-                            )}
 
                             {archiveBoundaryId === message.source.id && (
                                 <div className="agent-archive-divider" role="separator" aria-label="Memory boundary">

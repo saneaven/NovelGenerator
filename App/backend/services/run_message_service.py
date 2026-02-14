@@ -105,6 +105,42 @@ class RunMessageService:
         db.refresh(message)
         return message
 
+    def delete_run_message(
+        self,
+        db: Session,
+        *,
+        project_id: uuid.UUID,
+        agent_id: uuid.UUID,
+        run_id: uuid.UUID,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Delete a single message. If the run has no messages left, delete the run too."""
+        run = self._get_run(db, project_id=project_id, agent_id=agent_id, run_id=run_id, for_update=False)
+
+        message = (
+            db.query(RunMessageModel)
+            .filter(
+                RunMessageModel.id == message_id,
+                RunMessageModel.run_id == run.id,
+            )
+            .first()
+        )
+        if not message:
+            raise ValueError("Run message not found")
+
+        db.delete(message)
+        db.flush()
+
+        remaining = (
+            db.query(RunMessageModel)
+            .filter(RunMessageModel.run_id == run.id)
+            .count()
+        )
+        if remaining == 0:
+            db.delete(run)
+
+        db.commit()
+
     def translate_run_message(
         self,
         db: Session,

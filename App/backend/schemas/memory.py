@@ -1,9 +1,9 @@
-"""Schemas for Agent long-term memory (summary + RAG)."""
+"""Schemas for message long-term memory (summary + RAG)."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import List, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -12,7 +12,7 @@ from ..models.requests import ProviderConfig
 from .agents import ToolCallSchema
 
 
-class AgentMemoryStatusResponse(BaseModel):
+class MemoryStatusResponse(BaseModel):
     hasMemory: bool
     summaryCount: int
     lastSummaryText: Optional[str] = None
@@ -33,7 +33,7 @@ class ArchivedMessage(BaseModel):
     tool_calls: Optional[List[ToolCallSchema]] = None
 
 
-class AgentMemoryArchiveRequest(BaseModel):
+class MemoryArchiveRequest(BaseModel):
     language: str = Field(default="English", min_length=1)
     archive_until_message_id: UUID
     summary_text: str = Field(..., min_length=1)
@@ -41,7 +41,7 @@ class AgentMemoryArchiveRequest(BaseModel):
     embedding_config: ProviderConfig = Field(default_factory=ProviderConfig)
 
 
-class AgentMemoryArchiveResponse(BaseModel):
+class MemoryArchiveResponse(BaseModel):
     archived_until_message_id: Optional[UUID] = None
     summary_id: Optional[UUID] = None
     summary_text: Optional[str] = None
@@ -49,14 +49,14 @@ class AgentMemoryArchiveResponse(BaseModel):
     indexed_count: int = 0
 
 
-class AgentMemorySearchRequest(BaseModel):
+class MemorySearchRequest(BaseModel):
     language: str = Field(default="English", min_length=1)
     queries: List[str] = Field(default_factory=list)
     top_k_per_query: int = Field(default=20, ge=1, le=200)
     config: ProviderConfig = Field(default_factory=ProviderConfig)
 
 
-class AgentMemoryRelevantChat(BaseModel):
+class MemoryRelevantChat(BaseModel):
     message_id: UUID
     role: str
     content: str
@@ -66,5 +66,5 @@ class AgentMemoryRelevantChat(BaseModel):
     chunk_index: Optional[int] = None
 
 
-class AgentMemorySearchResponse(BaseModel):
-    results: List[AgentMemoryRelevantChat]
+class MemorySearchResponse(BaseModel):
+    results: List[MemoryRelevantChat]

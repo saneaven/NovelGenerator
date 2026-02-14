@@ -9,7 +9,7 @@ from uuid import UUID
 from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
-from ..models.agent_memory_models import AgentMemorySummary, AgentRagChunk, AgentRagSource
+from ..models.memory_models import MessageMemorySummary, MessageRagChunk, MessageRagSource
 from ..models.db_models import Agent, AgentRunModel, RunMessageModel, User
 from .embedding_config_service import get_embedding_profile, set_embedding_dimensions
 from .rag_embedding_service import embed_many
@@ -20,9 +20,9 @@ def _sha256(text: str) -> str:
     return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
 
 
-def wipe_agent_memory_index(db: Session, *, user_id: UUID) -> None:
-    """Delete all agent-memory embeddings for a user (sources + chunks via cascade)."""
-    db.query(AgentRagSource).filter(AgentRagSource.user_id == user_id).delete(synchronize_session=False)
+def wipe_memory_index(db: Session, *, user_id: UUID) -> None:
+    """Delete all message-memory embeddings for a user (sources + chunks via cascade)."""
+    db.query(MessageRagSource).filter(MessageRagSource.user_id == user_id).delete(synchronize_session=False)
 
 
 def _extract_message_text(data: Dict[str, Any], language: str) -> str:
@@ -106,7 +106,7 @@ def _extract_string_leaves(value: Any, *, path: str = "") -> List[Tuple[str, str
     return out
 
 
-def _build_agent_memory_chunks(*, message_req: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _build_memory_chunks(*, message_req: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Build embedding chunks (field_path + text) for a single archived message request.
 
     Chunking policy matches RAG Search:
@@ -195,29 +195,37 @@ def get_memory_status(
     *,
     user_id: UUID,
     agent: Agent,
+    owner_id: UUID,
 ) -> Dict[str, Any]:
     summary_count = (
-        db.query(AgentMemorySummary)
-        .filter(AgentMemorySummary.user_id == user_id, AgentMemorySummary.agent_id == agent.id)
+        db.query(MessageMemorySummary)
+        .filter(MessageMemorySummary.user_id == user_id, MessageMemorySummary.owner_id == owner_id)
         .count()
     )
     last = (
-        db.query(AgentMemorySummary)
-        .filter(AgentMemorySummary.user_id == user_id, AgentMemorySummary.agent_id == agent.id)
-        .order_by(AgentMemorySummary.created_at.desc())
+        db.query(MessageMemorySummary)
+        .filter(MessageMemorySummary.user_id == user_id, MessageMemorySummary.owner_id == owner_id)
+        .order_by(MessageMemorySummary.created_at.desc())
         .first()
     )
     indexed = (
-        db.query(AgentRagSource)
-        .filter(AgentRagSource.user_id == user_id, AgentRagSource.agent_id == agent.id)
+        db.query(MessageRagSource)
+        .filter(MessageRagSource.user_id == user_id, MessageRagSource.owner_id == owner_id)
         .count()
     )
+
+    # Archive boundary: for root agents use agent.archived_until_message_id;
+    # for sub-agents use the latest summary's to_message_id.
+    if owner_id == agent.id:
+        archived_until = agent.archived_until_message_id
+    else:
+        archived_until = getattr(last, "to_message_id", None) if last else None
 
     return {
         "hasMemory": summary_count > 0,
         "summaryCount": int(summary_count),
         "lastSummaryText": getattr(last, "summary_text", None) if last else None,
-        "archivedUntilMessageId": agent.archived_until_message_id,
+        "archivedUntilMessageId": archived_until,
         "indexedMessageCount": int(indexed),
     }
 
@@ -228,6 +236,7 @@ async def archive_until(
     current_user: User,
     project_id: UUID,
     agent: Agent,
+    owner_id: UUID,
     language: str,
     archive_until_message_id: UUID,
     summary_text: str,
@@ -235,7 +244,19 @@ async def archive_until(
     embedding_provider_request_config: Dict[str, Any],
 ) -> Dict[str, Any]:
     # Idempotency boundary check
-    current_boundary = agent.archived_until_message_id
+    # For root agents: use agent.archived_until_message_id
+    # For sub-agents: use the latest summary's to_message_id
+    if owner_id == agent.id:
+        current_boundary = agent.archived_until_message_id
+    else:
+        latest_summary = (
+            db.query(MessageMemorySummary)
+            .filter(MessageMemorySummary.user_id == current_user.id, MessageMemorySummary.owner_id == owner_id)
+            .order_by(MessageMemorySummary.created_at.desc())
+            .first()
+        )
+        current_boundary = getattr(latest_summary, "to_message_id", None) if latest_summary else None
+
     if current_boundary == archive_until_message_id:
         return {
             "archived_until_message_id": current_boundary,
@@ -246,13 +267,24 @@ async def archive_until(
         }
 
     # Determine message range to archive (by run → message ordering)
-    ordered_messages: List[RunMessageModel] = (
-        db.query(RunMessageModel)
-        .join(AgentRunModel, RunMessageModel.run_id == AgentRunModel.id)
-        .filter(AgentRunModel.agent_id == agent.id)
-        .order_by(AgentRunModel.root_run_seq.asc().nullslast(), AgentRunModel.created_at.asc(), RunMessageModel.seq.asc())
-        .all()
-    )
+    # For root agents: use root runs. For sub-agents: filter child runs by sub_agent_id.
+    if owner_id == agent.id:
+        ordered_messages: List[RunMessageModel] = (
+            db.query(RunMessageModel)
+            .join(AgentRunModel, RunMessageModel.run_id == AgentRunModel.id)
+            .filter(AgentRunModel.agent_id == agent.id, AgentRunModel.run_kind == "root")
+            .order_by(AgentRunModel.root_run_seq.asc().nullslast(), AgentRunModel.created_at.asc(), RunMessageModel.seq.asc())
+            .all()
+        )
+    else:
+        ordered_messages = (
+            db.query(RunMessageModel)
+            .join(AgentRunModel, RunMessageModel.run_id == AgentRunModel.id)
+            .filter(AgentRunModel.sub_agent_id == owner_id, AgentRunModel.run_kind == "child")
+            .order_by(AgentRunModel.created_at.asc(), RunMessageModel.seq.asc())
+            .all()
+        )
+
     ordered_ids = [m.id for m in ordered_messages]
 
     start_idx, end_idx = _select_message_range(
@@ -287,7 +319,7 @@ async def archive_until(
     if archive_until_message_id not in archived_by_id:
         raise ValueError("archived_messages must include archive_until_message_id")
 
-    # Index archived messages into agent_rag_* (must complete before returning)
+    # Index archived messages into message_rag_* (must complete before returning)
     profile = get_embedding_profile(db, user_id=current_user.id, feature="agentMemory")
     if not profile:
         raise ValueError("Missing agent-memory embedding profile")
@@ -306,19 +338,19 @@ async def archive_until(
             if req is None:
                 raise ValueError(f"archived_messages missing message_id={m.id}")
 
-            chunks = _build_agent_memory_chunks(message_req=req)
+            chunks = _build_memory_chunks(message_req=req)
             if not chunks:
                 continue
 
             content_hash = _compute_chunks_hash(chunks)
 
             existing = (
-                db.query(AgentRagSource)
+                db.query(MessageRagSource)
                 .filter(
-                    AgentRagSource.user_id == current_user.id,
-                    AgentRagSource.agent_id == agent.id,
-                    AgentRagSource.message_id == m.id,
-                    AgentRagSource.language == language,
+                    MessageRagSource.user_id == current_user.id,
+                    MessageRagSource.owner_id == owner_id,
+                    MessageRagSource.message_id == m.id,
+                    MessageRagSource.language == language,
                 )
                 .first()
             )
@@ -368,20 +400,19 @@ async def archive_until(
 
         for mid, chunk_pairs in by_mid.items():
             source = (
-                db.query(AgentRagSource)
+                db.query(MessageRagSource)
                 .filter(
-                    AgentRagSource.user_id == current_user.id,
-                    AgentRagSource.agent_id == agent.id,
-                    AgentRagSource.message_id == mid,
-                    AgentRagSource.language == language,
+                    MessageRagSource.user_id == current_user.id,
+                    MessageRagSource.owner_id == owner_id,
+                    MessageRagSource.message_id == mid,
+                    MessageRagSource.language == language,
                 )
                 .first()
             )
 
             content_hash = hash_by_mid.get(mid)
             if not content_hash:
-                # Should not happen, but avoid committing partial state.
-                raise RuntimeError("Missing content_hash for agent-memory message")
+                raise RuntimeError("Missing content_hash for memory message")
 
             if source:
                 # Replace existing chunks
@@ -391,10 +422,10 @@ async def archive_until(
                 source.updated_at = now
                 source.chunks = []
             else:
-                source = AgentRagSource(
+                source = MessageRagSource(
                     user_id=current_user.id,
                     project_id=project_id,
-                    agent_id=agent.id,
+                    owner_id=owner_id,
                     message_id=mid,
                     language=language,
                     content_hash=content_hash,
@@ -408,7 +439,7 @@ async def archive_until(
             # chunk_index is already unique per message/source; store in that order.
             chunk_pairs.sort(key=lambda x: int(x[0].get("chunk_index") or 0))
             for c, vec in chunk_pairs:
-                chunk = AgentRagChunk(
+                chunk = MessageRagChunk(
                     chunk_index=int(c["chunk_index"]),
                     field_path=str(c["field_path"]),
                     text=str(c["text"]),
@@ -419,10 +450,10 @@ async def archive_until(
                 source.chunks.append(chunk)
                 indexed_count += 1
 
-        summary_row = AgentMemorySummary(
+        summary_row = MessageMemorySummary(
             user_id=current_user.id,
             project_id=project_id,
-            agent_id=agent.id,
+            owner_id=owner_id,
             language=language,
             to_message_id=archive_until_message_id,
             summary_text=summary_text.strip(),
@@ -430,14 +461,15 @@ async def archive_until(
         )
         db.add(summary_row)
 
-        # Update boundary cache
-        agent.archived_until_message_id = archive_until_message_id
+        # Update boundary cache — only for root agents
+        if owner_id == agent.id:
+            agent.archived_until_message_id = archive_until_message_id
 
         db.commit()
         db.refresh(summary_row)
 
         return {
-            "archived_until_message_id": agent.archived_until_message_id,
+            "archived_until_message_id": archive_until_message_id if owner_id == agent.id else getattr(summary_row, "to_message_id", archive_until_message_id),
             "summary_id": summary_row.id,
             "summary_text": summary_row.summary_text,
             "archived_message_ids": archived_ids,
@@ -457,7 +489,7 @@ async def search_memory(
     *,
     current_user: User,
     project_id: UUID,
-    agent_id: UUID,
+    owner_id: UUID,
     language: str,
     queries: List[str],
     provider_request_config: Dict[str, Any],
@@ -491,11 +523,11 @@ async def search_memory(
           c.field_path AS field_path,
           c.text AS text,
           (c.embedding <-> (:qv)::vector) AS distance
-        FROM agent_rag_chunks c
-        JOIN agent_rag_sources s ON s.id = c.source_id
+        FROM message_rag_chunks c
+        JOIN message_rag_sources s ON s.id = c.source_id
         WHERE s.user_id = :user_id
           AND s.project_id = :project_id
-          AND s.agent_id = :agent_id
+          AND s.owner_id = :owner_id
           AND s.language = :language
           AND s.index_state = 'ready'
         ORDER BY c.embedding <-> (:qv)::vector
@@ -511,7 +543,7 @@ async def search_memory(
                 "qv": qv_str,
                 "user_id": current_user.id,
                 "project_id": project_id,
-                "agent_id": agent_id,
+                "owner_id": owner_id,
                 "language": language,
                 "k": int(top_k_per_query),
             },
@@ -533,10 +565,10 @@ async def search_memory(
         return []
 
     # Load full message rows for role/content/timestamp
+    # We need to join through runs — for root agents filter by agent_id, for sub-agents by sub_agent_id
     msg_rows: List[RunMessageModel] = (
         db.query(RunMessageModel)
-        .join(AgentRunModel, RunMessageModel.run_id == AgentRunModel.id)
-        .filter(AgentRunModel.agent_id == agent_id, RunMessageModel.id.in_(list(best_by_message.keys())))
+        .filter(RunMessageModel.id.in_(list(best_by_message.keys())))
         .all()
     )
 

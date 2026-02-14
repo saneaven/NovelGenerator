@@ -1,3 +1,5 @@
+import type { MemoryContext } from './context/types';
+
 export type RunKind = 'root' | 'child';
 export type RunStatus = 'running' | 'waiting' | 'paused' | 'completed' | 'error' | 'cancelled';
 export type RunCaller = 'planMode' | 'agentMode' | 'subAgent';
@@ -30,6 +32,7 @@ export interface Run {
   runStepCount: number;
   activeSessionId: string | null;
   frozenProjectData?: unknown;
+  memoryContext?: MemoryContext | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,14 +78,15 @@ export interface RuntimeOrchestrator {
     language: string;
     caller?: Extract<RunCaller, 'planMode' | 'agentMode'>;
     contextObjectIds?: string[];
-    historyOverride?: Array<Record<string, unknown>>;
-    promptContextOverride?: Record<string, unknown>;
+    signal?: AbortSignal;
+    onMemoryStageChange?: (stage: import('./context/types').MemoryPreflightStage) => void;
   }): Promise<{ runId: string }>;
 
   resumeRunLoop(input: {
     runId: string;
-    historyOverride?: Array<Record<string, unknown>>;
-    promptContextOverride?: Record<string, unknown>;
+    refreshMemory?: boolean;
+    signal?: AbortSignal;
+    onMemoryStageChange?: (stage: import('./context/types').MemoryPreflightStage) => void;
   }): Promise<void>;
 
   invokeChildRun(input: {

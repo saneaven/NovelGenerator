@@ -40,7 +40,7 @@ export type OutputMode = 'tool_call' | 'native_tool_call' | 'raw_output';
  */
 export type ThinkingMode = 'off' | 'model' | 'custom';
 
-export type AgentRelevantChatToolCall = {
+export type MemoryRelevantChatToolCall = {
   id?: string;
   name: string;
   status: string;
@@ -48,7 +48,7 @@ export type AgentRelevantChatToolCall = {
 };
 
 // Prompt-injected memory chat (data-only; formatting should be done in prompt templates/fragments).
-export type AgentRelevantChat = {
+export type MemoryRelevantChat = {
   messageId: string;
   role: string;
   // Snippet matched by memory search (best chunk text)
@@ -59,7 +59,7 @@ export type AgentRelevantChat = {
     fieldPath?: string | null;
     chunkIndex?: number | null;
   };
-  toolCall?: AgentRelevantChatToolCall;
+  toolCall?: MemoryRelevantChatToolCall;
   original?: {
     content_parts: ContentPart[];
     tool_calls: ToolCallMetadata[];
@@ -129,7 +129,7 @@ export interface TemplateData {
     surface: WorkspaceSurface;
     contextObjectIds?: string[];
     previousSummaries?: string[];
-    relevantChats?: AgentRelevantChat[];
+    relevantChats?: MemoryRelevantChat[];
   };
   memorySummary?: {
     previousSummary: string;
@@ -220,7 +220,7 @@ export interface AgentPromptContext extends BasePromptContext {
 
   contextObjectIds?: string[];
   previousSummaries?: string[];
-  relevantChats?: AgentRelevantChat[];
+  relevantChats?: MemoryRelevantChat[];
 }
 
 /**
@@ -230,12 +230,14 @@ export interface SubAgentPromptContext extends BasePromptContext {
   tools?: ToolCallSchema[];
   /** Prompt template key (also the tool suffix for call_{agent_name}). */
   agentName: string;
+  previousSummaries?: string[];
+  relevantChats?: MemoryRelevantChat[];
 }
 
 /**
  * Context for agent long-term memory summarization (rolling summary).
  */
-export interface AgentMemorySummaryPromptContext extends BasePromptContext {
+export interface MemorySummaryPromptContext extends BasePromptContext {
   memorySummary: {
     previousSummary: string;
     messages: Array<{
@@ -368,7 +370,7 @@ export interface CoverImagePromptContext extends BasePromptContext {
  */
 export type PromptContext =
   | AgentPromptContext
-  | AgentMemorySummaryPromptContext
+  | MemorySummaryPromptContext
   | EditAssistantStoryObjectPromptContext
   | EditAssistantManuscriptPromptContext
   | StoryTranslationPromptContext
@@ -398,6 +400,7 @@ export interface LLMTaskConfig {
   thinking_format?: ThinkingFormat;  // OpenAI-compatible dialect for custom provider
   request_format?: RequestFormat;
   retryConfig?: RetryConfig;
+  tool_choice?: 'auto' | 'required' | 'none';
 }
 
 /**

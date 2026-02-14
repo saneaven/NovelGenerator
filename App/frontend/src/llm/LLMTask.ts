@@ -119,6 +119,7 @@ export class LLMTask {
       });
 
       const nativeToolCall = outputMode === 'native_tool_call';
+      const effectiveToolChoice = outputMode === 'tool_call' ? this.config.tool_choice : undefined;
 
       if (outputMode !== 'tool_call' && tools?.length) {
         throw new Error(`${outputMode} requires tools to be omitted`);
@@ -229,6 +230,7 @@ export class LLMTask {
           request_format,
           retryConfig,
           native_tool_call: nativeToolCall,
+          tool_choice: effectiveToolChoice,
         },
       )) {
         if (event.type === 'delta') {

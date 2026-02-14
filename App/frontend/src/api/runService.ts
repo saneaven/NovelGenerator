@@ -19,6 +19,7 @@ import type {
   TranslateRunMessageResponse,
   UpsertRunToolCallsRequest,
   UpsertRunToolCallsResponse,
+  PatchRunToolCallsRequest,
 } from './types';
 
 
@@ -118,6 +119,17 @@ export const runService = {
     );
   },
 
+  async deleteRunMessage(
+    projectId: string,
+    agentId: string,
+    runId: string,
+    runMessageId: string
+  ): Promise<void> {
+    return apiClient.delete<void>(
+      `${basePath(projectId, agentId)}/${encodeURIComponent(runId)}/messages/${encodeURIComponent(runMessageId)}`
+    );
+  },
+
   async upsertRunToolCalls(
     projectId: string,
     agentId: string,
@@ -126,6 +138,19 @@ export const runService = {
     data: UpsertRunToolCallsRequest
   ): Promise<UpsertRunToolCallsResponse> {
     return apiClient.put<UpsertRunToolCallsResponse>(
+      `${basePath(projectId, agentId)}/${encodeURIComponent(runId)}/messages/${encodeURIComponent(runMessageId)}/tool-calls`,
+      data
+    );
+  },
+
+  async patchRunToolCalls(
+    projectId: string,
+    agentId: string,
+    runId: string,
+    runMessageId: string,
+    data: PatchRunToolCallsRequest
+  ): Promise<UpsertRunToolCallsResponse> {
+    return apiClient.patch<UpsertRunToolCallsResponse>(
       `${basePath(projectId, agentId)}/${encodeURIComponent(runId)}/messages/${encodeURIComponent(runMessageId)}/tool-calls`,
       data
     );

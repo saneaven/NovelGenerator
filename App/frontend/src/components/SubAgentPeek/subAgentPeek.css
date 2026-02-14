@@ -1,28 +1,26 @@
 .sub-agent-peek-dock {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-surface-subtle);
+  overflow: hidden;
 }
 
 .sub-agent-peek-header {
   position: sticky;
   top: 0;
   z-index: var(--z-sticky);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-surface-subtle);
   padding: var(--spacing-sm);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
 }
 
 .sub-agent-peek-header__main {
   width: 100%;
   border: 0;
   padding: var(--spacing-sm);
-  border-radius: var(--border-radius-md);
-  background: var(--color-surface-base);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -144,16 +142,18 @@
   overflow: hidden;
 }
 
-/* Timeline container — uses different background to visually distinguish
-   sub-agent messages from the main agent chat. Messages inside use the
-   same .agent-message classes as the main panel. */
+/* Timeline container — body flows seamlessly from header within
+   the single .sub-agent-peek-dock card. */
 .sub-agent-peek-timeline {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-surface-subtle);
+  border-top: 1px solid var(--color-border-subtle);
   padding: var(--spacing-md);
+}
+
+.sub-agent-peek-timeline > .agent-message.same-role-as-previous {
+  margin-top: calc(var(--spacing-md) * -1);
 }
 
 .sub-agent-peek-alert {
@@ -167,6 +167,69 @@
   background: var(--color-feedback-error-soft);
   color: var(--color-feedback-error-strong);
   border-color: var(--color-feedback-error-base);
+}
+
+/* Override AgentMessages.css hover leak — the peek is nested inside a parent
+   .agent-message, so the generic .agent-message:hover .message-actions rule
+   would expand ALL peek actions at once. These higher-specificity rules ensure
+   only the directly-hovered message shows its actions. */
+.sub-agent-peek-timeline > .agent-message .message-wrapper > .message-actions {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.sub-agent-peek-timeline > .agent-message:hover > .message-wrapper > .message-actions {
+  max-height: 3rem;
+  opacity: 1;
+  padding-top: var(--spacing-xs);
+  padding-bottom: var(--spacing-sm);
+}
+
+/* ── Sub Agent Result (collapsible final output) ── */
+
+.sub-agent-result-section {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-base);
+  overflow: hidden;
+}
+
+.sub-agent-result-toggle {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  transition: color var(--transition-base);
+}
+
+.sub-agent-result-toggle:hover {
+  color: var(--color-text-primary);
+}
+
+.sub-agent-result-chevron {
+  display: inline-flex;
+  transition: transform 0.2s ease;
+}
+
+.sub-agent-result-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.sub-agent-result-content {
+  padding: 0 var(--spacing-md) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed, 1.6);
+  max-height: 400px;
+  overflow-y: auto;
 }
 
 .sub-agent-peek-actions {

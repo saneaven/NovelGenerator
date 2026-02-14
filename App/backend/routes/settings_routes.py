@@ -14,7 +14,7 @@ from ..schemas.settings import (
     RetryConfig,
     ImageGenConfig,
 )
-from ..services.agent_memory_service import wipe_agent_memory_index
+from ..services.memory_service import wipe_memory_index
 from ..services.embedding_config_service import merge_embedding_configs
 from ..services.rag_index_service import wipe_user_index
 
@@ -253,7 +253,7 @@ async def update_user_settings(
         mem_prev = prev.get("agentMemory", {})
         mem_next = next_cfg.get("agentMemory", {})
         if mem_prev.get("provider") != mem_next.get("provider") or mem_prev.get("model") != mem_next.get("model"):
-            wipe_agent_memory_index(db, user_id=current_user.id)
+            wipe_memory_index(db, user_id=current_user.id)
             mem_next["dimensions"] = None
 
         settings.embedding_configs = next_cfg  # type: ignore
@@ -585,7 +585,7 @@ async def sync_settings_from_client(
             mem_prev = prev.get("agentMemory", {})
             mem_next = next_cfg.get("agentMemory", {})
             if mem_prev.get("provider") != mem_next.get("provider") or mem_prev.get("model") != mem_next.get("model"):
-                wipe_agent_memory_index(db, user_id=current_user.id)
+                wipe_memory_index(db, user_id=current_user.id)
                 mem_next["dimensions"] = None
 
             settings.embedding_configs = next_cfg  # type: ignore

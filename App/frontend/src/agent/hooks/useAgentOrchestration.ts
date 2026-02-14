@@ -12,10 +12,9 @@ import { useAgentStore } from '../../store/agentStore';
 import { useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useSettings, useSettingsStore } from '../../store/settingsStore';
+import { useSettings } from '../../store/settingsStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { useErrorStore } from '../../store/errorStore';
-import { AgentMemoryManager } from '../memory/AgentMemoryManager';
 import type { AgentOrchestrationConfig, AgentOrchestrationReturn, AgentHandlersReturn, ContextIdState } from './types';
 import { getSendBlockingState } from '../../toolCall/viewModel/blockingSelectors';
 import { getAgentRunMessageIds } from '../../runtime/selectors/conversationTimeline';
@@ -189,29 +188,21 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     useAgentUIStore.getState().setLoading(projectId, agentId, true);
     useAgentUIStore.getState().setPreflightToast(projectId, null);
 
-    const agentConfig = useSettingsStore.getState().getTaskConfig('agent');
-    const outputMode = useSettingsStore.getState().getSettings().nativeOutputMode ? 'native_tool_call' : 'tool_call';
+    const abortController = new AbortController();
+    preflightAbortControllerByAgentRef.current[agentId] = abortController;
 
-    let historyOverride: any[] | undefined;
-    let promptContextOverride: Record<string, any> | undefined;
     try {
-      const abortController = new AbortController();
-      preflightAbortControllerByAgentRef.current[agentId] = abortController;
-
-      const prepared = await AgentMemoryManager.prepare({
+      await runtimeOrchestrator.startRootRun({
         projectId,
         agentId,
         runMode,
         surface,
         userInput: userInput?.trim() ?? '',
-        outputLanguage: mainLanguage,
-        outputMode,
-        enable_prefill: agentConfig.advanced.enable_prefill,
-        thinking_mode: agentConfig.advanced.thinking_mode,
+        language: mainLanguage,
+        caller: runMode,
         contextObjectIds: selectedContextIds,
-      }, {
         signal: abortController.signal,
-        onStageChange: (stage) => {
+        onMemoryStageChange: (stage) => {
           const message =
             stage === 'summarizing'
               ? t('agent.memory.preflight.summarizing')
@@ -224,11 +215,8 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
           useAgentUIStore.getState().setPreflightToast(projectId, { type: 'info', message });
         },
       });
-      historyOverride = prepared.historyForLLM;
-      promptContextOverride = prepared.memory as any;
     } catch (error) {
-      // Cancel = cancel send.
-      if (isAbortError(error) || preflightAbortControllerByAgentRef.current[agentId]?.signal.aborted) {
+      if (isAbortError(error) || abortController.signal.aborted) {
         useAgentUIStore.getState().setInput(projectId, userInput);
         useAgentUIStore.getState().setLoading(projectId, agentId, false);
         useAgentUIStore.getState().setPreflightToast(projectId, null);
@@ -236,7 +224,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         return;
       }
 
-      console.warn('AgentMemoryManager.prepare failed; cancelling send', error);
+      console.error('Failed to start root run:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       useAgentUIStore.getState().setPreflightToast(projectId, {
         type: 'error',
@@ -250,31 +238,6 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
 
     delete preflightAbortControllerByAgentRef.current[agentId];
     useAgentUIStore.getState().setPreflightToast(projectId, null);
-
-    try {
-      await runtimeOrchestrator.startRootRun({
-        projectId,
-        agentId,
-        runMode,
-        surface,
-        userInput: userInput?.trim() ?? '',
-        language: mainLanguage,
-        caller: runMode,
-        contextObjectIds: selectedContextIds,
-        historyOverride,
-        promptContextOverride,
-      });
-    } catch (error) {
-      console.error('Failed to start root run:', error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      useAgentUIStore.getState().setPreflightToast(projectId, {
-        type: 'error',
-        message: t('agent.memory.preflightFailed', { error: errorMessage }),
-      });
-      useAgentUIStore.getState().setInput(projectId, userInput);
-      useAgentUIStore.getState().setLoading(projectId, agentId, false);
-      return;
-    }
   }, [projectId, getSelectedAgentId, getObjectsMissingMainLanguage, mainLanguage, clearInput, runMode, surface, selectedContextIds, t]);
 
   const handleStop = useCallback(() => {
@@ -399,34 +362,17 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         return;
       }
 
-      // Walk the run tree to find all descendant runs
-      const allRuns = runtime.listRuns();
-      const toDelete = new Set<string>([runId]);
-      let frontier = [runId];
-
-      while (frontier.length > 0) {
-        const next: string[] = [];
-        for (const run of allRuns) {
-          if (run.runKind !== 'child') continue;
-          if (!run.parentRunId || !frontier.includes(run.parentRunId)) continue;
-          if (toDelete.has(run.id)) continue;
-          toDelete.add(run.id);
-          next.push(run.id);
-        }
-        frontier = next;
-      }
-
-      // Delete from backend
+      // Delete the single message from backend
       try {
-        await runService.deleteRun(projectId, agentId, runId);
+        await runService.deleteRunMessage(projectId, agentId, runId, messageId);
       } catch (error) {
-        console.error('Failed to delete run from backend:', error);
+        console.error('Failed to delete message from backend:', error);
         showError('Delete Failed', error instanceof Error ? error.message : 'Failed to delete message.');
         return;
       }
 
-      // Clean up local state
-      runtime.removeRunsByIds([...toDelete]);
+      // Clean up local state (removes message; auto-cleans empty run)
+      runtime.removeRunMessage(runId, messageId);
     })();
   }, [projectId, getSelectedAgentId, showError]);
 
@@ -440,29 +386,21 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     useAgentUIStore.getState().setLoading(projectId, agentId, true);
     useAgentUIStore.getState().setPreflightToast(projectId, null);
 
-    const agentConfig = useSettingsStore.getState().getTaskConfig('agent');
-    const outputMode = useSettingsStore.getState().getSettings().nativeOutputMode ? 'native_tool_call' : 'tool_call';
+    const rootRunId = runtimeOrchestrator.findLatestOpenRootRunId(projectId, agentId);
+    if (!rootRunId) {
+      useAgentUIStore.getState().setLoading(projectId, agentId, false);
+      return;
+    }
 
-    let historyOverride: any[] | undefined;
-    let promptContextOverride: Record<string, any> | undefined;
+    const abortController = new AbortController();
+    preflightAbortControllerByAgentRef.current[agentId] = abortController;
+
     try {
-      const abortController = new AbortController();
-      preflightAbortControllerByAgentRef.current[agentId] = abortController;
-
-      const prepared = await AgentMemoryManager.prepare({
-        projectId,
-        agentId,
-        runMode,
-        surface,
-        userInput: '',
-        outputLanguage: mainLanguage,
-        outputMode,
-        enable_prefill: agentConfig.advanced.enable_prefill,
-        thinking_mode: agentConfig.advanced.thinking_mode,
-        contextObjectIds: selectedContextIds,
-      }, {
+      await runtimeOrchestrator.resumeRunLoop({
+        runId: rootRunId,
+        refreshMemory: true,
         signal: abortController.signal,
-        onStageChange: (stage) => {
+        onMemoryStageChange: (stage) => {
           const message =
             stage === 'summarizing'
               ? t('agent.memory.preflight.summarizing')
@@ -475,17 +413,15 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
           useAgentUIStore.getState().setPreflightToast(projectId, { type: 'info', message });
         },
       });
-      historyOverride = prepared.historyForLLM;
-      promptContextOverride = prepared.memory as any;
     } catch (error) {
-      if (isAbortError(error) || preflightAbortControllerByAgentRef.current[agentId]?.signal.aborted) {
+      if (isAbortError(error) || abortController.signal.aborted) {
         useAgentUIStore.getState().setLoading(projectId, agentId, false);
         useAgentUIStore.getState().setPreflightToast(projectId, null);
         delete preflightAbortControllerByAgentRef.current[agentId];
         return;
       }
 
-      console.warn('AgentMemoryManager.prepare failed; cancelling auto-continue', error);
+      console.error('RuntimeOrchestrator.resumeRunLoop (auto-continue) failed:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       useAgentUIStore.getState().setPreflightToast(projectId, {
         type: 'error',
@@ -498,21 +434,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
 
     delete preflightAbortControllerByAgentRef.current[agentId];
     useAgentUIStore.getState().setPreflightToast(projectId, null);
-    const rootRunId = runtimeOrchestrator.findLatestOpenRootRunId(projectId, agentId);
-    if (!rootRunId) {
-      useAgentUIStore.getState().setLoading(projectId, agentId, false);
-      return;
-    }
-
-    void runtimeOrchestrator.resumeRunLoop({
-      runId: rootRunId,
-      historyOverride,
-      promptContextOverride,
-    }).catch((error) => {
-      console.error('RuntimeOrchestrator.resumeRunLoop (auto-continue) failed:', error);
-      useAgentUIStore.getState().setLoading(projectId, agentId, false);
-    });
-  }, [projectId, getSelectedAgentId, runMode, surface, mainLanguage, selectedContextIds, t]);
+  }, [projectId, getSelectedAgentId, t]);
 
   const agentHandlers: AgentHandlersReturn = {
     editTextareaRef,

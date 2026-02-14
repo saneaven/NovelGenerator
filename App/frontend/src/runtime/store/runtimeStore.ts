@@ -27,6 +27,7 @@ interface RuntimeActions {
   clearRunMessageTranslations: (runId: string, messageId: string, preserveLanguages: string[]) => void;
   upsertRunToolCalls: (runMessageId: string, toolCalls: RunToolCall[]) => void;
   getRunToolCalls: (runMessageId: string) => RunToolCall[];
+  removeRunMessage: (runId: string, messageId: string) => void;
   removeRunsByIds: (runIds: string[]) => void;
 }
 
@@ -241,6 +242,34 @@ export const useRuntimeStore = create<RuntimeState & RuntimeActions>()(
 
       getRunToolCalls: (runMessageId) => [...(get().runToolCallsByMessageId[runMessageId] ?? [])]
         .sort((a, b) => a.callSeq - b.callSeq),
+
+      removeRunMessage: (runId, messageId) => set((state) => {
+        const messages = state.runMessagesByRunId[runId] ?? [];
+        const remaining = messages.filter((m) => m.id !== messageId);
+
+        const nextToolCalls = { ...state.runToolCallsByMessageId };
+        delete nextToolCalls[messageId];
+
+        if (remaining.length === 0) {
+          const nextRuns = { ...state.runsById };
+          delete nextRuns[runId];
+          const nextMessages = { ...state.runMessagesByRunId };
+          delete nextMessages[runId];
+          return {
+            runsById: nextRuns,
+            runMessagesByRunId: nextMessages,
+            runToolCallsByMessageId: nextToolCalls,
+          };
+        }
+
+        return {
+          runMessagesByRunId: {
+            ...state.runMessagesByRunId,
+            [runId]: remaining,
+          },
+          runToolCallsByMessageId: nextToolCalls,
+        };
+      }),
 
       removeRunsByIds: (runIds) => set((state) => {
         if (runIds.length === 0) return state;
