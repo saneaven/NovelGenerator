@@ -1093,6 +1093,7 @@ async def create_object(
 
         core_obj = model_class(
             id=object_id,
+            project_id=project_id,
             outline_id=outline_uuid,
             order=order_value,
             created_at=datetime.utcnow(),
@@ -1127,6 +1128,7 @@ async def create_object(
 
         core_obj = model_class(
             id=object_id,
+            project_id=project_id,
             act_id=act_uuid,
             order=chapter_order,
             created_at=datetime.utcnow(),
@@ -1382,8 +1384,8 @@ async def reorder_objects(
     """
     object_type = normalize_object_type(object_type)
 
-    # Only allow reordering for story object types and outlines
-    allowed_types = ['character', 'organization', 'location', LOREBOOK_TYPE, 'outline']
+    # Only allow reordering for story object types and outline hierarchy
+    allowed_types = ['character', 'organization', 'location', LOREBOOK_TYPE, 'outline', 'act', 'chapter']
     if object_type not in allowed_types:
         raise HTTPException(
             status_code=400,

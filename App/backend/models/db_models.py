@@ -559,6 +559,7 @@ class Act(Base):
     __tablename__ = 'acts'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
     outline_id = Column(UUID(as_uuid=True), ForeignKey('outlines.id', ondelete='CASCADE'), nullable=False, index=True)
 
     order = Column(Integer, nullable=False)  # Structural data, not translatable
@@ -576,6 +577,7 @@ class Chapter(Base):
     __tablename__ = 'chapters'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
     act_id = Column(UUID(as_uuid=True), ForeignKey('acts.id', ondelete='CASCADE'), nullable=False, index=True)
 
     order = Column(Integer, nullable=False)  # Structural data, not translatable

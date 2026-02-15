@@ -694,6 +694,32 @@
 }
 
 /* ============================================================================
+   DRAG AND DROP
+   ============================================================================ */
+
+/* Neutralize entrance animations on sortable items so dnd-kit transforms work */
+.outline-manager .timeline-act-group.is-dragging .timeline-act-node,
+.outline-manager .timeline-chapter-node.is-dragging {
+  animation: none;
+  opacity: inherit;
+}
+
+/* Grab cursor on act markers and chapter items */
+.outline-manager .timeline-act-group:not(.is-dragging) .node-marker {
+  cursor: grab;
+}
+
+.outline-manager .timeline-chapter-node:not(.is-dragging):not(.add-chapter-node):not(.creation-node) {
+  cursor: grab;
+}
+
+/* Grabbing cursor while dragging */
+.outline-manager .timeline-act-group.is-dragging .node-marker,
+.outline-manager .timeline-chapter-node.is-dragging {
+  cursor: grabbing;
+}
+
+/* ============================================================================
    RESPONSIVE
    ============================================================================ */
 

@@ -1,5 +1,23 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettings } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
@@ -498,6 +516,69 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     }
   };
 
+  // ========================================================================
+  // DRAG AND DROP
+  // ========================================================================
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 5 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const actIds = useMemo(
+    () => selectedOutlineActs.map((act) => act.id),
+    [selectedOutlineActs]
+  );
+
+  const handleActDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id || !projectId) return;
+
+      const oldIndex = selectedOutlineActs.findIndex((a) => a.id === active.id);
+      const newIndex = selectedOutlineActs.findIndex((a) => a.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const newOrder = arrayMove(actIds, oldIndex, newIndex);
+      try {
+        await store.reorderObjects('act', projectId, newOrder);
+      } catch (error) {
+        console.error('Failed to reorder acts:', error);
+        showError('Reorder Error', 'Failed to reorder acts. Please try again.');
+      }
+    },
+    [selectedOutlineActs, actIds, projectId, store, showError]
+  );
+
+  const makeChapterDragEndHandler = useCallback(
+    (actId: string) => async (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id || !projectId) return;
+
+      const actChapters = chaptersByActId.get(actId) || [];
+      const ids = actChapters.map((ch) => ch.id);
+      const oldIndex = ids.indexOf(active.id as string);
+      const newIndex = ids.indexOf(over.id as string);
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const newOrder = arrayMove(ids, oldIndex, newIndex);
+      try {
+        await store.reorderObjects('chapter', projectId, newOrder);
+      } catch (error) {
+        console.error('Failed to reorder chapters:', error);
+        showError('Reorder Error', 'Failed to reorder chapters. Please try again.');
+      }
+    },
+    [projectId, store, showError, chaptersByActId]
+  );
+
   // Handle version history
   const handleShowVersionHistory = () => {
     if (selectedOutlineId) {
@@ -663,128 +744,132 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
             )}
 
             {selectedOutline && selectedOutlineActs.length > 0 && (
-              <div className="timeline-track">
-                {selectedOutlineActs.map((act, actIndex) => {
-                  const actChapters = getChaptersForAct(act.id);
-                  const { effectiveLanguage: actLang, isFallback: actFallback } = getEffectiveLanguage(act);
-                  const actData = getDataForLanguage(act, actLang);
-                  const isActExpanded = !collapsedActs.has(act.id);
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleActDragEnd}>
+                <SortableContext items={actIds} strategy={verticalListSortingStrategy}>
+                  <div className="timeline-track">
+                    {selectedOutlineActs.map((act, actIndex) => {
+                      const actChapters = getChaptersForAct(act.id);
+                      const { effectiveLanguage: actLang, isFallback: actFallback } = getEffectiveLanguage(act);
+                      const actData = getDataForLanguage(act, actLang);
+                      const isActExpanded = !collapsedActs.has(act.id);
 
-                  return (
-                    <div key={act.id} className={`timeline-act-group ${isActExpanded ? 'is-expanded' : 'is-collapsed'}`}>
-                      {/* Act Node */}
-                      <div className="timeline-act-node" style={{ '--act-index': actIndex } as React.CSSProperties}>
-                        <div className="node-marker">
-                          <span className="act-index">{actIndex + 1}</span>
-                        </div>
+                      return (
+                        <SortableActGroup key={act.id} id={act.id} disabled={editingAct === act.id} isExpanded={isActExpanded}>
+                          {/* Act Node */}
+                          <div className="timeline-act-node" style={{ '--act-index': actIndex } as React.CSSProperties}>
+                            <div className="node-marker">
+                              <span className="act-index">{actIndex + 1}</span>
+                            </div>
 
-                        <div className="act-content-wrapper">
-                          {editingAct === act.id ? (
-                            <div className="outline-item-card">
-                              <div className="content-card act-card is-editing">
-                                <div className="card-header">
-                                  <div className="card-title-section" style={{ flex: 1 }}>
-                                    <input
-                                      type="text"
-                                      className="inline-title-input"
-                                      value={editActData.name}
-                                      onChange={(e) => setEditActData(prev => ({ ...prev, name: e.target.value }))}
-                                      placeholder="Act Title"
-                                      autoFocus
-                                    />
-                                  </div>
-                                </div>
-                                <div className="card-body-wrapper is-expanded">
-                                  <div className="card-body-content">
-                                    <textarea
-                                      className="inline-description-input"
-                                      value={editActData.description}
-                                      onChange={(e) => setEditActData(prev => ({ ...prev, description: e.target.value }))}
-                                      placeholder="Describe the main events that happen in this act"
-                                      rows={4}
-                                    />
-                                    <div className="inline-content-editor">
-                                      <RichTextEditor
-                                        ref={actEditorRef}
-                                        key={editingAct}
-                                        initialContent={editActData.content}
-                                        onChange={(markdown) => setEditActData(prev => ({ ...prev, content: markdown }))}
-                                        placeholder="Full act content..."
-                                      />
+                            <div className="act-content-wrapper">
+                              {editingAct === act.id ? (
+                                <div className="outline-item-card">
+                                  <div className="content-card act-card is-editing">
+                                    <div className="card-header">
+                                      <div className="card-title-section" style={{ flex: 1 }}>
+                                        <input
+                                          type="text"
+                                          className="inline-title-input"
+                                          value={editActData.name}
+                                          onChange={(e) => setEditActData(prev => ({ ...prev, name: e.target.value }))}
+                                          placeholder="Act Title"
+                                          autoFocus
+                                        />
+                                      </div>
                                     </div>
-                                    <div className="edit-actions-split">
-                                      <TextButton
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => setShowActAIModal(act.id)}
-                                        iconLeft={<AIAssist size="xs" />}
-                                      >
-                                        AI Edit
-                                      </TextButton>
-                                      <div className="edit-actions-right">
-                                        <TextButton
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={cancelEditingAct}
-                                          iconLeft={<Close size="xs" />}
-                                        >
-                                          Cancel
-                                        </TextButton>
-                                        <TextButton
-                                          variant="secondary"
-                                          size="sm"
-                                          onClick={handleUpdateAct}
-                                          iconLeft={<Save size="xs" />}
-                                        >
-                                          Save
-                                        </TextButton>
+                                    <div className="card-body-wrapper is-expanded">
+                                      <div className="card-body-content">
+                                        <textarea
+                                          className="inline-description-input"
+                                          value={editActData.description}
+                                          onChange={(e) => setEditActData(prev => ({ ...prev, description: e.target.value }))}
+                                          placeholder="Describe the main events that happen in this act"
+                                          rows={4}
+                                        />
+                                        <div className="inline-content-editor">
+                                          <RichTextEditor
+                                            ref={actEditorRef}
+                                            key={editingAct}
+                                            initialContent={editActData.content}
+                                            onChange={(markdown) => setEditActData(prev => ({ ...prev, content: markdown }))}
+                                            placeholder="Full act content..."
+                                          />
+                                        </div>
+                                        <div className="edit-actions-split">
+                                          <TextButton
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setShowActAIModal(act.id)}
+                                            iconLeft={<AIAssist size="xs" />}
+                                          >
+                                            AI Edit
+                                          </TextButton>
+                                          <div className="edit-actions-right">
+                                            <TextButton
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={cancelEditingAct}
+                                              iconLeft={<Close size="xs" />}
+                                            >
+                                              Cancel
+                                            </TextButton>
+                                            <TextButton
+                                              variant="secondary"
+                                              size="sm"
+                                              onClick={handleUpdateAct}
+                                              iconLeft={<Save size="xs" />}
+                                            >
+                                              Save
+                                            </TextButton>
+                                          </div>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <OutlineItemCard
-                              variant="act"
-                              name={actData.name || 'Untitled Act'}
-                              description={actData.description}
-                              content={actData.content}
-                              meta={`${actChapters.length} Chapters`}
-                              expanded={isActExpanded}
-                              showFallbackWarning={actFallback}
-                              onHeaderClick={() => toggleActExpand(act.id)}
-                              footerActions={
-                                <>
-                                  <DropdownMenu
-                                    trigger={
-                                      <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
-                                        More
+                              ) : (
+                                <OutlineItemCard
+                                  variant="act"
+                                  name={actData.name || 'Untitled Act'}
+                                  description={actData.description}
+                                  content={actData.content}
+                                  meta={`${actChapters.length} Chapters`}
+                                  expanded={isActExpanded}
+                                  showFallbackWarning={actFallback}
+                                  onHeaderClick={() => toggleActExpand(act.id)}
+                                  footerActions={
+                                    <>
+                                      <DropdownMenu
+                                        trigger={
+                                          <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
+                                            More
+                                          </TextButton>
+                                        }
+                                      >
+                                        <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteAct(act.id)} variant="danger" />
+                                      </DropdownMenu>
+                                      <TextButton
+                                        size="sm"
+                                        variant="secondary"
+                                        iconLeft={<Edit size="xs" />}
+                                        onClick={() => startEditingAct(act.id)}
+                                      >
+                                        Edit
                                       </TextButton>
-                                    }
-                                  >
-                                    <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteAct(act.id)} variant="danger" />
-                                  </DropdownMenu>
-                                  <TextButton
-                                    size="sm"
-                                    variant="secondary"
-                                    iconLeft={<Edit size="xs" />}
-                                    onClick={() => startEditingAct(act.id)}
-                                  >
-                                    Edit
-                                  </TextButton>
-                                </>
-                              }
-                            />
-                          )}
-                        </div>
-                      </div>
+                                    </>
+                                  }
+                                />
+                              )}
+                            </div>
+                          </div>
 
-                      {/* Chapter Stream */}
-                              <div className="chapter-stream-wrapper">
-                                <div className="timeline-chapter-stream">
-                                  <div className="stream-line"></div>
+                          {/* Chapter Stream */}
+                          <div className="chapter-stream-wrapper">
+                            <div className="timeline-chapter-stream">
+                              <div className="stream-line"></div>
 
+                              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={makeChapterDragEndHandler(act.id)}>
+                                <SortableContext items={actChapters.map(ch => ch.id)} strategy={verticalListSortingStrategy}>
                                   {actChapters.map((chapter, chapterIndex) => {
                                     const { effectiveLanguage: chLang, isFallback: chFallback } = getEffectiveLanguage(chapter);
                                     const chData = getDataForLanguage(chapter, chLang);
@@ -792,11 +877,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                     const globalChapterIndex = chapterNumberById.get(chapter.id) ?? chapterIndex + 1;
 
                                     return (
-                                      <div
-                                        key={chapter.id}
-                                        className="timeline-chapter-node"
-                                        style={{ '--chapter-index': chapterIndex } as React.CSSProperties}
-                                      >
+                                      <SortableChapterNode key={chapter.id} id={chapter.id} disabled={editingChapter === chapter.id} chapterIndex={chapterIndex}>
                                         <div className="chapter-marker"></div>
                                         <div className="chapter-content-wrapper">
                                           {editingChapter === chapter.id ? (
@@ -899,40 +980,44 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                             />
                                           )}
                                         </div>
-                                      </div>
+                                      </SortableChapterNode>
                                     );
                                   })}
+                                </SortableContext>
+                              </DndContext>
 
-                                  {/* Add Chapter Button */}
-                                  {showAddChapterForm === act.id ? (
-                                    <div className="timeline-chapter-node creation-node">
-                                      <div className="chapter-marker creation-marker"><Plus size="xs" /></div>
-                                      <div className="chapter-content-wrapper">
-                                        <AddChapterForm
-                                          onAdd={(name, desc, content) => handleAddChapter(act.id, name, desc, content)}
-                                          onCancel={() => setShowAddChapterForm(null)}
-                                        />
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="timeline-chapter-node add-chapter-node" onClick={() => setShowAddChapterForm(act.id)}>
-                                      <div className="chapter-marker add-marker"><Plus size="xs" /></div>
-                                      <div className="chapter-content-wrapper">
-                                        <div className="content-card add-chapter-card">
-                                          <div className="add-chapter-content">
-                                            <Plus size="sm" />
-                                            <span>Add Chapter</span>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
+                              {/* Add Chapter Button */}
+                              {showAddChapterForm === act.id ? (
+                                <div className="timeline-chapter-node creation-node">
+                                  <div className="chapter-marker creation-marker"><Plus size="xs" /></div>
+                                  <div className="chapter-content-wrapper">
+                                    <AddChapterForm
+                                      onAdd={(name, desc, content) => handleAddChapter(act.id, name, desc, content)}
+                                      onCancel={() => setShowAddChapterForm(null)}
+                                    />
+                                  </div>
                                 </div>
-                              </div>
+                              ) : (
+                                <div className="timeline-chapter-node add-chapter-node" onClick={() => setShowAddChapterForm(act.id)}>
+                                  <div className="chapter-marker add-marker"><Plus size="xs" /></div>
+                                  <div className="chapter-content-wrapper">
+                                    <div className="content-card add-chapter-card">
+                                      <div className="add-chapter-content">
+                                        <Plus size="sm" />
+                                        <span>Add Chapter</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                  );
-                })}
-              </div>
+                          </div>
+                        </SortableActGroup>
+                      );
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
             )}
           </div>
         </div>
@@ -1187,6 +1272,85 @@ const AddChapterForm: React.FC<AddChapterFormProps> = ({ onAdd, onCancel }) => {
           </TextButton>
         </div>
       </form>
+    </div>
+  );
+};
+
+// ============================================================================
+// SORTABLE WRAPPERS
+// ============================================================================
+
+interface SortableActGroupProps {
+  id: string;
+  disabled: boolean;
+  isExpanded: boolean;
+  children: React.ReactNode;
+}
+
+const SortableActGroup: React.FC<SortableActGroupProps> = ({ id, disabled, isExpanded, children }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 100 : undefined,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`timeline-act-group ${isExpanded ? 'is-expanded' : 'is-collapsed'} ${isDragging ? 'is-dragging' : ''}`}
+      {...attributes}
+      {...listeners}
+    >
+      {children}
+    </div>
+  );
+};
+
+interface SortableChapterNodeProps {
+  id: string;
+  disabled: boolean;
+  chapterIndex: number;
+  children: React.ReactNode;
+}
+
+const SortableChapterNode: React.FC<SortableChapterNodeProps> = ({ id, disabled, chapterIndex, children }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 100 : undefined,
+    opacity: isDragging ? 0.5 : 1,
+    '--chapter-index': chapterIndex,
+  } as React.CSSProperties;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`timeline-chapter-node ${isDragging ? 'is-dragging' : ''}`}
+      {...attributes}
+      {...listeners}
+    >
+      {children}
     </div>
   );
 };

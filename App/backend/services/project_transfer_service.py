@@ -1069,6 +1069,7 @@ class ProjectTransferService:
             db.add(
                 Act(
                     id=new_id,
+                    project_id=new_project_id,
                     outline_id=new_outline_id,
                     order=int(meta.get("order") or 0),
                     created_at=meta_dt(meta, "created_at"),
@@ -1088,6 +1089,7 @@ class ProjectTransferService:
             db.add(
                 Chapter(
                     id=new_id,
+                    project_id=new_project_id,
                     act_id=new_act_id,
                     order=int(meta.get("order") or 0),
                     created_at=meta_dt(meta, "created_at"),
