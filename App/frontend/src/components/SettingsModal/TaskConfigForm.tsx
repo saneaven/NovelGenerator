@@ -548,71 +548,28 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                       </div>
                     )}
 
-                    {/* Gemini format options */}
+                    {/* Gemini format options (Gemini 3+ only — uses thinking_level) */}
                     {effectiveThinkingFormat === 'gemini' && (
-                      <>
-                        <div className="form-field">
-                          <label>{t('settings.taskConfig.thinking_config.reasoningEffort')}</label>
-                          <CustomSelect
-                            value={config.advanced.thinking_config?.effort || ''}
-                            onChange={(value) =>
-                              handleThinkingConfigChange(
-                                'effort',
-                                value === '' ? undefined : value
-                              )
-                            }
-                            options={[
-                              { value: '', label: t('common.auto') },
-                              { value: 'none', label: t('settings.taskConfig.thinking_config.effortOptions.none') },
-                              { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
-                              { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
-                              { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
-                            ]}
-                          />
-                          <p className="field-hint">{t('settings.taskConfig.thinking_config.geminiCompatEffortHint')}</p>
-                        </div>
-
-                        <div className="form-field">
-                          <label>{t('settings.taskConfig.thinking_config.thinkingLevel')}</label>
-                          <CustomSelect
-                            value={config.advanced.thinking_config?.gemini_thinking_level || ''}
-                            onChange={(value) =>
-                              handleThinkingConfigChange(
-                                'gemini_thinking_level',
-                                value === '' ? undefined : value
-                              )
-                            }
-                            options={[
-                              { value: '', label: t('common.auto') },
-                              { value: 'minimal', label: t('settings.taskConfig.thinking_config.effortOptions.minimal') },
-                              { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
-                              { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
-                              { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
-                            ]}
-                          />
-                          <p className="field-hint">{t('settings.taskConfig.thinking_config.thinkingLevelHint')}</p>
-                        </div>
-
-                        <div className="form-field">
-                          <label>{t('settings.taskConfig.thinking_config.thinkingBudget25')}</label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={config.advanced.thinking_config?.gemini_budget_tokens ?? ''}
-                            onChange={(e) =>
-                              handleThinkingConfigChange(
-                                'gemini_budget_tokens',
-                                e.target.value === '' ? undefined : parseInt(e.target.value)
-                              )
-                            }
-                            placeholder={t('settings.taskConfig.thinking_config.thinkingBudget25Placeholder')}
-                            className="config-input"
-                          />
-                          <p className="field-hint">{t('settings.taskConfig.thinking_config.thinkingBudget25Hint')}</p>
-                        </div>
-
-                        <p className="field-hint">{t('settings.taskConfig.thinking_config.geminiCompatConflictHint')}</p>
-                      </>
+                      <div className="form-field">
+                        <label>{t('settings.taskConfig.thinking_config.thinkingLevel')}</label>
+                        <CustomSelect
+                          value={config.advanced.thinking_config?.gemini_thinking_level || ''}
+                          onChange={(value) =>
+                            handleThinkingConfigChange(
+                              'gemini_thinking_level',
+                              value === '' ? undefined : value
+                            )
+                          }
+                          options={[
+                            { value: '', label: t('common.auto') },
+                            { value: 'minimal', label: t('settings.taskConfig.thinking_config.effortOptions.minimal') },
+                            { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
+                            { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
+                            { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
+                          ]}
+                        />
+                        <p className="field-hint">{t('settings.taskConfig.thinking_config.thinkingLevelHint')}</p>
+                      </div>
                     )}
 
                   </>

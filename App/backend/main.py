@@ -22,6 +22,7 @@ from .providers.contracts import (
     delta_payload_to_wire,
     merge_meta_payload,
     patch_snapshot_with_meta,
+    extract_native_tool_calls_from_snapshot,
 )
 from .providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from .providers.sse_encoder import encode_sse
@@ -378,6 +379,9 @@ async def stream_chat(
                     final_snapshot = patch_snapshot_with_meta(native_final, merged_meta)
                 else:
                     final_snapshot = assembler.finalize_or_raise()
+
+                if request.native_tool_call:
+                    final_snapshot = extract_native_tool_calls_from_snapshot(final_snapshot)
 
                 yield encode_sse("final", {"snapshot": final_snapshot_to_wire(final_snapshot)})
                 yield encode_sse("done", {"ok": True})
