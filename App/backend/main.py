@@ -1,13 +1,14 @@
 import asyncio
 import mimetypes
 from pathlib import Path
+import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from .models.requests import ChatCompletionRequest, ProviderConfig, ProviderModelsRequest
+from .models.requests import ChatCompletionRequest, ProviderModelsRequest
 from .providers.registry import ProviderRegistry
 from .providers.openrouter import OpenRouterProvider
 from .providers.custom import CustomProvider
@@ -29,6 +30,7 @@ from .providers.sse_encoder import encode_sse
 from .auth import get_current_user
 from .database import get_db
 from .models.db_models import User
+from .services.credential_service import CredentialServiceError, credential_service
 from .services.embedding_models_service import list_embedding_models
 
 # Ensure correct Content-Type for AVIF assets when served via StaticFiles.
@@ -52,7 +54,7 @@ from .routes.project_routes import router as project_router
 from .routes.agent_routes import router as agent_router
 from .routes.memory_routes import router as memory_router
 from .routes.settings_routes import router as settings_router
-from .routes.credentials_backup_routes import router as credentials_backup_router
+from .routes.credential_routes import router as credential_router
 from .routes.prompt_routes import router as prompt_router
 from .routes.rag_routes import router as rag_router
 
@@ -72,8 +74,7 @@ from .routes.variable_routes import router as variable_router
 # Preset management routes
 from .routes.preset_routes import router as preset_router
 from .routes.sub_agent_routes import router as sub_agent_router
-from .routes.run_routes import router as run_router
-from .routes.timeline_routes import router as timeline_router
+from .routes.run_execution_routes import router as run_execution_router
 
 # Token counting routes
 from .routes.token_routes import router as token_router
@@ -96,7 +97,7 @@ app.include_router(project_router)
 app.include_router(agent_router)
 app.include_router(memory_router)
 app.include_router(settings_router)
-app.include_router(credentials_backup_router)
+app.include_router(credential_router)
 app.include_router(prompt_router)
 app.include_router(rag_router)
 
@@ -116,8 +117,7 @@ app.include_router(variable_router)
 # Include preset management router
 app.include_router(preset_router)
 app.include_router(sub_agent_router)
-app.include_router(run_router)
-app.include_router(timeline_router)
+app.include_router(run_execution_router)
 
 # Include token counting router
 app.include_router(token_router)
@@ -196,7 +196,7 @@ async def get_models(
 ):
     """Get available models for a specific provider"""
     try:
-        provider_config = request.provider_config.model_dump(exclude_none=True)
+        provider_config = credential_service.get_provider_config(db, current_user.id, provider)
         if provider == "custom":
             provider_config["request_format"] = request.request_format or "openai_sdk"
 
@@ -214,6 +214,8 @@ async def get_models(
 
     except HTTPException:
         raise
+    except CredentialServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         message = str(e)
         if message.startswith("Unknown provider"):
@@ -226,15 +228,15 @@ async def get_models(
 @app.post("/api/v1/providers/{provider}/embedding-models")
 async def get_embedding_models(
     provider: str,
-    config: ProviderConfig,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get available embedding models for a specific provider."""
     try:
+        config = credential_service.get_provider_config(db, current_user.id, provider)
         provider_instance = ProviderRegistry.get_provider(
             provider,
-            config.model_dump(exclude_none=True),
+            config,
         )
 
         # Keep parity with /models: require a valid provider configuration to list.
@@ -244,9 +246,11 @@ async def get_embedding_models(
                 detail=f"Invalid configuration for provider '{provider}'",
             )
 
-        return await list_embedding_models(provider=provider, config=config.model_dump())
+        return await list_embedding_models(provider=provider, config=config)
     except HTTPException:
         raise
+    except CredentialServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         message = str(e)
         if message.startswith("Unknown provider"):
@@ -272,9 +276,16 @@ async def stream_chat(
                 detail="native_tool_call requires tools to be omitted",
             )
 
+        provider_config = credential_service.get_provider_config(db, current_user.id, provider)
+        if provider == "custom":
+            provider_config = {
+                **provider_config,
+                "request_format": request.request_format or "openai_sdk",
+            }
+
         provider_instance = ProviderRegistry.get_provider(
             provider,
-            request.provider_config.model_dump(exclude_none=True)
+            provider_config
         )
 
         if not provider_instance.validate_config():
@@ -402,11 +413,55 @@ async def stream_chat(
 
     except HTTPException:
         raise
+    except CredentialServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         message = str(e)
         if message.startswith("Unknown provider"):
             raise HTTPException(status_code=404, detail=message)
         raise HTTPException(status_code=400, detail=message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/providers/openrouter/models/{canonical_slug:path}/endpoints")
+async def get_openrouter_model_endpoints(
+    canonical_slug: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Proxy OpenRouter model endpoint info with server-side credential resolution."""
+    try:
+        provider_config = credential_service.get_provider_config(db, current_user.id, "openrouter")
+        api_key = str(provider_config.get("api_key") or "").strip()
+        if not api_key:
+            raise HTTPException(status_code=400, detail="Credential for provider 'openrouter' not found")
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://novelbuds.local",
+            "X-Title": "Novel Buds",
+        }
+        additional_headers = provider_config.get("additional_headers")
+        if isinstance(additional_headers, dict):
+            for key, value in additional_headers.items():
+                if isinstance(key, str) and isinstance(value, str):
+                    headers[key] = value
+
+        url = f"https://openrouter.ai/api/v1/models/{canonical_slug}/endpoints"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers=headers)
+
+        if response.status_code >= 400:
+            detail = response.text or f"OpenRouter request failed ({response.status_code})"
+            raise HTTPException(status_code=response.status_code, detail=detail)
+
+        return response.json()
+    except HTTPException:
+        raise
+    except CredentialServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { BaseModal } from '../BaseModal';
 import { BaseSidebar } from '../BaseSidebar';
 import { useSettings, useSettingsStore } from '../../store/settingsStore';
-import { useCredentialsStore } from '../../store/credentialsStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import type { ProviderCredentials, Settings, AITaskType } from '../../store/settingsStore';
 import CredentialsPanel from './CredentialsPanel';
@@ -18,6 +17,7 @@ import SearchMemoryPanel from './SearchMemoryPanel';
 import { SettingsToastProvider, type SettingsToastApi, type SettingsToastKind } from './SettingsToastContext';
 import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu, People, List } from '../icons';
 import { TextButton } from '../TextButton';
+import apiClient from '../../api/client';
 import './SettingsModal.css';
 import './_shared-components.css';
 
@@ -37,13 +37,82 @@ type MainTab =
   | 'theme'
   | 'advanced';
 
+type ProviderName = keyof ProviderCredentials;
+
+const DEFAULT_CREDENTIAL_DRAFT: ProviderCredentials = {
+  openai: { apiKey: '' },
+  gemini: { apiKey: '' },
+  claude: { apiKey: '' },
+  openrouter: { apiKey: '' },
+  custom: { baseUrl: '', apiKey: '', additionalHeadersJson: '{}', additionalBodyJson: '{}' },
+  xai: { apiKey: '' },
+  novelai: { apiKey: '' },
+};
+
+const PROVIDERS: ProviderName[] = ['openai', 'gemini', 'claude', 'openrouter', 'custom', 'xai', 'novelai'];
+
+type NormalizedProviderConfig = Record<string, unknown>;
+
+function parseJsonObject(raw: string | undefined): Record<string, unknown> {
+  if (!raw?.trim()) return {};
+  const parsed = JSON.parse(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  return parsed as Record<string, unknown>;
+}
+
+function normalizeProviderDraft(provider: ProviderName, draft: ProviderCredentials): NormalizedProviderConfig {
+  if (provider === 'custom') {
+    const apiKey = (draft.custom.apiKey || '').trim();
+    const baseUrl = (draft.custom.baseUrl || '').trim();
+    const parsedHeaders = parseJsonObject(draft.custom.additionalHeadersJson);
+    const additionalHeaders = Object.fromEntries(
+      Object.entries(parsedHeaders).filter(([, value]) => typeof value === 'string')
+    ) as Record<string, string>;
+    const additionalBody = parseJsonObject(draft.custom.additionalBodyJson);
+
+    const normalized: NormalizedProviderConfig = {};
+    if (apiKey) normalized.api_key = apiKey;
+    if (baseUrl) normalized.base_url = baseUrl;
+    if (Object.keys(additionalHeaders).length > 0) normalized.additional_headers = additionalHeaders;
+    if (Object.keys(additionalBody).length > 0) normalized.additional_body = additionalBody;
+    return normalized;
+  }
+
+  const apiKey = ((draft as any)[provider]?.apiKey || '').trim();
+  return apiKey ? { api_key: apiKey } : {};
+}
+
+function snapshotNormalized(draft: ProviderCredentials): Record<ProviderName, NormalizedProviderConfig> {
+  return {
+    openai: normalizeProviderDraft('openai', draft),
+    gemini: normalizeProviderDraft('gemini', draft),
+    claude: normalizeProviderDraft('claude', draft),
+    openrouter: normalizeProviderDraft('openrouter', draft),
+    custom: normalizeProviderDraft('custom', draft),
+    xai: normalizeProviderDraft('xai', draft),
+    novelai: normalizeProviderDraft('novelai', draft),
+  };
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((v) => stableStringify(v)).join(',')}]`;
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`;
+}
+
+function isEmptyConfig(config: NormalizedProviderConfig): boolean {
+  return Object.keys(config).length === 0;
+}
+
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const { t } = useTranslation();
   const settingsStore = useSettingsStore();
   const settings = useSettings();
-  const credentialsStore = useCredentialsStore();
   const [localSettings, setLocalSettings] = useState<Settings>(settings);
-  const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>(credentialsStore.credentials);
+  const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>(DEFAULT_CREDENTIAL_DRAFT);
+  const [storedProviders, setStoredProviders] = useState<string[]>([]);
+  const [isSyncingCredentials, setIsSyncingCredentials] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [promptUnsavedCount, setPromptUnsavedCount] = useState(0);
   const [hasMountedPromptsPanel, setHasMountedPromptsPanel] = useState(false);
@@ -62,14 +131,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (isOpen) {
       setLocalSettings(settings);
-      setLocalCredentials(credentialsStore.credentials);
+      setLocalCredentials(DEFAULT_CREDENTIAL_DRAFT);
       settingsSnapshotRef.current = JSON.stringify(settings);
-      credentialsSnapshotRef.current = JSON.stringify(credentialsStore.credentials);
+      credentialsSnapshotRef.current = JSON.stringify(DEFAULT_CREDENTIAL_DRAFT);
       setPromptUnsavedCount(0);
       setHasMountedPromptsPanel(mainTab === 'prompts');
-      credentialsStore.fetchBackupStatus().catch(() => {
-        // Ignore - status is best-effort
-      });
+      void apiClient
+        .get<{ providers: string[] }>('/api/v1/credentials')
+        .then((resp) => setStoredProviders(Array.isArray(resp.providers) ? resp.providers : []))
+        .catch(() => setStoredProviders([]));
       setToast(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -140,28 +210,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           message: t('settings.embeddings.validation.missingModel', { feature: c.label }),
         };
       }
-
-      if (provider === 'custom') {
-        if (!localCredentials.custom?.apiKey?.trim()) {
-          return {
-            tab: 'credentials',
-            message: t('settings.embeddings.validation.missingApiKey', { feature: c.label, provider: 'custom' }),
-          };
-        }
-        if (!localCredentials.custom?.baseUrl?.trim()) {
-          return {
-            tab: 'credentials',
-            message: t('settings.embeddings.validation.missingBaseUrl', { feature: c.label }),
-          };
-        }
-      } else {
-        const key = (localCredentials as any)?.[provider]?.apiKey;
-        if (typeof key !== 'string' || !key.trim()) {
-          return {
-            tab: 'credentials',
-            message: t('settings.embeddings.validation.missingApiKey', { feature: c.label, provider }),
-          };
-        }
+      if (!provider.trim()) {
+        return {
+          tab: 'searchMemory',
+          message: t('settings.embeddings.validation.missingModel', { feature: c.label }),
+        };
       }
     }
 
@@ -217,6 +270,38 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     return null;
   };
 
+  const syncCredentialDraftDiff = useCallback(
+    async (prevDraft: ProviderCredentials, nextDraft: ProviderCredentials) => {
+      setIsSyncingCredentials(true);
+      try {
+        const prev = snapshotNormalized(prevDraft);
+        const next = snapshotNormalized(nextDraft);
+        const changedProviders = PROVIDERS.filter(
+          (provider) => stableStringify(prev[provider]) !== stableStringify(next[provider])
+        );
+
+        for (const provider of changedProviders) {
+          const normalized = next[provider];
+          if (isEmptyConfig(normalized)) {
+            try {
+              await apiClient.delete(`/api/v1/credentials/${encodeURIComponent(provider)}`);
+            } catch {
+              // Deleting an already-missing provider is idempotent for this flow.
+            }
+            continue;
+          }
+          await apiClient.put(`/api/v1/credentials/${encodeURIComponent(provider)}`, { config: normalized });
+        }
+
+        const refreshed = await apiClient.get<{ providers: string[] }>('/api/v1/credentials');
+        setStoredProviders(Array.isArray(refreshed.providers) ? refreshed.providers : []);
+      } finally {
+        setIsSyncingCredentials(false);
+      }
+    },
+    []
+  );
+
   const handleSave = async () => {
     if (isSaving) return;
 
@@ -247,10 +332,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               showToast('error', customJsonError.message);
             } else {
               try {
-                settingsStore.updateSettings(localSettings);
-                credentialsStore.setCredentials(localCredentials);
-
-                await settingsStore.saveToServer();
+                if (settingsDirty) {
+                  settingsStore.updateSettings(localSettings);
+                }
+                const prevCredentials = credentialsSnapshotRef.current
+                  ? (JSON.parse(credentialsSnapshotRef.current) as ProviderCredentials)
+                  : DEFAULT_CREDENTIAL_DRAFT;
+                if (settingsDirty) {
+                  await settingsStore.saveToServer();
+                }
+                if (credentialsDirty) {
+                  await syncCredentialDraftDiff(prevCredentials, localCredentials);
+                }
                 settingsSnapshotRef.current = JSON.stringify(localSettings);
                 credentialsSnapshotRef.current = JSON.stringify(localCredentials);
                 showToast('success', t('settings.savedSuccessfully'));
@@ -286,9 +379,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
   const closeWithoutSaving = useCallback(() => {
     setLocalSettings(settings);
-    setLocalCredentials(credentialsStore.credentials);
+    setLocalCredentials(DEFAULT_CREDENTIAL_DRAFT);
     onClose();
-  }, [credentialsStore.credentials, onClose, settings]);
+  }, [onClose, settings]);
 
   const handleRequestClose = useCallback(() => {
     const unsavedCount = getUnsavedCount();
@@ -578,6 +671,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         {mainTab === 'credentials' && (
           <CredentialsPanel
             credentials={localCredentials}
+            storedProviders={storedProviders}
+            isSyncing={isSyncingCredentials}
             onChange={setLocalCredentials}
           />
         )}
@@ -602,7 +697,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             }
             keywordPageSize={localSettings.ragSearchKeywordPageSize}
             onKeywordPageSizeChange={(value) => setLocalSettings(prev => ({ ...prev, ragSearchKeywordPageSize: value }))}
-            credentials={localCredentials}
             mainLanguage={localSettings.mainLanguage}
             topKPerQuery={localSettings.ragSearchTopKPerQuery}
             onTopKPerQueryChange={(value) => setLocalSettings(prev => ({ ...prev, ragSearchTopKPerQuery: value }))}
@@ -626,7 +720,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         {mainTab === 'general' && (
           <GeneralPanel
             task_configs={localSettings.task_configs}
-            credentials={localCredentials}
             activeTask={activeTask}
             onTaskChange={setActiveTask}
             onConfigChange={(taskType, config) =>
@@ -701,19 +794,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             onRetryConfigChange={(config) =>
               setLocalSettings(prev => ({ ...prev, retryConfig: config }))
             }
-            backupStatus={credentialsStore.backupStatus}
-            backupSyncing={credentialsStore.isSyncing}
-            onBackupRefresh={() => credentialsStore.fetchBackupStatus()}
-            onBackupUpload={async (password) => {
-              await credentialsStore.backupToServer(password, localCredentials);
-            }}
-            onBackupRestore={async (password) => {
-              const creds = await credentialsStore.restoreFromServer(password);
-              setLocalCredentials(creds);
-            }}
-            onBackupDelete={async (password) => {
-              await credentialsStore.deleteServerBackup(password);
-            }}
             nativeOutputMode={localSettings.nativeOutputMode}
             onNativeOutputModeChange={(enabled) =>
               setLocalSettings(prev => ({ ...prev, nativeOutputMode: enabled }))

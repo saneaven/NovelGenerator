@@ -6,12 +6,6 @@ export interface RagEmbeddingProfile {
   dimensions?: number | null;
 }
 
-export interface RagProviderConfig {
-  api_key?: string;
-  base_url?: string;
-  additional_headers?: Record<string, string>;
-}
-
 export interface RagProjectStatusResponse {
   enabled: boolean;
   profile?: RagEmbeddingProfile | null;
@@ -22,21 +16,8 @@ export interface RagProjectStatusResponse {
   last_indexed_at?: string | null;
 }
 
-export interface RagIndexObjectRequest {
-  object_type: string;
-  object_id: string;
-  force?: boolean;
-  config?: RagProviderConfig;
-}
-
-export interface RagDeleteObjectRequest {
-  object_type: string;
-  object_id: string;
-}
-
 export interface RagReindexRequest {
   force?: boolean;
-  config?: RagProviderConfig;
 }
 
 export interface RagReindexResponse {
@@ -46,68 +27,12 @@ export interface RagReindexResponse {
   missing_main_language_sources: number;
 }
 
-export interface RagSearchRequest {
-  queries: string[];
-  top_k_per_query?: number;
-  neighbor_window?: number;
-  config?: RagProviderConfig;
-}
-
-export interface RagSearchResult {
-  chunk_id: string;
-  source_id: string;
-  object_type: string;
-  object_id: string;
-  type_group: string;
-  story_object_type?: string | null;
-  story_object_order?: number | null;
-  outline_order?: number | null;
-  act_order?: number | null;
-  chapter_order?: number | null;
-  chapter_id?: string | null;
-  field_path: string;
-  chunk_index: number;
-  text: string;
-  distance?: number | null;
-}
-
-export interface RagSearchResponse {
-  results: RagSearchResult[];
-}
-
-export interface RagKeywordSearchResponse {
-  keyword: string;
-  page: number;
-  page_size: number;
-  total: number;
-  results: RagSearchResult[];
-}
-
 export const ragService = {
   async getStatus(projectId: string): Promise<RagProjectStatusResponse> {
     return await apiClient.get<RagProjectStatusResponse>(`/api/v1/projects/${projectId}/rag/status`);
   },
 
-  async indexObject(projectId: string, request: RagIndexObjectRequest): Promise<any> {
-    return await apiClient.post(`/api/v1/projects/${projectId}/rag/index-object`, request);
-  },
-
-  async deleteObject(projectId: string, request: RagDeleteObjectRequest): Promise<any> {
-    return await apiClient.post(`/api/v1/projects/${projectId}/rag/delete-object`, request);
-  },
-
   async reindex(projectId: string, request: RagReindexRequest): Promise<RagReindexResponse> {
     return await apiClient.post<RagReindexResponse>(`/api/v1/projects/${projectId}/rag/reindex`, request);
-  },
-
-  async search(projectId: string, request: RagSearchRequest): Promise<RagSearchResponse> {
-    return await apiClient.post<RagSearchResponse>(`/api/v1/projects/${projectId}/rag/search`, request);
-  },
-
-  async keywordSearch(projectId: string, keyword: string, page: number): Promise<RagKeywordSearchResponse> {
-    const params = new URLSearchParams({ keyword, page: String(page) });
-    return await apiClient.get<RagKeywordSearchResponse>(
-      `/api/v1/projects/${projectId}/rag/keyword-search?${params.toString()}`
-    );
   },
 };

@@ -2,30 +2,30 @@
 
 You are an AI assistant that helps with novel writing. The user wants to modify story objects (basic info, characters, locations, organizations, lorebook, outlines, acts, or chapters).
 
-{{#if (eq config.thinking_mode "custom")}}
-{{prompt "common/customThinkingInstruction"}}
-{{/if}}
+{% if (config.thinking_mode == "custom") %}
+{% include "fragment:common/customThinkingInstruction" %}
+{% endif %}
 
 ## Language
 
 Respond in {{ config.mainLanguage }}.
 
-{{prompt "common/editOperations/storyObject"}}
+{% include "fragment:common/editOperations/storyObject" %}
 
-{{#if (eq config.outputMode "raw_output")}}
+{% if (config.outputMode == "raw_output") %}
 
 ## Output Format (Raw Mode)
 
 Output ONLY the revised content directly. No tool calls, no JSON, no XML tags.
 Just output the updated content text as plain text.
 
-{{else}}
-{{#if (eq config.outputMode "native_tool_call")}}
+{% else %}
+{% if (config.outputMode == "native_tool_call") %}
 
-{{prompt "common/nativeOutput/storyObject"}}
+{% include "fragment:common/nativeOutput/storyObject" %}
 
-{{/if}}
-{{/if}}
+{% endif %}
+{% endif %}
 
 ## Editing Guidelines
 

@@ -1,24 +1,7 @@
 import { create } from 'zustand';
 import { assetService, type ImageProvider } from '../../api/assetService';
-import { useCredentialsStore } from '../../store/credentialsStore';
 
 type ModelInfo = { id: string; name: string };
-
-function getApiKeyForImageProvider(provider: string): string {
-  const creds = useCredentialsStore.getState().credentials;
-  switch (provider) {
-    case 'openai':
-      return creds.openai.apiKey;
-    case 'gemini':
-      return creds.gemini.apiKey;
-    case 'xai':
-      return creds.xai.apiKey;
-    case 'novelai':
-      return creds.novelai.apiKey;
-    default:
-      return '';
-  }
-}
 
 interface ProviderCatalogState {
   providers: ImageProvider[];
@@ -54,12 +37,7 @@ export const useImageProviderCatalogStore = create<ProviderCatalogState>((set, g
     if (get().modelsByProvider[key]) return;
     set({ isLoading: true, error: undefined });
     try {
-      const apiKey = getApiKeyForImageProvider(provider);
-      if (!apiKey) {
-        set({ isLoading: false, error: `API key not configured for ${provider}` });
-        return;
-      }
-      const models = await assetService.getImageModels(provider, apiKey);
+      const models = await assetService.getImageModels(provider);
       set((state) => ({
         modelsByProvider: { ...state.modelsByProvider, [key]: models },
         isLoading: false,

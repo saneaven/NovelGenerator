@@ -1,52 +1,52 @@
 # Story Object Edit Request
 
-{{prompt "common/projectContext/filtered" editAssistant.storyObject.contextIds}}
+{% with params = [editAssistant.storyObject.contextIds] %}{% include "fragment:common/projectContext/filtered" %}{% endwith %}
 
 ## Target Objects to Edit
 
-{{#if (hasItems editAssistant.storyObject.targetIds)}}
-{{#with editAssistant.storyObject.targetIds as |targetIds|}}
+{% if ((editAssistant.storyObject.targetIds)|length > 0) %}
+{% with targetIds = editAssistant.storyObject.targetIds %}
 
-{{#each (filterByIds project.objects targetIds)}}
+{% for this in (project.objects|filter_by_ids(targetIds)) %}
 ### {{ this.type }}: {{ this.name }} (ID: {{ this.id }})
 
 {{ this.content }}
 
-{{/each}}
+{% endfor %}
 
-{{#if project.outline}}
-{{#each project.outline.outlines}}
-{{#if (includes targetIds this.id)}}
-### Outline: {{ this.name }} (ID: {{ this.id }})
+{% if project.outline %}
+{% for outline in project.outline.outlines %}
+{% if (outline.id in targetIds) %}
+### Outline: {{ outline.name }} (ID: {{ outline.id }})
 
-{{ this.content }}
+{{ outline.content }}
 
-{{/if}}
+{% endif %}
 
-{{#each (filterByIds this.acts targetIds)}}
-### Act: {{ this.name }} (ID: {{ this.id }}, Outline: {{ ../name }})
+{% for act in (outline.acts|filter_by_ids(targetIds)) %}
+### Act: {{ act.name }} (ID: {{ act.id }}, Outline: {{ outline.name }})
 
-{{ this.content }}
+{{ act.content }}
 
-{{/each}}
+{% endfor %}
 
-{{#each this.acts}}
-{{#each (filterByIds this.chapters targetIds)}}
-### Chapter: {{ this.name }} (ID: {{ this.id }}, Act: {{ ../name }}, Outline: {{ ../../name }})
+{% for act in outline.acts %}
+{% for chapter in (act.chapters|filter_by_ids(targetIds)) %}
+### Chapter: {{ chapter.name }} (ID: {{ chapter.id }}, Act: {{ act.name }}, Outline: {{ outline.name }})
 
-{{ this.content }}
+{{ chapter.content }}
 
-{{/each}}
-{{/each}}
+{% endfor %}
+{% endfor %}
 
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
-{{/with}}
-{{/if}}
+{% endwith %}
+{% endif %}
 
-{{#if input.userMessage}}
+{% if input.userMessage %}
 ## User Request
 
 {{ input.userMessage }}
-{{/if}}
+{% endif %}

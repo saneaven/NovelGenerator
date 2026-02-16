@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ProviderType, ProviderPreference, ProviderCredentials, RequestFormat } from '../../store/settingsStore';
+import type { ProviderType, ProviderPreference, RequestFormat } from '../../store/settingsStore';
 import { fetchModels, fetchEmbeddingModels, fetchModelEndpoints } from '../../llm/llmService';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
@@ -13,7 +13,6 @@ interface ModelBrowserProps {
   mode?: 'chat' | 'embedding';
   currentModel: string;
   provider_preference?: ProviderPreference;
-  credentials: ProviderCredentials;
   onSelectModel: (modelId: string) => void;
   onUpdateProviderPreference: (pref?: ProviderPreference) => void;
   autoExpand?: boolean;
@@ -78,19 +77,6 @@ const parseOpenAIModelId = (id: string): { series: string; version: string } | n
 
 // Capitalize first letter
 const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
-
-const parseJsonObject = (raw: string | undefined): Record<string, unknown> | undefined => {
-  if (!raw?.trim()) return undefined;
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // ignore invalid JSON and continue without additional fields
-  }
-  return undefined;
-};
 
 // Build tree for OpenRouter (1-level: Family -> Models)
 const buildOpenRouterTree = (models: any[]): TreeNode[] => {
@@ -253,7 +239,6 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
   mode = 'chat',
   currentModel,
   provider_preference,
-  credentials,
   onSelectModel,
   onUpdateProviderPreference,
   autoExpand = false,
@@ -284,34 +269,9 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     setModelsError(null);
 
     try {
-      const config: any = {};
-      const providerCreds = credentials[provider] as any;
-
-      if ('apiKey' in providerCreds && providerCreds.apiKey) {
-        config.apiKey = providerCreds.apiKey;
-      }
-      if ('baseUrl' in providerCreds && providerCreds.baseUrl) {
-        config.baseUrl = providerCreds.baseUrl;
-      }
-      if (provider === 'custom') {
-        const headerObject = parseJsonObject(providerCreds.additionalHeadersJson);
-        if (headerObject) {
-          const additionalHeaders = Object.fromEntries(
-            Object.entries(headerObject).filter(([, value]) => typeof value === 'string')
-          );
-          if (Object.keys(additionalHeaders).length > 0) {
-            config.additionalHeaders = additionalHeaders;
-          }
-        }
-        const additionalBody = parseJsonObject(providerCreds.additionalBodyJson);
-        if (additionalBody && Object.keys(additionalBody).length > 0) {
-          config.additionalBody = additionalBody;
-        }
-      }
-
       const data = mode === 'embedding'
-        ? await fetchEmbeddingModels(provider, config)
-        : await fetchModels(provider, config, request_format);
+        ? await fetchEmbeddingModels(provider)
+        : await fetchModels(provider, request_format);
       setModelsData(data);
     } catch (error) {
       setModelsError(error instanceof Error ? error.message : 'Failed to fetch models');
@@ -374,16 +334,10 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
       return;
     }
 
-    const apiKey = credentials.openrouter.apiKey;
-    if (!apiKey) {
-      console.error('OpenRouter API key not configured');
-      return;
-    }
-
     setLoadingEndpoints(prev => ({ ...prev, [modelId]: true }));
 
     try {
-      const data = await fetchModelEndpoints(canonicalSlug, apiKey);
+      const data = await fetchModelEndpoints(canonicalSlug);
       setModelEndpoints(prev => ({ ...prev, [modelId]: data }));
     } catch (error) {
       console.error('Failed to fetch model endpoints:', error);

@@ -13,18 +13,18 @@ Generate an image prompt for the provided story object based on:
 2. The user's specific visualization request (if provided)
 3. The specified prompt format (natural language OR tag-based)
 
-{{#if (eq config.outputMode "raw_output")}}
+{% if (config.outputMode == "raw_output") %}
 ## Output Format (Native Mode)
 
 Output ONLY the image prompt text directly. No tool calls, no JSON, no additional text.
 
 Just the pure prompt content - either natural language sentences or comma-separated tags depending on the requested format.
-{{else}}
+{% else %}
 ## Output Format
 
 You MUST call the `generate_object_image_prompt` tool with your generated prompt.
 Do NOT output any text outside of the tool call.
-{{/if}}
+{% endif %}
 
 ## Prompt Style Guidelines
 

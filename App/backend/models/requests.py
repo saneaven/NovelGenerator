@@ -1,13 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Any, List, Optional, Dict, Literal
 
-class ProviderConfig(BaseModel):
-    """Provider-specific configuration sent from frontend"""
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    additional_headers: Optional[Dict[str, str]] = None
-    additional_body: Optional[Dict[str, Any]] = None
-
 class ProviderPreference(BaseModel):
     """Provider preference for OpenRouter (only/ignore lists)"""
     only: Optional[List[str]] = None
@@ -79,7 +72,6 @@ class ChatCompletionRequest(BaseModel):
     tools: Optional[List[Dict]] = None
     tool_choice: Optional[Literal["auto", "required", "none"]] = None
     max_tokens: Optional[int] = None
-    provider_config: ProviderConfig = Field(default_factory=ProviderConfig)
     provider_preference: Optional[ProviderPreference] = None
     thinking_mode: Optional[Literal["off", "custom", "model"]] = "off"
     thinking_config: Optional[ThinkingConfig] = None
@@ -90,5 +82,4 @@ class ChatCompletionRequest(BaseModel):
 
 
 class ProviderModelsRequest(BaseModel):
-    provider_config: ProviderConfig = Field(default_factory=ProviderConfig)
     request_format: Optional[Literal["openai_sdk", "claude_sdk"]] = "openai_sdk"

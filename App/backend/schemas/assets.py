@@ -30,9 +30,6 @@ class ReferenceObject(BaseModel):
 
 class ImageGenerationRequest(BaseModel):
     """Request to generate an image"""
-    # API key for the image provider (sent in request body for consistency with LLM endpoints)
-    api_key: str
-
     # For natural language providers (OpenAI, Gemini, xAI) - StyledPrompt structure
     prompt: Optional[StyledPrompt] = None
 

@@ -10,7 +10,8 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
 from ..models.memory_models import MessageMemorySummary, MessageRagChunk, MessageRagSource
-from ..models.db_models import Agent, AgentRunModel, RunMessageModel, User
+from ..models.db_models import Agent, RunModel, RunMessageModel
+from .credential_service import credential_service
 from .embedding_config_service import get_embedding_profile, set_embedding_dimensions
 from .rag_embedding_service import embed_many
 from .rag_chunker import merge_blocks_by_length, split_plaintext_blocks
@@ -233,7 +234,7 @@ def get_memory_status(
 async def archive_until(
     db: Session,
     *,
-    current_user: User,
+    user_id: UUID,
     project_id: UUID,
     agent: Agent,
     owner_id: UUID,
@@ -241,7 +242,6 @@ async def archive_until(
     archive_until_message_id: UUID,
     summary_text: str,
     archived_messages: List[Dict[str, Any]],
-    embedding_provider_request_config: Dict[str, Any],
 ) -> Dict[str, Any]:
     # Idempotency boundary check
     # For root agents: use agent.archived_until_message_id
@@ -251,7 +251,7 @@ async def archive_until(
     else:
         latest_summary = (
             db.query(MessageMemorySummary)
-            .filter(MessageMemorySummary.user_id == current_user.id, MessageMemorySummary.owner_id == owner_id)
+            .filter(MessageMemorySummary.user_id == user_id, MessageMemorySummary.owner_id == owner_id)
             .order_by(MessageMemorySummary.created_at.desc())
             .first()
         )
@@ -271,17 +271,17 @@ async def archive_until(
     if owner_id == agent.id:
         ordered_messages: List[RunMessageModel] = (
             db.query(RunMessageModel)
-            .join(AgentRunModel, RunMessageModel.run_id == AgentRunModel.id)
-            .filter(AgentRunModel.agent_id == agent.id, AgentRunModel.run_kind == "root")
-            .order_by(AgentRunModel.root_run_seq.asc().nullslast(), AgentRunModel.created_at.asc(), RunMessageModel.seq.asc())
+            .join(RunModel, RunMessageModel.run_id == RunModel.id)
+            .filter(RunModel.agent_id == agent.id, RunModel.run_type == "agent")
+            .order_by(RunModel.root_run_seq.asc().nullslast(), RunModel.created_at.asc(), RunMessageModel.seq.asc())
             .all()
         )
     else:
         ordered_messages = (
             db.query(RunMessageModel)
-            .join(AgentRunModel, RunMessageModel.run_id == AgentRunModel.id)
-            .filter(AgentRunModel.sub_agent_id == owner_id, AgentRunModel.run_kind == "child")
-            .order_by(AgentRunModel.created_at.asc(), RunMessageModel.seq.asc())
+            .join(RunModel, RunMessageModel.run_id == RunModel.id)
+            .filter(RunModel.sub_agent_id == owner_id, RunModel.run_type == "subAgent")
+            .order_by(RunModel.created_at.asc(), RunMessageModel.seq.asc())
             .all()
         )
 
@@ -320,11 +320,15 @@ async def archive_until(
         raise ValueError("archived_messages must include archive_until_message_id")
 
     # Index archived messages into message_rag_* (must complete before returning)
-    profile = get_embedding_profile(db, user_id=current_user.id, feature="agentMemory")
+    profile = get_embedding_profile(db, user_id=user_id, feature="agentMemory")
     if not profile:
         raise ValueError("Missing agent-memory embedding profile")
 
-    embedding_provider_cfg: Dict[str, Any] = dict(embedding_provider_request_config or {})
+    embedding_provider_cfg: Dict[str, Any] = credential_service.get_provider_config(
+        db,
+        user_id,
+        str(profile["provider"]),
+    )
 
     indexed_count = 0
 
@@ -347,7 +351,7 @@ async def archive_until(
             existing = (
                 db.query(MessageRagSource)
                 .filter(
-                    MessageRagSource.user_id == current_user.id,
+                    MessageRagSource.user_id == user_id,
                     MessageRagSource.owner_id == owner_id,
                     MessageRagSource.message_id == m.id,
                     MessageRagSource.language == language,
@@ -388,7 +392,7 @@ async def archive_until(
             embedding_dim = len(vectors[0])
             stored_dim = profile.get("dimensions")
             if stored_dim is None:
-                set_embedding_dimensions(db, user_id=current_user.id, feature="agentMemory", dimensions=embedding_dim)
+                set_embedding_dimensions(db, user_id=user_id, feature="agentMemory", dimensions=embedding_dim)
             elif stored_dim != embedding_dim:
                 raise RuntimeError(f"Embedding dimensions mismatch (profile={stored_dim}, got={embedding_dim})")
 
@@ -402,7 +406,7 @@ async def archive_until(
             source = (
                 db.query(MessageRagSource)
                 .filter(
-                    MessageRagSource.user_id == current_user.id,
+                    MessageRagSource.user_id == user_id,
                     MessageRagSource.owner_id == owner_id,
                     MessageRagSource.message_id == mid,
                     MessageRagSource.language == language,
@@ -423,7 +427,7 @@ async def archive_until(
                 source.chunks = []
             else:
                 source = MessageRagSource(
-                    user_id=current_user.id,
+                    user_id=user_id,
                     project_id=project_id,
                     owner_id=owner_id,
                     message_id=mid,
@@ -451,7 +455,7 @@ async def archive_until(
                 indexed_count += 1
 
         summary_row = MessageMemorySummary(
-            user_id=current_user.id,
+            user_id=user_id,
             project_id=project_id,
             owner_id=owner_id,
             language=language,
@@ -487,22 +491,25 @@ def _vec_to_pg(vec: List[float]) -> str:
 async def search_memory(
     db: Session,
     *,
-    current_user: User,
+    user_id: UUID,
     project_id: UUID,
     owner_id: UUID,
     language: str,
     queries: List[str],
-    provider_request_config: Dict[str, Any],
     top_k_per_query: int = 20,
 ) -> List[Dict[str, Any]]:
     if not queries:
         return []
 
-    profile = get_embedding_profile(db, user_id=current_user.id, feature="agentMemory")
+    profile = get_embedding_profile(db, user_id=user_id, feature="agentMemory")
     if not profile:
         return []
 
-    provider_config: Dict[str, Any] = dict(provider_request_config or {})
+    provider_config: Dict[str, Any] = credential_service.get_provider_config(
+        db,
+        user_id,
+        str(profile["provider"]),
+    )
 
     query_vectors = await embed_many(
         provider=profile["provider"],
@@ -541,7 +548,7 @@ async def search_memory(
             stmt,
             {
                 "qv": qv_str,
-                "user_id": current_user.id,
+                "user_id": user_id,
                 "project_id": project_id,
                 "owner_id": owner_id,
                 "language": language,

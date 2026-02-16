@@ -2,27 +2,27 @@
 
 Translate the following content from **{{ translation.sourceLanguage }}** to **{{ translation.targetLanguage }}**.
 
-{{#if (hasItems translation.currentTranslatedContents)}}
+{% if ((translation.currentTranslatedContents)|length > 0) %}
 ## Preview Translations ({{ translation.targetLanguage }})
 
 Review these existing translations to decide whether to use `replace_*` (full rewrite) or `patch_*` (minor fixes):
 
 <current>
-{{#each translation.currentTranslatedContents}}
+{% for this in translation.currentTranslatedContents %}
 ### {{ this.type }}: {{ this.name }} (ID: `{{ this.id }}`)
 
 {{ this.translatedContent }}
 
-{{/each}}
+{% endfor %}
 </current>
-{{/if}}
+{% endif %}
 
 ## Content to Translate
 
-{{prompt "translation/filteredContext" translation.sourceLanguage translation.objectIds}}
+{% with params = [translation.sourceLanguage, translation.objectIds] %}{% include "fragment:translation/filteredContext" %}{% endwith %}
 
-{{#if input.userMessage}}
+{% if input.userMessage %}
 ## Additional Instructions
 
 {{ input.userMessage }}
-{{/if}}
+{% endif %}

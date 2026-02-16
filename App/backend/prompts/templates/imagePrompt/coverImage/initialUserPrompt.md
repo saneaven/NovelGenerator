@@ -1,14 +1,14 @@
 ## Prompt Format Required
 
-{{#if (eq imagePrompt.promptMode "natural")}}
+{% if (imagePrompt.promptMode == "natural") %}
 Generate a **natural language prompt** (flowing descriptive sentences for DALL-E, Gemini, Grok, etc.)
-{{/if}}
-{{#if (eq imagePrompt.promptMode "positive")}}
+{% endif %}
+{% if (imagePrompt.promptMode == "positive") %}
 Generate **positive tags** (comma-separated keywords for NovelAI describing what TO include)
-{{/if}}
-{{#if (eq imagePrompt.promptMode "negative")}}
+{% endif %}
+{% if (imagePrompt.promptMode == "negative") %}
 Generate **negative tags** (comma-separated keywords for NovelAI describing what to AVOID)
-{{/if}}
+{% endif %}
 
 ## Novel Information
 
@@ -18,52 +18,52 @@ Generate **negative tags** (comma-separated keywords for NovelAI describing what
 
 **Logline:** {{ imagePrompt.coverImage.logline }}
 
-{{#if input.userMessage}}
+{% if input.userMessage %}
 ## User Request
 
 {{ input.userMessage }}
-{{/if}}
+{% endif %}
 
-{{#if imagePrompt.currentObject.image_prompt}}
+{% if imagePrompt.currentObject.image_prompt %}
 ## Current Image Prompt
 
 The following prompt already exists. Use it as reference or build upon it:
 
 {{ imagePrompt.currentObject.image_prompt }}
-{{/if}}
+{% endif %}
 
-{{#if imagePrompt.currentObject.image_prompt_positive}}
+{% if imagePrompt.currentObject.image_prompt_positive %}
 ## Current Positive Tags
 
 {{ imagePrompt.currentObject.image_prompt_positive }}
-{{/if}}
+{% endif %}
 
-{{#if imagePrompt.currentObject.image_prompt_negative}}
+{% if imagePrompt.currentObject.image_prompt_negative %}
 ## Current Negative Tags
 
 {{ imagePrompt.currentObject.image_prompt_negative }}
-{{/if}}
+{% endif %}
 
-{{#if (hasItems imagePrompt.selectedObjectIds)}}
+{% if ((imagePrompt.selectedObjectIds)|length > 0) %}
 ## Story Object Context
 
 The following objects can inform the cover design. Use their descriptions and saved image prompts (if available):
 
-{{#with (filterByIds project.objects imagePrompt.selectedObjectIds) as |selectedObjects|}}
-{{#each selectedObjects}}
+{% with selectedObjects = (project.objects|filter_by_ids(imagePrompt.selectedObjectIds)) %}
+{% for this in selectedObjects %}
 ### {{ this.type }}: {{ this.name }}
 {{ this.description }}
-{{#if this.imagePrompt}}
+{% if this.imagePrompt %}
 **Saved Image Prompt:** {{ this.imagePrompt }}
-{{/if}}
+{% endif %}
 
-{{/each}}
-{{/with}}
-{{/if}}
+{% endfor %}
+{% endwith %}
+{% endif %}
 
 ---
 
 Generate a book cover image prompt that captures the essence of this novel.
-{{#if (hasItems imagePrompt.selectedObjectIds)}}
+{% if ((imagePrompt.selectedObjectIds)|length > 0) %}
 Incorporate visual elements from the provided story objects as appropriate.
-{{/if}}
+{% endif %}

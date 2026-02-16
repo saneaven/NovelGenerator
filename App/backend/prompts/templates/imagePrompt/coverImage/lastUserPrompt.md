@@ -1,4 +1,4 @@
-{{! Last user message - simple feedback (no context refresh for image prompt) }}
+{{ ! }}
 
 # User Feedback
 

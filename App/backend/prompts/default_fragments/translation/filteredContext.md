@@ -1,127 +1,125 @@
-## Content ({{ params.[0] }})
+## Content ({{ params[0] }})
 
-{{!--
-  This fragment shows content in a specific language, filtered by IDs.
+{# This fragment shows content in a specific language, filtered by IDs.
   Handles both story objects and manuscripts.
 
-  Usage: {{prompt "translation/filteredContext" language ids}}
+  Usage: {% with params = [language, ids] %}{% include "fragment:translation/filteredContext" %}{% endwith %}
 
   Parameters:
     - params.[0]: Language name (e.g., "English", "Korean")
-    - params.[1]: Array of IDs to filter (object IDs or manuscript IDs)
---}}
+    - params.[1]: Array of IDs to filter (object IDs or manuscript IDs) #}
 
-{{#with (lookup project.languages params.[0]) as |langProject|}}
-{{#if (and langProject.basicInfo (includes params.[1] langProject.basicInfo.id))}}
+{% with langProject = (project.languages.get(params[0])) %}
+{% if (langProject.basicInfo and (langProject.basicInfo.id in params[1])) %}
 <basic_info id="{{ langProject.basicInfo.id }}">
 <title>{{ langProject.basicInfo.title }}</title>
 <logline>{{ langProject.basicInfo.logline }}</logline>
 <genre>{{ langProject.basicInfo.genre }}</genre>
 </basic_info>
-{{/if}}
-{{/with}}
+{% endif %}
+{% endwith %}
 
-{{#if (and project.guidelines.id (includes params.[1] project.guidelines.id))}}
+{% if (project.guidelines.id and (project.guidelines.id in params[1])) %}
 <guidelines id="{{ project.guidelines.id }}">
 <authorNote>{{ project.guidelines.authorNote }}</authorNote>
 </guidelines>
-{{/if}}
+{% endif %}
 
-{{#with (getObjectsOfLanguage project params.[0] params.[1]) as |filteredObjects|}}
-{{#if (hasItems (filterByType filteredObjects "character"))}}
+{% with filteredObjects = get_objects_of_language(project, params[0], params[1]) %}
+{% if (((filteredObjects|filter_by_type("character")))|length > 0) %}
 <characters>
-{{#each (filterByType filteredObjects "character")}}
+{% for this in (filteredObjects|filter_by_type("character")) %}
 <character id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
 <content>{{ this.content }}</content>
 </character>
-{{/each}}
+{% endfor %}
 </characters>
-{{/if}}
+{% endif %}
 
-{{#if (hasItems (filterByType filteredObjects "organization"))}}
+{% if (((filteredObjects|filter_by_type("organization")))|length > 0) %}
 <organizations>
-{{#each (filterByType filteredObjects "organization")}}
+{% for this in (filteredObjects|filter_by_type("organization")) %}
 <organization id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
 <content>{{ this.content }}</content>
 </organization>
-{{/each}}
+{% endfor %}
 </organizations>
-{{/if}}
+{% endif %}
 
-{{#if (hasItems (filterByType filteredObjects "location"))}}
+{% if (((filteredObjects|filter_by_type("location")))|length > 0) %}
 <locations>
-{{#each (filterByType filteredObjects "location")}}
+{% for this in (filteredObjects|filter_by_type("location")) %}
 <location id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
 <content>{{ this.content }}</content>
 </location>
-{{/each}}
+{% endfor %}
 </locations>
-{{/if}}
+{% endif %}
 
-{{#if (hasItems (filterByType filteredObjects "lorebook"))}}
+{% if (((filteredObjects|filter_by_type("lorebook")))|length > 0) %}
 <lorebooks>
-{{#each (filterByType filteredObjects "lorebook")}}
+{% for this in (filteredObjects|filter_by_type("lorebook")) %}
 <lorebook id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
 <content>{{ this.content }}</content>
 </lorebook>
-{{/each}}
+{% endfor %}
 </lorebooks>
-{{/if}}
+{% endif %}
 
-{{#if (hasItems (filterByType filteredObjects "outline"))}}
+{% if (((filteredObjects|filter_by_type("outline")))|length > 0) %}
 <outlines>
-{{#each (filterByType filteredObjects "outline")}}
+{% for this in (filteredObjects|filter_by_type("outline")) %}
 <outline id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
 <content>{{ this.content }}</content>
 </outline>
-{{/each}}
+{% endfor %}
 </outlines>
-{{/if}}
+{% endif %}
 
-{{#if (hasItems (filterByType filteredObjects "act"))}}
+{% if (((filteredObjects|filter_by_type("act")))|length > 0) %}
 <acts>
-{{#each (filterByType filteredObjects "act")}}
+{% for this in (filteredObjects|filter_by_type("act")) %}
 <act id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
 <content>{{ this.content }}</content>
 </act>
-{{/each}}
+{% endfor %}
 </acts>
-{{/if}}
+{% endif %}
 
-{{#if (hasItems (filterByType filteredObjects "chapter"))}}
+{% if (((filteredObjects|filter_by_type("chapter")))|length > 0) %}
 <chapters>
-{{#each (filterByType filteredObjects "chapter")}}
+{% for this in (filteredObjects|filter_by_type("chapter")) %}
 <chapter id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
 <content>{{ this.content }}</content>
 </chapter>
-{{/each}}
+{% endfor %}
 </chapters>
-{{/if}}
-{{/with}}
+{% endif %}
+{% endwith %}
 
-{{#with (getManuscriptsOfLanguage project params.[0] params.[1]) as |filteredManuscripts|}}
-{{#if (hasItems filteredManuscripts)}}
+{% with filteredManuscripts = get_manuscripts_of_language(project, params[0], params[1]) %}
+{% if ((filteredManuscripts)|length > 0) %}
 <manuscripts>
-{{#each filteredManuscripts}}
+{% for this in filteredManuscripts %}
 <manuscript id="{{ this.id }}">
 <chapter-name>{{ this.chapterName }}</chapter-name>
 <content>{{ this.content }}</content>
 </manuscript>
-{{/each}}
+{% endfor %}
 </manuscripts>
-{{/if}}
-{{/with}}
+{% endif %}
+{% endwith %}

@@ -1,42 +1,42 @@
-{{#with (lookup project.languages translation.targetLanguage)}}
-## Reference Context (Already Translated to {{ ../translation.targetLanguage }})
+{% with this = (project.languages.get(translation.targetLanguage)) %}
+## Reference Context (Already Translated to {{ translation.targetLanguage }})
 
 Use the following already-translated content as reference to maintain consistent terminology, naming, and style:
 
-{{#if this.basicInfo}}
+{% if this.basicInfo %}
 ### Story Info
 - **Title**: {{ this.basicInfo.title }}
 - **Logline**: {{ this.basicInfo.logline }}
 - **Genre**: {{ this.basicInfo.genre }}
-{{/if}}
+{% endif %}
 
-{{#if (hasItems (filterByType this.objects "character"))}}
+{% if (((this.objects|filter_by_type("character")))|length > 0) %}
 ### Characters
-{{#each (filterByType this.objects "character")}}
+{% for this in (this.objects|filter_by_type("character")) %}
 - **{{ this.name }}**: {{ this.content }}
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
-{{#if (hasItems (filterByType this.objects "organization"))}}
+{% if (((this.objects|filter_by_type("organization")))|length > 0) %}
 ### Organizations
-{{#each (filterByType this.objects "organization")}}
+{% for this in (this.objects|filter_by_type("organization")) %}
 - **{{ this.name }}**: {{ this.content }}
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
-{{#if (hasItems (filterByType this.objects "location"))}}
+{% if (((this.objects|filter_by_type("location")))|length > 0) %}
 ### Locations
-{{#each (filterByType this.objects "location")}}
+{% for this in (this.objects|filter_by_type("location")) %}
 - **{{ this.name }}**: {{ this.content }}
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
-{{#if (hasItems (filterByType this.objects "lorebook"))}}
+{% if (((this.objects|filter_by_type("lorebook")))|length > 0) %}
 ### World Details
-{{#each (filterByType this.objects "lorebook")}}
+{% for this in (this.objects|filter_by_type("lorebook")) %}
 - **{{ this.name }}**: {{ this.content }}
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
 **Important**: Use the exact names and terminology from this reference context when translating.
-{{/with}}
+{% endwith %}

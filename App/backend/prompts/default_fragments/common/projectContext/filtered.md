@@ -1,7 +1,7 @@
 ## Project Context
 
-{{!-- This fragment expects objectIds to be passed as the first positional parameter --}}
-{{!-- Usage: {{prompt "common/projectContext/filtered" someContext.objectIds}} --}}
+{# This fragment expects objectIds to be passed as the first positional parameter #}
+{# Usage: {% with params = [someContext.objectIds] %}{% include "fragment:common/projectContext/filtered" %}{% endwith %} #}
 
 ### Basic Information
 
@@ -9,97 +9,97 @@
 - **Logline**: {{ project.basicInfo.logline }}
 - **Genre**: {{ project.basicInfo.genre }}
 
-{{#if (hasItems params.[0])}}
-{{#with (filterByIds project.objects params.[0]) as |selectedObjects|}}
+{% if ((params[0])|length > 0) %}
+{% with selectedObjects = (project.objects|filter_by_ids(params[0])) %}
 
-{{#if (hasItems (filterByType selectedObjects "character"))}}
+{% if (((selectedObjects|filter_by_type("character")))|length > 0) %}
 ### Characters
 
-{{#each (filterByType selectedObjects "character")}}
+{% for this in (selectedObjects|filter_by_type("character")) %}
 #### {{ this.name }} (id: {{ this.id }})
 
 {{ this.content }}
 
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
-{{#if (hasItems (filterByType selectedObjects "organization"))}}
+{% if (((selectedObjects|filter_by_type("organization")))|length > 0) %}
 ### Organizations
 
-{{#each (filterByType selectedObjects "organization")}}
+{% for this in (selectedObjects|filter_by_type("organization")) %}
 #### {{ this.name }} (id: {{ this.id }})
 
 {{ this.content }}
 
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
-{{#if (hasItems (filterByType selectedObjects "location"))}}
+{% if (((selectedObjects|filter_by_type("location")))|length > 0) %}
 ### Locations
 
-{{#each (filterByType selectedObjects "location")}}
+{% for this in (selectedObjects|filter_by_type("location")) %}
 #### {{ this.name }} (id: {{ this.id }})
 
 {{ this.content }}
 
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
-{{#if (hasItems (filterByType selectedObjects "lorebook"))}}
+{% if (((selectedObjects|filter_by_type("lorebook")))|length > 0) %}
 ### Lorebook
 
-{{#each (filterByType selectedObjects "lorebook")}}
+{% for this in (selectedObjects|filter_by_type("lorebook")) %}
 #### {{ this.name }} (id: {{ this.id }})
 
 {{ this.content }}
 
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
-{{/with}}
+{% endwith %}
 
-{{#if project.outline}}
-{{#with (filterByIds project.outline.outlines params.[0]) as |selectedOutlines|}}
-{{#each selectedOutlines}}
+{% if project.outline %}
+{% with selectedOutlines = (project.outline.outlines|filter_by_ids(params[0])) %}
+{% for this in selectedOutlines %}
 ### Story Outline - {{ this.name }} (id: {{ this.id }})
 
 {{ this.content }}
 
-{{#with (filterByIds this.acts @root.params.[0]) as |selectedActs|}}
-{{#if (hasItems selectedActs)}}
-{{#each selectedActs}}
+{% with selectedActs = (this.acts|filter_by_ids(params[0])) %}
+{% if ((selectedActs)|length > 0) %}
+{% for this in selectedActs %}
 #### Act: {{ this.name }} (id: {{ this.id }})
 
 {{ this.content }}
 
-{{#with (filterByIds this.chapters @root.params.[0]) as |selectedChapters|}}
-{{#if (hasItems selectedChapters)}}
+{% with selectedChapters = (this.chapters|filter_by_ids(params[0])) %}
+{% if ((selectedChapters)|length > 0) %}
 **Chapters:**
-{{#each selectedChapters}}
+{% for this in selectedChapters %}
 - **{{ this.name }}** (id: {{ this.id }}): {{ this.content }}
-{{/each}}
-{{/if}}
-{{/with}}
+{% endfor %}
+{% endif %}
+{% endwith %}
 
-{{/each}}
-{{/if}}
-{{/with}}
-{{/each}}
-{{/with}}
-{{/if}}
+{% endfor %}
+{% endif %}
+{% endwith %}
+{% endfor %}
+{% endwith %}
+{% endif %}
 
-{{#with (filterByIds project.manuscripts params.[0]) as |selectedManuscripts|}}
-{{#if (hasItems selectedManuscripts)}}
+{% with selectedManuscripts = (project.manuscripts|filter_by_ids(params[0])) %}
+{% if ((selectedManuscripts)|length > 0) %}
 ### Reference Novel Content
 
-{{#each selectedManuscripts}}
+{% for this in selectedManuscripts %}
 #### {{ this.chapterName }} (id: {{ this.id }})
 
 {{ this.content }}
 
 ---
-{{/each}}
-{{/if}}
-{{/with}}
+{% endfor %}
+{% endif %}
+{% endwith %}
 
-{{/if}}
+{% endif %}

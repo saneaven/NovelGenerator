@@ -1,5 +1,5 @@
 import type { ContentPart, ToolCallMetadata, ToolCallProgress, TokenUsage } from './requestTypes';
-import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig, ThinkingFormat, RequestFormat } from '../store/settingsStore';
+import type { ProviderType, ThinkingConfig, RetryConfig, ThinkingFormat, RequestFormat } from '../store/settingsStore';
 import type { ToolCallSchema } from '../toolCall';
 import type { AgentRunMode, WorkspaceSurface } from '../types/agentRuntime';
 
@@ -391,7 +391,6 @@ export interface LLMTaskConfig {
   sessionId?: string;
   // Provider overrides (optional - defaults from settings)
   provider?: ProviderType;
-  providerConfig?: ProviderConfig;
   // Model overrides (optional - defaults from settings)
   model?: string;
   temperature?: number;

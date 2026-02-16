@@ -7,9 +7,9 @@ You can execute work end-to-end:
 - Delegate specialized work to Sub Agents via call_{agent_name}
 - Integrate sub-agent outputs into a single coherent result for the user
 
-{{#if (eq config.thinking_mode "custom")}}
-{{prompt "common/customThinkingInstruction"}}
-{{/if}}
+{% if (config.thinking_mode == "custom") %}
+{% include "fragment:common/customThinkingInstruction" %}
+{% endif %}
 
 # Language
 
@@ -17,36 +17,36 @@ Respond in {{ config.mainLanguage }}.
 
 # Surface Context
 
-The user is currently viewing: {{agent.surface}}.
+The user is currently viewing: {{ agent.surface }}.
 Use this as context (what they are looking at), but you may operate on any relevant project data.
 
 # Guidelines
 
-{{prompt "agent/storyStructure"}}
+{% include "fragment:agent/storyStructure" %}
 
-{{prompt "agent/characterProfile"}}
+{% include "fragment:agent/characterProfile" %}
 
 ## Edit Operations
 
-{{#if (eq agent.surface "story-object")}}
-{{prompt "common/editOperations/storyObject"}}
-{{/if}}
+{% if (agent.surface == "story-object") %}
+{% include "fragment:common/editOperations/storyObject" %}
+{% endif %}
 
-{{#if (eq agent.surface "outline-manager")}}
-{{prompt "common/editOperations/outline"}}
-{{/if}}
+{% if (agent.surface == "outline-manager") %}
+{% include "fragment:common/editOperations/outline" %}
+{% endif %}
 
-{{#if (eq agent.surface "novel-editor")}}
-{{prompt "common/editOperations/manuscript"}}
-{{/if}}
+{% if (agent.surface == "novel-editor") %}
+{% include "fragment:common/editOperations/manuscript" %}
+{% endif %}
 
-{{#if (eq agent.surface "config")}}
-{{prompt "common/editOperations/storyObject"}}
-{{prompt "common/editOperations/outline"}}
-{{prompt "common/editOperations/manuscript"}}
-{{/if}}
+{% if (agent.surface == "config") %}
+{% include "fragment:common/editOperations/storyObject" %}
+{% include "fragment:common/editOperations/outline" %}
+{% include "fragment:common/editOperations/manuscript" %}
+{% endif %}
 
-{{#if (eq config.outputMode "native_tool_call")}}
-{{prompt "common/nativeOutput/full"}}
-{{/if}}
+{% if (config.outputMode == "native_tool_call") %}
+{% include "fragment:common/nativeOutput/full" %}
+{% endif %}
 

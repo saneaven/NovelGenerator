@@ -199,7 +199,6 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         surface,
         userInput: userInput?.trim() ?? '',
         language: mainLanguage,
-        caller: runMode,
         contextObjectIds: selectedContextIds,
         signal: abortController.signal,
         onMemoryStageChange: (stage) => {

@@ -70,7 +70,7 @@ async def memory_archive(
     try:
         result = await archive_until(
             db,
-            current_user=current_user,
+            user_id=current_user.id,
             project_id=project_id,
             agent=agent,
             owner_id=effective_owner,
@@ -78,7 +78,6 @@ async def memory_archive(
             archive_until_message_id=request.archive_until_message_id,
             summary_text=request.summary_text,
             archived_messages=[m.model_dump() for m in request.archived_messages],
-            embedding_provider_request_config=request.embedding_config.model_dump(),
         )
         return MemoryArchiveResponse(
             archived_until_message_id=result.get("archived_until_message_id"),
@@ -109,13 +108,12 @@ async def memory_search(
     try:
         results = await search_memory(
             db,
-            current_user=current_user,
+            user_id=current_user.id,
             project_id=project_id,
             owner_id=effective_owner,
             language=request.language,
             queries=request.queries,
             top_k_per_query=request.top_k_per_query,
-            provider_request_config=request.config.model_dump(),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

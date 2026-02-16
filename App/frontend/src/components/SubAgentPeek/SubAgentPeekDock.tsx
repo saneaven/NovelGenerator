@@ -100,7 +100,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     const result: Record<string, Run> = {};
     for (const run of Object.values(runsById)) {
       if (!run) continue;
-      if (run.runKind !== 'child') continue;
+      if (run.runType !== 'subAgent') continue;
       if (run.parentRunId !== parentRunId) continue;
       if (run.parentRunMessageId !== parentRunMessageId) continue;
       if (allowedToolCalls.size > 0 && (!run.parentRunToolCallId || !allowedToolCalls.has(run.parentRunToolCallId))) {

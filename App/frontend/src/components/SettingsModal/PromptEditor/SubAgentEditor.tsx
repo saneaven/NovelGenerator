@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useCredentialsStore } from '../../../store/credentialsStore';
 import { useSettings } from '../../../store/settingsStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
 import type { SubAgentAllowedInvocation } from '../../../types/subAgents';
@@ -290,7 +289,6 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   onToggleSidebar,
 }) => {
   const { t } = useTranslation();
-  const credentials = useCredentialsStore((s) => s.credentials);
   const settings = useSettings();
   const { subAgents, deleteSubAgent } = useSubAgentStore();
   const globalSubAgentConfig = settings.task_configs.subAgent;
@@ -654,7 +652,6 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
               <TaskConfigForm
                 taskType="subAgent"
                 config={draft.current.llm_config_override ?? globalSubAgentConfig}
-                credentials={credentials}
                 onChange={(cfg) =>
                   updateDraft((cur) => ({
                     ...cur,

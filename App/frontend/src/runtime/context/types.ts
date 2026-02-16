@@ -9,7 +9,7 @@
 import type { LLMTaskModeType, ThinkingMode, AgentPromptContext, SubAgentPromptContext, MemoryRelevantChat } from '../../llm/types';
 import type { ChatMessage } from '../../llm/requestTypes';
 import type { ToolCallSchema } from '../../toolCall';
-import type { ProviderConfig, ProviderType, ThinkingConfig, ThinkingFormat, RequestFormat } from '../../store/settingsStore';
+import type { ProviderType, ThinkingConfig, ThinkingFormat, RequestFormat } from '../../store/settingsStore';
 import type { TemplateData } from '../../llm/types';
 
 // ---------------------------------------------------------------------------
@@ -37,7 +37,6 @@ export interface RunTypeConfig {
   kind: 'agent' | 'subAgent';
   label: string;
   provider: ProviderType;
-  providerConfig: ProviderConfig;
   model: string;
   temperature: number;
   thinkingMode: ThinkingMode | undefined;
@@ -61,7 +60,6 @@ export interface RunExecutionConfig {
   kind: 'agent' | 'subAgent';
   label: string;
   provider: ProviderType;
-  providerConfig: ProviderConfig;
   model: string;
   temperature: number;
   thinkingMode: ThinkingMode | undefined;

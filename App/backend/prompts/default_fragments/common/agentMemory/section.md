@@ -1,32 +1,32 @@
-{{#if (or (hasItems agent.previousSummaries) (hasItems agent.relevantChats))}}
+{% if (((agent.previousSummaries)|length > 0) or ((agent.relevantChats)|length > 0)) %}
 # Memory
 
-{{#if (hasItems agent.previousSummaries)}}
+{% if ((agent.previousSummaries)|length > 0) %}
 ## Previous Summary
 
-{{#each agent.previousSummaries}}
-{{this}}
+{% for this in agent.previousSummaries %}
+{{ this }}
 
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
-{{#if (hasItems agent.relevantChats)}}
+{% if ((agent.relevantChats)|length > 0) %}
 ## Relevant Archived Chats
 
-{{#each agent.relevantChats}}
-<chat id="{{messageId}}" role="{{role}}">
-{{#if (eq match.kind "tool_call")}}
-{{#if toolCall}}
-<function_call name="{{toolCall.name}}" status="{{toolCall.status}}">
-<result>{{toolCall.result}}</result>
-{{matched_snippet}}
+{% for this in agent.relevantChats %}
+<chat id="{{ messageId }}" role="{{ role }}">
+{% if (match.kind == "tool_call") %}
+{% if toolCall %}
+<function_call name="{{ toolCall.name }}" status="{{ toolCall.status }}">
+<result>{{ toolCall.result }}</result>
+{{ matched_snippet }}
 </function_call>
-{{/if}}
-{{else}}
-{{matched_snippet}}
-{{/if}}
+{% endif %}
+{% else %}
+{{ matched_snippet }}
+{% endif %}
 </chat>
 
-{{/each}}
-{{/if}}
-{{/if}}
+{% endfor %}
+{% endif %}
+{% endif %}

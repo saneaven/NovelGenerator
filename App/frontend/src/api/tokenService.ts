@@ -9,11 +9,6 @@ export interface CountTokensRequest {
   provider: 'claude' | 'gemini';
   model: string;
   text: string;
-  config?: {
-    api_key?: string;
-    base_url?: string;
-    additional_headers?: Record<string, string>;
-  };
 }
 
 export interface CountTokensResponse {

@@ -15,9 +15,6 @@
 
 import { create } from 'zustand';
 import { unifiedObjectService } from '../api/unifiedObjectService';
-import { ragService } from '../api/ragService';
-import { useCredentialsStore } from './credentialsStore';
-import { useSettingsStore } from './settingsStore';
 import type {
   UnifiedObject,
   ObjectType,
@@ -102,86 +99,6 @@ interface UnifiedObjectStore {
 // ============================================================================
 
 export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
-  const parseCustomAdditionalHeaders = (raw: unknown): Record<string, string> | undefined => {
-    if (typeof raw !== 'string' || !raw.trim()) return undefined;
-    try {
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
-      const headers = Object.fromEntries(
-        Object.entries(parsed as Record<string, unknown>).filter(([, value]) => typeof value === 'string')
-      ) as Record<string, string>;
-      return Object.keys(headers).length > 0 ? headers : undefined;
-    } catch {
-      return undefined;
-    }
-  };
-
-  const buildProviderConfig = (provider: string, creds: any): any | null => {
-    const config: any = {};
-
-    if (provider === 'custom') {
-      config.api_key = creds.custom?.apiKey || undefined;
-      config.base_url = creds.custom?.baseUrl || undefined;
-      const additionalHeaders = parseCustomAdditionalHeaders(creds.custom?.additionalHeadersJson);
-      if (additionalHeaders) {
-        config.additional_headers = additionalHeaders;
-      }
-    } else {
-      config.api_key = creds?.[provider]?.apiKey || undefined;
-    }
-
-    if (!config.api_key) return null;
-    if (provider === 'custom' && !config.base_url) return null;
-    return config;
-  };
-
-  const scheduleRagIndex = async (args: {
-    projectId: string | undefined;
-    objectType: ObjectType;
-    objectId: string;
-  }): Promise<void> => {
-    const { projectId, objectType, objectId } = args;
-    if (!projectId) return;
-
-    const ragEnabled = useSettingsStore.getState().getSettings().ragSearchEnabled;
-    if (!ragEnabled) return;
-
-    if (objectType === 'basic_info' || objectType === 'guidelines') return;
-
-    const profile = useSettingsStore.getState().getSettings().embeddingConfigs?.ragSearch;
-    if (!profile?.provider || !profile?.model) return;
-
-    const creds = useCredentialsStore.getState().credentials as any;
-    const config = buildProviderConfig(profile.provider, creds);
-    if (!config) return;
-
-    try {
-      await ragService.indexObject(projectId, { object_type: objectType, object_id: objectId, config });
-    } catch (err) {
-      console.debug('RAG index failed:', err);
-    }
-  };
-
-  const scheduleRagDelete = async (args: {
-    projectId: string | undefined;
-    objectType: ObjectType;
-    objectId: string;
-  }): Promise<void> => {
-    const { projectId, objectType, objectId } = args;
-    if (!projectId) return;
-
-    const ragEnabled = useSettingsStore.getState().getSettings().ragSearchEnabled;
-    if (!ragEnabled) return;
-
-    if (objectType === 'basic_info' || objectType === 'guidelines') return;
-
-    try {
-      await ragService.deleteObject(projectId, { object_type: objectType, object_id: objectId });
-    } catch (err) {
-      console.debug('RAG delete failed:', err);
-    }
-  };
-
   return ({
   objects: {},
   loading: {},
@@ -251,9 +168,6 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
         objects: { ...state.objects, [id]: updatedObject },
         loading: { ...state.loading, [id]: false },
       }));
-
-      const projectId = updatedObject.metadata?.project_id || get().objects[id]?.metadata?.project_id;
-      void scheduleRagIndex({ projectId, objectType: type, objectId: id });
     } catch (error: any) {
       set((state) => ({
         errors: { ...state.errors, [id]: error.message || 'Failed to update object' },
@@ -278,10 +192,6 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
       // Refetch object to get updated data with all languages
       await get().fetchObject(type, id);
-
-      const obj = get().objects[id];
-      const projectId = obj?.metadata?.project_id;
-      void scheduleRagIndex({ projectId, objectType: type, objectId: id });
     } catch (error: any) {
       set((state) => ({
         errors: { ...state.errors, [id]: error.message || 'Failed to add translation' },
@@ -318,10 +228,6 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
       // Refetch object to get updated data with all languages
       await get().fetchObject(type, id);
-
-      const obj = get().objects[id];
-      const projectId = obj?.metadata?.project_id;
-      void scheduleRagIndex({ projectId, objectType: type, objectId: id });
     } catch (error: any) {
       set((state) => ({
         errors: { ...state.errors, [id]: error.message || 'Failed to restore version' },
@@ -346,10 +252,6 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
       // Refetch object to get updated data with all languages
       await get().fetchObject(type, id);
-
-      const obj = get().objects[id];
-      const projectId = obj?.metadata?.project_id;
-      void scheduleRagIndex({ projectId, objectType: type, objectId: id });
     } catch (error: any) {
       set((state) => ({
         errors: { ...state.errors, [id]: error.message || 'Failed to delete translation' },
@@ -420,8 +322,6 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
           }
         }
       }
-
-      void scheduleRagIndex({ projectId, objectType: type, objectId: newObject.id });
       return newObject;
     } catch (error: any) {
       console.error('Failed to create object:', error);
@@ -430,7 +330,6 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
   },
 
   deleteObject: async (type: ObjectType, id: string) => {
-    const projectId = get().objects[id]?.metadata?.project_id;
     set((state) => ({
       loading: { ...state.loading, [id]: true },
       errors: { ...state.errors, [id]: null },
@@ -451,8 +350,6 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
         return { objects: newObjects, loading: newLoading, errors: newErrors };
       });
-
-      void scheduleRagDelete({ projectId, objectType: type, objectId: id });
     } catch (error: any) {
       set((state) => ({
         errors: { ...state.errors, [id]: error.message || 'Failed to delete object' },
@@ -605,9 +502,6 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     // Then call API (if fails, rollback)
     try {
       await unifiedObjectService.reorderObjects(type, projectId, objectIds);
-      for (const objectId of objectIds) {
-        void scheduleRagIndex({ projectId, objectType: type, objectId });
-      }
     } catch (error: any) {
       // Rollback on error
       set({ objects: oldObjects });

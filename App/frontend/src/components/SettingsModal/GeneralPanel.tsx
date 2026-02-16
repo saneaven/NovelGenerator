@@ -1,13 +1,12 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AITaskType, TaskAIConfig, ProviderCredentials } from '../../store/settingsStore';
+import type { AITaskType, TaskAIConfig } from '../../store/settingsStore';
 import TaskConfigForm from './TaskConfigForm';
 import { SpeechBubble, Globe, Edit, Palette, Document, People } from '../icons';
 import './GeneralPanel.css';
 
 interface GeneralPanelProps {
   task_configs: Record<AITaskType, TaskAIConfig>;
-  credentials: ProviderCredentials;
   activeTask: AITaskType;
   onTaskChange: (taskType: AITaskType) => void;
   onConfigChange: (taskType: AITaskType, config: TaskAIConfig) => void;
@@ -24,7 +23,6 @@ const TASK_ICONS: Record<AITaskType, React.ReactNode> = {
 
 const GeneralPanel: React.FC<GeneralPanelProps> = ({
   task_configs,
-  credentials,
   activeTask,
   onTaskChange,
   onConfigChange,
@@ -72,7 +70,6 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
       <TaskConfigForm
         taskType={activeTask}
         config={currentConfig}
-        credentials={credentials}
         onChange={(config) => onConfigChange(activeTask, config)}
       />
     </div>

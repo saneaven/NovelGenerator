@@ -2,7 +2,6 @@ import { type ConversationBlock, type ThinkingDetail } from './requestTypes';
 import type { LLMStreamEvent, FinalSnapshot, StreamToolCallDelta } from './streamProtocol';
 import {
   type ProviderType,
-  type ProviderConfig,
   type ProviderPreference,
   type ThinkingConfig,
   type RetryConfig,
@@ -189,7 +188,6 @@ function parseProtocolEvent(eventName: string, payload: string): LLMStreamEvent 
 export async function* streamLLM(
   messages: ConversationBlock[],
   provider: ProviderType,
-  providerConfig: ProviderConfig,
   opts?: {
     signal?: AbortSignal;
     temperature?: number;
@@ -208,13 +206,6 @@ export async function* streamLLM(
 ): AsyncGenerator<LLMStreamEvent> {
   const endpoint = `${API_BASE}/chat/completions/${provider}/stream`;
 
-  const backendConfig = {
-    api_key: providerConfig.apiKey,
-    base_url: providerConfig.baseUrl,
-    additional_headers: providerConfig.additionalHeaders,
-    additional_body: providerConfig.additionalBody,
-  };
-
   const backendMessages = messages.map((message) => ({
     role: message.role,
     content_parts: message.contentParts,
@@ -226,7 +217,6 @@ export async function* streamLLM(
     messages: backendMessages,
     model: opts?.model || 'gpt-5',
     temperature: opts?.temperature ?? 0.7,
-    provider_config: backendConfig,
   };
 
   if (typeof opts?.max_tokens === 'number') {
@@ -440,18 +430,10 @@ export async function* streamLLM(
 
 export async function fetchModels(
   provider: ProviderType,
-  config: ProviderConfig,
   request_format?: RequestFormat,
 ): Promise<any> {
   const endpoint = `${API_BASE}/providers/${provider}/models`;
-
-  const provider_config = {
-    api_key: config.apiKey,
-    base_url: config.baseUrl,
-    additional_headers: config.additionalHeaders,
-    additional_body: config.additionalBody,
-  };
-  const requestBody: Record<string, unknown> = { provider_config };
+  const requestBody: Record<string, unknown> = {};
   if (provider === 'custom') {
     requestBody.request_format = request_format ?? 'openai_sdk';
   }
@@ -472,20 +454,13 @@ export async function fetchModels(
 
 export async function fetchEmbeddingModels(
   provider: ProviderType,
-  config: ProviderConfig,
 ): Promise<any> {
   const endpoint = `${API_BASE}/providers/${provider}/embedding-models`;
-
-  const backendConfig = {
-    api_key: config.apiKey,
-    base_url: config.baseUrl,
-    additional_headers: config.additionalHeaders,
-  };
 
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-    body: JSON.stringify(backendConfig),
+    body: JSON.stringify({}),
   });
 
   if (!response.ok) {
@@ -513,20 +488,12 @@ export async function fetchProviders(): Promise<any> {
 
 export async function fetchModelEndpoints(
   canonicalSlug: string,
-  apiKey?: string,
 ): Promise<any> {
-  if (!apiKey) {
-    throw new Error('OpenRouter API key is not configured');
-  }
-
-  const endpoint = `https://openrouter.ai/api/v1/models/${canonicalSlug}/endpoints`;
+  const endpoint = `${API_BASE}/providers/openrouter/models/${encodeURIComponent(canonicalSlug)}/endpoints`;
 
   const response = await fetch(endpoint, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
   });
 
   if (!response.ok) {

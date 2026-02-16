@@ -2,7 +2,6 @@ import type { StyledPrompt } from '../../api/assetService';
 import type { ImageTaskBinding, ImageTaskInput, ReferenceImageRef } from '../types';
 
 export type GenerateRequestBody = {
-  api_key: string;
   provider: string;
   model: string;
   size?: string;
@@ -32,15 +31,13 @@ function refsToRequest(refs?: ReferenceImageRef[]): Array<{ asset_id: string; st
 }
 
 export function buildGenerateRequest(
-  input: ImageTaskInput,
-  apiKey: string
+  input: ImageTaskInput
 ): { url: string; body: GenerateRequestBody } {
   const { projectId, binding, recipe } = input;
   const qs = bindingToQuery(binding);
   const url = `/api/v1/assets/${projectId}/generate?${qs}`;
 
   const base: GenerateRequestBody = {
-    api_key: apiKey,
     provider: recipe.provider,
     model: recipe.model,
     size: recipe.size,

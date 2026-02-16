@@ -1,150 +1,45 @@
 import type { ToolCallMetadata } from '../../llm/requestTypes';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useSubAgentStore } from '../../store/subAgentStore';
 import type { ToolCallAutoApproveConfig } from '../../store/settingsStore';
-import { buildEditCards, applyValidationResults } from '../editCards';
-import { validate } from '../validation';
-import { normalizeToolCall } from '../normalizer';
-import type { RawToolCall, NormalizedToolCall } from '../types';
-import type { HandlerContext, Handler, HandlerOptions, StoreActions } from '../apply/types';
-import type {
-  ApplicationResult,
-  ToolCallDecisionMap,
-  ToolCallFailureType,
-  ToolCallStatus,
-} from '../types';
-import { getAutoApproveCategory } from '../schemas/schemaRegistry';
-import { CRUD_HANDLERS } from '../apply/handlers/CrudHandlers';
-import { PATCH_HANDLERS } from '../apply/handlers/PatchHandlers';
-import { REPLACE_HANDLERS } from '../apply/handlers/ReplaceHandlers';
-import { READ_HANDLERS } from '../apply/handlers/ReadHandlers';
-import { SUB_AGENT_HANDLERS } from '../apply/handlers/SubAgentHandlers';
-import { ToolCallBatchSharedState, ToolCallBatchStore } from './ToolCallBatchStore';
-import { ManuscriptBatch } from './manuscriptBatch';
-import { agentNameFromCallToolName, isCallToolName } from '../../subAgent/tools/SubAgentCallTools';
-import type { RunCaller } from '../../types/agentRuntime';
-import { runtimeOrchestrator } from '../../runtime';
+import type { ToolCallDecisionMap } from '../types';
+import {
+  isCrudTool,
+  isPatchTool,
+  isReadTool,
+  isReplaceTool,
+} from '../schemas/schemaRegistry';
 
-const HANDLERS: Record<string, Handler> = {
-  ...CRUD_HANDLERS,
-  ...PATCH_HANDLERS,
-  ...REPLACE_HANDLERS,
-  ...READ_HANDLERS,
-  ...SUB_AGENT_HANDLERS,
-};
 
 export interface ToolCallRunResult {
-  toolCalls: ToolCallMetadata[];
   status: 'pending_confirmation' | 'success' | 'error' | 'cancelled';
+  toolCalls: ToolCallMetadata[];
   error?: string;
   warning?: string;
 }
 
-function getFailureTypeFromResult(params: {
-  toolName: string;
-  result?: ApplicationResult;
-}): ToolCallFailureType | undefined {
-  const { toolName, result } = params;
-  if (!result || result.success) return undefined;
-
-  if (toolName.startsWith('patch_')) {
-    const successCount = (result.data as any)?.successCount;
-    const failureCount = (result.data as any)?.failureCount;
-    if (typeof successCount === 'number' && typeof failureCount === 'number') {
-      if (successCount > 0 && failureCount > 0) return 'partial';
-    }
+export function evaluateToolCallStatus(toolCalls: ToolCallMetadata[]): Omit<ToolCallRunResult, 'toolCalls'> {
+  const hasPending = toolCalls.some((toolCall) => toolCall.status === 'pending' || toolCall.status === 'running');
+  if (hasPending) {
+    return { status: 'pending_confirmation' };
   }
 
-  return 'execution';
-}
+  const hasAccepted = toolCalls.some((toolCall) => toolCall.status === 'accepted');
+  const hasFailed = toolCalls.some((toolCall) => toolCall.status === 'failed');
+  const hasRejected = toolCalls.some((toolCall) => toolCall.status === 'rejected');
 
-async function yieldToUI(): Promise<void> {
-  await new Promise<void>((resolve) => {
-    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-      window.requestAnimationFrame(() => resolve());
-      return;
-    }
-    setTimeout(resolve, 0);
-  });
-}
-
-function createBaseStore(): StoreActions {
-  const store = useUnifiedObjectStore.getState();
-  return {
-    getObject: (id) => store.getObject(id),
-    fetchObject: (type, id) => store.fetchObject(type, id),
-    listObjects: (type, projectId) => store.listObjects(type, projectId),
-    createObject: (type, projectId, data, language, metadata, userRequest) =>
-      store.createObject(type, projectId, data, language, metadata, userRequest),
-    updateObject: (type, id, request) => store.updateObject(type, id, request),
-    deleteObject: (type, id) => store.deleteObject(type, id),
-  };
-}
-
-function normalizeStatus(status: ToolCallMetadata['status']): ToolCallStatus {
-  return (status ?? 'pending') as ToolCallStatus;
-}
-
-function isValidationFailure(status: ToolCallStatus, failureType?: ToolCallFailureType): boolean {
-  return status === 'failed' && failureType === 'validation';
-}
-
-function isDecisionEligibleStatus(status: ToolCallStatus): boolean {
-  return status === 'pending' || status === 'validating';
-}
-
-function isDecisionProcessableStatus(status: ToolCallStatus): boolean {
-  return status === 'pending' || status === 'validating' || status === 'processing' || status === 'running';
-}
-
-function evaluateToolCallStatus(toolCalls: ToolCallMetadata[]): Omit<ToolCallRunResult, 'toolCalls'> {
-  const acceptedCount = toolCalls.filter((c) => normalizeStatus(c.status) === 'accepted').length;
-  const rejectedCount = toolCalls.filter((c) => normalizeStatus(c.status) === 'rejected').length;
-  const pendingCount = toolCalls.filter((c) => {
-    const status = normalizeStatus(c.status);
-    return status === 'pending' || status === 'validating' || status === 'processing' || status === 'running';
-  }).length;
-  const failedValidationCount = toolCalls.filter((c) => {
-    const status = normalizeStatus(c.status);
-    return isValidationFailure(status, c.failureType);
-  }).length;
-  const failedApplyCount = toolCalls.filter((c) => {
-    const status = normalizeStatus(c.status);
-    return status === 'failed' && c.failureType !== 'validation';
-  }).length;
-
-  if (pendingCount > 0) {
-    return {
-      status: 'pending_confirmation',
-      error: failedApplyCount > 0 ? `${failedApplyCount} action(s) failed to apply.` : undefined,
-      warning: failedValidationCount > 0 ? `${failedValidationCount} action(s) failed validation.` : undefined,
-    };
+  if (hasFailed && !hasAccepted) {
+    const firstError = toolCalls.find((toolCall) => toolCall.status === 'failed')?.reason || 'Tool execution failed';
+    return { status: 'error', error: firstError };
   }
-
-  if (acceptedCount === 0 && failedApplyCount === 0 && rejectedCount > 0 && failedValidationCount === 0) {
+  if (hasAccepted && (hasFailed || hasRejected)) {
+    return { status: 'success', warning: 'Some actions were not applied' };
+  }
+  if (hasAccepted) {
+    return { status: 'success' };
+  }
+  if (hasRejected) {
     return { status: 'cancelled' };
   }
-
-  if (failedApplyCount > 0) {
-    return {
-      status: 'error',
-      error: `${failedApplyCount} action(s) failed to apply.`,
-      warning: failedValidationCount > 0 ? `${failedValidationCount} action(s) failed validation.` : undefined,
-    };
-  }
-
-  if (failedValidationCount > 0) {
-    return {
-      status: acceptedCount > 0 ? 'success' : rejectedCount > 0 ? 'cancelled' : 'success',
-      warning: `${failedValidationCount} action(s) failed validation.`,
-    };
-  }
-
-  if (acceptedCount === 0) {
-    return { status: 'cancelled' };
-  }
-
-  return { status: 'success' };
+  return { status: 'error', error: 'No applicable actions found' };
 }
 
 export function markToolCallsRunning(params: {
@@ -152,378 +47,17 @@ export function markToolCallsRunning(params: {
   decisions: ToolCallDecisionMap;
 }): ToolCallMetadata[] {
   const { toolCalls, decisions } = params;
-
   return toolCalls.map((toolCall) => {
-    const status = normalizeStatus(toolCall.status);
     const decision = decisions[toolCall.id];
-
-    if (decision !== 'accept') return toolCall;
-    if (isValidationFailure(status, toolCall.failureType)) return toolCall;
-    if (!isDecisionEligibleStatus(status)) return toolCall;
-
-    return {
-      ...toolCall,
-      status: isCallToolName(toolCall.tool_name) ? 'running' : 'processing',
-      reason: undefined,
-      failureType: undefined,
-    };
-  });
-}
-
-async function applyToolCall(params: {
-  toolCall: RawToolCall;
-  context: Omit<HandlerContext, 'store' | 'callId'>;
-  store: ToolCallBatchStore;
-  manuscriptBatch: ManuscriptBatch;
-}): Promise<ApplicationResult> {
-  const { toolCall, context, store, manuscriptBatch } = params;
-  const normalized = normalizeToolCall(toolCall);
-  const handlerContext: HandlerContext = { ...context, callId: normalized.id, store, options: context.options };
-
-  try {
-    if (normalized.toolName === 'patch_manuscript') {
-      return manuscriptBatch.applyPatch({
-        callId: normalized.id,
-        args: normalized.arguments,
-        store,
-        language: context.language,
-        options: context.options,
-      });
+    if (toolCall.status !== 'pending') return toolCall;
+    if (decision === 'accept') {
+      return { ...toolCall, status: 'running' };
     }
-
-    if (normalized.toolName === 'replace_manuscript') {
-      return manuscriptBatch.applyReplace({
-        callId: normalized.id,
-        args: normalized.arguments,
-        store,
-        language: context.language,
-        options: context.options,
-      });
-    }
-
-    if (isCallToolName(normalized.toolName)) {
-      const agentName = agentNameFromCallToolName(normalized.toolName);
-      if (!agentName) {
-        return {
-          success: false,
-          message: 'Invalid Sub Agent tool name',
-          error: `Invalid Sub Agent tool name: ${normalized.toolName}`,
-        };
-      }
-
-      const caller: RunCaller | undefined = context.options?.parentSubRunId ? 'subAgent' : context.runCaller;
-      if (!caller) {
-        return {
-          success: false,
-          message: 'Missing runCaller for Sub Agent call',
-          error: 'Missing runCaller for Sub Agent call',
-        };
-      }
-
-      const agentId = context.options?.agentId;
-      if (!agentId) {
-        return {
-          success: false,
-          message: 'Missing agentId for Sub Agent call',
-          error: 'Missing agentId for Sub Agent call',
-        };
-      }
-
-      const parentRunId = context.options?.parentSubRunId;
-      const parentRunMessageId = context.options?.parentSubMessageId;
-
-      if (!parentRunId || !parentRunMessageId) {
-        return {
-          success: false,
-          message: 'Missing parent context for Sub Agent call',
-          error: 'Missing parent run context for Sub Agent call',
-        };
-      }
-
-      const input = (normalized.arguments as any).input;
-      if (typeof input !== 'string' || !input.trim()) {
-        return {
-          success: false,
-          message: 'Invalid input for Sub Agent call',
-          error: 'call_* tools require a non-empty string field "input".',
-        };
-      }
-
-      await useSubAgentStore.getState().ensureLoaded();
-
-      const def = useSubAgentStore.getState().getByAgentName(agentName);
-      if (!def) {
-        return {
-          success: false,
-          message: 'Sub Agent not found',
-          error: `Sub Agent not found: ${agentName}`,
-        };
-      }
-
-      if (!def.enabled) {
-        return {
-          success: false,
-          message: 'Sub Agent is disabled',
-          error: `Sub Agent is disabled: ${agentName}`,
-        };
-      }
-
-      if (!def.allowed_invocation_modes.includes(caller)) {
-        return {
-          success: false,
-          message: 'Sub Agent invocation not allowed',
-          error: `Sub Agent is not allowed from caller: ${caller}`,
-        };
-      }
-
-      const { output } = await runtimeOrchestrator.invokeChildRun({
-        projectId: context.projectId,
-        agentId,
-        language: context.language,
-        inputText: input,
-        parentRunId,
-        parentRunMessageId,
-        parentRunToolCallId: normalized.id,
-        subAgentId: def.id,
-        caller,
-      });
-      return { success: true, message: output, data: { subAgentId: def.id, agentName } };
-    }
-
-    const handler = HANDLERS[normalized.toolName];
-    if (!handler) {
-      return {
-        success: false,
-        message: 'Unknown function',
-        error: `Unsupported function: ${normalized.toolName}`,
-      };
-    }
-
-    return await handler(normalized.arguments, handlerContext);
-  } catch (error) {
-    console.error(`Error executing ${normalized.toolName}:`, error);
-    return {
-      success: false,
-      message: `Error executing ${normalized.toolName}`,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
-export async function stageToolCalls(params: {
-  projectId: string;
-  language: string;
-  toolCalls: ToolCallMetadata[];
-  allowedToolNames?: string[];
-}): Promise<ToolCallRunResult> {
-  const { projectId, language, toolCalls, allowedToolNames } = params;
-
-  if (!toolCalls.length) {
-    return {
-      toolCalls: [],
-      status: 'success',
-      warning: 'AI response did not include any applicable actions.',
-      error: undefined,
-    };
-  }
-
-  const rawCalls: RawToolCall[] = toolCalls.map((toolCall) => ({
-    id: toolCall.id,
-    tool_name: toolCall.tool_name,
-    arguments: toolCall.arguments,
-  }));
-
-  const validatingCards = buildEditCards(rawCalls, { initialStatus: 'validating' });
-  const normalized: NormalizedToolCall[] = rawCalls.map((rawCall) => normalizeToolCall(rawCall));
-  const validationResults = await validate(normalized, { projectId, language, allowedToolNames });
-  const finalCards = applyValidationResults(validatingCards, validationResults);
-
-  const cardById = new Map(finalCards.map((card) => [card.id, card]));
-  const stagedToolCalls = toolCalls.map((toolCall) => {
-    const card = cardById.get(toolCall.id);
-    if (!card) return toolCall;
-
-    return {
-      ...toolCall,
-      status: card.toolCall.status,
-      reason: card.toolCall.reason,
-      failureType: card.toolCall.failureType,
-      result: undefined,
-      acceptedAt: undefined,
-    };
-  });
-
-  const evaluated = evaluateToolCallStatus(stagedToolCalls);
-  return {
-    toolCalls: stagedToolCalls,
-    status: evaluated.status,
-    error: evaluated.error,
-    warning: evaluated.warning,
-  };
-}
-
-export async function applyToolCalls(params: {
-  projectId: string;
-  language: string;
-  toolCalls: ToolCallMetadata[];
-  decisions: ToolCallDecisionMap;
-  options: HandlerOptions;
-  runCaller?: RunCaller;
-}): Promise<ToolCallRunResult> {
-  const { projectId, language, toolCalls, decisions, options, runCaller } = params;
-
-  if (!toolCalls.length) {
-    return { toolCalls: [], status: 'success' };
-  }
-
-  const hasAnyDecision = toolCalls.some((toolCall) => {
-    const decision = decisions[toolCall.id];
-    if (!decision) return false;
-
-    const status = normalizeStatus(toolCall.status);
-    if (isValidationFailure(status, toolCall.failureType)) return false;
-    return isDecisionProcessableStatus(status);
-  });
-
-  if (!hasAnyDecision) {
-    const evaluated = evaluateToolCallStatus(toolCalls);
-    return {
-      toolCalls,
-      status: evaluated.status,
-      error: evaluated.error,
-      warning: evaluated.warning,
-    };
-  }
-
-  const baseStore = createBaseStore();
-  const shared = new ToolCallBatchSharedState();
-  const flushStore = new ToolCallBatchStore({ baseStore, shared });
-  const manuscriptBatch = new ManuscriptBatch();
-
-  const nextToolCalls = await Promise.all(toolCalls.map(async (toolCall): Promise<ToolCallMetadata> => {
-    const normalized: NormalizedToolCall = normalizeToolCall({
-      id: toolCall.id,
-      tool_name: toolCall.tool_name,
-      arguments: toolCall.arguments,
-    });
-
-    const status = normalizeStatus(toolCall.status);
-
-    if (isValidationFailure(status, toolCall.failureType)) {
-      return toolCall;
-    }
-
-    if (!isDecisionProcessableStatus(status)) {
-      return toolCall;
-    }
-
-    const decision = decisions[toolCall.id];
-    if (!decision) {
-      return toolCall;
-    }
-
     if (decision === 'reject') {
-      return {
-        ...toolCall,
-        status: 'rejected',
-        reason: 'User rejected',
-        failureType: undefined,
-      };
+      return { ...toolCall, status: 'rejected', reason: toolCall.reason ?? 'User rejected' };
     }
-
-    const rawToolCall: RawToolCall = {
-      id: normalized.id,
-      tool_name: normalized.toolName,
-      arguments: normalized.arguments,
-    };
-
-    try {
-      const callStore = new ToolCallBatchStore({ baseStore, shared });
-      callStore.beginCall(rawToolCall.id);
-      const result = await applyToolCall({
-        toolCall: rawToolCall,
-        context: { projectId, language, options, runCaller },
-        store: callStore,
-        manuscriptBatch,
-      });
-      callStore.endCall();
-
-      if (result.success) {
-        return {
-          ...toolCall,
-          status: 'accepted',
-          reason: undefined,
-          failureType: undefined,
-          result,
-          acceptedAt: new Date(),
-        };
-      }
-
-      return {
-        ...toolCall,
-        status: 'failed',
-        failureType: getFailureTypeFromResult({ toolName: normalized.toolName, result }),
-        reason: result.error || result.message,
-        result,
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      return {
-        ...toolCall,
-        status: 'failed',
-        failureType: 'execution',
-        reason: errorMessage,
-      };
-    }
-  }));
-
-  await manuscriptBatch.stageAll({ store: flushStore, yieldToUI });
-  const flushResults = await flushStore.flush(yieldToUI);
-
-  const finalizedToolCalls: ToolCallMetadata[] = flushResults.size === 0
-    ? nextToolCalls
-    : nextToolCalls.map((toolCall): ToolCallMetadata => {
-      const status = normalizeStatus(toolCall.status);
-      if (status !== 'accepted') return toolCall;
-
-      const touched = flushStore.getUpdateKeysForCall(toolCall.id);
-      if (touched.size === 0) return toolCall;
-
-      for (const key of touched) {
-        const flushStatus = flushResults.get(key);
-        if (!flushStatus) {
-          return {
-            ...toolCall,
-            status: 'failed' as const,
-            failureType: 'execution' as const,
-            reason: 'Batched apply failed: missing flush result',
-            result: undefined,
-            acceptedAt: undefined,
-          };
-        }
-
-        if (!flushStatus.success) {
-          return {
-            ...toolCall,
-            status: 'failed' as const,
-            failureType: 'execution' as const,
-            reason: flushStatus.reason,
-            result: undefined,
-            acceptedAt: undefined,
-          };
-        }
-      }
-
-      return toolCall;
-    });
-
-  const evaluated = evaluateToolCallStatus(finalizedToolCalls);
-  return {
-    toolCalls: finalizedToolCalls,
-    status: evaluated.status,
-    error: evaluated.error,
-    warning: evaluated.warning,
-  };
+    return toolCall;
+  });
 }
 
 export function rejectAllToolCalls(params: {
@@ -531,70 +65,53 @@ export function rejectAllToolCalls(params: {
   reason?: string;
 }): ToolCallRunResult {
   const { toolCalls, reason } = params;
-
-  if (!toolCalls.length) {
-    return { toolCalls: [], status: 'success' };
-  }
-
   const nextToolCalls = toolCalls.map((toolCall) => {
-    const status = normalizeStatus(toolCall.status);
-    if (!isDecisionEligibleStatus(status)) {
-      return toolCall;
+    if (toolCall.status === 'pending' || toolCall.status === 'running') {
+      return {
+        ...toolCall,
+        status: 'rejected' as const,
+        reason: reason ?? toolCall.reason ?? 'User rejected',
+      };
     }
-
-    return {
-      ...toolCall,
-      status: 'rejected' as const,
-      reason: reason ?? 'User rejected all pending actions',
-      failureType: undefined,
-    };
+    return toolCall;
   });
-
-  const evaluated = evaluateToolCallStatus(nextToolCalls);
   return {
+    ...evaluateToolCallStatus(nextToolCalls),
     toolCalls: nextToolCalls,
-    status: evaluated.status,
-    error: evaluated.error,
-    warning: evaluated.warning,
   };
 }
 
+function toAutoApproveCategory(toolName: string): keyof ToolCallAutoApproveConfig | null {
+  if (toolName.startsWith('call_')) return 'subAgent';
+  if (toolName === 'rag_search' || toolName === 'keyword_search') return 'search';
+  if (isReadTool(toolName)) return 'read';
+  if (isCrudTool(toolName)) return toolName.startsWith('create_') ? 'create' : 'delete';
+  if (isPatchTool(toolName)) return 'patch';
+  if (isReplaceTool(toolName)) return 'replace';
+  return null;
+}
+
 /**
- * Build auto-approve decisions for staged tool calls based on user config.
- * Only tool calls in 'pending' or 'validating' status are eligible.
- * Tool calls that failed validation are never auto-approved.
+ * All-or-none auto approve policy:
+ * - If any pending call is not approved by settings, returns null.
+ * - Otherwise returns accept decisions for all pending calls.
  */
 export function buildAutoApproveDecisions(params: {
   toolCalls: ToolCallMetadata[];
-  config: ToolCallAutoApproveConfig;
-}): {
-  decisions: ToolCallDecisionMap;
-  allAutoApproved: boolean;
-} {
-  const { toolCalls, config } = params;
+  autoApprove: ToolCallAutoApproveConfig;
+}): ToolCallDecisionMap | null {
+  const { toolCalls, autoApprove } = params;
+  const pending = toolCalls.filter((toolCall) => toolCall.status === 'pending');
+  if (pending.length === 0) return null;
+
   const decisions: ToolCallDecisionMap = {};
-  let hasAnyPending = false;
-  let allAutoApproved = true;
-
-  for (const toolCall of toolCalls) {
-    const status = normalizeStatus(toolCall.status);
-
-    if (!isDecisionEligibleStatus(status)) continue;
-    if (isValidationFailure(status, toolCall.failureType)) continue;
-
-    hasAnyPending = true;
-
-    const category = getAutoApproveCategory(toolCall.tool_name);
-    if (category && config[category]) {
-      decisions[toolCall.id] = 'accept';
-    } else {
-      allAutoApproved = false;
+  for (const toolCall of pending) {
+    const category = toAutoApproveCategory(toolCall.tool_name);
+    if (!category || !autoApprove[category]) {
+      return null;
     }
+    decisions[toolCall.id] = 'accept';
   }
-
-  if (!hasAnyPending) {
-    allAutoApproved = false;
-  }
-
-  return { decisions, allAutoApproved };
+  return decisions;
 }
+

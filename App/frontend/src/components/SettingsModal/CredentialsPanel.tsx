@@ -6,20 +6,30 @@ import './CredentialsPanel.css';
 
 interface CredentialsPanelProps {
   credentials: ProviderCredentials;
+  storedProviders?: string[];
+  isSyncing?: boolean;
   onChange: (credentials: ProviderCredentials) => void;
 }
 
 const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
   credentials,
+  storedProviders = [],
+  isSyncing = false,
   onChange,
 }) => {
   const { t } = useTranslation();
+  const storedSet = new Set(storedProviders);
 
   return (
     <div className="credentials-panel">
       <div className="panel-header">
         <h3>{t('settings.credentials.title')}</h3>
         <p className="panel-description">{t('settings.credentials.description')}</p>
+        <p className="panel-description">
+          {isSyncing
+            ? 'Syncing credential changes...'
+            : `Stored providers: ${storedProviders.length > 0 ? storedProviders.join(', ') : 'none'}`}
+        </p>
       </div>
 
       {/* OpenAI */}
@@ -27,6 +37,7 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
         <div className="credential-header">
           <div className="credential-icon"><OpenAI size="md" /></div>
           <h3>{t('settings.credentials.openai.title')}</h3>
+          {storedSet.has('openai') && <span className="field-hint">Saved</span>}
         </div>
         <div className="credential-body">
           <div className="form-field">
@@ -58,6 +69,7 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
         <div className="credential-header">
           <div className="credential-icon"><Gemini size="md" /></div>
           <h3>{t('settings.credentials.gemini.title')}</h3>
+          {storedSet.has('gemini') && <span className="field-hint">Saved</span>}
         </div>
         <div className="credential-body">
           <div className="form-field">
@@ -89,6 +101,7 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
         <div className="credential-header">
           <div className="credential-icon"><Claude size="md" /></div>
           <h3>{t('settings.credentials.claude.title')}</h3>
+          {storedSet.has('claude') && <span className="field-hint">Saved</span>}
         </div>
         <div className="credential-body">
           <div className="form-field">
@@ -120,6 +133,7 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
         <div className="credential-header">
           <div className="credential-icon"><OpenRouter size="md" /></div>
           <h3>{t('settings.credentials.openrouter.title')}</h3>
+          {storedSet.has('openrouter') && <span className="field-hint">Saved</span>}
         </div>
         <div className="credential-body">
           <div className="form-field">
@@ -151,6 +165,7 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
         <div className="credential-header">
           <div className="credential-icon"><XAI size="md" /></div>
           <h3>{t('settings.credentials.xai.title')}</h3>
+          {storedSet.has('xai') && <span className="field-hint">Saved</span>}
         </div>
         <div className="credential-body">
           <div className="form-field">
@@ -182,6 +197,7 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
         <div className="credential-header">
           <div className="credential-icon"><NovelAI size="md" /></div>
           <h3>{t('settings.credentials.novelai.title')}</h3>
+          {storedSet.has('novelai') && <span className="field-hint">Saved</span>}
         </div>
         <div className="credential-body">
           <div className="form-field">
@@ -208,6 +224,7 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
         <div className="credential-header">
           <div className="credential-icon"><CustomProvider size="md" /></div>
           <h3>{t('settings.credentials.custom.title')}</h3>
+          {storedSet.has('custom') && <span className="field-hint">Saved</span>}
         </div>
         <div className="credential-body">
           <div className="form-field">

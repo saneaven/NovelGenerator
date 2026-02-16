@@ -19,7 +19,6 @@ import type {
   LLMTaskModeType,
 } from './types';
 import { LLMTaskMode } from './types';
-import { useCredentialsStore } from '../store/credentialsStore';
 import { buildConversationBlocks } from './conversation/buildConversationBlocks';
 
 const MODE_TO_TASK_TYPE: Record<LLMTaskModeType, AITaskType> = {
@@ -71,13 +70,11 @@ export class LLMTask {
 
     try {
       const settings = settingsStore.getSettings();
-      const credentialsStore = useCredentialsStore.getState();
 
       const taskType = MODE_TO_TASK_TYPE[this.config.mode];
       const taskConfig = settings.task_configs[taskType];
 
       const provider = this.config.provider ?? taskConfig.provider;
-      const providerConfig = this.config.providerConfig ?? credentialsStore.getProviderConfigForBackend(provider);
       const model = this.config.model ?? taskConfig.model;
       const temperature = this.config.temperature ?? taskConfig.temperature;
       const max_tokens = taskConfig.max_output_tokens;
@@ -217,7 +214,6 @@ export class LLMTask {
       for await (const event of streamLLM(
         messages,
         provider,
-        providerConfig,
         {
           signal: this.config.abortController.signal,
           tools,

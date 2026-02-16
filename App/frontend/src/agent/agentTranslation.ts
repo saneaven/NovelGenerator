@@ -1,5 +1,4 @@
 import { useSettingsStore } from '../store/settingsStore';
-import { useCredentialsStore } from '../store/credentialsStore';
 import { useLLMSessionStore } from '../store/llmSessionStore';
 import { startLLMSession } from '../llmSession';
 import {
@@ -36,11 +35,9 @@ export async function runAgentTranslation(
   onSessionCreated?: (sessionId: string) => void,
 ): Promise<string> {
   const settingsStore = useSettingsStore.getState();
-  const credentialsStore = useCredentialsStore.getState();
   const sessionStore = useLLMSessionStore.getState();
 
   const translationConfig = settingsStore.getTaskConfig('translation');
-  const providerConfig = credentialsStore.getProviderConfigForBackend(translationConfig.provider);
 
   const promptContext: AgentTranslationPromptContext = {
     projectId: input.projectId,
@@ -61,7 +58,6 @@ export async function runAgentTranslation(
     projectId: input.projectId,
     promptContext,
     provider: translationConfig.provider,
-    providerConfig,
     model: translationConfig.model,
     temperature: translationConfig.temperature,
     thinking_mode: translationConfig.advanced.thinking_mode as any,

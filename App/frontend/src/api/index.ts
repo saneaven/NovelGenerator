@@ -8,7 +8,7 @@ export { authService } from './authService';
 export { projectService } from './projectService';
 export { agentService } from './agentService';
 export { runService } from './runService';
-export { timelineService } from './timelineService';
+export { runExecutionService } from './runExecutionService';
 export { novelService } from './novelService';
 export { assetService } from './assetService';
 export { presetService } from './presetService';

@@ -1,28 +1,30 @@
 import type { MemoryContext } from './context/types';
 
-export type RunKind = 'root' | 'child';
+export type RunType = 'agent' | 'subAgent' | 'journey';
 export type RunStatus = 'running' | 'waiting' | 'paused' | 'completed' | 'error' | 'cancelled';
-export type RunCaller = 'planMode' | 'agentMode' | 'subAgent';
 export type RunMode = 'planMode' | 'agentMode';
 export type RunSurface = 'story-object' | 'outline-manager' | 'novel-editor' | 'config';
-export type RunMessageRole = 'user' | 'assistant' | 'system';
+export type RunMessageRole = 'user' | 'assistant' | 'system' | 'tool';
 export type RunToolCallStatus = 'pending' | 'running' | 'accepted' | 'rejected' | 'failed';
 export type RunToolCallFailureType = 'validation' | 'execution' | 'partial';
+export type JourneyKind = 'aiEdit' | 'translation' | 'imagePrompt';
 
 export interface Run {
   id: string;
   projectId: string;
   agentId: string;
-  runKind: RunKind;
-  caller: RunCaller;
+  runType: RunType;
   status: RunStatus;
   language: string;
   inputText: string;
+  inputPayload?: Record<string, unknown>;
   finalOutput?: string;
   error?: string;
   runMode?: RunMode;
   surface?: RunSurface;
   contextObjectIds: string[];
+  journeyKind?: JourneyKind;
+  journeyTargetIds?: string[];
   parentRunId?: string;
   parentRunMessageId?: string;
   parentRunToolCallId?: string;
@@ -76,7 +78,6 @@ export interface RuntimeOrchestrator {
     surface: RunSurface;
     userInput: string;
     language: string;
-    caller?: Extract<RunCaller, 'planMode' | 'agentMode'>;
     contextObjectIds?: string[];
     signal?: AbortSignal;
     onMemoryStageChange?: (stage: import('./context/types').MemoryPreflightStage) => void;
@@ -98,13 +99,13 @@ export interface RuntimeOrchestrator {
     parentRunMessageId: string;
     parentRunToolCallId: string;
     subAgentId: string;
-    caller?: RunCaller;
   }): Promise<{ runId: string; output: string }>;
 
   applyRunToolCallDecisions(input: {
     runId: string;
     runMessageId: string;
     decisions: Record<string, 'accept' | 'reject'>;
+    options?: Record<string, unknown>;
   }): Promise<void>;
 
   pauseRun(runId: string): Promise<void>;

@@ -138,10 +138,6 @@ const ProfilePanel: React.FC = () => {
       return;
     }
 
-    if (!window.confirm(t('settings.profile.passwordChangeBackupConfirm'))) {
-      return;
-    }
-
     try {
       await changePassword(currentPassword, newPassword);
       setPasswordSuccess(t('settings.profile.passwordChanged'));
@@ -295,8 +291,6 @@ const ProfilePanel: React.FC = () => {
             disabled={isLoading}
           />
         </div>
-
-        <p className="field-hint">{t('settings.profile.passwordChangeBackupWarning')}</p>
 
         {passwordError && <div className="form-error">{passwordError}</div>}
         {passwordSuccess && <div className="form-success">{passwordSuccess}</div>}

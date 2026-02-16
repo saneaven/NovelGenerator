@@ -276,8 +276,6 @@
       "passwordChanged": "Password changed successfully",
       "passwordChangeFailed": "Failed to change password",
       "changingPassword": "Changing...",
-      "passwordChangeBackupWarning": "Changing your password will delete your server backup of API keys.",
-      "passwordChangeBackupConfirm": "Changing your password will delete your server backup of API keys. Continue?",
       "storage": "Storage",
       "storageUsed": "Used",
       "storageRemaining": "Remaining",
@@ -412,24 +410,6 @@
         "502": "Bad Gateway",
         "503": "Service Unavailable",
         "504": "Gateway Timeout"
-      },
-      "credentialsBackup": {
-        "title": "E2E Credentials Backup",
-        "backupTitle": "E2E Credentials Backup",
-        "backupHint": "Back up API keys to the server as an end-to-end encrypted blob (the server cannot decrypt and never auto-uses the keys). Restore requires your account password.",
-        "refreshStatus": "Refresh status",
-        "refreshBackupStatus": "Refresh status",
-        "statusHasBackup": "Backup found on server",
-        "statusNoBackup": "No backup on server",
-        "backupActionTitle": "Back up to server",
-        "backupActionDescription": "Enter your account password to encrypt and upload your current API keys.",
-        "backupActionConfirm": "Back up",
-        "restoreActionTitle": "Restore from server",
-        "restoreActionDescription": "Enter your account password to download and decrypt the backup into this browser.",
-        "restoreActionConfirm": "Restore",
-        "deleteActionTitle": "Delete server backup",
-        "deleteActionDescription": "Enter your account password to delete the server backup.",
-        "deleteActionConfirm": "Delete backup"
       },
       "nativeOutput": {
         "title": "Native Output Mode",

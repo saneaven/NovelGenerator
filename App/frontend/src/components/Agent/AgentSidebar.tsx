@@ -50,7 +50,7 @@ function hasPendingRunToolCallsForAgent(params: {
     if (!run) continue;
     if (run.projectId !== projectId) continue;
     if (run.agentId !== agentId) continue;
-    if (run.runKind !== 'root') continue;
+    if (run.runType !== 'agent') continue;
 
     const messages = runMessagesByRunId[run.id] ?? [];
     for (const message of messages) {
@@ -120,7 +120,7 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
 
     for (const run of Object.values(runsById)) {
       if (!run) continue;
-      if (run.runKind !== 'child') continue;
+      if (run.runType !== 'subAgent') continue;
       if (!agents.some((agent) => agent.id === run.agentId)) continue;
       if (!BLOCKING_SUB_AGENT_STATUSES.has(run.status)) continue;
       result[run.agentId] = true;
@@ -231,7 +231,13 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
 
     // Find the latest root run for this agent and get its last message
     const rootRuns = Object.values(runsById)
-      .filter((r): r is Run => Boolean(r) && r.projectId === projectId && r.agentId === agent.id && r.runKind === 'root')
+      .flatMap((value) => {
+        if (!value) return [];
+        if (value.projectId !== projectId) return [];
+        if (value.agentId !== agent.id) return [];
+        if (value.runType !== 'agent') return [];
+        return [value];
+      })
       .sort((a, b) => {
         const aSeq = a.rootRunSeq ?? Number.MAX_SAFE_INTEGER;
         const bSeq = b.rootRunSeq ?? Number.MAX_SAFE_INTEGER;

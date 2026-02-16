@@ -8,7 +8,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from ..models.requests import ProviderConfig
 from .agents import ToolCallSchema
 
 
@@ -38,7 +37,6 @@ class MemoryArchiveRequest(BaseModel):
     archive_until_message_id: UUID
     summary_text: str = Field(..., min_length=1)
     archived_messages: List[ArchivedMessage] = Field(default_factory=list)
-    embedding_config: ProviderConfig = Field(default_factory=ProviderConfig)
 
 
 class MemoryArchiveResponse(BaseModel):
@@ -53,7 +51,6 @@ class MemorySearchRequest(BaseModel):
     language: str = Field(default="English", min_length=1)
     queries: List[str] = Field(default_factory=list)
     top_k_per_query: int = Field(default=20, ge=1, le=200)
-    config: ProviderConfig = Field(default_factory=ProviderConfig)
 
 
 class MemoryRelevantChat(BaseModel):

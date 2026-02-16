@@ -1,5 +1,5 @@
-{{!-- This fragment provides a list of all project objects with their IDs for use with read functions --}}
-{{!-- Usage: {{prompt "common/objectIndex"}} --}}
+{# This fragment provides a list of all project objects with their IDs for use with read functions #}
+{# Usage: {% include "fragment:common/objectIndex" %} #}
 
 ## Available Objects Reference
 
@@ -7,23 +7,23 @@ Use read functions to get full content of any object listed below.
 
 ### Story Objects
 
-{{#each project.objects}}
+{% for this in project.objects %}
 - [{{ this.type }}] {{ this.name }}: {{ this.description }} (id: {{ this.id }})
-{{/each}}
+{% endfor %}
 
-{{#if project.outline}}
+{% if project.outline %}
 ### Outline & Manuscripts
 <outline-structure>
-{{#each project.outline.outlines}}
+{% for this in project.outline.outlines %}
   <outline id="{{ this.id }}" name="{{ this.name }}">
-{{#each this.acts}}
+{% for this in this.acts %}
     <act id="{{ this.id }}" name="{{ this.name }}">
-{{#each this.chapters}}
+{% for this in this.chapters %}
       <chapter id="{{ this.id }}" name="{{ this.name }}" manuscript-id="{{ this.manuscriptId }}" />
-{{/each}}
+{% endfor %}
     </act>
-{{/each}}
+{% endfor %}
   </outline>
-{{/each}}
+{% endfor %}
 </outline-structure>
-{{/if}}
+{% endif %}

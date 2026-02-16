@@ -276,8 +276,6 @@
       "passwordChanged": "비밀번호가 성공적으로 변경되었습니다",
       "passwordChangeFailed": "비밀번호 변경에 실패했습니다",
       "changingPassword": "변경 중...",
-      "passwordChangeBackupWarning": "비밀번호를 변경하면 서버에 백업된 API 키가 삭제됩니다.",
-      "passwordChangeBackupConfirm": "비밀번호를 변경하면 서버에 백업된 API 키가 삭제됩니다. 계속하시겠습니까?",
       "storage": "저장소",
       "storageUsed": "사용량",
       "storageRemaining": "남은 용량",
@@ -412,24 +410,6 @@
         "502": "잘못된 게이트웨이",
         "503": "서비스 사용 불가",
         "504": "게이트웨이 시간 초과"
-      },
-      "credentialsBackup": {
-        "title": "E2E 자격 증명 백업",
-        "backupTitle": "E2E 자격 증명 백업",
-        "backupHint": "API 키를 종단 간 암호화된 블롭으로 서버에 백업합니다 (서버는 복호화할 수 없고, 키를 자동으로 주입/사용하지도 않습니다). 복원에는 계정 비밀번호가 필요합니다.",
-        "refreshStatus": "상태 새로고침",
-        "refreshBackupStatus": "상태 새로고침",
-        "statusHasBackup": "서버에 백업이 있습니다",
-        "statusNoBackup": "서버에 백업이 없습니다",
-        "backupActionTitle": "서버에 백업",
-        "backupActionDescription": "현재 API 키를 암호화하여 업로드하려면 계정 비밀번호를 입력하세요.",
-        "backupActionConfirm": "백업",
-        "restoreActionTitle": "서버에서 복원",
-        "restoreActionDescription": "백업을 다운로드하고 이 브라우저에서 복호화하려면 계정 비밀번호를 입력하세요.",
-        "restoreActionConfirm": "복원",
-        "deleteActionTitle": "서버 백업 삭제",
-        "deleteActionDescription": "서버 백업을 삭제하려면 계정 비밀번호를 입력하세요.",
-        "deleteActionConfirm": "백업 삭제"
       },
       "nativeOutput": {
         "title": "네이티브 출력 모드",

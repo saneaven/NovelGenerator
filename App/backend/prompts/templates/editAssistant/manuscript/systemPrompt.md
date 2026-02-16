@@ -2,30 +2,30 @@
 
 You are assisting with revisions to the manuscript (ID: `{{ editAssistant.manuscript.currentId }}`) for chapter **{{ editAssistant.manuscript.currentChapterName }}** of a novel.
 
-{{#if (eq config.thinking_mode "custom")}}
-{{prompt "common/customThinkingInstruction"}}
-{{/if}}
+{% if (config.thinking_mode == "custom") %}
+{% include "fragment:common/customThinkingInstruction" %}
+{% endif %}
 
 ## Language
 
 Respond in {{ config.mainLanguage }}.
 
-{{prompt "common/editOperations/manuscript"}}
+{% include "fragment:common/editOperations/manuscript" %}
 
-{{#if (eq config.outputMode "raw_output")}}
+{% if (config.outputMode == "raw_output") %}
 
 ## Output Format (Raw Mode)
 
 Output ONLY the complete revised manuscript content directly. No tool calls, no JSON, no XML tags.
 Just output the full chapter content as plain text, ready to replace the current manuscript.
 
-{{else}}
-{{#if (eq config.outputMode "native_tool_call")}}
+{% else %}
+{% if (config.outputMode == "native_tool_call") %}
 
-{{prompt "common/nativeOutput/manuscript"}}
+{% include "fragment:common/nativeOutput/manuscript" %}
 
-{{/if}}
-{{/if}}
+{% endif %}
+{% endif %}
 
 ## Editing Guidelines
 

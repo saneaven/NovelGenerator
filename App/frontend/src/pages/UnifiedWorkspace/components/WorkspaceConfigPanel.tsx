@@ -17,7 +17,6 @@ import {
 } from '../../../api/projectService';
 import { ragService, type RagProjectStatusResponse } from '../../../api/ragService';
 import { useErrorStore } from '../../../store/errorStore';
-import { useCredentialsStore } from '../../../store/credentialsStore';
 import { List, Trash, Refresh, Download } from '../../../components/icons';
 import './WorkspaceConfigPanel.css';
 
@@ -77,24 +76,9 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(precision)} ${units[unitIndex]}`;
 }
 
-function parseCustomAdditionalHeaders(raw: unknown): Record<string, string> | undefined {
-  if (typeof raw !== 'string' || !raw.trim()) return undefined;
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
-    const headers = Object.fromEntries(
-      Object.entries(parsed as Record<string, unknown>).filter(([, value]) => typeof value === 'string')
-    ) as Record<string, string>;
-    return Object.keys(headers).length > 0 ? headers : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }) => {
   const { t } = useTranslation();
   const { showError } = useErrorStore();
-  const credentials = useCredentialsStore((state) => state.credentials);
 
   const [policy, setPolicy] = useState<ImageCleanupPolicy>(() => loadPolicy(projectId));
   const [preview, setPreview] = useState<ImageCleanupPreviewResponse | null>(null);
@@ -389,30 +373,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         showError('RAG', 'Embedding profile is not configured. Set it in Settings > Search & Memory.');
         return;
       }
-
-      const provider = profile.provider;
-      const config: any = {};
-      if (provider === 'custom') {
-        config.api_key = credentials.custom?.apiKey || undefined;
-        config.base_url = credentials.custom?.baseUrl || undefined;
-        const additionalHeaders = parseCustomAdditionalHeaders(credentials.custom?.additionalHeadersJson);
-        if (additionalHeaders) {
-          config.additional_headers = additionalHeaders;
-        }
-      } else {
-        config.api_key = (credentials as any)[provider]?.apiKey || undefined;
-      }
-
-      if (!config.api_key) {
-        showError('RAG', `Missing API key for provider '${provider}' (Settings > Credentials).`);
-        return;
-      }
-      if (provider === 'custom' && !config.base_url) {
-        showError('RAG', 'Missing baseUrl for custom provider (Settings > Credentials).');
-        return;
-      }
-
-      const res = await ragService.reindex(projectId, { config });
+      const res = await ragService.reindex(projectId, {});
       setLastRagSummary(
         `Reindex complete: rebuilt ${res.rebuilt_sources}/${res.indexed_sources} (missing main_language: ${res.missing_main_language_sources}).`
       );
@@ -423,7 +384,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
     } finally {
       setIsRagReindexing(false);
     }
-  }, [credentials, loadRagStatus, projectId, ragStatus?.profile, showError]);
+  }, [loadRagStatus, projectId, ragStatus?.profile, showError]);
 
   return (
     <div className="workspace-config-panel">

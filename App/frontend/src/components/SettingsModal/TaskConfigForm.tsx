@@ -4,7 +4,6 @@ import type {
   TaskAIConfig,
   ProviderType,
   AITaskType,
-  ProviderCredentials,
   ThinkingConfig,
   ThinkingFormat,
   RequestFormat,
@@ -18,14 +17,12 @@ import { Warning, Settings, Advenced } from '../icons';
 interface TaskConfigFormProps {
   taskType: AITaskType;
   config: TaskAIConfig;
-  credentials: ProviderCredentials;
   onChange: (config: TaskAIConfig) => void;
 }
 
 const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   taskType,
   config,
-  credentials,
   onChange,
 }) => {
   const { t } = useTranslation();
@@ -247,7 +244,6 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
               request_format={config.provider === 'custom' ? customRequestFormat : undefined}
               currentModel={config.model}
               provider_preference={config.provider_preference}
-              credentials={credentials}
               onSelectModel={handleModelChange}
               onUpdateProviderPreference={(pref) =>
                 onChange({ ...config, provider_preference: pref })

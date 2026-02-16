@@ -3,14 +3,14 @@
 Manuscript ID: `{{ editAssistant.manuscript.currentId }}`
 Chapter: **{{ editAssistant.manuscript.currentChapterName }}**
 
-{{prompt "common/projectContext/filtered" editAssistant.manuscript.objectIds}}
+{% with params = [editAssistant.manuscript.objectIds] %}{% include "fragment:common/projectContext/filtered" %}{% endwith %}
 
 ## Current Chapter Content
 
 {{ editAssistant.manuscript.currentChapterManuscript }}
 
-{{#if input.userMessage}}
+{% if input.userMessage %}
 ## User Request
 
 {{ input.userMessage }}
-{{/if}}
+{% endif %}

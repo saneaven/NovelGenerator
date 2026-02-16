@@ -1,20 +1,19 @@
 Update the rolling memory summary using the previous summary and the new messages.
 
 <language>
-{{memorySummary.language}}
+{{ memorySummary.language }}
 </language>
 
 <previous_summary>
-{{memorySummary.previousSummary}}
+{{ memorySummary.previousSummary }}
 </previous_summary>
 
-<messages archive_until_message_id="{{memorySummary.archiveUntilMessageId}}">
-{{#each memorySummary.messages}}
-<message id="{{this.messageId}}" role="{{this.role}}" created_at="{{this.createdAt}}">
-{{this.content}}
+<messages archive_until_message_id="{{ memorySummary.archiveUntilMessageId }}">
+{% for this in memorySummary.messages %}
+<message id="{{ this.messageId }}" role="{{ this.role }}" created_at="{{ this.createdAt }}">
+{{ this.content }}
 </message>
-{{/each}}
+{% endfor %}
 </messages>
 
 Return the updated summary only.
-

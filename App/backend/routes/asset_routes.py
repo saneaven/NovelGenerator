@@ -41,6 +41,7 @@ from ..services.storage_service import storage_service
 from ..services.deletion_service import delete_assets_with_files
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.storage_quota_service import StorageQuotaExceededError, enforce_user_asset_quota
+from ..services.credential_service import CredentialServiceError, credential_service
 from ..image_providers.registry import ImageProviderRegistry
 from ..image_providers.base import ReferenceImageData
 from ..utils.object_type_aliases import normalize_object_type
@@ -154,15 +155,19 @@ async def list_image_providers():
 @router.post("/image-providers/{provider}/models", response_model=ImageModelsResponse)
 async def get_image_models(
     provider: str,
-    api_key: str = Form(...)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get available models for an image provider"""
     try:
-        provider_instance = ImageProviderRegistry.get_provider(provider, {"api_key": api_key})
+        provider_config = credential_service.get_provider_config(db, current_user.id, provider)
+        provider_instance = ImageProviderRegistry.get_provider(provider, provider_config)
         if not provider_instance.validate_config():
             raise HTTPException(status_code=400, detail="Invalid API key")
         models = await provider_instance.get_models()
         return ImageModelsResponse(data=models.get("data", []))
+    except CredentialServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -234,10 +239,8 @@ async def generate_image(
 
     try:
         # Get provider instance
-        provider = ImageProviderRegistry.get_provider(
-            request.provider,
-            {"api_key": request.api_key}
-        )
+        provider_cfg = credential_service.get_provider_config(db, current_user.id, request.provider)
+        provider = ImageProviderRegistry.get_provider(request.provider, provider_cfg)
 
         if not provider.validate_config():
             return ImageGenerationResponse(
@@ -434,6 +437,8 @@ async def generate_image(
 
     except HTTPException:
         raise
+    except CredentialServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

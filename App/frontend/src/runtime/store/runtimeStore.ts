@@ -15,7 +15,7 @@ interface RuntimeActions {
   removeRun: (runId: string) => void;
   patchRun: (runId: string, partial: Partial<Run>) => void;
   getRun: (runId: string) => Run | undefined;
-  listRuns: (filter?: { projectId?: string; agentId?: string; runKind?: Run['runKind'] }) => Run[];
+  listRuns: (filter?: { projectId?: string; agentId?: string; runType?: Run['runType'] }) => Run[];
   findLatestOpenRootRunId: (projectId: string, agentId: string) => string | undefined;
   findChildRuns: (parentRunId: string, parentRunMessageId?: string) => Run[];
   replaceRunMessages: (runId: string, messages: RunMessage[]) => void;
@@ -103,7 +103,7 @@ export const useRuntimeStore = create<RuntimeState & RuntimeActions>()(
         return runs.filter((run) => {
           if (filter.projectId && run.projectId !== filter.projectId) return false;
           if (filter.agentId && run.agentId !== filter.agentId) return false;
-          if (filter.runKind && run.runKind !== filter.runKind) return false;
+          if (filter.runType && run.runType !== filter.runType) return false;
           return true;
         });
       },
@@ -113,7 +113,7 @@ export const useRuntimeStore = create<RuntimeState & RuntimeActions>()(
         const candidates = runs.filter((run) => {
           if (run.projectId !== projectId) return false;
           if (run.agentId !== agentId) return false;
-          if (run.runKind !== 'root') return false;
+          if (run.runType !== 'agent') return false;
           return run.status !== 'completed' && run.status !== 'cancelled';
         });
         if (candidates.length === 0) return undefined;
@@ -130,7 +130,7 @@ export const useRuntimeStore = create<RuntimeState & RuntimeActions>()(
         const runs = Object.values(get().runsById).filter((run): run is Run => Boolean(run));
         return runs
           .filter((run) => {
-            if (run.runKind !== 'child') return false;
+            if (run.runType !== 'subAgent') return false;
             if (run.parentRunId !== parentRunId) return false;
             if (parentRunMessageId && run.parentRunMessageId !== parentRunMessageId) return false;
             return true;

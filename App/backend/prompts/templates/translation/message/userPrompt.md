@@ -2,16 +2,16 @@
 
 Translate the message below from **{{ translation.sourceLanguage }}** to **{{ translation.targetLanguage }}**.
 
-{{#if input.userMessage}}
+{% if input.userMessage %}
 ## Additional Instructions
 {{ input.userMessage }}
-{{/if}}
+{% endif %}
 
 ## Message
 Content (translate this):
-{{#each translation.messages}}
+{% for this in translation.messages %}
 {{ this.content }}
-{{/each}}
+{% endfor %}
 
 ## Requirements
 - Output ONLY the translated text directly.

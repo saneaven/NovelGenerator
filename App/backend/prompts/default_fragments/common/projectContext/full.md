@@ -6,70 +6,70 @@
 - **Logline**: {{ project.basicInfo.logline }}
 - **Genre**: {{ project.basicInfo.genre }}
 
-{{#if (hasItems (filterByType project.objects "character"))}}
+{% if (((project.objects|filter_by_type("character")))|length > 0) %}
 ### Characters
 
-{{#each (filterByType project.objects "character")}}
+{% for this in (project.objects|filter_by_type("character")) %}
 #### {{ this.name }} (id: {{ this.id }})
 
 {{ this.content }}
 
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
-{{#if (hasItems (filterByType project.objects "organization"))}}
+{% if (((project.objects|filter_by_type("organization")))|length > 0) %}
 ### Organizations
 
-{{#each (filterByType project.objects "organization")}}
+{% for this in (project.objects|filter_by_type("organization")) %}
 #### {{ this.name }} (id: {{ this.id }})
 
 {{ this.content }}
 
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
-{{#if (hasItems (filterByType project.objects "location"))}}
+{% if (((project.objects|filter_by_type("location")))|length > 0) %}
 ### Locations
 
-{{#each (filterByType project.objects "location")}}
+{% for this in (project.objects|filter_by_type("location")) %}
 #### {{ this.name }} (id: {{ this.id }})
 
 {{ this.content }}
 
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
-{{#if (hasItems (filterByType project.objects "lorebook"))}}
+{% if (((project.objects|filter_by_type("lorebook")))|length > 0) %}
 ### Lorebook
 
-{{#each (filterByType project.objects "lorebook")}}
+{% for this in (project.objects|filter_by_type("lorebook")) %}
 #### {{ this.name }} (id: {{ this.id }})
 
 {{ this.content }}
 
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
-{{#if project.outline}}
-{{#each project.outline.outlines}}
+{% if project.outline %}
+{% for this in project.outline.outlines %}
 ### Story Outline - {{ this.name }} (id: {{ this.id }})
 
 {{ this.content }}
 
-{{#if (hasItems this.acts)}}
-{{#each this.acts}}
+{% if ((this.acts)|length > 0) %}
+{% for this in this.acts %}
 #### Act: {{ this.name }} (id: {{ this.id }})
 
 {{ this.content }}
 
-{{#if (hasItems this.chapters)}}
+{% if ((this.chapters)|length > 0) %}
 **Chapters:**
-{{#each this.chapters}}
+{% for this in this.chapters %}
 - **{{ this.name }}** (id: {{ this.id }}): {{ this.content }}
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
 
-{{/each}}
-{{/if}}
-{{/each}}
-{{/if}}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}

@@ -36,6 +36,7 @@ from ..schemas.rag import (
     RagKeywordSearchResponse,
 )
 from ..services.embedding_config_service import get_embedding_profile
+from ..services.credential_service import CredentialServiceError, credential_service
 from ..services.rag_index_service import (
     delete_object_index,
     get_project_status,
@@ -141,7 +142,10 @@ async def rag_index_object(
     if not profile:
         raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
 
-    cfg: Dict[str, Any] = request.config.model_dump()
+    try:
+        cfg: Dict[str, Any] = credential_service.get_provider_config(db, current_user.id, profile["provider"])
+    except CredentialServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     try:
         result = await index_object(
@@ -193,7 +197,10 @@ async def rag_reindex_project(
     if not profile:
         raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
 
-    cfg: Dict[str, Any] = request.config.model_dump()
+    try:
+        cfg: Dict[str, Any] = credential_service.get_provider_config(db, current_user.id, profile["provider"])
+    except CredentialServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     try:
         summary = await reindex_project(
@@ -224,7 +231,10 @@ async def rag_search(
     if not profile:
         raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
 
-    cfg: Dict[str, Any] = request.config.model_dump()
+    try:
+        cfg: Dict[str, Any] = credential_service.get_provider_config(db, current_user.id, profile["provider"])
+    except CredentialServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     try:
         results = await search_project(

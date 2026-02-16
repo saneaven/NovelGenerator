@@ -523,21 +523,11 @@ Get available models for a specific provider.
 **Request Body:**
 ```json
 {
-  "provider_config": {
-    "api_key": "optional-api-key",
-    "base_url": "https://custom-endpoint.example/v1",
-    "additional_headers": {
-      "X-Custom-Header": "value"
-    },
-    "additional_body": {
-      "reasoning": {
-        "effort": "high"
-      }
-    }
-  },
   "request_format": "openai_sdk"
 }
 ```
+
+Provider credentials are resolved server-side from `server_credentials`.
 
 ### Stream Chat Completions
 
@@ -561,25 +551,12 @@ Stream chat completions from a provider.
   ],
   "temperature": 0.7,
   "max_tokens": 2000,
-  "provider_config": {
-    "api_key": "optional-key",
-    "base_url": "https://custom-endpoint.example/v1",
-    "additional_headers": {
-      "X-Custom-Header": "value"
-    },
-    "additional_body": {
-      "reasoning": {
-        "effort": "high"
-      }
-    }
-  },
   "request_format": "openai_sdk",
   "thinking_format": "openai"
 }
 ```
 
-`additional_headers` and `additional_body` are custom endpoint extension fields.
-`additional_body` is applied only for the `custom` provider (`openai_sdk` and `claude_sdk` request formats).
+Provider credentials are resolved server-side from `server_credentials`.
 
 **Response:** Server-Sent Events stream
 

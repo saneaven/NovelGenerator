@@ -19,11 +19,6 @@ export type MemoryArchiveRequest = {
     created_at?: string;
     tool_calls?: unknown[];
   }>;
-  embedding_config?: {
-    api_key?: string;
-    base_url?: string;
-    additional_headers?: Record<string, string>;
-  };
 };
 
 export type MemoryArchiveResponse = {
@@ -38,11 +33,6 @@ export type MemorySearchRequest = {
   language: string;
   queries: string[];
   top_k_per_query?: number;
-  config?: {
-    api_key?: string;
-    base_url?: string;
-    additional_headers?: Record<string, string>;
-  };
 };
 
 export type MemorySearchResult = {

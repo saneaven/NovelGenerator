@@ -180,12 +180,10 @@ export const assetService = {
     /**
      * Get available models for a provider
      */
-    async getImageModels(provider: string, apiKey: string): Promise<{ id: string; name: string }[]> {
-        const formData = new FormData();
-        formData.append('api_key', apiKey);
-        const response = await apiClient.postFormData<{ data: { id: string; name: string }[] }>(
+    async getImageModels(provider: string): Promise<{ id: string; name: string }[]> {
+        const response = await apiClient.post<{ data: { id: string; name: string }[] }>(
             `/api/v1/assets/image-providers/${provider}/models`,
-            formData
+            {}
         );
         return response.data;
     },

@@ -1,5 +1,5 @@
 """SQLAlchemy database models for Novel Buds"""
-from sqlalchemy import Column, String, Integer, BigInteger, DateTime, Boolean, Text, ForeignKey, Index, UniqueConstraint, CheckConstraint
+from sqlalchemy import Column, String, Integer, BigInteger, DateTime, Boolean, Text, ForeignKey, Index, UniqueConstraint, CheckConstraint, text as sa_text
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from datetime import datetime
@@ -158,26 +158,26 @@ class UserSettings(Base):
 
 
 # ============================================================================
-# USER CREDENTIALS BACKUP (E2E-ENCRYPTED BLOB)
+# SERVER CREDENTIALS (SERVER-SIDE ENCRYPTED)
 # ============================================================================
 
-class UserCredentials(Base):
-    """E2E-encrypted credentials backup blob stored server-side.
-
-    The server stores an opaque encrypted blob and never decrypts it.
-    """
-    __tablename__ = "user_credentials"
+class ServerCredential(Base):
+    """Server-side encrypted provider credentials per user/provider."""
+    __tablename__ = "server_credentials"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
-
-    # Opaque encrypted blob (JSON string) produced client-side (E2E)
-    credentials_blob = Column(Text, nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider = Column(String(50), nullable=False)
+    encrypted_config = Column(Text, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider", name="uq_server_credentials_user_provider"),
+    )
 
 # ============================================================================
 # PROMPT PRESETS
@@ -633,51 +633,57 @@ class Agent(Base):
 
     # Relationships
     project = relationship("Project", back_populates="agents")
-    runs = relationship("AgentRunModel", back_populates="agent", cascade="all, delete-orphan", order_by="AgentRunModel.created_at")
+    runs = relationship("RunModel", back_populates="agent", cascade="all, delete-orphan", order_by="RunModel.created_at")
 
 
 # ============================================================================
-# RUN RUNTIME (UNIFIED ROOT/CHILD RUNS)
+# RUN RUNTIME (UNIFIED AGENT/SUBAGENT/JOURNEY RUNS)
 # ============================================================================
 
-class AgentRunModel(Base):
-    """Unified root/child run state."""
-    __tablename__ = 'agent_runs'
+class RunModel(Base):
+    """Unified run state for agent/subAgent/journey."""
+    __tablename__ = 'runs'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
-    agent_id = Column(UUID(as_uuid=True), ForeignKey('agents.id', ondelete='CASCADE'), nullable=False, index=True)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey('agents.id', ondelete='CASCADE'), nullable=True, index=True)
 
-    run_kind = Column(String(16), nullable=False)
-    caller = Column(String(20), nullable=False)
+    run_type = Column(String(20), nullable=False)
     status = Column(String(20), nullable=False)
 
     language = Column(String(50), nullable=False)
     input_text = Column(Text, nullable=False, default='')
+    input_payload = Column(JSONB, nullable=False, default=dict)
     final_output = Column(Text, nullable=True)
     error = Column(Text, nullable=True)
 
-    # Root-only metadata
+    # Agent-only metadata
     run_mode = Column(String(20), nullable=True)
     surface = Column(String(40), nullable=True)
     context_object_ids = Column(JSONB, nullable=False, default=list)
     root_run_seq = Column(BigInteger, nullable=True)
 
-    # Child-only metadata
-    parent_run_id = Column(UUID(as_uuid=True), ForeignKey('agent_runs.id', ondelete='CASCADE'), nullable=True, index=True)
+    # Journey-only metadata
+    journey_kind = Column(String(40), nullable=True)
+    journey_target_ids = Column(JSONB, nullable=False, default=list)
+
+    # Sub-agent metadata
+    parent_run_id = Column(UUID(as_uuid=True), ForeignKey('runs.id', ondelete='CASCADE'), nullable=True, index=True)
     parent_run_message_id = Column(UUID(as_uuid=True), nullable=True)
     parent_run_tool_call_id = Column(String(255), nullable=True)
     sub_agent_id = Column(UUID(as_uuid=True), ForeignKey('sub_agent_definitions.id', ondelete='SET NULL'), nullable=True, index=True)
 
     next_message_seq = Column(BigInteger, default=1, nullable=False)
+    frozen_context = Column(JSONB, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     project = relationship("Project")
-    agent = relationship("Agent", back_populates="runs")
+    agent = relationship("Agent", back_populates="runs", foreign_keys=[agent_id])
     sub_agent = relationship("SubAgentDefinitionModel")
-    parent_run = relationship("AgentRunModel", remote_side=[id], backref="child_runs")
+    parent_run = relationship("RunModel", remote_side=[id], backref="child_runs")
     messages = relationship(
         "RunMessageModel",
         back_populates="run",
@@ -687,28 +693,42 @@ class AgentRunModel(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "run_kind IN ('root','child')",
-            name='ck_agent_runs_kind',
-        ),
-        CheckConstraint(
-            "caller IN ('planMode','agentMode','subAgent')",
-            name='ck_agent_runs_caller',
+            "run_type IN ('agent','subAgent','journey')",
+            name='ck_runs_type',
         ),
         CheckConstraint(
             "status IN ('running','waiting','paused','completed','error','cancelled')",
-            name='ck_agent_runs_status',
+            name='ck_runs_status',
         ),
         CheckConstraint(
             "("
-            "(run_kind = 'root' AND parent_run_id IS NULL AND parent_run_message_id IS NULL AND parent_run_tool_call_id IS NULL AND sub_agent_id IS NULL)"
+            "(run_type='agent' AND agent_id IS NOT NULL AND sub_agent_id IS NULL AND journey_kind IS NULL AND run_mode IS NOT NULL AND surface IS NOT NULL AND parent_run_id IS NULL AND parent_run_message_id IS NULL AND parent_run_tool_call_id IS NULL)"
             " OR "
-            "(run_kind = 'child' AND parent_run_id IS NOT NULL AND parent_run_message_id IS NOT NULL AND parent_run_tool_call_id IS NOT NULL AND sub_agent_id IS NOT NULL)"
+            "(run_type='subAgent' AND agent_id IS NOT NULL AND sub_agent_id IS NOT NULL AND journey_kind IS NULL AND run_mode IS NULL AND surface IS NULL AND parent_run_id IS NOT NULL AND parent_run_message_id IS NOT NULL AND parent_run_tool_call_id IS NOT NULL)"
+            " OR "
+            "(run_type='journey' AND agent_id IS NULL AND sub_agent_id IS NULL AND journey_kind IS NOT NULL AND run_mode IS NULL AND surface IS NULL AND parent_run_id IS NULL AND parent_run_message_id IS NULL AND parent_run_tool_call_id IS NULL)"
             ")",
-            name='ck_agent_runs_parent_fields',
+            name='ck_runs_type_fields',
         ),
-        Index('ix_agent_runs_agent_status', 'agent_id', 'status'),
-        Index('ix_agent_runs_parent', 'parent_run_id'),
-        # Root run order guarantee (partial unique; implemented via migration SQL for PostgreSQL).
+        Index('ix_runs_agent_status', 'agent_id', 'status'),
+        Index('ix_runs_project_status', 'project_id', 'status'),
+        Index('ix_runs_type_status', 'run_type', 'status'),
+        Index('ix_runs_parent', 'parent_run_id'),
+        Index(
+            'uq_runs_root_seq',
+            'agent_id',
+            'root_run_seq',
+            unique=True,
+            postgresql_where=sa_text("run_type='agent' AND root_run_seq IS NOT NULL"),
+        ),
+        Index(
+            'uq_runs_child_parent_tool',
+            'parent_run_id',
+            'parent_run_message_id',
+            'parent_run_tool_call_id',
+            unique=True,
+            postgresql_where=sa_text("run_type='subAgent'"),
+        ),
     )
 
 
@@ -717,14 +737,14 @@ class RunMessageModel(Base):
     __tablename__ = 'run_messages'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    run_id = Column(UUID(as_uuid=True), ForeignKey('agent_runs.id', ondelete='CASCADE'), nullable=False, index=True)
+    run_id = Column(UUID(as_uuid=True), ForeignKey('runs.id', ondelete='CASCADE'), nullable=False, index=True)
     seq = Column(BigInteger, nullable=False)
     role = Column(String(16), nullable=False)
     # Multilingual content: { "English": { "contentParts": [...], "thinkingDetails": [...] }, ... }
     data = Column(JSONB, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    run = relationship("AgentRunModel", back_populates="messages")
+    run = relationship("RunModel", back_populates="messages")
     tool_calls = relationship(
         "RunToolCallModel",
         back_populates="message",
@@ -733,7 +753,7 @@ class RunMessageModel(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("role IN ('user','assistant','system')", name='ck_run_messages_role'),
+        CheckConstraint("role IN ('user','assistant','system','tool')", name='ck_run_messages_role'),
         UniqueConstraint('run_id', 'seq', name='uq_run_messages_run_seq'),
         Index('ix_run_messages_run_created', 'run_id', 'created_at'),
     )
@@ -744,7 +764,7 @@ class RunToolCallModel(Base):
     __tablename__ = 'run_tool_calls'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    run_id = Column(UUID(as_uuid=True), ForeignKey('agent_runs.id', ondelete='CASCADE'), nullable=False, index=True)
+    run_id = Column(UUID(as_uuid=True), ForeignKey('runs.id', ondelete='CASCADE'), nullable=False, index=True)
     message_id = Column(UUID(as_uuid=True), ForeignKey('run_messages.id', ondelete='CASCADE'), nullable=False, index=True)
     call_seq = Column(Integer, nullable=False)
     llm_call_id = Column(String(255), nullable=False)

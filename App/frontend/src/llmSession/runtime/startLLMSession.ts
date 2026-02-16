@@ -1,6 +1,6 @@
 import type { ChatMessage, ContentPart, ToolCallProgress, ToolCallMetadata } from '../../llm/requestTypes';
 import type { LLMTaskModeType, PromptContext } from '../../llm/types';
-import type { ProviderType, ProviderConfig, ThinkingConfig, ThinkingFormat, RequestFormat, RetryConfig } from '../../store/settingsStore';
+import type { ProviderType, ThinkingConfig, ThinkingFormat, RequestFormat, RetryConfig } from '../../store/settingsStore';
 import { LLMTask } from '../../llm/LLMTask';
 import { BackendError } from '../../llm/llmService';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
@@ -14,7 +14,6 @@ export interface LLMRunConfig {
 
   // Provider overrides
   provider?: ProviderType;
-  providerConfig?: ProviderConfig;
   model?: string;
   temperature?: number;
   thinking_mode?: 'off' | 'model' | 'custom';
@@ -107,7 +106,6 @@ export function startLLMSession<TInput = unknown, TResult = unknown>(
           promptContext: input.promptContext,
           abortController,
           provider: input.provider,
-          providerConfig: input.providerConfig,
           model: input.model,
           temperature: input.temperature,
           thinking_mode: input.thinking_mode,

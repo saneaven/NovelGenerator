@@ -19,14 +19,6 @@ export const SUPPORTED_UI_LANGUAGES = [
 
 export type UILanguageCode = typeof SUPPORTED_UI_LANGUAGES[number]['code'];
 
-// Generic provider config (for API requests)
-export interface ProviderConfig {
-    apiKey?: string;
-    baseUrl?: string;
-    additionalHeaders?: Record<string, string>;
-    additionalBody?: Record<string, unknown>;
-}
-
 // Provider configurations (credentials only - shared across functions)
 export interface ProviderCredentials {
     openai: {

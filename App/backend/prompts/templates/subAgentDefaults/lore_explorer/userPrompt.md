@@ -1,6 +1,6 @@
 # Request
 
-{{input.agentMessage}}
+{{ input.agentMessage }}
 
 # Reminder
 Return: Answer -> Evidence -> Notes.

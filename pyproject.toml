@@ -30,6 +30,7 @@ dependencies = [
     "idna",
     "iniconfig",
     "jiter",
+    "jinja2",
     "mako",
     "markupsafe",
     "mistune",

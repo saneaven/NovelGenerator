@@ -1,7 +1,6 @@
 import apiClient, { ApiError } from '../api/client';
 import { assetService, type Asset } from '../api/assetService';
 import { useAssetStore } from '../store/assetStore';
-import { useCredentialsStore } from '../store/credentialsStore';
 import { generateTempId } from '../utils/tempId';
 import { useImageTaskStore } from './store';
 import type { ImageProgressStage, ImageTaskInput, ImageTaskSession } from './types';
@@ -18,22 +17,6 @@ const handlersByTaskId = new Map<
     onFinally?: () => void;
   }
 >();
-
-function getApiKeyForProvider(provider: string): string {
-  const creds = useCredentialsStore.getState().credentials;
-  switch (provider) {
-    case 'openai':
-      return creds.openai.apiKey;
-    case 'gemini':
-      return creds.gemini.apiKey;
-    case 'xai':
-      return creds.xai.apiKey;
-    case 'novelai':
-      return creds.novelai.apiKey;
-    default:
-      return '';
-  }
-}
 
 function setStage(taskId: string, stage: ImageProgressStage, message: string) {
   useImageTaskStore.getState().updateSession(taskId, { status: 'running', progress: { stage, message } });
@@ -64,16 +47,11 @@ async function runTask(taskId: string) {
   abortControllers.set(taskId, controller);
 
   try {
-    const { projectId, binding, recipe } = session.input;
+    const { projectId, binding } = session.input;
 
     setStage(taskId, 'preparing', 'Preparing...');
 
-    const apiKey = getApiKeyForProvider(recipe.provider);
-    if (!apiKey) {
-      throw new Error(`API key not configured for ${recipe.provider}`);
-    }
-
-    const { url, body } = buildGenerateRequest(session.input, apiKey);
+    const { url, body } = buildGenerateRequest(session.input);
 
     setStage(taskId, 'generating', 'Generating...');
     const resp = await apiClient.post<{

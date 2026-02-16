@@ -2,13 +2,13 @@ import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useRuntimeStore } from '../store/runtimeStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
-import type { Run, RunMessage, RunMessageLangEntry, RunToolCall } from '../types';
+import type { Run, RunMessageLangEntry } from '../types';
 
 export interface ConversationMessage {
   id: string;
   runId: string;
   seq: number;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'tool';
   data: Record<string, RunMessageLangEntry>;
   createdAt: string;
   /** True when this is a virtual entry representing active LLM streaming. */
@@ -52,7 +52,7 @@ export function useConversationTimeline(projectId: string | undefined, agentId: 
       if (!run) continue;
       if (run.projectId !== projectId) continue;
       if (run.agentId !== agentId) continue;
-      if (run.runKind !== 'root') continue;
+      if (run.runType !== 'agent') continue;
       rootRuns.push(run);
     }
     rootRuns.sort((a, b) => {
@@ -119,7 +119,7 @@ export function getAgentRunMessageIds(projectId: string, agentId: string): strin
     if (!run) continue;
     if (run.projectId !== projectId) continue;
     if (run.agentId !== agentId) continue;
-    if (run.runKind !== 'root') continue;
+    if (run.runType !== 'agent') continue;
 
     const messages = state.runMessagesByRunId[run.id] ?? [];
     for (const msg of messages) {

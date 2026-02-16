@@ -14,6 +14,19 @@ services:
       retries: 30
     restart: unless-stopped
 
+  sidecar:
+    build:
+      context: ./App/sidecar
+      dockerfile: Dockerfile
+    expose:
+      - "3001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
   backend:
     build:
       context: .
@@ -25,9 +38,13 @@ services:
       DB_PORT: 5432
       DB_NAME: ${POSTGRES_DB:?set in .env.dev/.env.prod}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set in .env.dev/.env.prod}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?set in .env.dev/.env.prod}
       DEFAULT_ASSET_QUOTA_BYTES: ${DEFAULT_ASSET_QUOTA_BYTES:?set in .env.dev/.env.prod}
+      SIDECAR_URL: http://sidecar:3001
     depends_on:
       db:
+        condition: service_healthy
+      sidecar:
         condition: service_healthy
     expose:
       - "8000"
@@ -59,3 +76,4 @@ volumes:
   caddy_data:
   caddy_config:
   frontend_node_modules:
+  sidecar_node_modules:

@@ -4,20 +4,12 @@ import type { RetryConfig, ToolCallAutoApproveConfig } from '../../store/setting
 import LLMLogViewer from './LLMLogViewer';
 import ToggleSwitch from '../common/ToggleSwitch';
 import { TextButton } from '../TextButton';
-import { Refresh, Document, Lock } from '../icons';
-import type { CredentialBackupStatusResponse } from '../../api/credentialsBackupService';
-import PasswordPromptModal from './PasswordPromptModal';
+import { Refresh, Document } from '../icons';
 import './AdvancedPanel.css';
 
 interface AdvancedPanelProps {
     retryConfig: RetryConfig;
     onRetryConfigChange: (config: RetryConfig) => void;
-    backupStatus: CredentialBackupStatusResponse | null;
-    backupSyncing: boolean;
-    onBackupRefresh: () => void;
-    onBackupUpload: (password: string) => Promise<void>;
-    onBackupRestore: (password: string) => Promise<void>;
-    onBackupDelete: (password: string) => Promise<void>;
     nativeOutputMode: boolean;
     onNativeOutputModeChange: (enabled: boolean) => void;
     toolCallHistoryLimit: number;
@@ -31,12 +23,6 @@ interface AdvancedPanelProps {
 const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     retryConfig,
     onRetryConfigChange,
-    backupStatus,
-    backupSyncing,
-    onBackupRefresh,
-    onBackupUpload,
-    onBackupRestore,
-    onBackupDelete,
     nativeOutputMode,
     onNativeOutputModeChange,
     toolCallHistoryLimit,
@@ -47,11 +33,6 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     onToolCallAutoApproveChange,
 }) => {
     const [newErrorCode, setNewErrorCode] = useState('');
-    const [passwordModalOpen, setPasswordModalOpen] = useState(false);
-    const [passwordModalTitle, setPasswordModalTitle] = useState('');
-    const [passwordModalDescription, setPasswordModalDescription] = useState<string | undefined>(undefined);
-    const [passwordModalConfirmLabel, setPasswordModalConfirmLabel] = useState('');
-    const [passwordModalAction, setPasswordModalAction] = useState<((password: string) => Promise<void>) | null>(null);
 
     const handleMaxRetriesChange = (value: number) => {
         onRetryConfigChange({
@@ -95,19 +76,6 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     };
 
     const { t } = useTranslation();
-
-    const openPasswordModal = (opts: {
-        title: string;
-        description?: string;
-        confirmLabel: string;
-        action: (password: string) => Promise<void>;
-    }) => {
-        setPasswordModalTitle(opts.title);
-        setPasswordModalDescription(opts.description);
-        setPasswordModalConfirmLabel(opts.confirmLabel);
-        setPasswordModalAction(() => opts.action);
-        setPasswordModalOpen(true);
-    };
 
     return (
         <div className="advanced-panel">
@@ -227,100 +195,6 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                     <li><strong>504:</strong> {t('settings.advanced.commonErrorCodes.504')}</li>
                 </ul>
             </div>
-
-            {/* Credentials Backup (E2E) */}
-            <div className="settings-panel-card">
-                <h3>{t('settings.advanced.credentialsBackup.backupTitle')}</h3>
-                <div className="form-field">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Lock size="sm" />
-                        <p className="field-hint" style={{ margin: 0 }}>
-                            {t('settings.advanced.credentialsBackup.backupHint')}
-                        </p>
-                    </div>
-                </div>
-
-                <div className="form-field">
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <TextButton
-                            variant="secondary"
-                            size="sm"
-                            type="button"
-                            onClick={onBackupRefresh}
-                            disabled={backupSyncing}
-                        >
-                            {t('settings.advanced.credentialsBackup.refreshBackupStatus')}
-                        </TextButton>
-                        <TextButton
-                            variant="secondary"
-                            size="sm"
-                            type="button"
-                            onClick={() =>
-                                openPasswordModal({
-                                    title: t('settings.advanced.credentialsBackup.backupActionTitle'),
-                                    description: t('settings.advanced.credentialsBackup.backupActionDescription'),
-                                    confirmLabel: t('settings.advanced.credentialsBackup.backupActionConfirm'),
-                                    action: onBackupUpload,
-                                })
-                            }
-                            disabled={backupSyncing}
-                        >
-                            {t('settings.advanced.credentialsBackup.backupActionConfirm')}
-                        </TextButton>
-                        <TextButton
-                            variant="secondary"
-                            size="sm"
-                            type="button"
-                            onClick={() =>
-                                openPasswordModal({
-                                    title: t('settings.advanced.credentialsBackup.restoreActionTitle'),
-                                    description: t('settings.advanced.credentialsBackup.restoreActionDescription'),
-                                    confirmLabel: t('settings.advanced.credentialsBackup.restoreActionConfirm'),
-                                    action: onBackupRestore,
-                                })
-                            }
-                            disabled={backupSyncing || !backupStatus?.hasBackup}
-                        >
-                            {t('settings.advanced.credentialsBackup.restoreActionConfirm')}
-                        </TextButton>
-                        <TextButton
-                            variant="secondary"
-                            size="sm"
-                            type="button"
-                            onClick={() =>
-                                openPasswordModal({
-                                    title: t('settings.advanced.credentialsBackup.deleteActionTitle'),
-                                    description: t('settings.advanced.credentialsBackup.deleteActionDescription'),
-                                    confirmLabel: t('settings.advanced.credentialsBackup.deleteActionConfirm'),
-                                    action: onBackupDelete,
-                                })
-                            }
-                            disabled={backupSyncing || !backupStatus?.hasBackup}
-                        >
-                            {t('settings.advanced.credentialsBackup.deleteActionConfirm')}
-                        </TextButton>
-                    </div>
-                    {backupStatus && (
-                        <p className="field-hint" style={{ marginTop: 8 }}>
-                            {backupStatus.hasBackup ? t('settings.advanced.credentialsBackup.statusHasBackup') : t('settings.advanced.credentialsBackup.statusNoBackup')}
-                            {backupStatus.updatedAt ? ` (${backupStatus.updatedAt})` : ''}
-                        </p>
-                    )}
-                </div>
-            </div>
-
-            <PasswordPromptModal
-                isOpen={passwordModalOpen}
-                title={passwordModalTitle}
-                description={passwordModalDescription}
-                confirmLabel={passwordModalConfirmLabel}
-                isLoading={backupSyncing}
-                onClose={() => setPasswordModalOpen(false)}
-                onConfirm={async (password) => {
-                    if (!passwordModalAction) return;
-                    await passwordModalAction(password);
-                }}
-            />
 
             {/* Native Output Mode */}
             <div className="settings-panel-card">

@@ -1,0 +1,210 @@
+from __future__ import annotations
+
+import asyncio
+from dataclasses import dataclass, field
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy.orm import Session
+
+from ..models.translation_models import ObjectVersion
+from .object_service import ObjectService
+from .patch_utils import apply_single_replacement
+from .sidecar_client import SidecarClient, SidecarConversionError, SidecarUnavailableError
+
+
+@dataclass
+class BatchState:
+    manuscript_id: UUID
+    project_id: UUID
+    language: str
+    create_new_version: bool
+    user_request: str
+    markdown: str
+    touched_call_ids: set[str] = field(default_factory=set)
+
+
+@dataclass
+class FlushStatus:
+    success: bool
+    reason: str | None = None
+
+
+class ManuscriptBatch:
+    """Batches patch/replace operations for manuscript updates."""
+
+    def __init__(self) -> None:
+        self._states: dict[str, BatchState] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
+
+    @staticmethod
+    def make_key(manuscript_id: UUID, language: str, create_new_version: bool) -> str:
+        return f"{manuscript_id}:{language}:{'new' if create_new_version else 'in_place'}"
+
+    def lock_for(self, key: str) -> asyncio.Lock:
+        lock = self._locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._locks[key] = lock
+        return lock
+
+    async def get_or_load_markdown(
+        self,
+        *,
+        db: Session,
+        manuscript_id: UUID,
+        project_id: UUID,
+        language: str,
+        create_new_version: bool,
+        user_request: str,
+        sidecar: SidecarClient,
+    ) -> tuple[str, str]:
+        key = self.make_key(manuscript_id, language, create_new_version)
+        existing = self._states.get(key)
+        if existing is not None:
+            return key, existing.markdown
+
+        latest = (
+            db.query(ObjectVersion)
+            .filter(
+                ObjectVersion.object_type == "manuscript",
+                ObjectVersion.object_id == manuscript_id,
+            )
+            .order_by(ObjectVersion.version_number.desc())
+            .with_for_update()
+            .first()
+        )
+        if latest is None or not isinstance(latest.data, dict):
+            raise ValueError("MANUSCRIPT_EMPTY")
+
+        lang_data = latest.data.get(language)
+        if not isinstance(lang_data, dict):
+            lang_data = next((v for v in latest.data.values() if isinstance(v, dict)), None)
+        if not isinstance(lang_data, dict):
+            raise ValueError("MANUSCRIPT_EMPTY")
+
+        doc = lang_data.get("doc")
+        if not isinstance(doc, dict):
+            raise ValueError("MANUSCRIPT_EMPTY")
+
+        markdown = await sidecar.doc_to_markdown(doc)
+        self._states[key] = BatchState(
+            manuscript_id=manuscript_id,
+            project_id=project_id,
+            language=language,
+            create_new_version=create_new_version,
+            user_request=user_request,
+            markdown=markdown,
+        )
+        return key, markdown
+
+    async def apply_patch(
+        self,
+        *,
+        db: Session,
+        manuscript_id: UUID,
+        project_id: UUID,
+        language: str,
+        old_text: str,
+        new_text: str,
+        call_id: str,
+        create_new_version: bool,
+        user_request: str,
+        sidecar: SidecarClient,
+    ) -> dict[str, Any]:
+        key = self.make_key(manuscript_id, language, create_new_version)
+        lock = self.lock_for(key)
+        async with lock:
+            try:
+                key, markdown = await self.get_or_load_markdown(
+                    db=db,
+                    manuscript_id=manuscript_id,
+                    project_id=project_id,
+                    language=language,
+                    create_new_version=create_new_version,
+                    user_request=user_request,
+                    sidecar=sidecar,
+                )
+            except SidecarUnavailableError:
+                return {"success": False, "code": "SIDECAR_ERROR", "reason": "sidecar unavailable"}
+            except SidecarConversionError as exc:
+                return {"success": False, "code": "SIDECAR_ERROR", "reason": str(exc)}
+            except ValueError as exc:
+                return {"success": False, "code": str(exc), "reason": str(exc)}
+
+            rr = apply_single_replacement(markdown, old_text, new_text)
+            if not rr.success:
+                return {"success": False, "code": rr.code, "reason": rr.reason}
+
+            state = self._states[key]
+            state.markdown = rr.content
+            state.touched_call_ids.add(call_id)
+            return {"success": True, "buffered": True, "key": key, "replace_count": 1}
+
+    async def apply_replace(
+        self,
+        *,
+        manuscript_id: UUID,
+        project_id: UUID,
+        language: str,
+        content: str,
+        call_id: str,
+        create_new_version: bool,
+        user_request: str,
+    ) -> dict[str, Any]:
+        key = self.make_key(manuscript_id, language, create_new_version)
+        lock = self.lock_for(key)
+        async with lock:
+            state = self._states.get(key)
+            if state is None:
+                state = BatchState(
+                    manuscript_id=manuscript_id,
+                    project_id=project_id,
+                    language=language,
+                    create_new_version=create_new_version,
+                    user_request=user_request,
+                    markdown=content,
+                )
+                self._states[key] = state
+            else:
+                state.markdown = content
+            state.touched_call_ids.add(call_id)
+            return {"success": True, "buffered": True, "key": key}
+
+    async def flush_all(
+        self,
+        *,
+        db: Session,
+        sidecar: SidecarClient,
+        object_service: ObjectService,
+        created_by: UUID | None,
+    ) -> tuple[dict[str, FlushStatus], dict[str, set[str]]]:
+        results: dict[str, FlushStatus] = {}
+        key_to_call_ids: dict[str, set[str]] = {}
+
+        for key, state in list(self._states.items()):
+            key_to_call_ids[key] = set(state.touched_call_ids)
+            try:
+                doc = await sidecar.markdown_to_doc(state.markdown)
+                object_service.update_object(
+                    db=db,
+                    project_id=state.project_id,
+                    object_type="manuscript",
+                    object_id=state.manuscript_id,
+                    data={"doc": doc, "wordCount": len(state.markdown.split())},
+                    language=state.language,
+                    metadata=None,
+                    user_request=state.user_request,
+                    create_new_version=state.create_new_version,
+                    created_by=created_by,
+                )
+                results[key] = FlushStatus(success=True)
+            except SidecarUnavailableError:
+                results[key] = FlushStatus(success=False, reason="sidecar unavailable")
+            except SidecarConversionError as exc:
+                results[key] = FlushStatus(success=False, reason=str(exc))
+            except Exception as exc:
+                results[key] = FlushStatus(success=False, reason=str(exc))
+
+        self._states.clear()
+        return results, key_to_call_ids

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ProviderCredentials, ProviderType } from '../../store/settingsStore';
+import type { ProviderType } from '../../store/settingsStore';
 import type { EmbeddingProfileConfig } from '../../store/settingsStore';
 import ModelBrowser from './ModelBrowser';
 import { TextButton } from '../TextButton';
@@ -20,7 +20,6 @@ interface SearchMemoryPanelProps {
   onAgentMemoryProfileChange: (next: EmbeddingProfileConfig) => void;
   keywordPageSize: number;
   onKeywordPageSizeChange: (value: number) => void;
-  credentials: ProviderCredentials;
   mainLanguage: string;
   topKPerQuery: number;
   onTopKPerQueryChange: (value: number) => void;
@@ -49,7 +48,6 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
   onAgentMemoryProfileChange,
   keywordPageSize,
   onKeywordPageSizeChange,
-  credentials,
   mainLanguage,
   topKPerQuery,
   onTopKPerQueryChange,
@@ -247,7 +245,6 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
                   provider={ragSearchProfile.provider}
                   mode="embedding"
                   currentModel={ragSearchProfile.model}
-                  credentials={credentials}
                   onSelectModel={(m) => {
                     handleRagModelChange(m);
                     setShowModelBrowser(false);
@@ -402,16 +399,15 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
             <p className="field-hint">{t('settings.agentMemory.modelHint')}</p>
 
             {showModelBrowser && activeModelBrowser === 'agentMemory' && (
-              <ModelBrowser
-                key={`agentMemory:${agentMemoryProfile.provider}`}
-                autoExpand={true}
-                provider={agentMemoryProfile.provider}
-                mode="embedding"
-                currentModel={agentMemoryProfile.model}
-                credentials={credentials}
-                onSelectModel={(m) => {
-                  handleMemModelChange(m);
-                  setShowModelBrowser(false);
+                <ModelBrowser
+                  key={`agentMemory:${agentMemoryProfile.provider}`}
+                  autoExpand={true}
+                  provider={agentMemoryProfile.provider}
+                  mode="embedding"
+                  currentModel={agentMemoryProfile.model}
+                  onSelectModel={(m) => {
+                    handleMemModelChange(m);
+                    setShowModelBrowser(false);
                 }}
                 onUpdateProviderPreference={() => {
                   // not used for embedding profile
@@ -504,4 +500,3 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
 };
 
 export default SearchMemoryPanel;
-

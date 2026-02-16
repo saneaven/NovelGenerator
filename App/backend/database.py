@@ -3,6 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
+from contextlib import contextmanager
 import os
 from pathlib import Path
 
@@ -43,6 +44,19 @@ def get_db():
         @app.get("/items")
         def read_items(db: Session = Depends(get_db)):
             ...
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@contextmanager
+def short_session():
+    """
+    Short-lived session for long-running async loops.
+    Ensures each discrete operation gets a fresh DB session.
     """
     db = SessionLocal()
     try:

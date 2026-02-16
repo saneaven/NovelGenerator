@@ -794,7 +794,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     // Streaming tool call progress (only for virtual streaming messages)
                     const hasStreamingCalls = Boolean(
                         isStreamingMessage &&
-                        message.source.streamingToolCallProgress?.length > 0
+                        (message.source.streamingToolCallProgress?.length ?? 0) > 0
                     );
 
                     // Persisted tool calls (for real messages)

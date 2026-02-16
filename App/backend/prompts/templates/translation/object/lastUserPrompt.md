@@ -1,7 +1,7 @@
-{{! Last user message with context refresh }}
+{{ ! }}
 
 # Context (targets)
-{{prompt "common/projectContext/filtered" feedback.editingObjectIds}}
+{% with params = [feedback.editingObjectIds] %}{% include "fragment:common/projectContext/filtered" %}{% endwith %}
 
 # User Feedback
 
@@ -11,7 +11,7 @@ The user has a feedback on your operation
 {{ input.userMessage }}
 </feedback>
 
-{{#if (eq config.outputMode "native_tool_call")}}
+{% if (config.outputMode == "native_tool_call") %}
 # Explicit Tool Calling Disabled
 Explicit tool calling is currently disabled. If you want to edit project, please proceed with the task using the <tool_calls> tag to bypass this.
-{{/if}}
+{% endif %}

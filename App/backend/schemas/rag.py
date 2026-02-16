@@ -5,8 +5,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from ..models.requests import ProviderConfig
-
 
 class RagEmbeddingProfileResponse(BaseModel):
     provider: str
@@ -28,7 +26,6 @@ class RagIndexObjectRequest(BaseModel):
     object_type: str = Field(..., min_length=1, max_length=50)
     object_id: UUID
     force: bool = False
-    config: ProviderConfig = Field(default_factory=ProviderConfig)
 
 
 class RagDeleteObjectRequest(BaseModel):
@@ -38,7 +35,6 @@ class RagDeleteObjectRequest(BaseModel):
 
 class RagReindexRequest(BaseModel):
     force: bool = False
-    config: ProviderConfig = Field(default_factory=ProviderConfig)
 
 
 class RagReindexResponse(BaseModel):
@@ -52,7 +48,6 @@ class RagSearchRequest(BaseModel):
     queries: List[str] = Field(..., min_length=1)
     top_k_per_query: int = Field(default=20, ge=1, le=200)
     neighbor_window: int = Field(default=0, ge=0, le=10)
-    config: ProviderConfig = Field(default_factory=ProviderConfig)
 
 
 class RagSearchResult(BaseModel):
