@@ -186,38 +186,25 @@ async def dispatch(
 
 # ── Tool Decisions ──
 
-@router.post("/{thread_id}/tool-decisions")
+@router.patch("/{thread_id}/tool-decisions")
 async def tool_decisions(
     project_id: UUID,
     thread_id: UUID,
     req: ToolDecisionsRequest,
-    after_seq: int | None = Query(default=None, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _ensure_project(db, user_id=current_user.id, project_id=project_id)
     _get_thread(db, thread_id=thread_id, user_id=current_user.id, project_id=project_id)
 
-    async def trigger_apply() -> None:
-        await run_pipeline.apply_decisions(
-            user_id=current_user.id,
-            thread_id=thread_id,
-            message_id=req.message_id,
-            decisions=req.decisions,
-            options=req.options,
-        )
-
-    task = asyncio.create_task(trigger_apply())
-
-    async def gen():
-        async for chunk in _stream_thread_events(thread_id, trigger=task, after_seq=after_seq):
-            yield chunk
-
-    return StreamingResponse(
-        gen(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    result = await run_pipeline.apply_decisions(
+        user_id=current_user.id,
+        thread_id=thread_id,
+        message_id=req.message_id,
+        decisions=req.decisions,
+        options=req.options,
     )
+    return result
 
 
 # ── Resume ──
@@ -246,14 +233,12 @@ async def resume(
     if run is None:
         raise HTTPException(status_code=404, detail="No run found for this thread")
 
-    # Already running → send warning SSE and close
+    # Already running → subscribe to events without triggering pipeline
     if run.status == "running":
-        async def warn_gen():
-            yield encode_sse("thread:warning", {
-                "thread_id": str(thread_id),
-                "message": "Run is already in progress",
-            })
-        return StreamingResponse(warn_gen(), media_type="text/event-stream", headers=SSE_HEADERS)
+        async def subscribe_gen():
+            async for chunk in _stream_thread_events(thread_id, after_seq=after_seq):
+                yield chunk
+        return StreamingResponse(subscribe_gen(), media_type="text/event-stream", headers=SSE_HEADERS)
 
     async def trigger_resume() -> None:
         await run_pipeline.resume(user_id=current_user.id, thread_id=thread_id)

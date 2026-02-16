@@ -192,7 +192,7 @@ export const threadService = {
     );
   },
 
-  toolDecisions(
+  async toolDecisions(
     projectId: string,
     threadId: string,
     payload: {
@@ -200,15 +200,10 @@ export const threadService = {
       decisions: Record<string, 'accept' | 'reject' | 'cancel'>;
       options?: Record<string, unknown>;
     },
-    onEvent: (event: ThreadEvent) => void,
-    requestOptions?: RequestOptions,
-    afterSeq?: number,
-  ) {
-    return streamPostSse(
-      withAfterSeq(buildPath(projectId, `/${encodeURIComponent(threadId)}/tool-decisions`), afterSeq),
+  ): Promise<{ tool_calls: Array<{ id: string; tool_name: string; status: string; reason: string | null; result: any; child_thread_id: string | null; child_run_id: string | null }> }> {
+    return apiClient.patch(
+      buildPath(projectId, `/${encodeURIComponent(threadId)}/tool-decisions`),
       payload,
-      onEvent,
-      requestOptions,
     );
   },
 

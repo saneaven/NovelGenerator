@@ -89,7 +89,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   const messages = useMemo(() => {
     if (!threadMessages) return [];
     return [...threadMessages]
-      .filter((msg) => msg.role !== 'user' && !msg.id.startsWith('delta:'))
+      .filter((msg) => msg.role === 'assistant' && !msg.id.startsWith('delta:'))
       .sort((a, b) => {
         const aSit = a.seqInThread ?? Number.MAX_SAFE_INTEGER;
         const bSit = b.seqInThread ?? Number.MAX_SAFE_INTEGER;

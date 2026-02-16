@@ -21,7 +21,6 @@ from sqlalchemy.orm import Session
 from ..database import short_session
 from ..models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thread
 from ..providers.contracts import FinalSnapshot
-from .auto_approve_policy_service import auto_approve_policy_service
 from .credential_service import credential_service
 from .history_service import history_service
 from .llm_client import llm_client
@@ -35,7 +34,6 @@ from .sidecar_client import sidecar_client
 from .summary_service import SummaryMessage, summary_service
 from .token_count_service import count_text_tokens
 from .tool_call_executor import RawToolCall, get_tool_call_executor
-from .tool_schemas import get_auto_approve_category
 
 logger = logging.getLogger(__name__)
 
@@ -173,12 +171,21 @@ class RunPipeline:
             if run.status == "running":
                 return
 
-            run.status = "running"
-            thread.status = "running"
-            db.commit()
+            # Check for non-terminal children before resuming
+            running_children = (
+                db.query(RunToolCallModel)
+                .filter(RunToolCallModel.run_id == run.id, RunToolCallModel.status == "running")
+                .count()
+            )
+            if running_children > 0:
+                return  # Children still running — don't resume yet
 
             run_id = run.id
             event_ctx = RunEventContext.from_run(run)
+
+            run.status = "running"
+            thread.status = "running"
+            db.commit()
 
         await run_event_emitter.emit_status(event_ctx, "running")
         await self._launch_loop(run_id, user_id)
@@ -191,8 +198,8 @@ class RunPipeline:
         message_id: UUID,
         decisions: dict[str, str],
         options: dict[str, Any] | None = None,
-    ) -> None:
-        """Apply user tool-call decisions. Does NOT auto-resume."""
+    ) -> dict:
+        """Apply user tool-call decisions. Returns tool call results for the frontend."""
         with short_session() as db:
             thread = db.query(Thread).filter(
                 Thread.id == thread_id, Thread.user_id == user_id,
@@ -218,6 +225,7 @@ class RunPipeline:
                 db, run, message_id, decisions, options,
             )
 
+            run_id = run.id
             event_ctx = RunEventContext.from_run(run)
             tool_rows = [
                 {
@@ -249,7 +257,7 @@ class RunPipeline:
             if lines:
                 tool_message = RunMessageModel(
                     thread_id=thread.id,
-                    run_id=run.id,
+                    run_id=run_id,
                     seq=run.next_message_seq,
                     seq_in_thread=self._next_thread_seq(db, thread),
                     role="tool",
@@ -276,10 +284,12 @@ class RunPipeline:
                 await self._launch_child_if_needed(user_id, thread_id, message_id, row_info["id"])
 
         await self._emit_tools_all_terminal_if_ready(
-            run_id=run.id,
+            run_id=run_id,
             user_id=user_id,
             target_message_id=message_id,
         )
+
+        return {"tool_calls": tool_rows}
 
     async def pause(self, *, user_id: UUID, thread_id: UUID) -> None:
         with short_session() as db:
@@ -684,97 +694,9 @@ class RunPipeline:
             },
         )
 
-        # Check auto-approve policy
-        policy = auto_approve_policy_service.get_effective_policy(db, run.user_id, override=None)
-        auto_decisions = self._build_auto_decisions(staged_rows, policy)
-
-        if auto_decisions:
-            applied = await executor.apply_tool_calls(
-                db, run, assistant_message.id, auto_decisions,
-                {
-                    "create_new_version": cfg.handler_default_options.create_new_version,
-                    "user_request": cfg.handler_default_options.user_request,
-                },
-            )
-
-            tool_rows = [
-                {
-                    "id": str(row.llm_call_id),
-                    "tool_name": row.tool_name,
-                    "status": row.status,
-                    "reason": row.reason,
-                    "result": row.result,
-                    "child_thread_id": str(row.child_thread_id) if row.child_thread_id else None,
-                    "child_run_id": str(row.child_run_id) if row.child_run_id else None,
-                }
-                for row in applied.rows
-            ]
-            await run_event_emitter.emit(
-                "thread:tool_calls_executed",
-                event_ctx,
-                {"message_id": str(assistant_message.id), "tool_calls": tool_rows},
-            )
-
-            # Build tool result message
-            lines: list[str] = []
-            for item in tool_rows:
-                if item["status"] == "accepted":
-                    msg = (item.get("result") or {}).get("message") if isinstance(item.get("result"), dict) else None
-                    lines.append(str(msg or f"{item['tool_name']}: accepted"))
-                elif item["status"] == "rejected":
-                    lines.append(f"{item['tool_name']}: rejected ({item.get('reason') or 'user'})")
-                elif item["status"] == "cancelled":
-                    lines.append(f"{item['tool_name']}: cancelled ({item.get('reason') or 'error'})")
-                elif item["status"] == "running":
-                    lines.append(f"{item['tool_name']}: running ({item.get('reason') or 'in progress'})")
-
-            if lines:
-                tool_message = RunMessageModel(
-                    thread_id=thread.id,
-                    run_id=run.id,
-                    seq=run.next_message_seq,
-                    seq_in_thread=self._next_thread_seq(db, thread),
-                    role="tool",
-                    data={
-                        run.language: {
-                            "contentParts": [{"type": "content", "text": "\n".join(lines)}],
-                            "thinkingDetails": [],
-                        }
-                    },
-                )
-                run.next_message_seq += 1
-                db.add(tool_message)
-
-            # Check if any tool calls are still running (sub-agent)
-            has_running = any(r.status == "running" for r in applied.rows)
-            if has_running:
-                # Wait for sub-agent — set waiting, frontend will resume after child completes
-                db.commit()
-                return StepResult(waiting_for_decision=True, completed=False)
-
-            db.commit()
-            # Auto-approved and all done — continue loop
-            return StepResult(waiting_for_decision=False, completed=False)
-
-        # No auto-approve — wait for user decisions
+        # Always wait for frontend decisions (auto-approve handled by frontend)
         db.commit()
         return StepResult(waiting_for_decision=True, completed=False)
-
-    # ── Auto-approve ──
-
-    @staticmethod
-    def _build_auto_decisions(staged_rows: list[RunToolCallModel], policy: dict[str, bool]) -> dict[str, str] | None:
-        pending = [row for row in staged_rows if row.status == "pending"]
-        if not pending:
-            return None
-
-        decisions: dict[str, str] = {}
-        for row in pending:
-            category = get_auto_approve_category(row.tool_name)
-            if category is None or not bool(policy.get(category, False)):
-                return None
-            decisions[row.llm_call_id] = "accept"
-        return decisions
 
     # ── Memory & Context Cut Loop ──
 

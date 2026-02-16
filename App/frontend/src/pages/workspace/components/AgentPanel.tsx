@@ -498,7 +498,9 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     );
 
     const displayMessages = useMemo(
-        () => timelineMessages.map(resolveDisplayInfo),
+        () => timelineMessages
+            .filter(m => m.role === 'user' || m.role === 'assistant')
+            .map(resolveDisplayInfo),
         [timelineMessages, resolveDisplayInfo]
     );
 

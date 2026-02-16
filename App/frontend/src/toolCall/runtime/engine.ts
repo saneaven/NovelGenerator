@@ -84,7 +84,7 @@ export function rejectAllToolCalls(params: {
   };
 }
 
-function toAutoApproveCategory(toolName: string): keyof ToolCallAutoApproveConfig | null {
+export function toAutoApproveCategory(toolName: string): keyof ToolCallAutoApproveConfig | null {
   if (toolName.startsWith('call_')) return 'subAgent';
   if (toolName === 'rag_search' || toolName === 'keyword_search') return 'search';
   if (isReadTool(toolName)) return 'read';

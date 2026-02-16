@@ -11,6 +11,8 @@ import {
   type ThreadMessage,
   type ThreadToolCall,
 } from './store/threadStore';
+import { useSettingsStore } from '../store/settingsStore';
+import { toAutoApproveCategory } from '../toolCall/runtime/engine';
 import { createClientMessageId, isUuid } from '../utils/idUtils';
 
 // ── Helpers ──
@@ -137,6 +139,7 @@ export class ThreadOrchestrator {
   private lastEventSeqByThread = new Map<string, number>();
   private resumeInFlightByThread = new Set<string>();
   private pendingUserMessageByClientId = new Map<string, PendingUserMessageRef>();
+  private childToParentThread = new Map<string, { threadId: string; projectId: string; messageId: string }>();
 
   // ── Public API ──
 
@@ -258,29 +261,80 @@ export class ThreadOrchestrator {
     messageId: string;
     decisions: Record<string, 'accept' | 'reject' | 'cancel'>;
     options?: Record<string, unknown>;
-    signal?: AbortSignal;
-    afterSeq?: number;
   }): Promise<void> {
     if (!isUuid(input.messageId)) {
       throw new Error('message_id must be a valid UUID before applying tool decisions.');
     }
-    const handle = await threadService.toolDecisions(
-      input.projectId,
-      input.threadId,
-      {
-        message_id: input.messageId,
-        decisions: input.decisions,
-        options: input.options,
-      },
-      (event) => this.handleEvent(input.threadId, event),
-      { signal: input.signal },
-      input.afterSeq ?? this.lastEventSeqByThread.get(input.threadId),
-    );
 
-    this.abortPreviousStream(input.threadId);
-    this.streamByThread.set(input.threadId, handle);
-    useThreadStore.getState().setThreadStreamActive(input.threadId, true);
-    this.attachStreamFailureHandler(input.threadId, handle, 'toolDecisions');
+    const response = await threadService.toolDecisions(input.projectId, input.threadId, {
+      message_id: input.messageId,
+      decisions: input.decisions,
+      options: input.options,
+    });
+
+    // Update store from PATCH response
+    const store = useThreadStore.getState();
+    const existing = store.getToolCalls(input.messageId);
+    const updates: ThreadToolCall[] = (response.tool_calls ?? []).map((tc: any) => {
+      const prev = existing.find((e) => e.llmCallId === tc.id);
+      return {
+        ...(prev ?? {
+          id: `${input.messageId}:${tc.id}`,
+          threadId: input.threadId,
+          messageId: input.messageId,
+          callSeq: 0,
+          llmCallId: tc.id,
+          toolName: tc.tool_name,
+          arguments: {},
+          createdAt: new Date().toISOString(),
+        }),
+        status: parseThreadToolCallStatus(tc.status),
+        reason: tc.reason ?? null,
+        result: tc.result ?? null,
+        childThreadId: tc.child_thread_id ?? null,
+        updatedAt: new Date().toISOString(),
+      } as ThreadToolCall;
+    });
+    store.upsertToolCalls(input.messageId, updates);
+
+    // Register child threads + store child→parent mapping
+    for (const tc of updates) {
+      if (tc.childThreadId) {
+        this.childToParentThread.set(tc.childThreadId, {
+          threadId: input.threadId,
+          projectId: input.projectId,
+          messageId: input.messageId,
+        });
+        if (!store.getThread(tc.childThreadId)) {
+          store.upsertThread({
+            id: tc.childThreadId,
+            projectId: input.projectId,
+            threadType: 'subAgent',
+            ownerId: null,
+            journeyKind: null,
+            status: 'running',
+            lastError: null,
+          });
+        }
+      }
+    }
+
+    // If all terminal → auto-resume parent immediately
+    const allTerminal = updates.every((tc) => TERMINAL_TOOL_STATUSES.has(tc.status));
+    if (allTerminal) {
+      void this.autoResumeIfReady(input.projectId, input.threadId);
+      return;
+    }
+
+    // If children running → subscribe to each child's events via resume SSE
+    const runningChildren = updates.filter((tc) => tc.status === 'running' && tc.childThreadId);
+    for (const tc of runningChildren) {
+      void this.resume({
+        projectId: input.projectId,
+        threadId: tc.childThreadId!,
+        afterSeq: undefined,
+      });
+    }
   }
 
   async resume(input: {
@@ -538,6 +592,27 @@ export class ThreadOrchestrator {
           updatedAt: new Date().toISOString(),
         }));
         store.upsertToolCalls(messageId, calls);
+
+        // Auto-approve: if all pending calls match auto-approve policy, submit immediately
+        const projectId = String(data.project_id ?? '');
+        if (projectId) {
+          const autoApprove = useSettingsStore.getState().settings?.toolCallAutoApprove;
+          if (autoApprove) {
+            const pending = calls.filter((c) => c.status === 'pending');
+            if (pending.length > 0) {
+              let allApprovable = true;
+              const decisions: Record<string, 'accept'> = {};
+              for (const call of pending) {
+                const category = toAutoApproveCategory(call.toolName);
+                if (!category || !autoApprove[category]) { allApprovable = false; break; }
+                decisions[call.llmCallId] = 'accept';
+              }
+              if (allApprovable) {
+                void this.toolDecisions({ projectId, threadId, messageId, decisions });
+              }
+            }
+          }
+        }
         break;
       }
 
@@ -587,6 +662,22 @@ export class ThreadOrchestrator {
         store.patchThread(threadId, { status: 'idle', lastError: null });
         this.clearPendingUserMessagesForThread(threadId);
         this.abortPreviousStream(threadId);
+
+        // If this is a child thread → update parent tool call status
+        const completeParentRef = this.childToParentThread.get(threadId);
+        if (completeParentRef) {
+          this.childToParentThread.delete(threadId);
+          const parentCalls = store.getToolCalls(completeParentRef.messageId);
+          const target = parentCalls.find((tc) => tc.childThreadId === threadId);
+          if (target) {
+            store.upsertToolCalls(completeParentRef.messageId, [{
+              ...target,
+              status: 'accepted' as const,
+              updatedAt: new Date().toISOString(),
+            }]);
+          }
+          void this.autoResumeIfReady(completeParentRef.projectId, completeParentRef.threadId);
+        }
         break;
       }
 
@@ -595,6 +686,23 @@ export class ThreadOrchestrator {
         store.patchThread(threadId, { status: 'error', lastError: threadError });
         this.clearPendingUserMessagesForThread(threadId);
         this.abortPreviousStream(threadId);
+
+        // If this is a child thread → update parent tool call as cancelled
+        const errorParentRef = this.childToParentThread.get(threadId);
+        if (errorParentRef) {
+          this.childToParentThread.delete(threadId);
+          const parentCalls = store.getToolCalls(errorParentRef.messageId);
+          const target = parentCalls.find((tc) => tc.childThreadId === threadId);
+          if (target) {
+            store.upsertToolCalls(errorParentRef.messageId, [{
+              ...target,
+              status: 'cancelled' as const,
+              reason: 'Child sub-agent failed',
+              updatedAt: new Date().toISOString(),
+            }]);
+          }
+          void this.autoResumeIfReady(errorParentRef.projectId, errorParentRef.threadId);
+        }
         break;
       }
 
@@ -670,7 +778,7 @@ export class ThreadOrchestrator {
   private attachStreamFailureHandler(
     threadId: string,
     handle: StreamHandle,
-    source: 'dispatch' | 'resume' | 'toolDecisions',
+    source: 'dispatch' | 'resume',
   ): void {
     void handle.done
       .catch((error) => {
