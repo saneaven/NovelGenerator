@@ -16,7 +16,7 @@ RunMode = Literal["planMode", "agentMode"]
 RunSurface = Literal["story-object", "outline-manager", "novel-editor", "config"]
 JourneyKind = Literal["aiEdit", "translation", "imagePrompt"]
 ToolDecision = Literal["accept", "reject", "cancel"]
-RunToolCallStatus = Literal["pending", "running", "accepted", "rejected", "cancelled"]
+RunToolCallStatus = Literal["pending", "running", "accepted", "rejected", "failed"]
 
 
 # ── Dispatch ──

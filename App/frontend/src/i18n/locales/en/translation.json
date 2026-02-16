@@ -1010,7 +1010,7 @@
     "processing": "Processing",
     "running": "Running",
     "applied": "Applied",
-    "skipped": "Skipped",
+    "rejected": "Rejected",
     "failed": "Failed"
   },
   "toolCall": {

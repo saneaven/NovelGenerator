@@ -13,10 +13,15 @@ from sqlalchemy.orm import Session
 
 from ..models.db_models import RunMessageModel, RunModel, RunToolCallModel, SubAgentDefinitionModel, Thread
 from .credential_service import credential_service
+from .deletion_service import (
+    collect_act_subtree_object_ids,
+    collect_chapter_subtree_object_ids,
+    collect_outline_subtree_object_ids,
+)
 from .manuscript_batch import ManuscriptBatch
 from .object_service import object_service
 from .patch_utils import apply_single_replacement
-from .rag_search_service import keyword_search_project, search_project
+from .rag_search_service import build_search_payload, keyword_search_project, search_project
 from .settings_service import settings_service
 from .sidecar_client import SidecarClient, SidecarConversionError, SidecarUnavailableError
 from .tool_schemas import ToolSchemaDef
@@ -39,7 +44,7 @@ class StagedToolCall:
     call_seq: int
     tool_name: str
     arguments: dict[str, Any]
-    status: Literal["pending", "cancelled"]
+    status: Literal["pending", "failed"]
     reason: str | None = None
 
 
@@ -64,7 +69,7 @@ class StagedUpdate:
 
 @dataclass
 class DispatchResult:
-    status: Literal["accepted", "running", "cancelled"]
+    status: Literal["accepted", "running", "failed"]
     result: dict[str, Any] | None = None
     reason: str | None = None
     child_run_id: UUID | None = None
@@ -74,6 +79,8 @@ class DispatchResult:
 @dataclass
 class ApplyResult:
     rows: list[RunToolCallModel]
+    affected_objects: list[dict[str, Any]] = field(default_factory=list)
+    deleted_ids: list[dict[str, str]] = field(default_factory=list)
 
 
 # ── Patch-grouping helpers ──
@@ -189,6 +196,39 @@ class ToolCallExecutor:
         if "guidelines" in tool_name:
             return "guidelines"
         return None
+
+    @staticmethod
+    def _resolve_tool_object_key(
+        tool_name: str, args: dict[str, Any], result_data: dict[str, Any],
+    ) -> tuple[str | None, str | None]:
+        """Extract (object_type, object_id) from a tool call for affected-object tracking."""
+        # Object ID: creates store ID in result.data.id, everything else in args.id
+        oid: str | None = None
+        if tool_name.startswith("create_"):
+            oid = result_data.get("id")
+            if not isinstance(oid, str):
+                oid = None
+        else:
+            raw_id = args.get("id")
+            oid = str(raw_id) if isinstance(raw_id, str) else None
+
+        # Object type resolution
+        if "basic_info" in tool_name:
+            return "basic_info", oid
+        if "guidelines" in tool_name:
+            return "guidelines", oid
+        if "story_object" in tool_name:
+            raw = args.get("type")
+            return (raw if isinstance(raw, str) else None), oid
+        if "manuscript" in tool_name:
+            return "manuscript", oid
+        if "outline_act" in tool_name:
+            return "act", oid
+        if "outline_chapter" in tool_name:
+            return "chapter", oid
+        if "outline" in tool_name:
+            return "outline", oid
+        return None, None
 
     def _get_cached_or_fetch_object(
         self,
@@ -329,7 +369,7 @@ class ToolCallExecutor:
                         call_seq=idx,
                         tool_name=raw.tool_name,
                         arguments={},
-                        status="cancelled",
+                        status="failed",
                         reason=f"VALIDATION::parse_arguments::{parse_err}",
                     )
                 )
@@ -343,7 +383,7 @@ class ToolCallExecutor:
                         call_seq=idx,
                         tool_name=raw.tool_name,
                         arguments=args,
-                        status="cancelled",
+                        status="failed",
                         reason=f"VALIDATION::{global_result.validator or 'global'}::{global_result.reason}",
                     )
                 )
@@ -358,7 +398,7 @@ class ToolCallExecutor:
                         call_seq=idx,
                         tool_name=raw.tool_name,
                         arguments=args,
-                        status="cancelled",
+                        status="failed",
                         reason=f"VALIDATION::{per_result.validator or 'tool'}::{per_result.reason}",
                     )
                 )
@@ -409,8 +449,8 @@ class ToolCallExecutor:
 
             decision = decisions.get(row.llm_call_id, "reject")
             if decision == "cancel":
-                row.status = "cancelled"
-                row.reason = row.reason or "Cancelled"
+                row.status = "rejected"
+                row.reason = row.reason or "User rejected"
                 row.updated_at = datetime.utcnow()
                 continue
             if decision != "accept":
@@ -448,7 +488,7 @@ class ToolCallExecutor:
             failed = self._flush_staged_updates(db, run, local_staged)
             if failed and r.llm_call_id in failed and result.status == "accepted":
                 result = DispatchResult(
-                    status="cancelled",
+                    status="failed",
                     result={"success": False, "message": "flush failed"},
                     reason="EXECUTION::flush::update_failed",
                 )
@@ -485,8 +525,8 @@ class ToolCallExecutor:
                             row.child_run_id = dispatch.child_run_id
                         if dispatch.child_thread_id:
                             row.child_thread_id = dispatch.child_thread_id
-                    else:  # cancel
-                        row.status = "cancelled"
+                    else:  # failed
+                        row.status = "failed"
                         row.reason = dispatch.reason
                         row.result = self._truncate_json_value(dispatch.result or {"success": False})
                     row.updated_at = datetime.utcnow()
@@ -508,14 +548,50 @@ class ToolCallExecutor:
             for row in rows:
                 if row.status != "accepted" or row.llm_call_id not in failed_call_ids:
                     continue
-                row.status = "cancelled"
+                row.status = "failed"
                 row.reason = "EXECUTION::flush::batched flush failed"
                 row.result = self._truncate_json_value({"success": False, "message": row.reason})
                 row.accepted_at = None
                 row.updated_at = datetime.utcnow()
 
         db.flush()
-        return ApplyResult(rows=rows)
+
+        # ── Collect affected objects for frontend sync ──
+        affected_objects: list[dict[str, Any]] = []
+        deleted_ids: list[dict[str, str]] = []
+        seen_keys: set[str] = set()
+
+        for row in rows:
+            if row.status != "accepted":
+                continue
+            args, _ = self._safe_parse_arguments(row.arguments)
+            if args is None:
+                continue
+            result_data = (row.result or {}).get("data") or {}
+            tool = row.tool_name
+
+            # Deletes: gather cascade IDs from result
+            if tool.startswith("delete_"):
+                for d in result_data.get("deleted_ids", []):
+                    deleted_ids.append(d)
+                continue
+
+            # Creates/updates: re-fetch full serialized object
+            obj_type, obj_id = self._resolve_tool_object_key(tool, args, result_data)
+            if not obj_type or not obj_id:
+                continue
+            key = f"{obj_type}:{obj_id}"
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            try:
+                obj = object_service.get_object(db, obj_type, UUID(obj_id), project_id=run.project_id)
+            except Exception:
+                continue
+            if obj:
+                affected_objects.append(obj)
+
+        return ApplyResult(rows=rows, affected_objects=affected_objects, deleted_ids=deleted_ids)
 
     # ── Grouped patch dispatch ──
 
@@ -545,7 +621,7 @@ class ToolCallExecutor:
                     results[i] = (
                         row,
                         DispatchResult(
-                            status="cancelled",
+                            status="failed",
                             result={"success": False, "message": "flush failed"},
                             reason="EXECUTION::flush::group_update_failed",
                         ),
@@ -652,6 +728,22 @@ class ToolCallExecutor:
                     object_type = "chapter"
 
                 self._remove_staged_for_object(staged_updates=staged_updates, object_type=object_type, object_id=object_id)
+
+                # Collect all IDs that will be deleted (including cascade children)
+                all_deleted: list[dict[str, str]] = [{"id": id_raw, "type": object_type}]
+                if object_type == "outline":
+                    for child_type, child_ids in collect_outline_subtree_object_ids(db, outline_id=object_id).items():
+                        for cid in child_ids:
+                            all_deleted.append({"id": str(cid), "type": child_type})
+                elif object_type == "act":
+                    for child_type, child_ids in collect_act_subtree_object_ids(db, act_id=object_id).items():
+                        for cid in child_ids:
+                            all_deleted.append({"id": str(cid), "type": child_type})
+                elif object_type == "chapter":
+                    for child_type, child_ids in collect_chapter_subtree_object_ids(db, chapter_id=object_id).items():
+                        for cid in child_ids:
+                            all_deleted.append({"id": str(cid), "type": child_type})
+
                 object_service.delete_object(
                     db,
                     project_id=run.project_id,
@@ -661,7 +753,7 @@ class ToolCallExecutor:
                 )
                 return DispatchResult(
                     status="accepted",
-                    result={"success": True, "message": f"Deleted {object_type}", "data": {"id": id_raw}},
+                    result={"success": True, "message": f"Deleted {object_type}", "data": {"id": id_raw, "deleted_ids": all_deleted}},
                 )
 
             # ── Read / search ──
@@ -730,9 +822,21 @@ class ToolCallExecutor:
                     page=max(page_num, 1),
                     page_size=rag_settings.keyword_page_size,
                 )
+                total = payload.get("total", 0)
+                raw_results = payload.get("results", [])
+                search_payload = build_search_payload(
+                    db,
+                    search_type="keyword",
+                    results=raw_results,
+                    language=run.language,
+                    keyword=keyword,
+                    page=max(page_num, 1),
+                    page_size=rag_settings.keyword_page_size,
+                    total=total,
+                )
                 return DispatchResult(
                     status="accepted",
-                    result={"success": True, "message": f"Keyword results: {payload.get('total', 0)}", "data": payload},
+                    result={"success": True, "message": f"Keyword results: {total}", "data": {"searchPayload": search_payload}},
                 )
 
             if tool == "rag_search":
@@ -747,7 +851,7 @@ class ToolCallExecutor:
                 provider_config = credential_service.get_provider_config(db, run.user_id, embedding_cfg.provider)
                 rag_settings = settings_service.get_rag_settings(db, run.user_id)
 
-                results = await search_project(
+                raw_results = await search_project(
                     db,
                     user_id=run.user_id,
                     project_id=run.project_id,
@@ -756,9 +860,17 @@ class ToolCallExecutor:
                     top_k_per_query=rag_settings.top_k_per_query,
                     neighbor_window=rag_settings.neighbor_window,
                 )
+                search_payload = build_search_payload(
+                    db,
+                    search_type="rag",
+                    results=raw_results,
+                    language=run.language,
+                    queries=query_texts,
+                    total=len(raw_results),
+                )
                 return DispatchResult(
                     status="accepted",
-                    result={"success": True, "message": f"RAG Results: {len(results)}", "data": {"results": results}},
+                    result={"success": True, "message": f"RAG Results: {len(raw_results)}", "data": {"searchPayload": search_payload}},
                 )
 
             # ── Replace / patch (non-manuscript) ──
@@ -789,7 +901,7 @@ class ToolCallExecutor:
                 )
                 if not result.get("success"):
                     return DispatchResult(
-                        status="cancelled",
+                        status="failed",
                         result=result,
                         reason=f"PATCH_MANUSCRIPT::{result.get('code') or 'UNKNOWN'}::{result.get('reason') or 'failed'}",
                     )
@@ -816,7 +928,7 @@ class ToolCallExecutor:
 
         except Exception as exc:
             return DispatchResult(
-                status="cancelled",
+                status="failed",
                 result={"success": False, "message": f"Error executing {tool}", "error": str(exc)},
                 reason=f"EXECUTION::{tool}::{exc}",
             )
@@ -835,7 +947,7 @@ class ToolCallExecutor:
         input_text = args.get("input")
         if not isinstance(input_text, str) or not input_text.strip():
             return DispatchResult(
-                status="cancelled",
+                status="failed",
                 result={"success": False, "message": "Invalid sub-agent input"},
                 reason="EXECUTION::call_sub_agent::invalid_input",
             )
@@ -843,7 +955,7 @@ class ToolCallExecutor:
         preset_id = settings_service.get_active_preset_id(db, run.user_id)
         if preset_id is None:
             return DispatchResult(
-                status="cancelled",
+                status="failed",
                 result={"success": False, "message": "No active preset"},
                 reason="EXECUTION::call_sub_agent::no_active_preset",
             )
@@ -859,13 +971,13 @@ class ToolCallExecutor:
         )
         if sub_agent is None:
             return DispatchResult(
-                status="cancelled",
+                status="failed",
                 result={"success": False, "message": f"Sub-agent not found: {agent_name}"},
                 reason="EXECUTION::call_sub_agent::not_found",
             )
         if not sub_agent.enabled:
             return DispatchResult(
-                status="cancelled",
+                status="failed",
                 result={"success": False, "message": f"Sub-agent disabled: {agent_name}"},
                 reason="EXECUTION::call_sub_agent::disabled",
             )
@@ -882,7 +994,7 @@ class ToolCallExecutor:
         )
         if caller_mode not in allowed_modes:
             return DispatchResult(
-                status="cancelled",
+                status="failed",
                 result={"success": False, "message": f"Invocation not allowed from {caller_mode}"},
                 reason="EXECUTION::call_sub_agent::not_allowed",
             )
@@ -988,7 +1100,7 @@ class ToolCallExecutor:
                 rr = apply_single_replacement(current_value, old_text, str(new_text))
                 if not rr.success:
                     return DispatchResult(
-                        status="cancelled",
+                        status="failed",
                         result={"success": False, "message": rr.reason or rr.code or "patch failed"},
                         reason=f"EXECUTION::{tool}::{rr.code or rr.reason}",
                     )
@@ -1037,7 +1149,7 @@ class ToolCallExecutor:
                 rr = apply_single_replacement(current_value, old_text, str(new_text))
                 if not rr.success:
                     return DispatchResult(
-                        status="cancelled",
+                        status="failed",
                         result={"success": False, "message": rr.reason or rr.code or "patch failed"},
                         reason=f"EXECUTION::{tool}::{rr.code or rr.reason}",
                     )
@@ -1097,7 +1209,7 @@ class ToolCallExecutor:
             rr = apply_single_replacement(current_value, old_text, str(new_text))
             if not rr.success:
                 return DispatchResult(
-                    status="cancelled",
+                    status="failed",
                     result={"success": False, "message": rr.reason or rr.code or "patch failed"},
                     reason=f"EXECUTION::{tool}::{rr.code or rr.reason}",
                 )

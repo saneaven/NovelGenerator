@@ -189,6 +189,12 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   useEffect(() => {
     if (!selectedChildThreadId) return;
 
+    // Skip recovery if thread already has an active SSE stream.
+    // recover() would overwrite lastEventSeqByThread, causing the SSE backlog
+    // dedup check in handleEvent to filter out early events like thread:prompt_prepared.
+    const store = useThreadStore.getState();
+    if (store.isThreadStreamActive(selectedChildThreadId)) return;
+
     let cancelled = false;
     let inFlight = false;
 

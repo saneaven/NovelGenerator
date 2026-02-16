@@ -10,7 +10,7 @@ import {
 
 
 export interface ToolCallRunResult {
-  status: 'pending_confirmation' | 'success' | 'error' | 'cancelled';
+  status: 'pending_confirmation' | 'success' | 'error' | 'rejected';
   toolCalls: ToolCallMetadata[];
   error?: string;
   warning?: string;
@@ -24,7 +24,7 @@ export function evaluateToolCallStatus(toolCalls: ToolCallMetadata[]): Omit<Tool
 
   const hasAccepted = toolCalls.some((toolCall) => toolCall.status === 'accepted');
   const hasFailed = toolCalls.some((toolCall) => toolCall.status === 'failed');
-  const hasRejected = toolCalls.some((toolCall) => toolCall.status === 'rejected' || toolCall.status === 'cancelled');
+  const hasRejected = toolCalls.some((toolCall) => toolCall.status === 'rejected');
 
   if (hasFailed && !hasAccepted) {
     const firstError = toolCalls.find((toolCall) => toolCall.status === 'failed')?.reason || 'Tool execution failed';
@@ -37,7 +37,7 @@ export function evaluateToolCallStatus(toolCalls: ToolCallMetadata[]): Omit<Tool
     return { status: 'success' };
   }
   if (hasRejected) {
-    return { status: 'cancelled' };
+    return { status: 'rejected' };
   }
   return { status: 'error', error: 'No applicable actions found' };
 }
@@ -57,7 +57,7 @@ export function markToolCallsRunning(params: {
       return { ...toolCall, status: 'rejected', reason: toolCall.reason ?? 'User rejected' };
     }
     if (decision === 'cancel') {
-      return { ...toolCall, status: 'cancelled', reason: toolCall.reason ?? 'Cancelled' };
+      return { ...toolCall, status: 'rejected', reason: toolCall.reason ?? 'User rejected' };
     }
     return toolCall;
   });

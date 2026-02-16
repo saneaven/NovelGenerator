@@ -1010,7 +1010,7 @@
     "processing": "처리 중",
     "running": "적용 중",
     "applied": "적용됨",
-    "skipped": "건너뜀",
+    "rejected": "거부됨",
     "failed": "실패"
   },
   "toolCall": {

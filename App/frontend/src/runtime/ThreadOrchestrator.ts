@@ -12,6 +12,7 @@ import {
   type ThreadToolCall,
 } from './store/threadStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { toAutoApproveCategory } from '../toolCall/runtime/engine';
 import { createClientMessageId, isUuid } from '../utils/idUtils';
 
@@ -22,11 +23,11 @@ type ThreadToolCallStatus = ThreadToolCall['status'];
 const TERMINAL_TOOL_STATUSES: ReadonlySet<ThreadToolCallStatus> = new Set([
   'accepted',
   'rejected',
-  'cancelled',
+  'failed',
 ]);
 
 function parseThreadToolCallStatus(raw: unknown): ThreadToolCallStatus {
-  if (raw === 'pending' || raw === 'running' || raw === 'accepted' || raw === 'rejected' || raw === 'cancelled') {
+  if (raw === 'pending' || raw === 'running' || raw === 'accepted' || raw === 'rejected' || raw === 'failed') {
     return raw;
   }
   throw new Error(`Invalid tool call status: ${String(raw)}`);
@@ -297,6 +298,14 @@ export class ThreadOrchestrator {
     });
     store.upsertToolCalls(input.messageId, updates);
 
+    // Sync affected objects to unified store
+    if (response.affected_objects?.length || response.deleted_ids?.length) {
+      useUnifiedObjectStore.getState().applyAffectedObjects(
+        (response.affected_objects ?? []) as any[],
+        (response.deleted_ids ?? []).map((d) => d.id),
+      );
+    }
+
     // Register child threads + store child→parent mapping
     for (const tc of updates) {
       if (tc.childThreadId) {
@@ -371,8 +380,16 @@ export class ThreadOrchestrator {
   async recover(projectId: string, threadId: string): Promise<void> {
     const state = await threadService.getState(projectId, threadId);
     const store = useThreadStore.getState();
-    const recoveredEventSeq = typeof state.last_event_seq === 'number' ? state.last_event_seq : 0;
-    this.lastEventSeqByThread.set(threadId, recoveredEventSeq);
+
+    // If an SSE stream is already active for this thread, don't overwrite
+    // event seq tracking or stream-active state — the live stream handles this.
+    // Without this guard, recover() racing with resume() would set lastEventSeqByThread
+    // to a high value, causing the SSE backlog dedup check to filter out early events.
+    const hasActiveStream = store.isThreadStreamActive(threadId);
+    if (!hasActiveStream) {
+      const recoveredEventSeq = typeof state.last_event_seq === 'number' ? state.last_event_seq : 0;
+      this.lastEventSeqByThread.set(threadId, recoveredEventSeq);
+    }
 
     if (state.thread) {
       store.upsertThread(mapBackendThread(state.thread));
@@ -398,6 +415,23 @@ export class ThreadOrchestrator {
       for (const [messageId, tcs] of byMessage) {
         store.upsertToolCalls(messageId, tcs);
       }
+
+      // Create placeholder ThreadInfo for child threads so SubAgentPeekDock
+      // can build childEntries (its lazy recovery will fetch full state).
+      for (const raw of state.tool_calls) {
+        const childId = raw.child_thread_id;
+        if (childId && !store.getThread(childId)) {
+          store.upsertThread({
+            id: childId,
+            projectId,
+            threadType: 'subAgent',
+            ownerId: null,
+            journeyKind: null,
+            status: 'idle',
+            lastError: null,
+          });
+        }
+      }
     }
 
     if (state.last_error) {
@@ -406,7 +440,9 @@ export class ThreadOrchestrator {
         lastError: normalizeErrorText(state.last_error) ?? 'An error occurred during generation.',
       });
     }
-    store.setThreadStreamActive(threadId, false);
+    if (!hasActiveStream) {
+      store.setThreadStreamActive(threadId, false);
+    }
   }
 
   // ── Event handling ──
@@ -616,48 +652,6 @@ export class ThreadOrchestrator {
         break;
       }
 
-      case 'thread:tool_calls_executed': {
-        const messageId = payload.message_id;
-        const existing = store.getToolCalls(messageId);
-        const updates: ThreadToolCall[] = (payload.tool_calls ?? []).map((tc: any) => {
-          const prev = existing.find((e) => e.llmCallId === (tc.id ?? tc.llm_call_id));
-          return {
-            ...(prev ?? {
-              id: `${messageId}:${tc.id ?? tc.llm_call_id}`,
-              threadId,
-              messageId,
-              callSeq: 0,
-              llmCallId: tc.id ?? tc.llm_call_id,
-              toolName: tc.tool_name,
-              arguments: {},
-              createdAt: new Date().toISOString(),
-            }),
-            status: parseThreadToolCallStatus(tc.status),
-            reason: tc.reason ?? null,
-            result: tc.result ?? null,
-            childThreadId: tc.child_thread_id ?? prev?.childThreadId ?? null,
-            updatedAt: new Date().toISOString(),
-          } as ThreadToolCall;
-        });
-        store.upsertToolCalls(messageId, updates);
-
-        // Register placeholder child threads so SubAgentPeekDock can render
-        for (const tc of updates) {
-          if (tc.childThreadId && !store.getThread(tc.childThreadId)) {
-            store.upsertThread({
-              id: tc.childThreadId,
-              projectId: String(data.project_id ?? ''),
-              threadType: 'subAgent',
-              ownerId: null,
-              journeyKind: null,
-              status: 'running',
-              lastError: null,
-            });
-          }
-        }
-        break;
-      }
-
       case 'thread:complete': {
         store.patchThread(threadId, { status: 'idle', lastError: null });
         this.clearPendingUserMessagesForThread(threadId);
@@ -696,7 +690,7 @@ export class ThreadOrchestrator {
           if (target) {
             store.upsertToolCalls(errorParentRef.messageId, [{
               ...target,
-              status: 'cancelled' as const,
+              status: 'failed' as const,
               reason: 'Child sub-agent failed',
               updatedAt: new Date().toISOString(),
             }]);

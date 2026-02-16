@@ -41,7 +41,6 @@ function normalizeStoredStatus(status?: string): HeaderStatus {
     case 'failed':
     case 'accepted':
     case 'rejected':
-    case 'cancelled':
       return status;
     case undefined:
       return 'pending';

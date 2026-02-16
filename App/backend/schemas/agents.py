@@ -12,7 +12,7 @@ class ToolCallStatus(str, Enum):
     RUNNING = "running"
     REJECTED = "rejected"
     ACCEPTED = "accepted"
-    CANCELLED = "cancelled"
+    FAILED = "failed"
 
 
 class ToolCallFailureType(str, Enum):

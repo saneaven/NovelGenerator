@@ -210,8 +210,7 @@ class RunPipeline:
             run = (
                 db.query(RunModel)
                 .filter(
-                    RunModel.thread_id == thread_id,
-                    RunModel.status.in_(["waiting", "running", "paused"]),
+                    RunModel.thread_id == thread_id
                 )
                 .order_by(RunModel.run_seq.desc().nullslast())
                 .with_for_update()
@@ -249,8 +248,8 @@ class RunPipeline:
                     lines.append(str(msg or f"{item['tool_name']}: accepted"))
                 elif status == "rejected":
                     lines.append(f"{item['tool_name']}: rejected ({item.get('reason') or 'user'})")
-                elif status == "cancelled":
-                    lines.append(f"{item['tool_name']}: cancelled ({item.get('reason') or 'error'})")
+                elif status == "failed":
+                    lines.append(f"{item['tool_name']}: failed ({item.get('reason') or 'error'})")
                 elif status == "running":
                     lines.append(f"{item['tool_name']}: running ({item.get('reason') or 'in progress'})")
 
@@ -273,11 +272,6 @@ class RunPipeline:
 
             db.commit()
 
-        await run_event_emitter.emit(
-            "thread:tool_calls_executed", event_ctx,
-            {"message_id": str(message_id), "tool_calls": tool_rows},
-        )
-
         # Launch child pipelines for any call_sub_agent that returned "running"
         for row_info in tool_rows:
             if row_info["status"] == "running":
@@ -289,7 +283,11 @@ class RunPipeline:
             target_message_id=message_id,
         )
 
-        return {"tool_calls": tool_rows}
+        return {
+            "tool_calls": tool_rows,
+            "affected_objects": applied.affected_objects,
+            "deleted_ids": applied.deleted_ids,
+        }
 
     async def pause(self, *, user_id: UUID, thread_id: UUID) -> None:
         with short_session() as db:
@@ -694,8 +692,12 @@ class RunPipeline:
             },
         )
 
-        # Always wait for frontend decisions (auto-approve handled by frontend)
         db.commit()
+
+        # If all calls are pre-failed (validation), skip waiting — let LLM retry
+        if all(item.status != "pending" for item in staged):
+            return StepResult(waiting_for_decision=False, completed=False)
+
         return StepResult(waiting_for_decision=True, completed=False)
 
     # ── Memory & Context Cut Loop ──
@@ -1050,7 +1052,7 @@ class RunPipeline:
                 }
                 call_row.accepted_at = datetime.utcnow()
             else:
-                call_row.status = "cancelled"
+                call_row.status = "failed"
                 call_row.reason = f"EXECUTION::call_sub_agent::{terminal_status}"
                 call_row.result = {"success": False, "message": child.error or f"Sub-agent {terminal_status}"}
                 call_row.accepted_at = None
@@ -1061,7 +1063,7 @@ class RunPipeline:
             if call_row.status == "accepted":
                 summary = str((call_row.result or {}).get("message") or f"{call_row.tool_name}: accepted")
             else:
-                summary = f"{call_row.tool_name}: cancelled ({call_row.reason or 'error'})"
+                summary = f"{call_row.tool_name}: failed ({call_row.reason or 'error'})"
 
             tool_msg = RunMessageModel(
                 thread_id=parent_thread.id,
@@ -1086,25 +1088,6 @@ class RunPipeline:
                 parent_ctx,
                 {"child_run_id": str(child.id), "output": child.final_output or ""},
             )
-            await run_event_emitter.emit(
-                "thread:tool_calls_executed",
-                parent_ctx,
-                {
-                    "message_id": str(child.parent_run_message_id),
-                    "tool_calls": [
-                        {
-                            "id": str(call_row.llm_call_id),
-                            "tool_name": call_row.tool_name,
-                            "status": call_row.status,
-                            "reason": call_row.reason,
-                            "result": call_row.result,
-                            "child_thread_id": str(call_row.child_thread_id) if call_row.child_thread_id else None,
-                            "child_run_id": str(call_row.child_run_id) if call_row.child_run_id else None,
-                        }
-                    ],
-                },
-            )
-
         # Resume parent if all tool calls for the message are terminal
         if parent_run_id is not None:
             await self._maybe_notify_parent_ready(parent_run_id, user_id)
@@ -1120,7 +1103,7 @@ class RunPipeline:
         target_message_id: UUID | None,
     ) -> None:
         """Emit readiness event when the latest assistant tool-call set is terminal."""
-        terminal_statuses = {"accepted", "rejected", "cancelled"}
+        terminal_statuses = {"accepted", "rejected", "failed"}
 
         with short_session() as db:
             run = db.query(RunModel).filter(RunModel.id == run_id, RunModel.user_id == user_id).first()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -114,7 +115,7 @@ class ConversationBuilder:
                             "type": "function",
                             "function": {
                                 "name": tc.tool_name,
-                                "arguments": tc.arguments if isinstance(tc.arguments, str) else tc.arguments,
+                                "arguments": tc.arguments if isinstance(tc.arguments, str) else json.dumps(tc.arguments, ensure_ascii=False),
                             },
                         }
                         for tc in msg.tool_calls
@@ -135,8 +136,8 @@ class ConversationBuilder:
                             )
                         elif tc.status == "rejected":
                             content = f"User rejected: {tc.reason}" if tc.reason else "User rejected this action"
-                        elif tc.status == "cancelled":
-                            content = f"Cancelled: {tc.reason}" if tc.reason else "Cancelled"
+                        elif tc.status == "failed":
+                            content = f"Failed: {tc.reason}" if tc.reason else "Failed"
                         else:
                             content = f"Failed: {tc.reason or 'Unknown error'}"
                         tool_results.append(

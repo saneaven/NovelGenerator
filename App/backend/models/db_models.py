@@ -827,7 +827,7 @@ class RunToolCallModel(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending','running','accepted','rejected','cancelled')",
+            "status IN ('pending','running','accepted','rejected','failed')",
             name='ck_run_tool_calls_status',
         ),
         UniqueConstraint('message_id', 'llm_call_id', name='uq_run_tool_calls_message_llm_call_id'),

@@ -200,7 +200,11 @@ export const threadService = {
       decisions: Record<string, 'accept' | 'reject' | 'cancel'>;
       options?: Record<string, unknown>;
     },
-  ): Promise<{ tool_calls: Array<{ id: string; tool_name: string; status: string; reason: string | null; result: any; child_thread_id: string | null; child_run_id: string | null }> }> {
+  ): Promise<{
+    tool_calls: Array<{ id: string; tool_name: string; status: string; reason: string | null; result: any; child_thread_id: string | null; child_run_id: string | null }>;
+    affected_objects?: Array<Record<string, unknown>>;
+    deleted_ids?: Array<{ id: string; type: string }>;
+  }> {
     return apiClient.patch(
       buildPath(projectId, `/${encodeURIComponent(threadId)}/tool-decisions`),
       payload,

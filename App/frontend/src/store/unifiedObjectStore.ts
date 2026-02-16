@@ -92,6 +92,9 @@ interface UnifiedObjectStore {
     projectId: string,
     objectIds: string[]
   ) => Promise<void>;
+
+  // Bulk sync from tool call results
+  applyAffectedObjects: (objects: UnifiedObject[], deletedIds: string[]) => void;
 }
 
 // ============================================================================
@@ -508,6 +511,20 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       console.error('Failed to reorder objects:', error);
       throw error;
     }
+  },
+
+  applyAffectedObjects: (objects: UnifiedObject[], deletedIds: string[]) => {
+    if (!objects.length && !deletedIds.length) return;
+    set((s) => {
+      const next = { ...s.objects };
+      for (const obj of objects) {
+        next[obj.id] = obj;
+      }
+      for (const id of deletedIds) {
+        delete next[id];
+      }
+      return { objects: next };
+    });
   },
   });
 });

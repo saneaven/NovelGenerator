@@ -132,11 +132,15 @@ class AsyncOpenAIProvider(BaseProvider):
                 # OpenAI: separate message per tool result with role "tool"
                 tool_results = msg.get("tool_results", [])
                 for tr in tool_results:
-                    converted.append({
+                    tool_msg: Dict[str, object] = {
                         "role": "tool",
                         "tool_call_id": tr.get("tool_call_id", ""),
-                        "content": tr.get("content", "")
-                    })
+                        "content": tr.get("content", ""),
+                    }
+                    tool_name = tr.get("tool_name")
+                    if tool_name:
+                        tool_msg["name"] = tool_name
+                    converted.append(tool_msg)
                 continue
 
             converted_msg: Dict[str, object] = {

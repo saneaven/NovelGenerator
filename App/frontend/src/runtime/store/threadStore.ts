@@ -40,7 +40,7 @@ export interface ThreadToolCall {
   llmCallId: string;
   toolName: string;
   arguments: Record<string, unknown>;
-  status: 'pending' | 'running' | 'accepted' | 'rejected' | 'cancelled';
+  status: 'pending' | 'running' | 'accepted' | 'rejected' | 'failed';
   reason?: string | null;
   result?: Record<string, unknown> | null;
   childThreadId?: string | null;

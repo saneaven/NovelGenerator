@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from collections import OrderedDict
+from typing import Any, Dict, List, Optional, Set, Tuple
 from uuid import UUID
 
 from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
 from ..models.rag_models import RagSource
+from ..models.translation_models import ObjectVersion
 from .embedding_config_service import get_embedding_profile
 from .rag_embedding_service import embed_many
 from .rag_index_service import get_main_language
@@ -326,3 +328,124 @@ async def search_project(
 
     results.sort(key=sort_key)
     return results
+
+
+# ── Search payload builder (backend → frontend contract) ──
+
+
+def _batch_resolve_display_names(
+    db: Session,
+    *,
+    object_refs: Set[Tuple[str, str]],
+    language: str,
+) -> Dict[Tuple[str, str], str]:
+    """Resolve display names for a set of (object_type, object_id) pairs."""
+    if not object_refs:
+        return {}
+
+    result_map: Dict[Tuple[str, str], str] = {}
+
+    for object_type, object_id_str in object_refs:
+        try:
+            oid = UUID(object_id_str)
+        except (ValueError, AttributeError):
+            continue
+
+        latest: Optional[ObjectVersion] = (
+            db.query(ObjectVersion)
+            .filter(
+                ObjectVersion.object_type == object_type,
+                ObjectVersion.object_id == oid,
+            )
+            .order_by(ObjectVersion.version_number.desc())
+            .first()
+        )
+        if latest is None:
+            continue
+
+        data = latest.data if isinstance(latest.data, dict) else {}
+        lang_data = data.get(language)
+        if not isinstance(lang_data, dict):
+            # Fallback: try any available language
+            for v in data.values():
+                if isinstance(v, dict):
+                    lang_data = v
+                    break
+            else:
+                continue
+
+        key = (object_type, object_id_str)
+        name = lang_data.get("name") or lang_data.get("title")
+        if isinstance(name, str) and name.strip():
+            result_map[key] = name.strip()
+
+    return result_map
+
+
+def build_search_payload(
+    db: Session,
+    *,
+    search_type: str,
+    results: List[Dict[str, Any]],
+    language: str,
+    keyword: Optional[str] = None,
+    queries: Optional[List[str]] = None,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None,
+    total: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Transform flat search results into the grouped searchPayload format."""
+    # Collect unique (object_type, object_id) pairs
+    object_refs: Set[Tuple[str, str]] = set()
+    for r in results:
+        ot = str(r.get("object_type") or "")
+        oid = str(r.get("object_id") or "")
+        if ot and oid:
+            object_refs.add((ot, oid))
+
+    name_map = _batch_resolve_display_names(db, object_refs=object_refs, language=language)
+
+    # Group results by (object_type, object_id), preserving order
+    groups_dict: OrderedDict[Tuple[str, str], List[Dict[str, Any]]] = OrderedDict()
+    for r in results:
+        ot = str(r.get("object_type") or "")
+        oid = str(r.get("object_id") or "")
+        key = (ot, oid)
+        if key not in groups_dict:
+            groups_dict[key] = []
+        groups_dict[key].append(r)
+
+    groups: List[Dict[str, Any]] = []
+    for (ot, oid), entries in groups_dict.items():
+        display_name = name_map.get((ot, oid), oid)
+        groups.append({
+            "objectType": ot,
+            "objectId": oid,
+            "displayName": display_name,
+            "entries": [
+                {
+                    "text": str(e.get("text") or ""),
+                    "fieldPath": e.get("field_path"),
+                    "chunkIndex": e.get("chunk_index"),
+                    "distance": e.get("distance"),
+                }
+                for e in entries
+            ],
+        })
+
+    payload: Dict[str, Any] = {
+        "type": search_type,
+        "groups": groups,
+    }
+    if keyword is not None:
+        payload["keyword"] = keyword
+    if queries is not None:
+        payload["queries"] = queries
+    if page is not None:
+        payload["page"] = page
+    if page_size is not None:
+        payload["pageSize"] = page_size
+    if total is not None:
+        payload["total"] = total
+
+    return payload
