@@ -1,8 +1,3 @@
-import type { TaskSessionState } from '../../llmTask/types';
-import type { RunToolCall } from '../../runtime/types';
-
-type AnySession = TaskSessionState<unknown, unknown>;
-
 export interface ToolCallBlockingSummary {
   count: number;
   firstMessageId?: string;
@@ -10,27 +5,29 @@ export interface ToolCallBlockingSummary {
 
 export interface SendBlockingState {
   blocked: boolean;
-  rootSessionBlocked: boolean;
   unresolvedToolCalls: ToolCallBlockingSummary;
 }
 
-export function isBlockingRunToolStatus(status: string | undefined): boolean {
+/** Any object with a `status` string works (RunToolCall, ThreadToolCall, etc.) */
+type AnyToolCall = { status: string };
+
+export function isBlockingToolCallStatus(status: string | undefined): boolean {
   return status === 'pending' || status === 'running';
 }
 
-export function summarizeRunToolCallBlocking(params: {
-  runMessageIds: string[];
-  runToolCallsByMessageId: Record<string, RunToolCall[] | undefined>;
+export function summarizeToolCallBlocking(params: {
+  messageIds: string[];
+  toolCallsByMessageId: Record<string, AnyToolCall[] | undefined>;
 }): ToolCallBlockingSummary {
-  const { runMessageIds, runToolCallsByMessageId } = params;
+  const { messageIds, toolCallsByMessageId } = params;
 
   let count = 0;
   let firstMessageId: string | undefined;
 
-  for (const messageId of runMessageIds) {
-    const toolCalls = runToolCallsByMessageId[messageId] ?? [];
+  for (const messageId of messageIds) {
+    const toolCalls = toolCallsByMessageId[messageId] ?? [];
     for (const toolCall of toolCalls) {
-      if (!isBlockingRunToolStatus(toolCall.status)) continue;
+      if (!isBlockingToolCallStatus(toolCall.status)) continue;
       count += 1;
       if (!firstMessageId) {
         firstMessageId = messageId;
@@ -41,46 +38,31 @@ export function summarizeRunToolCallBlocking(params: {
   return { count, firstMessageId };
 }
 
-export function hasRootSessionBlocker(sessions: AnySession[], selectedAgentId: string): boolean {
-  return sessions.some((session) => {
-    if (session.kind !== 'agent') return false;
-    const agentId = (session.input as any)?.agentId;
-    if (agentId !== selectedAgentId) return false;
-    return session.status === 'running' || session.status === 'applying';
-  });
-}
-
 export function getSendBlockingState(params: {
   selectedAgentId?: string;
-  runMessageIds: string[];
-  sessions: AnySession[];
-  runToolCallsByMessageId?: Record<string, RunToolCall[] | undefined>;
+  messageIds: string[];
+  toolCallsByMessageId?: Record<string, AnyToolCall[] | undefined>;
 }): SendBlockingState {
   const {
     selectedAgentId,
-    runMessageIds,
-    sessions,
-    runToolCallsByMessageId,
+    messageIds,
+    toolCallsByMessageId,
   } = params;
 
   if (!selectedAgentId) {
     return {
       blocked: false,
-      rootSessionBlocked: false,
       unresolvedToolCalls: { count: 0 },
     };
   }
 
-  const unresolvedToolCalls = summarizeRunToolCallBlocking({
-    runMessageIds,
-    runToolCallsByMessageId: runToolCallsByMessageId ?? {},
+  const unresolvedToolCalls = summarizeToolCallBlocking({
+    messageIds,
+    toolCallsByMessageId: toolCallsByMessageId ?? {},
   });
 
-  const rootSessionBlocked = hasRootSessionBlocker(sessions, selectedAgentId);
-
   return {
-    blocked: rootSessionBlocked || unresolvedToolCalls.count > 0,
-    rootSessionBlocked,
+    blocked: unresolvedToolCalls.count > 0,
     unresolvedToolCalls,
   };
 }

@@ -32,7 +32,7 @@ export interface Journey<TInput = unknown, TResult = unknown> {
   id: string;
   kind: JourneyKind;
   input: TInput;
-  runId?: string;
+  threadId?: string;
 
   // Status
   status: JourneyStatus;

@@ -1,19 +1,22 @@
-export * from './types';
-export { runtimeOrchestrator } from './RuntimeOrchestrator';
-export { useRuntimeStore } from './store/runtimeStore';
+// ── Thread-centric runtime ──
+export { threadOrchestrator } from './ThreadOrchestrator';
 export {
-  canTransitionRunStatus,
-  ALLOWED_RUN_STATUS_TRANSITIONS,
-  assertRunTransition,
-  isTerminalRunStatus,
-} from './stateMachine';
+  useThreadStore,
+  type ThreadInfo,
+  type ThreadMessage,
+  type ThreadToolCall,
+  type ThreadType,
+  type ThreadStatus,
+} from './store/threadStore';
 export {
   useConversationTimeline,
   getAgentRunMessageIds,
+  getThreadMessageIds,
   type ConversationMessage,
 } from './selectors/conversationTimeline';
 export {
   resolveRunMessageDisplay,
   getRunMessageText,
   buildLangEntry,
+  type LangEntry,
 } from './utils/displayMessage';

@@ -5,9 +5,8 @@ export { mapToolToOperationVM, toStoredHeaderStatus } from './toolToVm';
 export { extractSearchPayload } from './searchPayload';
 export {
   getSendBlockingState,
-  hasRootSessionBlocker,
-  summarizeRunToolCallBlocking,
-  isBlockingRunToolStatus,
+  summarizeToolCallBlocking,
+  isBlockingToolCallStatus,
   type SendBlockingState,
   type ToolCallBlockingSummary,
 } from './blockingSelectors';

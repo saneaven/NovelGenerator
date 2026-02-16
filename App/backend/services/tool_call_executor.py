@@ -1,5 +1,8 @@
+"""Parallel tool-call execution with same-object patch grouping."""
+
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -8,7 +11,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from ..models.db_models import RunModel, RunToolCallModel, SubAgentDefinitionModel
+from ..models.db_models import RunMessageModel, RunModel, RunToolCallModel, SubAgentDefinitionModel, Thread
 from .credential_service import credential_service
 from .manuscript_batch import ManuscriptBatch
 from .object_service import object_service
@@ -20,7 +23,7 @@ from .tool_schemas import ToolSchemaDef
 from .validators import GLOBAL_VALIDATORS, TOOL_VALIDATORS, ValidationContext, run_validator_chain
 
 
-ToolDecision = Literal["accept", "reject"]
+ToolDecision = Literal["accept", "reject", "cancel"]
 
 
 @dataclass
@@ -36,8 +39,7 @@ class StagedToolCall:
     call_seq: int
     tool_name: str
     arguments: dict[str, Any]
-    status: Literal["pending", "failed"]
-    failure_type: Literal["validation"] | None = None
+    status: Literal["pending", "cancel"]
     reason: str | None = None
 
 
@@ -61,20 +63,56 @@ class StagedUpdate:
 
 
 @dataclass
-class ApplyResult:
-    rows: list[RunToolCallModel]
-    blocked_children: list[dict[str, str]] = field(default_factory=list)
-    subagent_finalize_output: str | None = None
+class DispatchResult:
+    status: Literal["accepted", "running", "cancel"]
+    result: dict[str, Any] | None = None
+    reason: str | None = None
+    child_run_id: UUID | None = None
+    child_thread_id: UUID | None = None
+    output_text: str | None = None
 
 
 @dataclass
-class DispatchResult:
-    kind: Literal["ok", "blocked_child", "finalize_subagent", "error"]
-    result: dict[str, Any] | None = None
-    failure_type: Literal["execution", "partial"] | None = None
-    reason: str | None = None
-    child_run_id: str | None = None
-    output_text: str | None = None
+class ApplyResult:
+    rows: list[RunToolCallModel]
+    subagent_finalize_output: str | None = None
+
+
+# ── Patch-grouping helpers ──
+
+_PATCHABLE_TOOLS = frozenset({
+    "replace_basic_info", "patch_basic_info",
+    "replace_guidelines", "patch_guidelines",
+    "replace_story_object", "patch_story_object",
+    "replace_outline", "patch_outline",
+    "replace_outline_act", "patch_outline_act",
+    "replace_outline_chapter", "patch_outline_chapter",
+})
+
+
+def _patch_target_key(row: RunToolCallModel) -> str:
+    """Return a grouping key for patchable tool calls on the same object."""
+    args = row.arguments if isinstance(row.arguments, dict) else {}
+    tool = row.tool_name
+
+    if tool in {"replace_basic_info", "patch_basic_info"}:
+        return "basic_info:__singleton__"
+    if tool in {"replace_guidelines", "patch_guidelines"}:
+        oid = args.get("id", "__singleton__")
+        return f"guidelines:{oid}"
+
+    oid = args.get("id", "__unknown__")
+    if tool in {"replace_story_object", "patch_story_object"}:
+        otype = args.get("type", "story")
+        return f"{otype}:{oid}"
+    if tool in {"replace_outline", "patch_outline"}:
+        return f"outline:{oid}"
+    if tool in {"replace_outline_act", "patch_outline_act"}:
+        return f"act:{oid}"
+    if tool in {"replace_outline_chapter", "patch_outline_chapter"}:
+        return f"chapter:{oid}"
+
+    return f"unknown:{oid}"
 
 
 class ToolCallExecutor:
@@ -83,6 +121,8 @@ class ToolCallExecutor:
     def __init__(self, sidecar: SidecarClient) -> None:
         self._sidecar = sidecar
         self._manuscript_batch = ManuscriptBatch()
+
+    # ── Utility methods ──
 
     @staticmethod
     def _truncate_json_value(value: Any) -> Any:
@@ -232,6 +272,35 @@ class ToolCallExecutor:
         for key in [k for k in staged_updates.keys() if k.startswith(prefix)]:
             del staged_updates[key]
 
+    def _flush_staged_updates(
+        self,
+        db: Session,
+        run: RunModel,
+        staged_updates: dict[str, StagedUpdate],
+    ) -> set[str]:
+        """Flush staged non-manuscript updates. Returns set of failed call_ids."""
+        failed_call_ids: set[str] = set()
+        for staged in staged_updates.values():
+            try:
+                object_service.update_object(
+                    db=db,
+                    project_id=run.project_id,
+                    object_type=staged.object_type,
+                    object_id=staged.object_id,
+                    data=staged.data,
+                    language=staged.language,
+                    metadata=staged.metadata,
+                    user_request=staged.user_request,
+                    create_new_version=staged.create_new_version,
+                    created_by=run.user_id,
+                )
+            except Exception:
+                for call_id in staged.call_ids:
+                    failed_call_ids.add(call_id)
+        return failed_call_ids
+
+    # ── Validation / staging ──
+
     async def stage_tool_calls(
         self,
         db: Session,
@@ -262,8 +331,7 @@ class ToolCallExecutor:
                         call_seq=idx,
                         tool_name=raw.tool_name,
                         arguments={},
-                        status="failed",
-                        failure_type="validation",
+                        status="cancel",
                         reason=f"VALIDATION::parse_arguments::{parse_err}",
                     )
                 )
@@ -277,8 +345,7 @@ class ToolCallExecutor:
                         call_seq=idx,
                         tool_name=raw.tool_name,
                         arguments=args,
-                        status="failed",
-                        failure_type="validation",
+                        status="cancel",
                         reason=f"VALIDATION::{global_result.validator or 'global'}::{global_result.reason}",
                     )
                 )
@@ -293,8 +360,7 @@ class ToolCallExecutor:
                         call_seq=idx,
                         tool_name=raw.tool_name,
                         arguments=args,
-                        status="failed",
-                        failure_type="validation",
+                        status="cancel",
                         reason=f"VALIDATION::{per_result.validator or 'tool'}::{per_result.reason}",
                     )
                 )
@@ -312,6 +378,8 @@ class ToolCallExecutor:
 
         return staged
 
+    # ── Main entry point ──
+
     async def apply_tool_calls(
         self,
         db: Session,
@@ -319,8 +387,6 @@ class ToolCallExecutor:
         message_id: UUID,
         decisions: dict[str, ToolDecision],
         options: dict[str, Any] | None,
-        *,
-        run_engine: Any = None,
     ) -> ApplyResult:
         opts = HandlerOptions(
             create_new_version=bool((options or {}).get("create_new_version", True)),
@@ -337,163 +403,177 @@ class ToolCallExecutor:
             .all()
         )
 
-        object_cache: dict[str, dict[str, Any]] = {}
-        staged_updates: dict[str, StagedUpdate] = {}
-        blocked_children: list[dict[str, str]] = []
-        subagent_finalize_output: str | None = None
-        finalized_subagent = False
-
-        accepted_rows: list[RunToolCallModel] = []
+        # ── Decision phase ──
+        to_dispatch: list[RunToolCallModel] = []
         for row in rows:
-            if row.status in {"accepted", "rejected", "failed"}:
-                continue
-            if row.status != "pending":
-                continue
-
-            if finalized_subagent:
-                row.status = "rejected"
-                row.reason = "REJECTED::subagent_already_completed"
-                row.updated_at = datetime.utcnow()
+            if row.status not in {"pending"}:
                 continue
 
             decision = decisions.get(row.llm_call_id, "reject")
+            if decision == "cancel":
+                row.status = "cancel"
+                row.reason = row.reason or "Cancelled"
+                row.updated_at = datetime.utcnow()
+                continue
             if decision != "accept":
-                row.status = "rejected"
+                row.status = "reject"
                 row.reason = row.reason or "User rejected"
                 row.updated_at = datetime.utcnow()
                 continue
+            to_dispatch.append(row)
 
+        # Guard: return_sub_agent_result rejects all peers
+        finalize_row = next(
+            (r for r in to_dispatch if r.tool_name == "return_sub_agent_result"), None
+        )
+        if finalize_row:
+            for r in to_dispatch:
+                if r is not finalize_row:
+                    r.status = "reject"
+                    r.reason = "REJECTED::subagent_already_completed"
+                    r.updated_at = datetime.utcnow()
+            to_dispatch = [finalize_row]
+
+        # ── Group patchable tools by target object ──
+        patch_groups: dict[str, list[RunToolCallModel]] = {}
+        independent: list[RunToolCallModel] = []
+        for row in to_dispatch:
+            if row.tool_name in _PATCHABLE_TOOLS:
+                key = _patch_target_key(row)
+                patch_groups.setdefault(key, []).append(row)
+            else:
+                independent.append(row)
+
+        # Mark all dispatching rows as running
+        for row in to_dispatch:
             row.status = "running"
             row.updated_at = datetime.utcnow()
 
-            dispatch_raw = await self._dispatch_tool_call(
-                db=db,
-                run=run,
-                row=row,
-                options=opts,
-                object_cache=object_cache,
-                staged_updates=staged_updates,
-                run_engine=run_engine,
+        # ── Build parallel tasks ──
+        async def dispatch_single(
+            r: RunToolCallModel,
+        ) -> list[tuple[RunToolCallModel, DispatchResult]]:
+            local_cache: dict[str, dict[str, Any]] = {}
+            local_staged: dict[str, StagedUpdate] = {}
+            result = await self._dispatch_tool_call(
+                db=db, run=run, row=r, options=opts,
+                object_cache=local_cache, staged_updates=local_staged,
             )
-            if isinstance(dispatch_raw, DispatchResult):
-                dispatch = dispatch_raw
-            else:
-                result, failure_type, reason = dispatch_raw
-                dispatch = (
-                    DispatchResult(kind="ok", result=result)
-                    if failure_type is None
-                    else DispatchResult(kind="error", result=result, failure_type=failure_type, reason=reason)
+            failed = self._flush_staged_updates(db, run, local_staged)
+            if failed and r.llm_call_id in failed and result.status == "accepted":
+                result = DispatchResult(
+                    status="cancel",
+                    result={"success": False, "message": "flush failed"},
+                    reason="EXECUTION::flush::update_failed",
                 )
+            return [(r, result)]
 
-            if dispatch.kind == "ok":
-                row.status = "accepted"
-                row.failure_type = None
-                row.reason = None
-                row.accepted_at = datetime.utcnow()
-                row.result = self._truncate_json_value(dispatch.result or {"success": True})
-                accepted_rows.append(row)
-            elif dispatch.kind == "finalize_subagent":
-                row.status = "accepted"
-                row.failure_type = None
-                row.reason = None
-                row.accepted_at = datetime.utcnow()
-                row.result = self._truncate_json_value(dispatch.result or {"success": True})
-                accepted_rows.append(row)
-                subagent_finalize_output = (dispatch.output_text or "").strip()
-                finalized_subagent = True
-            elif dispatch.kind == "blocked_child":
-                child_run_id = str(dispatch.child_run_id or "").strip()
-                row.status = "running"
-                row.failure_type = None
-                row.reason = f"CHILD_WAITING::{child_run_id}" if child_run_id else "CHILD_WAITING"
-                row.result = self._truncate_json_value(
-                    dispatch.result
-                    or {
-                        "success": True,
-                        "message": "Sub-agent run is waiting for decisions",
-                        "child_run_id": child_run_id,
-                    }
-                )
-                row.accepted_at = None
-                if child_run_id:
-                    blocked_children.append(
-                        {
-                            "llm_call_id": row.llm_call_id,
-                            "child_run_id": child_run_id,
-                            "parent_message_id": str(message_id),
-                        }
-                    )
-            else:
-                row.status = "failed"
-                row.failure_type = dispatch.failure_type
-                row.reason = dispatch.reason
-                row.result = self._truncate_json_value(dispatch.result or {"success": False})
+        async def dispatch_group(
+            group: list[RunToolCallModel],
+        ) -> list[tuple[RunToolCallModel, DispatchResult]]:
+            return await self._dispatch_grouped_patches(db, run, group, opts)
 
-            row.updated_at = datetime.utcnow()
+        tasks: list[Any] = []
+        for row in independent:
+            tasks.append(dispatch_single(row))
+        for group in patch_groups.values():
+            tasks.append(dispatch_group(group))
 
-        # Flush manuscript batch first (it calls object_service.update_object internally)
+        # ── Execute in parallel ──
+        subagent_finalize_output: str | None = None
+        if tasks:
+            gather_results = await asyncio.gather(*tasks, return_exceptions=True)
+            for outcome in gather_results:
+                if isinstance(outcome, BaseException):
+                    continue
+                for row, dispatch in outcome:
+                    if dispatch.status == "accepted":
+                        row.status = "accepted"
+                        row.reason = None
+                        row.accepted_at = datetime.utcnow()
+                        row.result = self._truncate_json_value(dispatch.result or {"success": True})
+                        if dispatch.output_text:
+                            subagent_finalize_output = dispatch.output_text
+                    elif dispatch.status == "running":
+                        row.status = "running"
+                        row.reason = dispatch.reason
+                        row.result = self._truncate_json_value(dispatch.result or {"success": True})
+                        if dispatch.child_run_id:
+                            row.child_run_id = dispatch.child_run_id
+                        if dispatch.child_thread_id:
+                            row.child_thread_id = dispatch.child_thread_id
+                    else:  # cancel
+                        row.status = "cancel"
+                        row.reason = dispatch.reason
+                        row.result = self._truncate_json_value(dispatch.result or {"success": False})
+                    row.updated_at = datetime.utcnow()
+
+        # ── Flush manuscript batch ──
         flush_results, key_to_call_ids = await self._manuscript_batch.flush_all(
             db=db,
             sidecar=self._sidecar,
             object_service=object_service,
             created_by=run.user_id,
         )
-
         failed_call_ids: set[str] = set()
         for key, status in flush_results.items():
             if status.success:
                 continue
             for call_id in key_to_call_ids.get(key, set()):
                 failed_call_ids.add(call_id)
-
-        # Flush staged non-manuscript updates once per dedup key
-        update_flush_failures: dict[str, str] = {}
-        for staged in staged_updates.values():
-            try:
-                object_service.update_object(
-                    db=db,
-                    project_id=run.project_id,
-                    object_type=staged.object_type,
-                    object_id=staged.object_id,
-                    data=staged.data,
-                    language=staged.language,
-                    metadata=staged.metadata,
-                    user_request=staged.user_request,
-                    create_new_version=staged.create_new_version,
-                    created_by=run.user_id,
-                )
-            except Exception as exc:
-                update_flush_failures[staged.key] = str(exc)
-                for call_id in staged.call_ids:
-                    failed_call_ids.add(call_id)
-
         if failed_call_ids:
             for row in rows:
-                if row.status != "accepted":
+                if row.status != "accepted" or row.llm_call_id not in failed_call_ids:
                     continue
-                if row.llm_call_id not in failed_call_ids:
-                    continue
-                row.status = "failed"
-                row.failure_type = "partial"
-                row.reason = row.reason or "EXECUTION::flush::batched flush failed"
-                row.result = self._truncate_json_value({
-                    "success": False,
-                    "message": row.reason,
-                    "flush_errors": update_flush_failures,
-                })
+                row.status = "cancel"
+                row.reason = "EXECUTION::flush::batched flush failed"
+                row.result = self._truncate_json_value({"success": False, "message": row.reason})
                 row.accepted_at = None
                 row.updated_at = datetime.utcnow()
 
-        if subagent_finalize_output is not None and run.run_type != "subAgent":
-            # Guardrail: only subAgent runs may finalize via return_sub_agent_result.
+        if subagent_finalize_output is not None and run.thread.thread_type != "subAgent":
             subagent_finalize_output = None
 
         db.flush()
-        return ApplyResult(
-            rows=rows,
-            blocked_children=blocked_children,
-            subagent_finalize_output=subagent_finalize_output,
-        )
+        return ApplyResult(rows=rows, subagent_finalize_output=subagent_finalize_output)
+
+    # ── Grouped patch dispatch ──
+
+    async def _dispatch_grouped_patches(
+        self,
+        db: Session,
+        run: RunModel,
+        rows: list[RunToolCallModel],
+        options: HandlerOptions,
+    ) -> list[tuple[RunToolCallModel, DispatchResult]]:
+        """Process patches on the same object sequentially, flush once."""
+        results: list[tuple[RunToolCallModel, DispatchResult]] = []
+        shared_cache: dict[str, dict[str, Any]] = {}
+        shared_staged: dict[str, StagedUpdate] = {}
+
+        for row in rows:
+            result = await self._dispatch_tool_call(
+                db=db, run=run, row=row, options=options,
+                object_cache=shared_cache, staged_updates=shared_staged,
+            )
+            results.append((row, result))
+
+        failed = self._flush_staged_updates(db, run, shared_staged)
+        if failed:
+            for i, (row, dispatch) in enumerate(results):
+                if dispatch.status == "accepted" and row.llm_call_id in failed:
+                    results[i] = (
+                        row,
+                        DispatchResult(
+                            status="cancel",
+                            result={"success": False, "message": "flush failed"},
+                            reason="EXECUTION::flush::group_update_failed",
+                        ),
+                    )
+
+        return results
+
+    # ── Single tool-call dispatch ──
 
     async def _dispatch_tool_call(
         self,
@@ -504,133 +584,36 @@ class ToolCallExecutor:
         options: HandlerOptions,
         object_cache: dict[str, dict[str, Any]],
         staged_updates: dict[str, StagedUpdate],
-        run_engine: Any,
-    ) -> DispatchResult | tuple[dict[str, Any], Literal["execution", "partial"] | None, str | None]:
+    ) -> DispatchResult:
         tool = row.tool_name
         args = row.arguments if isinstance(row.arguments, dict) else {}
 
         try:
-            # Sub-agent control tools
+            # ── Sub-agent control ──
             if tool == "return_sub_agent_result":
-                if run.run_type != "subAgent":
+                if run.thread.thread_type != "subAgent":
                     return DispatchResult(
-                        kind="error",
+                        status="cancel",
                         result={"success": False, "message": "return_sub_agent_result is only allowed in subAgent runs"},
-                        failure_type="execution",
                         reason="EXECUTION::return_sub_agent_result::invalid_run_type",
                     )
                 result_text = args.get("result")
                 if not isinstance(result_text, str) or not result_text.strip():
                     return DispatchResult(
-                        kind="error",
+                        status="cancel",
                         result={"success": False, "message": "Invalid result", "error": "result must be non-empty string"},
-                        failure_type="execution",
                         reason="EXECUTION::return_sub_agent_result::invalid_result",
                     )
                 return DispatchResult(
-                    kind="finalize_subagent",
+                    status="accepted",
                     result={"success": True, "message": result_text, "result": result_text},
                     output_text=result_text,
                 )
 
             if tool.startswith("call_"):
-                if run_engine is None:
-                    return (
-                        {"success": False, "message": "Run engine unavailable"},
-                        "execution",
-                        "EXECUTION::call_sub_agent::run_engine_unavailable",
-                    )
+                return await self._dispatch_call_sub_agent(db, run, row, args)
 
-                agent_name = tool[5:]
-                input_text = args.get("input")
-                if not isinstance(input_text, str) or not input_text.strip():
-                    return (
-                        {"success": False, "message": "Invalid sub-agent input"},
-                        "execution",
-                        "EXECUTION::call_sub_agent::invalid_input",
-                    )
-
-                preset_id = settings_service.get_active_preset_id(db, run.user_id)
-                if preset_id is None:
-                    return (
-                        {"success": False, "message": "No active preset"},
-                        "execution",
-                        "EXECUTION::call_sub_agent::no_active_preset",
-                    )
-
-                sub_agent = (
-                    db.query(SubAgentDefinitionModel)
-                    .filter(
-                        SubAgentDefinitionModel.user_id == run.user_id,
-                        SubAgentDefinitionModel.preset_id == preset_id,
-                        SubAgentDefinitionModel.agent_name == agent_name,
-                    )
-                    .first()
-                )
-                if sub_agent is None:
-                    return (
-                        {"success": False, "message": f"Sub-agent not found: {agent_name}"},
-                        "execution",
-                        "EXECUTION::call_sub_agent::not_found",
-                    )
-                if not sub_agent.enabled:
-                    return (
-                        {"success": False, "message": f"Sub-agent disabled: {agent_name}"},
-                        "execution",
-                        "EXECUTION::call_sub_agent::disabled",
-                    )
-
-                caller_mode = "subAgent" if run.run_type == "subAgent" else (run.run_mode or "agentMode")
-                allowed_modes = sub_agent.allowed_invocation_modes if isinstance(sub_agent.allowed_invocation_modes, list) else []
-                if caller_mode not in allowed_modes:
-                    return (
-                        {"success": False, "message": f"Invocation not allowed from {caller_mode}"},
-                        "execution",
-                        "EXECUTION::call_sub_agent::not_allowed",
-                    )
-
-                outcome = await run_engine.invoke_sub_agent(
-                    user_id=run.user_id,
-                    project_id=run.project_id,
-                    parent_run_id=run.id,
-                    parent_run_message_id=row.message_id,
-                    parent_run_tool_call_id=row.llm_call_id,
-                    agent_id=run.agent_id,
-                    sub_agent_id=sub_agent.id,
-                    language=run.language,
-                    input_text=input_text,
-                )
-                if isinstance(outcome, dict):
-                    outcome_kind = str(outcome.get("kind") or "").strip()
-                    child_run_id = str(outcome.get("child_run_id") or "").strip()
-                    if outcome_kind == "waiting":
-                        return DispatchResult(
-                            kind="blocked_child",
-                            child_run_id=child_run_id or None,
-                            result={
-                                "success": True,
-                                "message": "Sub-agent is waiting for decisions",
-                                "child_run_id": child_run_id,
-                                "sub_agent_id": str(sub_agent.id),
-                            },
-                        )
-                    if outcome_kind == "completed":
-                        output_text = str(outcome.get("output") or "")
-                        return DispatchResult(
-                            kind="ok",
-                            result={"success": True, "message": output_text, "data": {"sub_agent_id": str(sub_agent.id)}},
-                        )
-                    if outcome_kind == "failed":
-                        return DispatchResult(
-                            kind="error",
-                            result={"success": False, "message": str(outcome.get("error") or "Sub-agent failed")},
-                            failure_type="execution",
-                            reason=f"EXECUTION::call_sub_agent::{outcome.get('error') or 'failed'}",
-                        )
-                output = str(outcome or "")
-                return DispatchResult(kind="ok", result={"success": True, "message": output, "data": {"sub_agent_id": str(sub_agent.id)}})
-
-            # CRUD handlers
+            # ── CRUD handlers ──
             if tool == "create_story_object":
                 type_raw = args.get("type")
                 if not isinstance(type_raw, str):
@@ -654,7 +637,10 @@ class ToolCallExecutor:
                     create_new_version=options.create_new_version,
                     created_by=run.user_id,
                 )
-                return ({"success": True, "message": f"Created {object_type}", "data": {"id": created.get("id")}}, None, None)
+                return DispatchResult(
+                    status="accepted",
+                    result={"success": True, "message": f"Created {object_type}", "data": {"id": created.get("id")}},
+                )
 
             if tool in {"create_outline", "create_outline_act", "create_outline_chapter"}:
                 metadata: dict[str, Any] | None = None
@@ -682,7 +668,10 @@ class ToolCallExecutor:
                     create_new_version=options.create_new_version,
                     created_by=run.user_id,
                 )
-                return ({"success": True, "message": f"Created {object_type}", "data": {"id": created.get("id")}}, None, None)
+                return DispatchResult(
+                    status="accepted",
+                    result={"success": True, "message": f"Created {object_type}", "data": {"id": created.get("id")}},
+                )
 
             if tool in {"delete_story_object", "delete_outline", "delete_outline_act", "delete_outline_chapter"}:
                 id_raw = args.get("id")
@@ -711,9 +700,12 @@ class ToolCallExecutor:
                     object_id=object_id,
                     user_id=run.user_id,
                 )
-                return ({"success": True, "message": f"Deleted {object_type}", "data": {"id": id_raw}}, None, None)
+                return DispatchResult(
+                    status="accepted",
+                    result={"success": True, "message": f"Deleted {object_type}", "data": {"id": id_raw}},
+                )
 
-            # Read/search handlers
+            # ── Read / search ──
             if tool in {"read_story_object", "read_outline", "read_manuscript"}:
                 id_raw = args.get("id")
                 if not isinstance(id_raw, str):
@@ -723,11 +715,7 @@ class ToolCallExecutor:
                 if object_type is None:
                     raise ValueError("Unable to resolve object type")
                 obj = self._get_cached_or_fetch_object(
-                    db=db,
-                    run=run,
-                    object_type=object_type,
-                    object_id=object_id,
-                    cache=object_cache,
+                    db=db, run=run, object_type=object_type, object_id=object_id, cache=object_cache,
                 )
                 current = self._current_data_for_language(obj, run.language)
 
@@ -739,11 +727,11 @@ class ToolCallExecutor:
                         text = str(current.get("authorNote") or "")
                     else:
                         text = f"Name: {current.get('name', '')}\nContent: {current.get('content', '')}"
-                    return ({"success": True, "message": text, "data": {"raw": current}}, None, None)
+                    return DispatchResult(status="accepted", result={"success": True, "message": text, "data": {"raw": current}})
 
                 if tool == "read_outline":
                     text = f"Name: {current.get('name', '')}\nContent: {current.get('content', '')}"
-                    return ({"success": True, "message": text, "data": {"raw": current}}, None, None)
+                    return DispatchResult(status="accepted", result={"success": True, "message": text, "data": {"raw": current}})
 
                 # read_manuscript
                 doc = current.get("doc")
@@ -763,7 +751,10 @@ class ToolCallExecutor:
                     if isinstance(from_value, int) and isinstance(to_value, int):
                         markdown = markdown[from_value:to_value]
 
-                return ({"success": True, "message": markdown, "data": {"wordCount": current.get("wordCount")}}, None, None)
+                return DispatchResult(
+                    status="accepted",
+                    result={"success": True, "message": markdown, "data": {"wordCount": current.get("wordCount")}},
+                )
 
             if tool == "keyword_search":
                 keyword = args.get("keyword")
@@ -780,14 +771,9 @@ class ToolCallExecutor:
                     page=max(page_num, 1),
                     page_size=rag_settings.keyword_page_size,
                 )
-                return (
-                    {
-                        "success": True,
-                        "message": f"Keyword results: {payload.get('total', 0)}",
-                        "data": payload,
-                    },
-                    None,
-                    None,
+                return DispatchResult(
+                    status="accepted",
+                    result={"success": True, "message": f"Keyword results: {payload.get('total', 0)}", "data": payload},
                 )
 
             if tool == "rag_search":
@@ -811,34 +797,16 @@ class ToolCallExecutor:
                     top_k_per_query=rag_settings.top_k_per_query,
                     neighbor_window=rag_settings.neighbor_window,
                 )
+                return DispatchResult(
+                    status="accepted",
+                    result={"success": True, "message": f"RAG Results: {len(results)}", "data": {"results": results}},
+                )
 
-                message = f"RAG Results: {len(results)}"
-                return ({"success": True, "message": message, "data": {"results": results}}, None, None)
-
-            # Replace / patch handlers (dedup staged)
-            if tool in {
-                "replace_basic_info",
-                "replace_guidelines",
-                "replace_story_object",
-                "replace_outline",
-                "replace_outline_act",
-                "replace_outline_chapter",
-                "patch_basic_info",
-                "patch_guidelines",
-                "patch_story_object",
-                "patch_outline",
-                "patch_outline_act",
-                "patch_outline_chapter",
-            }:
+            # ── Replace / patch (non-manuscript) ──
+            if tool in _PATCHABLE_TOOLS:
                 return self._handle_non_manuscript_update(
-                    db=db,
-                    run=run,
-                    tool=tool,
-                    args=args,
-                    options=options,
-                    row=row,
-                    object_cache=object_cache,
-                    staged_updates=staged_updates,
+                    db=db, run=run, tool=tool, args=args, options=options,
+                    row=row, object_cache=object_cache, staged_updates=staged_updates,
                 )
 
             if tool == "patch_manuscript":
@@ -861,12 +829,12 @@ class ToolCallExecutor:
                     sidecar=self._sidecar,
                 )
                 if not result.get("success"):
-                    return (
-                        result,
-                        "execution",
-                        f"PATCH_MANUSCRIPT::{result.get('code') or 'UNKNOWN'}::{result.get('reason') or 'failed'}",
+                    return DispatchResult(
+                        status="cancel",
+                        result=result,
+                        reason=f"PATCH_MANUSCRIPT::{result.get('code') or 'UNKNOWN'}::{result.get('reason') or 'failed'}",
                     )
-                return (result, None, None)
+                return DispatchResult(status="accepted", result=result)
 
             if tool == "replace_manuscript":
                 id_raw = args.get("id")
@@ -883,17 +851,141 @@ class ToolCallExecutor:
                     create_new_version=options.create_new_version,
                     user_request=options.user_request,
                 )
-                return (result, None, None)
+                return DispatchResult(status="accepted", result=result)
 
             raise ValueError(f"Unsupported function: {tool}")
 
         except Exception as exc:
             return DispatchResult(
-                kind="error",
+                status="cancel",
                 result={"success": False, "message": f"Error executing {tool}", "error": str(exc)},
-                failure_type="execution",
                 reason=f"EXECUTION::{tool}::{exc}",
             )
+
+    # ── Sub-agent dispatch ──
+
+    async def _dispatch_call_sub_agent(
+        self,
+        db: Session,
+        run: RunModel,
+        row: RunToolCallModel,
+        args: dict[str, Any],
+    ) -> DispatchResult:
+        """Create child thread + run for a sub-agent call. Non-blocking."""
+        agent_name = row.tool_name[5:]  # strip "call_" prefix
+        input_text = args.get("input")
+        if not isinstance(input_text, str) or not input_text.strip():
+            return DispatchResult(
+                status="cancel",
+                result={"success": False, "message": "Invalid sub-agent input"},
+                reason="EXECUTION::call_sub_agent::invalid_input",
+            )
+
+        preset_id = settings_service.get_active_preset_id(db, run.user_id)
+        if preset_id is None:
+            return DispatchResult(
+                status="cancel",
+                result={"success": False, "message": "No active preset"},
+                reason="EXECUTION::call_sub_agent::no_active_preset",
+            )
+
+        sub_agent = (
+            db.query(SubAgentDefinitionModel)
+            .filter(
+                SubAgentDefinitionModel.user_id == run.user_id,
+                SubAgentDefinitionModel.preset_id == preset_id,
+                SubAgentDefinitionModel.agent_name == agent_name,
+            )
+            .first()
+        )
+        if sub_agent is None:
+            return DispatchResult(
+                status="cancel",
+                result={"success": False, "message": f"Sub-agent not found: {agent_name}"},
+                reason="EXECUTION::call_sub_agent::not_found",
+            )
+        if not sub_agent.enabled:
+            return DispatchResult(
+                status="cancel",
+                result={"success": False, "message": f"Sub-agent disabled: {agent_name}"},
+                reason="EXECUTION::call_sub_agent::disabled",
+            )
+
+        caller_mode = (
+            "subAgent"
+            if run.thread.thread_type == "subAgent"
+            else (run.run_mode or "agentMode")
+        )
+        allowed_modes = (
+            sub_agent.allowed_invocation_modes
+            if isinstance(sub_agent.allowed_invocation_modes, list)
+            else []
+        )
+        if caller_mode not in allowed_modes:
+            return DispatchResult(
+                status="cancel",
+                result={"success": False, "message": f"Invocation not allowed from {caller_mode}"},
+                reason="EXECUTION::call_sub_agent::not_allowed",
+            )
+
+        # Create child thread + run (non-blocking)
+        child_thread = Thread(
+            project_id=run.project_id,
+            user_id=run.user_id,
+            thread_type="subAgent",
+            owner_id=sub_agent.id,
+            status="running",
+        )
+        db.add(child_thread)
+        db.flush()
+
+        child_run = RunModel(
+            thread_id=child_thread.id,
+            user_id=run.user_id,
+            project_id=run.project_id,
+            status="running",
+            run_seq=1,
+            language=run.language,
+            input_text=input_text.strip(),
+            parent_run_id=run.id,
+            parent_run_message_id=row.message_id,
+            parent_run_tool_call_id=row.llm_call_id,
+        )
+        db.add(child_run)
+        db.flush()
+
+        # Add user message to child run
+        child_msg = RunMessageModel(
+            thread_id=child_thread.id,
+            run_id=child_run.id,
+            seq=1,
+            seq_in_thread=1,
+            role="user",
+            data={run.language: {"contentParts": [{"type": "content", "text": input_text.strip()}]}},
+        )
+        db.add(child_msg)
+
+        child_thread.next_run_seq = 2
+        child_run.next_message_seq = 2
+        db.flush()
+
+        # Pipeline launch handled by the caller (run_pipeline, Phase 6).
+        return DispatchResult(
+            status="running",
+            result={
+                "success": True,
+                "message": "Sub-agent started",
+                "data": {
+                    "sub_agent_id": str(sub_agent.id),
+                    "child_thread_id": str(child_thread.id),
+                    "child_run_id": str(child_run.id),
+                },
+            },
+            child_run_id=child_run.id,
+            child_thread_id=child_thread.id,
+        )
+
+    # ── Non-manuscript replace / patch handler ──
 
     def _handle_non_manuscript_update(
         self,
@@ -906,7 +998,7 @@ class ToolCallExecutor:
         row: RunToolCallModel,
         object_cache: dict[str, dict[str, Any]],
         staged_updates: dict[str, StagedUpdate],
-    ) -> tuple[dict[str, Any], Literal["execution", "partial"] | None, str | None]:
+    ) -> DispatchResult:
         language = run.language
         create_new = options.create_new_version
         user_request = options.user_request
@@ -936,27 +1028,25 @@ class ToolCallExecutor:
                 current_value = str(current.get(field) or "")
                 rr = apply_single_replacement(current_value, old_text, str(new_text))
                 if not rr.success:
-                    return (
-                        {"success": False, "message": rr.reason or rr.code or "patch failed"},
-                        "execution",
-                        f"EXECUTION::{tool}::{rr.code or rr.reason}",
+                    return DispatchResult(
+                        status="cancel",
+                        result={"success": False, "message": rr.reason or rr.code or "patch failed"},
+                        reason=f"EXECUTION::{tool}::{rr.code or rr.reason}",
                     )
                 new_data = dict(current)
                 new_data[field] = rr.content
 
             self._stage_update(
-                staged_updates=staged_updates,
-                cache=object_cache,
-                object_type="basic_info",
-                object_id=object_id,
-                language=language,
-                create_new_version=create_new,
-                data=new_data,
-                metadata=None,
-                user_request=user_request,
-                call_id=row.llm_call_id,
+                staged_updates=staged_updates, cache=object_cache,
+                object_type="basic_info", object_id=object_id,
+                language=language, create_new_version=create_new,
+                data=new_data, metadata=None,
+                user_request=user_request, call_id=row.llm_call_id,
             )
-            return ({"success": True, "message": "Updated basic info", "data": {"id": str(object_id)}}, None, None)
+            return DispatchResult(
+                status="accepted",
+                result={"success": True, "message": "Updated basic info", "data": {"id": str(object_id)}},
+            )
 
         object_id_raw = args.get("id")
         if not isinstance(object_id_raw, str):
@@ -972,11 +1062,7 @@ class ToolCallExecutor:
 
         if object_type == "guidelines":
             target = self._get_cached_or_fetch_object(
-                db=db,
-                run=run,
-                object_type="guidelines",
-                object_id=object_id,
-                cache=object_cache,
+                db=db, run=run, object_type="guidelines", object_id=object_id, cache=object_cache,
             )
             current = self._current_data_for_language(target, language)
             if tool == "replace_guidelines":
@@ -991,34 +1077,28 @@ class ToolCallExecutor:
                 current_value = str(current.get("authorNote") or "")
                 rr = apply_single_replacement(current_value, old_text, str(new_text))
                 if not rr.success:
-                    return (
-                        {"success": False, "message": rr.reason or rr.code or "patch failed"},
-                        "execution",
-                        f"EXECUTION::{tool}::{rr.code or rr.reason}",
+                    return DispatchResult(
+                        status="cancel",
+                        result={"success": False, "message": rr.reason or rr.code or "patch failed"},
+                        reason=f"EXECUTION::{tool}::{rr.code or rr.reason}",
                     )
                 new_data = dict(current)
                 new_data["authorNote"] = rr.content
 
             self._stage_update(
-                staged_updates=staged_updates,
-                cache=object_cache,
-                object_type="guidelines",
-                object_id=object_id,
-                language=language,
-                create_new_version=create_new,
-                data=new_data,
-                metadata=None,
-                user_request=user_request,
-                call_id=row.llm_call_id,
+                staged_updates=staged_updates, cache=object_cache,
+                object_type="guidelines", object_id=object_id,
+                language=language, create_new_version=create_new,
+                data=new_data, metadata=None,
+                user_request=user_request, call_id=row.llm_call_id,
             )
-            return ({"success": True, "message": "Updated guidelines", "data": {"id": str(object_id)}}, None, None)
+            return DispatchResult(
+                status="accepted",
+                result={"success": True, "message": "Updated guidelines", "data": {"id": str(object_id)}},
+            )
 
         target = self._get_cached_or_fetch_object(
-            db=db,
-            run=run,
-            object_type=object_type,
-            object_id=object_id,
-            cache=object_cache,
+            db=db, run=run, object_type=object_type, object_id=object_id, cache=object_cache,
         )
         current = self._current_data_for_language(target, language)
 
@@ -1057,10 +1137,10 @@ class ToolCallExecutor:
             current_value = str(current.get(field) or "")
             rr = apply_single_replacement(current_value, old_text, str(new_text))
             if not rr.success:
-                return (
-                    {"success": False, "message": rr.reason or rr.code or "patch failed"},
-                    "execution",
-                    f"EXECUTION::{tool}::{rr.code or rr.reason}",
+                return DispatchResult(
+                    status="cancel",
+                    result={"success": False, "message": rr.reason or rr.code or "patch failed"},
+                    reason=f"EXECUTION::{tool}::{rr.code or rr.reason}",
                 )
             new_data = dict(current)
             new_data[field] = rr.content
@@ -1080,18 +1160,16 @@ class ToolCallExecutor:
             raise ValueError(f"Unsupported update tool: {tool}")
 
         self._stage_update(
-            staged_updates=staged_updates,
-            cache=object_cache,
-            object_type=object_type,
-            object_id=object_id,
-            language=language,
-            create_new_version=create_new,
-            data=new_data,
-            metadata=metadata,
-            user_request=user_request,
-            call_id=row.llm_call_id,
+            staged_updates=staged_updates, cache=object_cache,
+            object_type=object_type, object_id=object_id,
+            language=language, create_new_version=create_new,
+            data=new_data, metadata=metadata,
+            user_request=user_request, call_id=row.llm_call_id,
         )
-        return ({"success": True, "message": f"Updated {object_type}", "data": {"id": str(object_id)}}, None, None)
+        return DispatchResult(
+            status="accepted",
+            result={"success": True, "message": f"Updated {object_type}", "data": {"id": str(object_id)}},
+        )
 
 
 _tool_call_executor_singleton: ToolCallExecutor | None = None

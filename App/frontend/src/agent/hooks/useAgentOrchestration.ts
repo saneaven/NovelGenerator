@@ -1,7 +1,7 @@
 /**
  * Unified Agent Orchestration Hook
  *
- * Starts agent requests via RuntimeOrchestrator and provides UI helpers
+ * Starts agent requests via ThreadOrchestrator and provides UI helpers
  * (context selection, abort, edit/delete message).
  */
 
@@ -13,14 +13,13 @@ import { useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
-import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { useErrorStore } from '../../store/errorStore';
 import type { AgentOrchestrationConfig, AgentOrchestrationReturn, AgentHandlersReturn, ContextIdState } from './types';
 import { getSendBlockingState } from '../../toolCall/viewModel/blockingSelectors';
-import { getAgentRunMessageIds } from '../../runtime/selectors/conversationTimeline';
-import { runtimeOrchestrator } from '../../runtime';
-import { useRuntimeStore } from '../../runtime';
-import { runService } from '../../api/runService';
+import { getThreadMessageIds } from '../../runtime/selectors/conversationTimeline';
+import { threadOrchestrator } from '../../runtime';
+import { useThreadStore } from '../../runtime';
+import { threadService } from '../../api/threadService';
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
@@ -32,6 +31,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
 
   const {
     getSelectedAgentId,
+    getAgent,
     selectAgent,
   } = useAgentStore();
 
@@ -72,35 +72,45 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
   };
 
   // ============================================================================
-  // Active session tracking (for Stop button + loading state)
+  // Helper: resolve threadId for the selected agent
+  // ============================================================================
+
+  const resolveThreadId = useCallback((): string | undefined => {
+    if (!projectId) return undefined;
+    const agentId = getSelectedAgentId(projectId);
+    if (!agentId) return undefined;
+    const agent = getAgent(projectId, agentId);
+    return agent?.thread_id ?? undefined;
+  }, [projectId, getSelectedAgentId, getAgent]);
+
+  // ============================================================================
+  // Active thread tracking (for Stop button + loading state)
   // ============================================================================
 
   const preflightAbortControllerByAgentRef = useRef<Record<string, AbortController>>({});
 
+  // Sync loading state from thread store status
   useEffect(() => {
     if (!projectId) return;
-    const activeProjectId = projectId;
-    function syncLoadingFromSessions() {
-      const agentId = getSelectedAgentId(activeProjectId);
+
+    function syncLoading() {
+      const agentId = getSelectedAgentId(projectId!);
       if (!agentId) return;
-
-      const allSessions = Object.values(useLLMSessionStore.getState().sessions)
-        .filter((session): session is NonNullable<typeof session> => Boolean(session));
-
-      const hasRunning = allSessions.some((session) => {
-        if (session.kind !== 'agent') return false;
-        if ((session.input as any)?.projectId !== activeProjectId) return false;
-        if ((session.input as any)?.agentId !== agentId) return false;
-        return session.status === 'running' || session.status === 'applying';
-      });
-
-      useAgentUIStore.getState().setLoading(activeProjectId, agentId, hasRunning);
+      const agent = getAgent(projectId!, agentId);
+      const threadId = agent?.thread_id;
+      if (!threadId) {
+        useAgentUIStore.getState().setLoading(projectId!, agentId, false);
+        return;
+      }
+      const thread = useThreadStore.getState().threadsById[threadId];
+      const isActive = thread?.status === 'running' || thread?.status === 'waiting_tools';
+      useAgentUIStore.getState().setLoading(projectId!, agentId, isActive);
     }
 
-    syncLoadingFromSessions();
-    const unsubscribe = useLLMSessionStore.subscribe(syncLoadingFromSessions);
+    syncLoading();
+    const unsubscribe = useThreadStore.subscribe(syncLoading);
     return unsubscribe;
-  }, [projectId, getSelectedAgentId]);
+  }, [projectId, getSelectedAgentId, getAgent]);
 
   useEffect(() => {
     return () => {
@@ -110,15 +120,19 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     };
   }, []);
 
+  // Recover thread state on mount
   useEffect(() => {
     if (!projectId) return;
     const agentId = getSelectedAgentId(projectId);
     if (!agentId) return;
+    const agent = getAgent(projectId, agentId);
+    const threadId = agent?.thread_id;
+    if (!threadId) return;
 
-    void runtimeOrchestrator.recoverRuns(projectId, agentId).catch((error) => {
-      console.warn('Failed to recover interrupted runs:', error);
+    void threadOrchestrator.recover(projectId, threadId).catch((error) => {
+      console.warn('Failed to recover thread state:', error);
     });
-  }, [projectId, getSelectedAgentId]);
+  }, [projectId, getSelectedAgentId, getAgent]);
 
   // ============================================================================
   // Agent handlers
@@ -141,18 +155,12 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     if (!agentId) return;
     if (useAgentUIStore.getState().isLoading(projectId, agentId)) return;
 
-    const runMessageIds = getAgentRunMessageIds(projectId, agentId);
-    const sessions = Object.values(useLLMSessionStore.getState().sessions)
-      .filter((session): session is NonNullable<typeof session> => Boolean(session))
-      .filter((session) => {
-        if (session.kind !== 'agent') return false;
-        return (session.input as any)?.projectId === projectId;
-      });
+    const threadId = resolveThreadId();
+    const messageIds = threadId ? getThreadMessageIds(threadId) : [];
     const sendBlockingState = getSendBlockingState({
       selectedAgentId: agentId,
-      runMessageIds,
-      sessions,
-      runToolCallsByMessageId: useRuntimeStore.getState().runToolCallsByMessageId,
+      messageIds,
+      toolCallsByMessageId: useThreadStore.getState().toolCallsByMessageId,
     });
     if (sendBlockingState.blocked) {
       useAgentUIStore.getState().setPreflightToast(projectId, {
@@ -192,27 +200,16 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     preflightAbortControllerByAgentRef.current[agentId] = abortController;
 
     try {
-      await runtimeOrchestrator.startRootRun({
+      await threadOrchestrator.dispatch({
         projectId,
-        agentId,
+        threadType: 'agent',
+        threadId: threadId ?? undefined,
+        inputText: userInput?.trim() ?? '',
+        language: mainLanguage,
         runMode,
         surface,
-        userInput: userInput?.trim() ?? '',
-        language: mainLanguage,
         contextObjectIds: selectedContextIds,
         signal: abortController.signal,
-        onMemoryStageChange: (stage) => {
-          const message =
-            stage === 'summarizing'
-              ? t('agent.memory.preflight.summarizing')
-              : stage === 'archiving'
-                ? t('agent.memory.preflight.archiving')
-                : stage === 'searching'
-                  ? t('agent.memory.preflight.searching')
-                  : null;
-          if (!message) return;
-          useAgentUIStore.getState().setPreflightToast(projectId, { type: 'info', message });
-        },
       });
     } catch (error) {
       if (isAbortError(error) || abortController.signal.aborted) {
@@ -223,7 +220,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         return;
       }
 
-      console.error('Failed to start root run:', error);
+      console.error('Failed to dispatch:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       useAgentUIStore.getState().setPreflightToast(projectId, {
         type: 'error',
@@ -237,7 +234,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
 
     delete preflightAbortControllerByAgentRef.current[agentId];
     useAgentUIStore.getState().setPreflightToast(projectId, null);
-  }, [projectId, getSelectedAgentId, getObjectsMissingMainLanguage, mainLanguage, clearInput, runMode, surface, selectedContextIds, t]);
+  }, [projectId, getSelectedAgentId, getObjectsMissingMainLanguage, mainLanguage, clearInput, runMode, surface, selectedContextIds, t, resolveThreadId]);
 
   const handleStop = useCallback(() => {
     if (!projectId) return;
@@ -251,26 +248,13 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       return;
     }
 
-    const runId = runtimeOrchestrator.findLatestOpenRootRunId(projectId, agentId);
-    if (runId) {
-      void runtimeOrchestrator.cancelRun(runId).catch((error) => {
-        console.error('Failed to cancel root run:', error);
+    const threadId = resolveThreadId();
+    if (threadId) {
+      void threadOrchestrator.cancel(projectId, threadId).catch((error) => {
+        console.error('Failed to cancel thread:', error);
       });
-      return;
     }
-
-    const fallbackSession = Object.values(useLLMSessionStore.getState().sessions)
-      .filter((session): session is NonNullable<typeof session> => Boolean(session))
-      .find((session) => {
-        if (session.kind !== 'agent') return false;
-        if ((session.input as any)?.projectId !== projectId) return false;
-        if ((session.input as any)?.agentId !== agentId) return false;
-        return session.status === 'running' || session.status === 'applying';
-      });
-    if (fallbackSession) {
-      useLLMSessionStore.getState().cancelSession(fallbackSession.id);
-    }
-  }, [projectId, getSelectedAgentId]);
+  }, [projectId, getSelectedAgentId, resolveThreadId]);
 
   const adjustTextareaHeight = useCallback(() => {
     if (editTextareaRef.current) {
@@ -299,31 +283,23 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     const editing = getEditing(projectId);
     if (!editing.messageId) return;
 
-    // Find the RunMessage's runId
-    const runtime = useRuntimeStore.getState();
-    let runId: string | undefined;
-    for (const [rId, messages] of Object.entries(runtime.runMessagesByRunId)) {
-      if (messages?.some(m => m.id === editing.messageId)) {
-        runId = rId;
-        break;
-      }
-    }
-
-    if (!runId) {
-      showError('Edit Failed', 'Could not find the message run.');
+    const threadId = resolveThreadId();
+    if (!threadId) {
+      showError('Edit Failed', 'Could not find the thread.');
       return;
     }
 
     const newContentParts = [{ type: 'content', text: editing.content }];
 
     // Update local store
-    runtime.updateRunMessageData(runId, editing.messageId, mainLanguage, {
+    const store = useThreadStore.getState();
+    store.updateMessageData(threadId, editing.messageId, mainLanguage, {
       contentParts: newContentParts,
     });
-    runtime.clearRunMessageTranslations(runId, editing.messageId, [mainLanguage]);
+    store.clearMessageTranslations(threadId, editing.messageId, [mainLanguage]);
 
     // Persist to backend
-    void runService.patchRunMessage(projectId, agentId, runId, editing.messageId, {
+    void threadService.patchMessage(projectId, threadId, editing.messageId, {
       language: mainLanguage,
       content_parts: newContentParts as Array<Record<string, any>>,
     }).catch((error) => {
@@ -331,7 +307,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     });
 
     cancelEditing(projectId);
-  }, [projectId, getSelectedAgentId, getEditing, mainLanguage, cancelEditing, showError]);
+  }, [projectId, getSelectedAgentId, getEditing, mainLanguage, cancelEditing, showError, resolveThreadId]);
 
   const handleCancelEdit = useCallback(() => {
     if (!projectId) return;
@@ -345,35 +321,24 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
 
     if (!confirm('Are you sure you want to delete this message?')) return;
 
+    const threadId = resolveThreadId();
+    if (!threadId) {
+      showError('Delete Failed', 'Could not find the thread.');
+      return;
+    }
+
     void (async () => {
-      // Find the RunMessage's runId
-      const runtime = useRuntimeStore.getState();
-      let runId: string | undefined;
-      for (const [rId, messages] of Object.entries(runtime.runMessagesByRunId)) {
-        if (messages?.some(m => m.id === messageId)) {
-          runId = rId;
-          break;
-        }
-      }
-
-      if (!runId) {
-        showError('Delete Failed', 'Could not find the message run.');
-        return;
-      }
-
-      // Delete the single message from backend
       try {
-        await runService.deleteRunMessage(projectId, agentId, runId, messageId);
+        await threadService.deleteMessage(projectId, threadId, messageId);
       } catch (error) {
         console.error('Failed to delete message from backend:', error);
         showError('Delete Failed', error instanceof Error ? error.message : 'Failed to delete message.');
         return;
       }
 
-      // Clean up local state (removes message; auto-cleans empty run)
-      runtime.removeRunMessage(runId, messageId);
+      useThreadStore.getState().removeMessage(threadId, messageId);
     })();
-  }, [projectId, getSelectedAgentId, showError]);
+  }, [projectId, getSelectedAgentId, showError, resolveThreadId]);
 
   const triggerAutoContinue = useCallback(async () => {
     if (!projectId) return;
@@ -382,35 +347,20 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     if (!agentId) return;
     if (useAgentUIStore.getState().isLoading(projectId, agentId)) return;
 
+    const threadId = resolveThreadId();
+    if (!threadId) return;
+
     useAgentUIStore.getState().setLoading(projectId, agentId, true);
     useAgentUIStore.getState().setPreflightToast(projectId, null);
-
-    const rootRunId = runtimeOrchestrator.findLatestOpenRootRunId(projectId, agentId);
-    if (!rootRunId) {
-      useAgentUIStore.getState().setLoading(projectId, agentId, false);
-      return;
-    }
 
     const abortController = new AbortController();
     preflightAbortControllerByAgentRef.current[agentId] = abortController;
 
     try {
-      await runtimeOrchestrator.resumeRunLoop({
-        runId: rootRunId,
-        refreshMemory: true,
+      await threadOrchestrator.resume({
+        projectId,
+        threadId,
         signal: abortController.signal,
-        onMemoryStageChange: (stage) => {
-          const message =
-            stage === 'summarizing'
-              ? t('agent.memory.preflight.summarizing')
-              : stage === 'archiving'
-                ? t('agent.memory.preflight.archiving')
-                : stage === 'searching'
-                  ? t('agent.memory.preflight.searching')
-                  : null;
-          if (!message) return;
-          useAgentUIStore.getState().setPreflightToast(projectId, { type: 'info', message });
-        },
       });
     } catch (error) {
       if (isAbortError(error) || abortController.signal.aborted) {
@@ -420,7 +370,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         return;
       }
 
-      console.error('RuntimeOrchestrator.resumeRunLoop (auto-continue) failed:', error);
+      console.error('ThreadOrchestrator.resume (auto-continue) failed:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       useAgentUIStore.getState().setPreflightToast(projectId, {
         type: 'error',
@@ -433,7 +383,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
 
     delete preflightAbortControllerByAgentRef.current[agentId];
     useAgentUIStore.getState().setPreflightToast(projectId, null);
-  }, [projectId, getSelectedAgentId, t]);
+  }, [projectId, getSelectedAgentId, t, resolveThreadId]);
 
   const agentHandlers: AgentHandlersReturn = {
     editTextareaRef,

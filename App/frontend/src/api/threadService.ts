@@ -1,6 +1,6 @@
-import { API_BASE_URL, ApiError, apiClient, type RequestOptions } from './client';
+import { API_BASE_URL, apiClient, type RequestOptions } from './client';
 
-export type RunExecutionEvent = {
+export type ThreadEvent = {
   event: string;
   data: any;
 };
@@ -11,7 +11,7 @@ export type StreamHandle = {
 };
 
 function buildPath(projectId: string, suffix: string): string {
-  return `/api/v1/projects/${encodeURIComponent(projectId)}/runs${suffix}`;
+  return `/api/v1/projects/${encodeURIComponent(projectId)}/threads${suffix}`;
 }
 
 function withAfterSeq(path: string, afterSeq?: number): string {
@@ -22,7 +22,7 @@ function withAfterSeq(path: string, afterSeq?: number): string {
   return `${path}${joiner}after_seq=${Math.floor(afterSeq)}`;
 }
 
-function parseSseFrame(frame: string): RunExecutionEvent | null {
+function parseSseFrame(frame: string): ThreadEvent | null {
   let eventName = 'message';
   const dataLines: string[] = [];
   const lines = frame.split(/\r?\n/);
@@ -51,7 +51,7 @@ function parseSseFrame(frame: string): RunExecutionEvent | null {
 async function streamPostSse(
   path: string,
   body: unknown,
-  onEvent: (event: RunExecutionEvent) => void,
+  onEvent: (event: ThreadEvent) => void,
   requestOptions?: RequestOptions,
 ): Promise<StreamHandle> {
   const controller = new AbortController();
@@ -87,12 +87,10 @@ async function streamPostSse(
     if (!response.ok) {
       const maybeJson = await response.json().catch(() => null);
       const detail = maybeJson?.detail ?? response.statusText ?? 'Request failed';
-      throw new ApiError(typeof detail === 'string' ? detail : 'Request failed', response.status, maybeJson);
+      throw new Error(typeof detail === 'string' ? detail : 'Request failed');
     }
 
-    if (!response.body) {
-      return;
-    }
+    if (!response.body) return;
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
@@ -109,88 +107,113 @@ async function streamPostSse(
         const frame = buffer.slice(0, boundary);
         buffer = buffer.slice(boundary + 2);
         const parsed = parseSseFrame(frame);
-        if (parsed) {
-          onEvent(parsed);
-        }
+        if (parsed) onEvent(parsed);
       }
     }
 
     if (buffer.trim()) {
       const parsed = parseSseFrame(buffer);
-      if (parsed) {
-        onEvent(parsed);
-      }
+      if (parsed) onEvent(parsed);
     }
   })();
 
-  return {
-    done,
-    abort: () => controller.abort(),
-  };
+  return { done, abort: () => controller.abort() };
 }
 
-export const runExecutionService = {
-  startRun(
+export const threadService = {
+  dispatch(
     projectId: string,
-    payload: unknown,
-    onEvent: (event: RunExecutionEvent) => void,
-    requestOptions?: RequestOptions,
-    afterSeq?: number,
-  ) {
-    return streamPostSse(withAfterSeq(buildPath(projectId, '/start'), afterSeq), payload, onEvent, requestOptions);
-  },
-
-  applyDecisions(
-    projectId: string,
-    runId: string,
-    payload: unknown,
-    onEvent: (event: RunExecutionEvent) => void,
+    payload: {
+      thread_type: string;
+      thread_id?: string;
+      input_text: string;
+      language: string;
+      run_mode?: string;
+      surface?: string;
+      context_object_ids?: string[];
+      journey_kind?: string;
+      input_payload?: Record<string, unknown>;
+      journey_target_ids?: string[];
+    },
+    onEvent: (event: ThreadEvent) => void,
     requestOptions?: RequestOptions,
     afterSeq?: number,
   ) {
     return streamPostSse(
-      withAfterSeq(buildPath(projectId, `/${encodeURIComponent(runId)}/decisions`), afterSeq),
+      withAfterSeq(buildPath(projectId, '/dispatch'), afterSeq),
       payload,
       onEvent,
       requestOptions,
     );
   },
 
-  resumeRun(
+  toolDecisions(
     projectId: string,
-    runId: string,
-    onEvent: (event: RunExecutionEvent) => void,
+    threadId: string,
+    payload: {
+      message_id: string;
+      decisions: Record<string, string>;
+      options?: Record<string, unknown>;
+    },
+    onEvent: (event: ThreadEvent) => void,
     requestOptions?: RequestOptions,
     afterSeq?: number,
   ) {
     return streamPostSse(
-      withAfterSeq(buildPath(projectId, `/${encodeURIComponent(runId)}/resume`), afterSeq),
+      withAfterSeq(buildPath(projectId, `/${encodeURIComponent(threadId)}/tool-decisions`), afterSeq),
+      payload,
+      onEvent,
+      requestOptions,
+    );
+  },
+
+  resume(
+    projectId: string,
+    threadId: string,
+    onEvent: (event: ThreadEvent) => void,
+    requestOptions?: RequestOptions,
+    afterSeq?: number,
+  ) {
+    return streamPostSse(
+      withAfterSeq(buildPath(projectId, `/${encodeURIComponent(threadId)}/resume`), afterSeq),
       {},
       onEvent,
       requestOptions,
     );
   },
 
-  async pauseRun(projectId: string, runId: string): Promise<void> {
-    await apiClient.post(buildPath(projectId, `/${encodeURIComponent(runId)}/pause`), {});
+  async pause(projectId: string, threadId: string): Promise<void> {
+    await apiClient.post(buildPath(projectId, `/${encodeURIComponent(threadId)}/pause`), {});
   },
 
-  async cancelRun(projectId: string, runId: string): Promise<void> {
-    await apiClient.post(buildPath(projectId, `/${encodeURIComponent(runId)}/cancel`), {});
+  async cancel(projectId: string, threadId: string): Promise<void> {
+    await apiClient.post(buildPath(projectId, `/${encodeURIComponent(threadId)}/cancel`), {});
   },
 
-  async appendMessage(projectId: string, runId: string, payload: { text: string; language: string }): Promise<{ ok: boolean; message_id: string }> {
-    return await apiClient.post(buildPath(projectId, `/${encodeURIComponent(runId)}/messages`), payload);
+  async getState(projectId: string, threadId: string): Promise<{
+    thread: any;
+    open_run: any | null;
+    messages: any[];
+    tool_calls: any[];
+  }> {
+    return await apiClient.get(buildPath(projectId, `/${encodeURIComponent(threadId)}/state`));
   },
 
-  async getRun(projectId: string, runId: string): Promise<{ run: any }> {
-    return await apiClient.get(buildPath(projectId, `/${encodeURIComponent(runId)}`));
-  },
-
-  async queryRuns(
+  async patchMessage(
     projectId: string,
-    payload: { run_types?: Array<'agent' | 'subAgent' | 'journey'>; statuses?: string[]; limit?: number },
-  ): Promise<{ items: any[] }> {
-    return await apiClient.post(buildPath(projectId, '/query'), payload);
+    threadId: string,
+    messageId: string,
+    data: { language: string; content_parts?: Array<Record<string, any>>; thinking_details?: Array<Record<string, any>> },
+  ): Promise<any> {
+    return apiClient.patch(
+      buildPath(projectId, `/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`),
+      data,
+    );
+  },
+
+  async deleteMessage(projectId: string, threadId: string, messageId: string): Promise<void> {
+    return apiClient.delete(
+      buildPath(projectId, `/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`),
+    );
   },
 };

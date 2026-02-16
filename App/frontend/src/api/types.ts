@@ -254,6 +254,7 @@ export interface AgentUpdate {
 export interface AgentResponse extends BaseMetadata {
   project_id: string;
   name: string;
+  thread_id?: string | null;
   archived_until_message_id?: string | null;
 }
 

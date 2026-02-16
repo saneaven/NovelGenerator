@@ -33,6 +33,7 @@ class ResolvedRunConfig:
     retry_config: dict[str, Any] | None
     tools: list[ToolSchemaDef]
     allowed_tool_names: list[str]
+    context_window_tokens: int
     memory_enabled: bool
     history_strategy: str
     handler_default_options: HandlerDefaultOptions
@@ -61,6 +62,10 @@ class RunTypeResolver:
         preset_id = settings_service.get_active_preset_id(db, user_id)
         retry_config = settings_service.get_retry_config(db, user_id)
 
+        thread = run.thread
+        thread_type = thread.thread_type
+        owner_id = thread.owner_id
+
         # Defaults
         task_type = "agent"
         llm_mode = "agent:agentMode"
@@ -69,7 +74,7 @@ class RunTypeResolver:
         history_strategy = "none"
         handler_default = HandlerDefaultOptions(create_new_version=True, user_request="AI Edit")
 
-        if run.run_type == "agent":
+        if thread_type == "agent":
             task_type = "agent"
             llm_mode = f"agent:{run.run_mode}"
             set_name = "agent_plan_mode" if run.run_mode == "planMode" else "agent_agent_mode"
@@ -103,15 +108,16 @@ class RunTypeResolver:
                 retry_config=retry_config,
                 tools=tools,
                 allowed_tool_names=[t.name for t in tools],
+                context_window_tokens=task_cfg.context_window_tokens or 32000,
                 memory_enabled=memory_enabled,
                 history_strategy=history_strategy,
                 handler_default_options=handler_default,
                 preset_id=preset_id,
             )
 
-        if run.run_type == "subAgent":
-            if run.sub_agent_id is None:
-                raise ValueError("subAgent run is missing sub_agent_id")
+        if thread_type == "subAgent":
+            if owner_id is None:
+                raise ValueError("subAgent thread is missing owner_id")
             if preset_id is None:
                 raise ValueError("No active preset for subAgent run")
 
@@ -120,7 +126,7 @@ class RunTypeResolver:
                 .filter(
                     SubAgentDefinitionModel.user_id == user_id,
                     SubAgentDefinitionModel.preset_id == preset_id,
-                    SubAgentDefinitionModel.id == run.sub_agent_id,
+                    SubAgentDefinitionModel.id == owner_id,
                 )
                 .first()
             )
@@ -193,6 +199,13 @@ class RunTypeResolver:
                 provider = sub_cfg.provider
                 model, temperature, max_tokens, thinking_mode, thinking_cfg, thinking_format, request_format = self._task_config_to_fields(sub_cfg)
 
+            ctx_window = 32000
+            if bool(sub_agent.use_custom_llm_config) and isinstance(sub_agent.llm_config_override, dict):
+                ctx_window = int(sub_agent.llm_config_override.get("context_window_tokens") or 32000)
+            else:
+                sub_cfg_ctx = settings_service.get_task_config(db, user_id, "subAgent")
+                ctx_window = sub_cfg_ctx.context_window_tokens or 32000
+
             return ResolvedRunConfig(
                 llm_mode=llm_mode,
                 task_type=task_type,
@@ -208,6 +221,7 @@ class RunTypeResolver:
                 retry_config=retry_config,
                 tools=tools,
                 allowed_tool_names=[t.name for t in tools],
+                context_window_tokens=ctx_window,
                 memory_enabled=True,
                 history_strategy="sub_agent",
                 handler_default_options=HandlerDefaultOptions(create_new_version=True, user_request="Sub Agent"),
@@ -215,15 +229,16 @@ class RunTypeResolver:
             )
 
         # Journey
-        if run.run_type != "journey":
-            raise ValueError(f"Unknown run type: {run.run_type}")
+        if thread_type != "journey":
+            raise ValueError(f"Unknown thread type: {thread_type}")
 
-        if run.journey_kind == "translation":
+        journey_kind = thread.journey_kind
+        if journey_kind == "translation":
             task_type = "translation"
             llm_mode = "journey:translation"
             tools = get_tools_for_set("translateObjects", rag_search_enabled=rag_settings.enabled)
             handler_default = HandlerDefaultOptions(create_new_version=False, user_request="AI Translation")
-        elif run.journey_kind == "imagePrompt":
+        elif journey_kind == "imagePrompt":
             task_type = "imagePrompt"
             llm_mode = "journey:imagePrompt"
             tools = []
@@ -254,6 +269,7 @@ class RunTypeResolver:
             retry_config=retry_config,
             tools=tools,
             allowed_tool_names=[t.name for t in tools],
+            context_window_tokens=task_cfg.context_window_tokens or 32000,
             memory_enabled=False,
             history_strategy="journey",
             handler_default_options=handler_default,

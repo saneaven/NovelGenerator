@@ -1,131 +1,88 @@
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { useRuntimeStore } from '../store/runtimeStore';
-import { useLLMSessionStore } from '../../store/llmSessionStore';
-import type { Run, RunMessageLangEntry } from '../types';
+import { useThreadStore, type ThreadMessage } from '../store/threadStore';
 
 export interface ConversationMessage {
   id: string;
+  threadId: string;
   runId: string;
   seq: number;
+  seqInThread: number | null;
   role: 'user' | 'assistant' | 'system' | 'tool';
-  data: Record<string, RunMessageLangEntry>;
+  data: ThreadMessage['data'];
   createdAt: string;
   /** True when this is a virtual entry representing active LLM streaming. */
   isStreaming?: boolean;
-  /** Session content parts for streaming overlay. */
-  streamingContentParts?: Array<{ type: string; text: string }>;
-  /** Session thinking details for streaming overlay. */
-  streamingThinkingDetails?: any[];
-  /** Session tool call progress for streaming function calls. */
-  streamingToolCallProgress?: any[];
 }
 
 /**
- * Compute flat conversation timeline from runtimeStore for a given agent.
- * Returns all RunMessages across root runs, ordered chronologically.
- * Includes a virtual "streaming" message when the latest run has an active LLM session.
+ * Compute flat conversation timeline from threadStore for a given thread.
+ * Returns all ThreadMessages ordered by seqInThread / createdAt.
+ * Streaming delta messages (id starting with "delta:") are marked with isStreaming.
  */
-export function useConversationTimeline(projectId: string | undefined, agentId: string | undefined): {
+export function useConversationTimeline(threadId: string | undefined): {
   messages: ConversationMessage[];
-  runMessageIds: string[];
+  messageIds: string[];
 } {
-  const { runsById, runMessagesByRunId } = useRuntimeStore(
-    useShallow((state) => ({
-      runsById: state.runsById,
-      runMessagesByRunId: state.runMessagesByRunId,
-    }))
-  );
-
-  const sessions = useLLMSessionStore(
-    useShallow((state) => state.sessions)
+  const threadMessages = useThreadStore(
+    useShallow((state) => (threadId ? state.messagesByThreadId[threadId] : undefined)),
   );
 
   return useMemo(() => {
-    if (!projectId || !agentId) {
-      return { messages: [], runMessageIds: [] };
+    if (!threadId || !threadMessages) {
+      return { messages: [], messageIds: [] };
     }
 
-    // Get all root runs for this agent, sorted by sequence
-    const rootRuns: Run[] = [];
-    for (const run of Object.values(runsById)) {
-      if (!run) continue;
-      if (run.projectId !== projectId) continue;
-      if (run.agentId !== agentId) continue;
-      if (run.runType !== 'agent') continue;
-      rootRuns.push(run);
-    }
-    rootRuns.sort((a, b) => {
-      const aSeq = a.rootRunSeq ?? Number.MAX_SAFE_INTEGER;
-      const bSeq = b.rootRunSeq ?? Number.MAX_SAFE_INTEGER;
-      if (aSeq !== bSeq) return aSeq - bSeq;
+    const sorted = [...threadMessages].sort((a, b) => {
+      // Sort by seqInThread first (cross-run ordering), then by createdAt
+      const aSit = a.seqInThread ?? Number.MAX_SAFE_INTEGER;
+      const bSit = b.seqInThread ?? Number.MAX_SAFE_INTEGER;
+      if (aSit !== bSit) return aSit - bSit;
       return a.createdAt.localeCompare(b.createdAt);
     });
 
-    // Flatten messages from all root runs
     const allMessages: ConversationMessage[] = [];
-    const allMessageIds: string[] = [];
+    const allIds: string[] = [];
 
-    for (const run of rootRuns) {
-      const runMessages = runMessagesByRunId[run.id] ?? [];
-      const sorted = [...runMessages].sort((a, b) => a.seq - b.seq);
-
-      for (const msg of sorted) {
-        allMessages.push({
-          id: msg.id,
-          runId: msg.runId,
-          seq: msg.seq,
-          role: msg.role as ConversationMessage['role'],
-          data: msg.data,
-          createdAt: msg.createdAt,
-        });
-        allMessageIds.push(msg.id);
-      }
+    for (const msg of sorted) {
+      const isStreaming = msg.id.startsWith('delta:');
+      allMessages.push({
+        id: msg.id,
+        threadId: msg.threadId,
+        runId: msg.runId,
+        seq: msg.seq,
+        seqInThread: msg.seqInThread,
+        role: msg.role,
+        data: msg.data,
+        createdAt: msg.createdAt,
+        isStreaming,
+      });
+      allIds.push(msg.id);
     }
 
-    // Check for active streaming session on the latest run
-    const latestRun = rootRuns[rootRuns.length - 1];
-    if (latestRun?.activeSessionId) {
-      const session = sessions[latestRun.activeSessionId];
-      if (session && session.status === 'running') {
-        // Add virtual streaming message
-        allMessages.push({
-          id: `streaming-${latestRun.id}`,
-          runId: latestRun.id,
-          seq: Number.MAX_SAFE_INTEGER,
-          role: 'assistant',
-          data: {},
-          createdAt: new Date().toISOString(),
-          isStreaming: true,
-          streamingContentParts: session.contentParts as Array<{ type: string; text: string }>,
-          streamingThinkingDetails: session.thinkingDetails as any[],
-          streamingToolCallProgress: (session as any).toolCallProgress as any[],
-        });
-      }
-    }
-
-    return { messages: allMessages, runMessageIds: allMessageIds };
-  }, [projectId, agentId, runsById, runMessagesByRunId, sessions]);
+    return { messages: allMessages, messageIds: allIds };
+  }, [threadId, threadMessages]);
 }
 
 /**
- * Get all run message IDs for a given agent (used for blocking checks).
+ * Get all message IDs for a given thread (used for blocking checks).
+ */
+export function getThreadMessageIds(threadId: string): string[] {
+  const state = useThreadStore.getState();
+  return (state.messagesByThreadId[threadId] ?? []).map((m) => m.id);
+}
+
+/**
+ * @deprecated Use getThreadMessageIds instead. Kept for migration period.
  */
 export function getAgentRunMessageIds(projectId: string, agentId: string): string[] {
-  const state = useRuntimeStore.getState();
-  const messageIds: string[] = [];
-
-  for (const run of Object.values(state.runsById)) {
-    if (!run) continue;
-    if (run.projectId !== projectId) continue;
-    if (run.agentId !== agentId) continue;
-    if (run.runType !== 'agent') continue;
-
-    const messages = state.runMessagesByRunId[run.id] ?? [];
-    for (const msg of messages) {
-      messageIds.push(msg.id);
+  const state = useThreadStore.getState();
+  // Find the thread for this agent
+  for (const thread of Object.values(state.threadsById)) {
+    if (!thread) continue;
+    if (thread.projectId === projectId && thread.ownerId === agentId && thread.threadType === 'agent') {
+      return (state.messagesByThreadId[thread.id] ?? []).map((m) => m.id);
     }
   }
-
-  return messageIds;
+  return [];
 }

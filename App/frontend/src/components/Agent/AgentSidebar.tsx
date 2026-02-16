@@ -4,11 +4,9 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAgentStore, type Agent, getAgentLastActivityAt } from '../../store/agentStore';
 import { makeProjectAgentKey, useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
-import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { useSettings } from '../../store/settingsStore';
 import { useErrorStore } from '../../store/errorStore';
-import type { TaskSessionState } from '../../llmTask/types';
-import { useRuntimeStore, resolveRunMessageDisplay, type Run, type RunMessage } from '../../runtime';
+import { useThreadStore, resolveRunMessageDisplay } from '../../runtime';
 import { BaseSidebar } from '../BaseSidebar';
 import { IconButton } from '../IconButton';
 import { SpeechBubble, Plus, Trash, Edit, Close } from '../icons';
@@ -19,52 +17,11 @@ interface AgentSidebarProps {
   onSelectAgent: (agentId: string) => void;
 }
 
-type AnySession = TaskSessionState<any, any>;
-
 type AgentSidebarSignals = {
   isRunning: boolean;
   hasCompletedSinceViewed: boolean;
   hasPendingToolRequest: boolean;
 };
-
-const RUNNING_SESSION_STATUSES = new Set(['running', 'applying']);
-const TERMINAL_SESSION_STATUSES = new Set(['success', 'error', 'cancelled']);
-const PENDING_TOOL_STATUSES = new Set(['pending', 'running']);
-const BLOCKING_SUB_AGENT_STATUSES = new Set(['running', 'waiting', 'paused', 'error']);
-
-function getSessionAgentId(session: AnySession): string | null {
-  const agentId = (session.input as any)?.agentId;
-  return typeof agentId === 'string' && agentId ? agentId : null;
-}
-
-function hasPendingRunToolCallsForAgent(params: {
-  agentId: string;
-  projectId: string;
-  runsById: Record<string, Run | undefined>;
-  runMessagesByRunId: Record<string, RunMessage[] | undefined>;
-  runToolCallsByMessageId: Record<string, Array<{ status: string }> | undefined>;
-}): boolean {
-  const { agentId, projectId, runsById, runMessagesByRunId, runToolCallsByMessageId } = params;
-
-  for (const run of Object.values(runsById)) {
-    if (!run) continue;
-    if (run.projectId !== projectId) continue;
-    if (run.agentId !== agentId) continue;
-    if (run.runType !== 'agent') continue;
-
-    const messages = runMessagesByRunId[run.id] ?? [];
-    for (const message of messages) {
-      const toolCalls = runToolCallsByMessageId[message.id] ?? [];
-      for (const toolCall of toolCalls) {
-        if (PENDING_TOOL_STATUSES.has(String(toolCall?.status ?? ''))) {
-          return true;
-        }
-      }
-    }
-  }
-
-  return false;
-}
 
 const AgentSidebar: React.FC<AgentSidebarProps> = ({
   projectId,
@@ -86,89 +43,62 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
   const settings = useSettings();
   const { showError } = useErrorStore();
 
-  const projectAgentSessions = useLLMSessionStore(
-    useShallow((state) => {
-      const sessions: AnySession[] = [];
-      for (const session of Object.values(state.sessions)) {
-        if (!session) continue;
-        if (session.kind !== 'agent') continue;
-        const inputProjectId = (session.input as any)?.projectId;
-        if (inputProjectId !== projectId) continue;
-        sessions.push(session);
-      }
-      return sessions;
-    })
-  );
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
 
   const agents = getAgents(projectId);
   const selectedAgentId = getSelectedAgentId(projectId);
-  const { runsById, runMessagesByRunId, runToolCallsByMessageId } = useRuntimeStore(
+
+  const { threadsById, messagesByThreadId, toolCallsByMessageId } = useThreadStore(
     useShallow((state) => ({
-      runsById: state.runsById,
-      runMessagesByRunId: state.runMessagesByRunId,
-      runToolCallsByMessageId: state.runToolCallsByMessageId,
+      threadsById: state.threadsById,
+      messagesByThreadId: state.messagesByThreadId,
+      toolCallsByMessageId: state.toolCallsByMessageId,
     })),
   );
-  const blockingSubAgentByAgentId = useMemo(() => {
-    const result: Record<string, boolean> = {};
-    for (const agent of agents) {
-      result[agent.id] = false;
-    }
-
-    for (const run of Object.values(runsById)) {
-      if (!run) continue;
-      if (run.runType !== 'subAgent') continue;
-      if (!agents.some((agent) => agent.id === run.agentId)) continue;
-      if (!BLOCKING_SUB_AGENT_STATUSES.has(run.status)) continue;
-      result[run.agentId] = true;
-    }
-
-    return result;
-  }, [agents, runsById]);
 
   const agentSignalsById = useMemo<Record<string, AgentSidebarSignals>>(() => {
-    const sessionsByAgent: Record<string, AnySession[]> = {};
-    for (const session of projectAgentSessions) {
-      const sessionAgentId = getSessionAgentId(session);
-      if (!sessionAgentId) continue;
-      const existing = sessionsByAgent[sessionAgentId] ?? [];
-      existing.push(session);
-      sessionsByAgent[sessionAgentId] = existing;
-    }
-
     const signals: Record<string, AgentSidebarSignals> = {};
     for (const agent of agents) {
-      const isSelectedAgent = selectedAgentId === agent.id;
+      const threadId = agent.thread_id;
       const key = makeProjectAgentKey(projectId, agent.id);
-      const sessions = sessionsByAgent[agent.id] ?? [];
       const lastViewedAt = lastViewedAtByProjectAgent[key] ?? 0;
-
-      const isRunningFromSession = sessions.some((session) => RUNNING_SESSION_STATUSES.has(session.status));
       const isRunningFromPreflight = loadingByProjectAgent[key] === true;
-      const hasCompletedSinceViewed = sessions.some(
-        (session) =>
-          TERMINAL_SESSION_STATUSES.has(session.status) &&
-          (session.updatedAt ?? 0) > lastViewedAt
-      );
-      const hasPendingToolRequestFromSession = sessions.some((session) => {
-        return session.status === 'running' || session.status === 'applying';
-      });
-      const hasPendingToolRequestFromMessage = hasPendingRunToolCallsForAgent({
-        agentId: agent.id,
-        projectId,
-        runsById,
-        runMessagesByRunId,
-        runToolCallsByMessageId: runToolCallsByMessageId as Record<string, Array<{ status: string }> | undefined>,
-      });
-      const hasPendingToolRequestFromSubAgent = blockingSubAgentByAgentId[agent.id] ?? false;
+
+      const threadInfo = threadId ? threadsById[threadId] : undefined;
+      const threadStatus = threadInfo?.status;
+      const isRunning = threadStatus === 'running' || isRunningFromPreflight;
+
+      // Has completed since viewed: latest message arrived after lastViewedAt while thread is idle
+      const messages = threadId ? messagesByThreadId[threadId] : undefined;
+      const latestMessage = messages?.length ? messages[messages.length - 1] : undefined;
+      const latestMessageTime = latestMessage ? new Date(latestMessage.createdAt).getTime() : 0;
+      const hasCompletedSinceViewed =
+        selectedAgentId !== agent.id &&
+        threadStatus === 'idle' &&
+        latestMessageTime > lastViewedAt;
+
+      // Pending tool requests: thread waiting or any tool call pending/running
+      let hasPendingToolRequest = threadStatus === 'waiting_tools';
+      if (!hasPendingToolRequest && messages) {
+        for (const msg of messages) {
+          const tcs = toolCallsByMessageId[msg.id];
+          if (!tcs) continue;
+          for (const tc of tcs) {
+            if (tc.status === 'pending' || tc.status === 'running') {
+              hasPendingToolRequest = true;
+              break;
+            }
+          }
+          if (hasPendingToolRequest) break;
+        }
+      }
 
       signals[agent.id] = {
-        isRunning: isRunningFromSession || isRunningFromPreflight,
-        hasCompletedSinceViewed: isSelectedAgent ? false : hasCompletedSinceViewed,
-        hasPendingToolRequest: hasPendingToolRequestFromSession || hasPendingToolRequestFromMessage || hasPendingToolRequestFromSubAgent,
+        isRunning,
+        hasCompletedSinceViewed,
+        hasPendingToolRequest,
       };
     }
     return signals;
@@ -176,13 +106,11 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
     agents,
     selectedAgentId,
     projectId,
-    projectAgentSessions,
+    threadsById,
+    messagesByThreadId,
+    toolCallsByMessageId,
     loadingByProjectAgent,
     lastViewedAtByProjectAgent,
-    blockingSubAgentByAgentId,
-    runsById,
-    runMessagesByRunId,
-    runToolCallsByMessageId,
   ]);
 
   useEffect(() => {
@@ -229,29 +157,17 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
     const mainLanguage = settings.mainLanguage;
     const defaultSubLanguage = settings.defaultSubLanguage ?? undefined;
 
-    // Find the latest root run for this agent and get its last message
-    const rootRuns = Object.values(runsById)
-      .flatMap((value) => {
-        if (!value) return [];
-        if (value.projectId !== projectId) return [];
-        if (value.agentId !== agent.id) return [];
-        if (value.runType !== 'agent') return [];
-        return [value];
-      })
-      .sort((a, b) => {
-        const aSeq = a.rootRunSeq ?? Number.MAX_SAFE_INTEGER;
-        const bSeq = b.rootRunSeq ?? Number.MAX_SAFE_INTEGER;
-        if (aSeq !== bSeq) return aSeq - bSeq;
-        return a.createdAt.localeCompare(b.createdAt);
-      });
+    if (!agent.thread_id) return t('agent.sidebar.noMessagesYet');
+    const messages = messagesByThreadId[agent.thread_id];
+    if (!messages || messages.length === 0) return t('agent.sidebar.noMessagesYet');
 
-    if (rootRuns.length === 0) return t('agent.sidebar.noMessagesYet');
+    // Find last non-streaming message
+    let lastMessage = messages[messages.length - 1];
+    if (lastMessage.id.startsWith('delta:')) {
+      if (messages.length < 2) return t('agent.sidebar.noMessagesYet');
+      lastMessage = messages[messages.length - 2];
+    }
 
-    const latestRun = rootRuns[rootRuns.length - 1];
-    const messages = runMessagesByRunId[latestRun.id] ?? [];
-    if (messages.length === 0) return t('agent.sidebar.noMessagesYet');
-
-    const lastMessage = messages[messages.length - 1];
     const resolved = resolveRunMessageDisplay(lastMessage, mainLanguage, defaultSubLanguage);
     const content = resolved.contentParts
       .filter(p => p.type === 'content')

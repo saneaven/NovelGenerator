@@ -5,6 +5,7 @@ export interface Agent {
   id: string;
   name: string;
   project_id: string;
+  thread_id?: string | null;
   archived_until_message_id?: string | null;
   created_at: string;
   updated_at: string;
@@ -38,6 +39,7 @@ const convertBackendAgent = (agent: AgentResponse): Agent => ({
   id: agent.id,
   name: agent.name,
   project_id: agent.project_id,
+  thread_id: (agent as any).thread_id ?? null,
   archived_until_message_id: (agent as any).archived_until_message_id ?? null,
   created_at: agent.created_at,
   updated_at: agent.updated_at,

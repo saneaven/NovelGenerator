@@ -27,14 +27,13 @@ import { runAgentTranslation } from '../../../agent';
 import { buildEditCardsFromToolCallMetadata } from '../../../toolCall';
 import type { ToolCallDecisionMap } from '../../../toolCall/types';
 import type { AgentRunMode, WorkspaceSurface } from '../../../types/agentRuntime';
-import { getSendBlockingState } from '../../../toolCall/viewModel/blockingSelectors';
 import {
-    runtimeOrchestrator,
-    useRuntimeStore,
+    threadOrchestrator,
+    useThreadStore,
     useConversationTimeline,
     resolveRunMessageDisplay,
     type ConversationMessage,
-    type RunToolCall,
+    type ThreadToolCall,
 } from '../../../runtime';
 
 interface AgentPanelProps
@@ -205,14 +204,13 @@ interface DisplayMessageInfo
     fallbackLanguage: string | null;
 }
 
-function toToolCallMetadata(toolCall: RunToolCall): ToolCallMetadata {
+function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
     return {
         id: toolCall.llmCallId,
         tool_name: toolCall.toolName,
         arguments: toolCall.arguments,
-        status: toolCall.status,
-        failureType: toolCall.failureType,
-        reason: toolCall.reason,
+        status: toolCall.status as any,
+        reason: toolCall.reason ?? undefined,
         result: toolCall.result as any,
         acceptedAt: toolCall.acceptedAt ? new Date(toolCall.acceptedAt) : undefined,
     };
@@ -300,28 +298,20 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const selectedAgent = useAgentStore(agentSelector);
     const archiveBoundaryId = selectedAgent?.archived_until_message_id ?? null;
 
+    // Resolve threadId from agent
+    const selectedThreadId = useMemo(() => {
+        if (!selectedAgentId) return undefined;
+        const agent = useAgentStore.getState().agentsByProject[projectId]?.find(a => a.id === selectedAgentId);
+        return agent?.thread_id ?? undefined;
+    }, [projectId, selectedAgentId]);
+
     // Conversation timeline — single source of truth for messages
-    const { messages: timelineMessages, runMessageIds } = useConversationTimeline(projectId, selectedAgentId);
+    const { messages: timelineMessages, messageIds: runMessageIds } = useConversationTimeline(selectedThreadId);
 
-    // Only subscribe to agent sessions for this project (for blocking state checks)
-    const projectAgentSessions = useLLMSessionStore(
-        useShallow((state) => {
-            const filtered: Record<string, any> = {};
-            for (const [id, session] of Object.entries(state.sessions)) {
-                if (session &&
-                    session.kind === 'agent' &&
-                    (session.input as any)?.projectId === projectId) {
-                    filtered[id] = session;
-                }
-            }
-            return filtered;
-        })
-    );
-
-    const { runToolCallsByMessageId, runsById } = useRuntimeStore(
+    const { toolCallsByMessageId, threadStatus } = useThreadStore(
         useShallow((state) => ({
-            runToolCallsByMessageId: state.runToolCallsByMessageId,
-            runsById: state.runsById,
+            toolCallsByMessageId: state.toolCallsByMessageId,
+            threadStatus: selectedThreadId ? state.threadsById[selectedThreadId]?.status : undefined,
         }))
     );
 
@@ -457,13 +447,14 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         {
             // For virtual streaming messages, use streaming data directly
             if (msg.isStreaming) {
+                const streamingEntry = msg.data['_streaming'];
                 return {
                     source: msg,
                     chatMessage: {
                         id: msg.id,
                         role: msg.role,
-                        contentParts: (msg.streamingContentParts ?? []) as any,
-                        thinking_details: msg.streamingThinkingDetails,
+                        contentParts: (streamingEntry?.contentParts ?? []) as any,
+                        thinking_details: streamingEntry?.thinkingDetails,
                         timestamp: msg.createdAt,
                     } as any,
                     requestedLanguage: mainLanguage,
@@ -517,16 +508,28 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         return null;
     }, [timelineMessages]);
 
-    const sendBlockingState = useMemo(
-        () =>
-            getSendBlockingState({
-                selectedAgentId,
-                runMessageIds,
-                sessions: Object.values(projectAgentSessions),
-                runToolCallsByMessageId,
-            }),
-        [selectedAgentId, runMessageIds, projectAgentSessions, runToolCallsByMessageId]
-    );
+    const sendBlockingState = useMemo(() => {
+        if (!selectedAgentId) {
+            return { blocked: false, rootSessionBlocked: false, unresolvedToolCalls: { count: 0 } as { count: number; firstMessageId?: string } };
+        }
+        let unresolvedCount = 0;
+        let firstMessageId: string | undefined;
+        for (const msgId of runMessageIds) {
+            const tcs = toolCallsByMessageId[msgId] ?? [];
+            for (const tc of tcs) {
+                if (tc.status === 'pending' || tc.status === 'running') {
+                    unresolvedCount++;
+                    if (!firstMessageId) firstMessageId = msgId;
+                }
+            }
+        }
+        const rootSessionBlocked = threadStatus === 'running';
+        return {
+            blocked: rootSessionBlocked || unresolvedCount > 0,
+            rootSessionBlocked,
+            unresolvedToolCalls: { count: unresolvedCount, firstMessageId },
+        };
+    }, [selectedAgentId, runMessageIds, toolCallsByMessageId, threadStatus]);
 
     const sendBlockedReason = useMemo(() => {
         if (!sendBlockingState.blocked) return null;
@@ -656,8 +659,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         void runAgentTranslation({
             projectId,
             agentId: selectedAgentId,
-            runId: msg.runId,
-            runMessageId: msg.id,
+            threadId: msg.threadId,
+            messageId: msg.id,
             sourceLanguage,
             targetLanguage,
             sourceContent,
@@ -726,12 +729,12 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
     // Compute latest run error (shown on last message)
     const latestRunError = useMemo(() => {
+        if (threadStatus !== 'error') return undefined;
         if (timelineMessages.length === 0) return undefined;
         const lastMsg = timelineMessages[timelineMessages.length - 1];
         if (lastMsg.isStreaming) return undefined;
-        const run = runsById[lastMsg.runId];
-        return run?.status === 'error' ? run.error : undefined;
-    }, [timelineMessages, runsById]);
+        return 'An error occurred during generation.';
+    }, [timelineMessages, threadStatus]);
 
     return (
         <div className={`agent-panel ${isAgentVisible ? 'visible' : 'hidden'}`}>
@@ -791,15 +794,9 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                         : t('agent.translateTo', { language: translationTargetLabel });
                     const translateDisabled = !translationEnabled || isTranslating;
 
-                    // Streaming tool call progress (only for virtual streaming messages)
-                    const hasStreamingCalls = Boolean(
-                        isStreamingMessage &&
-                        (message.source.streamingToolCallProgress?.length ?? 0) > 0
-                    );
-
                     // Persisted tool calls (for real messages)
                     const storedToolCalls = !isStreamingMessage
-                        ? (runToolCallsByMessageId[message.source.id] ?? []).map(toToolCallMetadata)
+                        ? (toolCallsByMessageId[message.source.id] ?? []).map(toToolCallMetadata)
                         : [];
                     const cardsToRender = storedToolCalls.length > 0
                         ? buildEditCardsFromToolCallMetadata(storedToolCalls)
@@ -852,20 +849,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                     />
                                                 )}
                                                 {(primaryPlainContent.trim() || isStreamingMessage) && renderMessageContent(message, processingResult)}
-                                                {hasStreamingCalls && (
-                                                    <div
-                                                        className="message-function-calls"
-                                                        data-function-call-message-id={message.source.id}
-                                                    >
-                                                        <FunctionCallsThread
-                                                            threadId={`${functionThreadId}:stream`}
-                                                            mode="streaming"
-                                                            streamingProgress={message.source.streamingToolCallProgress}
-                                                            projectId={projectId}
-                                                        />
-                                                    </div>
-                                                )}
-
                                                 {hasEditCards && (
                                                     <div
                                                         className="message-function-calls"
@@ -883,11 +866,12 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                             return;
                                                                         }
 
-                                                                        if (storedToolCalls.length === 0) return;
+                                                                        if (storedToolCalls.length === 0 || !selectedThreadId) return;
 
-                                                                        await runtimeOrchestrator.applyRunToolCallDecisions({
-                                                                            runId: message.source.runId,
-                                                                            runMessageId: message.source.id,
+                                                                        await threadOrchestrator.toolDecisions({
+                                                                            projectId,
+                                                                            threadId: selectedThreadId,
+                                                                            messageId: message.source.id,
                                                                             decisions,
                                                                         });
                                                                     }
@@ -901,14 +885,15 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                             return;
                                                                         }
 
-                                                                        if (storedToolCalls.length === 0) return;
+                                                                        if (storedToolCalls.length === 0 || !selectedThreadId) return;
 
-                                                                        await runtimeOrchestrator.applyRunToolCallDecisions({
-                                                                            runId: message.source.runId,
-                                                                            runMessageId: message.source.id,
+                                                                        await threadOrchestrator.toolDecisions({
+                                                                            projectId,
+                                                                            threadId: selectedThreadId,
+                                                                            messageId: message.source.id,
                                                                             decisions,
                                                                         });
-                                                                        await runtimeOrchestrator.pauseRun(message.source.runId);
+                                                                        await threadOrchestrator.pause(projectId, selectedThreadId);
                                                                     }
                                                                     : undefined
                                                             }
@@ -923,12 +908,11 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                     </div>
                                                 )}
 
-                                                {selectedAgentId && hasSubAgentCalls && (
+                                                {selectedAgentId && hasSubAgentCalls && selectedThreadId && (
                                                     <SubAgentPeekDock
-                                                        threadId={`${functionThreadId}:peek`}
-                                                        parentRunId={message.source.runId}
-                                                        parentRunMessageId={message.source.id}
-                                                        parentToolCallIds={subAgentToolCallIds}
+                                                        parentThreadId={selectedThreadId}
+                                                        parentMessageId={message.source.id}
+                                                        projectId={projectId}
                                                         isActiveParent={isActiveSubAgentParent}
                                                     />
                                                 )}

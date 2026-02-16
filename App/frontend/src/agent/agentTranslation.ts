@@ -9,15 +9,15 @@ import {
 import type { ContentPart } from '../llm/requestTypes';
 import { registerSessionNotification, updateSessionNotification } from '../llmTask/notificationHelpers';
 import { useAgentUIStore } from '../store/agentUIStore';
-import { runService } from '../api/runService';
-import { useRuntimeStore } from '../runtime';
+import { threadService } from '../api/threadService';
+import { useThreadStore } from '../runtime';
 import { buildLangEntry } from '../runtime/utils/displayMessage';
 
 export interface AgentTranslationInput {
   projectId: string;
   agentId: string;
-  runId: string;
-  runMessageId: string;
+  threadId: string;
+  messageId: string;
   sourceLanguage: string;
   targetLanguage: string;
   sourceContent: string;
@@ -26,7 +26,7 @@ export interface AgentTranslationInput {
 
 export interface AgentTranslationResult {
   agentId: string;
-  runMessageId: string;
+  messageId: string;
   targetLanguage: string;
 }
 
@@ -113,11 +113,10 @@ export async function runAgentTranslation(
 
     // Persist to backend
     try {
-      await runService.translateRunMessage(
+      await threadService.patchMessage(
         input.projectId,
-        input.agentId,
-        input.runId,
-        input.runMessageId,
+        input.threadId,
+        input.messageId,
         {
           language: input.targetLanguage,
           content_parts: translatedContentParts as Array<Record<string, any>>,
@@ -128,16 +127,16 @@ export async function runAgentTranslation(
     }
 
     // Update local store
-    useRuntimeStore.getState().addRunMessageTranslation(
-      input.runId,
-      input.runMessageId,
+    useThreadStore.getState().addMessageTranslation(
+      input.threadId,
+      input.messageId,
       input.targetLanguage,
       langEntry,
     );
 
     useLLMSessionStore.getState().updateSession(sessionId, {
       status: 'success',
-      result: { agentId: input.agentId, runMessageId: input.runMessageId, targetLanguage: input.targetLanguage },
+      result: { agentId: input.agentId, messageId: input.messageId, targetLanguage: input.targetLanguage },
     } as any);
     const updated = useLLMSessionStore.getState().getSessionById(sessionId);
     if (updated) updateSessionNotification(sessionId, updated);

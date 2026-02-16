@@ -1,4 +1,12 @@
-import type { RunMessage, RunMessageLangEntry } from '../types';
+export interface LangEntry {
+  contentParts: Array<{ type: string; text: string }>;
+  thinkingDetails?: Array<Record<string, unknown>>;
+}
+
+/** Any message with multilingual `data` (RunMessage, ThreadMessage, ConversationMessage). */
+interface MessageWithData {
+  data: Record<string, LangEntry>;
+}
 
 export interface DisplayMessageResult {
   contentParts: Array<{ type: string; text: string }>;
@@ -8,7 +16,7 @@ export interface DisplayMessageResult {
 }
 
 /**
- * Resolve the best language entry from a RunMessage's multilingual `data`.
+ * Resolve the best language entry from a message's multilingual `data`.
  *
  * Priority:
  *   1. Exact match for `language`
@@ -17,7 +25,7 @@ export interface DisplayMessageResult {
  *   4. Empty result
  */
 export function resolveRunMessageDisplay(
-  message: RunMessage,
+  message: MessageWithData,
   language: string,
   fallbackLanguage?: string,
 ): DisplayMessageResult {
@@ -72,7 +80,7 @@ export function resolveRunMessageDisplay(
  * Extract plain text from contentParts (content-type only).
  */
 export function getRunMessageText(
-  message: RunMessage,
+  message: MessageWithData,
   language: string,
   fallbackLanguage?: string,
 ): string {
@@ -84,12 +92,12 @@ export function getRunMessageText(
 }
 
 /**
- * Build a RunMessageLangEntry from flat contentParts + thinkingDetails.
+ * Build a LangEntry from flat contentParts + thinkingDetails.
  */
 export function buildLangEntry(
   contentParts: Array<{ type: string; text: string }>,
   thinkingDetails?: Array<Record<string, unknown>>,
-): RunMessageLangEntry {
+): LangEntry {
   return {
     contentParts,
     ...(thinkingDetails !== undefined ? { thinkingDetails } : {}),

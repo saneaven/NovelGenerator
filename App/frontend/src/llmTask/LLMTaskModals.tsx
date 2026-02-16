@@ -1,6 +1,6 @@
 /**
  * Agent Detail Modal
- * Renders modal for agent session details from llmSessionStore
+ * Renders modal for LLM session details from llmSessionStore
  */
 
 import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react';
@@ -18,27 +18,7 @@ import {
   runAgentTranslation,
   type AgentTranslationInput,
 } from '../agent';
-import type { ToolCallDecisionMap, ToolCallStatus } from '../toolCall/types';
-import { runtimeOrchestrator, useRuntimeStore, type RunToolCall } from '../runtime';
 import './LLMTaskModals.css';
-
-function isPendingStatus(status: string | undefined): boolean {
-  const normalized = (status ?? 'pending') as ToolCallStatus;
-  return normalized === 'pending' || normalized === 'running';
-}
-
-function toToolCallMetadata(toolCall: RunToolCall) {
-  return {
-    id: toolCall.llmCallId,
-    tool_name: toolCall.toolName,
-    arguments: toolCall.arguments,
-    status: toolCall.status,
-    reason: toolCall.reason,
-    failureType: toolCall.failureType,
-    result: toolCall.result as any,
-    acceptedAt: toolCall.acceptedAt ? new Date(toolCall.acceptedAt) : undefined,
-  };
-}
 
 export const LLMTaskModals: React.FC = () => {
   const detailSessionId = useAgentUIStore((state) => state.detailSessionId);
@@ -48,19 +28,15 @@ export const LLMTaskModals: React.FC = () => {
     detailSessionId ? state.sessions[detailSessionId] : null
   );
   const cancelSession = useLLMSessionStore((state) => state.cancelSession);
-  const runToolCallsByMessageId = useRuntimeStore((state) => state.runToolCallsByMessageId);
-  const runMessagesByRunId = useRuntimeStore((state) => state.runMessagesByRunId);
 
   const [outputExpanded, setOutputExpanded] = useState(false);
   const [errorExpanded, setErrorExpanded] = useState(false);
-  const [isApplying, setIsApplying] = useState(false);
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
 
   useEffect(() => {
     userScrolledUpRef.current = false;
-    setIsApplying(false);
   }, [detailSessionId]);
 
   const handleBodyScroll = useCallback(() => {
@@ -81,34 +57,10 @@ export const LLMTaskModals: React.FC = () => {
     element.scrollTop = element.scrollHeight;
   }, [lastContentPart, toolCallProgressLength, session?.status]);
 
-  const agentContext = useMemo(() => {
-    if (!session || session.kind !== 'agent') return null;
-    const input = session.input as any;
-    const runId = input?.runId as string | undefined;
-    if (!runId) return null;
-
-    // Find the latest assistant message in this run (for tool call lookup)
-    const messages = runMessagesByRunId[runId] ?? [];
-    const assistantMessage = [...messages].reverse().find(m => m.role === 'assistant');
-
-    return {
-      projectId: input.projectId as string,
-      agentId: input.agentId as string,
-      runId,
-      runMessageId: assistantMessage?.id,
-    };
-  }, [session?.id, session?.kind, session?.input, runMessagesByRunId]);
-
   const displayedToolCalls = useMemo(() => {
-    if (agentContext?.runMessageId) {
-      const runToolCalls = runToolCallsByMessageId[agentContext.runMessageId] ?? [];
-      if (runToolCalls.length > 0) {
-        return runToolCalls.map(toToolCallMetadata);
-      }
-    }
     if (Array.isArray(session?.toolCalls)) return session.toolCalls;
     return [];
-  }, [agentContext?.runMessageId, runToolCallsByMessageId, session?.toolCalls]);
+  }, [session?.toolCalls]);
 
   const hasStreamingCalls = session?.status === 'running' && (session.toolCallProgress?.length ?? 0) > 0;
   const cards = useMemo(
@@ -152,20 +104,11 @@ export const LLMTaskModals: React.FC = () => {
       .join('');
   }, [session?.contentParts]);
 
-  const projectId = agentContext?.projectId ?? ((session?.input as any)?.projectId as string | undefined) ?? '';
-  const hasPendingCards = displayedToolCalls.some((toolCall: any) => isPendingStatus(toolCall?.status));
-  const isPending = hasPendingCards || isApplying;
+  const projectId = (session?.input as any)?.projectId as string | undefined ?? '';
 
   const handleRetry = useCallback(() => {
     if (!session) return;
-    if (session.kind === 'agent') {
-      const runId = (session.input as any)?.runId as string | undefined;
-      if (runId) {
-        void runtimeOrchestrator.retryRun(runId).catch(() => {
-          void runtimeOrchestrator.resumeRunLoop({ runId });
-        });
-      }
-    } else if (session.kind === 'agentTranslation') {
+    if (session.kind === 'agentTranslation') {
       void runAgentTranslation(session.input as AgentTranslationInput);
     }
     closeDetailModal();
@@ -175,21 +118,6 @@ export const LLMTaskModals: React.FC = () => {
     if (!session) return;
     cancelSession(session.id);
   }, [cancelSession, session?.id]);
-
-  const handleConfirm = useCallback(async (decisions: ToolCallDecisionMap) => {
-    if (!agentContext?.runMessageId) return;
-
-    setIsApplying(true);
-    try {
-      await runtimeOrchestrator.applyRunToolCallDecisions({
-        runId: agentContext.runId,
-        runMessageId: agentContext.runMessageId,
-        decisions,
-      });
-    } finally {
-      setIsApplying(false);
-    }
-  }, [agentContext]);
 
   if (!session) return null;
 
@@ -306,12 +234,9 @@ export const LLMTaskModals: React.FC = () => {
           <div className="llm-task-modal-tool-calls">
             <FunctionCallsThread
               threadId={`llm-session:${session.id}:cards`}
-              mode={isPending ? 'pending' : 'confirmed'}
+              mode="confirmed"
               cards={cards}
-              onCommitDecisions={isPending ? handleConfirm : undefined}
               projectId={projectId}
-              isApplyDisabled={isApplying}
-              applyDisabledReason={isApplying ? 'Applying changes...' : undefined}
             />
           </div>
         )}

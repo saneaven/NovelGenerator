@@ -7,8 +7,6 @@ export * from './types';
 export { authService } from './authService';
 export { projectService } from './projectService';
 export { agentService } from './agentService';
-export { runService } from './runService';
-export { runExecutionService } from './runExecutionService';
 export { novelService } from './novelService';
 export { assetService } from './assetService';
 export { presetService } from './presetService';

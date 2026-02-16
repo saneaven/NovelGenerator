@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ...services.template_engine import create_environment, render_template
-from ..run_context_builder import HistoryMessage
+from ..history_service import HistoryMessage
 from .prompt_manager import PromptBundle
 
 
@@ -133,8 +133,10 @@ class ConversationBuilder:
                                 if isinstance(tc.result, dict)
                                 else "Applied successfully"
                             )
-                        elif tc.status == "rejected":
+                        elif tc.status == "reject":
                             content = f"User rejected: {tc.reason}" if tc.reason else "User rejected this action"
+                        elif tc.status == "cancel":
+                            content = f"Cancelled: {tc.reason}" if tc.reason else "Cancelled"
                         else:
                             content = f"Failed: {tc.reason or 'Unknown error'}"
                         tool_results.append(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 from ..models.db_models import RunModel
@@ -14,25 +15,26 @@ class RunEventContext:
     run_id: UUID
     run_type: str
     project_id: UUID
-    agent_id: UUID | None = None
+    thread_id: UUID | None = None
+    owner_id: UUID | None = None
     run_mode: str | None = None
     surface: str | None = None
-    sub_agent_id: UUID | None = None
     parent_run_id: UUID | None = None
     journey_kind: str | None = None
 
     @staticmethod
     def from_run(run: RunModel) -> "RunEventContext":
+        thread = run.thread
         return RunEventContext(
             run_id=run.id,
-            run_type=run.run_type,
+            run_type=thread.thread_type,
             project_id=run.project_id,
-            agent_id=run.agent_id,
+            thread_id=thread.id,
+            owner_id=thread.owner_id,
             run_mode=run.run_mode,
             surface=run.surface,
-            sub_agent_id=run.sub_agent_id,
             parent_run_id=run.parent_run_id,
-            journey_kind=run.journey_kind,
+            journey_kind=thread.journey_kind,
         )
 
 
@@ -54,15 +56,16 @@ class RunEventEmitter:
             ctx = RunEventContext.from_run(run)
         else:
             ctx = run
-        payload = {
+        payload: dict[str, Any] = {
             "run_id": str(ctx.run_id),
             "run_type": ctx.run_type,
             "project_id": str(ctx.project_id),
+            "thread_id": str(ctx.thread_id) if ctx.thread_id else None,
         }
         if ctx.run_type == "agent":
             payload.update(
                 {
-                    "agent_id": str(ctx.agent_id) if ctx.agent_id else None,
+                    "owner_id": str(ctx.owner_id) if ctx.owner_id else None,
                     "run_mode": ctx.run_mode,
                     "surface": ctx.surface,
                 }
@@ -70,7 +73,7 @@ class RunEventEmitter:
         elif ctx.run_type == "subAgent":
             payload.update(
                 {
-                    "sub_agent_id": str(ctx.sub_agent_id) if ctx.sub_agent_id else None,
+                    "owner_id": str(ctx.owner_id) if ctx.owner_id else None,
                     "parent_run_id": str(ctx.parent_run_id) if ctx.parent_run_id else None,
                 }
             )

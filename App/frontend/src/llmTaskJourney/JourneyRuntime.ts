@@ -1,4 +1,4 @@
-import { runExecutionService, type RunExecutionEvent, type StreamHandle } from '../api/runExecutionService';
+import { threadService, type ThreadEvent, type StreamHandle } from '../api/threadService';
 import type { ToolCallDecisionMap } from '../toolCall/types';
 import { useJourneyStore, type Journey } from '../store/journeyStore';
 import type { ToolCallMetadata } from '../llm/requestTypes';
@@ -63,73 +63,62 @@ function normalizeDecisionKey(id: string): string {
   return id.split(':').pop() || id;
 }
 
-function buildJourneyRunStartPayload(kind: JourneyKind, input: any) {
+function buildJourneyDispatchPayload(kind: JourneyKind, input: any, threadId?: string) {
+  const base: Record<string, unknown> = {
+    thread_type: 'journey',
+    thread_id: threadId,
+    input_text: extractUserInput(kind, input),
+    language: 'English',
+    journey_kind: kind === 'translateObjects' ? 'translation' : kind === 'sceneImage' ? 'imagePrompt' : kind,
+  };
+
   if (kind === 'aiEdit') {
     const isManuscript = input.category === 'manuscript';
     const targetId = typeof input.targetId === 'string' ? input.targetId : '';
     const selectedContextIds = Array.isArray(input.selectedContextIds) ? input.selectedContextIds : [];
-    return {
-      run_type: 'journey',
-      journey_kind: 'aiEdit',
-      input_text: String(input.userRequest || ''),
-      language: 'English',
-      journey_target_ids: targetId ? [targetId] : [],
-      input_payload: {
-        mode: isManuscript ? 'manuscript' : 'storyObject',
-        editAssistant: {
-          manuscript: {
-            currentId: '',
-            currentChapterId: targetId,
-            currentChapterName: '',
-            currentChapterManuscript: '',
-            objectIds: selectedContextIds,
-          },
-          storyObject: {
-            targetIds: targetId ? [targetId] : [],
-            contextIds: selectedContextIds,
-            categoryName: String(input.category || ''),
-            editScope: 'partial',
-          },
+    base.journey_target_ids = targetId ? [targetId] : [];
+    base.input_payload = {
+      mode: isManuscript ? 'manuscript' : 'storyObject',
+      editAssistant: {
+        manuscript: {
+          currentId: '',
+          currentChapterId: targetId,
+          currentChapterName: '',
+          currentChapterManuscript: '',
+          objectIds: selectedContextIds,
         },
-        feedback: {
-          editingObjectIds: selectedContextIds,
+        storyObject: {
+          targetIds: targetId ? [targetId] : [],
+          contextIds: selectedContextIds,
+          categoryName: String(input.category || ''),
+          editScope: 'partial',
         },
       },
+      feedback: {
+        editingObjectIds: selectedContextIds,
+      },
     };
-  }
-
-  if (kind === 'translateObjects') {
+  } else if (kind === 'translateObjects') {
     const objectIds = Array.isArray(input.objectIds) ? input.objectIds : [];
-    return {
-      run_type: 'journey',
-      journey_kind: 'translation',
-      input_text: String(input.userInput || ''),
-      language: String(input.targetLanguage || 'English'),
-      journey_target_ids: objectIds,
-      input_payload: {
-        translation: {
-          sourceLanguage: String(input.sourceLanguage || ''),
-          targetLanguage: String(input.targetLanguage || ''),
-          objectIds,
-          currentTranslatedContents: [],
-          contextObjectIds: Array.isArray(input.contextObjectIds) ? input.contextObjectIds : [],
-        },
-        feedback: {
-          editingObjectIds: objectIds,
-        },
+    base.language = String(input.targetLanguage || 'English');
+    base.journey_target_ids = objectIds;
+    base.input_payload = {
+      translation: {
+        sourceLanguage: String(input.sourceLanguage || ''),
+        targetLanguage: String(input.targetLanguage || ''),
+        objectIds,
+        currentTranslatedContents: [],
+        contextObjectIds: Array.isArray(input.contextObjectIds) ? input.contextObjectIds : [],
+      },
+      feedback: {
+        editingObjectIds: objectIds,
       },
     };
-  }
-
-  // imagePrompt + sceneImage => journey_kind=imagePrompt
-  const selectedObjectIds = Array.isArray(input.selectedObjectIds) ? input.selectedObjectIds : [];
-  return {
-    run_type: 'journey',
-    journey_kind: 'imagePrompt',
-    input_text: String(input.userRequest || ''),
-    language: 'English',
-    journey_target_ids: selectedObjectIds,
-    input_payload: {
+  } else {
+    // imagePrompt + sceneImage
+    const selectedObjectIds = Array.isArray(input.selectedObjectIds) ? input.selectedObjectIds : [];
+    base.journey_target_ids = selectedObjectIds;
+    base.input_payload = {
       variant: kind === 'sceneImage' ? 'scene' : (input.contextType === 'cover_image' ? 'coverImage' : 'object'),
       imagePrompt: {
         promptMode: String(input.promptMode || 'natural'),
@@ -141,8 +130,10 @@ function buildJourneyRunStartPayload(kind: JourneyKind, input: any) {
       feedback: {
         editingObjectIds: selectedObjectIds,
       },
-    },
-  };
+    };
+  }
+
+  return base;
 }
 
 function withUpdatedAssistantMessage(
@@ -158,7 +149,7 @@ function withUpdatedAssistantMessage(
   return journey.messages.map((msg, idx) => (idx === index ? updater(msg) : msg));
 }
 
-async function handleRunEvent(journeyId: string, event: RunExecutionEvent): Promise<void> {
+async function handleRunEvent(journeyId: string, event: ThreadEvent): Promise<void> {
   const journeyStore = useJourneyStore.getState();
   const journey = journeyStore.getJourneyById(journeyId);
   if (!journey) return;
@@ -173,10 +164,11 @@ async function handleRunEvent(journeyId: string, event: RunExecutionEvent): Prom
   }
 
   const payload = envelope?.payload ?? {};
-  const runId = envelope?.run_id ? String(envelope.run_id) : journey.runId;
 
-  if (runId && !journey.runId) {
-    journeyStore.updateJourney(journeyId, { runId });
+  // Extract threadId from event
+  const threadId = envelope?.thread_id ? String(envelope.thread_id) : journey.threadId;
+  if (threadId && !journey.threadId) {
+    journeyStore.updateJourney(journeyId, { threadId });
   }
 
   if (event.event === 'run:status') {
@@ -384,8 +376,8 @@ export async function applyJourneyEdits(params: {
   const { journeyId, decisions, options } = params;
   const journeyStore = useJourneyStore.getState();
   const journey = journeyStore.getJourneyById(journeyId);
-  if (!journey?.runId) {
-    throw new Error('Journey run is not ready yet');
+  if (!journey?.threadId) {
+    throw new Error('Journey thread is not ready yet');
   }
 
   const lastAssistant = [...journey.messages].reverse().find((msg) => msg.role === 'assistant');
@@ -400,17 +392,19 @@ export async function applyJourneyEdits(params: {
 
   journeyStore.updateJourney(journeyId, { status: 'applying', error: undefined });
 
+  const projectId = getProjectId(journey.kind as JourneyKind, journey.input);
+
   await openJourneyStream({
     journeyId,
-    projectId: getProjectId(journey.kind as JourneyKind, journey.input),
+    projectId,
     streamFactory: () =>
-      runExecutionService.applyDecisions(
-        getProjectId(journey.kind as JourneyKind, journey.input),
-        journey.runId!,
+      threadService.toolDecisions(
+        projectId,
+        journey.threadId!,
         {
           message_id: lastAssistant.id,
           decisions: normalized,
-          options: (options && typeof options === 'object') ? options : undefined,
+          options: (options && typeof options === 'object') ? options as Record<string, unknown> : undefined,
         },
         (event) => {
           void handleRunEvent(journeyId, event);
@@ -487,24 +481,26 @@ export const JourneyRuntime = {
       onDismiss: () => useJourneyStore.getState().clearJourney(journeyId),
     });
 
+    const payload = buildJourneyDispatchPayload(kind, input);
+
     void openJourneyStream({
       journeyId,
       projectId,
       streamFactory: () =>
-        runExecutionService.startRun(
+        threadService.dispatch(
           projectId,
-          buildJourneyRunStartPayload(kind, input),
+          payload as any,
           (event) => {
             void handleRunEvent(journeyId, event);
           },
         ),
     });
 
-    return { journeyId, sessionId: `journey-run-${journeyId}` };
+    return { journeyId, sessionId: `journey-thread-${journeyId}` };
   },
 
   /**
-   * Send feedback to continue a journey (append user message + resume run).
+   * Send feedback to continue a journey (dispatch with existing thread).
    */
   sendFeedback(params: { journeyId: string; text: string }): { sessionId: string } | undefined {
     const { journeyId, text } = params;
@@ -513,8 +509,8 @@ export const JourneyRuntime = {
 
     const journeyStore = useJourneyStore.getState();
     const journey = journeyStore.getJourneyById(journeyId);
-    if (!journey?.runId) {
-      throw new Error('Journey run is not ready yet');
+    if (!journey?.threadId) {
+      throw new Error('Journey thread is not ready yet');
     }
 
     if (journey.status === 'running' || journey.status === 'applying') {
@@ -532,24 +528,27 @@ export const JourneyRuntime = {
       ],
     });
 
-    void (async () => {
-      await runExecutionService.appendMessage(projectId, journey.runId!, { text: trimmed, language });
-      await openJourneyStream({
-        journeyId,
-        projectId,
-        streamFactory: () =>
-          runExecutionService.resumeRun(
-            projectId,
-            journey.runId!,
-            (event) => {
-              void handleRunEvent(journeyId, event);
-            },
-            undefined,
-            lastEventSeqByJourneyId.get(journeyId),
-          ),
-      });
-    })();
+    void openJourneyStream({
+      journeyId,
+      projectId,
+      streamFactory: () =>
+        threadService.dispatch(
+          projectId,
+          {
+            thread_type: 'journey',
+            thread_id: journey.threadId!,
+            input_text: trimmed,
+            language,
+            journey_kind: journey.kind === 'translateObjects' ? 'translation' : journey.kind === 'sceneImage' ? 'imagePrompt' : journey.kind,
+          },
+          (event) => {
+            void handleRunEvent(journeyId, event);
+          },
+          undefined,
+          lastEventSeqByJourneyId.get(journeyId),
+        ),
+    });
 
-    return { sessionId: `journey-run-${journey.runId}` };
+    return { sessionId: `journey-thread-${journey.threadId}` };
   },
 };

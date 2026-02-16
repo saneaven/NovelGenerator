@@ -5,7 +5,7 @@ from typing import List
 import uuid
 
 from ..database import get_db
-from ..models.db_models import User, Project, Agent
+from ..models.db_models import User, Project, Agent, Thread
 from ..schemas.agents import AgentCreate, AgentUpdate, AgentResponse
 from ..auth import get_current_user
 
@@ -33,6 +33,29 @@ async def verify_project_access(
     return project
 
 
+def _find_thread_id(db: Session, agent_id: uuid.UUID) -> uuid.UUID | None:
+    """Find the thread for an agent."""
+    row = (
+        db.query(Thread.id)
+        .filter(Thread.owner_id == agent_id, Thread.thread_type == "agent")
+        .first()
+    )
+    return row[0] if row else None
+
+
+def _agent_to_response(agent: Agent, thread_id: uuid.UUID | None) -> dict:
+    """Convert an Agent row + resolved thread_id to a response dict."""
+    return {
+        "id": agent.id,
+        "project_id": agent.project_id,
+        "name": agent.name,
+        "thread_id": thread_id,
+        "archived_until_message_id": agent.archived_until_message_id,
+        "created_at": agent.created_at,
+        "updated_at": agent.updated_at,
+    }
+
+
 # ============================================================================
 # AGENT MANAGEMENT
 # ============================================================================
@@ -44,7 +67,7 @@ async def create_agent(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new agent conversation"""
+    """Create a new agent conversation (auto-creates a thread)."""
     project = await verify_project_access(project_id, current_user, db)
 
     agent = Agent(
@@ -52,12 +75,22 @@ async def create_agent(
         project_id=project_id,
         name=data.name
     )
-
     db.add(agent)
+    db.flush()
+
+    # Auto-create thread for this agent
+    thread = Thread(
+        project_id=project_id,
+        user_id=current_user.id,
+        thread_type="agent",
+        owner_id=agent.id,
+        status="idle",
+    )
+    db.add(thread)
     db.commit()
     db.refresh(agent)
 
-    return agent
+    return _agent_to_response(agent, thread.id)
 
 
 @router.get("", response_model=List[AgentResponse])
@@ -73,7 +106,16 @@ async def list_agents(
         Agent.project_id == project_id
     ).all()
 
-    return agents
+    # Batch-load thread IDs for all agents
+    agent_ids = [a.id for a in agents]
+    thread_rows = (
+        db.query(Thread.owner_id, Thread.id)
+        .filter(Thread.owner_id.in_(agent_ids), Thread.thread_type == "agent")
+        .all()
+    ) if agent_ids else []
+    thread_id_by_agent = {row[0]: row[1] for row in thread_rows}
+
+    return [_agent_to_response(a, thread_id_by_agent.get(a.id)) for a in agents]
 
 
 @router.get("/{agent_id}", response_model=AgentResponse)
@@ -97,7 +139,7 @@ async def get_agent(
             detail="Agent not found"
         )
 
-    return agent
+    return _agent_to_response(agent, _find_thread_id(db, agent.id))
 
 
 @router.put("/{agent_id}", response_model=AgentResponse)
@@ -126,7 +168,7 @@ async def update_agent(
     db.commit()
     db.refresh(agent)
 
-    return agent
+    return _agent_to_response(agent, _find_thread_id(db, agent.id))
 
 
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)

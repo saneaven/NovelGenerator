@@ -1,13 +1,18 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import type { TaskSessionState } from '../../llmTask/types';
-import type { ChatMessage, ToolCallMetadata } from '../../llm/requestTypes';
+import type { ToolCallMetadata } from '../../llm/requestTypes';
 import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { collapseContentParts } from '../../agent/utils/contentParts';
-import { runtimeOrchestrator, useRuntimeStore, type Run, type RunToolCall } from '../../runtime';
-import { runService } from '../../api/runService';
+import {
+  threadOrchestrator,
+  useThreadStore,
+  resolveRunMessageDisplay,
+  type ThreadMessage,
+  type ThreadToolCall,
+} from '../../runtime';
+import { threadService } from '../../api/threadService';
 import { FunctionCallsThread } from '../../toolCall/ui';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import { IconButton } from '../IconButton';
@@ -28,69 +33,64 @@ function formatTime(input?: Date | string): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function messageText(message: ChatMessage): string {
-  return collapseContentParts(message.contentParts ?? []).content.trim();
-}
-
 function hasPendingStatus(status: string | undefined): boolean {
   return status === 'pending' || status === 'running';
 }
 
-function toToolCallMetadata(toolCall: RunToolCall): ToolCallMetadata {
+function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
   return {
     id: toolCall.llmCallId,
     tool_name: toolCall.toolName,
     arguments: toolCall.arguments,
-    status: toolCall.status,
-    reason: toolCall.reason,
-    failureType: toolCall.failureType,
+    status: toolCall.status as any,
+    reason: toolCall.reason ?? undefined,
     result: toolCall.result as any,
     acceptedAt: toolCall.acceptedAt ? new Date(toolCall.acceptedAt) : undefined,
   };
 }
 
-function toChatMessage(message: any): ChatMessage {
-  return {
-    id: message.id,
-    seq: message.seq,
-    role: message.role,
-    contentParts: message.contentParts,
-    timestamp: new Date(message.createdAt),
-    thinking_details: message.thinkingDetails,
-  } as ChatMessage;
-}
-
 export interface SubAgentPeekTimelineProps {
-  threadId: string;
-  runId: string;
-  run: Run;
-  activeSession?: TaskSessionState<any, any>;
+  childThreadId: string;
+  projectId: string;
+  finalOutput?: string | null;
 }
 
 export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
-  threadId,
-  runId,
-  run,
-  activeSession,
+  childThreadId,
+  projectId,
+  finalOutput,
 }) => {
   const { t } = useTranslation();
   const [isApplying, setIsApplying] = useState(false);
   const [actionInFlight, setActionInFlight] = useState<'pause' | 'retry' | 'cancel' | null>(null);
   const [resultExpanded, setResultExpanded] = useState(false);
 
-  const { runMessagesByRunId, runToolCallsByMessageId } = useRuntimeStore(
+  const { thread, threadMessages, toolCallsByMessageId } = useThreadStore(
     useShallow((state) => ({
-      runMessagesByRunId: state.runMessagesByRunId,
-      runToolCallsByMessageId: state.runToolCallsByMessageId,
+      thread: state.threadsById[childThreadId],
+      threadMessages: state.messagesByThreadId[childThreadId],
+      toolCallsByMessageId: state.toolCallsByMessageId,
     })),
   );
 
+  const threadStatus = thread?.status ?? 'idle';
+
   const messages = useMemo(() => {
-    const history = runMessagesByRunId[runId] ?? [];
-    return [...history]
-      .filter((msg) => msg.role !== 'user')
-      .sort((a, b) => a.seq - b.seq);
-  }, [runMessagesByRunId, runId]);
+    if (!threadMessages) return [];
+    return [...threadMessages]
+      .filter((msg) => msg.role !== 'user' && !msg.id.startsWith('delta:'))
+      .sort((a, b) => {
+        const aSit = a.seqInThread ?? Number.MAX_SAFE_INTEGER;
+        const bSit = b.seqInThread ?? Number.MAX_SAFE_INTEGER;
+        if (aSit !== bSit) return aSit - bSit;
+        return a.createdAt.localeCompare(b.createdAt);
+      });
+  }, [threadMessages]);
+
+  const deltaMessage = useMemo(() => {
+    if (!threadMessages) return null;
+    return threadMessages.find((m) => m.id.startsWith('delta:')) ?? null;
+  }, [threadMessages]);
 
   const lastAssistantMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -99,76 +99,97 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     return null;
   }, [messages]);
 
-  const handleConfirm = useCallback(async (runMessageId: string, decisions: ToolCallDecisionMap) => {
+  const getMessageText = useCallback((message: ThreadMessage): string => {
+    const display = resolveRunMessageDisplay(message, '_final', '_streaming');
+    return collapseContentParts(display.contentParts as any).content.trim();
+  }, []);
+
+  const getMessageContentParts = useCallback((message: ThreadMessage) => {
+    const display = resolveRunMessageDisplay(message, '_final', '_streaming');
+    return display.contentParts;
+  }, []);
+
+  const handleConfirm = useCallback(async (messageId: string, decisions: ToolCallDecisionMap) => {
     setIsApplying(true);
     try {
-      await runtimeOrchestrator.applyRunToolCallDecisions({
-        runId,
-        runMessageId,
+      await threadOrchestrator.toolDecisions({
+        projectId,
+        threadId: childThreadId,
+        messageId,
         decisions,
       });
     } finally {
       setIsApplying(false);
     }
-  }, [runId]);
+  }, [projectId, childThreadId]);
 
   const handlePause = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('pause');
-    void runtimeOrchestrator.pauseRun(runId).finally(() => {
+    void threadOrchestrator.pause(projectId, childThreadId).finally(() => {
       setActionInFlight(null);
     });
-  }, [actionInFlight, runId]);
+  }, [actionInFlight, projectId, childThreadId]);
 
   const handleRetry = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('retry');
-    void runtimeOrchestrator.retryRun(runId).finally(() => {
+    void threadOrchestrator.resume({ projectId, threadId: childThreadId }).finally(() => {
       setActionInFlight(null);
     });
-  }, [actionInFlight, runId]);
+  }, [actionInFlight, projectId, childThreadId]);
 
   const handleCancel = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('cancel');
-    void runtimeOrchestrator.cancelRun(runId).finally(() => {
+    void threadOrchestrator.cancel(projectId, childThreadId).finally(() => {
       setActionInFlight(null);
     });
-  }, [actionInFlight, runId]);
+  }, [actionInFlight, projectId, childThreadId]);
 
   const handleDeleteMessage = useCallback((messageId: string) => {
     if (!confirm('Are you sure you want to delete this message?')) return;
     void (async () => {
       try {
-        await runService.deleteRunMessage(run.projectId, run.agentId, runId, messageId);
+        await threadService.deleteMessage(projectId, childThreadId, messageId);
       } catch (error) {
         console.error('Failed to delete sub-agent message:', error);
         return;
       }
-      useRuntimeStore.getState().removeRunMessage(runId, messageId);
+      useThreadStore.getState().removeMessage(childThreadId, messageId);
     })();
-  }, [run.projectId, run.agentId, runId]);
+  }, [projectId, childThreadId]);
+
+  const actionDisabled = isApplying || actionInFlight !== null;
+
+  // Streaming content from delta message
+  const streamingContentParts = useMemo(() => {
+    if (!deltaMessage) return null;
+    const entry = deltaMessage.data._streaming;
+    return entry?.contentParts ?? null;
+  }, [deltaMessage]);
 
   const streamingText = useMemo(() => {
-    if (!activeSession || activeSession.status !== 'running') return '';
-    return collapseContentParts(activeSession.contentParts ?? []).content.trim();
-  }, [activeSession]);
-  const actionDisabled = isApplying || actionInFlight !== null;
+    if (!streamingContentParts) return '';
+    return collapseContentParts(streamingContentParts as any).content.trim();
+  }, [streamingContentParts]);
 
   return (
     <div className="sub-agent-peek-timeline">
-      {run.error && (run.status === 'error' || run.status === 'paused') && (
-        <div className="sub-agent-peek-alert sub-agent-peek-alert--error">{run.error}</div>
+      {threadStatus === 'error' && (
+        <div className="sub-agent-peek-alert sub-agent-peek-alert--error">
+          An error occurred during sub-agent execution.
+        </div>
       )}
 
       {messages.map((message, index) => {
-        const chatMessage = toChatMessage(message);
-        const text = messageText(chatMessage);
-        const toolCalls = (runToolCallsByMessageId[message.id] ?? [])
+        const contentParts = getMessageContentParts(message);
+        const text = getMessageText(message);
+        const toolCalls = (toolCallsByMessageId[message.id] ?? [])
           .filter((tc) => tc.toolName !== 'return_sub_agent_result')
           .map(toToolCallMetadata);
         const isLatestAssistant = message.role === 'assistant' && String(message.id) === lastAssistantMessageId;
-        const waitingDecision = isLatestAssistant && run.status === 'waiting';
+        const waitingDecision = isLatestAssistant && threadStatus === 'waiting_tools';
         const cards = toolCalls.length > 0 ? buildEditCardsFromToolCallMetadata(toolCalls) : [];
         const hasPendingCards = cards.some((card) => hasPendingStatus(String(card.toolCall.status)));
         const showApplyingBanner = isApplying && isLatestAssistant && hasPendingCards;
@@ -177,7 +198,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
 
         return (
           <div
-            key={`${run.id}:${message.id}`}
+            key={`${childThreadId}:${message.id}`}
             className={`agent-message ${message.role === 'assistant' ? 'assistant' : 'user'}${isSameRoleAsPrevious ? ' same-role-as-previous' : ''}`}
           >
             <div className="message-wrapper">
@@ -190,7 +211,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
               {message.role === 'assistant' && (
                 <ThinkingDisplay
                   messageId={String(message.id)}
-                  contentParts={chatMessage.contentParts}
+                  contentParts={contentParts}
                   isStreaming={false}
                 />
               )}
@@ -199,7 +220,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
               {cards.length > 0 && (
                 <div className="message-function-calls">
                   <FunctionCallsThread
-                    threadId={`${threadId}:message:${run.id}:${message.id}`}
+                    threadId={`${childThreadId}:message:${message.id}`}
                     mode={waitingDecision && hasPendingCards ? 'pending' : 'confirmed'}
                     cards={cards}
                     onCommitDecisions={
@@ -207,7 +228,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
                         ? (decisions) => handleConfirm(String(message.id), decisions)
                         : undefined
                     }
-                    projectId={run.projectId}
+                    projectId={projectId}
                     isApplyDisabled={isApplying}
                     applyDisabledReason={showApplyingBanner ? 'Applying changes...' : undefined}
                   />
@@ -228,7 +249,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
         );
       })}
 
-      {activeSession?.status === 'running' && (
+      {deltaMessage && streamingContentParts && (
         <div className={`agent-message assistant${messages.length > 0 && messages[messages.length - 1].role === 'assistant' ? ' same-role-as-previous' : ''}`}>
           <div className="message-wrapper">
             {!(messages.length > 0 && messages[messages.length - 1].role === 'assistant') && (
@@ -238,8 +259,8 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
             </div>
             )}
             <ThinkingDisplay
-              messageId={`stream:${run.id}`}
-              contentParts={activeSession.contentParts}
+              messageId={`stream:${childThreadId}`}
+              contentParts={streamingContentParts}
               isStreaming={true}
             />
             {streamingText && (
@@ -250,21 +271,11 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
                 <div className="loading-bar" />
               </div>
             </div>
-            {Array.isArray(activeSession.toolCallProgress) && activeSession.toolCallProgress.length > 0 && (
-              <div className="message-function-calls">
-                <FunctionCallsThread
-                  threadId={`${threadId}:stream:${run.id}`}
-                  mode="streaming"
-                  streamingProgress={activeSession.toolCallProgress}
-                  projectId={run.projectId}
-                />
-              </div>
-            )}
           </div>
         </div>
       )}
 
-      {run.finalOutput && (
+      {finalOutput && (
         <div className="sub-agent-result-section">
           <button
             type="button"
@@ -278,14 +289,14 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
           </button>
           {resultExpanded && (
             <div className="sub-agent-result-content">
-              <MarkdownRenderer>{run.finalOutput}</MarkdownRenderer>
+              <MarkdownRenderer>{finalOutput}</MarkdownRenderer>
             </div>
           )}
         </div>
       )}
 
       <div className="sub-agent-peek-actions">
-        {(run.status === 'running' || run.status === 'waiting') && (
+        {(threadStatus === 'running' || threadStatus === 'waiting_tools') && (
           <TextButton
             size="sm"
             variant="secondary"
@@ -296,7 +307,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
             {t('subAgent.pause')}
           </TextButton>
         )}
-        {(run.status === 'paused' || run.status === 'error') && (
+        {(threadStatus === 'paused' || threadStatus === 'error') && (
           <>
             <TextButton
               size="sm"

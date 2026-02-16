@@ -80,6 +80,20 @@ DEFAULT_TASK_CONFIGS: dict[str, dict[str, Any]] = {
             "thinking_format": "openai",
         },
     },
+    "summary": {
+        "provider": "openrouter",
+        "model": "gpt-4o-mini",
+        "temperature": 0.3,
+        "max_output_tokens": 2048,
+        "context_window_tokens": 32000,
+        "advanced": {
+            "enable_prefill": False,
+            "thinking_mode": "off",
+            "thinking_config": {"effort": "medium"},
+            "request_format": "openai_sdk",
+            "thinking_format": "openai",
+        },
+    },
 }
 
 DEFAULT_AUTO_APPROVE: dict[str, bool] = {
