@@ -216,15 +216,6 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
         cancelled = true;
       };
     }
-
-    const timer = window.setInterval(() => {
-      void recoverSelectedThread();
-    }, 2000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
   }, [projectId, selectedChildThreadId, selectedChildThreadStatus]);
 
   if (childEntries.length === 0 || !selectedEntry) return null;

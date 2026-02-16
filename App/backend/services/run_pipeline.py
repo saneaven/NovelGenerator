@@ -339,9 +339,9 @@ class RunPipeline:
             db.commit()
 
             if run is not None:
-                await run_event_emitter.emit_status(RunEventContext.from_run(run), "cancelled")
                 if is_child_run:
                     await self._handle_child_terminal(run.id, user_id, "cancelled")
+                await run_event_emitter.emit_status(RunEventContext.from_run(run), "cancelled")
 
     # ── Thread-seq helper ──
 
@@ -398,10 +398,10 @@ class RunPipeline:
                 is_child_run = run.parent_run_id is not None
                 db.commit()
                 event_ctx = RunEventContext.from_run(run)
-                await run_event_emitter.emit_status(event_ctx, "error", error=normalized_error)
-                await run_event_emitter.emit("thread:error", event_ctx, {"error": normalized_error})
                 if is_child_run:
                     await self._handle_child_terminal(run.id, user_id, "error")
+                await run_event_emitter.emit_status(event_ctx, "error", error=normalized_error)
+                await run_event_emitter.emit("thread:error", event_ctx, {"error": normalized_error})
 
     # ── Main loop ──
 
@@ -456,10 +456,10 @@ class RunPipeline:
                             thread.status = "idle"
                         db.commit()
                         event_ctx = RunEventContext.from_run(run)
-                        await run_event_emitter.emit_status(event_ctx, "completed")
-                        await run_event_emitter.emit("thread:complete", event_ctx, {"final_output": run.final_output})
                         if run.parent_run_id is not None:
                             await self._handle_child_terminal(run.id, user_id, "completed")
+                        await run_event_emitter.emit_status(event_ctx, "completed")
+                        await run_event_emitter.emit("thread:complete", event_ctx, {"final_output": run.final_output})
                     return
 
                 # step returned no tool calls and not completed — continue looping
