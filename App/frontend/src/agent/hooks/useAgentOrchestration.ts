@@ -155,6 +155,57 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     if (!agentId) return;
     if (useAgentUIStore.getState().isLoading(projectId, agentId)) return;
 
+    const userInput = input ?? '';
+    const trimmedInput = userInput.trim();
+    if (!trimmedInput) {
+      const threadId = resolveThreadId();
+      if (!threadId) {
+        useAgentUIStore.getState().setPreflightToast(projectId, {
+          type: 'error',
+          message: 'No run is available to resume.',
+        });
+        return;
+      }
+
+      const thread = useThreadStore.getState().getThread(threadId);
+      if (!thread || !['waiting_tools', 'paused', 'error'].includes(thread.status)) {
+        useAgentUIStore.getState().setPreflightToast(projectId, {
+          type: 'error',
+          message: 'There is no resumable run for this thread.',
+        });
+        return;
+      }
+
+      useAgentUIStore.getState().setLoading(projectId, agentId, true);
+      useAgentUIStore.getState().setPreflightToast(projectId, null);
+
+      const abortController = new AbortController();
+      preflightAbortControllerByAgentRef.current[agentId] = abortController;
+      try {
+        await threadOrchestrator.resume({
+          projectId,
+          threadId,
+          signal: abortController.signal,
+        });
+        delete preflightAbortControllerByAgentRef.current[agentId];
+        useAgentUIStore.getState().setPreflightToast(projectId, null);
+      } catch (error) {
+        if (isAbortError(error) || abortController.signal.aborted) {
+          useAgentUIStore.getState().setLoading(projectId, agentId, false);
+          delete preflightAbortControllerByAgentRef.current[agentId];
+          return;
+        }
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        useAgentUIStore.getState().setPreflightToast(projectId, {
+          type: 'error',
+          message: t('agent.memory.preflightFailed', { error: errorMessage }),
+        });
+        useAgentUIStore.getState().setLoading(projectId, agentId, false);
+        delete preflightAbortControllerByAgentRef.current[agentId];
+      }
+      return;
+    }
+
     const threadId = resolveThreadId();
     const messageIds = threadId ? getThreadMessageIds(threadId) : [];
     const sendBlockingState = getSendBlockingState({
@@ -190,8 +241,6 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       }
     }
 
-    const userInput = input ?? '';
-
     clearInput(projectId);
     useAgentUIStore.getState().setLoading(projectId, agentId, true);
     useAgentUIStore.getState().setPreflightToast(projectId, null);
@@ -204,7 +253,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         projectId,
         threadType: 'agent',
         threadId: threadId ?? undefined,
-        inputText: userInput?.trim() ?? '',
+        inputText: trimmedInput,
         language: mainLanguage,
         runMode,
         surface,

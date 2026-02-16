@@ -30,6 +30,7 @@ export type HeaderStatus =
   | 'running'
   | 'accepted'
   | 'rejected'
+  | 'cancelled'
   | 'failed';
 
 export type PatchDecision = 'accept' | 'reject';

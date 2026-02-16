@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import type { ToolCallMetadata } from '../../llm/requestTypes';
+import type { ContentPart, ToolCallMetadata } from '../../llm/requestTypes';
 import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { collapseContentParts } from '../../agent/utils/contentParts';
@@ -35,6 +35,14 @@ function formatTime(input?: Date | string): string {
 
 function hasPendingStatus(status: string | undefined): boolean {
   return status === 'pending' || status === 'running';
+}
+
+
+function toContentParts(parts: Array<{ type: string; text: string }>): ContentPart[] {
+  return parts.map((part) => ({
+    type: part.type === 'thinking' ? 'thinking' : 'content',
+    text: String(part.text ?? ''),
+  }));
 }
 
 function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
@@ -104,9 +112,9 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     return collapseContentParts(display.contentParts as any).content.trim();
   }, []);
 
-  const getMessageContentParts = useCallback((message: ThreadMessage) => {
+  const getMessageContentParts = useCallback((message: ThreadMessage): ContentPart[] => {
     const display = resolveRunMessageDisplay(message, '_final', '_streaming');
-    return display.contentParts;
+    return toContentParts(display.contentParts);
   }, []);
 
   const handleConfirm = useCallback(async (messageId: string, decisions: ToolCallDecisionMap) => {
@@ -163,10 +171,11 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   const actionDisabled = isApplying || actionInFlight !== null;
 
   // Streaming content from delta message
-  const streamingContentParts = useMemo(() => {
+  const streamingContentParts = useMemo<ContentPart[] | null>(() => {
     if (!deltaMessage) return null;
     const entry = deltaMessage.data._streaming;
-    return entry?.contentParts ?? null;
+    if (!entry?.contentParts) return null;
+    return toContentParts(entry.contentParts);
   }, [deltaMessage]);
 
   const streamingText = useMemo(() => {

@@ -5,7 +5,6 @@
  * No run IDs exposed to callers (except internally for SSE subscriptions).
  */
 
-import { type RequestOptions } from '../api/client';
 import { threadService, type StreamHandle, type ThreadEvent } from '../api/threadService';
 import {
   useThreadStore,
@@ -15,6 +14,21 @@ import {
 } from './store/threadStore';
 
 // ── Helpers ──
+
+type ThreadToolCallStatus = ThreadToolCall['status'];
+
+const TERMINAL_TOOL_STATUSES: ReadonlySet<ThreadToolCallStatus> = new Set([
+  'accepted',
+  'rejected',
+  'cancelled',
+]);
+
+function parseThreadToolCallStatus(raw: unknown): ThreadToolCallStatus {
+  if (raw === 'pending' || raw === 'running' || raw === 'accepted' || raw === 'rejected' || raw === 'cancelled') {
+    return raw;
+  }
+  throw new Error(`Invalid tool call status: ${String(raw)}`);
+}
 
 function mapBackendMessage(raw: any): ThreadMessage {
   return {
@@ -39,7 +53,7 @@ function mapBackendToolCall(raw: any): ThreadToolCall {
     llmCallId: raw.llm_call_id,
     toolName: raw.tool_name,
     arguments: raw.arguments ?? {},
-    status: raw.status,
+    status: parseThreadToolCallStatus(raw.status),
     reason: raw.reason ?? null,
     result: raw.result ?? null,
     childRunId: raw.child_run_id ?? null,
@@ -67,6 +81,7 @@ export class ThreadOrchestrator {
   private streamByThread = new Map<string, StreamHandle>();
   private deltaMessageIdByThread = new Map<string, string>();
   private lastEventSeqByThread = new Map<string, number>();
+  private resumeInFlightByThread = new Set<string>();
   // Track which run_id corresponds to which thread for SSE purposes
   private runIdToThread = new Map<string, string>();
 
@@ -222,11 +237,16 @@ export class ThreadOrchestrator {
 
     if (state.tool_calls) {
       const byMessage = new Map<string, ThreadToolCall[]>();
-      for (const raw of state.tool_calls) {
-        const tc = mapBackendToolCall(raw);
-        const existing = byMessage.get(tc.messageId) ?? [];
-        existing.push(tc);
-        byMessage.set(tc.messageId, existing);
+      try {
+        for (const raw of state.tool_calls) {
+          const tc = mapBackendToolCall(raw);
+          const existing = byMessage.get(tc.messageId) ?? [];
+          existing.push(tc);
+          byMessage.set(tc.messageId, existing);
+        }
+      } catch (error) {
+        store.patchThread(threadId, { status: 'error' });
+        throw error;
       }
       for (const [messageId, tcs] of byMessage) {
         store.upsertToolCalls(messageId, tcs);
@@ -238,6 +258,8 @@ export class ThreadOrchestrator {
       const runId = state.open_run.id;
       this.runIdToThread.set(runId, threadId);
     }
+
+    void this.autoResumeIfReady(projectId, threadId);
   }
 
   // ── Event handling ──
@@ -262,7 +284,8 @@ export class ThreadOrchestrator {
     const store = useThreadStore.getState();
     const payload = data.payload ?? data;
 
-    switch (event.event) {
+    try {
+      switch (event.event) {
       case 'run:status': {
         const status = payload.status;
         if (status) {
@@ -372,7 +395,7 @@ export class ThreadOrchestrator {
           llmCallId: tc.id,
           toolName: tc.tool_name,
           arguments: tc.arguments ?? {},
-          status: tc.status ?? 'pending',
+          status: parseThreadToolCallStatus(tc.status ?? 'pending'),
           reason: tc.reason ?? null,
           result: null,
           childRunId: null,
@@ -401,7 +424,7 @@ export class ThreadOrchestrator {
               arguments: {},
               createdAt: new Date().toISOString(),
             }),
-            status: tc.status,
+            status: parseThreadToolCallStatus(tc.status),
             reason: tc.reason ?? null,
             result: tc.result ?? null,
             childRunId: tc.child_run_id ?? prev?.childRunId ?? null,
@@ -428,13 +451,26 @@ export class ThreadOrchestrator {
       case 'run:child_start':
       case 'run:child_end':
       case 'run:child_waiting':
-      case 'run:tools_all_terminal':
       case 'run:step_completed':
       case 'run:heartbeat':
         break;
 
+      case 'run:tools_all_terminal': {
+        const projectId = String(data.project_id ?? payload.project_id ?? '');
+        if (!projectId) {
+          throw new Error('Missing project_id on run:tools_all_terminal');
+        }
+        void this.autoResumeIfReady(projectId, threadId);
+        break;
+      }
+
       default:
         break;
+      }
+    } catch (error) {
+      console.error('ThreadOrchestrator.handleEvent failed:', error);
+      store.patchThread(threadId, { status: 'error' });
+      this.abortPreviousStream(threadId);
     }
   }
 
@@ -475,6 +511,42 @@ export class ThreadOrchestrator {
         return 'idle';
       default:
         return 'idle';
+    }
+  }
+
+  private canAutoResumeThread(threadId: string): boolean {
+    const store = useThreadStore.getState();
+    const thread = store.getThread(threadId);
+    if (!thread) return false;
+    if (thread.status === 'running') return false;
+    if (!['waiting_tools', 'paused', 'error'].includes(thread.status)) return false;
+
+    const messages = [...store.getMessages(threadId)].sort((a, b) => {
+      const aSeq = a.seqInThread ?? Number.MAX_SAFE_INTEGER;
+      const bSeq = b.seqInThread ?? Number.MAX_SAFE_INTEGER;
+      if (aSeq !== bSeq) return aSeq - bSeq;
+      return a.createdAt.localeCompare(b.createdAt);
+    });
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+    if (!lastAssistant) return false;
+
+    const toolCalls = store.getToolCalls(lastAssistant.id);
+    if (!toolCalls.length) return false;
+    return toolCalls.every((tc) => TERMINAL_TOOL_STATUSES.has(tc.status));
+  }
+
+  private async autoResumeIfReady(projectId: string, threadId: string): Promise<void> {
+    if (this.resumeInFlightByThread.has(threadId)) return;
+    if (!this.canAutoResumeThread(threadId)) return;
+
+    this.resumeInFlightByThread.add(threadId);
+    try {
+      await this.resume({ projectId, threadId, afterSeq: this.lastEventSeqByThread.get(threadId) });
+    } catch (error) {
+      console.error('Auto-resume failed:', error);
+      useThreadStore.getState().patchThread(threadId, { status: 'error' });
+    } finally {
+      this.resumeInFlightByThread.delete(threadId);
     }
   }
 }

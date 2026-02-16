@@ -152,7 +152,7 @@ export const threadService = {
     threadId: string,
     payload: {
       message_id: string;
-      decisions: Record<string, string>;
+      decisions: Record<string, 'accept' | 'reject' | 'cancel'>;
       options?: Record<string, unknown>;
     },
     onEvent: (event: ThreadEvent) => void,

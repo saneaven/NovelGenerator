@@ -39,7 +39,7 @@ class StagedToolCall:
     call_seq: int
     tool_name: str
     arguments: dict[str, Any]
-    status: Literal["pending", "cancel"]
+    status: Literal["pending", "cancelled"]
     reason: str | None = None
 
 
@@ -64,7 +64,7 @@ class StagedUpdate:
 
 @dataclass
 class DispatchResult:
-    status: Literal["accepted", "running", "cancel"]
+    status: Literal["accepted", "running", "cancelled"]
     result: dict[str, Any] | None = None
     reason: str | None = None
     child_run_id: UUID | None = None
@@ -331,7 +331,7 @@ class ToolCallExecutor:
                         call_seq=idx,
                         tool_name=raw.tool_name,
                         arguments={},
-                        status="cancel",
+                        status="cancelled",
                         reason=f"VALIDATION::parse_arguments::{parse_err}",
                     )
                 )
@@ -345,7 +345,7 @@ class ToolCallExecutor:
                         call_seq=idx,
                         tool_name=raw.tool_name,
                         arguments=args,
-                        status="cancel",
+                        status="cancelled",
                         reason=f"VALIDATION::{global_result.validator or 'global'}::{global_result.reason}",
                     )
                 )
@@ -360,7 +360,7 @@ class ToolCallExecutor:
                         call_seq=idx,
                         tool_name=raw.tool_name,
                         arguments=args,
-                        status="cancel",
+                        status="cancelled",
                         reason=f"VALIDATION::{per_result.validator or 'tool'}::{per_result.reason}",
                     )
                 )
@@ -411,12 +411,12 @@ class ToolCallExecutor:
 
             decision = decisions.get(row.llm_call_id, "reject")
             if decision == "cancel":
-                row.status = "cancel"
+                row.status = "cancelled"
                 row.reason = row.reason or "Cancelled"
                 row.updated_at = datetime.utcnow()
                 continue
             if decision != "accept":
-                row.status = "reject"
+                row.status = "rejected"
                 row.reason = row.reason or "User rejected"
                 row.updated_at = datetime.utcnow()
                 continue
@@ -429,7 +429,7 @@ class ToolCallExecutor:
         if finalize_row:
             for r in to_dispatch:
                 if r is not finalize_row:
-                    r.status = "reject"
+                    r.status = "rejected"
                     r.reason = "REJECTED::subagent_already_completed"
                     r.updated_at = datetime.utcnow()
             to_dispatch = [finalize_row]
@@ -462,7 +462,7 @@ class ToolCallExecutor:
             failed = self._flush_staged_updates(db, run, local_staged)
             if failed and r.llm_call_id in failed and result.status == "accepted":
                 result = DispatchResult(
-                    status="cancel",
+                    status="cancelled",
                     result={"success": False, "message": "flush failed"},
                     reason="EXECUTION::flush::update_failed",
                 )
@@ -503,7 +503,7 @@ class ToolCallExecutor:
                         if dispatch.child_thread_id:
                             row.child_thread_id = dispatch.child_thread_id
                     else:  # cancel
-                        row.status = "cancel"
+                        row.status = "cancelled"
                         row.reason = dispatch.reason
                         row.result = self._truncate_json_value(dispatch.result or {"success": False})
                     row.updated_at = datetime.utcnow()
@@ -525,7 +525,7 @@ class ToolCallExecutor:
             for row in rows:
                 if row.status != "accepted" or row.llm_call_id not in failed_call_ids:
                     continue
-                row.status = "cancel"
+                row.status = "cancelled"
                 row.reason = "EXECUTION::flush::batched flush failed"
                 row.result = self._truncate_json_value({"success": False, "message": row.reason})
                 row.accepted_at = None
@@ -565,7 +565,7 @@ class ToolCallExecutor:
                     results[i] = (
                         row,
                         DispatchResult(
-                            status="cancel",
+                            status="cancelled",
                             result={"success": False, "message": "flush failed"},
                             reason="EXECUTION::flush::group_update_failed",
                         ),
@@ -593,14 +593,14 @@ class ToolCallExecutor:
             if tool == "return_sub_agent_result":
                 if run.thread.thread_type != "subAgent":
                     return DispatchResult(
-                        status="cancel",
+                        status="cancelled",
                         result={"success": False, "message": "return_sub_agent_result is only allowed in subAgent runs"},
                         reason="EXECUTION::return_sub_agent_result::invalid_run_type",
                     )
                 result_text = args.get("result")
                 if not isinstance(result_text, str) or not result_text.strip():
                     return DispatchResult(
-                        status="cancel",
+                        status="cancelled",
                         result={"success": False, "message": "Invalid result", "error": "result must be non-empty string"},
                         reason="EXECUTION::return_sub_agent_result::invalid_result",
                     )
@@ -830,7 +830,7 @@ class ToolCallExecutor:
                 )
                 if not result.get("success"):
                     return DispatchResult(
-                        status="cancel",
+                        status="cancelled",
                         result=result,
                         reason=f"PATCH_MANUSCRIPT::{result.get('code') or 'UNKNOWN'}::{result.get('reason') or 'failed'}",
                     )
@@ -857,7 +857,7 @@ class ToolCallExecutor:
 
         except Exception as exc:
             return DispatchResult(
-                status="cancel",
+                status="cancelled",
                 result={"success": False, "message": f"Error executing {tool}", "error": str(exc)},
                 reason=f"EXECUTION::{tool}::{exc}",
             )
@@ -876,7 +876,7 @@ class ToolCallExecutor:
         input_text = args.get("input")
         if not isinstance(input_text, str) or not input_text.strip():
             return DispatchResult(
-                status="cancel",
+                status="cancelled",
                 result={"success": False, "message": "Invalid sub-agent input"},
                 reason="EXECUTION::call_sub_agent::invalid_input",
             )
@@ -884,7 +884,7 @@ class ToolCallExecutor:
         preset_id = settings_service.get_active_preset_id(db, run.user_id)
         if preset_id is None:
             return DispatchResult(
-                status="cancel",
+                status="cancelled",
                 result={"success": False, "message": "No active preset"},
                 reason="EXECUTION::call_sub_agent::no_active_preset",
             )
@@ -900,13 +900,13 @@ class ToolCallExecutor:
         )
         if sub_agent is None:
             return DispatchResult(
-                status="cancel",
+                status="cancelled",
                 result={"success": False, "message": f"Sub-agent not found: {agent_name}"},
                 reason="EXECUTION::call_sub_agent::not_found",
             )
         if not sub_agent.enabled:
             return DispatchResult(
-                status="cancel",
+                status="cancelled",
                 result={"success": False, "message": f"Sub-agent disabled: {agent_name}"},
                 reason="EXECUTION::call_sub_agent::disabled",
             )
@@ -923,7 +923,7 @@ class ToolCallExecutor:
         )
         if caller_mode not in allowed_modes:
             return DispatchResult(
-                status="cancel",
+                status="cancelled",
                 result={"success": False, "message": f"Invocation not allowed from {caller_mode}"},
                 reason="EXECUTION::call_sub_agent::not_allowed",
             )
@@ -1029,7 +1029,7 @@ class ToolCallExecutor:
                 rr = apply_single_replacement(current_value, old_text, str(new_text))
                 if not rr.success:
                     return DispatchResult(
-                        status="cancel",
+                        status="cancelled",
                         result={"success": False, "message": rr.reason or rr.code or "patch failed"},
                         reason=f"EXECUTION::{tool}::{rr.code or rr.reason}",
                     )
@@ -1078,7 +1078,7 @@ class ToolCallExecutor:
                 rr = apply_single_replacement(current_value, old_text, str(new_text))
                 if not rr.success:
                     return DispatchResult(
-                        status="cancel",
+                        status="cancelled",
                         result={"success": False, "message": rr.reason or rr.code or "patch failed"},
                         reason=f"EXECUTION::{tool}::{rr.code or rr.reason}",
                     )
@@ -1138,7 +1138,7 @@ class ToolCallExecutor:
             rr = apply_single_replacement(current_value, old_text, str(new_text))
             if not rr.success:
                 return DispatchResult(
-                    status="cancel",
+                    status="cancelled",
                     result={"success": False, "message": rr.reason or rr.code or "patch failed"},
                     reason=f"EXECUTION::{tool}::{rr.code or rr.reason}",
                 )

@@ -655,8 +655,11 @@ class Thread(Base):
 
     status = Column(String(20), nullable=False, default='idle')
 
-    # Captured history: pre-rendered conversation snapshot for reuse within a run
-    captured_history_json = Column(JSONB, nullable=True)
+    # Captured history snapshot for reuse within a run.
+    # Stored as split fields for system/conversation/prefill.
+    captured_history_system_prompt = Column(Text, nullable=True)
+    captured_history_conversation_json = Column(JSONB, nullable=True)
+    captured_history_prefill = Column(Text, nullable=True)
     captured_from_run_id = Column(UUID(as_uuid=True), nullable=True)
 
     # Stable per-thread run ordering (1-based)
@@ -824,7 +827,7 @@ class RunToolCallModel(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending','running','accepted','reject','cancel')",
+            "status IN ('pending','running','accepted','rejected','cancelled')",
             name='ck_run_tool_calls_status',
         ),
         UniqueConstraint('message_id', 'llm_call_id', name='uq_run_tool_calls_message_llm_call_id'),

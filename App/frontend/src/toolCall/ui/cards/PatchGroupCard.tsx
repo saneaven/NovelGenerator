@@ -29,6 +29,7 @@ function buildStatusSummary(operations: ObjectOperationVM[]): string {
   const accepted = operations.filter((operation) => operation.status === 'accepted').length;
   const failed = operations.filter((operation) => operation.status === 'failed').length;
   const rejected = operations.filter((operation) => operation.status === 'rejected').length;
+  const cancelled = operations.filter((operation) => operation.status === 'cancelled').length;
 
   const parts: string[] = [];
   if (pending > 0) parts.push(`Pending ${pending}`);
@@ -36,6 +37,7 @@ function buildStatusSummary(operations: ObjectOperationVM[]): string {
   if (running > 0) parts.push(`Running ${running}`);
   if (accepted > 0) parts.push(`Applied ${accepted}`);
   if (rejected > 0) parts.push(`Rejected ${rejected}`);
+  if (cancelled > 0) parts.push(`Cancelled ${cancelled}`);
   if (failed > 0) parts.push(`Failed ${failed}`);
   return parts.join(' • ');
 }
@@ -126,6 +128,8 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
       ? 'pending'
       : operations.every((operation) => operation.status === 'accepted')
         ? 'accepted'
+        : operations.every((operation) => operation.status === 'cancelled')
+          ? 'cancelled'
         : operations.every((operation) => operation.status === 'rejected')
           ? 'rejected'
           : 'failed';

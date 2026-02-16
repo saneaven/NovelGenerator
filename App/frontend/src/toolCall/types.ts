@@ -40,14 +40,15 @@ export type ExecutionMode = 'storyObject' | 'novelEditor' | 'translation' | 'edi
  * - failed: Validation or execution failed
  * - accepted: Apply completed successfully
  * - rejected: User rejected the tool call
+ * - cancelled: Execution cancelled or failed at runtime
  */
-export type ToolCallStatus = 'validating' | 'pending' | 'processing' | 'running' | 'failed' | 'accepted' | 'rejected';
+export type ToolCallStatus = 'validating' | 'pending' | 'processing' | 'running' | 'failed' | 'accepted' | 'rejected' | 'cancelled';
 
 /** Type of failure when status is 'failed' */
 export type ToolCallFailureType = 'validation' | 'execution' | 'partial';
 
 /** User decision for a pending tool call */
-export type ToolCallDecision = 'accept' | 'reject';
+export type ToolCallDecision = 'accept' | 'reject' | 'cancel';
 
 /** Explicit decisions keyed by tool call ID (only listed IDs are processed) */
 export type ToolCallDecisionMap = Record<string, ToolCallDecision>;

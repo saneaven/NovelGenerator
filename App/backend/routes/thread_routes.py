@@ -115,6 +115,8 @@ async def dispatch(
 ):
     """Single entry point: create or reuse a thread, then start a new run."""
     _ensure_project(db, user_id=current_user.id, project_id=project_id)
+    if not req.input_text.strip():
+        raise HTTPException(status_code=400, detail="input_text must be non-empty for dispatch")
 
     # Resolve or create thread
     if req.thread_id is not None:

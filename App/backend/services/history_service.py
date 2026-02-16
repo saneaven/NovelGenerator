@@ -1,10 +1,4 @@
-"""Thread-level conversation history with capture / reuse caching.
-
-Replaces the per-step DB rebuilds in run_context_builder.py.
-The pipeline calls *resolve()* once per LLM step; the first call for a
-given run captures (reads DB → writes to thread.captured_history_json),
-subsequent calls within the same run reuse the cache.
-"""
+"""Thread-level conversation history with capture / reuse caching."""
 
 from __future__ import annotations
 
@@ -41,9 +35,16 @@ class HistoryMessage:
 
 @dataclass
 class CapturedHistory:
-    """Pre-loaded message history from completed runs in a thread."""
+    """Pre-loaded history snapshot for a thread."""
 
-    messages: list[HistoryMessage]
+    system_prompt: str
+    conversation: list[HistoryMessage]
+    prefill: str
+
+    @property
+    def messages(self) -> list[HistoryMessage]:
+        # Convenience alias for call sites that only need conversation messages.
+        return self.conversation
 
 
 # ── Service ──
@@ -108,6 +109,28 @@ class HistoryService:
         )
 
     # ── DB helpers ──
+
+    @staticmethod
+    def _latest_history_run(db: Session, thread_id: UUID, exclude_run_id: UUID) -> RunModel | None:
+        return (
+            db.query(RunModel)
+            .filter(
+                RunModel.thread_id == thread_id,
+                RunModel.id != exclude_run_id,
+            )
+            .order_by(RunModel.run_seq.desc().nullslast(), RunModel.created_at.desc())
+            .first()
+        )
+
+    @staticmethod
+    def _last_role_for_run(db: Session, run_id: UUID) -> str | None:
+        row = (
+            db.query(RunMessageModel.role)
+            .filter(RunMessageModel.run_id == run_id)
+            .order_by(RunMessageModel.seq.desc(), RunMessageModel.created_at.desc())
+            .first()
+        )
+        return str(row[0]) if row else None
 
     def _tool_calls_by_message(
         self, db: Session, message_ids: list[UUID]
@@ -214,7 +237,7 @@ class HistoryService:
     def capture(
         self, db: Session, thread: Thread, run: RunModel, language: str
     ) -> CapturedHistory:
-        """Build history from all messages in previous runs, cache on thread."""
+        """Build history from previous runs, cache on thread."""
         rows = (
             db.query(RunMessageModel)
             .filter(
@@ -232,28 +255,51 @@ class HistoryService:
         message_ids = [r.id for r in rows]
         tool_by_message = self._tool_calls_by_message(db, message_ids)
         messages = self._rows_to_history(rows, language, tool_by_message)
+        latest_history_run = self._latest_history_run(db, thread.id, run.id)
 
-        thread.captured_history_json = self._serialize(messages)
-        thread.captured_from_run_id = run.id
+        thread.captured_history_system_prompt = ""
+        thread.captured_history_conversation_json = self._serialize(messages)
+        thread.captured_history_prefill = ""
+        thread.captured_from_run_id = latest_history_run.id if latest_history_run is not None else None
         db.flush()
 
-        return CapturedHistory(messages=messages)
+        return CapturedHistory(system_prompt="", conversation=messages, prefill="")
 
     def load(self, thread: Thread) -> CapturedHistory | None:
         """Load cached history from thread. Returns None if no cache exists."""
-        data = thread.captured_history_json
+        data = thread.captured_history_conversation_json
         if not isinstance(data, list):
             return None
-        return CapturedHistory(messages=self._deserialize(data))
+        system_prompt = thread.captured_history_system_prompt or ""
+        prefill = thread.captured_history_prefill or ""
+        return CapturedHistory(
+            system_prompt=system_prompt,
+            conversation=self._deserialize(data),
+            prefill=prefill,
+        )
 
     def resolve(
         self, db: Session, thread: Thread, run: RunModel, language: str
     ) -> CapturedHistory:
-        """Return cached history if valid for this run, otherwise capture fresh."""
-        if thread.captured_from_run_id == run.id:
-            cached = self.load(thread)
-            if cached is not None:
-                return cached
+        """Capture/reuse policy:
+        - Compare latest previous run id with captured_from_run_id.
+        - If equal and latest role is assistant, reuse.
+        - Otherwise capture fresh.
+        """
+        latest_history_run = self._latest_history_run(db, thread.id, run.id)
+        latest_history_run_id = latest_history_run.id if latest_history_run is not None else None
+
+        if thread.captured_from_run_id == latest_history_run_id:
+            if latest_history_run_id is None:
+                cached = self.load(thread)
+                if cached is not None:
+                    return cached
+            else:
+                last_role = self._last_role_for_run(db, latest_history_run_id)
+                if last_role == "assistant":
+                    cached = self.load(thread)
+                    if cached is not None:
+                        return cached
         return self.capture(db, thread, run, language)
 
     def build_current_run_messages(

@@ -168,6 +168,9 @@ export function buildConversationBlocksWithMeta(
               case 'failed':
                 content = `Failed: ${fc.reason || 'Unknown error'}`;
                 break;
+              case 'cancelled':
+                content = fc.reason ? `Cancelled: ${fc.reason}` : 'Cancelled';
+                break;
               default:
                 content = 'Pending user confirmation';
             }

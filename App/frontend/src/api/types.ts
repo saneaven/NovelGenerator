@@ -273,7 +273,7 @@ export type RunMode = 'planMode' | 'agentMode';
 export type RunSurface = 'story-object' | 'outline-manager' | 'novel-editor' | 'config';
 export type JourneyKind = 'aiEdit' | 'translation' | 'imagePrompt';
 export type RunMessageRole = 'user' | 'assistant' | 'system' | 'tool';
-export type RunToolCallStatus = 'pending' | 'running' | 'accepted' | 'rejected' | 'failed';
+export type RunToolCallStatus = 'pending' | 'running' | 'accepted' | 'rejected' | 'cancelled';
 export type RunToolCallFailureType = 'validation' | 'execution' | 'partial';
 
 export interface AgentStartRunRequest {
@@ -299,7 +299,7 @@ export type StartRunRequest = AgentStartRunRequest | JourneyStartRunRequest;
 
 export interface RunDecisionsRequest {
   message_id: string;
-  decisions: Record<string, 'accept' | 'reject'>;
+  decisions: Record<string, 'accept' | 'reject' | 'cancel'>;
   options?: Record<string, any>;
 }
 

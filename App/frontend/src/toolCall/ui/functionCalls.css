@@ -196,7 +196,8 @@
   border-color: var(--color-success);
 }
 
-.function-call-status-pill--rejected {
+.function-call-status-pill--rejected,
+.function-call-status-pill--cancelled {
   background: var(--color-surface-muted);
   color: var(--color-text-secondary);
   border-color: var(--color-border-medium);

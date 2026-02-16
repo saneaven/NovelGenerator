@@ -12,6 +12,7 @@ const STATUS_LABEL_KEYS: Record<HeaderStatus, string> = {
   running: 'operationStatus.running',
   accepted: 'operationStatus.applied',
   rejected: 'operationStatus.skipped',
+  cancelled: 'operationStatus.skipped',
   failed: 'operationStatus.failed',
 };
 

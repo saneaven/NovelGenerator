@@ -24,7 +24,7 @@ export function evaluateToolCallStatus(toolCalls: ToolCallMetadata[]): Omit<Tool
 
   const hasAccepted = toolCalls.some((toolCall) => toolCall.status === 'accepted');
   const hasFailed = toolCalls.some((toolCall) => toolCall.status === 'failed');
-  const hasRejected = toolCalls.some((toolCall) => toolCall.status === 'rejected');
+  const hasRejected = toolCalls.some((toolCall) => toolCall.status === 'rejected' || toolCall.status === 'cancelled');
 
   if (hasFailed && !hasAccepted) {
     const firstError = toolCalls.find((toolCall) => toolCall.status === 'failed')?.reason || 'Tool execution failed';
@@ -55,6 +55,9 @@ export function markToolCallsRunning(params: {
     }
     if (decision === 'reject') {
       return { ...toolCall, status: 'rejected', reason: toolCall.reason ?? 'User rejected' };
+    }
+    if (decision === 'cancel') {
+      return { ...toolCall, status: 'cancelled', reason: toolCall.reason ?? 'Cancelled' };
     }
     return toolCall;
   });
@@ -114,4 +117,3 @@ export function buildAutoApproveDecisions(params: {
   }
   return decisions;
 }
-

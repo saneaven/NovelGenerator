@@ -133,9 +133,9 @@ class ConversationBuilder:
                                 if isinstance(tc.result, dict)
                                 else "Applied successfully"
                             )
-                        elif tc.status == "reject":
+                        elif tc.status == "rejected":
                             content = f"User rejected: {tc.reason}" if tc.reason else "User rejected this action"
-                        elif tc.status == "cancel":
+                        elif tc.status == "cancelled":
                             content = f"Cancelled: {tc.reason}" if tc.reason else "Cancelled"
                         else:
                             content = f"Failed: {tc.reason or 'Unknown error'}"

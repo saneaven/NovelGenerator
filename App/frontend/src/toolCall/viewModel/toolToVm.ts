@@ -41,9 +41,12 @@ function normalizeStoredStatus(status?: string): HeaderStatus {
     case 'failed':
     case 'accepted':
     case 'rejected':
+    case 'cancelled':
       return status;
-    default:
+    case undefined:
       return 'pending';
+    default:
+      throw new Error(`Invalid stored tool-call status: ${String(status)}`);
   }
 }
 

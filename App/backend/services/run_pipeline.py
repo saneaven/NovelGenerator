@@ -46,6 +46,9 @@ class StepResult:
 
 class RunPipeline:
     MAX_SUB_AGENT_DEPTH = 3
+    MAX_CONTEXT_CUT_ITERATIONS = 6
+    MIN_CONVERSATION_MESSAGES = 6
+    SUMMARY_RECENT_MESSAGES = 6
 
     def __init__(self) -> None:
         self._active_tasks: dict[UUID, asyncio.Task] = {}
@@ -75,6 +78,10 @@ class RunPipeline:
         journey_target_ids: list[str] | None = None,
     ) -> UUID:
         """Single entry point. Creates a new run with a user message."""
+        trimmed_input = input_text.strip()
+        if not trimmed_input:
+            raise ValueError("Dispatch requires non-empty input_text")
+
         with short_session() as db:
             db.add(thread)
 
@@ -88,7 +95,7 @@ class RunPipeline:
                 status="running",
                 run_seq=run_seq,
                 language=language,
-                input_text=input_text.strip(),
+                input_text=trimmed_input,
                 input_payload=input_payload or {},
                 run_mode=run_mode,
                 surface=surface,
@@ -99,23 +106,22 @@ class RunPipeline:
             db.add(run)
             db.flush()
 
-            if run.input_text:
-                msg_seq = run.next_message_seq
-                user_msg = RunMessageModel(
-                    thread_id=thread.id,
-                    run_id=run.id,
-                    seq=msg_seq,
-                    seq_in_thread=self._next_thread_seq(db, thread),
-                    role="user",
-                    data={
-                        language: {
-                            "contentParts": [{"type": "content", "text": run.input_text}],
-                            "thinkingDetails": [],
-                        }
-                    },
-                )
-                run.next_message_seq = msg_seq + 1
-                db.add(user_msg)
+            msg_seq = run.next_message_seq
+            user_msg = RunMessageModel(
+                thread_id=thread.id,
+                run_id=run.id,
+                seq=msg_seq,
+                seq_in_thread=self._next_thread_seq(db, thread),
+                role="user",
+                data={
+                    language: {
+                        "contentParts": [{"type": "content", "text": run.input_text}],
+                        "thinkingDetails": [],
+                    }
+                },
+            )
+            run.next_message_seq = msg_seq + 1
+            db.add(user_msg)
 
             thread.status = "running"
             db.commit()
@@ -212,9 +218,9 @@ class RunPipeline:
                 if status == "accepted":
                     msg = (item.get("result") or {}).get("message") if isinstance(item.get("result"), dict) else None
                     lines.append(str(msg or f"{item['tool_name']}: accepted"))
-                elif status == "reject":
+                elif status == "rejected":
                     lines.append(f"{item['tool_name']}: rejected ({item.get('reason') or 'user'})")
-                elif status == "cancel":
+                elif status == "cancelled":
                     lines.append(f"{item['tool_name']}: cancelled ({item.get('reason') or 'error'})")
                 elif status == "running":
                     lines.append(f"{item['tool_name']}: running ({item.get('reason') or 'in progress'})")
@@ -264,6 +270,12 @@ class RunPipeline:
         for row_info in tool_rows:
             if row_info["status"] == "running":
                 await self._launch_child_if_needed(user_id, thread_id, message_id, row_info["id"])
+
+        await self._emit_tools_all_terminal_if_ready(
+            run_id=run.id,
+            user_id=user_id,
+            target_message_id=message_id,
+        )
 
     async def pause(self, *, user_id: UUID, thread_id: UUID) -> None:
         with short_session() as db:
@@ -448,7 +460,7 @@ class RunPipeline:
             cfg.provider_config = provider_config
             cfg.sidecar_client = sidecar_client  # type: ignore[attr-defined]
 
-            # Build history: capture/reuse from thread + current run messages
+            # Build history: capture/reuse previous runs, then append current run messages.
             captured = history_service.resolve(db, thread, run, run.language)
             current_msgs = history_service.build_current_run_messages(db, run, run.language)
             all_history = captured.messages + current_msgs
@@ -456,6 +468,9 @@ class RunPipeline:
             # Build prompt bundle & conversation blocks
             prompt_context = self._build_prompt_context(db, run, thread, cfg)
             bundle = await prompt_manager.generate_prompt_bundle(db, cfg, prompt_context, user_id, cfg.preset_id)
+            thread.captured_history_system_prompt = bundle.system_prompt
+            thread.captured_history_prefill = bundle.prefill
+            db.flush()
 
             settings = settings_service._get_settings(db, user_id)
             tool_limit = int(getattr(settings, "tool_call_history_limit", 5) or 5)
@@ -666,9 +681,9 @@ class RunPipeline:
                 if item["status"] == "accepted":
                     msg = (item.get("result") or {}).get("message") if isinstance(item.get("result"), dict) else None
                     lines.append(str(msg or f"{item['tool_name']}: accepted"))
-                elif item["status"] == "reject":
+                elif item["status"] == "rejected":
                     lines.append(f"{item['tool_name']}: rejected ({item.get('reason') or 'user'})")
-                elif item["status"] == "cancel":
+                elif item["status"] == "cancelled":
                     lines.append(f"{item['tool_name']}: cancelled ({item.get('reason') or 'error'})")
                 elif item["status"] == "running":
                     lines.append(f"{item['tool_name']}: running ({item.get('reason') or 'in progress'})")
@@ -766,31 +781,48 @@ class RunPipeline:
         If conversation fits in context window, returns blocks directly.
         Otherwise: summarize recent messages → cut conversation in half → rebuild → repeat.
         """
-        from .prompt_runtime.prompt_manager import PromptBundle
-
-        blocks = conversation_builder.build_conversation_blocks(all_history, bundle, build_opts)
-
         max_tokens = cfg.context_window_tokens or 32000
         output_reserve = cfg.max_output_tokens or 4096
         available = max_tokens - output_reserve
 
-        estimated = self._estimate_tokens(blocks)
-        if estimated <= available:
-            return blocks
-
         logger.info(
-            "Context cut needed: estimated=%d tokens, available=%d, history=%d messages",
-            estimated, available, len(all_history),
+            "Memory+cut loop start: available=%d, history=%d messages",
+            available, len(all_history),
         )
 
         previous_summary: str | None = None
         conversation = list(all_history)
 
-        for iteration in range(5):
+        for iteration in range(self.MAX_CONTEXT_CUT_ITERATIONS):
+            if previous_summary:
+                summary_block = f"[Conversation Summary]\n{previous_summary}"
+                augmented_memory = (
+                    f"{summary_block}\n\n{bundle.memory_prompt}"
+                    if bundle.memory_prompt.strip()
+                    else summary_block
+                )
+                augmented_bundle = dc_replace(bundle, memory_prompt=augmented_memory)
+            else:
+                augmented_bundle = bundle
+
+            blocks = conversation_builder.build_conversation_blocks(
+                conversation, augmented_bundle, build_opts,
+            )
+            estimated = self._estimate_tokens(blocks)
+            if estimated <= available:
+                return blocks
+
+            if len(conversation) <= self.MIN_CONVERSATION_MESSAGES:
+                logger.warning(
+                    "Context still exceeds budget after minimum retention; returning fallback blocks (estimated=%d available=%d)",
+                    estimated, available,
+                )
+                return blocks
+
             # Collect recent user/assistant messages for summary
             recent = [
                 m for m in conversation if m.role in ("user", "assistant")
-            ][-6:]
+            ][-self.SUMMARY_RECENT_MESSAGES:]
 
             if recent:
                 summary_msgs = [
@@ -809,36 +841,29 @@ class RunPipeline:
                     messages=summary_msgs,
                 )
 
-            # Cut conversation in half
+            # Cut conversation in half, while keeping a minimum tail.
             half = max(1, len(conversation) // 2)
             conversation = conversation[half:]
-
-            # Augment the bundle's memory_prompt with the summary
-            if previous_summary:
-                summary_block = f"[Conversation Summary]\n{previous_summary}"
-                augmented_memory = (
-                    f"{summary_block}\n\n{bundle.memory_prompt}"
-                    if bundle.memory_prompt.strip()
-                    else summary_block
-                )
-                augmented_bundle = dc_replace(bundle, memory_prompt=augmented_memory)
-            else:
-                augmented_bundle = bundle
-
-            blocks = conversation_builder.build_conversation_blocks(
-                conversation, augmented_bundle, build_opts,
-            )
-            estimated = self._estimate_tokens(blocks)
+            if len(conversation) < self.MIN_CONVERSATION_MESSAGES:
+                conversation = conversation[-self.MIN_CONVERSATION_MESSAGES:]
 
             logger.info(
                 "Context cut iteration %d: estimated=%d tokens, messages=%d",
                 iteration + 1, estimated, len(conversation),
             )
 
-            if estimated <= available:
-                return blocks
-
-        return blocks
+        # Last resort fallback: build with whatever remains after cut loop.
+        if previous_summary:
+            summary_block = f"[Conversation Summary]\n{previous_summary}"
+            final_memory = (
+                f"{summary_block}\n\n{bundle.memory_prompt}"
+                if bundle.memory_prompt.strip()
+                else summary_block
+            )
+            final_bundle = dc_replace(bundle, memory_prompt=final_memory)
+        else:
+            final_bundle = bundle
+        return conversation_builder.build_conversation_blocks(conversation, final_bundle, build_opts)
 
     # ── Prompt context builder ──
 
@@ -960,7 +985,7 @@ class RunPipeline:
                 }
                 call_row.accepted_at = datetime.utcnow()
             else:
-                call_row.status = "cancel"
+                call_row.status = "cancelled"
                 call_row.reason = f"EXECUTION::call_sub_agent::{terminal_status}"
                 call_row.result = {"success": False, "message": child.error or f"Sub-agent {terminal_status}"}
                 call_row.accepted_at = None
@@ -1018,27 +1043,56 @@ class RunPipeline:
             await self._maybe_notify_parent_ready(parent_run_id, user_id)
 
     async def _maybe_notify_parent_ready(self, parent_run_id: UUID, user_id: UUID) -> None:
-        """Check if all tool calls for the parent run's latest assistant message are terminal.
-        If so, the parent is ready for resume — but we do NOT auto-resume (frontend decides).
-        """
+        await self._emit_tools_all_terminal_if_ready(run_id=parent_run_id, user_id=user_id, target_message_id=None)
+
+    async def _emit_tools_all_terminal_if_ready(
+        self,
+        *,
+        run_id: UUID,
+        user_id: UUID,
+        target_message_id: UUID | None,
+    ) -> None:
+        """Emit readiness event when the latest assistant tool-call set is terminal."""
+        terminal_statuses = {"accepted", "rejected", "cancelled"}
+
         with short_session() as db:
-            run = db.query(RunModel).filter(RunModel.id == parent_run_id, RunModel.user_id == user_id).first()
+            run = db.query(RunModel).filter(RunModel.id == run_id, RunModel.user_id == user_id).first()
             if run is None or run.status not in {"waiting", "running"}:
                 return
 
-            # Find the latest assistant message with tool calls
-            pending_tools = (
-                db.query(RunToolCallModel)
+            latest = (
+                db.query(RunMessageModel.id)
+                .join(RunToolCallModel, RunToolCallModel.message_id == RunMessageModel.id)
                 .filter(
-                    RunToolCallModel.run_id == parent_run_id,
-                    RunToolCallModel.status.in_(["pending", "running"]),
+                    RunMessageModel.run_id == run.id,
+                    RunMessageModel.role == "assistant",
                 )
-                .count()
+                .order_by(RunMessageModel.seq.desc(), RunMessageModel.created_at.desc())
+                .first()
             )
-            if pending_tools > 0:
+            if latest is None:
+                return
+            latest_message_id = latest[0]
+
+            if target_message_id is not None and target_message_id != latest_message_id:
+                return
+            message_id = target_message_id or latest_message_id
+
+            rows = (
+                db.query(RunToolCallModel.status)
+                .filter(
+                    RunToolCallModel.run_id == run.id,
+                    RunToolCallModel.message_id == message_id,
+                )
+                .all()
+            )
+            if not rows:
                 return
 
-            # All tools terminal — emit event so frontend knows it can resume
+            statuses = [str(row[0]) for row in rows]
+            if any(status not in terminal_statuses for status in statuses):
+                return
+
             event_ctx = RunEventContext.from_run(run)
             await run_event_emitter.emit("run:tools_all_terminal", event_ctx, {})
 

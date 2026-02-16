@@ -8,11 +8,11 @@ from enum import Enum
 
 class ToolCallStatus(str, Enum):
     """Status of a tool call"""
-    FAILED = "failed"
     PENDING = "pending"
     RUNNING = "running"
     REJECTED = "rejected"
     ACCEPTED = "accepted"
+    CANCELLED = "cancelled"
 
 
 class ToolCallFailureType(str, Enum):

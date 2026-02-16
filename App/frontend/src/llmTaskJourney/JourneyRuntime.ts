@@ -12,6 +12,7 @@ import { createChatMessage } from './types';
 const streamByJourneyId = new Map<string, StreamHandle>();
 const lastEventSeqByJourneyId = new Map<string, number>();
 const deltaMessageIdByJourneyId = new Map<string, string>();
+const resumeInFlightByJourneyId = new Set<string>();
 
 
 function extractUserInput(kind: JourneyKind, input: unknown): string {
@@ -37,11 +38,26 @@ function getJourneyLanguage(journey: Journey): string {
 
 function mapToolCalls(raw: any[] | undefined): ToolCallMetadata[] {
   const rows = Array.isArray(raw) ? raw : [];
+  const parseStatus = (status: unknown): ToolCallMetadata['status'] => {
+    if (
+      status === 'validating' ||
+      status === 'pending' ||
+      status === 'processing' ||
+      status === 'running' ||
+      status === 'failed' ||
+      status === 'accepted' ||
+      status === 'rejected' ||
+      status === 'cancelled'
+    ) {
+      return status;
+    }
+    throw new Error(`Invalid tool call status: ${String(status)}`);
+  };
   return rows.map((row, idx) => ({
     id: String(row?.id ?? idx + 1),
     tool_name: String(row?.tool_name ?? ''),
     arguments: (row?.arguments && typeof row.arguments === 'object' ? row.arguments : {}) as Record<string, unknown>,
-    status: (row?.status ?? 'pending') as ToolCallMetadata['status'],
+    status: parseStatus(row?.status ?? 'pending'),
     reason: row?.reason ?? undefined,
     failureType: row?.failure_type ?? undefined,
     result: row?.result ?? undefined,
@@ -164,6 +180,7 @@ async function handleRunEvent(journeyId: string, event: ThreadEvent): Promise<vo
   }
 
   const payload = envelope?.payload ?? {};
+  const projectId = envelope?.project_id ? String(envelope.project_id) : getProjectId(journey.kind as JourneyKind, journey.input);
 
   // Extract threadId from event
   const threadId = envelope?.thread_id ? String(envelope.thread_id) : journey.threadId;
@@ -189,6 +206,42 @@ async function handleRunEvent(journeyId: string, event: ThreadEvent): Promise<vo
     return;
   }
 
+  if (event.event === 'run:tools_all_terminal') {
+    if (resumeInFlightByJourneyId.has(journeyId)) return;
+    const current = journeyStore.getJourneyById(journeyId);
+    if (!current?.threadId || current.status !== 'pending_confirmation') return;
+
+    const lastAssistant = [...current.messages].reverse().find((msg) => msg.role === 'assistant');
+    const toolCalls = Array.isArray(lastAssistant?.toolCalls) ? lastAssistant!.toolCalls : [];
+    if (!toolCalls.length) return;
+    const allTerminal = toolCalls.every((toolCall) =>
+      toolCall.status === 'accepted' || toolCall.status === 'rejected' || toolCall.status === 'cancelled',
+    );
+    if (!allTerminal) return;
+
+    resumeInFlightByJourneyId.add(journeyId);
+    journeyStore.updateJourney(journeyId, { status: 'running', error: undefined });
+    try {
+      await openJourneyStream({
+        journeyId,
+        projectId,
+        streamFactory: () =>
+          threadService.resume(
+            projectId,
+            current.threadId!,
+            (resumeEvent) => {
+              void handleRunEvent(journeyId, resumeEvent);
+            },
+            undefined,
+            lastEventSeqByJourneyId.get(journeyId),
+          ),
+      });
+    } finally {
+      resumeInFlightByJourneyId.delete(journeyId);
+    }
+    return;
+  }
+
   if (event.event === 'run:llm_final') {
     const pendingDeltaId = deltaMessageIdByJourneyId.get(journeyId);
     if (pendingDeltaId) {
@@ -205,7 +258,16 @@ async function handleRunEvent(journeyId: string, event: ThreadEvent): Promise<vo
 
     const contentParts = Array.isArray(payload?.content_parts) ? payload.content_parts : [];
     const thinkingDetails = Array.isArray(payload?.thinking_details) ? payload.thinking_details : [];
-    const toolCalls = mapToolCalls(payload?.tool_calls);
+    let toolCalls: ToolCallMetadata[];
+    try {
+      toolCalls = mapToolCalls(payload?.tool_calls);
+    } catch (error) {
+      journeyStore.updateJourney(journeyId, {
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
 
     const nextMessages = withUpdatedAssistantMessage(refreshed, messageId, (current) => {
       if (current) {
@@ -284,7 +346,16 @@ async function handleRunEvent(journeyId: string, event: ThreadEvent): Promise<vo
   if (event.event === 'run:tool_calls' || event.event === 'run:tool_calls_executed') {
     const messageId = String(payload?.message_id ?? '');
     if (!messageId) return;
-    const toolCalls = mapToolCalls(payload?.tool_calls);
+    let toolCalls: ToolCallMetadata[];
+    try {
+      toolCalls = mapToolCalls(payload?.tool_calls);
+    } catch (error) {
+      journeyStore.updateJourney(journeyId, {
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
     const nextMessages = withUpdatedAssistantMessage(journey, messageId, (current) => ({
       ...(current || {
         id: messageId,
@@ -385,7 +456,7 @@ export async function applyJourneyEdits(params: {
     throw new Error('No assistant message found');
   }
 
-  const normalized: Record<string, 'accept' | 'reject'> = {};
+  const normalized: Record<string, 'accept' | 'reject' | 'cancel'> = {};
   for (const [id, decision] of Object.entries(decisions || {})) {
     normalized[normalizeDecisionKey(id)] = decision;
   }
@@ -505,12 +576,43 @@ export const JourneyRuntime = {
   sendFeedback(params: { journeyId: string; text: string }): { sessionId: string } | undefined {
     const { journeyId, text } = params;
     const trimmed = text.trim();
-    if (!trimmed) return;
-
     const journeyStore = useJourneyStore.getState();
     const journey = journeyStore.getJourneyById(journeyId);
     if (!journey?.threadId) {
       throw new Error('Journey thread is not ready yet');
+    }
+
+    if (!trimmed) {
+      if (journey.status !== 'pending_confirmation' && journey.status !== 'error') {
+        journeyStore.updateJourney(journeyId, {
+          warning: 'There is no resumable run for this journey.',
+        });
+        return;
+      }
+
+      journeyStore.updateJourney(journeyId, {
+        status: 'running',
+        error: undefined,
+        warning: undefined,
+      });
+
+      const projectId = getProjectId(journey.kind as JourneyKind, journey.input);
+      void openJourneyStream({
+        journeyId,
+        projectId,
+        streamFactory: () =>
+          threadService.resume(
+            projectId,
+            journey.threadId!,
+            (event) => {
+              void handleRunEvent(journeyId, event);
+            },
+            undefined,
+            lastEventSeqByJourneyId.get(journeyId),
+          ),
+      });
+
+      return { sessionId: `journey-thread-${journey.threadId}` };
     }
 
     if (journey.status === 'running' || journey.status === 'applying') {
@@ -522,6 +624,7 @@ export const JourneyRuntime = {
 
     journeyStore.updateJourney(journeyId, {
       status: 'running',
+      warning: undefined,
       messages: [
         ...journey.messages,
         createChatMessage({ role: 'user', content: trimmed, idPrefix: 'journey-user' }),

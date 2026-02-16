@@ -16,6 +16,7 @@ RunMode = Literal["planMode", "agentMode"]
 RunSurface = Literal["story-object", "outline-manager", "novel-editor", "config"]
 JourneyKind = Literal["aiEdit", "translation", "imagePrompt"]
 ToolDecision = Literal["accept", "reject", "cancel"]
+RunToolCallStatus = Literal["pending", "running", "accepted", "rejected", "cancelled"]
 
 
 # ── Dispatch ──
@@ -123,7 +124,7 @@ class ToolCallResponse(BaseModel):
     llm_call_id: str
     tool_name: str
     arguments: dict[str, Any]
-    status: str
+    status: RunToolCallStatus
     reason: str | None = None
     result: dict[str, Any] | None = None
     child_run_id: UUID | None = None
