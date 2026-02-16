@@ -6,7 +6,6 @@
  */
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 // ── Types ──
 
@@ -20,6 +19,7 @@ export interface ThreadInfo {
   ownerId?: string | null;
   journeyKind?: string | null;
   status: ThreadStatus;
+  lastError?: string | null;
 }
 
 export interface ThreadMessage {
@@ -58,6 +58,8 @@ interface ThreadState {
   threadsById: Record<string, ThreadInfo | undefined>;
   messagesByThreadId: Record<string, ThreadMessage[] | undefined>;
   toolCallsByMessageId: Record<string, ThreadToolCall[] | undefined>;
+  /** Maps threadId → messageId for messages expecting tool calls (between llm_final and tool_calls events). */
+  pendingToolCallMessageByThread: Record<string, string | undefined>;
 
   // Actions — threads
   upsertThread: (thread: ThreadInfo) => void;
@@ -94,6 +96,10 @@ interface ThreadState {
   upsertToolCalls: (messageId: string, toolCalls: ThreadToolCall[]) => void;
   getToolCalls: (messageId: string) => ThreadToolCall[];
 
+  // Actions — pending tool call tracking
+  setPendingToolCallMessage: (threadId: string, messageId: string) => void;
+  clearPendingToolCallMessage: (threadId: string) => void;
+
   // Lookups
   findThreadByOwner: (projectId: string, ownerId: string) => ThreadInfo | undefined;
 
@@ -101,160 +107,162 @@ interface ThreadState {
   clearAll: () => void;
 }
 
-export const useThreadStore = create<ThreadState>()(
-  persist(
-    (set, get) => ({
-      threadsById: {},
-      messagesByThreadId: {},
-      toolCallsByMessageId: {},
+export const useThreadStore = create<ThreadState>()((set, get) => ({
+  threadsById: {},
+  messagesByThreadId: {},
+  toolCallsByMessageId: {},
+  pendingToolCallMessageByThread: {},
 
-      // ── Thread actions ──
+  // ── Thread actions ──
 
-      upsertThread: (thread) =>
-        set((s) => ({
-          threadsById: { ...s.threadsById, [thread.id]: thread },
-        })),
+  upsertThread: (thread) =>
+    set((s) => ({
+      threadsById: { ...s.threadsById, [thread.id]: thread },
+    })),
 
-      patchThread: (threadId, partial) =>
-        set((s) => {
-          const existing = s.threadsById[threadId];
-          if (!existing) return s;
-          return {
-            threadsById: { ...s.threadsById, [threadId]: { ...existing, ...partial } },
-          };
-        }),
-
-      removeThread: (threadId) =>
-        set((s) => {
-          const { [threadId]: _, ...rest } = s.threadsById;
-          const { [threadId]: __, ...restMsgs } = s.messagesByThreadId;
-          return { threadsById: rest, messagesByThreadId: restMsgs };
-        }),
-
-      getThread: (threadId) => get().threadsById[threadId],
-
-      // ── Message actions ──
-
-      replaceMessages: (threadId, messages) =>
-        set((s) => ({
-          messagesByThreadId: { ...s.messagesByThreadId, [threadId]: messages },
-        })),
-
-      appendMessage: (message) =>
-        set((s) => {
-          const existing = s.messagesByThreadId[message.threadId] ?? [];
-          return {
-            messagesByThreadId: {
-              ...s.messagesByThreadId,
-              [message.threadId]: [...existing, message],
-            },
-          };
-        }),
-
-      patchMessage: (threadId, messageId, partial) =>
-        set((s) => {
-          const msgs = s.messagesByThreadId[threadId];
-          if (!msgs) return s;
-          return {
-            messagesByThreadId: {
-              ...s.messagesByThreadId,
-              [threadId]: msgs.map((m) => (m.id === messageId ? { ...m, ...partial } : m)),
-            },
-          };
-        }),
-
-      removeMessage: (threadId, messageId) =>
-        set((s) => {
-          const msgs = s.messagesByThreadId[threadId];
-          if (!msgs) return s;
-          return {
-            messagesByThreadId: {
-              ...s.messagesByThreadId,
-              [threadId]: msgs.filter((m) => m.id !== messageId),
-            },
-          };
-        }),
-
-      getMessages: (threadId) => get().messagesByThreadId[threadId] ?? [],
-
-      updateMessageData: (threadId, messageId, language, entry) =>
-        set((s) => {
-          const msgs = s.messagesByThreadId[threadId];
-          if (!msgs) return s;
-          return {
-            messagesByThreadId: {
-              ...s.messagesByThreadId,
-              [threadId]: msgs.map((m) =>
-                m.id === messageId ? { ...m, data: { ...m.data, [language]: entry } } : m,
-              ),
-            },
-          };
-        }),
-
-      addMessageTranslation: (threadId, messageId, language, entry) =>
-        set((s) => {
-          const msgs = s.messagesByThreadId[threadId];
-          if (!msgs) return s;
-          return {
-            messagesByThreadId: {
-              ...s.messagesByThreadId,
-              [threadId]: msgs.map((m) =>
-                m.id === messageId ? { ...m, data: { ...m.data, [language]: entry } } : m,
-              ),
-            },
-          };
-        }),
-
-      clearMessageTranslations: (threadId, messageId, preserveLanguages) =>
-        set((s) => {
-          const msgs = s.messagesByThreadId[threadId];
-          if (!msgs) return s;
-          const preserveSet = new Set(preserveLanguages);
-          return {
-            messagesByThreadId: {
-              ...s.messagesByThreadId,
-              [threadId]: msgs.map((m) => {
-                if (m.id !== messageId) return m;
-                const filtered: typeof m.data = {};
-                for (const [lang, entry] of Object.entries(m.data)) {
-                  if (preserveSet.has(lang)) filtered[lang] = entry;
-                }
-                return { ...m, data: filtered };
-              }),
-            },
-          };
-        }),
-
-      // ── Tool call actions ──
-
-      upsertToolCalls: (messageId, toolCalls) =>
-        set((s) => ({
-          toolCallsByMessageId: { ...s.toolCallsByMessageId, [messageId]: toolCalls },
-        })),
-
-      getToolCalls: (messageId) => get().toolCallsByMessageId[messageId] ?? [],
-
-      // ── Lookups ──
-
-      findThreadByOwner: (projectId, ownerId) => {
-        for (const thread of Object.values(get().threadsById)) {
-          if (!thread) continue;
-          if (thread.projectId === projectId && thread.ownerId === ownerId) return thread;
-        }
-        return undefined;
-      },
-
-      // ── Bulk ──
-
-      clearAll: () => set({ threadsById: {}, messagesByThreadId: {}, toolCallsByMessageId: {} }),
+  patchThread: (threadId, partial) =>
+    set((s) => {
+      const existing = s.threadsById[threadId];
+      if (!existing) return s;
+      return {
+        threadsById: { ...s.threadsById, [threadId]: { ...existing, ...partial } },
+      };
     }),
-    {
-      name: 'thread-store',
-      partialize: (state) => ({
-        threadsById: state.threadsById,
-        messagesByThreadId: state.messagesByThreadId,
-        toolCallsByMessageId: state.toolCallsByMessageId,
-      }),
-    },
-  ),
-);
+
+  removeThread: (threadId) =>
+    set((s) => {
+      const { [threadId]: _, ...rest } = s.threadsById;
+      const { [threadId]: __, ...restMsgs } = s.messagesByThreadId;
+      return { threadsById: rest, messagesByThreadId: restMsgs };
+    }),
+
+  getThread: (threadId) => get().threadsById[threadId],
+
+  // ── Message actions ──
+
+  replaceMessages: (threadId, messages) =>
+    set((s) => ({
+      messagesByThreadId: { ...s.messagesByThreadId, [threadId]: messages },
+    })),
+
+  appendMessage: (message) =>
+    set((s) => {
+      const existing = s.messagesByThreadId[message.threadId] ?? [];
+      return {
+        messagesByThreadId: {
+          ...s.messagesByThreadId,
+          [message.threadId]: [...existing, message],
+        },
+      };
+    }),
+
+  patchMessage: (threadId, messageId, partial) =>
+    set((s) => {
+      const msgs = s.messagesByThreadId[threadId];
+      if (!msgs) return s;
+      return {
+        messagesByThreadId: {
+          ...s.messagesByThreadId,
+          [threadId]: msgs.map((m) => (m.id === messageId ? { ...m, ...partial } : m)),
+        },
+      };
+    }),
+
+  removeMessage: (threadId, messageId) =>
+    set((s) => {
+      const msgs = s.messagesByThreadId[threadId];
+      if (!msgs) return s;
+      return {
+        messagesByThreadId: {
+          ...s.messagesByThreadId,
+          [threadId]: msgs.filter((m) => m.id !== messageId),
+        },
+      };
+    }),
+
+  getMessages: (threadId) => get().messagesByThreadId[threadId] ?? [],
+
+  updateMessageData: (threadId, messageId, language, entry) =>
+    set((s) => {
+      const msgs = s.messagesByThreadId[threadId];
+      if (!msgs) return s;
+      return {
+        messagesByThreadId: {
+          ...s.messagesByThreadId,
+          [threadId]: msgs.map((m) =>
+            m.id === messageId ? { ...m, data: { ...m.data, [language]: entry } } : m,
+          ),
+        },
+      };
+    }),
+
+  addMessageTranslation: (threadId, messageId, language, entry) =>
+    set((s) => {
+      const msgs = s.messagesByThreadId[threadId];
+      if (!msgs) return s;
+      return {
+        messagesByThreadId: {
+          ...s.messagesByThreadId,
+          [threadId]: msgs.map((m) =>
+            m.id === messageId ? { ...m, data: { ...m.data, [language]: entry } } : m,
+          ),
+        },
+      };
+    }),
+
+  clearMessageTranslations: (threadId, messageId, preserveLanguages) =>
+    set((s) => {
+      const msgs = s.messagesByThreadId[threadId];
+      if (!msgs) return s;
+      const preserveSet = new Set(preserveLanguages);
+      return {
+        messagesByThreadId: {
+          ...s.messagesByThreadId,
+          [threadId]: msgs.map((m) => {
+            if (m.id !== messageId) return m;
+            const filtered: typeof m.data = {};
+            for (const [lang, entry] of Object.entries(m.data)) {
+              if (preserveSet.has(lang)) filtered[lang] = entry;
+            }
+            return { ...m, data: filtered };
+          }),
+        },
+      };
+    }),
+
+  // ── Tool call actions ──
+
+  upsertToolCalls: (messageId, toolCalls) =>
+    set((s) => ({
+      toolCallsByMessageId: { ...s.toolCallsByMessageId, [messageId]: toolCalls },
+    })),
+
+  getToolCalls: (messageId) => get().toolCallsByMessageId[messageId] ?? [],
+
+  // ── Pending tool call tracking ──
+
+  setPendingToolCallMessage: (threadId, messageId) =>
+    set((s) => ({
+      pendingToolCallMessageByThread: { ...s.pendingToolCallMessageByThread, [threadId]: messageId },
+    })),
+
+  clearPendingToolCallMessage: (threadId) =>
+    set((s) => {
+      const { [threadId]: _, ...rest } = s.pendingToolCallMessageByThread;
+      return { pendingToolCallMessageByThread: rest };
+    }),
+
+  // ── Lookups ──
+
+  findThreadByOwner: (projectId, ownerId) => {
+    for (const thread of Object.values(get().threadsById)) {
+      if (!thread) continue;
+      if (thread.projectId === projectId && thread.ownerId === ownerId) return thread;
+    }
+    return undefined;
+  },
+
+  // ── Bulk ──
+
+  clearAll: () => set({ threadsById: {}, messagesByThreadId: {}, toolCallsByMessageId: {}, pendingToolCallMessageByThread: {} }),
+}));

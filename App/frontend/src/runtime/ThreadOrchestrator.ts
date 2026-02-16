@@ -12,6 +12,7 @@ import {
   type ThreadMessage,
   type ThreadToolCall,
 } from './store/threadStore';
+import { createClientMessageId, isUuid } from '../utils/idUtils';
 
 // ── Helpers ──
 
@@ -28,6 +29,11 @@ function parseThreadToolCallStatus(raw: unknown): ThreadToolCallStatus {
     return raw;
   }
   throw new Error(`Invalid tool call status: ${String(raw)}`);
+}
+
+interface PendingUserMessageRef {
+  threadId: string;
+  pendingMessageId: string;
 }
 
 function mapBackendMessage(raw: any): ThreadMessage {
@@ -72,7 +78,41 @@ function mapBackendThread(raw: any): ThreadInfo {
     ownerId: raw.owner_id ?? null,
     journeyKind: raw.journey_kind ?? null,
     status: raw.status,
+    lastError: null,
   };
+}
+
+function normalizeUnknownError(error: unknown, fallback: string): Error {
+  if (error instanceof Error) return error;
+  if (typeof error === 'string' && error.trim()) return new Error(error);
+  return new Error(fallback);
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function normalizeErrorText(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (Array.isArray(value)) {
+    const combined = value
+      .map((item) => normalizeErrorText(item))
+      .filter((item): item is string => Boolean(item))
+      .join(', ');
+    return combined || null;
+  }
+  if (value && typeof value === 'object') {
+    const message = normalizeErrorText((value as any).message);
+    if (message) return message;
+    const detail = normalizeErrorText((value as any).detail);
+    if (detail) return detail;
+    const error = normalizeErrorText((value as any).error);
+    if (error) return error;
+  }
+  return null;
 }
 
 // ── Orchestrator class ──
@@ -82,6 +122,8 @@ export class ThreadOrchestrator {
   private deltaMessageIdByThread = new Map<string, string>();
   private lastEventSeqByThread = new Map<string, number>();
   private resumeInFlightByThread = new Set<string>();
+  private pendingUserMessageByClientId = new Map<string, PendingUserMessageRef>();
+  private pendingClientMessageIdByRun = new Map<string, string>();
   // Track which run_id corresponds to which thread for SSE purposes
   private runIdToThread = new Map<string, string>();
 
@@ -103,66 +145,99 @@ export class ThreadOrchestrator {
     afterSeq?: number;
   }): Promise<{ threadId: string }> {
     const store = useThreadStore.getState();
-
     let resolvedThreadId = input.threadId ?? '';
+    const shouldTrackClientMessage =
+      input.threadType !== 'journey' && input.inputText.trim().length > 0;
+    const clientMessageId = shouldTrackClientMessage ? createClientMessageId() : undefined;
+    const pendingMessageId =
+      shouldTrackClientMessage && resolvedThreadId ? `pending:user:${clientMessageId}` : undefined;
 
-    const handle = await threadService.dispatch(
-      input.projectId,
-      {
-        thread_type: input.threadType,
-        thread_id: input.threadId,
-        input_text: input.inputText,
-        language: input.language,
-        run_mode: input.runMode,
-        surface: input.surface,
-        context_object_ids: input.contextObjectIds,
-        journey_kind: input.journeyKind,
-        input_payload: input.inputPayload,
-        journey_target_ids: input.journeyTargetIds,
-      },
-      (event) => {
-        const threadId = this.resolveThreadIdFromEvent(event, resolvedThreadId);
-        if (threadId && !resolvedThreadId) {
-          resolvedThreadId = threadId;
-        }
-        if (resolvedThreadId) {
-          this.handleEvent(resolvedThreadId, event);
-        }
-      },
-      { signal: input.signal },
-      input.afterSeq,
-    );
-
-    if (resolvedThreadId) {
-      this.abortPreviousStream(resolvedThreadId);
-      this.streamByThread.set(resolvedThreadId, handle);
+    if (pendingMessageId && clientMessageId && resolvedThreadId) {
+      store.appendMessage({
+        id: pendingMessageId,
+        threadId: resolvedThreadId,
+        runId: '',
+        seq: 0,
+        seqInThread: null,
+        role: 'user',
+        data: {
+          [input.language]: {
+            contentParts: [{ type: 'content', text: input.inputText }],
+            thinkingDetails: [],
+          },
+        },
+        createdAt: new Date().toISOString(),
+      });
+      this.pendingUserMessageByClientId.set(clientMessageId, {
+        threadId: resolvedThreadId,
+        pendingMessageId,
+      });
     }
 
-    // If threadId wasn't known up front, we need to add user message
-    if (input.inputText.trim() && resolvedThreadId) {
-      const existing = store.getMessages(resolvedThreadId);
-      const hasUserMsg = existing.some(
-        (m) => m.role === 'user' && Object.values(m.data).some((e) =>
-          e.contentParts?.some((p) => p.text === input.inputText),
-        ),
+    let handle!: StreamHandle;
+    let streamAttached = false;
+    try {
+      handle = await threadService.dispatch(
+        input.projectId,
+        {
+          thread_type: input.threadType,
+          thread_id: input.threadId,
+          input_text: input.inputText,
+          language: input.language,
+          client_message_id: clientMessageId,
+          run_mode: input.runMode,
+          surface: input.surface,
+          context_object_ids: input.contextObjectIds,
+          journey_kind: input.journeyKind,
+          input_payload: input.inputPayload,
+          journey_target_ids: input.journeyTargetIds,
+        },
+        (event) => {
+          const threadId = this.resolveThreadIdFromEvent(event, resolvedThreadId);
+          if (threadId && !resolvedThreadId) {
+            resolvedThreadId = threadId;
+          }
+          if (threadId && !streamAttached) {
+            this.abortPreviousStream(threadId);
+            this.streamByThread.set(threadId, handle);
+            this.attachStreamFailureHandler(threadId, handle, 'dispatch');
+            streamAttached = true;
+          }
+          const runId = event.data?.run_id;
+          if (runId && clientMessageId) {
+            this.pendingClientMessageIdByRun.set(String(runId), clientMessageId);
+          }
+          if (resolvedThreadId) {
+            this.handleEvent(resolvedThreadId, event);
+          }
+        },
+        { signal: input.signal },
+        input.afterSeq,
       );
-      if (!hasUserMsg) {
-        store.appendMessage({
-          id: `pending:user:${Date.now()}`,
-          threadId: resolvedThreadId,
-          runId: '',
-          seq: 0,
-          seqInThread: null,
-          role: 'user',
-          data: {
-            [input.language]: {
-              contentParts: [{ type: 'content', text: input.inputText }],
-              thinkingDetails: [],
-            },
-          },
-          createdAt: new Date().toISOString(),
-        });
+    } catch (error) {
+      if (clientMessageId) {
+        this.removePendingUserMessage(clientMessageId);
       }
+      throw error;
+    }
+
+    if (resolvedThreadId && !streamAttached) {
+      this.abortPreviousStream(resolvedThreadId);
+      this.streamByThread.set(resolvedThreadId, handle);
+      this.attachStreamFailureHandler(resolvedThreadId, handle, 'dispatch');
+      streamAttached = true;
+    }
+
+    if (!streamAttached) {
+      void handle.done.catch((error) => {
+        if (streamAttached) return;
+        const normalized = normalizeUnknownError(error, 'Dispatch stream failed before thread binding.');
+        if (isAbortLikeError(normalized)) return;
+        if (clientMessageId) {
+          this.removePendingUserMessage(clientMessageId);
+        }
+        console.error('ThreadOrchestrator.dispatch stream failed before thread binding:', normalized);
+      });
     }
 
     return { threadId: resolvedThreadId };
@@ -177,6 +252,9 @@ export class ThreadOrchestrator {
     signal?: AbortSignal;
     afterSeq?: number;
   }): Promise<void> {
+    if (!isUuid(input.messageId)) {
+      throw new Error('message_id must be a valid UUID before applying tool decisions.');
+    }
     const handle = await threadService.toolDecisions(
       input.projectId,
       input.threadId,
@@ -192,6 +270,7 @@ export class ThreadOrchestrator {
 
     this.abortPreviousStream(input.threadId);
     this.streamByThread.set(input.threadId, handle);
+    this.attachStreamFailureHandler(input.threadId, handle, 'toolDecisions');
   }
 
   async resume(input: {
@@ -210,17 +289,18 @@ export class ThreadOrchestrator {
 
     this.abortPreviousStream(input.threadId);
     this.streamByThread.set(input.threadId, handle);
+    this.attachStreamFailureHandler(input.threadId, handle, 'resume');
   }
 
   async pause(projectId: string, threadId: string): Promise<void> {
     await threadService.pause(projectId, threadId);
-    useThreadStore.getState().patchThread(threadId, { status: 'paused' });
+    useThreadStore.getState().patchThread(threadId, { status: 'paused', lastError: null });
   }
 
   async cancel(projectId: string, threadId: string): Promise<void> {
     this.abortPreviousStream(threadId);
     await threadService.cancel(projectId, threadId);
-    useThreadStore.getState().patchThread(threadId, { status: 'idle' });
+    useThreadStore.getState().patchThread(threadId, { status: 'idle', lastError: null });
   }
 
   async recover(projectId: string, threadId: string): Promise<void> {
@@ -258,8 +338,11 @@ export class ThreadOrchestrator {
       const runId = state.open_run.id;
       this.runIdToThread.set(runId, threadId);
     }
+    if (state.open_run && state.open_run.status === 'error') {
+      const recoveredError = normalizeErrorText(state.open_run.error) ?? 'An error occurred during generation.';
+      store.patchThread(threadId, { status: 'error', lastError: recoveredError });
+    }
 
-    void this.autoResumeIfReady(projectId, threadId);
   }
 
   // ── Event handling ──
@@ -290,10 +373,62 @@ export class ThreadOrchestrator {
         const status = payload.status;
         if (status) {
           const threadStatus = this.runStatusToThreadStatus(status);
-          store.patchThread(threadId, { status: threadStatus });
+          const statusPatch: Partial<ThreadInfo> = { status: threadStatus };
+          if (threadStatus === 'error') {
+            statusPatch.lastError = normalizeErrorText(payload.error) ?? 'An error occurred during generation.';
+          } else {
+            statusPatch.lastError = null;
+          }
+          store.patchThread(threadId, statusPatch);
         }
         if (['completed', 'error', 'cancelled'].includes(payload.status)) {
+          if (runId) {
+            this.clearPendingUserMessageForRun(runId);
+          }
+          this.clearPendingUserMessagesForThread(threadId);
           this.abortPreviousStream(threadId);
+        }
+        break;
+      }
+
+      case 'run:user_message_created': {
+        const clientMessageId = typeof payload.client_message_id === 'string'
+          ? payload.client_message_id
+          : '';
+        const rawMessage = payload.message;
+        if (!rawMessage || typeof rawMessage !== 'object') {
+          break;
+        }
+
+        const backendMessage = mapBackendMessage(rawMessage);
+        const targetThreadId = backendMessage.threadId || threadId;
+        const existingMessages = store.getMessages(targetThreadId);
+        const hasBackendMessage = existingMessages.some((m) => m.id === backendMessage.id);
+        const pending = clientMessageId ? this.consumePendingUserMessage(clientMessageId) : undefined;
+
+        if (pending) {
+          const pendingMessages = store.getMessages(pending.threadId);
+          const hasPending = pendingMessages.some((m) => m.id === pending.pendingMessageId);
+          if (hasPending) {
+            if (hasBackendMessage) {
+              store.removeMessage(pending.threadId, pending.pendingMessageId);
+            } else {
+              store.patchMessage(pending.threadId, pending.pendingMessageId, {
+                id: backendMessage.id,
+                threadId: backendMessage.threadId,
+                runId: backendMessage.runId,
+                seq: backendMessage.seq,
+                seqInThread: backendMessage.seqInThread,
+                role: backendMessage.role,
+                data: backendMessage.data,
+                createdAt: backendMessage.createdAt,
+              });
+            }
+          } else if (!hasBackendMessage) {
+            store.appendMessage(backendMessage);
+          }
+        } else if (!hasBackendMessage) {
+          store.appendMessage(backendMessage);
         }
         break;
       }
@@ -364,7 +499,7 @@ export class ThreadOrchestrator {
         // Add final assistant message
         const msgId = payload.message_id;
         if (msgId) {
-          const langKey = '_final';
+          const langKey = payload.language ?? '_final';
           store.appendMessage({
             id: msgId,
             threadId,
@@ -380,11 +515,17 @@ export class ThreadOrchestrator {
             },
             createdAt: new Date().toISOString(),
           });
+
+          // Signal that tool call cards are expected for this message
+          if (payload.tool_calls?.length > 0) {
+            store.setPendingToolCallMessage(threadId, msgId);
+          }
         }
         break;
       }
 
       case 'run:tool_calls': {
+        store.clearPendingToolCallMessage(threadId);
         const messageId = payload.message_id;
         const calls: ThreadToolCall[] = (payload.tool_calls ?? []).map((tc: any) => ({
           id: `${messageId}:${tc.id}`,
@@ -437,13 +578,22 @@ export class ThreadOrchestrator {
       }
 
       case 'run:complete': {
-        store.patchThread(threadId, { status: 'idle' });
+        store.patchThread(threadId, { status: 'idle', lastError: null });
+        if (runId) {
+          this.clearPendingUserMessageForRun(runId);
+        }
+        this.clearPendingUserMessagesForThread(threadId);
         this.abortPreviousStream(threadId);
         break;
       }
 
       case 'run:error': {
-        store.patchThread(threadId, { status: 'error' });
+        const runError = normalizeErrorText(payload.error) ?? 'An error occurred during generation.';
+        store.patchThread(threadId, { status: 'error', lastError: runError });
+        if (runId) {
+          this.clearPendingUserMessageForRun(runId);
+        }
+        this.clearPendingUserMessagesForThread(threadId);
         this.abortPreviousStream(threadId);
         break;
       }
@@ -464,12 +614,28 @@ export class ThreadOrchestrator {
         break;
       }
 
+      case 'run:prompt_prepared': {
+        const requestMessages = Array.isArray(payload.request?.messages) ? payload.request.messages : [];
+        const provider = payload.provider ?? 'unknown';
+        const model = payload.model ?? 'unknown';
+        console.groupCollapsed(
+          `[Prompt Debug] ${provider}/${model}`,
+        );
+        console.log('threadId:', threadId, 'runId:', runId);
+        console.log('rendered payload:', payload);
+        console.groupEnd();
+        break;
+      }
+
       default:
         break;
       }
     } catch (error) {
       console.error('ThreadOrchestrator.handleEvent failed:', error);
-      store.patchThread(threadId, { status: 'error' });
+      store.patchThread(threadId, {
+        status: 'error',
+        lastError: normalizeUnknownError(error, 'Failed to handle stream event.').message,
+      });
       this.abortPreviousStream(threadId);
     }
   }
@@ -496,6 +662,40 @@ export class ThreadOrchestrator {
     }
   }
 
+  private attachStreamFailureHandler(
+    threadId: string,
+    handle: StreamHandle,
+    source: 'dispatch' | 'resume' | 'toolDecisions',
+  ): void {
+    void handle.done
+      .catch((error) => {
+        const normalized = normalizeUnknownError(error, `${source} stream failed.`);
+        if (isAbortLikeError(normalized)) return;
+        if (this.streamByThread.get(threadId) !== handle) return;
+
+        console.error(`ThreadOrchestrator.${source} stream failed:`, {
+          threadId,
+          error: normalized,
+        });
+        useThreadStore.getState().patchThread(threadId, {
+          status: 'error',
+          lastError: normalized.message,
+        });
+        this.clearPendingUserMessagesForThread(threadId);
+        try {
+          handle.abort();
+        } catch {
+          // ignore
+        }
+        this.streamByThread.delete(threadId);
+      })
+      .finally(() => {
+        if (this.streamByThread.get(threadId) === handle) {
+          this.streamByThread.delete(threadId);
+        }
+      });
+  }
+
   private runStatusToThreadStatus(runStatus: string): ThreadInfo['status'] {
     switch (runStatus) {
       case 'running':
@@ -511,6 +711,44 @@ export class ThreadOrchestrator {
         return 'idle';
       default:
         return 'idle';
+    }
+  }
+
+  private removePendingUserMessage(clientMessageId: string): void {
+    const pending = this.pendingUserMessageByClientId.get(clientMessageId);
+    if (!pending) return;
+    useThreadStore.getState().removeMessage(pending.threadId, pending.pendingMessageId);
+    this.pendingUserMessageByClientId.delete(clientMessageId);
+    for (const [runId, trackedClientMessageId] of this.pendingClientMessageIdByRun.entries()) {
+      if (trackedClientMessageId === clientMessageId) {
+        this.pendingClientMessageIdByRun.delete(runId);
+      }
+    }
+  }
+
+  private consumePendingUserMessage(clientMessageId: string): PendingUserMessageRef | undefined {
+    const pending = this.pendingUserMessageByClientId.get(clientMessageId);
+    if (!pending) return undefined;
+    this.pendingUserMessageByClientId.delete(clientMessageId);
+    for (const [runId, trackedClientMessageId] of this.pendingClientMessageIdByRun.entries()) {
+      if (trackedClientMessageId === clientMessageId) {
+        this.pendingClientMessageIdByRun.delete(runId);
+      }
+    }
+    return pending;
+  }
+
+  private clearPendingUserMessageForRun(runId: string): void {
+    const clientMessageId = this.pendingClientMessageIdByRun.get(runId);
+    if (!clientMessageId) return;
+    this.pendingClientMessageIdByRun.delete(runId);
+    this.removePendingUserMessage(clientMessageId);
+  }
+
+  private clearPendingUserMessagesForThread(threadId: string): void {
+    for (const [clientMessageId, pending] of this.pendingUserMessageByClientId.entries()) {
+      if (pending.threadId !== threadId) continue;
+      this.removePendingUserMessage(clientMessageId);
     }
   }
 

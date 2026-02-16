@@ -94,8 +94,14 @@ class SummaryService:
             provider_config={},
             model=task_cfg.model,
             messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
+                {
+                    "role": "system",
+                    "content_parts": [{"type": "content", "text": system_prompt}],
+                },
+                {
+                    "role": "user",
+                    "content_parts": [{"type": "content", "text": user_prompt}],
+                },
             ],
             temperature=task_cfg.temperature,
             tools=None,

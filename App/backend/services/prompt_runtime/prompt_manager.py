@@ -385,7 +385,21 @@ class PromptManager:
         env = create_environment(fragment_map=fragment_map)
 
         system_prompt = render_template(env, system_template, template_data)
-        memory_prompt = render_template(env, memory_template, template_data) if memory_template else ""
+        agent_data = template_data.get("agent") if isinstance(template_data.get("agent"), dict) else {}
+        previous_summaries = agent_data.get("previousSummaries") if isinstance(agent_data, dict) else []
+        relevant_chats = agent_data.get("relevantChats") if isinstance(agent_data, dict) else []
+        has_memory_context = (
+            isinstance(previous_summaries, list)
+            and len(previous_summaries) > 0
+        ) or (
+            isinstance(relevant_chats, list)
+            and len(relevant_chats) > 0
+        )
+        memory_prompt = (
+            render_template(env, memory_template, template_data)
+            if memory_template and has_memory_context
+            else ""
+        )
         prefill = render_template(env, prefill_template, template_data) if prefill_template is not None else None
 
         return PromptBundle(

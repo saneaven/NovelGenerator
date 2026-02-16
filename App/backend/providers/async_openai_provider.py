@@ -126,7 +126,7 @@ class AsyncOpenAIProvider(BaseProvider):
         """
         converted: List[Dict] = []
         for msg in messages:
-            role = msg.get("role")
+            role = msg.get("role", "user")
 
             if role == "tool_results":
                 # OpenAI: separate message per tool result with role "tool"
@@ -137,8 +137,17 @@ class AsyncOpenAIProvider(BaseProvider):
                         "tool_call_id": tr.get("tool_call_id", ""),
                         "content": tr.get("content", "")
                     })
-            else:
-                converted.append(msg)
+                continue
+
+            converted_msg: Dict[str, object] = {
+                "role": role,
+                "content": self._extract_text_content(msg),
+            }
+            tool_calls = msg.get("tool_calls")
+            if role == "assistant" and isinstance(tool_calls, list) and tool_calls:
+                converted_msg["tool_calls"] = tool_calls
+
+            converted.append(converted_msg)
 
         return converted
 
@@ -384,7 +393,9 @@ class AsyncOpenAIProvider(BaseProvider):
 
         # Check if prefill has unclosed <thinking> tag - parser should start inside thinking block
         # Always parse <thinking> tags from text content to prevent leakage into regular content
-        prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
+        prefill_has_thinking = (
+            has_unclosed_thinking_tag(converted_messages) if thinking_mode == "custom" else False
+        )
         parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
         native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
         last_finish_reason = None

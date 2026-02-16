@@ -19,6 +19,7 @@ import { IconButton } from '../IconButton';
 import { ChevronRight, Trash } from '../icons';
 import { MarkdownRenderer } from '../MarkdownRenderer/MarkdownRenderer';
 import { TextButton } from '../TextButton';
+import { isUuid } from '../../utils/idUtils';
 
 function formatRole(role: string, t: (key: string) => string): string {
   if (role === 'user') return t('subAgent.parentAgent');
@@ -157,6 +158,10 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
 
   const handleDeleteMessage = useCallback((messageId: string) => {
     if (!confirm('Are you sure you want to delete this message?')) return;
+    if (!isUuid(messageId)) {
+      useThreadStore.getState().removeMessage(childThreadId, messageId);
+      return;
+    }
     void (async () => {
       try {
         await threadService.deleteMessage(projectId, childThreadId, messageId);

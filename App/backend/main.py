@@ -294,12 +294,12 @@ async def stream_chat(
                 detail=f"Invalid configuration for provider '{provider}'"
             )
 
-        # Convert messages to dict format with content field for LLM providers
+        # Keep canonical message shape for providers (role + content_parts)
         messages = []
         for msg in request.messages:
             message_dict: dict = {
                 "role": msg.role,
-                "content": msg.get_content_text()
+                "content_parts": [part.model_dump() for part in msg.content_parts],
             }
             # Include tool_calls for assistant messages if present
             if msg.tool_calls:

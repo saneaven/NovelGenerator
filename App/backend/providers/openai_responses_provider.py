@@ -77,12 +77,12 @@ class OpenAIResponsesProvider(BaseProvider):
             self._client = self._build_client()
         return self._client
 
-    def _convert_messages_to_input(self, messages: List[Dict]) -> List[Dict]:
+    def _convert_messages(self, messages: List[Dict]) -> List[Dict]:
         """
-        Convert Chat Completions message format to Responses API input format.
+        Convert canonical messages to Responses API input format.
 
-        Chat Completions format:
-            {"role": "user", "content": "Hello"}
+        Canonical format:
+            {"role": "user", "content_parts": [{"type": "content", "text": "Hello"}]}
 
         Responses API format:
             {"role": "user", "content": [{"type": "input_text", "text": "Hello"}]}
@@ -93,7 +93,7 @@ class OpenAIResponsesProvider(BaseProvider):
         result = []
         for msg in messages:
             role = msg.get("role", "user")
-            content = msg.get("content", "")
+            text_content = self._extract_text_content(msg)
             tool_calls = msg.get("tool_calls")
 
             # Map roles (Chat Completions -> Responses)
@@ -116,8 +116,8 @@ class OpenAIResponsesProvider(BaseProvider):
             if role == "assistant" and tool_calls:
                 content_items = []
                 # Add text content if present (use output_text for assistant)
-                if content:
-                    content_items.append({"type": "output_text", "text": content})
+                if text_content:
+                    content_items.append({"type": "output_text", "text": text_content})
                 # Convert tool_calls to Responses API function_call format
                 for tc in tool_calls:
                     tc_function = tc.get("function", {})
@@ -130,32 +130,12 @@ class OpenAIResponsesProvider(BaseProvider):
                 result.append({"role": role, "content": content_items})
                 continue
 
-            # Convert content to array format
-            if isinstance(content, str):
-                content_items = [{"type": "input_text", "text": content}]
-            elif isinstance(content, list):
-                # Already structured content (e.g., multimodal)
-                content_items = []
-                for item in content:
-                    if isinstance(item, str):
-                        content_items.append({"type": "input_text", "text": item})
-                    elif isinstance(item, dict):
-                        # Handle image_url and other types
-                        if item.get("type") == "text":
-                            content_items.append({
-                                "type": "input_text",
-                                "text": item.get("text", "")
-                            })
-                        elif item.get("type") == "image_url":
-                            content_items.append({
-                                "type": "input_image",
-                                "image_url": item.get("image_url", {}).get("url", "")
-                            })
-                        else:
-                            # Pass through as-is for other types
-                            content_items.append(item)
-            else:
-                content_items = [{"type": "input_text", "text": str(content)}]
+            if not text_content:
+                continue
+
+            # Convert text content to Responses content array format.
+            item_type = "output_text" if role == "assistant" else "input_text"
+            content_items = [{"type": item_type, "text": text_content}]
 
             result.append({"role": role, "content": content_items})
 
@@ -197,7 +177,7 @@ class OpenAIResponsesProvider(BaseProvider):
         client = self._ensure_client()
 
         # Convert messages to Responses API format
-        input_items = self._convert_messages_to_input(messages)
+        input_items = self._convert_messages(messages)
 
         # Build request
         request: Dict = {

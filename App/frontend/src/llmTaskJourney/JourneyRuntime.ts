@@ -242,6 +242,19 @@ async function handleRunEvent(journeyId: string, event: ThreadEvent): Promise<vo
     return;
   }
 
+  if (event.event === 'run:prompt_prepared') {
+    const requestMessages = Array.isArray(payload?.request?.messages) ? payload.request.messages : [];
+    const provider = String(payload?.provider ?? 'unknown');
+    const model = String(payload?.model ?? 'unknown');
+    console.groupCollapsed(
+      `[Prompt Debug][Journey]`,
+    );
+    console.log('journeyId:', journeyId, 'threadId:', threadId, 'runId:', envelope?.run_id);
+    console.log('rendered payload:', payload);
+    console.groupEnd();
+    return;
+  }
+
   if (event.event === 'run:llm_final') {
     const pendingDeltaId = deltaMessageIdByJourneyId.get(journeyId);
     if (pendingDeltaId) {

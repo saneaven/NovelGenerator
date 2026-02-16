@@ -58,8 +58,13 @@ class OpenRouterProvider(AsyncOpenAIProvider):
                 extra["provider"] = provider_payload
 
         if thinking_config:
-            # OpenRouter expects the field name 'reasoning', map from our thinking config
-            extra["reasoning"] = thinking_config
+            reasoning: Dict[str, object] = {}
+            if thinking_config.get("effort") is not None:
+                reasoning["effort"] = thinking_config["effort"]
+            if thinking_config.get("max_tokens") is not None:
+                reasoning["max_tokens"] = thinking_config["max_tokens"]
+            if reasoning:
+                extra["reasoning"] = reasoning
 
         return extra or None
 

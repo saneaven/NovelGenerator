@@ -38,6 +38,31 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   const effectiveThinkingFormat: ThinkingFormat =
     isCustomClaudeSdk ? 'claude' : (config.advanced.thinking_format ?? 'openai');
 
+  const getDefaultThinkingConfig = (
+    provider: ProviderType,
+    thinkingFormat: ThinkingFormat
+  ): ThinkingConfig | undefined => {
+    if (provider === 'custom') {
+      switch (thinkingFormat) {
+        case 'openai': return { effort: 'medium' };
+        case 'claude': return { effort: 'high' };
+        case 'gemini': return undefined;
+      }
+    }
+    switch (provider) {
+      case 'openrouter':
+      case 'openai':
+      case 'xai':
+        return { effort: 'medium' };
+      case 'claude':
+        return { effort: 'high' };
+      case 'gemini':
+        return undefined;
+      default:
+        return { effort: 'medium' };
+    }
+  };
+
   const handleProviderChange = (provider: ProviderType) => {
     // If switching to Gemini and thinking mode is 'off', change to 'model'
     // because Gemini doesn't support disabling thinking
@@ -49,6 +74,11 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
     // Close model browser when provider changes
     setShowModelBrowser(false);
 
+    const effectiveFormat: ThinkingFormat =
+      provider === 'custom'
+        ? (config.advanced.thinking_format ?? 'openai')
+        : 'openai';
+
     onChange({
       ...config,
       provider,
@@ -57,6 +87,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
       advanced: {
         ...config.advanced,
         thinking_mode: newThinkingMode,
+        thinking_config: getDefaultThinkingConfig(provider, effectiveFormat),
       },
     });
   };
@@ -114,11 +145,13 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   };
 
   const handleThinkingFormatChange = (format: ThinkingFormat | undefined) => {
+    const effectiveFormat = format ?? 'openai';
     onChange({
       ...config,
       advanced: {
         ...config.advanced,
         thinking_format: format,
+        thinking_config: getDefaultThinkingConfig(config.provider, effectiveFormat),
       },
     });
   };

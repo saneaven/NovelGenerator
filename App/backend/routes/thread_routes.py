@@ -157,6 +157,7 @@ async def dispatch(
         context_object_ids=req.context_object_ids,
         input_payload=req.input_payload,
         journey_target_ids=req.journey_target_ids,
+        client_message_id=req.client_message_id,
     )
 
     async def gen():

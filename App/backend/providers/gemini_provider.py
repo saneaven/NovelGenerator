@@ -152,16 +152,17 @@ class GeminiProvider(BaseProvider):
         """
         contents: List[types.Content] = []
         system_instruction: Optional[types.Content] = None
+        parser_messages: List[Dict[str, str]] = []
 
         for msg in messages:
-            role = msg.get("role")
-            text = msg.get("content") or ""
+            role = msg.get("role", "user")
+            text = self._extract_text_content(msg)
             tool_calls = msg.get("tool_calls")
 
             if role == "system":
-                if system_instruction is None:
+                if system_instruction is None and text:
                     system_instruction = types.Content(role="user", parts=[types.Part.from_text(text=text)])
-                    continue
+                continue
 
             if role == "tool_results":
                 tool_results = msg.get("tool_results", [])
@@ -174,7 +175,8 @@ class GeminiProvider(BaseProvider):
                                 response={"result": tr.get("content", "")},
                             )
                         )
-                    contents.append(types.Content(role="user", parts=parts))
+                    if parts:
+                        contents.append(types.Content(role="user", parts=parts))
                 continue
 
             mapped_role = "user" if role == "user" else "model"
@@ -191,11 +193,21 @@ class GeminiProvider(BaseProvider):
                     except json.JSONDecodeError:
                         args = {}
                     parts.append(types.Part.from_function_call(name=tc_function.get("name", ""), args=args))
-                contents.append(types.Content(role=mapped_role, parts=parts))
+                if parts:
+                    contents.append(types.Content(role=mapped_role, parts=parts))
+                if text:
+                    parser_messages.append({"role": "assistant", "content": text})
             else:
-                contents.append(types.Content(role=mapped_role, parts=[types.Part.from_text(text=text)]))
+                if text:
+                    contents.append(types.Content(role=mapped_role, parts=[types.Part.from_text(text=text)]))
+                    if mapped_role == "model":
+                        parser_messages.append({"role": "assistant", "content": text})
 
-        return {"contents": contents, "system_instruction": system_instruction}
+        return {
+            "contents": contents,
+            "system_instruction": system_instruction,
+            "parser_messages": parser_messages,
+        }
 
     # ------------------------------------------------------------------ #
     # Streaming
@@ -230,6 +242,7 @@ class GeminiProvider(BaseProvider):
         msg_payload = self._convert_messages(messages)
         contents: List[types.Content] = msg_payload["contents"]
         system_instruction = msg_payload.get("system_instruction")
+        parser_messages = msg_payload.get("parser_messages") if isinstance(msg_payload, dict) else None
 
         if not contents:
             yield self._error_event("Gemini stream request has no messages")
@@ -273,7 +286,8 @@ class GeminiProvider(BaseProvider):
 
         config = types.GenerateContentConfig.model_validate(config_dict)
 
-        prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
+        prefill_source = parser_messages if isinstance(parser_messages, list) else []
+        prefill_has_thinking = has_unclosed_thinking_tag(prefill_source) if thinking_mode == "custom" else False
         parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
         native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
 

@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from jinja2 import BaseLoader, Environment, StrictUndefined, TemplateNotFound
+from jinja2 import BaseLoader, Environment, StrictUndefined, TemplateNotFound, nodes
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -150,7 +150,21 @@ def create_environment(fragment_map: dict[str, str] | None = None) -> Environmen
     return env
 
 
-_RE_INCLUDE = re.compile(r'{%\s*include\s+"([^"]+)"\s*%}')
+def _extract_static_includes(env: Environment, template_text: str) -> list[str]:
+    parsed = env.parse(template_text)
+    includes: list[str] = []
+
+    for include_node in parsed.find_all(nodes.Include):
+        template_expr = include_node.template
+        if isinstance(template_expr, nodes.Const) and isinstance(template_expr.value, str):
+            includes.append(template_expr.value)
+            continue
+        if isinstance(template_expr, (nodes.List, nodes.Tuple)):
+            for item in template_expr.items:
+                if isinstance(item, nodes.Const) and isinstance(item.value, str):
+                    includes.append(item.value)
+
+    return includes
 
 
 def _validate_include_depth(env: Environment, template_text: str, depth: int = 0, seen: set[str] | None = None) -> None:
@@ -159,7 +173,7 @@ def _validate_include_depth(env: Environment, template_text: str, depth: int = 0
     if seen is None:
         seen = set()
 
-    includes = _RE_INCLUDE.findall(template_text)
+    includes = _extract_static_includes(env, template_text)
     if not includes:
         return
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, replace as dc_replace
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -76,6 +76,7 @@ class RunPipeline:
         context_object_ids: list[str] | None = None,
         input_payload: dict[str, Any] | None = None,
         journey_target_ids: list[str] | None = None,
+        client_message_id: str | None = None,
     ) -> UUID:
         """Single entry point. Creates a new run with a user message."""
         trimmed_input = input_text.strip()
@@ -128,8 +129,26 @@ class RunPipeline:
 
             run_id = run.id
             event_ctx = RunEventContext.from_run(run)
+            user_message_payload = {
+                "id": str(user_msg.id),
+                "thread_id": str(user_msg.thread_id),
+                "run_id": str(user_msg.run_id),
+                "seq": int(user_msg.seq),
+                "seq_in_thread": int(user_msg.seq_in_thread) if user_msg.seq_in_thread is not None else None,
+                "role": str(user_msg.role),
+                "data": user_msg.data or {},
+                "created_at": user_msg.created_at.isoformat() if user_msg.created_at else datetime.now(timezone.utc).isoformat(),
+            }
 
         await run_event_emitter.emit_status(event_ctx, "running")
+        await run_event_emitter.emit(
+            "run:user_message_created",
+            event_ctx,
+            {
+                "client_message_id": client_message_id,
+                "message": user_message_payload,
+            },
+        )
         await self._launch_loop(run_id, user_id)
         return run_id
 
@@ -353,7 +372,12 @@ class RunPipeline:
             try:
                 await self._run_loop(run_id, user_id)
             except Exception as exc:
-                await self._handle_run_error(run_id, user_id, str(exc))
+                logger.exception(
+                    "Run loop failed",
+                    extra={"run_id": str(run_id), "user_id": str(user_id)},
+                )
+                error_text = str(exc).strip() or f"{exc.__class__.__name__}: unknown error"
+                await self._handle_run_error(run_id, user_id, error_text)
             finally:
                 self._active_tasks.pop(run_id, None)
 
@@ -362,6 +386,7 @@ class RunPipeline:
 
     async def _handle_run_error(self, run_id: UUID, user_id: UUID, error_text: str) -> None:
         is_sub_agent = False
+        normalized_error = (error_text or "").strip() or "Run failed with unknown error."
         with short_session() as db:
             run = (
                 db.query(RunModel)
@@ -371,15 +396,15 @@ class RunPipeline:
             )
             if run is not None and run.status not in {"completed", "cancelled"}:
                 run.status = "error"
-                run.error = error_text
+                run.error = normalized_error
                 thread = db.query(Thread).filter(Thread.id == run.thread_id).with_for_update().first()
                 if thread is not None:
                     thread.status = "error"
                     is_sub_agent = thread.thread_type == "subAgent"
                 db.commit()
                 event_ctx = RunEventContext.from_run(run)
-                await run_event_emitter.emit_status(event_ctx, "error", error=error_text)
-                await run_event_emitter.emit("run:error", event_ctx, {"error": error_text})
+                await run_event_emitter.emit_status(event_ctx, "error", error=normalized_error)
+                await run_event_emitter.emit("run:error", event_ctx, {"error": normalized_error})
                 if is_sub_agent:
                     await self._handle_child_terminal(run.id, user_id, "error")
 
@@ -486,6 +511,36 @@ class RunPipeline:
                 db, user_id, run, cfg, all_history, bundle, build_opts,
             )
 
+            tool_specs = [
+                {"name": t.name, "description": t.description, "parameters": t.parameters}
+                for t in cfg.tools
+            ] or None
+            await run_event_emitter.emit(
+                "run:prompt_prepared",
+                event_ctx,
+                {
+                    "provider": cfg.provider,
+                    "model": cfg.model,
+                    "request": {
+                        "messages": blocks,
+                        "tools": tool_specs,
+                        "temperature": cfg.temperature,
+                        "max_tokens": cfg.max_output_tokens,
+                        "thinking_mode": cfg.thinking_mode,
+                        "thinking_config": cfg.thinking_config,
+                        "thinking_format": cfg.thinking_format,
+                        "request_format": cfg.request_format,
+                        "tool_choice": "auto",
+                        "native_tool_call": False,
+                    },
+                    "rendered_prompts": {
+                        "system_prompt": bundle.system_prompt,
+                        "memory_prompt": bundle.memory_prompt,
+                        "prefill": bundle.prefill,
+                    },
+                },
+            )
+
         # Stream LLM
         delta_seq = 0
 
@@ -510,7 +565,7 @@ class RunPipeline:
             model=cfg.model,
             messages=blocks,
             temperature=cfg.temperature,
-            tools=[{"name": t.name, "description": t.description, "parameters": t.parameters} for t in cfg.tools] or None,
+            tools=tool_specs,
             max_tokens=cfg.max_output_tokens,
             thinking_mode=cfg.thinking_mode,
             thinking_config=cfg.thinking_config,
@@ -560,6 +615,7 @@ class RunPipeline:
                 event_ctx,
                 {
                     "message_id": str(assistant_message.id),
+                    "language": run.language,
                     "content_parts": snapshot.content_parts,
                     "thinking_details": snapshot.thinking_details,
                     "tool_calls": [
@@ -761,9 +817,6 @@ class RunPipeline:
                     text = part.get("text") if isinstance(part, dict) else None
                     if isinstance(text, str):
                         total += len(text)
-            content = block.get("content")
-            if isinstance(content, str):
-                total += len(content)
         return total // 4
 
     async def _memory_and_cut_loop(

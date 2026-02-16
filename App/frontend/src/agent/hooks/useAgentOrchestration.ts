@@ -15,14 +15,21 @@ import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
 import { useErrorStore } from '../../store/errorStore';
 import type { AgentOrchestrationConfig, AgentOrchestrationReturn, AgentHandlersReturn, ContextIdState } from './types';
-import { getSendBlockingState } from '../../toolCall/viewModel/blockingSelectors';
+import { getSendBlockingState, getSendBlockedReasonMessage } from '../../toolCall/viewModel/blockingSelectors';
 import { getThreadMessageIds } from '../../runtime/selectors/conversationTimeline';
 import { threadOrchestrator } from '../../runtime';
 import { useThreadStore } from '../../runtime';
 import { threadService } from '../../api/threadService';
+import { isUuid } from '../../utils/idUtils';
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return String(error);
 }
 
 export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOrchestrationReturn {
@@ -31,9 +38,20 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
 
   const {
     getSelectedAgentId,
+    getAgents,
+    fetchAgents,
     getAgent,
     selectAgent,
   } = useAgentStore();
+  const selectedAgentIdForRecovery = useAgentStore((state) =>
+    projectId ? state.selectedAgentByProject[projectId] : undefined,
+  );
+  const selectedThreadIdForRecovery = useAgentStore((state) => {
+    if (!projectId) return undefined;
+    const selectedId = state.selectedAgentByProject[projectId];
+    if (!selectedId) return undefined;
+    return state.agentsByProject[projectId]?.find((agent) => agent.id === selectedId)?.thread_id ?? undefined;
+  });
 
   const unifiedStore = useUnifiedObjectStore();
   const settings = useSettings();
@@ -113,8 +131,9 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
   }, [projectId, getSelectedAgentId, getAgent]);
 
   useEffect(() => {
+    const controllersRef = preflightAbortControllerByAgentRef;
     return () => {
-      for (const controller of Object.values(preflightAbortControllerByAgentRef.current)) {
+      for (const controller of Object.values(controllersRef.current)) {
         controller.abort();
       }
     };
@@ -122,17 +141,65 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
 
   // Recover thread state on mount
   useEffect(() => {
-    if (!projectId) return;
-    const agentId = getSelectedAgentId(projectId);
-    if (!agentId) return;
-    const agent = getAgent(projectId, agentId);
-    const threadId = agent?.thread_id;
-    if (!threadId) return;
-
-    void threadOrchestrator.recover(projectId, threadId).catch((error) => {
+    if (!projectId || !selectedThreadIdForRecovery) return;
+    void threadOrchestrator.recover(projectId, selectedThreadIdForRecovery).catch((error) => {
       console.warn('Failed to recover thread state:', error);
     });
-  }, [projectId, getSelectedAgentId, getAgent]);
+  }, [projectId, selectedAgentIdForRecovery, selectedThreadIdForRecovery]);
+
+  // If selection is missing but agents exist, recover selection automatically.
+  const agentRecoveryAttemptedByProjectRef = useRef<Record<string, boolean>>({});
+  useEffect(() => {
+    if (!projectId) return;
+
+    if (selectedAgentIdForRecovery) {
+      delete agentRecoveryAttemptedByProjectRef.current[projectId];
+      return;
+    }
+
+    const existingAgents = getAgents(projectId);
+    if (existingAgents.length > 0) {
+      const fallbackAgentId = existingAgents[0].id;
+      selectAgent(projectId, fallbackAgentId);
+      markAgentViewed(projectId, fallbackAgentId);
+      useAgentUIStore.getState().setPreflightToast(projectId, null);
+      return;
+    }
+
+    if (agentRecoveryAttemptedByProjectRef.current[projectId]) return;
+    agentRecoveryAttemptedByProjectRef.current[projectId] = true;
+
+    void fetchAgents(projectId)
+      .then(() => {
+        const refreshedAgents = getAgents(projectId);
+        if (refreshedAgents.length > 0) {
+          const fallbackAgentId = refreshedAgents[0].id;
+          selectAgent(projectId, fallbackAgentId);
+          markAgentViewed(projectId, fallbackAgentId);
+          useAgentUIStore.getState().setPreflightToast(projectId, null);
+          return;
+        }
+        useAgentUIStore.getState().setPreflightToast(projectId, {
+          type: 'error',
+          message: 'No available agent found. Create a new agent to continue.',
+        });
+      })
+      .catch((error) => {
+        console.error('Failed to recover agent selection:', error);
+        useAgentUIStore.getState().setPreflightToast(projectId, {
+          type: 'error',
+          message: t('agent.memory.preflightFailed', { error: toErrorMessage(error) }),
+        });
+      });
+  }, [
+    projectId,
+    selectedAgentIdForRecovery,
+    getAgents,
+    fetchAgents,
+    selectAgent,
+    markAgentViewed,
+    t,
+  ]);
 
   // ============================================================================
   // Agent handlers
@@ -151,139 +218,170 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     e.preventDefault();
     if (!projectId) return;
 
-    const agentId = getSelectedAgentId(projectId);
-    if (!agentId) return;
-    if (useAgentUIStore.getState().isLoading(projectId, agentId)) return;
+    const uiStore = useAgentUIStore.getState();
+    const setPreflightError = (message: string) => {
+      uiStore.setPreflightToast(projectId, { type: 'error', message });
+    };
 
-    const userInput = input ?? '';
-    const trimmedInput = userInput.trim();
-    if (!trimmedInput) {
-      const threadId = resolveThreadId();
-      if (!threadId) {
-        useAgentUIStore.getState().setPreflightToast(projectId, {
-          type: 'error',
-          message: 'No run is available to resume.',
-        });
-        return;
+    const resolveAgentIdForSend = async (): Promise<string | null> => {
+      let activeAgentId = getSelectedAgentId(projectId);
+      if (activeAgentId) return activeAgentId;
+
+      const existingAgents = getAgents(projectId);
+      if (existingAgents.length > 0) {
+        activeAgentId = existingAgents[0].id;
+        selectAgent(projectId, activeAgentId);
+        markAgentViewed(projectId, activeAgentId);
+        return activeAgentId;
       }
 
-      const thread = useThreadStore.getState().getThread(threadId);
-      if (!thread || !['waiting_tools', 'paused', 'error'].includes(thread.status)) {
-        useAgentUIStore.getState().setPreflightToast(projectId, {
-          type: 'error',
-          message: 'There is no resumable run for this thread.',
-        });
-        return;
-      }
-
-      useAgentUIStore.getState().setLoading(projectId, agentId, true);
-      useAgentUIStore.getState().setPreflightToast(projectId, null);
-
-      const abortController = new AbortController();
-      preflightAbortControllerByAgentRef.current[agentId] = abortController;
       try {
+        await fetchAgents(projectId);
+      } catch (error) {
+        console.warn('Failed to refresh agents before sending:', error);
+      }
+
+      const refreshedAgents = getAgents(projectId);
+      if (refreshedAgents.length > 0) {
+        activeAgentId = refreshedAgents[0].id;
+        selectAgent(projectId, activeAgentId);
+        markAgentViewed(projectId, activeAgentId);
+        return activeAgentId;
+      }
+      return null;
+    };
+
+    try {
+      const userInput = input ?? '';
+      const trimmedInput = userInput.trim();
+
+      const agentId = await resolveAgentIdForSend();
+      const fallbackBlocking = getSendBlockingState({
+        selectedAgentId: agentId ?? undefined,
+        messageIds: [],
+      });
+      if (!agentId) {
+        setPreflightError(
+          getSendBlockedReasonMessage(fallbackBlocking)
+            ?? 'No available agent found. Create a new agent to continue.',
+        );
+        return;
+      }
+
+      if (uiStore.isLoading(projectId, agentId)) {
+        setPreflightError('The agent is still running or applying operations.');
+        return;
+      }
+
+      const threadId = getAgent(projectId, agentId)?.thread_id ?? undefined;
+
+      if (!trimmedInput && !threadId) {
+        setPreflightError('You must enter a message to start the agent.');
+        return;
+      }
+      if (!trimmedInput && threadId) {
+        // empty input on existing thread → resume
         await threadOrchestrator.resume({
           projectId,
           threadId,
+        });
+        return;
+      }
+
+      const threadStatus = threadId ? useThreadStore.getState().getThread(threadId)?.status : undefined;
+      const messageIds = threadId ? getThreadMessageIds(threadId) : [];
+      const sendBlockingState = getSendBlockingState({
+        selectedAgentId: agentId,
+        messageIds,
+        toolCallsByMessageId: useThreadStore.getState().toolCallsByMessageId,
+        threadStatus,
+      });
+      if (sendBlockingState.blocked) {
+        const reason = getSendBlockedReasonMessage(sendBlockingState)
+          ?? 'Resolve pending operations before sending.';
+        setPreflightError(reason);
+        return;
+      }
+
+      const missingMainLanguageObjects = getObjectsMissingMainLanguage(projectId, mainLanguage);
+      if (missingMainLanguageObjects.length > 0) {
+        const objectNames = missingMainLanguageObjects
+          .map(obj => {
+            const availableLanguages = Object.keys(obj.data || {});
+            const fallbackLang = availableLanguages[0];
+            const data = fallbackLang ? obj.data[fallbackLang] : {};
+            const name = (data as any)?.name || (data as any)?.title || obj.id;
+            const type = obj.type.replace('_', ' ');
+            return `- ${type}: ${name}`;
+          })
+          .join('\n');
+
+        const confirmMessage = `The following objects only have content in a sub-language (not ${mainLanguage}):\n\n${objectNames}\n\nDo you want to send using sub-language content instead?`;
+
+        if (!confirm(confirmMessage)) {
+          setPreflightError('Send cancelled.');
+          return;
+        }
+      }
+
+      clearInput(projectId);
+      uiStore.setLoading(projectId, agentId, true);
+      uiStore.setPreflightToast(projectId, null);
+
+      const abortController = new AbortController();
+      preflightAbortControllerByAgentRef.current[agentId] = abortController;
+
+      try {
+        await threadOrchestrator.dispatch({
+          projectId,
+          threadType: 'agent',
+          threadId: threadId ?? undefined,
+          inputText: trimmedInput,
+          language: mainLanguage,
+          runMode,
+          surface,
+          contextObjectIds: selectedContextIds,
           signal: abortController.signal,
         });
-        delete preflightAbortControllerByAgentRef.current[agentId];
-        useAgentUIStore.getState().setPreflightToast(projectId, null);
       } catch (error) {
         if (isAbortError(error) || abortController.signal.aborted) {
-          useAgentUIStore.getState().setLoading(projectId, agentId, false);
+          uiStore.setInput(projectId, userInput);
+          uiStore.setLoading(projectId, agentId, false);
+          uiStore.setPreflightToast(projectId, null);
           delete preflightAbortControllerByAgentRef.current[agentId];
           return;
         }
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        useAgentUIStore.getState().setPreflightToast(projectId, {
-          type: 'error',
-          message: t('agent.memory.preflightFailed', { error: errorMessage }),
-        });
-        useAgentUIStore.getState().setLoading(projectId, agentId, false);
-        delete preflightAbortControllerByAgentRef.current[agentId];
-      }
-      return;
-    }
 
-    const threadId = resolveThreadId();
-    const messageIds = threadId ? getThreadMessageIds(threadId) : [];
-    const sendBlockingState = getSendBlockingState({
-      selectedAgentId: agentId,
-      messageIds,
-      toolCallsByMessageId: useThreadStore.getState().toolCallsByMessageId,
-    });
-    if (sendBlockingState.blocked) {
-      useAgentUIStore.getState().setPreflightToast(projectId, {
-        type: 'error',
-        message: 'Resolve pending or running operations before sending a new message.',
-      });
-      return;
-    }
-
-    const missingMainLanguageObjects = getObjectsMissingMainLanguage(projectId, mainLanguage);
-    if (missingMainLanguageObjects.length > 0) {
-      const objectNames = missingMainLanguageObjects
-        .map(obj => {
-          const availableLanguages = Object.keys(obj.data || {});
-          const fallbackLang = availableLanguages[0];
-          const data = fallbackLang ? obj.data[fallbackLang] : {};
-          const name = (data as any)?.name || (data as any)?.title || obj.id;
-          const type = obj.type.replace('_', ' ');
-          return `- ${type}: ${name}`;
-        })
-        .join('\n');
-
-      const confirmMessage = `The following objects only have content in a sub-language (not ${mainLanguage}):\n\n${objectNames}\n\nDo you want to send using sub-language content instead?`;
-
-      if (!confirm(confirmMessage)) {
-        return;
-      }
-    }
-
-    clearInput(projectId);
-    useAgentUIStore.getState().setLoading(projectId, agentId, true);
-    useAgentUIStore.getState().setPreflightToast(projectId, null);
-
-    const abortController = new AbortController();
-    preflightAbortControllerByAgentRef.current[agentId] = abortController;
-
-    try {
-      await threadOrchestrator.dispatch({
-        projectId,
-        threadType: 'agent',
-        threadId: threadId ?? undefined,
-        inputText: trimmedInput,
-        language: mainLanguage,
-        runMode,
-        surface,
-        contextObjectIds: selectedContextIds,
-        signal: abortController.signal,
-      });
-    } catch (error) {
-      if (isAbortError(error) || abortController.signal.aborted) {
-        useAgentUIStore.getState().setInput(projectId, userInput);
-        useAgentUIStore.getState().setLoading(projectId, agentId, false);
-        useAgentUIStore.getState().setPreflightToast(projectId, null);
+        console.error('Failed to dispatch:', error);
+        setPreflightError(t('agent.memory.preflightFailed', { error: toErrorMessage(error) }));
+        uiStore.setInput(projectId, userInput);
+        uiStore.setLoading(projectId, agentId, false);
         delete preflightAbortControllerByAgentRef.current[agentId];
         return;
       }
 
-      console.error('Failed to dispatch:', error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      useAgentUIStore.getState().setPreflightToast(projectId, {
-        type: 'error',
-        message: t('agent.memory.preflightFailed', { error: errorMessage }),
-      });
-      useAgentUIStore.getState().setInput(projectId, userInput);
-      useAgentUIStore.getState().setLoading(projectId, agentId, false);
       delete preflightAbortControllerByAgentRef.current[agentId];
-      return;
+      uiStore.setPreflightToast(projectId, null);
+    } catch (error) {
+      console.error('Agent submit failed:', error);
+      setPreflightError(t('agent.memory.preflightFailed', { error: toErrorMessage(error) }));
     }
-
-    delete preflightAbortControllerByAgentRef.current[agentId];
-    useAgentUIStore.getState().setPreflightToast(projectId, null);
-  }, [projectId, getSelectedAgentId, getObjectsMissingMainLanguage, mainLanguage, clearInput, runMode, surface, selectedContextIds, t, resolveThreadId]);
+  }, [
+    projectId,
+    getSelectedAgentId,
+    getAgents,
+    fetchAgents,
+    getAgent,
+    selectAgent,
+    markAgentViewed,
+    getObjectsMissingMainLanguage,
+    mainLanguage,
+    clearInput,
+    runMode,
+    surface,
+    selectedContextIds,
+    t,
+  ]);
 
   const handleStop = useCallback(() => {
     if (!projectId) return;
@@ -331,6 +429,10 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
 
     const editing = getEditing(projectId);
     if (!editing.messageId) return;
+    if (!isUuid(editing.messageId)) {
+      showError('Edit Failed', 'Message is not synced yet. Please try again once it is saved.');
+      return;
+    }
 
     const threadId = resolveThreadId();
     if (!threadId) {
@@ -373,6 +475,10 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     const threadId = resolveThreadId();
     if (!threadId) {
       showError('Delete Failed', 'Could not find the thread.');
+      return;
+    }
+    if (!isUuid(messageId)) {
+      useThreadStore.getState().removeMessage(threadId, messageId);
       return;
     }
 

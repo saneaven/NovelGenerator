@@ -26,6 +26,7 @@ import { useAgentOrchestration } from '../../../agent/hooks';
 import { runAgentTranslation } from '../../../agent';
 import { buildEditCardsFromToolCallMetadata } from '../../../toolCall';
 import type { ToolCallDecisionMap } from '../../../toolCall/types';
+import { getSendBlockingState, getSendBlockedReasonMessage } from '../../../toolCall/viewModel/blockingSelectors';
 import type { AgentRunMode, WorkspaceSurface } from '../../../types/agentRuntime';
 import {
     threadOrchestrator,
@@ -308,10 +309,12 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     // Conversation timeline — single source of truth for messages
     const { messages: timelineMessages, messageIds: runMessageIds } = useConversationTimeline(selectedThreadId);
 
-    const { toolCallsByMessageId, threadStatus } = useThreadStore(
+    const { toolCallsByMessageId, threadStatus, threadError, pendingToolCallMessageId } = useThreadStore(
         useShallow((state) => ({
             toolCallsByMessageId: state.toolCallsByMessageId,
             threadStatus: selectedThreadId ? state.threadsById[selectedThreadId]?.status : undefined,
+            threadError: selectedThreadId ? state.threadsById[selectedThreadId]?.lastError ?? null : null,
+            pendingToolCallMessageId: selectedThreadId ? state.pendingToolCallMessageByThread[selectedThreadId] : undefined,
         }))
     );
 
@@ -498,6 +501,11 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         [timelineMessages, resolveDisplayInfo]
     );
 
+    const hasStreamingMessage = useMemo(
+        () => timelineMessages.some(m => m.isStreaming),
+        [timelineMessages]
+    );
+
     const lastAssistantMessageId = useMemo(() => {
         for (let i = timelineMessages.length - 1; i >= 0; i--) {
             const msg = timelineMessages[i];
@@ -508,38 +516,17 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         return null;
     }, [timelineMessages]);
 
-    const sendBlockingState = useMemo(() => {
-        if (!selectedAgentId) {
-            return { blocked: false, rootSessionBlocked: false, unresolvedToolCalls: { count: 0 } as { count: number; firstMessageId?: string } };
-        }
-        let unresolvedCount = 0;
-        let firstMessageId: string | undefined;
-        for (const msgId of runMessageIds) {
-            const tcs = toolCallsByMessageId[msgId] ?? [];
-            for (const tc of tcs) {
-                if (tc.status === 'pending' || tc.status === 'running') {
-                    unresolvedCount++;
-                    if (!firstMessageId) firstMessageId = msgId;
-                }
-            }
-        }
-        const rootSessionBlocked = threadStatus === 'running';
-        return {
-            blocked: rootSessionBlocked || unresolvedCount > 0,
-            rootSessionBlocked,
-            unresolvedToolCalls: { count: unresolvedCount, firstMessageId },
-        };
-    }, [selectedAgentId, runMessageIds, toolCallsByMessageId, threadStatus]);
+    const sendBlockingState = useMemo(() => (
+        getSendBlockingState({
+            selectedAgentId,
+            messageIds: runMessageIds,
+            toolCallsByMessageId,
+            threadStatus,
+        })
+    ), [selectedAgentId, runMessageIds, toolCallsByMessageId, threadStatus]);
 
     const sendBlockedReason = useMemo(() => {
-        if (!sendBlockingState.blocked) return null;
-        if (sendBlockingState.unresolvedToolCalls.count > 0) {
-            return `Resolve ${sendBlockingState.unresolvedToolCalls.count} pending operation(s) before sending.`;
-        }
-        if (sendBlockingState.rootSessionBlocked) {
-            return 'The agent is still running or applying operations.';
-        }
-        return 'Resolve pending operations before sending.';
+        return getSendBlockedReasonMessage(sendBlockingState);
     }, [sendBlockingState]);
 
     useEffect(() => {
@@ -733,8 +720,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         if (timelineMessages.length === 0) return undefined;
         const lastMsg = timelineMessages[timelineMessages.length - 1];
         if (lastMsg.isStreaming) return undefined;
-        return 'An error occurred during generation.';
-    }, [timelineMessages, threadStatus]);
+        return threadError || 'An error occurred during generation.';
+    }, [timelineMessages, threadStatus, threadError]);
 
     return (
         <div className={`agent-panel ${isAgentVisible ? 'visible' : 'hidden'}`}>
@@ -908,6 +895,16 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                     </div>
                                                 )}
 
+                                                {!hasEditCards && pendingToolCallMessageId === message.source.id && (
+                                                    <div className="message-function-calls">
+                                                        <div className="typing-indicator">
+                                                            <div className="loading-track">
+                                                                <div className="loading-bar" />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
                                                 {selectedAgentId && hasSubAgentCalls && selectedThreadId && (
                                                     <SubAgentPeekDock
                                                         parentThreadId={selectedThreadId}
@@ -998,6 +995,14 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                         </React.Fragment>
                     );
                 })}
+
+                {isLoading && !hasStreamingMessage && threadStatus === 'running' && (
+                    <div className="typing-indicator">
+                        <div className="loading-track">
+                            <div className="loading-bar" />
+                        </div>
+                    </div>
+                )}
 
                 <div ref={messagesEndRef} />
 

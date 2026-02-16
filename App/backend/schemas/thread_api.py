@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 ThreadType = Literal["agent", "subAgent", "journey"]
@@ -38,6 +38,13 @@ class DispatchRequest(BaseModel):
     journey_kind: JourneyKind | None = None
     input_payload: dict[str, Any] = Field(default_factory=dict)
     journey_target_ids: list[str] = Field(default_factory=list)
+    client_message_id: str | None = None
+
+    @model_validator(mode="after")
+    def validate_client_message_id(self):
+        if self.thread_type != "journey" and not self.client_message_id:
+            raise ValueError("client_message_id is required for agent/subAgent dispatch")
+        return self
 
 
 # ── Tool decisions ──

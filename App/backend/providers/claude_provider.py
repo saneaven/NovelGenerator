@@ -100,12 +100,13 @@ class ClaudeProvider(BaseProvider):
         anthropic_messages: List[Dict] = []
 
         for msg in messages:
-            role = msg.get("role")
-            content = msg.get("content") or ""
+            role = msg.get("role", "user")
+            text = self._extract_text_content(msg)
             tool_calls = msg.get("tool_calls")
 
             if role == "system":
-                system_parts.append(content)
+                if text:
+                    system_parts.append(text)
                 continue
 
             mapped_role = "user" if role == "user" else "assistant"
@@ -128,8 +129,8 @@ class ClaudeProvider(BaseProvider):
             # Handle assistant messages with tool_calls
             if role == "assistant" and tool_calls:
                 content_blocks = []
-                if content:
-                    content_blocks.append({"type": "text", "text": content})
+                if text:
+                    content_blocks.append({"type": "text", "text": text})
                 for tc in tool_calls:
                     tc_function = tc.get("function", {})
                     args_str = tc_function.get("arguments", "{}")
@@ -145,7 +146,7 @@ class ClaudeProvider(BaseProvider):
                     })
                 anthropic_messages.append({"role": mapped_role, "content": content_blocks})
             else:
-                anthropic_messages.append({"role": mapped_role, "content": content})
+                anthropic_messages.append({"role": mapped_role, "content": text})
 
         system_prompt = "\n\n".join(system_parts) if system_parts else None
         return system_prompt, anthropic_messages
@@ -241,7 +242,9 @@ class ClaudeProvider(BaseProvider):
         if additional_body:
             request = merge_user_overrides(request, additional_body)
 
-        prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
+        prefill_has_thinking = (
+            has_unclosed_thinking_tag(anthropic_messages) if thinking_mode == "custom" else False
+        )
         parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
         native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
 

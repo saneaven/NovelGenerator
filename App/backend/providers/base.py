@@ -9,6 +9,24 @@ class BaseProvider(ABC):
     def __init__(self, config: Dict):
         self.config = config
 
+    @staticmethod
+    def _extract_text_content(message: Dict) -> str:
+        """Extract canonical text content from content_parts."""
+        parts = message.get("content_parts")
+        if not isinstance(parts, list):
+            return ""
+
+        chunks: List[str] = []
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") != "content":
+                continue
+            text = part.get("text")
+            if isinstance(text, str) and text:
+                chunks.append(text)
+        return "".join(chunks)
+
     @abstractmethod
     def stream_chat(
         self,
@@ -30,7 +48,7 @@ class BaseProvider(ABC):
         Stream chat completions from the provider
 
         Args:
-            messages: List of message dicts with 'role' and 'content'
+            messages: List of canonical message dicts with 'role' and 'content_parts'
             model: Model identifier
             temperature: Temperature for generation
             tools: Optional tool calling schemas

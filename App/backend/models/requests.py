@@ -61,10 +61,6 @@ class Message(BaseModel):
     tool_calls: Optional[List[ToolCall]] = None
     tool_results: Optional[List[ToolResult]] = None
 
-    def get_content_text(self) -> str:
-        """Extract text content from content_parts for LLM providers"""
-        return "".join(part.text for part in self.content_parts if part.type == "content")
-
 class ChatCompletionRequest(BaseModel):
     messages: List[Message]
     model: str

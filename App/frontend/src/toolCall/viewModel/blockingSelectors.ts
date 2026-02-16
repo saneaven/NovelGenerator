@@ -3,9 +3,14 @@ export interface ToolCallBlockingSummary {
   firstMessageId?: string;
 }
 
+export type SendBlockReason = 'missing_agent' | 'running' | 'pending_tool_calls' | null;
+
 export interface SendBlockingState {
   blocked: boolean;
+  missingAgent: boolean;
+  rootSessionBlocked: boolean;
   unresolvedToolCalls: ToolCallBlockingSummary;
+  reason: SendBlockReason;
 }
 
 /** Any object with a `status` string works (RunToolCall, ThreadToolCall, etc.) */
@@ -42,27 +47,52 @@ export function getSendBlockingState(params: {
   selectedAgentId?: string;
   messageIds: string[];
   toolCallsByMessageId?: Record<string, AnyToolCall[] | undefined>;
+  threadStatus?: string | null;
 }): SendBlockingState {
   const {
     selectedAgentId,
     messageIds,
     toolCallsByMessageId,
+    threadStatus,
   } = params;
 
-  if (!selectedAgentId) {
-    return {
-      blocked: false,
-      unresolvedToolCalls: { count: 0 },
-    };
-  }
-
+  const missingAgent = !selectedAgentId;
+  const rootSessionBlocked = threadStatus === 'running';
   const unresolvedToolCalls = summarizeToolCallBlocking({
     messageIds,
     toolCallsByMessageId: toolCallsByMessageId ?? {},
   });
+  const blocked = missingAgent || rootSessionBlocked || unresolvedToolCalls.count > 0;
+
+  let reason: SendBlockReason = null;
+  if (missingAgent) {
+    reason = 'missing_agent';
+  } else if (unresolvedToolCalls.count > 0) {
+    reason = 'pending_tool_calls';
+  } else if (rootSessionBlocked) {
+    reason = 'running';
+  }
 
   return {
-    blocked: unresolvedToolCalls.count > 0,
+    blocked,
+    missingAgent,
+    rootSessionBlocked,
     unresolvedToolCalls,
+    reason,
   };
+}
+
+export function getSendBlockedReasonMessage(state: SendBlockingState): string | null {
+  if (!state.blocked || !state.reason) return null;
+
+  if (state.reason === 'missing_agent') {
+    return 'Select an agent before sending a message.';
+  }
+  if (state.reason === 'pending_tool_calls') {
+    return `Resolve ${state.unresolvedToolCalls.count} pending operation(s) before sending.`;
+  }
+  if (state.reason === 'running') {
+    return 'The agent is still running or applying operations.';
+  }
+  return 'Resolve pending operations before sending.';
 }

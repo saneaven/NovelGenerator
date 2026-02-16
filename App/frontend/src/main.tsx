@@ -14,6 +14,11 @@ const initialPath = window.location.pathname.replace(/\/+$/, '') || '/'
 if (publicPaths.has(initialPath)) {
   applySystemThemeOnce()
 }
+try {
+  window.localStorage.removeItem('thread-store')
+} catch {
+  // ignore storage cleanup errors
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

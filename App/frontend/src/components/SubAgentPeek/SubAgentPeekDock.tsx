@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
-import { useThreadStore, type ThreadInfo, type ThreadToolCall } from '../../runtime';
+import { threadOrchestrator, useThreadStore, type ThreadInfo, type ThreadToolCall } from '../../runtime';
 import { useFunctionCallUIStore } from '../../toolCall/ui/store';
 import { SubAgentPeekHeader } from './SubAgentPeekHeader';
 import { SubAgentPeekTimeline } from './SubAgentPeekTimeline';
@@ -196,6 +196,50 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
       : prioritizedKeys[0] ?? orderedKeys[0];
     return childEntries.find((e) => e.key === effective);
   }, [childEntries, orderedKeys, selectedKey, prioritizedKeys]);
+
+  const selectedChildThreadId = selectedEntry?.childThreadId;
+  const selectedChildThreadStatus = selectedEntry?.thread.status;
+
+  useEffect(() => {
+    if (!selectedChildThreadId) return;
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const recoverSelectedThread = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      try {
+        await threadOrchestrator.recover(projectId, selectedChildThreadId);
+      } catch (error) {
+        console.warn('Failed to recover sub-agent child thread:', error);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void recoverSelectedThread();
+
+    const shouldPoll =
+      selectedChildThreadStatus === 'running' ||
+      selectedChildThreadStatus === 'waiting_tools' ||
+      selectedChildThreadStatus === 'paused' ||
+      selectedChildThreadStatus === 'error';
+    if (!shouldPoll) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const timer = window.setInterval(() => {
+      void recoverSelectedThread();
+    }, 2000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [projectId, selectedChildThreadId, selectedChildThreadStatus]);
 
   if (childEntries.length === 0 || !selectedEntry) return null;
 

@@ -48,6 +48,43 @@ function parseSseFrame(frame: string): ThreadEvent | null {
   return { event: eventName, data: payload };
 }
 
+function stringifyErrorDetail(detail: unknown): string | null {
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    const normalized = detail
+      .map((item) => {
+        if (!item || typeof item !== 'object') return String(item ?? '').trim();
+        const loc = Array.isArray((item as any).loc) ? (item as any).loc.join('.') : '';
+        const msg = typeof (item as any).msg === 'string' ? (item as any).msg : '';
+        if (loc && msg) return `${loc}: ${msg}`;
+        return msg || loc;
+      })
+      .filter(Boolean)
+      .join(', ');
+    return normalized || null;
+  }
+  if (detail && typeof detail === 'object') {
+    const maybeMessage = (detail as any).message;
+    if (typeof maybeMessage === 'string' && maybeMessage.trim()) {
+      return maybeMessage;
+    }
+    const maybeDetail = (detail as any).detail;
+    if (typeof maybeDetail === 'string' && maybeDetail.trim()) {
+      return maybeDetail;
+    }
+  }
+  return null;
+}
+
+function normalizeStreamError(error: unknown, fallback: string): Error {
+  if (error instanceof Error) return error;
+  const detail = stringifyErrorDetail(error);
+  if (detail) return new Error(detail);
+  return new Error(fallback);
+}
+
 async function streamPostSse(
   path: string,
   body: unknown,
@@ -77,43 +114,50 @@ async function streamPostSse(
   }
 
   const done = (async () => {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body ?? {}),
-      signal: controller.signal,
-    });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body ?? {}),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      const maybeJson = await response.json().catch(() => null);
-      const detail = maybeJson?.detail ?? response.statusText ?? 'Request failed';
-      throw new Error(typeof detail === 'string' ? detail : 'Request failed');
-    }
+      if (!response.ok) {
+        const maybeJson = await response.json().catch(() => null);
+        const detail =
+          stringifyErrorDetail((maybeJson as any)?.detail ?? maybeJson)
+          ?? stringifyErrorDetail(response.statusText)
+          ?? `Request failed (${response.status})`;
+        throw new Error(detail);
+      }
 
-    if (!response.body) return;
+      if (!response.body) return;
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
 
       while (true) {
-        const boundary = buffer.indexOf('\n\n');
-        if (boundary < 0) break;
-        const frame = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-        const parsed = parseSseFrame(frame);
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        while (true) {
+          const boundary = buffer.indexOf('\n\n');
+          if (boundary < 0) break;
+          const frame = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const parsed = parseSseFrame(frame);
+          if (parsed) onEvent(parsed);
+        }
+      }
+
+      if (buffer.trim()) {
+        const parsed = parseSseFrame(buffer);
         if (parsed) onEvent(parsed);
       }
-    }
-
-    if (buffer.trim()) {
-      const parsed = parseSseFrame(buffer);
-      if (parsed) onEvent(parsed);
+    } catch (error) {
+      throw normalizeStreamError(error, 'Failed to stream thread response.');
     }
   })();
 
@@ -128,6 +172,7 @@ export const threadService = {
       thread_id?: string;
       input_text: string;
       language: string;
+      client_message_id?: string;
       run_mode?: string;
       surface?: string;
       context_object_ids?: string[];
