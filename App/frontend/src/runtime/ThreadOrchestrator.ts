@@ -475,10 +475,30 @@ export class ThreadOrchestrator {
           }
           store.patchThread(threadId, statusPatch);
         }
-        if (['completed', 'error', 'cancelled'].includes(payload.status)) {
+        if (payload.status === 'cancelled') {
           this.clearPendingUserMessagesForThread(threadId);
+
+          // cancelled has no follow-up event — handle parent update here
+          const cancelledParentRef = this.childToParentThread.get(threadId);
+          if (cancelledParentRef) {
+            this.childToParentThread.delete(threadId);
+            const parentCalls = store.getToolCalls(cancelledParentRef.messageId);
+            const target = parentCalls.find((tc) => tc.childThreadId === threadId);
+            if (target) {
+              store.upsertToolCalls(cancelledParentRef.messageId, [{
+                ...target,
+                status: 'failed' as const,
+                reason: 'Child sub-agent cancelled',
+                updatedAt: new Date().toISOString(),
+              }]);
+            }
+            void this.autoResumeIfReady(cancelledParentRef.projectId, cancelledParentRef.threadId);
+          }
+
           this.abortPreviousStream(threadId);
         }
+        // For 'completed' and 'error': do NOT abort here.
+        // thread:complete / thread:error handlers will handle cleanup + parent updates.
         break;
       }
 
