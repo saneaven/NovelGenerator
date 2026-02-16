@@ -153,7 +153,7 @@ class RunPipeline:
         return run_id
 
     async def resume(self, *, user_id: UUID, thread_id: UUID) -> None:
-        """Explicit resume after all tool calls are terminal."""
+        """Resume the latest run on a thread, regardless of current status."""
         with short_session() as db:
             thread = db.query(Thread).filter(
                 Thread.id == thread_id, Thread.user_id == user_id,
@@ -163,15 +163,16 @@ class RunPipeline:
 
             run = (
                 db.query(RunModel)
-                .filter(
-                    RunModel.thread_id == thread_id,
-                    RunModel.status.in_(["waiting", "paused", "error"]),
-                )
+                .filter(RunModel.thread_id == thread_id)
                 .order_by(RunModel.run_seq.desc().nullslast())
                 .first()
             )
             if run is None:
-                raise ValueError("No resumable run found")
+                raise ValueError("No run found for this thread")
+
+            # Already running — no-op
+            if run.status == "running":
+                return
 
             run.status = "running"
             thread.status = "running"
