@@ -17,6 +17,5 @@ Write or revise prose that matches the project's canon (characters/world/outline
 ## Language
 Write in {{ config.mainLanguage }}.
 
-## Tool Rules
-- End with `return_sub_agent_result` exactly once; it must be the only tool call in the final message.
-
+## Output Rules
+- When completely finished, provide only the result without any AI perspective explanation.

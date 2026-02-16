@@ -309,12 +309,13 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     // Conversation timeline — single source of truth for messages
     const { messages: timelineMessages, messageIds: runMessageIds } = useConversationTimeline(selectedThreadId);
 
-    const { toolCallsByMessageId, threadStatus, threadError, pendingToolCallMessageId } = useThreadStore(
+    const { toolCallsByMessageId, threadStatus, threadError, pendingToolCallMessageId, isThreadStreamActive } = useThreadStore(
         useShallow((state) => ({
             toolCallsByMessageId: state.toolCallsByMessageId,
             threadStatus: selectedThreadId ? state.threadsById[selectedThreadId]?.status : undefined,
             threadError: selectedThreadId ? state.threadsById[selectedThreadId]?.lastError ?? null : null,
             pendingToolCallMessageId: selectedThreadId ? state.pendingToolCallMessageByThread[selectedThreadId] : undefined,
+            isThreadStreamActive: selectedThreadId ? Boolean(state.activeStreamByThread[selectedThreadId]) : false,
         }))
     );
 
@@ -521,9 +522,9 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             selectedAgentId,
             messageIds: runMessageIds,
             toolCallsByMessageId,
-            threadStatus,
+            isThreadStreamActive,
         })
-    ), [selectedAgentId, runMessageIds, toolCallsByMessageId, threadStatus]);
+    ), [selectedAgentId, runMessageIds, toolCallsByMessageId, isThreadStreamActive]);
 
     const sendBlockedReason = useMemo(() => {
         return getSendBlockedReasonMessage(sendBlockingState);

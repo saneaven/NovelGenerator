@@ -59,14 +59,14 @@ def _serialize_event(event: dict) -> tuple[str, dict]:
     return event_name, payload
 
 
-async def _stream_run_events(
-    run_id: UUID,
+async def _stream_thread_events(
+    thread_id: UUID,
     *,
     trigger: asyncio.Task | None = None,
     after_seq: int | None = None,
 ):
-    """Stream SSE events for a run. Breaks on terminal events."""
-    subscription = run_event_bus.subscribe(run_id, after_seq=after_seq)
+    """Stream SSE events for a thread. Breaks on terminal events."""
+    subscription = run_event_bus.subscribe(thread_id, after_seq=after_seq)
     event_iter = subscription.__aiter__()
 
     try:
@@ -79,7 +79,15 @@ async def _stream_run_events(
                         await trigger
                     break
                 with short_session() as db:
-                    run = db.query(RunModel).filter(RunModel.id == run_id).first()
+                    run = (
+                        db.query(RunModel)
+                        .filter(
+                            RunModel.thread_id == thread_id,
+                            RunModel.status.in_(["running", "waiting", "paused", "error"]),
+                        )
+                        .order_by(RunModel.run_seq.desc().nullslast())
+                        .first()
+                    )
                     if run is not None:
                         await run_event_emitter.emit_heartbeat(run)
                 continue
@@ -87,9 +95,9 @@ async def _stream_run_events(
             event_name, payload = _serialize_event(event)
             yield encode_sse(event_name, payload)
 
-            if event_name in {"run:complete", "run:error"}:
+            if event_name in {"thread:complete", "thread:error"}:
                 break
-            if event_name == "run:status":
+            if event_name == "thread:status":
                 body = payload.get("payload") if isinstance(payload, dict) else None
                 status = body.get("status") if isinstance(body, dict) else None
                 if status in {"waiting", "paused", "cancelled"}:
@@ -146,7 +154,7 @@ async def dispatch(
     db.expunge(thread)
 
     # Dispatch via pipeline
-    run_id = await run_pipeline.dispatch(
+    await run_pipeline.dispatch(
         user_id=current_user.id,
         project_id=project_id,
         thread=thread,
@@ -161,7 +169,7 @@ async def dispatch(
     )
 
     async def gen():
-        async for chunk in _stream_run_events(run_id, after_seq=after_seq):
+        async for chunk in _stream_thread_events(thread_id, after_seq=after_seq):
             yield chunk
 
     return StreamingResponse(
@@ -172,7 +180,6 @@ async def dispatch(
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
             "X-Thread-Id": str(thread_id),
-            "X-Run-Id": str(run_id),
         },
     )
 
@@ -191,17 +198,6 @@ async def tool_decisions(
     _ensure_project(db, user_id=current_user.id, project_id=project_id)
     _get_thread(db, thread_id=thread_id, user_id=current_user.id, project_id=project_id)
 
-    # Find the active run to subscribe to its events
-    run = (
-        db.query(RunModel)
-        .filter(RunModel.thread_id == thread_id, RunModel.status.in_(["waiting", "running", "paused"]))
-        .order_by(RunModel.run_seq.desc().nullslast())
-        .first()
-    )
-    if run is None:
-        raise HTTPException(status_code=404, detail="No active run found")
-    run_id = run.id
-
     async def trigger_apply() -> None:
         await run_pipeline.apply_decisions(
             user_id=current_user.id,
@@ -214,7 +210,7 @@ async def tool_decisions(
     task = asyncio.create_task(trigger_apply())
 
     async def gen():
-        async for chunk in _stream_run_events(run_id, trigger=task, after_seq=after_seq):
+        async for chunk in _stream_thread_events(thread_id, trigger=task, after_seq=after_seq):
             yield chunk
 
     return StreamingResponse(
@@ -225,6 +221,9 @@ async def tool_decisions(
 
 
 # ── Resume ──
+
+SSE_HEADERS = {"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+
 
 @router.post("/{thread_id}/resume")
 async def resume(
@@ -237,15 +236,24 @@ async def resume(
     _ensure_project(db, user_id=current_user.id, project_id=project_id)
     _get_thread(db, thread_id=thread_id, user_id=current_user.id, project_id=project_id)
 
+    # Find latest run regardless of status
     run = (
         db.query(RunModel)
-        .filter(RunModel.thread_id == thread_id, RunModel.status.in_(["waiting", "paused", "error"]))
+        .filter(RunModel.thread_id == thread_id)
         .order_by(RunModel.run_seq.desc().nullslast())
         .first()
     )
     if run is None:
-        raise HTTPException(status_code=404, detail="No resumable run found")
-    run_id = run.id
+        raise HTTPException(status_code=404, detail="No run found for this thread")
+
+    # Already running → send warning SSE and close
+    if run.status == "running":
+        async def warn_gen():
+            yield encode_sse("thread:warning", {
+                "thread_id": str(thread_id),
+                "message": "Run is already in progress",
+            })
+        return StreamingResponse(warn_gen(), media_type="text/event-stream", headers=SSE_HEADERS)
 
     async def trigger_resume() -> None:
         await run_pipeline.resume(user_id=current_user.id, thread_id=thread_id)
@@ -253,14 +261,10 @@ async def resume(
     task = asyncio.create_task(trigger_resume())
 
     async def gen():
-        async for chunk in _stream_run_events(run_id, trigger=task, after_seq=after_seq):
+        async for chunk in _stream_thread_events(thread_id, trigger=task, after_seq=after_seq):
             yield chunk
 
-    return StreamingResponse(
-        gen(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
-    )
+    return StreamingResponse(gen(), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 # ── Pause / Cancel ──
@@ -304,17 +308,6 @@ async def get_state(
     _ensure_project(db, user_id=current_user.id, project_id=project_id)
     thread = _get_thread(db, thread_id=thread_id, user_id=current_user.id, project_id=project_id)
 
-    # Find open run (non-terminal)
-    open_run = (
-        db.query(RunModel)
-        .filter(
-            RunModel.thread_id == thread_id,
-            RunModel.status.notin_(["completed", "cancelled"]),
-        )
-        .order_by(RunModel.run_seq.desc().nullslast())
-        .first()
-    )
-
     # Load all messages for the thread
     messages = (
         db.query(RunMessageModel)
@@ -335,11 +328,24 @@ async def get_state(
         .all()
     )
 
+    last_error_row = (
+        db.query(RunModel.error)
+        .filter(
+            RunModel.thread_id == thread_id,
+            RunModel.status == "error",
+        )
+        .order_by(RunModel.run_seq.desc().nullslast(), RunModel.updated_at.desc())
+        .first()
+    )
+    last_error = str(last_error_row[0]) if last_error_row and last_error_row[0] else None
+    last_event_seq = await run_event_bus.latest_seq(thread_id)
+
     return ThreadStateResponse(
         thread=thread,
-        open_run=open_run,
         messages=[MessageResponse.model_validate(m) for m in messages],
         tool_calls=[ToolCallResponse.model_validate(tc) for tc in tool_calls],
+        last_error=last_error,
+        last_event_seq=last_event_seq,
     )
 
 
@@ -405,7 +411,6 @@ async def patch_message(
         "message": {
             "id": str(message.id),
             "thread_id": str(message.thread_id),
-            "run_id": str(message.run_id),
             "seq": int(message.seq),
             "role": message.role,
             "data": message.data if isinstance(message.data, dict) else {},

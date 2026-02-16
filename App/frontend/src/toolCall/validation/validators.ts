@@ -244,26 +244,6 @@ export const validateRagSearchEnabled: Validator = (_args, toolName, _context) =
   return validResult();
 };
 
-/**
- * Validate that Sub Agent return result contains a non-empty string payload.
- *
- * Note: This only validates arguments. Cross-tool rules (e.g., "must be last and alone")
- * are enforced at the Sub Agent orchestration layer.
- */
-export const validateReturnSubAgentResultArgs: Validator = (args, toolName, _context) => {
-  if (toolName !== 'return_sub_agent_result') return validResult();
-
-  const result = args.result;
-  if (typeof result !== 'string' || !result.trim()) {
-    return invalidResult(
-      'return_sub_agent_result requires a non-empty string field "result". ' +
-      'Call it exactly once, and only as the final, standalone tool call in the Sub Agent invocation.'
-    );
-  }
-
-  return validResult();
-};
-
 // ============================================================================
 // ASYNC VALIDATORS
 // ============================================================================

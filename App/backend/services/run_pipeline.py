@@ -9,6 +9,7 @@ Implements the user's spec:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass, replace as dc_replace
 from datetime import datetime, timezone
@@ -24,6 +25,7 @@ from .auto_approve_policy_service import auto_approve_policy_service
 from .credential_service import credential_service
 from .history_service import history_service
 from .llm_client import llm_client
+from .memory_service import search_memory
 from .prompt_runtime.conversation_builder import ConversationBuildOptions, conversation_builder
 from .prompt_runtime.prompt_manager import prompt_manager
 from .run_event_emitter import RunEventContext, run_event_emitter
@@ -31,6 +33,7 @@ from .run_type_resolver import ResolvedRunConfig, run_type_resolver
 from .settings_service import settings_service
 from .sidecar_client import sidecar_client
 from .summary_service import SummaryMessage, summary_service
+from .token_count_service import count_text_tokens
 from .tool_call_executor import RawToolCall, get_tool_call_executor
 from .tool_schemas import get_auto_approve_category
 
@@ -132,7 +135,6 @@ class RunPipeline:
             user_message_payload = {
                 "id": str(user_msg.id),
                 "thread_id": str(user_msg.thread_id),
-                "run_id": str(user_msg.run_id),
                 "seq": int(user_msg.seq),
                 "seq_in_thread": int(user_msg.seq_in_thread) if user_msg.seq_in_thread is not None else None,
                 "role": str(user_msg.role),
@@ -142,7 +144,7 @@ class RunPipeline:
 
         await run_event_emitter.emit_status(event_ctx, "running")
         await run_event_emitter.emit(
-            "run:user_message_created",
+            "thread:user_message_created",
             event_ctx,
             {
                 "client_message_id": client_message_id,
@@ -262,27 +264,10 @@ class RunPipeline:
                 run.next_message_seq += 1
                 db.add(tool_message)
 
-            # Handle subAgent finalization
-            if applied.subagent_finalize_output is not None and thread.thread_type == "subAgent":
-                run.status = "completed"
-                run.final_output = applied.subagent_finalize_output
-                thread.status = "idle"
-                db.commit()
-
-                final_ctx = RunEventContext.from_run(run)
-                await run_event_emitter.emit_status(final_ctx, "completed")
-                await run_event_emitter.emit("run:complete", final_ctx, {"final_output": run.final_output or ""})
-                await run_event_emitter.emit(
-                    "run:tool_calls_executed", event_ctx,
-                    {"message_id": str(message_id), "tool_calls": tool_rows},
-                )
-                await self._handle_child_terminal(run.id, user_id, "completed")
-                return
-
             db.commit()
 
         await run_event_emitter.emit(
-            "run:tool_calls_executed", event_ctx,
+            "thread:tool_calls_executed", event_ctx,
             {"message_id": str(message_id), "tool_calls": tool_rows},
         )
 
@@ -338,7 +323,7 @@ class RunPipeline:
                 .with_for_update()
                 .first()
             )
-            is_sub_agent = thread.thread_type == "subAgent"
+            is_child_run = run is not None and run.parent_run_id is not None
             if run is not None:
                 run.status = "cancelled"
             thread.status = "idle"
@@ -346,7 +331,7 @@ class RunPipeline:
 
             if run is not None:
                 await run_event_emitter.emit_status(RunEventContext.from_run(run), "cancelled")
-                if is_sub_agent:
+                if is_child_run:
                     await self._handle_child_terminal(run.id, user_id, "cancelled")
 
     # ── Thread-seq helper ──
@@ -386,7 +371,7 @@ class RunPipeline:
         self._active_tasks[run_id] = task
 
     async def _handle_run_error(self, run_id: UUID, user_id: UUID, error_text: str) -> None:
-        is_sub_agent = False
+        is_child_run = False
         normalized_error = (error_text or "").strip() or "Run failed with unknown error."
         with short_session() as db:
             run = (
@@ -401,12 +386,12 @@ class RunPipeline:
                 thread = db.query(Thread).filter(Thread.id == run.thread_id).with_for_update().first()
                 if thread is not None:
                     thread.status = "error"
-                    is_sub_agent = thread.thread_type == "subAgent"
+                is_child_run = run.parent_run_id is not None
                 db.commit()
                 event_ctx = RunEventContext.from_run(run)
                 await run_event_emitter.emit_status(event_ctx, "error", error=normalized_error)
-                await run_event_emitter.emit("run:error", event_ctx, {"error": normalized_error})
-                if is_sub_agent:
+                await run_event_emitter.emit("thread:error", event_ctx, {"error": normalized_error})
+                if is_child_run:
                     await self._handle_child_terminal(run.id, user_id, "error")
 
     # ── Main loop ──
@@ -463,8 +448,8 @@ class RunPipeline:
                         db.commit()
                         event_ctx = RunEventContext.from_run(run)
                         await run_event_emitter.emit_status(event_ctx, "completed")
-                        await run_event_emitter.emit("run:complete", event_ctx, {"final_output": run.final_output})
-                        if thread is not None and thread.thread_type == "subAgent":
+                        await run_event_emitter.emit("thread:complete", event_ctx, {"final_output": run.final_output})
+                        if run.parent_run_id is not None:
                             await self._handle_child_terminal(run.id, user_id, "completed")
                     return
 
@@ -492,7 +477,8 @@ class RunPipeline:
             all_history = captured.messages + current_msgs
 
             # Build prompt bundle & conversation blocks
-            prompt_context = self._build_prompt_context(db, run, thread, cfg)
+            memory_context = await self._build_memory_context(db, run, thread, cfg, all_history)
+            prompt_context = self._build_prompt_context(db, run, thread, memory_context)
             bundle = await prompt_manager.generate_prompt_bundle(db, cfg, prompt_context, user_id, cfg.preset_id)
             thread.captured_history_system_prompt = bundle.system_prompt
             thread.captured_history_prefill = bundle.prefill
@@ -509,7 +495,7 @@ class RunPipeline:
             )
 
             blocks = await self._memory_and_cut_loop(
-                db, user_id, run, cfg, all_history, bundle, build_opts,
+                db, user_id, run, thread, cfg, all_history, bundle, build_opts,
             )
 
             tool_specs = [
@@ -517,7 +503,7 @@ class RunPipeline:
                 for t in cfg.tools
             ] or None
             await run_event_emitter.emit(
-                "run:prompt_prepared",
+                "thread:prompt_prepared",
                 event_ctx,
                 {
                     "provider": cfg.provider,
@@ -549,7 +535,7 @@ class RunPipeline:
             nonlocal delta_seq
             delta_seq += 1
             await run_event_emitter.emit(
-                "run:llm_delta",
+                "thread:llm_delta",
                 event_ctx,
                 {
                     "seq": delta_seq,
@@ -612,7 +598,7 @@ class RunPipeline:
             db.flush()
 
             await run_event_emitter.emit(
-                "run:llm_final",
+                "thread:llm_final",
                 event_ctx,
                 {
                     "message_id": str(assistant_message.id),
@@ -637,10 +623,6 @@ class RunPipeline:
                 for part in snapshot.content_parts
                 if part.get("type") == "content"
             )
-            if thread.thread_type == "subAgent":
-                db.commit()
-                raise ValueError("Sub-agent must call return_sub_agent_result before completion")
-
             db.commit()
             return StepResult(waiting_for_decision=False, completed=True, output_text=output)
 
@@ -686,7 +668,7 @@ class RunPipeline:
         db.flush()
 
         await run_event_emitter.emit(
-            "run:tool_calls",
+            "thread:tool_calls",
             event_ctx,
             {
                 "message_id": str(assistant_message.id),
@@ -727,7 +709,7 @@ class RunPipeline:
                 for row in applied.rows
             ]
             await run_event_emitter.emit(
-                "run:tool_calls_executed",
+                "thread:tool_calls_executed",
                 event_ctx,
                 {"message_id": str(assistant_message.id), "tool_calls": tool_rows},
             )
@@ -761,18 +743,6 @@ class RunPipeline:
                 )
                 run.next_message_seq += 1
                 db.add(tool_message)
-
-            # SubAgent finalization via return_sub_agent_result
-            if applied.subagent_finalize_output is not None and thread.thread_type == "subAgent":
-                run.status = "completed"
-                run.final_output = applied.subagent_finalize_output
-                thread.status = "idle"
-                db.commit()
-                sub_ctx = RunEventContext.from_run(run)
-                await run_event_emitter.emit_status(sub_ctx, "completed")
-                await run_event_emitter.emit("run:complete", sub_ctx, {"final_output": run.final_output or ""})
-                await self._handle_child_terminal(run.id, run.user_id, "completed")
-                return StepResult(waiting_for_decision=False, completed=True, output_text=run.final_output or "")
 
             # Check if any tool calls are still running (sub-agent)
             has_running = any(r.status == "running" for r in applied.rows)
@@ -808,23 +778,179 @@ class RunPipeline:
     # ── Memory & Context Cut Loop ──
 
     @staticmethod
-    def _estimate_tokens(blocks: list[dict[str, Any]]) -> int:
-        """Fast character-based token estimate (~4 chars per token)."""
-        total = 0
+    def _serialize_blocks_for_counting(blocks: list[dict[str, Any]]) -> str:
+        lines: list[str] = []
         for block in blocks:
+            role = str(block.get("role") or "")
+            lines.append(f"[{role}]")
             parts = block.get("content_parts")
             if isinstance(parts, list):
                 for part in parts:
-                    text = part.get("text") if isinstance(part, dict) else None
-                    if isinstance(text, str):
-                        total += len(text)
-        return total // 4
+                    if isinstance(part, dict):
+                        text = part.get("text")
+                        if isinstance(text, str) and text:
+                            lines.append(text)
+            tool_calls = block.get("tool_calls")
+            if isinstance(tool_calls, list):
+                for tc in tool_calls:
+                    if isinstance(tc, dict):
+                        function = tc.get("function") if isinstance(tc.get("function"), dict) else {}
+                        name = function.get("name")
+                        args = function.get("arguments")
+                        if isinstance(name, str) and name:
+                            lines.append(f"tool:{name}")
+                        if isinstance(args, str) and args:
+                            lines.append(args)
+                        elif isinstance(args, dict):
+                            lines.append(json.dumps(args, ensure_ascii=False, separators=(",", ":")))
+        return "\n".join(lines)
+
+    async def _count_prompt_tokens(
+        self,
+        *,
+        db: Session,
+        user_id: UUID,
+        blocks: list[dict[str, Any]],
+        cfg: ResolvedRunConfig,
+    ) -> int:
+        payload_text = self._serialize_blocks_for_counting(blocks)
+        result = await count_text_tokens(
+            db,
+            user_id=user_id,
+            provider=cfg.provider,
+            model=cfg.model,
+            text=payload_text,
+            tokenizer_override=cfg.tokenizer_override,
+            allow_custom_base_url=True,
+        )
+        return result.token_count
+
+    @staticmethod
+    def _last_user_assistant_text(history: list[Any]) -> tuple[str | None, str | None]:
+        last_user: str | None = None
+        last_assistant: str | None = None
+        for msg in reversed(history):
+            role = getattr(msg, "role", None)
+            if role == "user" and last_user is None:
+                last_user = history_service.message_text(msg)
+            elif role == "assistant" and last_assistant is None:
+                last_assistant = history_service.message_text(msg)
+            if last_user is not None and last_assistant is not None:
+                break
+        return last_user, last_assistant
+
+    async def _build_memory_context(
+        self,
+        db: Session,
+        run: RunModel,
+        thread: Thread,
+        cfg: ResolvedRunConfig,
+        history: list[Any],
+    ) -> dict[str, Any]:
+        from ..models.memory_models import MessageMemorySummary
+
+        owner_id = thread.owner_id
+        summaries: list[dict[str, Any]] = []
+        relevant: list[dict[str, Any]] = []
+
+        if not cfg.memory_enabled or owner_id is None:
+            return {
+                "enabled": cfg.memory_enabled,
+                "previous_summaries": summaries,
+                "relevant_chats": relevant,
+            }
+
+        rows = (
+            db.query(MessageMemorySummary)
+            .filter(
+                MessageMemorySummary.user_id == run.user_id,
+                MessageMemorySummary.project_id == run.project_id,
+                MessageMemorySummary.owner_id == owner_id,
+                MessageMemorySummary.language == run.language,
+            )
+            .order_by(MessageMemorySummary.created_at.desc())
+            .limit(5)
+            .all()
+        )
+        summaries = [
+            {
+                "toMessageId": str(row.to_message_id) if row.to_message_id else None,
+                "summaryText": row.summary_text or "",
+                "createdAt": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ]
+
+        last_user, last_assistant = self._last_user_assistant_text(history)
+        queries = [q for q in [last_user, last_assistant] if isinstance(q, str) and q.strip()]
+        if queries:
+            try:
+                rows = await search_memory(
+                    db,
+                    user_id=run.user_id,
+                    project_id=run.project_id,
+                    owner_id=owner_id,
+                    language=run.language,
+                    queries=queries,
+                    top_k_per_query=8,
+                )
+                relevant = [
+                    {
+                        "messageId": str(item.get("message_id")) if item.get("message_id") is not None else None,
+                        "role": str(item.get("role") or ""),
+                        "content": str(item.get("content") or ""),
+                        "createdAt": (
+                            item.get("created_at").isoformat()
+                            if hasattr(item.get("created_at"), "isoformat")
+                            else None
+                        ),
+                        "distance": item.get("distance"),
+                    }
+                    for item in rows
+                ]
+            except Exception as exc:
+                logger.warning("Memory search failed; continuing without relevant chats: %s", exc)
+
+        return {
+            "enabled": cfg.memory_enabled,
+            "previous_summaries": summaries,
+            "relevant_chats": relevant,
+        }
+
+    @staticmethod
+    def _render_memory_block(
+        *,
+        base_memory_prompt: str,
+        memory_context: dict[str, Any],
+        previous_summary: str | None,
+    ) -> str:
+        sections: list[str] = []
+        if previous_summary:
+            sections.append(f"[Conversation Summary]\n{previous_summary}")
+
+        relevant = memory_context.get("relevant_chats")
+        if isinstance(relevant, list) and relevant:
+            lines = ["[Relevant Chats]"]
+            for item in relevant[:8]:
+                if not isinstance(item, dict):
+                    continue
+                role = str(item.get("role") or "unknown")
+                content = str(item.get("content") or "")
+                if content:
+                    lines.append(f"- ({role}) {content}")
+            if len(lines) > 1:
+                sections.append("\n".join(lines))
+
+        if base_memory_prompt.strip():
+            sections.append(base_memory_prompt)
+        return "\n\n".join(section for section in sections if section.strip())
 
     async def _memory_and_cut_loop(
         self,
         db: Session,
         user_id: UUID,
         run: RunModel,
+        thread: Thread,
         cfg: ResolvedRunConfig,
         all_history: list,
         bundle: Any,
@@ -848,21 +974,23 @@ class RunPipeline:
         conversation = list(all_history)
 
         for iteration in range(self.MAX_CONTEXT_CUT_ITERATIONS):
-            if previous_summary:
-                summary_block = f"[Conversation Summary]\n{previous_summary}"
-                augmented_memory = (
-                    f"{summary_block}\n\n{bundle.memory_prompt}"
-                    if bundle.memory_prompt.strip()
-                    else summary_block
-                )
-                augmented_bundle = dc_replace(bundle, memory_prompt=augmented_memory)
-            else:
-                augmented_bundle = bundle
+            memory_context = await self._build_memory_context(db, run, thread, cfg, conversation)
+            memory_prompt = self._render_memory_block(
+                base_memory_prompt=bundle.memory_prompt,
+                memory_context=memory_context,
+                previous_summary=previous_summary,
+            )
+            augmented_bundle = dc_replace(bundle, memory_prompt=memory_prompt)
 
             blocks = conversation_builder.build_conversation_blocks(
                 conversation, augmented_bundle, build_opts,
             )
-            estimated = self._estimate_tokens(blocks)
+            estimated = await self._count_prompt_tokens(
+                db=db,
+                user_id=user_id,
+                blocks=blocks,
+                cfg=cfg,
+            )
             if estimated <= available:
                 return blocks
 
@@ -907,16 +1035,13 @@ class RunPipeline:
             )
 
         # Last resort fallback: build with whatever remains after cut loop.
-        if previous_summary:
-            summary_block = f"[Conversation Summary]\n{previous_summary}"
-            final_memory = (
-                f"{summary_block}\n\n{bundle.memory_prompt}"
-                if bundle.memory_prompt.strip()
-                else summary_block
-            )
-            final_bundle = dc_replace(bundle, memory_prompt=final_memory)
-        else:
-            final_bundle = bundle
+        memory_context = await self._build_memory_context(db, run, thread, cfg, conversation)
+        final_memory = self._render_memory_block(
+            base_memory_prompt=bundle.memory_prompt,
+            memory_context=memory_context,
+            previous_summary=previous_summary,
+        )
+        final_bundle = dc_replace(bundle, memory_prompt=final_memory)
         return conversation_builder.build_conversation_blocks(conversation, final_bundle, build_opts)
 
     # ── Prompt context builder ──
@@ -926,41 +1051,15 @@ class RunPipeline:
         db: Session,
         run: RunModel,
         thread: Thread,
-        cfg: ResolvedRunConfig,
+        memory_context: dict[str, Any],
     ) -> dict[str, Any]:
         """Build the prompt_context dict consumed by prompt_manager."""
         from ..models.db_models import Agent
-        from ..models.memory_models import MessageMemorySummary
 
         agent = None
         owner_id = thread.owner_id
         if thread.thread_type == "agent" and owner_id:
             agent = db.query(Agent).filter(Agent.id == owner_id).first()
-
-        summaries: list[dict[str, Any]] = []
-        relevant: list[dict[str, Any]] = []
-
-        if cfg.memory_enabled and owner_id is not None:
-            rows = (
-                db.query(MessageMemorySummary)
-                .filter(
-                    MessageMemorySummary.user_id == run.user_id,
-                    MessageMemorySummary.project_id == run.project_id,
-                    MessageMemorySummary.owner_id == owner_id,
-                    MessageMemorySummary.language == run.language,
-                )
-                .order_by(MessageMemorySummary.created_at.desc())
-                .limit(5)
-                .all()
-            )
-            summaries = [
-                {
-                    "toMessageId": str(row.to_message_id) if row.to_message_id else None,
-                    "summaryText": row.summary_text or "",
-                    "createdAt": row.created_at.isoformat() if row.created_at else None,
-                }
-                for row in rows
-            ]
 
         return {
             "run": {
@@ -982,9 +1081,9 @@ class RunPipeline:
                 "name": agent.name if agent else None,
             },
             "memory": {
-                "enabled": cfg.memory_enabled,
-                "previous_summaries": summaries,
-                "relevant_chats": relevant,
+                "enabled": bool(memory_context.get("enabled", False)),
+                "previous_summaries": memory_context.get("previous_summaries") or [],
+                "relevant_chats": memory_context.get("relevant_chats") or [],
             },
             "project_data": None,  # prompt_manager will fetch fresh via build_project_data
         }
@@ -1071,12 +1170,12 @@ class RunPipeline:
 
             parent_ctx = RunEventContext.from_run(parent)
             await run_event_emitter.emit(
-                "run:child_end",
+                "thread:child_end",
                 parent_ctx,
                 {"child_run_id": str(child.id), "output": child.final_output or ""},
             )
             await run_event_emitter.emit(
-                "run:tool_calls_executed",
+                "thread:tool_calls_executed",
                 parent_ctx,
                 {
                     "message_id": str(child.parent_run_message_id),
@@ -1148,7 +1247,7 @@ class RunPipeline:
                 return
 
             event_ctx = RunEventContext.from_run(run)
-            await run_event_emitter.emit("run:tools_all_terminal", event_ctx, {})
+            await run_event_emitter.emit("thread:tools_all_terminal", event_ctx, {})
 
     async def _launch_child_if_needed(
         self,

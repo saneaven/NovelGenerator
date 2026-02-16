@@ -47,17 +47,17 @@ export function getSendBlockingState(params: {
   selectedAgentId?: string;
   messageIds: string[];
   toolCallsByMessageId?: Record<string, AnyToolCall[] | undefined>;
-  threadStatus?: string | null;
+  isThreadStreamActive?: boolean;
 }): SendBlockingState {
   const {
     selectedAgentId,
     messageIds,
     toolCallsByMessageId,
-    threadStatus,
+    isThreadStreamActive,
   } = params;
 
   const missingAgent = !selectedAgentId;
-  const rootSessionBlocked = threadStatus === 'running';
+  const rootSessionBlocked = Boolean(isThreadStreamActive);
   const unresolvedToolCalls = summarizeToolCallBlocking({
     messageIds,
     toolCallsByMessageId: toolCallsByMessageId ?? {},

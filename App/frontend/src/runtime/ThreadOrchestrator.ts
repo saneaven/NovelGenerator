@@ -1,8 +1,7 @@
 /**
  * Thread-centric orchestrator.
  *
- * Replaces RuntimeOrchestrator.ts — all operations keyed by threadId.
- * No run IDs exposed to callers (except internally for SSE subscriptions).
+ * All runtime operations are keyed by threadId.
  */
 
 import { threadService, type StreamHandle, type ThreadEvent } from '../api/threadService';
@@ -31,6 +30,24 @@ function parseThreadToolCallStatus(raw: unknown): ThreadToolCallStatus {
   throw new Error(`Invalid tool call status: ${String(raw)}`);
 }
 
+function lifecycleStatusToThreadStatus(status: string): ThreadInfo['status'] {
+  switch (status) {
+    case 'running':
+      return 'running';
+    case 'waiting':
+      return 'waiting_tools';
+    case 'paused':
+      return 'paused';
+    case 'error':
+      return 'error';
+    case 'completed':
+    case 'cancelled':
+      return 'idle';
+    default:
+      return 'idle';
+  }
+}
+
 interface PendingUserMessageRef {
   threadId: string;
   pendingMessageId: string;
@@ -40,7 +57,6 @@ function mapBackendMessage(raw: any): ThreadMessage {
   return {
     id: raw.id,
     threadId: raw.thread_id,
-    runId: raw.run_id,
     seq: raw.seq,
     seqInThread: raw.seq_in_thread ?? null,
     role: raw.role,
@@ -53,7 +69,6 @@ function mapBackendToolCall(raw: any): ThreadToolCall {
   return {
     id: raw.id ?? `${raw.message_id}:${raw.llm_call_id ?? raw.id}`,
     threadId: raw.thread_id,
-    runId: raw.run_id,
     messageId: raw.message_id,
     callSeq: raw.call_seq,
     llmCallId: raw.llm_call_id,
@@ -62,7 +77,6 @@ function mapBackendToolCall(raw: any): ThreadToolCall {
     status: parseThreadToolCallStatus(raw.status),
     reason: raw.reason ?? null,
     result: raw.result ?? null,
-    childRunId: raw.child_run_id ?? null,
     childThreadId: raw.child_thread_id ?? null,
     acceptedAt: raw.accepted_at ?? null,
     createdAt: raw.created_at ?? new Date().toISOString(),
@@ -123,9 +137,6 @@ export class ThreadOrchestrator {
   private lastEventSeqByThread = new Map<string, number>();
   private resumeInFlightByThread = new Set<string>();
   private pendingUserMessageByClientId = new Map<string, PendingUserMessageRef>();
-  private pendingClientMessageIdByRun = new Map<string, string>();
-  // Track which run_id corresponds to which thread for SSE purposes
-  private runIdToThread = new Map<string, string>();
 
   // ── Public API ──
 
@@ -146,17 +157,17 @@ export class ThreadOrchestrator {
   }): Promise<{ threadId: string }> {
     const store = useThreadStore.getState();
     let resolvedThreadId = input.threadId ?? '';
-    const shouldTrackClientMessage =
-      input.threadType !== 'journey' && input.inputText.trim().length > 0;
+    const dispatchAfterSeq = input.afterSeq ?? (
+      resolvedThreadId ? this.lastEventSeqByThread.get(resolvedThreadId) : undefined
+    );
+    const shouldTrackClientMessage = input.threadType !== 'journey' && input.inputText.trim().length > 0;
     const clientMessageId = shouldTrackClientMessage ? createClientMessageId() : undefined;
-    const pendingMessageId =
-      shouldTrackClientMessage && resolvedThreadId ? `pending:user:${clientMessageId}` : undefined;
+    const pendingMessageId = shouldTrackClientMessage && resolvedThreadId ? `pending:user:${clientMessageId}` : undefined;
 
     if (pendingMessageId && clientMessageId && resolvedThreadId) {
       store.appendMessage({
         id: pendingMessageId,
         threadId: resolvedThreadId,
-        runId: '',
         seq: 0,
         seqInThread: null,
         role: 'user',
@@ -200,19 +211,16 @@ export class ThreadOrchestrator {
           if (threadId && !streamAttached) {
             this.abortPreviousStream(threadId);
             this.streamByThread.set(threadId, handle);
+            useThreadStore.getState().setThreadStreamActive(threadId, true);
             this.attachStreamFailureHandler(threadId, handle, 'dispatch');
             streamAttached = true;
-          }
-          const runId = event.data?.run_id;
-          if (runId && clientMessageId) {
-            this.pendingClientMessageIdByRun.set(String(runId), clientMessageId);
           }
           if (resolvedThreadId) {
             this.handleEvent(resolvedThreadId, event);
           }
         },
         { signal: input.signal },
-        input.afterSeq,
+        dispatchAfterSeq,
       );
     } catch (error) {
       if (clientMessageId) {
@@ -224,6 +232,7 @@ export class ThreadOrchestrator {
     if (resolvedThreadId && !streamAttached) {
       this.abortPreviousStream(resolvedThreadId);
       this.streamByThread.set(resolvedThreadId, handle);
+      useThreadStore.getState().setThreadStreamActive(resolvedThreadId, true);
       this.attachStreamFailureHandler(resolvedThreadId, handle, 'dispatch');
       streamAttached = true;
     }
@@ -270,6 +279,7 @@ export class ThreadOrchestrator {
 
     this.abortPreviousStream(input.threadId);
     this.streamByThread.set(input.threadId, handle);
+    useThreadStore.getState().setThreadStreamActive(input.threadId, true);
     this.attachStreamFailureHandler(input.threadId, handle, 'toolDecisions');
   }
 
@@ -289,6 +299,7 @@ export class ThreadOrchestrator {
 
     this.abortPreviousStream(input.threadId);
     this.streamByThread.set(input.threadId, handle);
+    useThreadStore.getState().setThreadStreamActive(input.threadId, true);
     this.attachStreamFailureHandler(input.threadId, handle, 'resume');
   }
 
@@ -306,6 +317,8 @@ export class ThreadOrchestrator {
   async recover(projectId: string, threadId: string): Promise<void> {
     const state = await threadService.getState(projectId, threadId);
     const store = useThreadStore.getState();
+    const recoveredEventSeq = typeof state.last_event_seq === 'number' ? state.last_event_seq : 0;
+    this.lastEventSeqByThread.set(threadId, recoveredEventSeq);
 
     if (state.thread) {
       store.upsertThread(mapBackendThread(state.thread));
@@ -333,16 +346,13 @@ export class ThreadOrchestrator {
       }
     }
 
-    // If there's an active run, re-subscribe to its events
-    if (state.open_run && state.open_run.status === 'running') {
-      const runId = state.open_run.id;
-      this.runIdToThread.set(runId, threadId);
+    if (state.last_error) {
+      store.patchThread(threadId, {
+        status: 'error',
+        lastError: normalizeErrorText(state.last_error) ?? 'An error occurred during generation.',
+      });
     }
-    if (state.open_run && state.open_run.status === 'error') {
-      const recoveredError = normalizeErrorText(state.open_run.error) ?? 'An error occurred during generation.';
-      store.patchThread(threadId, { status: 'error', lastError: recoveredError });
-    }
-
+    store.setThreadStreamActive(threadId, false);
   }
 
   // ── Event handling ──
@@ -358,21 +368,15 @@ export class ThreadOrchestrator {
       this.lastEventSeqByThread.set(threadId, eventSeq);
     }
 
-    // Track run_id → thread mapping
-    const runId = data.run_id;
-    if (runId) {
-      this.runIdToThread.set(runId, threadId);
-    }
-
     const store = useThreadStore.getState();
     const payload = data.payload ?? data;
 
     try {
       switch (event.event) {
-      case 'run:status': {
+      case 'thread:status': {
         const status = payload.status;
         if (status) {
-          const threadStatus = this.runStatusToThreadStatus(status);
+          const threadStatus = lifecycleStatusToThreadStatus(status);
           const statusPatch: Partial<ThreadInfo> = { status: threadStatus };
           if (threadStatus === 'error') {
             statusPatch.lastError = normalizeErrorText(payload.error) ?? 'An error occurred during generation.';
@@ -382,16 +386,13 @@ export class ThreadOrchestrator {
           store.patchThread(threadId, statusPatch);
         }
         if (['completed', 'error', 'cancelled'].includes(payload.status)) {
-          if (runId) {
-            this.clearPendingUserMessageForRun(runId);
-          }
           this.clearPendingUserMessagesForThread(threadId);
           this.abortPreviousStream(threadId);
         }
         break;
       }
 
-      case 'run:user_message_created': {
+      case 'thread:user_message_created': {
         const clientMessageId = typeof payload.client_message_id === 'string'
           ? payload.client_message_id
           : '';
@@ -416,7 +417,6 @@ export class ThreadOrchestrator {
               store.patchMessage(pending.threadId, pending.pendingMessageId, {
                 id: backendMessage.id,
                 threadId: backendMessage.threadId,
-                runId: backendMessage.runId,
                 seq: backendMessage.seq,
                 seqInThread: backendMessage.seqInThread,
                 role: backendMessage.role,
@@ -433,7 +433,7 @@ export class ThreadOrchestrator {
         break;
       }
 
-      case 'run:llm_delta': {
+      case 'thread:llm_delta': {
         const deltaId = `delta:${threadId}`;
         const existingDelta = this.deltaMessageIdByThread.get(threadId);
 
@@ -442,7 +442,6 @@ export class ThreadOrchestrator {
           store.appendMessage({
             id: deltaId,
             threadId,
-            runId: runId ?? '',
             seq: 0,
             seqInThread: null,
             role: 'assistant',
@@ -488,22 +487,19 @@ export class ThreadOrchestrator {
         break;
       }
 
-      case 'run:llm_final': {
-        // Remove delta message
+      case 'thread:llm_final': {
         const deltaId = this.deltaMessageIdByThread.get(threadId);
         if (deltaId) {
           store.removeMessage(threadId, deltaId);
           this.deltaMessageIdByThread.delete(threadId);
         }
 
-        // Add final assistant message
         const msgId = payload.message_id;
         if (msgId) {
           const langKey = payload.language ?? '_final';
           store.appendMessage({
             id: msgId,
             threadId,
-            runId: runId ?? '',
             seq: 0,
             seqInThread: null,
             role: 'assistant',
@@ -516,7 +512,6 @@ export class ThreadOrchestrator {
             createdAt: new Date().toISOString(),
           });
 
-          // Signal that tool call cards are expected for this message
           if (payload.tool_calls?.length > 0) {
             store.setPendingToolCallMessage(threadId, msgId);
           }
@@ -524,13 +519,12 @@ export class ThreadOrchestrator {
         break;
       }
 
-      case 'run:tool_calls': {
+      case 'thread:tool_calls': {
         store.clearPendingToolCallMessage(threadId);
         const messageId = payload.message_id;
         const calls: ThreadToolCall[] = (payload.tool_calls ?? []).map((tc: any) => ({
           id: `${messageId}:${tc.id}`,
           threadId,
-          runId: runId ?? '',
           messageId,
           callSeq: tc.call_seq ?? 0,
           llmCallId: tc.id,
@@ -539,7 +533,6 @@ export class ThreadOrchestrator {
           status: parseThreadToolCallStatus(tc.status ?? 'pending'),
           reason: tc.reason ?? null,
           result: null,
-          childRunId: null,
           acceptedAt: null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -548,7 +541,7 @@ export class ThreadOrchestrator {
         break;
       }
 
-      case 'run:tool_calls_executed': {
+      case 'thread:tool_calls_executed': {
         const messageId = payload.message_id;
         const existing = store.getToolCalls(messageId);
         const updates: ThreadToolCall[] = (payload.tool_calls ?? []).map((tc: any) => {
@@ -557,7 +550,6 @@ export class ThreadOrchestrator {
             ...(prev ?? {
               id: `${messageId}:${tc.id ?? tc.llm_call_id}`,
               threadId,
-              runId: runId ?? '',
               messageId,
               callSeq: 0,
               llmCallId: tc.id ?? tc.llm_call_id,
@@ -568,7 +560,6 @@ export class ThreadOrchestrator {
             status: parseThreadToolCallStatus(tc.status),
             reason: tc.reason ?? null,
             result: tc.result ?? null,
-            childRunId: tc.child_run_id ?? prev?.childRunId ?? null,
             childThreadId: tc.child_thread_id ?? prev?.childThreadId ?? null,
             updatedAt: new Date().toISOString(),
           } as ThreadToolCall;
@@ -577,51 +568,49 @@ export class ThreadOrchestrator {
         break;
       }
 
-      case 'run:complete': {
+      case 'thread:complete': {
         store.patchThread(threadId, { status: 'idle', lastError: null });
-        if (runId) {
-          this.clearPendingUserMessageForRun(runId);
-        }
         this.clearPendingUserMessagesForThread(threadId);
         this.abortPreviousStream(threadId);
         break;
       }
 
-      case 'run:error': {
-        const runError = normalizeErrorText(payload.error) ?? 'An error occurred during generation.';
-        store.patchThread(threadId, { status: 'error', lastError: runError });
-        if (runId) {
-          this.clearPendingUserMessageForRun(runId);
-        }
+      case 'thread:error': {
+        const threadError = normalizeErrorText(payload.error) ?? 'An error occurred during generation.';
+        store.patchThread(threadId, { status: 'error', lastError: threadError });
         this.clearPendingUserMessagesForThread(threadId);
         this.abortPreviousStream(threadId);
         break;
       }
 
-      case 'run:child_start':
-      case 'run:child_end':
-      case 'run:child_waiting':
-      case 'run:step_completed':
-      case 'run:heartbeat':
+      case 'thread:warning': {
+        console.warn('[ThreadOrchestrator] Warning:', payload.message);
+        break;
+      }
+
+      case 'thread:child_start':
+      case 'thread:child_end':
+      case 'thread:child_waiting':
+      case 'thread:step_completed':
+      case 'thread:heartbeat':
         break;
 
-      case 'run:tools_all_terminal': {
+      case 'thread:tools_all_terminal': {
         const projectId = String(data.project_id ?? payload.project_id ?? '');
         if (!projectId) {
-          throw new Error('Missing project_id on run:tools_all_terminal');
+          throw new Error('Missing project_id on thread:tools_all_terminal');
         }
         void this.autoResumeIfReady(projectId, threadId);
         break;
       }
 
-      case 'run:prompt_prepared': {
-        const requestMessages = Array.isArray(payload.request?.messages) ? payload.request.messages : [];
+      case 'thread:prompt_prepared': {
         const provider = payload.provider ?? 'unknown';
         const model = payload.model ?? 'unknown';
         console.groupCollapsed(
           `[Prompt Debug] ${provider}/${model}`,
         );
-        console.log('threadId:', threadId, 'runId:', runId);
+        console.log('threadId:', threadId);
         console.log('rendered payload:', payload);
         console.groupEnd();
         break;
@@ -660,6 +649,7 @@ export class ThreadOrchestrator {
       }
       this.streamByThread.delete(threadId);
     }
+    useThreadStore.getState().setThreadStreamActive(threadId, false);
   }
 
   private attachStreamFailureHandler(
@@ -693,25 +683,8 @@ export class ThreadOrchestrator {
         if (this.streamByThread.get(threadId) === handle) {
           this.streamByThread.delete(threadId);
         }
+        useThreadStore.getState().setThreadStreamActive(threadId, false);
       });
-  }
-
-  private runStatusToThreadStatus(runStatus: string): ThreadInfo['status'] {
-    switch (runStatus) {
-      case 'running':
-        return 'running';
-      case 'waiting':
-        return 'waiting_tools';
-      case 'paused':
-        return 'paused';
-      case 'error':
-        return 'error';
-      case 'completed':
-      case 'cancelled':
-        return 'idle';
-      default:
-        return 'idle';
-    }
   }
 
   private removePendingUserMessage(clientMessageId: string): void {
@@ -719,30 +692,13 @@ export class ThreadOrchestrator {
     if (!pending) return;
     useThreadStore.getState().removeMessage(pending.threadId, pending.pendingMessageId);
     this.pendingUserMessageByClientId.delete(clientMessageId);
-    for (const [runId, trackedClientMessageId] of this.pendingClientMessageIdByRun.entries()) {
-      if (trackedClientMessageId === clientMessageId) {
-        this.pendingClientMessageIdByRun.delete(runId);
-      }
-    }
   }
 
   private consumePendingUserMessage(clientMessageId: string): PendingUserMessageRef | undefined {
     const pending = this.pendingUserMessageByClientId.get(clientMessageId);
     if (!pending) return undefined;
     this.pendingUserMessageByClientId.delete(clientMessageId);
-    for (const [runId, trackedClientMessageId] of this.pendingClientMessageIdByRun.entries()) {
-      if (trackedClientMessageId === clientMessageId) {
-        this.pendingClientMessageIdByRun.delete(runId);
-      }
-    }
     return pending;
-  }
-
-  private clearPendingUserMessageForRun(runId: string): void {
-    const clientMessageId = this.pendingClientMessageIdByRun.get(runId);
-    if (!clientMessageId) return;
-    this.pendingClientMessageIdByRun.delete(runId);
-    this.removePendingUserMessage(clientMessageId);
   }
 
   private clearPendingUserMessagesForThread(threadId: string): void {
@@ -756,7 +712,7 @@ export class ThreadOrchestrator {
     const store = useThreadStore.getState();
     const thread = store.getThread(threadId);
     if (!thread) return false;
-    if (thread.status === 'running') return false;
+    if (store.isThreadStreamActive(threadId)) return false;
     if (!['waiting_tools', 'paused', 'error'].includes(thread.status)) return false;
 
     const messages = [...store.getMessages(threadId)].sort((a, b) => {

@@ -268,18 +268,15 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         return;
       }
 
-      if (uiStore.isLoading(projectId, agentId)) {
-        setPreflightError('The agent is still running or applying operations.');
-        return;
-      }
-
       const threadId = getAgent(projectId, agentId)?.thread_id ?? undefined;
 
-      if (!trimmedInput && !threadId) {
-        setPreflightError('You must enter a message to start the agent.');
-        return;
-      }
-      if (!trimmedInput && threadId) {
+
+      if (!trimmedInput) {
+        if (!threadId) {
+          setPreflightError('Input cannot be empty.');
+          return;
+        }
+        
         // empty input on existing thread → resume
         await threadOrchestrator.resume({
           projectId,
@@ -288,13 +285,15 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         return;
       }
 
-      const threadStatus = threadId ? useThreadStore.getState().getThread(threadId)?.status : undefined;
+      const isThreadStreamActive = threadId
+        ? Boolean(useThreadStore.getState().activeStreamByThread[threadId])
+        : false;
       const messageIds = threadId ? getThreadMessageIds(threadId) : [];
       const sendBlockingState = getSendBlockingState({
         selectedAgentId: agentId,
         messageIds,
         toolCallsByMessageId: useThreadStore.getState().toolCallsByMessageId,
-        threadStatus,
+        isThreadStreamActive,
       });
       if (sendBlockingState.blocked) {
         const reason = getSendBlockedReasonMessage(sendBlockingState)

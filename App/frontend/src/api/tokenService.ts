@@ -2,25 +2,30 @@
  * API service for token counting
  */
 import { apiClient, type RequestOptions } from './client';
+import type { ProviderType, TokenizerOverride } from '../store/settingsStore';
 
 const BASE_PATH = '/api/v1/tokens';
 
 export interface CountTokensRequest {
-  provider: 'claude' | 'gemini';
+  provider: ProviderType;
   model: string;
   text: string;
+  tokenizer_override?: TokenizerOverride;
 }
 
 export interface CountTokensResponse {
   token_count: number;
   provider: string;
   model: string;
+  effective_tokenizer: 'openai' | 'claude' | 'gemini';
+  is_estimate: boolean;
+  fallback_used: boolean;
+  method: 'tiktoken' | 'claude_api' | 'gemini_api';
 }
 
 export const tokenService = {
   /**
-   * Count tokens for the given text using the specified provider's API.
-   * Only supports 'claude' and 'gemini' providers (requires API call).
+   * Count tokens with backend runtime policy (tokenizer override + fallback).
    */
   async countTokens(
     request: CountTokensRequest,

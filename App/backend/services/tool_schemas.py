@@ -265,13 +265,6 @@ KEYWORD_SEARCH = ToolSchemaDef(
     "Search by keyword in project knowledge base.",
     _obj_schema({"keyword": {"type": "string"}, "page": {"type": "integer"}}, ["keyword"]),
 )
-RETURN_SUB_AGENT_RESULT = ToolSchemaDef(
-    "return_sub_agent_result",
-    "Return the final sub-agent result and finish sub-agent run.",
-    _obj_schema({"result": {"type": "string"}}, ["result"]),
-)
-
-
 ALL_TOOL_SCHEMAS: dict[str, ToolSchemaDef] = {
     s.name: s
     for s in [
@@ -302,7 +295,6 @@ ALL_TOOL_SCHEMAS: dict[str, ToolSchemaDef] = {
         READ_MANUSCRIPT,
         RAG_SEARCH,
         KEYWORD_SEARCH,
-        RETURN_SUB_AGENT_RESULT,
     ]
 }
 
@@ -315,7 +307,7 @@ TOOL_SET_SCHEMAS: dict[ToolSetName, list[str]] = {
         "keyword_search",
         "rag_search",
     ],
-    "agent_agent_mode": list(ALL_TOOL_SCHEMAS.keys())[:-1],  # everything except return_sub_agent_result
+    "agent_agent_mode": list(ALL_TOOL_SCHEMAS.keys()),
     "manuscript": ["replace_manuscript", "patch_manuscript"],
     "storyObject": [
         "create_story_object",
@@ -403,7 +395,6 @@ def get_tools_for_set(
     *,
     rag_search_enabled: bool = True,
     dynamic_call_tools: list[ToolSchemaDef] | None = None,
-    include_return_sub_agent_result: bool = False,
 ) -> list[ToolSchemaDef]:
     names = TOOL_SET_SCHEMAS[set_name]
     out: list[ToolSchemaDef] = []
@@ -413,9 +404,6 @@ def get_tools_for_set(
         schema = ALL_TOOL_SCHEMAS.get(name)
         if schema is not None:
             out.append(schema)
-
-    if include_return_sub_agent_result:
-        out.append(RETURN_SUB_AGENT_RESULT)
 
     if dynamic_call_tools:
         out.extend(dynamic_call_tools)
@@ -433,8 +421,6 @@ def get_tool_schema(name: str) -> ToolSchemaDef | None:
 def get_auto_approve_category(tool_name: str) -> AutoApproveCategory | None:
     if tool_name == "rag_search" or tool_name == "keyword_search":
         return "search"
-    if tool_name == "return_sub_agent_result":
-        return "read"
     if tool_name.startswith("call_"):
         return "subAgent"
     if tool_name.startswith("read_"):

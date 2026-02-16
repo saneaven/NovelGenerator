@@ -68,21 +68,10 @@ export interface CallAgentOperationVM extends OperationBaseVM {
   input: string;
 }
 
-/**
- * Internal VM for `return_sub_agent_result`.
- * Kept out of user-facing object taxonomy.
- */
-export interface InternalReadOperationVM extends OperationBaseVM {
-  category: 'read';
-  objectType: 'story_object';
-  internalKind: 'return_sub_agent_result';
-}
-
 export type OperationVM =
   | ObjectOperationVM
   | SearchOperationVM
-  | CallAgentOperationVM
-  | InternalReadOperationVM;
+  | CallAgentOperationVM;
 
 export type OperationSource = 'stored' | 'streaming';
 

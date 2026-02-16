@@ -30,13 +30,6 @@ You will receive:
 
 Use tools when helpful.
 
-When you are completely done, call `return_sub_agent_result` with the full final output in `result`.
-
-Rules:
-- Call `return_sub_agent_result` exactly once per invocation.
-- `return_sub_agent_result` must be the ONLY tool call in the final message.
-- Do other tool calls first; call `return_sub_agent_result` alone as the last step.
-
 Do not summarize unless explicitly requested."""
 
 DEFAULT_SUB_AGENT_USER_PROMPT = "{{input.agentMessage}}"

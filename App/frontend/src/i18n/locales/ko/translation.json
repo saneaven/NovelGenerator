@@ -746,7 +746,6 @@
         "allowedSubAgents": "허용 서브 에이전트",
         "toolFilterPlaceholder": "툴 필터…",
         "toolIdHint": "툴 이름은 call_{id}로 생성됩니다. 소문자 영문/숫자/언더스코어(_)만 사용(1~50자).",
-        "returnResultAlwaysAvailable": "참고: return_sub_agent_result는 항상 사용 가능하며 여기에서 활성화할 필요가 없습니다.",
         "llmConfig": "LLM 설정",
         "useCustomLlmConfig": "전역 서브 에이전트 설정 덮어쓰기",
         "useCustomLlmConfigHint": "비활성화하면 Settings > General > Sub Agents의 전역 설정을 상속합니다.",

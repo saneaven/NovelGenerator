@@ -1,19 +1,14 @@
-import { threadService, type ThreadEvent, type StreamHandle } from '../api/threadService';
 import type { ToolCallDecisionMap } from '../toolCall/types';
 import { useJourneyStore, type Journey } from '../store/journeyStore';
-import type { ToolCallMetadata } from '../llm/requestTypes';
+import type { ChatMessage, ToolCallMetadata } from '../llm/requestTypes';
 import { registerJourneyNotification, updateJourneyNotification } from './notificationHelpers';
 import { generateTempId } from '../utils/tempId';
 import { getJourneySpec, type JourneyKind } from './journeySpecs';
 import type { JourneySpec } from './types';
 import { createChatMessage } from './types';
+import { threadOrchestrator, useThreadStore, resolveRunMessageDisplay, type ThreadMessage, type ThreadToolCall } from '../runtime';
 
-
-const streamByJourneyId = new Map<string, StreamHandle>();
-const lastEventSeqByJourneyId = new Map<string, number>();
-const deltaMessageIdByJourneyId = new Map<string, string>();
-const resumeInFlightByJourneyId = new Set<string>();
-
+let threadStoreSubscribed = false;
 
 function extractUserInput(kind: JourneyKind, input: unknown): string {
   if (kind === 'aiEdit') return (input as any).userRequest || '';
@@ -34,44 +29,6 @@ function getJourneyLanguage(journey: Journey): string {
   if (targets.kind === 'translateObjects') return targets.targetLanguage;
   if (targets.kind === 'aiEdit') return targets.language;
   return 'English';
-}
-
-function mapToolCalls(raw: any[] | undefined): ToolCallMetadata[] {
-  const rows = Array.isArray(raw) ? raw : [];
-  const parseStatus = (status: unknown): ToolCallMetadata['status'] => {
-    if (
-      status === 'validating' ||
-      status === 'pending' ||
-      status === 'processing' ||
-      status === 'running' ||
-      status === 'failed' ||
-      status === 'accepted' ||
-      status === 'rejected' ||
-      status === 'cancelled'
-    ) {
-      return status;
-    }
-    throw new Error(`Invalid tool call status: ${String(status)}`);
-  };
-  return rows.map((row, idx) => ({
-    id: String(row?.id ?? idx + 1),
-    tool_name: String(row?.tool_name ?? ''),
-    arguments: (row?.arguments && typeof row.arguments === 'object' ? row.arguments : {}) as Record<string, unknown>,
-    status: parseStatus(row?.status ?? 'pending'),
-    reason: row?.reason ?? undefined,
-    failureType: row?.failure_type ?? undefined,
-    result: row?.result ?? undefined,
-    acceptedAt: row?.accepted_at ? new Date(row.accepted_at) : undefined,
-  }));
-}
-
-function normalizeStatus(status: string | undefined): Journey['status'] {
-  if (status === 'running') return 'running';
-  if (status === 'waiting' || status === 'paused') return 'pending_confirmation';
-  if (status === 'completed') return 'success';
-  if (status === 'cancelled') return 'cancelled';
-  if (status === 'error') return 'error';
-  return 'running';
 }
 
 function normalizeDecisionKey(id: string): string {
@@ -131,7 +88,6 @@ function buildJourneyDispatchPayload(kind: JourneyKind, input: any, threadId?: s
       },
     };
   } else {
-    // imagePrompt + sceneImage
     const selectedObjectIds = Array.isArray(input.selectedObjectIds) ? input.selectedObjectIds : [];
     base.journey_target_ids = selectedObjectIds;
     base.input_payload = {
@@ -152,296 +108,114 @@ function buildJourneyDispatchPayload(kind: JourneyKind, input: any, threadId?: s
   return base;
 }
 
-function withUpdatedAssistantMessage(
-  journey: Journey,
-  messageId: string,
-  updater: (current: any | undefined) => any,
-): Journey['messages'] {
-  const index = journey.messages.findIndex((msg) => msg.id === messageId);
-  if (index < 0) {
-    const next = updater(undefined);
-    return [...journey.messages, next];
-  }
-  return journey.messages.map((msg, idx) => (idx === index ? updater(msg) : msg));
+function mapToolCallToMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
+  return {
+    id: toolCall.llmCallId,
+    tool_name: toolCall.toolName,
+    arguments: toolCall.arguments,
+    status: toolCall.status,
+    reason: toolCall.reason ?? undefined,
+    result: toolCall.result as any,
+    acceptedAt: toolCall.acceptedAt ? new Date(toolCall.acceptedAt) : undefined,
+  };
 }
 
-async function handleRunEvent(journeyId: string, event: ThreadEvent): Promise<void> {
+function mapThreadMessageToChatMessage(message: ThreadMessage, language: string): ChatMessage | null {
+  if (message.role !== 'user' && message.role !== 'assistant') return null;
+  const resolved = resolveRunMessageDisplay(message, language, '_streaming');
+  return {
+    id: message.id,
+    role: message.role,
+    contentParts: resolved.contentParts as any,
+    timestamp: new Date(message.createdAt),
+    seq: message.seqInThread ?? undefined,
+  };
+}
+
+function deriveJourneyStatus(params: {
+  previousStatus: Journey['status'];
+  threadStatus: string | undefined;
+  hasPendingToolCalls: boolean;
+  streamActive: boolean;
+}): Journey['status'] {
+  const { previousStatus, threadStatus, hasPendingToolCalls, streamActive } = params;
+  if (previousStatus === 'cancelled') return 'cancelled';
+  if (streamActive) return previousStatus === 'applying' ? 'applying' : 'running';
+  if (threadStatus === 'error') return 'error';
+  if (hasPendingToolCalls) return 'pending_confirmation';
+  if (threadStatus === 'waiting_tools' || threadStatus === 'paused') return 'pending_confirmation';
+  if (threadStatus === 'running') return previousStatus === 'applying' ? 'applying' : 'running';
+  if (threadStatus === 'idle') return 'success';
+  return previousStatus;
+}
+
+function syncJourneyFromThread(journeyId: string): void {
   const journeyStore = useJourneyStore.getState();
   const journey = journeyStore.getJourneyById(journeyId);
-  if (!journey) return;
+  if (!journey?.threadId) return;
 
-  const envelope = event.data ?? {};
-  const seqRaw = envelope?.event_seq;
-  const seq = typeof seqRaw === 'number' ? seqRaw : Number(seqRaw);
-  if (Number.isFinite(seq) && seq > 0) {
-    const last = lastEventSeqByJourneyId.get(journeyId) ?? 0;
-    if (seq <= last) return;
-    lastEventSeqByJourneyId.set(journeyId, seq);
-  }
+  const threadState = useThreadStore.getState();
+  const thread = threadState.threadsById[journey.threadId];
+  if (!thread) return;
 
-  const payload = envelope?.payload ?? {};
-  const projectId = envelope?.project_id ? String(envelope.project_id) : getProjectId(journey.kind as JourneyKind, journey.input);
+  const threadMessages = [...(threadState.messagesByThreadId[journey.threadId] ?? [])].sort((a, b) => {
+    const aSeq = a.seqInThread ?? Number.MAX_SAFE_INTEGER;
+    const bSeq = b.seqInThread ?? Number.MAX_SAFE_INTEGER;
+    if (aSeq !== bSeq) return aSeq - bSeq;
+    return a.createdAt.localeCompare(b.createdAt);
+  });
 
-  // Extract threadId from event
-  const threadId = envelope?.thread_id ? String(envelope.thread_id) : journey.threadId;
-  if (threadId && !journey.threadId) {
-    journeyStore.updateJourney(journeyId, { threadId });
-  }
-
-  if (event.event === 'run:status') {
-    const nextStatus = normalizeStatus(payload?.status);
-    journeyStore.updateJourney(journeyId, {
-      status: nextStatus,
-      error: payload?.error,
-    });
-    if (nextStatus === 'cancelled' || nextStatus === 'error' || nextStatus === 'success' || nextStatus === 'pending_confirmation') {
-      const stream = streamByJourneyId.get(journeyId);
-      if (stream) {
-        stream.abort();
-        streamByJourneyId.delete(journeyId);
-      }
+  const language = getJourneyLanguage(journey);
+  const chatMessages: ChatMessage[] = [];
+  for (const message of threadMessages) {
+    const mapped = mapThreadMessageToChatMessage(message, language);
+    if (!mapped) continue;
+    const toolCalls = threadState.toolCallsByMessageId[message.id] ?? [];
+    if (mapped.role === 'assistant' && toolCalls.length > 0) {
+      mapped.toolCalls = toolCalls.map(mapToolCallToMetadata);
     }
-    const updated = journeyStore.getJourneyById(journeyId);
-    if (updated) updateJourneyNotification(journeyId, updated);
-    return;
+    chatMessages.push(mapped);
   }
 
-  if (event.event === 'run:tools_all_terminal') {
-    if (resumeInFlightByJourneyId.has(journeyId)) return;
-    const current = journeyStore.getJourneyById(journeyId);
-    if (!current?.threadId || current.status !== 'pending_confirmation') return;
+  const lastAssistant = [...chatMessages].reverse().find((msg) => msg.role === 'assistant');
+  const hasPendingToolCalls = Boolean(
+    lastAssistant?.toolCalls?.some((tc) => tc.status === 'pending' || tc.status === 'running'),
+  );
 
-    const lastAssistant = [...current.messages].reverse().find((msg) => msg.role === 'assistant');
-    const toolCalls = Array.isArray(lastAssistant?.toolCalls) ? lastAssistant!.toolCalls : [];
-    if (!toolCalls.length) return;
-    const allTerminal = toolCalls.every((toolCall) =>
-      toolCall.status === 'accepted' || toolCall.status === 'rejected' || toolCall.status === 'cancelled',
-    );
-    if (!allTerminal) return;
+  const streamActive = threadState.isThreadStreamActive(journey.threadId);
+  const nextStatus = deriveJourneyStatus({
+    previousStatus: journey.status,
+    threadStatus: thread.status,
+    hasPendingToolCalls,
+    streamActive,
+  });
 
-    resumeInFlightByJourneyId.add(journeyId);
-    journeyStore.updateJourney(journeyId, { status: 'running', error: undefined });
-    try {
-      await openJourneyStream({
-        journeyId,
-        projectId,
-        streamFactory: () =>
-          threadService.resume(
-            projectId,
-            current.threadId!,
-            (resumeEvent) => {
-              void handleRunEvent(journeyId, resumeEvent);
-            },
-            undefined,
-            lastEventSeqByJourneyId.get(journeyId),
-          ),
-      });
-    } finally {
-      resumeInFlightByJourneyId.delete(journeyId);
-    }
-    return;
-  }
+  journeyStore.updateJourney(journeyId, {
+    messages: chatMessages.length > 0 ? chatMessages : journey.messages,
+    status: nextStatus,
+    error: nextStatus === 'error' ? (thread.lastError ?? journey.error) : undefined,
+    warning: undefined,
+  });
 
-  if (event.event === 'run:prompt_prepared') {
-    const requestMessages = Array.isArray(payload?.request?.messages) ? payload.request.messages : [];
-    const provider = String(payload?.provider ?? 'unknown');
-    const model = String(payload?.model ?? 'unknown');
-    console.groupCollapsed(
-      `[Prompt Debug][Journey]`,
-    );
-    console.log('journeyId:', journeyId, 'threadId:', threadId, 'runId:', envelope?.run_id);
-    console.log('rendered payload:', payload);
-    console.groupEnd();
-    return;
-  }
+  const updated = journeyStore.getJourneyById(journeyId);
+  if (updated) updateJourneyNotification(journeyId, updated);
+}
 
-  if (event.event === 'run:llm_final') {
-    const pendingDeltaId = deltaMessageIdByJourneyId.get(journeyId);
-    if (pendingDeltaId) {
-      const filtered = journey.messages.filter((msg) => msg.id !== pendingDeltaId);
-      journeyStore.updateJourney(journeyId, { messages: filtered });
-      deltaMessageIdByJourneyId.delete(journeyId);
-    }
-
-    const refreshed = journeyStore.getJourneyById(journeyId);
-    if (!refreshed) return;
-
-    const messageId = String(payload?.message_id ?? '');
-    if (!messageId) return;
-
-    const contentParts = Array.isArray(payload?.content_parts) ? payload.content_parts : [];
-    const thinkingDetails = Array.isArray(payload?.thinking_details) ? payload.thinking_details : [];
-    let toolCalls: ToolCallMetadata[];
-    try {
-      toolCalls = mapToolCalls(payload?.tool_calls);
-    } catch (error) {
-      journeyStore.updateJourney(journeyId, {
-        status: 'error',
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return;
-    }
-
-    const nextMessages = withUpdatedAssistantMessage(refreshed, messageId, (current) => {
-      if (current) {
-        return {
-          ...current,
-          contentParts,
-          thinking_details: thinkingDetails,
-          toolCalls: toolCalls.length > 0 ? toolCalls : current.toolCalls,
-          timestamp: new Date(),
-        };
-      }
-      return {
-        id: messageId,
-        role: 'assistant',
-        contentParts,
-        thinking_details: thinkingDetails,
-        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-        timestamp: new Date(),
-      };
-    });
-
-    journeyStore.updateJourney(journeyId, { messages: nextMessages });
-    const updated = journeyStore.getJourneyById(journeyId);
-    if (updated) updateJourneyNotification(journeyId, updated);
-    return;
-  }
-
-  if (event.event === 'run:llm_delta') {
-    const contentDelta = typeof payload?.content_delta === 'string' ? payload.content_delta : '';
-    const thinkingDelta = typeof payload?.thinking_delta === 'string' ? payload.thinking_delta : '';
-    const text = contentDelta || thinkingDelta;
-    if (!text) return;
-
-    const current = journeyStore.getJourneyById(journeyId);
-    if (!current) return;
-
-    let deltaId = deltaMessageIdByJourneyId.get(journeyId);
-    if (!deltaId) {
-      deltaId = `delta:${journeyId}`;
-      deltaMessageIdByJourneyId.set(journeyId, deltaId);
-      journeyStore.updateJourney(journeyId, {
-        messages: [
-          ...current.messages,
-          {
-            id: deltaId,
-            role: 'assistant',
-            contentParts: [{ type: 'content', text }],
-            timestamp: new Date(),
-          } as any,
-        ],
-      });
-      return;
-    }
-
-    const nextMessages = withUpdatedAssistantMessage(current, deltaId, (existing) => {
-      const currentParts = Array.isArray(existing?.contentParts) ? existing.contentParts : [];
-      const last = currentParts[currentParts.length - 1];
-      const contentParts =
-        last && last.type === 'content'
-          ? [...currentParts.slice(0, -1), { type: 'content', text: `${String(last.text || '')}${text}` }]
-          : [...currentParts, { type: 'content', text }];
-      return {
-        ...(existing || {
-          id: deltaId,
-          role: 'assistant',
-          timestamp: new Date(),
-        }),
-        contentParts,
-        timestamp: new Date(),
-      };
-    });
-    journeyStore.updateJourney(journeyId, { messages: nextMessages });
-    return;
-  }
-
-  if (event.event === 'run:tool_calls' || event.event === 'run:tool_calls_executed') {
-    const messageId = String(payload?.message_id ?? '');
-    if (!messageId) return;
-    let toolCalls: ToolCallMetadata[];
-    try {
-      toolCalls = mapToolCalls(payload?.tool_calls);
-    } catch (error) {
-      journeyStore.updateJourney(journeyId, {
-        status: 'error',
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return;
-    }
-    const nextMessages = withUpdatedAssistantMessage(journey, messageId, (current) => ({
-      ...(current || {
-        id: messageId,
-        role: 'assistant',
-        contentParts: [],
-        timestamp: new Date(),
-      }),
-      toolCalls,
-      timestamp: new Date(),
-    }));
-    journeyStore.updateJourney(journeyId, {
-      messages: nextMessages,
-      status: event.event === 'run:tool_calls' ? 'pending_confirmation' : journey.status,
-    });
-    const updated = journeyStore.getJourneyById(journeyId);
-    if (updated) updateJourneyNotification(journeyId, updated);
-    return;
-  }
-
-  if (event.event === 'run:complete') {
-    deltaMessageIdByJourneyId.delete(journeyId);
-    journeyStore.updateJourney(journeyId, { status: 'success', error: undefined, activeSessionId: undefined });
-    const updated = journeyStore.getJourneyById(journeyId);
-    if (updated) updateJourneyNotification(journeyId, updated);
-    return;
-  }
-
-  if (event.event === 'run:error') {
-    deltaMessageIdByJourneyId.delete(journeyId);
-    journeyStore.updateJourney(journeyId, {
-      status: 'error',
-      error: String(payload?.error || 'Run failed'),
-      activeSessionId: undefined,
-    });
-    const updated = journeyStore.getJourneyById(journeyId);
-    if (updated) updateJourneyNotification(journeyId, updated);
+function syncAllJourneysFromThreadStore(): void {
+  const journeyStore = useJourneyStore.getState();
+  const journeys = Object.values(journeyStore.journeys).filter((j): j is Journey => Boolean(j));
+  for (const journey of journeys) {
+    if (!journey.threadId) continue;
+    syncJourneyFromThread(journey.id);
   }
 }
 
-async function openJourneyStream(params: {
-  journeyId: string;
-  projectId: string;
-  streamFactory: () => Promise<StreamHandle>;
-}): Promise<void> {
-  const { journeyId, projectId, streamFactory } = params;
-  const existing = streamByJourneyId.get(journeyId);
-  if (existing) {
-    existing.abort();
-    streamByJourneyId.delete(journeyId);
-  }
-
-  const handle = await streamFactory();
-  streamByJourneyId.set(journeyId, handle);
-
-  void handle.done
-    .catch((error) => {
-      const journey = useJourneyStore.getState().getJourneyById(journeyId);
-      if (journey) {
-        useJourneyStore.getState().updateJourney(journeyId, {
-          status: 'error',
-          error: error instanceof Error ? error.message : String(error),
-          activeSessionId: undefined,
-        });
-        const updated = useJourneyStore.getState().getJourneyById(journeyId);
-        if (updated) updateJourneyNotification(journeyId, updated);
-      }
-    })
-    .finally(() => {
-      if (streamByJourneyId.get(journeyId) === handle) {
-        streamByJourneyId.delete(journeyId);
-      }
-      void projectId;
-    });
+function ensureThreadStoreSubscription(): void {
+  if (threadStoreSubscribed) return;
+  threadStoreSubscribed = true;
+  useThreadStore.subscribe(() => {
+    syncAllJourneysFromThreadStore();
+  });
 }
 
 /**
@@ -474,28 +248,14 @@ export async function applyJourneyEdits(params: {
     normalized[normalizeDecisionKey(id)] = decision;
   }
 
-  journeyStore.updateJourney(journeyId, { status: 'applying', error: undefined });
+  journeyStore.updateJourney(journeyId, { status: 'applying', error: undefined, warning: undefined });
 
-  const projectId = getProjectId(journey.kind as JourneyKind, journey.input);
-
-  await openJourneyStream({
-    journeyId,
-    projectId,
-    streamFactory: () =>
-      threadService.toolDecisions(
-        projectId,
-        journey.threadId!,
-        {
-          message_id: lastAssistant.id,
-          decisions: normalized,
-          options: (options && typeof options === 'object') ? options as Record<string, unknown> : undefined,
-        },
-        (event) => {
-          void handleRunEvent(journeyId, event);
-        },
-        undefined,
-        lastEventSeqByJourneyId.get(journeyId),
-      ),
+  await threadOrchestrator.toolDecisions({
+    projectId: getProjectId(journey.kind as JourneyKind, journey.input),
+    threadId: journey.threadId,
+    messageId: lastAssistant.id,
+    decisions: normalized,
+    options: (options && typeof options === 'object') ? options as Record<string, unknown> : undefined,
   });
 }
 
@@ -534,6 +294,8 @@ export const JourneyRuntime = {
    * Start a new journey.
    */
   start<TInput>(kind: JourneyKind, input: TInput): { journeyId: string; sessionId: string } {
+    ensureThreadStoreSubscription();
+
     const journeyId = `llm-journey-${generateTempId()}`;
     const journeyStore = useJourneyStore.getState();
     const spec = getJourneySpec(kind) as JourneySpec<TInput, unknown>;
@@ -567,17 +329,24 @@ export const JourneyRuntime = {
 
     const payload = buildJourneyDispatchPayload(kind, input);
 
-    void openJourneyStream({
-      journeyId,
+    void threadOrchestrator.dispatch({
       projectId,
-      streamFactory: () =>
-        threadService.dispatch(
-          projectId,
-          payload as any,
-          (event) => {
-            void handleRunEvent(journeyId, event);
-          },
-        ),
+      threadType: 'journey',
+      inputText: String(payload.input_text ?? ''),
+      language: String(payload.language ?? 'English'),
+      journeyKind: payload.journey_kind as string,
+      inputPayload: payload.input_payload as Record<string, unknown> | undefined,
+      journeyTargetIds: payload.journey_target_ids as string[] | undefined,
+    }).then(({ threadId }) => {
+      useJourneyStore.getState().updateJourney(journeyId, { threadId, warning: undefined });
+      syncJourneyFromThread(journeyId);
+    }).catch((error) => {
+      useJourneyStore.getState().updateJourney(journeyId, {
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      const updated = useJourneyStore.getState().getJourneyById(journeyId);
+      if (updated) updateJourneyNotification(journeyId, updated);
     });
 
     return { journeyId, sessionId: `journey-thread-${journeyId}` };
@@ -587,6 +356,8 @@ export const JourneyRuntime = {
    * Send feedback to continue a journey (dispatch with existing thread).
    */
   sendFeedback(params: { journeyId: string; text: string }): { sessionId: string } | undefined {
+    ensureThreadStoreSubscription();
+
     const { journeyId, text } = params;
     const trimmed = text.trim();
     const journeyStore = useJourneyStore.getState();
@@ -596,13 +367,6 @@ export const JourneyRuntime = {
     }
 
     if (!trimmed) {
-      if (journey.status !== 'pending_confirmation' && journey.status !== 'error') {
-        journeyStore.updateJourney(journeyId, {
-          warning: 'There is no resumable run for this journey.',
-        });
-        return;
-      }
-
       journeyStore.updateJourney(journeyId, {
         status: 'running',
         error: undefined,
@@ -610,26 +374,17 @@ export const JourneyRuntime = {
       });
 
       const projectId = getProjectId(journey.kind as JourneyKind, journey.input);
-      void openJourneyStream({
-        journeyId,
+      void threadOrchestrator.resume({
         projectId,
-        streamFactory: () =>
-          threadService.resume(
-            projectId,
-            journey.threadId!,
-            (event) => {
-              void handleRunEvent(journeyId, event);
-            },
-            undefined,
-            lastEventSeqByJourneyId.get(journeyId),
-          ),
+        threadId: journey.threadId,
+      }).catch((error) => {
+        journeyStore.updateJourney(journeyId, {
+          status: 'error',
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
 
       return { sessionId: `journey-thread-${journey.threadId}` };
-    }
-
-    if (journey.status === 'running' || journey.status === 'applying') {
-      return;
     }
 
     const projectId = getProjectId(journey.kind as JourneyKind, journey.input);
@@ -644,25 +399,26 @@ export const JourneyRuntime = {
       ],
     });
 
-    void openJourneyStream({
-      journeyId,
+    const payload = buildJourneyDispatchPayload(journey.kind as JourneyKind, journey.input, journey.threadId);
+    payload.input_text = trimmed;
+    payload.language = language;
+
+    void threadOrchestrator.dispatch({
       projectId,
-      streamFactory: () =>
-        threadService.dispatch(
-          projectId,
-          {
-            thread_type: 'journey',
-            thread_id: journey.threadId!,
-            input_text: trimmed,
-            language,
-            journey_kind: journey.kind === 'translateObjects' ? 'translation' : journey.kind === 'sceneImage' ? 'imagePrompt' : journey.kind,
-          },
-          (event) => {
-            void handleRunEvent(journeyId, event);
-          },
-          undefined,
-          lastEventSeqByJourneyId.get(journeyId),
-        ),
+      threadType: 'journey',
+      threadId: journey.threadId,
+      inputText: String(payload.input_text ?? ''),
+      language: String(payload.language ?? 'English'),
+      journeyKind: payload.journey_kind as string,
+      inputPayload: payload.input_payload as Record<string, unknown> | undefined,
+      journeyTargetIds: payload.journey_target_ids as string[] | undefined,
+    }).then(() => {
+      syncJourneyFromThread(journeyId);
+    }).catch((error) => {
+      journeyStore.updateJourney(journeyId, {
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error),
+      });
     });
 
     return { sessionId: `journey-thread-${journey.threadId}` };

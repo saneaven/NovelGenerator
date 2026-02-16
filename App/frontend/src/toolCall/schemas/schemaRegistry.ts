@@ -591,27 +591,6 @@ const KEYWORD_SEARCH: ToolSchema = {
 };
 
 // ============================================================================
-// SUB AGENT
-// ============================================================================
-
-const RETURN_SUB_AGENT_RESULT: ToolSchema = {
-  name: 'return_sub_agent_result',
-  description: 'Return the final Sub Agent output and finish the current Sub Agent invocation.',
-  category: 'read',
-  target: 'sub_agent',
-  parameters: {
-    type: 'object',
-    properties: {
-      result: {
-        type: 'string',
-        description: 'Final Sub Agent output (no summarization; return the full output).',
-      },
-    },
-    required: ['result'],
-  },
-};
-
-// ============================================================================
 // SCHEMA REGISTRY CLASS
 // ============================================================================
 
@@ -664,8 +643,6 @@ class SchemaRegistryClass {
     this.register(KEYWORD_SEARCH);
     this.register(RAG_SEARCH);
 
-    // Sub Agent
-    this.register(RETURN_SUB_AGENT_RESULT);
   }
 
   register(schema: ToolSchema): void {
@@ -810,7 +787,6 @@ export type AutoApproveCategory = 'read' | 'search' | 'create' | 'delete' | 'rep
  */
 export function getAutoApproveCategory(toolName: string): AutoApproveCategory | undefined {
   if (toolName === 'rag_search' || toolName === 'keyword_search') return 'search';
-  if (toolName === 'return_sub_agent_result') return 'read';
   if (toolName.startsWith('call_')) return 'subAgent';
   if (toolName.startsWith('read_')) return 'read';
   if (toolName.startsWith('create_')) return 'create';

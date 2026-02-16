@@ -26,7 +26,5 @@ Design or refine characters so they fit the story goals, world rules, and outlin
 ## Language
 Write in {{ config.mainLanguage }}.
 
-## Tool Rules
-- Call `return_sub_agent_result` exactly once at the end with full output in `result`.
-- It must be the only tool call in the final message.
-
+## Output Rules
+- When completely finished, provide only the result without any AI perspective explanation.

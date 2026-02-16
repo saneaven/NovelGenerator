@@ -25,7 +25,6 @@ export interface ThreadInfo {
 export interface ThreadMessage {
   id: string;
   threadId: string;
-  runId: string;
   seq: number;
   seqInThread: number | null;
   role: 'user' | 'assistant' | 'system' | 'tool';
@@ -36,7 +35,6 @@ export interface ThreadMessage {
 export interface ThreadToolCall {
   id: string;
   threadId: string;
-  runId: string;
   messageId: string;
   callSeq: number;
   llmCallId: string;
@@ -45,7 +43,6 @@ export interface ThreadToolCall {
   status: 'pending' | 'running' | 'accepted' | 'rejected' | 'cancelled';
   reason?: string | null;
   result?: Record<string, unknown> | null;
-  childRunId?: string | null;
   childThreadId?: string | null;
   acceptedAt?: string | null;
   createdAt: string;
@@ -60,6 +57,7 @@ interface ThreadState {
   toolCallsByMessageId: Record<string, ThreadToolCall[] | undefined>;
   /** Maps threadId → messageId for messages expecting tool calls (between llm_final and tool_calls events). */
   pendingToolCallMessageByThread: Record<string, string | undefined>;
+  activeStreamByThread: Record<string, boolean | undefined>;
 
   // Actions — threads
   upsertThread: (thread: ThreadInfo) => void;
@@ -100,6 +98,10 @@ interface ThreadState {
   setPendingToolCallMessage: (threadId: string, messageId: string) => void;
   clearPendingToolCallMessage: (threadId: string) => void;
 
+  // Actions — stream tracking
+  setThreadStreamActive: (threadId: string, active: boolean) => void;
+  isThreadStreamActive: (threadId: string) => boolean;
+
   // Lookups
   findThreadByOwner: (projectId: string, ownerId: string) => ThreadInfo | undefined;
 
@@ -112,6 +114,7 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
   messagesByThreadId: {},
   toolCallsByMessageId: {},
   pendingToolCallMessageByThread: {},
+  activeStreamByThread: {},
 
   // ── Thread actions ──
 
@@ -252,6 +255,13 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
       return { pendingToolCallMessageByThread: rest };
     }),
 
+  setThreadStreamActive: (threadId, active) =>
+    set((s) => ({
+      activeStreamByThread: { ...s.activeStreamByThread, [threadId]: active },
+    })),
+
+  isThreadStreamActive: (threadId) => Boolean(get().activeStreamByThread[threadId]),
+
   // ── Lookups ──
 
   findThreadByOwner: (projectId, ownerId) => {
@@ -264,5 +274,11 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
 
   // ── Bulk ──
 
-  clearAll: () => set({ threadsById: {}, messagesByThreadId: {}, toolCallsByMessageId: {}, pendingToolCallMessageByThread: {} }),
+  clearAll: () => set({
+    threadsById: {},
+    messagesByThreadId: {},
+    toolCallsByMessageId: {},
+    pendingToolCallMessageByThread: {},
+    activeStreamByThread: {},
+  }),
 }));

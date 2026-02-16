@@ -301,7 +301,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
     return schemaRegistry
       .getAll()
       .map((s) => s.name)
-      .filter((name) => !name.startsWith('call_') && name !== 'return_sub_agent_result')
+      .filter((name) => !name.startsWith('call_'))
       .sort();
   }, []);
 
@@ -592,7 +592,6 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
                 />
               ))}
             </div>
-            <div className="sub-agent-editor__hint">{t('settings.promptEditor.subAgentSettings.returnResultAlwaysAvailable')}</div>
           </section>
 
           <section className="sub-agent-editor__section">

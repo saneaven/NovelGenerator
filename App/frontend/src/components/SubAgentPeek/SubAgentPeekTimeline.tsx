@@ -8,6 +8,7 @@ import { collapseContentParts } from '../../agent/utils/contentParts';
 import {
   threadOrchestrator,
   useThreadStore,
+  isBlockingThreadStatus,
   resolveRunMessageDisplay,
   type ThreadMessage,
   type ThreadToolCall,
@@ -83,6 +84,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   );
 
   const threadStatus = thread?.status ?? 'idle';
+  const isBlocking = isBlockingThreadStatus(threadStatus);
 
   const messages = useMemo(() => {
     if (!threadMessages) return [];
@@ -200,7 +202,6 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
         const contentParts = getMessageContentParts(message);
         const text = getMessageText(message);
         const toolCalls = (toolCallsByMessageId[message.id] ?? [])
-          .filter((tc) => tc.toolName !== 'return_sub_agent_result')
           .map(toToolCallMetadata);
         const isLatestAssistant = message.role === 'assistant' && String(message.id) === lastAssistantMessageId;
         const waitingDecision = isLatestAssistant && threadStatus === 'waiting_tools';
@@ -310,7 +311,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
       )}
 
       <div className="sub-agent-peek-actions">
-        {(threadStatus === 'running' || threadStatus === 'waiting_tools') && (
+        {isBlocking && (threadStatus === 'running' || threadStatus === 'waiting_tools') && (
           <TextButton
             size="sm"
             variant="secondary"
@@ -321,7 +322,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
             {t('subAgent.pause')}
           </TextButton>
         )}
-        {(threadStatus === 'paused' || threadStatus === 'error') && (
+        {isBlocking && (threadStatus === 'paused' || threadStatus === 'error') && (
           <>
             <TextButton
               size="sm"

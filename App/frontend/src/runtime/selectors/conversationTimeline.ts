@@ -5,7 +5,6 @@ import { useThreadStore, type ThreadMessage } from '../store/threadStore';
 export interface ConversationMessage {
   id: string;
   threadId: string;
-  runId: string;
   seq: number;
   seqInThread: number | null;
   role: 'user' | 'assistant' | 'system' | 'tool';
@@ -49,7 +48,6 @@ export function useConversationTimeline(threadId: string | undefined): {
       allMessages.push({
         id: msg.id,
         threadId: msg.threadId,
-        runId: msg.runId,
         seq: msg.seq,
         seqInThread: msg.seqInThread,
         role: msg.role,

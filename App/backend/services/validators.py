@@ -288,24 +288,6 @@ def validate_rag_search_enabled(args: dict[str, Any], tool_name: str, ctx: Valid
     return valid_result()
 
 
-def validate_return_sub_agent_result_args(args: dict[str, Any], tool_name: str, ctx: ValidationContext) -> ValidationResult:
-    _ = ctx
-    if tool_name != "return_sub_agent_result":
-        return valid_result()
-    result = args.get("result")
-    if not isinstance(result, str) or not result.strip():
-        return invalid_result(
-            "validate_return_sub_agent_result_args",
-            'return_sub_agent_result requires a non-empty string field "result"',
-        )
-    return valid_result()
-
-
-def validate_sub_agent_return_contract(args: dict[str, Any], tool_name: str, ctx: ValidationContext) -> ValidationResult:
-    # Per-call contract only checks argument validity; cross-call ordering is handled during apply.
-    return validate_return_sub_agent_result_args(args, tool_name, ctx)
-
-
 async def validate_object_exists(args: dict[str, Any], tool_name: str, ctx: ValidationContext) -> ValidationResult:
     if tool_name.startswith("create_"):
         return valid_result()
@@ -466,7 +448,6 @@ GLOBAL_VALIDATORS: list[Validator] = [
     validate_tool_schema,
     validate_tool_allowed_in_session,
     validate_sub_agent_call_input,
-    validate_return_sub_agent_result_args,
 ]
 
 
@@ -498,7 +479,6 @@ TOOL_VALIDATORS: dict[str, list[Validator]] = {
     "read_manuscript": [validate_required_id, validate_object_exists],
     "rag_search": [validate_rag_search_enabled],
     "keyword_search": [],
-    "return_sub_agent_result": [validate_return_sub_agent_result_args, validate_sub_agent_return_contract],
 }
 
 

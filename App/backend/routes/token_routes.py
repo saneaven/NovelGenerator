@@ -8,17 +8,17 @@ from typing import Literal
 from ..auth import get_current_user
 from ..database import get_db
 from ..models.db_models import User
-from ..services.credential_service import CredentialServiceError, credential_service
-from ..services.token_counting_service import count_tokens_claude, count_tokens_gemini
+from ..services.token_count_service import count_text_tokens
 
 router = APIRouter(prefix="/api/v1/tokens", tags=["tokens"])
 
 
 class CountTokensRequest(BaseModel):
     """Request body for token counting."""
-    provider: Literal["claude", "gemini"]
+    provider: Literal["openai", "gemini", "claude", "openrouter", "custom", "xai"]
     model: str
     text: str
+    tokenizer_override: Literal["openai", "claude", "gemini"] | None = None
 
 
 class CountTokensResponse(BaseModel):
@@ -26,6 +26,10 @@ class CountTokensResponse(BaseModel):
     token_count: int
     provider: str
     model: str
+    effective_tokenizer: str
+    is_estimate: bool
+    fallback_used: bool
+    method: Literal["tiktoken", "claude_api", "gemini_api"]
 
 
 @router.post("/count", response_model=CountTokensResponse)
@@ -34,53 +38,27 @@ async def count_tokens(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Count tokens for the given text using the specified provider.
-
-    Supported providers:
-    - claude: Uses Anthropic's count_tokens API
-    - gemini: Uses Google's countTokens API
-    """
+    """Count tokens using the same backend policy as runtime pipeline."""
     try:
-        config = credential_service.get_provider_config(db, current_user.id, request.provider)
-    except CredentialServiceError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    api_key = str(config.get("api_key") or "").strip()
-    if not api_key:
-        raise HTTPException(status_code=400, detail=f"Credential for provider '{request.provider}' not found")
-
-    # SSRF hardening: token counting only supports official endpoints (no user-supplied base_url).
-    base_url = None
-
-    try:
-        if request.provider == "claude":
-            token_count = await count_tokens_claude(
-                text=request.text,
-                model=request.model,
-                api_key=api_key,
-                base_url=base_url,
-            )
-        elif request.provider == "gemini":
-            token_count = await count_tokens_gemini(
-                text=request.text,
-                model=request.model,
-                api_key=api_key,
-                base_url=base_url,
-            )
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported provider: {request.provider}",
-            )
-
-        return CountTokensResponse(
-            token_count=token_count,
+        result = await count_text_tokens(
+            db,
+            user_id=current_user.id,
             provider=request.provider,
             model=request.model,
+            text=request.text,
+            tokenizer_override=request.tokenizer_override,
+            # SSRF hardening for route-level counting.
+            allow_custom_base_url=False,
         )
-
-    except HTTPException:
-        raise
+        return CountTokensResponse(
+            token_count=result.token_count,
+            provider=result.provider,
+            model=result.model,
+            effective_tokenizer=result.effective_tokenizer,
+            is_estimate=result.is_estimate,
+            fallback_used=result.fallback_used,
+            method=result.method,
+        )
     except Exception as e:
         raise HTTPException(
             status_code=502,

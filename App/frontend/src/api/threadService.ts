@@ -237,9 +237,10 @@ export const threadService = {
 
   async getState(projectId: string, threadId: string): Promise<{
     thread: any;
-    open_run: any | null;
     messages: any[];
     tool_calls: any[];
+    last_error: string | null;
+    last_event_seq: number;
   }> {
     return await apiClient.get(buildPath(projectId, `/${encodeURIComponent(threadId)}/state`));
   },

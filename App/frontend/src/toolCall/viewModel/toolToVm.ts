@@ -77,7 +77,6 @@ function getCategory(toolName: string): OperationCategory {
   if (toolName.startsWith('replace_')) return 'replace';
   if (toolName.startsWith('patch_')) return 'patch';
   if (toolName.startsWith('delete_')) return 'delete';
-  if (toolName === 'return_sub_agent_result') return 'read';
   return 'read';
 }
 
@@ -98,10 +97,6 @@ function inferObjectType(toolName: string, args: Record<string, unknown>): {
   objectType?: ObjectType;
   storySubtype?: StoryObjectSubtype;
 } {
-  if (toolName === 'return_sub_agent_result') {
-    return { objectType: 'story_object' };
-  }
-
   if (toolName === 'read_story_object') {
     const argType = typeof args.type === 'string' ? args.type : undefined;
     if (argType === 'basic_info') return { objectType: 'basic_info' };

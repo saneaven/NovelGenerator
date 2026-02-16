@@ -780,7 +780,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
             enabled: d.current.enabled,
             allowed_invocation_modes: d.current.allowed_invocation_modes,
             allowed_tool_names: d.current.allowed_tool_names.filter(
-              (n) => !n.startsWith('call_') && n !== 'return_sub_agent_result'
+              (n) => !n.startsWith('call_')
             ),
             allowed_sub_agent_ids: d.current.allowed_sub_agent_ids,
             use_custom_llm_config: d.current.use_custom_llm_config,

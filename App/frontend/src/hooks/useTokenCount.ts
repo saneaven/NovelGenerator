@@ -30,6 +30,8 @@ export interface UseTokenCountResult {
   error: string | null;
   /** Whether the count is an estimate (tiktoken) vs exact (API) */
   isEstimate: boolean;
+  /** Whether fallback path was used */
+  fallbackUsed: boolean;
 }
 
 // Simple LRU cache for token counts
@@ -68,6 +70,7 @@ export function useTokenCount(options: UseTokenCountOptions): UseTokenCountResul
     isLoading: false,
     error: null,
     isEstimate: true,
+    fallbackUsed: false,
   });
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -87,6 +90,7 @@ export function useTokenCount(options: UseTokenCountOptions): UseTokenCountResul
         isLoading: false,
         error: null,
         isEstimate: true,
+        fallbackUsed: false,
       });
       return;
     }
@@ -97,8 +101,9 @@ export function useTokenCount(options: UseTokenCountOptions): UseTokenCountResul
       setResult({
         tokenCount: cached.tokenCount,
         isLoading: false,
-        error: cached.error || null,
+        error: null,
         isEstimate: cached.isEstimate,
+        fallbackUsed: cached.fallbackUsed,
       });
       return;
     }
@@ -137,8 +142,9 @@ export function useTokenCount(options: UseTokenCountOptions): UseTokenCountResul
         setResult({
           tokenCount: countResult.tokenCount,
           isLoading: false,
-          error: countResult.error || null,
+          error: null,
           isEstimate: countResult.isEstimate,
+          fallbackUsed: countResult.fallbackUsed,
         });
       } catch (error) {
         // Don't update state if aborted
@@ -151,6 +157,7 @@ export function useTokenCount(options: UseTokenCountOptions): UseTokenCountResul
           isLoading: false,
           error: error instanceof Error ? error.message : 'Token counting failed',
           isEstimate: true,
+          fallbackUsed: false,
         });
       }
     }, debounceMs);

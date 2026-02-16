@@ -746,7 +746,6 @@
         "allowedSubAgents": "Allowed Sub Agents",
         "toolFilterPlaceholder": "Filter tools…",
         "toolIdHint": "Used to generate tool name: call_{id}. Lowercase letters, numbers, and underscores only. 1–50 chars.",
-        "returnResultAlwaysAvailable": "Note: return_sub_agent_result is always available and does not need to be enabled here.",
         "llmConfig": "LLM Config",
         "useCustomLlmConfig": "Override global Sub Agents config",
         "useCustomLlmConfigHint": "When disabled, this Sub Agent inherits Settings > General > Sub Agents.",

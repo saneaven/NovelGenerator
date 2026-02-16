@@ -11,7 +11,6 @@ import {
   validateRequiredId,
   validatePatchRequiredFields,
   validateRagSearchEnabled,
-  validateReturnSubAgentResultArgs,
   validateObjectExists,
   validatePatchApplicable,
   validateOutlineParentExists,
@@ -94,7 +93,6 @@ export const TOOL_VALIDATORS: Record<string, Validator[]> = {
   read_outline: [validateRequiredId, validateObjectExists],
   read_manuscript: [validateRequiredId, validateObjectExists],
   rag_search: [validateRagSearchEnabled],
-  return_sub_agent_result: [validateReturnSubAgentResultArgs],
 };
 
 /**

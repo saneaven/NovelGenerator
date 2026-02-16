@@ -10,12 +10,13 @@ from uuid import UUID
 
 
 class RunEventBus(Protocol):
-    async def publish(self, run_id: UUID, event: dict) -> None: ...
-    def subscribe(self, run_id: UUID, *, after_seq: int | None = None) -> AsyncIterator[dict]: ...
+    async def publish(self, thread_id: UUID, event: dict) -> None: ...
+    def subscribe(self, thread_id: UUID, *, after_seq: int | None = None) -> AsyncIterator[dict]: ...
+    async def latest_seq(self, thread_id: UUID) -> int: ...
 
 
 @dataclass
-class _RunChannel:
+class _ThreadChannel:
     subscribers: set[asyncio.Queue] = field(default_factory=set)
     history: deque[dict] = field(default_factory=deque)
     updated_at: datetime = field(default_factory=datetime.utcnow)
@@ -23,7 +24,7 @@ class _RunChannel:
 
 class InMemoryRunEventBus:
     def __init__(self, *, ttl_seconds: int = 900, max_history: int = 512) -> None:
-        self._channels: dict[UUID, _RunChannel] = {}
+        self._channels: dict[UUID, _ThreadChannel] = {}
         self._lock = asyncio.Lock()
         self._ttl = timedelta(seconds=max(ttl_seconds, 60))
         self._max_history = max(int(max_history), 64)
@@ -38,24 +39,24 @@ class InMemoryRunEventBus:
                 await asyncio.sleep(60)
                 cutoff = datetime.utcnow() - self._ttl
                 async with self._lock:
-                    for run_id in list(self._channels.keys()):
-                        channel = self._channels.get(run_id)
+                    for thread_id in list(self._channels.keys()):
+                        channel = self._channels.get(thread_id)
                         if channel is None:
                             continue
                         if channel.subscribers:
                             continue
                         if channel.updated_at < cutoff:
-                            del self._channels[run_id]
+                            del self._channels[thread_id]
 
         self._cleanup_task = asyncio.create_task(_cleanup_loop())
 
-    async def publish(self, run_id: UUID, event: dict) -> None:
+    async def publish(self, thread_id: UUID, event: dict) -> None:
         await self._ensure_cleanup_task()
         async with self._lock:
-            channel = self._channels.get(run_id)
+            channel = self._channels.get(thread_id)
             if channel is None:
-                channel = _RunChannel()
-                self._channels[run_id] = channel
+                channel = _ThreadChannel()
+                self._channels[thread_id] = channel
             channel.updated_at = datetime.utcnow()
             channel.history.append(event)
             while len(channel.history) > self._max_history:
@@ -76,7 +77,7 @@ class InMemoryRunEventBus:
                 except Exception:
                     pass
 
-    def subscribe(self, run_id: UUID, *, after_seq: int | None = None) -> AsyncIterator[dict]:
+    def subscribe(self, thread_id: UUID, *, after_seq: int | None = None) -> AsyncIterator[dict]:
         async def _generator() -> AsyncIterator[dict]:
             await self._ensure_cleanup_task()
 
@@ -84,10 +85,10 @@ class InMemoryRunEventBus:
             backlog: list[dict] = []
 
             async with self._lock:
-                channel = self._channels.get(run_id)
+                channel = self._channels.get(thread_id)
                 if channel is None:
-                    channel = _RunChannel()
-                    self._channels[run_id] = channel
+                    channel = _ThreadChannel()
+                    self._channels[thread_id] = channel
                 if after_seq is None:
                     backlog = list(channel.history)
                 else:
@@ -108,12 +109,20 @@ class InMemoryRunEventBus:
                     yield item
             finally:
                 async with self._lock:
-                    channel = self._channels.get(run_id)
+                    channel = self._channels.get(thread_id)
                     if channel is not None:
                         channel.subscribers.discard(queue)
                         channel.updated_at = datetime.utcnow()
 
         return _generator()
+
+    async def latest_seq(self, thread_id: UUID) -> int:
+        async with self._lock:
+            channel = self._channels.get(thread_id)
+            if channel is None or not channel.history:
+                return 0
+            latest = channel.history[-1]
+            return int(latest.get("event_seq") or 0)
 
 
 run_event_bus = InMemoryRunEventBus()

@@ -112,7 +112,6 @@ class MessageResponse(BaseModel):
 
     id: UUID
     thread_id: UUID
-    run_id: UUID
     seq: int
     seq_in_thread: int | None = None
     role: str
@@ -125,7 +124,6 @@ class ToolCallResponse(BaseModel):
 
     id: UUID
     thread_id: UUID
-    run_id: UUID
     message_id: UUID
     call_seq: int
     llm_call_id: str
@@ -134,7 +132,6 @@ class ToolCallResponse(BaseModel):
     status: RunToolCallStatus
     reason: str | None = None
     result: dict[str, Any] | None = None
-    child_run_id: UUID | None = None
     child_thread_id: UUID | None = None
     accepted_at: datetime | None = None
     created_at: datetime
@@ -143,6 +140,7 @@ class ToolCallResponse(BaseModel):
 
 class ThreadStateResponse(BaseModel):
     thread: ThreadResponse
-    open_run: RunResponse | None = None
     messages: list[MessageResponse] = Field(default_factory=list)
     tool_calls: list[ToolCallResponse] = Field(default_factory=list)
+    last_error: str | None = None
+    last_event_seq: int = 0

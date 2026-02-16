@@ -24,5 +24,5 @@ Plan, diagnose, and improve story structure: acts, chapters, beats, pacing, caus
 Write in {{ config.mainLanguage }}.
 
 ## Tool Rules
-- End with `return_sub_agent_result` exactly once; it must be the only tool call in the final message.
-
+- End with a normal assistant response that contains the full final output.
+- Do not add extra tool calls after the final answer.

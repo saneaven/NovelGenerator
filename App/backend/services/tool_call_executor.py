@@ -69,13 +69,11 @@ class DispatchResult:
     reason: str | None = None
     child_run_id: UUID | None = None
     child_thread_id: UUID | None = None
-    output_text: str | None = None
 
 
 @dataclass
 class ApplyResult:
     rows: list[RunToolCallModel]
-    subagent_finalize_output: str | None = None
 
 
 # ── Patch-grouping helpers ──
@@ -422,18 +420,6 @@ class ToolCallExecutor:
                 continue
             to_dispatch.append(row)
 
-        # Guard: return_sub_agent_result rejects all peers
-        finalize_row = next(
-            (r for r in to_dispatch if r.tool_name == "return_sub_agent_result"), None
-        )
-        if finalize_row:
-            for r in to_dispatch:
-                if r is not finalize_row:
-                    r.status = "rejected"
-                    r.reason = "REJECTED::subagent_already_completed"
-                    r.updated_at = datetime.utcnow()
-            to_dispatch = [finalize_row]
-
         # ── Group patchable tools by target object ──
         patch_groups: dict[str, list[RunToolCallModel]] = {}
         independent: list[RunToolCallModel] = []
@@ -480,7 +466,6 @@ class ToolCallExecutor:
             tasks.append(dispatch_group(group))
 
         # ── Execute in parallel ──
-        subagent_finalize_output: str | None = None
         if tasks:
             gather_results = await asyncio.gather(*tasks, return_exceptions=True)
             for outcome in gather_results:
@@ -492,8 +477,6 @@ class ToolCallExecutor:
                         row.reason = None
                         row.accepted_at = datetime.utcnow()
                         row.result = self._truncate_json_value(dispatch.result or {"success": True})
-                        if dispatch.output_text:
-                            subagent_finalize_output = dispatch.output_text
                     elif dispatch.status == "running":
                         row.status = "running"
                         row.reason = dispatch.reason
@@ -531,11 +514,8 @@ class ToolCallExecutor:
                 row.accepted_at = None
                 row.updated_at = datetime.utcnow()
 
-        if subagent_finalize_output is not None and run.thread.thread_type != "subAgent":
-            subagent_finalize_output = None
-
         db.flush()
-        return ApplyResult(rows=rows, subagent_finalize_output=subagent_finalize_output)
+        return ApplyResult(rows=rows)
 
     # ── Grouped patch dispatch ──
 
@@ -589,27 +569,6 @@ class ToolCallExecutor:
         args = row.arguments if isinstance(row.arguments, dict) else {}
 
         try:
-            # ── Sub-agent control ──
-            if tool == "return_sub_agent_result":
-                if run.thread.thread_type != "subAgent":
-                    return DispatchResult(
-                        status="cancelled",
-                        result={"success": False, "message": "return_sub_agent_result is only allowed in subAgent runs"},
-                        reason="EXECUTION::return_sub_agent_result::invalid_run_type",
-                    )
-                result_text = args.get("result")
-                if not isinstance(result_text, str) or not result_text.strip():
-                    return DispatchResult(
-                        status="cancelled",
-                        result={"success": False, "message": "Invalid result", "error": "result must be non-empty string"},
-                        reason="EXECUTION::return_sub_agent_result::invalid_result",
-                    )
-                return DispatchResult(
-                    status="accepted",
-                    result={"success": True, "message": result_text, "result": result_text},
-                    output_text=result_text,
-                )
-
             if tool.startswith("call_"):
                 return await self._dispatch_call_sub_agent(db, run, row, args)
 

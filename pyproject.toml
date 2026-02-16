@@ -60,6 +60,7 @@ dependencies = [
     "sqlalchemy-utils",
     "starlette",
     "tenacity",
+    "tiktoken",
     "tqdm",
     "typing-extensions",
     "typing-inspection",

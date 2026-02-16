@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
-import { threadOrchestrator, useThreadStore, type ThreadInfo, type ThreadToolCall } from '../../runtime';
+import {
+  threadOrchestrator,
+  useThreadStore,
+  threadPriority,
+  isBlockingThreadStatus,
+  type ThreadInfo,
+  type ThreadToolCall,
+} from '../../runtime';
 import { useFunctionCallUIStore } from '../../toolCall/ui/store';
 import { SubAgentPeekHeader } from './SubAgentPeekHeader';
 import { SubAgentPeekTimeline } from './SubAgentPeekTimeline';
@@ -13,27 +20,6 @@ interface ChildEntry {
   displayName: string;
   thread: ThreadInfo;
   callSeq: number;
-}
-
-function threadPriority(status: ThreadInfo['status']): number {
-  switch (status) {
-    case 'running':
-      return 0;
-    case 'waiting_tools':
-      return 1;
-    case 'paused':
-      return 2;
-    case 'error':
-      return 3;
-    case 'idle':
-      return 4;
-    default:
-      return 5;
-  }
-}
-
-function isBlockingThreadStatus(status: string): boolean {
-  return status === 'running' || status === 'waiting_tools' || status === 'paused' || status === 'error';
 }
 
 function countPendingDecisions(

@@ -23,6 +23,5 @@ Turn outline + canon into a scene-by-scene plan that is easy to write.
 ## Language
 Write in {{ config.mainLanguage }}.
 
-## Tool Rules
-- End with `return_sub_agent_result` exactly once; it must be the only tool call in the final message.
-
+## Output Rules
+- When completely finished, provide only the result without any AI perspective explanation.

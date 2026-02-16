@@ -249,16 +249,6 @@ const TOOL_META: Record<string, ToolMeta> = {
       return 'queries';
     },
   },
-  return_sub_agent_result: {
-    editType: 'init',
-    title: 'Return Result',
-    description: 'Return final Sub Agent output',
-    summary: (args) => {
-      const result = args.result as unknown;
-      if (typeof result === 'string') return `len: ${result.length}`;
-      return 'result';
-    },
-  },
 };
 
 // ============================================================================
