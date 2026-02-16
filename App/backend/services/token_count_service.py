@@ -78,8 +78,6 @@ def _encoding_for_model(model: str) -> str:
 
 
 def _count_tokens_tiktoken(text: str, model: str) -> int:
-    if tiktoken is None:
-        raise RuntimeError("tiktoken is not installed")
     encoding_name = _encoding_for_model(model)
     encoder = _TIKTOKEN_ENCODERS.get(encoding_name)
     if encoder is None:

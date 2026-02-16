@@ -48,10 +48,7 @@ class StepResult:
 
 
 class RunPipeline:
-    MAX_SUB_AGENT_DEPTH = 3
     MAX_CONTEXT_CUT_ITERATIONS = 6
-    MIN_CONVERSATION_MESSAGES = 6
-    SUMMARY_RECENT_MESSAGES = 6
 
     def __init__(self) -> None:
         self._active_tasks: dict[UUID, asyncio.Task] = {}
@@ -229,6 +226,8 @@ class RunPipeline:
                     "status": row.status,
                     "reason": row.reason,
                     "result": row.result,
+                    "child_thread_id": str(row.child_thread_id) if row.child_thread_id else None,
+                    "child_run_id": str(row.child_run_id) if row.child_run_id else None,
                 }
                 for row in applied.rows
             ]
@@ -705,6 +704,8 @@ class RunPipeline:
                     "status": row.status,
                     "reason": row.reason,
                     "result": row.result,
+                    "child_thread_id": str(row.child_thread_id) if row.child_thread_id else None,
+                    "child_run_id": str(row.child_run_id) if row.child_run_id else None,
                 }
                 for row in applied.rows
             ]
@@ -994,19 +995,10 @@ class RunPipeline:
             if estimated <= available:
                 return blocks
 
-            if len(conversation) <= self.MIN_CONVERSATION_MESSAGES:
-                logger.warning(
-                    "Context still exceeds budget after minimum retention; returning fallback blocks (estimated=%d available=%d)",
-                    estimated, available,
-                )
-                return blocks
+            # Summarize current conversation scope (user/assistant only).
+            summary_scope = [m for m in conversation if m.role in ("user", "assistant")]
 
-            # Collect recent user/assistant messages for summary
-            recent = [
-                m for m in conversation if m.role in ("user", "assistant")
-            ][-self.SUMMARY_RECENT_MESSAGES:]
-
-            if recent:
+            if summary_scope:
                 summary_msgs = [
                     SummaryMessage(
                         message_id=str(m.id),
@@ -1014,7 +1006,7 @@ class RunPipeline:
                         content=history_service.message_text(m),
                         created_at="",
                     )
-                    for m in recent
+                    for m in summary_scope
                 ]
                 previous_summary = await summary_service.generate_summary(
                     db, user_id,
@@ -1023,11 +1015,9 @@ class RunPipeline:
                     messages=summary_msgs,
                 )
 
-            # Cut conversation in half, while keeping a minimum tail.
+            # Cut conversation in half.
             half = max(1, len(conversation) // 2)
             conversation = conversation[half:]
-            if len(conversation) < self.MIN_CONVERSATION_MESSAGES:
-                conversation = conversation[-self.MIN_CONVERSATION_MESSAGES:]
 
             logger.info(
                 "Context cut iteration %d: estimated=%d tokens, messages=%d",
@@ -1186,6 +1176,8 @@ class RunPipeline:
                             "status": call_row.status,
                             "reason": call_row.reason,
                             "result": call_row.result,
+                            "child_thread_id": str(call_row.child_thread_id) if call_row.child_thread_id else None,
+                            "child_run_id": str(call_row.child_run_id) if call_row.child_run_id else None,
                         }
                     ],
                 },

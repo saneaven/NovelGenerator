@@ -565,6 +565,21 @@ export class ThreadOrchestrator {
           } as ThreadToolCall;
         });
         store.upsertToolCalls(messageId, updates);
+
+        // Register placeholder child threads so SubAgentPeekDock can render
+        for (const tc of updates) {
+          if (tc.childThreadId && !store.getThread(tc.childThreadId)) {
+            store.upsertThread({
+              id: tc.childThreadId,
+              projectId: String(data.project_id ?? ''),
+              threadType: 'subAgent',
+              ownerId: null,
+              journeyKind: null,
+              status: 'running',
+              lastError: null,
+            });
+          }
+        }
         break;
       }
 
