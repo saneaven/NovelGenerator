@@ -3,16 +3,17 @@
  * Builds TemplateData for rendering prompt previews with configurable context modes.
  */
 
-import { PromptManager } from '../../../llm/PromptManager';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useDisplayLanguageStore } from '../../../store/displayLanguageStore';
 import { useProjectStore } from '../../../store/projectStore';
 import { useVariableStore } from '../../../store/variableStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { type PromptType, type ConfigData, type VariablesData } from '../../../templateEngine/schema';
-import type { TemplateData } from '../../../llm/types';
 import type { PromptCategory, TaskType } from '../../../types/prompts';
 import { setNestedValue } from './promptTypeFields';
+
+// TODO: TemplateData was in llm/types.ts (deleted). Using `any` until template types are rebuilt.
+type TemplateData = any;
 
 export interface PreviewDataOptions {
   taskType: TaskType;
@@ -332,7 +333,8 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
   if (showProjectContext && projectId) {
     try {
       const settings = useSettingsStore.getState().getSettings();
-      project = PromptManager.buildProjectData(projectId, settings.mainLanguage);
+      // TODO: PromptManager.buildProjectData deleted — need backend preview endpoint
+      project = buildMinimalProjectData();
     } catch (error) {
       // Fall back to minimal if project data fails to load
       console.warn('Failed to load project data for preview, using minimal:', error);

@@ -1,5 +1,5 @@
 import type { UnifiedObject, ObjectType as UnifiedObjectType } from '../../../types/unifiedObject';
-import type { ObjectOperationVM, StoryObjectSubtype } from '../../viewModel/types';
+import type { ObjectOperationVM, StoryObjectSubtype } from '../vmTypes';
 
 export interface ObjectSnapshot {
   id?: string;

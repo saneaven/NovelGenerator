@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import type { ContentPart } from '../../llm/requestTypes';
+import type { ContentPart } from '../../types/chat';
 import { ChevronRight } from '../icons/navigation/ChevronRight';
 import { Loading } from './Loading';
 import './ThinkingDisplay.css';

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useSettings } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useLLMSessionStore } from '../../store/llmSessionStore';
+// TODO: useLLMSessionStore deleted — streaming session tracking needs reimplementation
 import {
     PROVIDER_LABELS,
     MODEL_OPTIONS,
@@ -366,9 +366,8 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     }, [provider]);
 
     // Subscribe to streaming session from the store
-    const streamingSession = useLLMSessionStore((state) =>
-        streamingSessionId ? state.sessions[streamingSessionId] : undefined
-    );
+    // TODO: streaming session tracking needs reimplementation
+    const streamingSession = undefined as any;
 
     // Effect to extract and update prompt during streaming
     useEffect(() => {

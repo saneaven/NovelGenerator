@@ -1,71 +1,30 @@
 /**
  * Thread-centric Zustand store.
- *
- * Replaces the run-centric runtimeStore.ts.
  * State is keyed by threadId — no run IDs exposed to UI components.
  */
 
 import { create } from 'zustand';
+import type {
+  ThreadInfo,
+  ThreadMessage,
+  ThreadToolCall,
+} from '../types/thread';
 
-// ── Types ──
-
-export type ThreadType = 'agent' | 'subAgent' | 'journey';
-export type ThreadStatus = 'idle' | 'running' | 'waiting_tools' | 'paused' | 'error';
-
-export interface ThreadInfo {
-  id: string;
-  projectId: string;
-  threadType: ThreadType;
-  ownerId?: string | null;
-  journeyKind?: string | null;
-  status: ThreadStatus;
-  lastError?: string | null;
-}
-
-export interface ThreadMessage {
-  id: string;
-  threadId: string;
-  seq: number;
-  seqInThread: number | null;
-  role: 'user' | 'assistant' | 'system' | 'tool';
-  data: Record<string, { contentParts: Array<{ type: string; text: string }>; thinkingDetails?: Array<Record<string, unknown>> }>;
-  createdAt: string;
-}
-
-export interface ThreadToolCall {
-  id: string;
-  threadId: string;
-  messageId: string;
-  callSeq: number;
-  llmCallId: string;
-  toolName: string;
-  arguments: Record<string, unknown>;
-  status: 'pending' | 'running' | 'accepted' | 'rejected' | 'failed';
-  reason?: string | null;
-  result?: Record<string, unknown> | null;
-  childThreadId?: string | null;
-  acceptedAt?: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// ── Store shape ──
+export type { ThreadInfo, ThreadMessage, ThreadToolCall };
+export type { ThreadType, ThreadStatus } from '../types/thread';
 
 interface ThreadState {
   threadsById: Record<string, ThreadInfo | undefined>;
   messagesByThreadId: Record<string, ThreadMessage[] | undefined>;
   toolCallsByMessageId: Record<string, ThreadToolCall[] | undefined>;
-  /** Maps threadId → messageId for messages expecting tool calls (between llm_final and tool_calls events). */
   pendingToolCallMessageByThread: Record<string, string | undefined>;
   activeStreamByThread: Record<string, boolean | undefined>;
 
-  // Actions — threads
   upsertThread: (thread: ThreadInfo) => void;
   patchThread: (threadId: string, partial: Partial<ThreadInfo>) => void;
   removeThread: (threadId: string) => void;
   getThread: (threadId: string) => ThreadInfo | undefined;
 
-  // Actions — messages
   replaceMessages: (threadId: string, messages: ThreadMessage[]) => void;
   appendMessage: (message: ThreadMessage) => void;
   patchMessage: (threadId: string, messageId: string, partial: Partial<ThreadMessage>) => void;
@@ -90,22 +49,17 @@ interface ThreadState {
     preserveLanguages: string[],
   ) => void;
 
-  // Actions — tool calls
   upsertToolCalls: (messageId: string, toolCalls: ThreadToolCall[]) => void;
   getToolCalls: (messageId: string) => ThreadToolCall[];
 
-  // Actions — pending tool call tracking
   setPendingToolCallMessage: (threadId: string, messageId: string) => void;
   clearPendingToolCallMessage: (threadId: string) => void;
 
-  // Actions — stream tracking
   setThreadStreamActive: (threadId: string, active: boolean) => void;
   isThreadStreamActive: (threadId: string) => boolean;
 
-  // Lookups
   findThreadByOwner: (projectId: string, ownerId: string) => ThreadInfo | undefined;
 
-  // Actions — bulk
   clearAll: () => void;
 }
 
@@ -115,8 +69,6 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
   toolCallsByMessageId: {},
   pendingToolCallMessageByThread: {},
   activeStreamByThread: {},
-
-  // ── Thread actions ──
 
   upsertThread: (thread) =>
     set((s) => ({
@@ -140,8 +92,6 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
     }),
 
   getThread: (threadId) => get().threadsById[threadId],
-
-  // ── Message actions ──
 
   replaceMessages: (threadId, messages) =>
     set((s) => ({
@@ -233,16 +183,12 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
       };
     }),
 
-  // ── Tool call actions ──
-
   upsertToolCalls: (messageId, toolCalls) =>
     set((s) => ({
       toolCallsByMessageId: { ...s.toolCallsByMessageId, [messageId]: toolCalls },
     })),
 
   getToolCalls: (messageId) => get().toolCallsByMessageId[messageId] ?? [],
-
-  // ── Pending tool call tracking ──
 
   setPendingToolCallMessage: (threadId, messageId) =>
     set((s) => ({
@@ -262,8 +208,6 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
 
   isThreadStreamActive: (threadId) => Boolean(get().activeStreamByThread[threadId]),
 
-  // ── Lookups ──
-
   findThreadByOwner: (projectId, ownerId) => {
     for (const thread of Object.values(get().threadsById)) {
       if (!thread) continue;
@@ -271,8 +215,6 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
     }
     return undefined;
   },
-
-  // ── Bulk ──
 
   clearAll: () => set({
     threadsById: {},

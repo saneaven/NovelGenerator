@@ -1,4 +1,4 @@
-import type { ObjectOperationVM } from './types';
+import type { ObjectOperationVM } from './vmTypes';
 
 export interface PatchGroup {
   id: string;

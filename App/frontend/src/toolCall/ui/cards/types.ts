@@ -1,5 +1,5 @@
 import type { ToolCallDecisionMap } from '../../types';
-import type { OperationVM, ObjectOperationVM, SearchOperationVM, CallAgentOperationVM } from '../../viewModel/types';
+import type { OperationVM, ObjectOperationVM, SearchOperationVM, CallAgentOperationVM } from '../vmTypes';
 
 export interface CommonCardProps<T extends OperationVM> {
   threadId: string;

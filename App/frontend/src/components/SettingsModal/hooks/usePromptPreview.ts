@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { renderTemplate } from '../../../templateEngine/engine';
-import { PromptManager } from '../../../llm/PromptManager';
+
 import { useProjectStore } from '../../../store/projectStore';
 import { useVariableStore } from '../../../store/variableStore';
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -94,8 +94,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
     setError(null);
 
     try {
-      // Ensure fragments are loaded
-      await PromptManager.reloadFragments();
+      // TODO: fragment reload needs reimplementation (PromptManager deleted)
 
       // Build preview data
       const previewData = buildPreviewData({

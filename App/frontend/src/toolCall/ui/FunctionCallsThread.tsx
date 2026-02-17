@@ -1,10 +1,9 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import type { ToolCallProgress } from '../../llm/requestTypes';
+import type { ToolCallProgress } from '../../types/chat';
 import type { EditCard, ToolCallDecision, ToolCallDecisionMap } from '../types';
-import { buildStoredOperations } from '../viewModel/buildStoredOperations';
-import { buildStreamingOperations } from '../viewModel/buildStreamingOperations';
-import { groupPatchOperations } from '../viewModel/patchGrouping';
-import type { ObjectOperationVM, OperationVM } from '../viewModel/types';
+import { buildStoredOperations, buildStreamingOperations } from './buildOperations';
+import { groupPatchOperations } from './patchGrouping';
+import type { ObjectOperationVM, OperationVM } from './vmTypes';
 import { useFunctionCallUIStore } from './store';
 import { CreateCallCard } from './cards/CreateCallCard';
 import { ReadCallCard } from './cards/ReadCallCard';

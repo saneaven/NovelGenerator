@@ -1,8 +1,16 @@
+/**
+ * Shared chat/message/tool-call type definitions.
+ *
+ * These were previously in llm/requestTypes.ts. Moved here because the
+ * frontend no longer owns prompt rendering — these are pure data shapes
+ * shared between the API layer and UI components.
+ */
+
 import type { ToolCallStatus, ToolCallFailureType, ApplicationResult } from '../toolCall/types';
 
-export type Role = "system" | "user" | "assistant" | "tool_results";
+export type Role = 'system' | 'user' | 'assistant' | 'tool_results';
 
-export type ContentPartType = "content" | "thinking";
+export type ContentPartType = 'content' | 'thinking';
 
 export interface ContentPart {
   type: ContentPartType;
@@ -19,24 +27,19 @@ export interface ToolCall {
   extra_content?: Record<string, any>;
 }
 
-/**
- * Tool result block for sending tool call results back to the LLM.
- * Used in multi-turn conversations where the assistant made tool_calls.
- */
 export interface ToolResultBlock {
   tool_call_id: string;
-  tool_name: string;  // Required for Gemini provider
+  tool_name: string;
   content: string;
 }
 
 export interface ConversationBlock {
   role: Role;
   contentParts: ContentPart[];
-  tool_calls?: ToolCall[]; // for assistant messages with tool calls
-  tool_results?: ToolResultBlock[]; // for tool_results role messages
+  tool_calls?: ToolCall[];
+  tool_results?: ToolResultBlock[];
 }
 
-// Thinking detail from OpenRouter (model-native thinking)
 export interface ThinkingDetail {
   type: 'summary' | 'text' | 'encrypted';
   summary?: string;
@@ -44,7 +47,6 @@ export interface ThinkingDetail {
   signature?: string;
 }
 
-// Token usage information from LLM response
 export interface TokenUsage {
   prompt_tokens: number;
   completion_tokens: number;
@@ -56,15 +58,10 @@ export interface ToolCallMetadata {
   tool_name: string;
   arguments: any;
   extra_content?: Record<string, any>;
-  /** Current status of the tool call */
   status: ToolCallStatus;
-  /** Error message (when failed) or user-provided reason (when rejected) */
   reason?: string;
-  /** Type of failure when status is 'failed' */
   failureType?: ToolCallFailureType;
-  /** Result from applying the tool call (when accepted) */
   result?: ApplicationResult;
-  /** Timestamp when the tool call was accepted */
   acceptedAt?: Date;
 }
 
@@ -108,11 +105,8 @@ export interface ToolCallOperationPreview {
   chapters?: ToolCallOperationChapterPreview[];
   missingFields?: string[];
   rawSnippet?: string;
-  /** For PATCH operations - array of search/replace pairs */
   replacements?: ToolCallReplacementPreview[];
-  /** For translation operations - target language code */
   targetLanguage?: string;
-  /** Indices of failed replacements (for retry context display) */
   failedReplacementIndices?: number[];
 }
 
@@ -128,23 +122,8 @@ export interface ToolCallProgress {
 
 export interface ChatMessage extends ConversationBlock {
   id: string;
-  /** Stable per-agent message order (1-based). May be absent for synthetic/local-only messages. */
   seq?: number;
   timestamp: Date;
   toolCalls?: ToolCallMetadata[];
   thinking_details?: ThinkingDetail[];
-}
-
-/**
- * Create a minimal history with an empty user message.
- * Use this for modes that don't have chat history but need a user block
- * to trigger template rendering (e.g., agent translation).
- */
-export function createEmptyUserHistory(): ChatMessage[] {
-  return [{
-    id: 'empty-user',
-    timestamp: new Date(),
-    role: 'user',
-    contentParts: [{ type: 'content', text: '' }],
-  }];
 }

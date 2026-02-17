@@ -7,7 +7,7 @@
 import React from 'react';
 import { useNotificationStore } from '../store/notificationStore';
 import type { Journey } from '../store/journeyStore';
-import type { ThreadInfo } from '../runtime';
+import type { ThreadInfo } from '../types/thread';
 import type { NotificationStatus, NotificationHandlers } from '../store/notificationStore/types';
 
 const SOURCE = 'journey';

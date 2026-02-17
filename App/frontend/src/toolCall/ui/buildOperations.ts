@@ -1,6 +1,22 @@
-import type { ToolCallProgress } from '../../llm/requestTypes';
-import type { OperationVM } from './types';
+import type { ToolCallProgress } from '../../types/chat';
+import type { EditCard } from '../types';
+import type { OperationVM } from './vmTypes';
 import { mapToolToOperationVM } from './toolToVm';
+
+export function buildStoredOperations(cards: EditCard[]): OperationVM[] {
+  return cards.map((card) =>
+    mapToolToOperationVM({
+      id: card.id,
+      toolName: card.toolCall.toolName,
+      args: card.data,
+      status: card.toolCall.status,
+      reason: card.toolCall.reason,
+      failureType: card.toolCall.failureType,
+      result: card.toolCall.result,
+      source: 'stored',
+    })
+  );
+}
 
 function toArgs(progress: ToolCallProgress): Record<string, unknown> {
   const preview = progress.preview;

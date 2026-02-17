@@ -7,13 +7,12 @@ import { useTheme } from '../hooks/useTheme';
 import { Loading } from '../components/common/Loading';
 import { NotificationModals } from '../components/Notification';
 import { NotificationToastManager } from '../components/ActivityPanel/NotificationToastManager';
-import { registerLLMModals } from '../llmTask/notificationHelpers';
 import { registerJourneyModals } from '../llmTaskJourney/notificationHelpers';
 import { registerImageTaskModals } from '../imageTask';
 import '../App.css';
 
 // Register notification modal renderers at module load (push-based - no subscribers)
-registerLLMModals();
+// TODO: registerLLMModals deleted (llmTask module removed)
 registerJourneyModals();
 registerImageTaskModals();
 

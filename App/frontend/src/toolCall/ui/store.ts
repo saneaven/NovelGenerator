@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PatchDecision } from '../viewModel/types';
+import type { PatchDecision } from './vmTypes';
 
 interface FunctionCallUIState {
   expandedByThread: Record<string, Record<string, boolean> | undefined>;

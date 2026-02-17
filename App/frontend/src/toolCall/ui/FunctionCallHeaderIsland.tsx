@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown } from '../../components/icons';
 import { TextButton } from '../../components/TextButton';
-import type { HeaderStatus, OperationCategory } from '../viewModel/types';
+import type { HeaderStatus, OperationCategory } from './vmTypes';
 
 const STATUS_LABEL_KEYS: Record<HeaderStatus, string> = {
   collecting: 'operationStatus.streaming',

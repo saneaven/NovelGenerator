@@ -3,7 +3,7 @@ import { presetService } from '../api/presetService';
 import { useSettingsStore } from './settingsStore';
 import { useVariableStore } from './variableStore';
 import { useSubAgentStore } from './subAgentStore';
-import { PromptManager } from '../llm/PromptManager';
+
 import type {
   PresetListItem,
   PresetCreate,
@@ -98,8 +98,7 @@ export const usePresetStore = create<PresetStore>()((set, get) => ({
       useSettingsStore.getState().invalidatePromptCache();
       useVariableStore.getState().reset();
 
-      // 4. Force fragment reload (resets fragmentsLoaded flag)
-      await PromptManager.reloadFragments();
+      // TODO: fragment reload needs reimplementation (PromptManager deleted)
 
       // 5. Reload variables for new preset
       await useVariableStore.getState().loadVariables();

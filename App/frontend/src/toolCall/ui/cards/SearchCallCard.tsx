@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import type { SearchCardProps } from './types';
-import { extractSearchPayload } from '../../viewModel/searchPayload';
+import { extractSearchPayload } from './searchPayload';
 
 export const SearchCallCard: React.FC<SearchCardProps> = ({
   threadId,

@@ -16,19 +16,13 @@ import { TextButton } from '../components/TextButton';
 import { IconButton } from '../components/IconButton';
 import { FunctionCallsThread } from '../toolCall/ui';
 import { buildEditCardsFromToolCallMetadata } from '../toolCall';
-import { JourneyRuntime } from './JourneyRuntime';
-import type { HandlerOptions } from '../toolCall/apply/types';
-import { CRUD_OPTIONS, TRANSLATION_OPTIONS } from '../toolCall/apply/types';
+// TODO: JourneyRuntime deleted — journey execution needs reimplementation via backend
 import type { ToolCallDecisionMap } from '../toolCall/types';
-import type { ToolCallMetadata } from '../llm/requestTypes';
-import {
-  threadOrchestrator,
-  useThreadStore,
-  useConversationTimeline,
-  resolveRunMessageDisplay,
-  type ThreadToolCall,
-} from '../runtime';
-import '../llmTask/LLMTaskModals.css';
+import type { ToolCallMetadata } from '../types/chat';
+import { useThreadStore } from '../store/threadStore';
+import type { ThreadToolCall } from '../types/thread';
+import { resolveRunMessageDisplay } from '../types/thread';
+// TODO: LLMTaskModals.css was in deleted llmTask/ — style import removed
 
 type JourneyDisplayStatus =
   | 'idle'
@@ -44,18 +38,10 @@ function getApplyLanguage(journey: Journey, mainLanguage: string): string {
   return mainLanguage;
 }
 
-function getHandlerOptions(journey: Journey): HandlerOptions {
-  if (journey.kind === 'translateObjects') {
-    const userInput = ((journey.input as any)?.userInput as string | undefined)?.trim();
-    return { ...TRANSLATION_OPTIONS, userRequest: userInput || TRANSLATION_OPTIONS.userRequest };
-  }
-
-  if (journey.kind === 'aiEdit') {
-    const userRequest = ((journey.input as any)?.userRequest as string | undefined)?.trim();
-    return { ...CRUD_OPTIONS, userRequest: userRequest || CRUD_OPTIONS.userRequest };
-  }
-
-  return CRUD_OPTIONS;
+// TODO: HandlerOptions/CRUD_OPTIONS/TRANSLATION_OPTIONS were in deleted modules — stub
+type HandlerOptions = Record<string, unknown>;
+function getHandlerOptions(_journey: Journey): HandlerOptions {
+  return {};
 }
 
 function getProjectIdFromJourney(journey: Journey): string {
@@ -124,8 +110,19 @@ export const JourneyDetailModal: React.FC = () => {
 
   const threadId = journey?.threadId;
 
-  // Messages from ThreadStore (same as AgentPanel)
-  const { messages: timelineMessages } = useConversationTimeline(threadId);
+  // Messages from ThreadStore (inline replaces deleted useConversationTimeline)
+  const threadMessages = useThreadStore(
+    useShallow((state) => (threadId ? state.messagesByThreadId[threadId] : undefined)),
+  );
+  const timelineMessages = useMemo(() => {
+    if (!threadId || !threadMessages) return [];
+    return [...threadMessages].sort((a, b) => {
+      const aSit = a.seqInThread ?? Number.MAX_SAFE_INTEGER;
+      const bSit = b.seqInThread ?? Number.MAX_SAFE_INTEGER;
+      if (aSit !== bSit) return aSit - bSit;
+      return a.createdAt.localeCompare(b.createdAt);
+    });
+  }, [threadId, threadMessages]);
 
   // Thread state from ThreadStore
   const { toolCallsByMessageId, threadStatus, threadError, pendingToolCallMessageId, isStreamActive } = useThreadStore(
@@ -224,36 +221,26 @@ export const JourneyDetailModal: React.FC = () => {
     [journey, mainLanguage]
   );
   const handlerOptions = useMemo(
-    () => (journey ? getHandlerOptions(journey) : CRUD_OPTIONS),
+    () => (journey ? getHandlerOptions(journey) : {}),
     [journey]
   );
 
   const isPending = journeyStatus === 'pending_confirmation' || hasPendingToolCalls;
 
+  // TODO: reimplement via new backend orchestration API
   const handleCancel = useCallback(() => {
-    if (!journey?.threadId) return;
-    void threadOrchestrator.cancel(projectId, journey.threadId);
-  }, [projectId, journey?.threadId]);
+    console.warn('Not implemented: journey cancel');
+  }, []);
 
-  const handleConfirm = useCallback(async (decisions: ToolCallDecisionMap) => {
-    if (!projectId || !journey?.threadId || !lastAssistantMessageId) return;
-    await threadOrchestrator.toolDecisions({
-      projectId,
-      threadId: journey.threadId,
-      messageId: lastAssistantMessageId,
-      decisions,
-      options: handlerOptions as Record<string, unknown>,
-    });
-  }, [projectId, journey?.threadId, lastAssistantMessageId, handlerOptions]);
+  const handleConfirm = useCallback(async (_decisions: ToolCallDecisionMap) => {
+    console.warn('Not implemented: journey tool decisions');
+  }, []);
 
   const handleSendFeedback = useCallback(() => {
-    if (!journey) return;
-    const text = feedbackText.trim();
-    if (!text) return;
-    JourneyRuntime.sendFeedback({ journeyId: journey.id, text });
+    console.warn('Not implemented: journey feedback');
     setFeedbackText('');
     setFeedbackOpen(false);
-  }, [journey, feedbackText]);
+  }, []);
 
   const handleStartEdit = useCallback((messageId: string, currentText: string) => {
     setEditingMessageId(messageId);

@@ -27,7 +27,8 @@ import { useSubAgentStore } from '../../../store/subAgentStore';
 import { useVariableStore } from '../../../store/variableStore';
 import { promptService } from '../../../api/promptService';
 import { fragmentService } from '../../../api/fragmentService';
-import { PromptManager } from '../../../llm/PromptManager';
+// TODO: PromptManager deleted — fragment reload needs reimplementation
+const PromptManager = { reloadFragments: () => Promise.resolve() };
 import { PROMPT_TREE, getFirstPromptNode, type PromptNode } from './promptTree';
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RetryConfig, ToolCallAutoApproveConfig } from '../../store/settingsStore';
-import LLMLogViewer from './LLMLogViewer';
+
 import ToggleSwitch from '../common/ToggleSwitch';
 import { TextButton } from '../TextButton';
 import { Refresh, Document } from '../icons';
@@ -326,14 +326,7 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                 </div>
             </div>
 
-            {/* LLM Request Logging */}
-            <div className="settings-panel-card">
-                <h3>{t('settings.advanced.llmLogging.title')}</h3>
-                <div className="panel-description">
-                    <p>{t('settings.advanced.llmLogging.description')}</p>
-                </div>
-                <LLMLogViewer />
-            </div>
+            {/* TODO: LLM Request Logging — will be reimplemented with backend-driven pipeline */}
         </div>
     );
 };

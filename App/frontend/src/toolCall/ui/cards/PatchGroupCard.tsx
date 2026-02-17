@@ -4,7 +4,7 @@ import ToggleSwitch from '../../../components/common/ToggleSwitch';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import type { ToolCallDecisionMap } from '../../types';
-import type { ObjectOperationVM, PatchDecision } from '../../viewModel/types';
+import type { ObjectOperationVM, PatchDecision } from '../vmTypes';
 import { useFunctionCallUIStore } from '../store';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import type { PatchGroupCardProps } from './types';

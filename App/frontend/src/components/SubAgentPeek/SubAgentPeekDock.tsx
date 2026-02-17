@@ -1,14 +1,9 @@
 import React, { useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
-import {
-  threadOrchestrator,
-  useThreadStore,
-  threadPriority,
-  isBlockingThreadStatus,
-  type ThreadInfo,
-  type ThreadToolCall,
-} from '../../runtime';
+import { useThreadStore } from '../../store/threadStore';
+import type { ThreadInfo, ThreadToolCall } from '../../types/thread';
+import { threadPriority, isBlockingThreadStatus } from '../../types/thread';
 import { useFunctionCallUIStore } from '../../toolCall/ui/store';
 import { SubAgentPeekHeader } from './SubAgentPeekHeader';
 import { SubAgentPeekTimeline } from './SubAgentPeekTimeline';
@@ -185,42 +180,11 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
   const selectedChildThreadId = selectedEntry?.childThreadId;
 
+  // TODO: reimplement thread recovery/resume via new backend orchestration API
   useEffect(() => {
     if (!selectedChildThreadId) return;
-
-    // Skip recovery if thread already has an active SSE stream.
-    const store = useThreadStore.getState();
-    if (store.isThreadStreamActive(selectedChildThreadId)) return;
-
-    let cancelled = false;
-    let inFlight = false;
-
-    const recoverSelectedThread = async () => {
-      if (cancelled || inFlight) return;
-      inFlight = true;
-      try {
-        await threadOrchestrator.recover(projectId, selectedChildThreadId);
-        if (cancelled) return;
-
-        // If the recovered child is still running, subscribe to its SSE events
-        // so completion properly flows back to update the parent tool call.
-        const recovered = useThreadStore.getState().getThread(selectedChildThreadId);
-        if (recovered?.status === 'running' || recovered?.status === 'waiting_tools') {
-          await threadOrchestrator.resume({ projectId, threadId: selectedChildThreadId });
-        }
-      } catch (error) {
-        console.warn('Failed to recover sub-agent child thread:', error);
-      } finally {
-        inFlight = false;
-      }
-    };
-
-    void recoverSelectedThread();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, selectedChildThreadId]);
+    // Thread recovery disabled — orchestrator deleted, needs reimplementation
+  }, [selectedChildThreadId]);
 
   if (childEntries.length === 0 || !selectedEntry) return null;
 

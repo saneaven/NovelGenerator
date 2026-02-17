@@ -31,7 +31,7 @@ import { useSettings } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
-import { useLLMSessionStore } from '../../../store/llmSessionStore';
+// TODO: useLLMSessionStore deleted — AI edit session tracking needs reimplementation
 import AIEditModal from '../../../components/Modal/AIEditModal';
 import TranslationModal from '../../../components/Modal/TranslationModal';
 import VersionHistoryModal from '../../../components/Modal/VersionHistoryModal';
@@ -129,9 +129,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef<ManuscriptEditorRef>(null);
 
-  const aiEditSession = useLLMSessionStore((state) =>
-    aiEditSessionId ? state.sessions[aiEditSessionId] : undefined
-  );
+  // TODO: AI edit session tracking needs reimplementation
+  const aiEditSession = undefined as any;
 
   useEffect(() => {
     if (!aiEditSessionId || !aiEditSession) return;

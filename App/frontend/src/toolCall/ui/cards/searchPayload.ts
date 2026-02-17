@@ -1,4 +1,4 @@
-import type { SearchType } from './types';
+import type { SearchType } from '../vmTypes';
 
 export interface SearchPayloadEntry {
   text: string;

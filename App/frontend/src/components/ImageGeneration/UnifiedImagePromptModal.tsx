@@ -9,8 +9,8 @@ import { useProjectStore } from '../../store/projectStore';
 import { useSettings } from '../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useJourneyStore } from '../../store/journeyStore';
-import { useThreadStore } from '../../runtime';
-import { JourneyRuntime } from '../../llmTaskJourney';
+import { useThreadStore } from '../../store/threadStore';
+// TODO: JourneyRuntime deleted — journey execution needs reimplementation via backend
 import { TextButton } from '../TextButton';
 import { ObjectPicker } from '../ObjectPicker';
 import './UnifiedImagePromptModal.css';
@@ -221,20 +221,8 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       return;
     }
 
-    const kind = contextType === 'scene' ? 'sceneImage' : 'imagePrompt';
-    const { journeyId } = JourneyRuntime.start(kind, {
-      projectId: currentProjectId,
-      promptMode,
-      contextType,
-      userRequest,
-      objectType,
-      objectId,
-      basicInfoId,
-      sceneContext,
-      selectedObjectIds,
-    });
-
-    setActiveJourneyId(journeyId);
+    // TODO: JourneyRuntime.start deleted — reimplement via backend
+    console.warn('Not implemented: image prompt journey');
     onClose();
   }, [
     currentProjectId,

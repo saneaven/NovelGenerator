@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import type { HeaderStatus, OperationCategory } from '../viewModel/types';
+import type { HeaderStatus, OperationCategory } from './vmTypes';
 import { useFunctionCallUIStore } from './store';
 import { FunctionCallHeaderIsland } from './FunctionCallHeaderIsland';
 import { FunctionCallContentIsland } from './FunctionCallContentIsland';

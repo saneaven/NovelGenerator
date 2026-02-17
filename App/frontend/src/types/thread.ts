@@ -1,11 +1,46 @@
+export type ThreadType = 'agent' | 'subAgent' | 'journey';
+export type ThreadStatus = 'idle' | 'running' | 'waiting_tools' | 'paused' | 'error';
+
+export interface ThreadInfo {
+  id: string;
+  projectId: string;
+  threadType: ThreadType;
+  ownerId?: string | null;
+  journeyKind?: string | null;
+  status: ThreadStatus;
+  lastError?: string | null;
+}
+
+export interface ThreadMessage {
+  id: string;
+  threadId: string;
+  seq: number;
+  seqInThread: number | null;
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  data: Record<string, { contentParts: Array<{ type: string; text: string }>; thinkingDetails?: Array<Record<string, unknown>> }>;
+  createdAt: string;
+}
+
+export interface ThreadToolCall {
+  id: string;
+  threadId: string;
+  messageId: string;
+  callSeq: number;
+  llmCallId: string;
+  toolName: string;
+  arguments: Record<string, unknown>;
+  status: 'pending' | 'running' | 'accepted' | 'rejected' | 'failed';
+  reason?: string | null;
+  result?: Record<string, unknown> | null;
+  childThreadId?: string | null;
+  acceptedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LangEntry {
   contentParts: Array<{ type: string; text: string }>;
   thinkingDetails?: Array<Record<string, unknown>>;
-}
-
-/** Any message with multilingual `data` (RunMessage, ThreadMessage, ConversationMessage). */
-interface MessageWithData {
-  data: Record<string, LangEntry>;
 }
 
 export interface DisplayMessageResult {
@@ -15,15 +50,10 @@ export interface DisplayMessageResult {
   isFallback: boolean;
 }
 
-/**
- * Resolve the best language entry from a message's multilingual `data`.
- *
- * Priority:
- *   1. Exact match for `language`
- *   2. Exact match for `fallbackLanguage`
- *   3. First available language entry
- *   4. Empty result
- */
+interface MessageWithData {
+  data: Record<string, LangEntry>;
+}
+
 export function resolveRunMessageDisplay(
   message: MessageWithData,
   language: string,
@@ -31,7 +61,6 @@ export function resolveRunMessageDisplay(
 ): DisplayMessageResult {
   const data = message.data;
 
-  // Exact match
   const exact = data[language];
   if (exact) {
     return {
@@ -42,7 +71,6 @@ export function resolveRunMessageDisplay(
     };
   }
 
-  // Fallback language
   if (fallbackLanguage) {
     const fallback = data[fallbackLanguage];
     if (fallback) {
@@ -55,7 +83,6 @@ export function resolveRunMessageDisplay(
     }
   }
 
-  // First available
   const languages = Object.keys(data);
   if (languages.length > 0) {
     const first = data[languages[0]];
@@ -67,7 +94,6 @@ export function resolveRunMessageDisplay(
     };
   }
 
-  // Empty
   return {
     contentParts: [],
     thinkingDetails: undefined,
@@ -76,9 +102,6 @@ export function resolveRunMessageDisplay(
   };
 }
 
-/**
- * Extract plain text from contentParts (content-type only).
- */
 export function getRunMessageText(
   message: MessageWithData,
   language: string,
@@ -91,9 +114,6 @@ export function getRunMessageText(
     .join('');
 }
 
-/**
- * Build a LangEntry from flat contentParts + thinkingDetails.
- */
 export function buildLangEntry(
   contentParts: Array<{ type: string; text: string }>,
   thinkingDetails?: Array<Record<string, unknown>>,
@@ -102,4 +122,25 @@ export function buildLangEntry(
     contentParts,
     ...(thinkingDetails !== undefined ? { thinkingDetails } : {}),
   };
+}
+
+export function threadPriority(status: ThreadStatus): number {
+  switch (status) {
+    case 'running':
+      return 0;
+    case 'waiting_tools':
+      return 1;
+    case 'paused':
+      return 2;
+    case 'error':
+      return 3;
+    case 'idle':
+      return 4;
+    default:
+      return 5;
+  }
+}
+
+export function isBlockingThreadStatus(status: ThreadStatus): boolean {
+  return status === 'running' || status === 'waiting_tools' || status === 'paused' || status === 'error';
 }

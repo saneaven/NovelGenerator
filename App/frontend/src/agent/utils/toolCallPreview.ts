@@ -2,7 +2,7 @@ import type {
   ToolCallOperationFieldPreview,
   ToolCallOperationPreview,
   ToolCallReplacementPreview,
-} from '../../llm/requestTypes';
+} from '../../types/chat';
 import { isIdField } from './objectNameResolver';
 
 const ELLIPSIS = '...';

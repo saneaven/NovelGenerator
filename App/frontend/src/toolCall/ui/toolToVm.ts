@@ -12,7 +12,7 @@ import {
   type SearchOperationVM,
   type SearchType,
   type StoryObjectSubtype,
-} from './types';
+} from './vmTypes';
 
 interface MapToolToVmParams {
   id: string;

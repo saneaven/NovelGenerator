@@ -15,7 +15,7 @@ import { translationService } from '../../api/unifiedObjectService';
 import ErrorModal from '../../components/Modal/ErrorModal';
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
 import TranslationModal from '../../components/Modal/TranslationModal';
-import AgentPanel from '../workspace/components/AgentPanel';
+// TODO: AgentPanel deleted — needs full reimplementation with new backend pipeline
 import StoryObjectPanel from '../workspace/components/StoryObjectPanel';
 import OutlinePanel from '../outlinemanager/components/OutlinePanel';
 import NovelEditorPanel from '../noveleditor/components/NovelEditorPanel';
@@ -455,11 +455,8 @@ const UnifiedWorkspace: React.FC = () => {
       />
 
       <div className={`unified-workspace-content ${isAgentVisible ? 'agent-visible' : ''}`}>
-        <AgentPanel
-          projectId={projectId ?? ''}
-          runMode={currentRunMode}
-          surface={currentSubPage}
-        />
+        {/* TODO: AgentPanel deleted — needs reimplementation */}
+        <div className="agent-panel agent-panel--placeholder" />
 
         {currentSubPage === 'story-object' && (
           <StoryObjectPanel

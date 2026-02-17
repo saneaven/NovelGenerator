@@ -1,19 +1,13 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import type { ContentPart, ToolCallMetadata } from '../../llm/requestTypes';
+import type { ContentPart, ToolCallMetadata } from '../../types/chat';
 import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { collapseContentParts } from '../../agent/utils/contentParts';
-import {
-  threadOrchestrator,
-  useThreadStore,
-  isBlockingThreadStatus,
-  resolveRunMessageDisplay,
-  type ThreadMessage,
-  type ThreadToolCall,
-} from '../../runtime';
-import { threadService } from '../../api/threadService';
+import { useThreadStore } from '../../store/threadStore';
+import type { ThreadMessage, ThreadToolCall } from '../../types/thread';
+import { isBlockingThreadStatus, resolveRunMessageDisplay } from '../../types/thread';
 import { FunctionCallsThread } from '../../toolCall/ui';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import { IconButton } from '../IconButton';
@@ -120,60 +114,42 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     return toContentParts(display.contentParts);
   }, []);
 
-  const handleConfirm = useCallback(async (messageId: string, decisions: ToolCallDecisionMap) => {
+  // TODO: reimplement via new backend orchestration API
+  const handleConfirm = useCallback(async (_messageId: string, _decisions: ToolCallDecisionMap) => {
     setIsApplying(true);
     try {
-      await threadOrchestrator.toolDecisions({
-        projectId,
-        threadId: childThreadId,
-        messageId,
-        decisions,
-      });
+      throw new Error('Not implemented: threadOrchestrator.toolDecisions');
     } finally {
       setIsApplying(false);
     }
-  }, [projectId, childThreadId]);
+  }, []);
 
   const handlePause = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('pause');
-    void threadOrchestrator.pause(projectId, childThreadId).finally(() => {
-      setActionInFlight(null);
-    });
-  }, [actionInFlight, projectId, childThreadId]);
+    console.warn('Not implemented: threadOrchestrator.pause');
+    setActionInFlight(null);
+  }, [actionInFlight]);
 
   const handleRetry = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('retry');
-    void threadOrchestrator.resume({ projectId, threadId: childThreadId }).finally(() => {
-      setActionInFlight(null);
-    });
-  }, [actionInFlight, projectId, childThreadId]);
+    console.warn('Not implemented: threadOrchestrator.resume');
+    setActionInFlight(null);
+  }, [actionInFlight]);
 
   const handleCancel = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('cancel');
-    void threadOrchestrator.cancel(projectId, childThreadId).finally(() => {
-      setActionInFlight(null);
-    });
-  }, [actionInFlight, projectId, childThreadId]);
+    console.warn('Not implemented: threadOrchestrator.cancel');
+    setActionInFlight(null);
+  }, [actionInFlight]);
 
+  // TODO: reimplement message deletion via new backend API
   const handleDeleteMessage = useCallback((messageId: string) => {
     if (!confirm('Are you sure you want to delete this message?')) return;
-    if (!isUuid(messageId)) {
-      useThreadStore.getState().removeMessage(childThreadId, messageId);
-      return;
-    }
-    void (async () => {
-      try {
-        await threadService.deleteMessage(projectId, childThreadId, messageId);
-      } catch (error) {
-        console.error('Failed to delete sub-agent message:', error);
-        return;
-      }
-      useThreadStore.getState().removeMessage(childThreadId, messageId);
-    })();
-  }, [projectId, childThreadId]);
+    useThreadStore.getState().removeMessage(childThreadId, messageId);
+  }, [childThreadId]);
 
   const actionDisabled = isApplying || actionInFlight !== null;
 

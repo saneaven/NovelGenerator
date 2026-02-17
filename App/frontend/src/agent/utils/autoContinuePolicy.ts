@@ -1,4 +1,4 @@
-import type { ToolCallMetadata } from '../../llm/requestTypes';
+import type { ToolCallMetadata } from '../../types/chat';
 import type { ToolCallStatus } from '../../toolCall/types';
 
 function normalizeToolCallStatus(status: ToolCallMetadata['status']): ToolCallStatus {

@@ -1,4 +1,4 @@
-import type { ChatMessage, ContentPart } from '../llm/requestTypes';
+import type { ChatMessage, ContentPart } from '../types/chat';
 import type { WorkspaceSurface } from '../types/agentRuntime';
 
 

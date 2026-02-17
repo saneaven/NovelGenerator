@@ -1,4 +1,3 @@
-export { JourneyRuntime } from './JourneyRuntime';
 export { JourneyDetailModal } from './JourneyDetailModal';
 export {
   registerJourneyNotification,

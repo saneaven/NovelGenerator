@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ProviderType, ProviderPreference, RequestFormat } from '../../store/settingsStore';
-import { fetchModels, fetchEmbeddingModels, fetchModelEndpoints } from '../../llm/llmService';
+import { fetchModels, fetchEmbeddingModels, fetchModelEndpoints } from '../../api/providerService';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import { Check, Expand, Collapse } from '../icons';

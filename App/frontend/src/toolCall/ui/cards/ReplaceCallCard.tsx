@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
-import { computeChangedFields, pickChangedValues } from '../../viewModel/fieldDiff';
+import { computeChangedFields, pickChangedValues } from './fieldDiff';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
 import { OutlineItemCard, toOutlineItemVariant } from '../../../components/OutlineItemCard';

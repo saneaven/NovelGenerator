@@ -1,4 +1,4 @@
-import type { ContentPart } from '../../llm/requestTypes';
+import type { ContentPart } from '../../types/chat';
 
 export interface CollapseContentPartsOptions {
   contentSeparator?: string;
