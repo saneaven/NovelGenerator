@@ -6,6 +6,7 @@ interface RuntimeEventBase {
   thread_id: string;
   run_id: string | null;
   ts: string;
+  thread_type?: string;
 }
 
 export type ThreadSSEEvent =
@@ -14,8 +15,8 @@ export type ThreadSSEEvent =
   | { event: 'content:delta'; data: RuntimeEventBase & { message_id: string; text: string } }
   | { event: 'thinking:delta'; data: RuntimeEventBase & { message_id: string; text: string } }
   | { event: 'tool_call:start'; data: RuntimeEventBase & { tool_call_id: string; message_id: string; assistant_message_id: string; index: number; name: string } }
-  | { event: 'tool_call:delta'; data: RuntimeEventBase & { tool_call_id: string; index: number; arguments_delta: string } }
-  | { event: 'tool_call:end'; data: RuntimeEventBase & { tool_call_id: string; message_id: string; assistant_message_id: string; index: number; name: string; arguments: Record<string, unknown> } }
+  | { event: 'tool_call:delta'; data: RuntimeEventBase & { tool_call_id: string; index: number; arguments_delta: string; name?: string } }
+  | { event: 'tool_call:end'; data: RuntimeEventBase & { tool_call_id: string; message_id: string; assistant_message_id: string; index: number; name: string; arguments: Record<string, unknown>; status?: ToolCallStatus } }
   | { event: 'tool_call:status'; data: RuntimeEventBase & { tool_call_id: string; status: ToolCallStatus; reason?: string | null; result?: Record<string, unknown> | null } }
   | { event: 'message:end'; data: RuntimeEventBase & { message_id: string; seq_in_thread: number; data: Record<string, unknown> } }
   | { event: 'run:done'; data: RuntimeEventBase & { final_status: RunStatus } }
@@ -120,9 +121,17 @@ export async function connectProjectStream(
 
   while (!signal.aborted) {
     try {
-      await openAndReadStream(streamUrl, signal, onEvent);
+      let receivedEvent = false;
+      await openAndReadStream(streamUrl, signal, (event) => {
+        receivedEvent = true;
+        onEvent(event);
+      });
       if (signal.aborted) return;
-      attempt += 1;
+      if (receivedEvent) {
+        attempt = 0;
+      } else {
+        attempt += 1;
+      }
       const delay = reconnectDelayMs(attempt);
       await new Promise((resolve) => setTimeout(resolve, delay));
       await options?.onReconnect?.();

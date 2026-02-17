@@ -7,9 +7,11 @@ import {
 import { threadRuntimeCoordinator } from './threadRuntimeCoordinator';
 import { useThreadStore } from '../store/threadStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
-import type {
-  ThreadInfo,
-  ThreadStatus,
+import {
+  toThreadType,
+  nowIso,
+  type ThreadInfo,
+  type ThreadStatus,
 } from '../types/thread';
 
 type EngineThreadType = 'agent' | 'subAgent' | 'journey';
@@ -18,16 +20,6 @@ interface ChatEngineParams {
   threadId: string;
   projectId: string;
   threadType: EngineThreadType;
-}
-
-function toThreadType(threadType: EngineThreadType): ThreadInfo['threadType'] {
-  if (threadType === 'subAgent') return 'subAgent';
-  if (threadType === 'journey') return 'journey';
-  return 'agent';
-}
-
-function nowIso(): string {
-  return new Date().toISOString();
 }
 
 export class ChatEngine {

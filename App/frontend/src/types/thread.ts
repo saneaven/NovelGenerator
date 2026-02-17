@@ -25,7 +25,9 @@ export interface ThreadMessage {
   seq: number;
   seqInThread: number;
   role: 'user' | 'assistant' | 'system' | 'tool_call' | 'tool_result';
-  data: Record<string, { contentParts: Array<{ type: string; text: string }>; thinkingDetails?: Array<Record<string, unknown>> }>;
+  data: Record<string, LangEntry>;
+  /** Transient streaming buffer — only present while `isStreaming` is true. */
+  streamingData?: LangEntry;
   isStreaming?: boolean;
   createdAt: string;
 }
@@ -159,4 +161,14 @@ export function threadPriority(status: ThreadStatus): number {
 
 export function isBlockingThreadStatus(status: ThreadStatus): boolean {
   return status === 'running' || status === 'waiting' || status === 'processing' || status === 'paused';
+}
+
+export function toThreadType(raw: string | null | undefined): ThreadType {
+  if (raw === 'subAgent') return 'subAgent';
+  if (raw === 'journey') return 'journey';
+  return 'agent';
+}
+
+export function nowIso(): string {
+  return new Date().toISOString();
 }

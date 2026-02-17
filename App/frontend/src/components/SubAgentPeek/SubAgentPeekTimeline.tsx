@@ -107,12 +107,16 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   }, [messages]);
 
   const getMessageText = useCallback((message: ThreadMessage): string => {
-    const display = resolveRunMessageDisplay(message, '_final', '_streaming');
+    const display = message.isStreaming
+      ? { contentParts: message.streamingData?.contentParts ?? [] }
+      : resolveRunMessageDisplay(message, 'English');
     return collapseContentParts(display.contentParts as any).content.trim();
   }, []);
 
   const getMessageContentParts = useCallback((message: ThreadMessage): ContentPart[] => {
-    const display = resolveRunMessageDisplay(message, '_final', '_streaming');
+    const display = message.isStreaming
+      ? { contentParts: message.streamingData?.contentParts ?? [] }
+      : resolveRunMessageDisplay(message, 'English');
     return toContentParts(display.contentParts);
   }, []);
 
@@ -190,7 +194,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   // Streaming content from delta message
   const streamingContentParts = useMemo<ContentPart[] | null>(() => {
     if (!deltaMessage) return null;
-    const entry = deltaMessage.data._streaming;
+    const entry = deltaMessage.streamingData;
     if (!entry?.contentParts) return null;
     return toContentParts(entry.contentParts);
   }, [deltaMessage]);

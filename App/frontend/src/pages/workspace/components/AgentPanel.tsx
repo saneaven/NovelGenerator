@@ -311,8 +311,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
 
         const resolved = msg.isStreaming
           ? {
-              contentParts: msg.data._streaming?.contentParts ?? [],
-              thinkingDetails: msg.data._streaming?.thinkingDetails,
+              contentParts: msg.streamingData?.contentParts ?? [],
+              thinkingDetails: msg.streamingData?.thinkingDetails,
               displayLanguage: requestedLanguage,
               isFallback: false,
             }

@@ -365,8 +365,8 @@ export const JourneyDetailModal: React.FC = () => {
               // Resolve display content from multilingual data
               const resolved = isStreamingMessage
                 ? {
-                    contentParts: (message.data['_streaming']?.contentParts ?? []),
-                    thinkingDetails: message.data['_streaming']?.thinkingDetails,
+                    contentParts: (message.streamingData?.contentParts ?? []),
+                    thinkingDetails: message.streamingData?.thinkingDetails,
                   }
                 : resolveRunMessageDisplay(message, journeyLanguage);
               const displayContentParts = (resolved.contentParts ?? []).map((part) => ({

@@ -3,12 +3,14 @@ import { threadService, type ToolCallDecisionResponse } from '../api/threadServi
 import { useSettingsStore } from '../store/settingsStore';
 import { useThreadStore } from '../store/threadStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
-import type {
-  ThreadInfo,
-  ThreadMessage,
-  ThreadStatus,
-  ThreadToolCall,
-  ToolCallStatus,
+import {
+  toThreadType,
+  nowIso,
+  type ThreadInfo,
+  type ThreadMessage,
+  type ThreadStatus,
+  type ThreadToolCall,
+  type ToolCallStatus,
 } from '../types/thread';
 
 type AutoApproveConfig = {
@@ -23,22 +25,12 @@ type AutoApproveConfig = {
 
 const THREAD_TERMINAL_STATUSES = new Set<ThreadStatus>(['done', 'paused', 'error', 'canceled']);
 
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
 function isPendingToolStatus(status: ToolCallStatus): boolean {
   return status === 'pending' || status === 'streaming' || status === 'validating' || status === 'processing';
 }
 
 function isTerminalToolStatus(status: ToolCallStatus): boolean {
   return status === 'applied' || status === 'failed' || status === 'rejected';
-}
-
-function toThreadType(raw: string | null | undefined): ThreadInfo['threadType'] {
-  if (raw === 'subAgent') return 'subAgent';
-  if (raw === 'journey') return 'journey';
-  return 'agent';
 }
 
 function toToolCallStatus(value: unknown): ToolCallStatus {
@@ -64,6 +56,8 @@ class ProjectRuntimeConnection {
   private streamTask: Promise<void> | null = null;
   private trackedThreadIds = new Set<string>();
   private streamingToolCallsByThread = new Map<string, Map<number, string>>();
+  /** Raw argument buffer for streaming tool calls, keyed by temp ID. */
+  private streamingArgBuffers = new Map<string, string>();
   private autoContinueLockByThread = new Set<string>();
   private inFlightResumeByThread = new Set<string>();
   private autoAcceptLockByThread = new Set<string>();
@@ -87,6 +81,7 @@ class ProjectRuntimeConnection {
     this.streamTask = null;
     this.trackedThreadIds.clear();
     this.streamingToolCallsByThread.clear();
+    this.streamingArgBuffers.clear();
     this.autoContinueLockByThread.clear();
     this.inFlightResumeByThread.clear();
     this.autoAcceptLockByThread.clear();
@@ -115,6 +110,7 @@ class ProjectRuntimeConnection {
       const store = useThreadStore.getState();
       store.upsertThread(snapshot.thread);
       store.replaceMessagesAndToolCalls(threadId, snapshot.messages, snapshot.toolCalls);
+      this.refreshUnresolvedCount(threadId);
     } catch (error) {
       console.warn('Failed to load thread snapshot', { threadId, error });
     }
@@ -131,6 +127,8 @@ class ProjectRuntimeConnection {
       this.abortController.signal,
       {
         onReconnect: async () => {
+          this.streamingToolCallsByThread.clear();
+          this.streamingArgBuffers.clear();
           await this.syncRuntimeSnapshot();
           await Promise.all([...this.trackedThreadIds].map((threadId) => this.loadThreadSnapshot(threadId)));
         },
@@ -194,11 +192,10 @@ class ProjectRuntimeConnection {
       role: 'assistant',
       seq: params.seq ?? 0,
       seqInThread: params.seqInThread ?? 0,
-      data: {
-        _streaming: {
-          contentParts: [],
-          thinkingDetails: [],
-        },
+      data: {},
+      streamingData: {
+        contentParts: [],
+        thinkingDetails: [],
       },
       isStreaming: true,
       createdAt: nowIso(),
@@ -246,13 +243,21 @@ class ProjectRuntimeConnection {
       messageId: params.messageId,
       runId: params.runId,
     });
-    const streaming = message.data._streaming ?? { contentParts: [], thinkingDetails: [] };
-    const nextParts = [...(streaming.contentParts ?? []), { type: params.partType, text: params.text }];
-    store.updateMessageData(params.threadId, params.messageId, '_streaming', {
-      contentParts: nextParts,
-      thinkingDetails: streaming.thinkingDetails ?? [],
+    const streaming = message.streamingData ?? { contentParts: [], thinkingDetails: [] };
+    const parts = [...(streaming.contentParts ?? [])];
+    const last = parts[parts.length - 1];
+    if (last && last.type === params.partType) {
+      parts[parts.length - 1] = { type: params.partType, text: last.text + params.text };
+    } else {
+      parts.push({ type: params.partType, text: params.text });
+    }
+    store.patchMessage(params.threadId, params.messageId, {
+      streamingData: {
+        contentParts: parts,
+        thinkingDetails: streaming.thinkingDetails ?? [],
+      },
+      isStreaming: true,
     });
-    store.patchMessage(params.threadId, params.messageId, { isStreaming: true });
     store.setThreadStreamActive(params.threadId, true);
   }
 
@@ -308,16 +313,17 @@ class ProjectRuntimeConnection {
 
     const argsDelta = String(payload.arguments_delta ?? '');
     const name = payload.name ? String(payload.name) : '';
-    const prevRaw = (existing.arguments._rawStreaming as string) ?? '';
+    const prevRaw = this.streamingArgBuffers.get(tempId) ?? '';
     const nextRaw = prevRaw + argsDelta;
-    let parsed: Record<string, unknown> = { _rawStreaming: nextRaw };
+    this.streamingArgBuffers.set(tempId, nextRaw);
+    let parsed: Record<string, unknown> = {};
     try {
       const obj = JSON.parse(nextRaw);
       if (typeof obj === 'object' && obj !== null) {
-        parsed = { ...obj, _rawStreaming: nextRaw };
+        parsed = obj as Record<string, unknown>;
       }
     } catch {
-      // Keep raw chunk until arguments are complete.
+      // Keep empty until arguments JSON is complete.
     }
 
     const patch: Partial<ThreadToolCall> = { arguments: parsed, updatedAt: nowIso() };
@@ -335,6 +341,7 @@ class ProjectRuntimeConnection {
     if (tempId) {
       useThreadStore.getState().removeToolCall(tempId);
       this.getStreamingToolMap(threadId).delete(index);
+      this.streamingArgBuffers.delete(tempId);
     }
 
     const toolCall: ThreadToolCall = {
@@ -348,7 +355,7 @@ class ProjectRuntimeConnection {
       llmCallId: toolCallId,
       toolName: String(payload.name ?? ''),
       arguments: (payload.arguments ?? {}) as Record<string, unknown>,
-      status: 'streaming',
+      status: toToolCallStatus(payload.status ?? 'validating'),
       reason: null,
       result: null,
       childThreadId: null,
@@ -475,10 +482,14 @@ class ProjectRuntimeConnection {
     if (!threadId) return;
     if (payload.project_id && String(payload.project_id) !== this.projectId) return;
 
-    this.ensureThread(threadId, {
+    const threadPartial: Partial<ThreadInfo> = {
       updatedAt: payload.ts ? String(payload.ts) : nowIso(),
       latestRunId: payload.run_id ? String(payload.run_id) : null,
-    });
+    };
+    if (payload.thread_type) {
+      threadPartial.threadType = toThreadType(String(payload.thread_type));
+    }
+    this.ensureThread(threadId, threadPartial);
 
     if (event.event === 'run:status') {
       const status = String(payload.status ?? 'running') as ThreadStatus;
@@ -592,6 +603,7 @@ class ProjectRuntimeConnection {
           seq: 0,
           seqInThread: Number(payload.seq_in_thread ?? 0),
           data: (payload.data ?? {}) as ThreadMessage['data'],
+          streamingData: undefined,
           isStreaming: false,
           createdAt: nowIso(),
         });
@@ -599,6 +611,7 @@ class ProjectRuntimeConnection {
         store.patchMessage(threadId, messageId, {
           runId,
           data: (payload.data ?? {}) as ThreadMessage['data'],
+          streamingData: undefined,
           seqInThread: Number(payload.seq_in_thread ?? existing.seqInThread ?? 0),
           isStreaming: false,
         });

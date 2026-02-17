@@ -504,6 +504,7 @@ class RunPipeline:
                     "index": idx,
                     "name": tool_name,
                     "arguments": arguments,
+                    "status": row.status,
                 },
             )
             await self._emit(
@@ -535,7 +536,7 @@ class RunPipeline:
                 project_id=run.project_id,
                 thread_id=thread.id,
                 event_name="run:status",
-                data={"run_id": str(run.id), "status": "running"},
+                data={"run_id": str(run.id), "status": "running", "thread_type": thread.thread_type},
             )
 
             await self._materialize_resume_tool_results(db, run, thread)
