@@ -1,3 +1,4 @@
+import './dom-polyfill.js';
 import express from 'express';
 import { Editor } from '@tiptap/core';
 import type { JSONContent } from '@tiptap/core';

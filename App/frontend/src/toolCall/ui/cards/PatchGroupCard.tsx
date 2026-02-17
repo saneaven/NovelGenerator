@@ -73,7 +73,11 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
     [operations]
   );
 
-  const statusSummary = useMemo(() => buildStatusSummary(operations), [operations]);
+  const statusSummary = useMemo(() => {
+    const summary = buildStatusSummary(operations);
+    const firstFailedReason = operations.find((op) => op.status === 'failed' && op.reason)?.reason;
+    return firstFailedReason ? `${summary} — ${firstFailedReason}` : summary;
+  }, [operations]);
 
   const buildDecisionMap = useCallback((): ToolCallDecisionMap => {
     const map: ToolCallDecisionMap = {};
@@ -167,6 +171,9 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
                 <div className="function-call-patch-row__meta">
                   <span className="function-call-patch-row__field">{field}</span>
                   <span className={`function-call-status-pill function-call-status-pill--${operation.status}`}>{operation.status}</span>
+                  {operation.status === 'failed' && operation.reason && (
+                    <span className="function-call-patch-row__reason">{operation.reason}</span>
+                  )}
                 </div>
                 <ToggleSwitch
                   checked={decision === 'accept'}

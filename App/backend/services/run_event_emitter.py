@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -41,14 +40,6 @@ class RunEventContext:
 class RunEventEmitter:
     def __init__(self, bus: InMemoryRunEventBus) -> None:
         self._bus = bus
-        self._seq_by_thread: dict[UUID, int] = {}
-        self._lock = asyncio.Lock()
-
-    async def _next_seq(self, thread_id: UUID) -> int:
-        async with self._lock:
-            next_seq = self._seq_by_thread.get(thread_id, 0) + 1
-            self._seq_by_thread[thread_id] = next_seq
-            return next_seq
 
     @staticmethod
     def _base_payload(run: RunModel | RunEventContext) -> dict:
@@ -86,10 +77,8 @@ class RunEventEmitter:
             thread_id = run.thread_id
         if thread_id is None:
             raise ValueError("thread_id is required for event emission")
-        seq = await self._next_seq(thread_id)
         event = {
             "event": event_name,
-            "event_seq": seq,
             "ts": datetime.now(timezone.utc).isoformat(),
             **self._base_payload(run),
             "payload": payload,

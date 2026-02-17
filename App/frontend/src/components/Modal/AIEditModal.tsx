@@ -132,7 +132,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       return;
     }
 
-    const { sessionId } = JourneyRuntime.start('aiEdit', {
+    const { journeyId } = JourneyRuntime.start('aiEdit', {
       projectId,
       category,
       targetId,
@@ -140,7 +140,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       selectedContextIds,
       rawMode,
     });
-    onTaskStarted?.(sessionId);
+    onTaskStarted?.(journeyId);
 
     // Close modal immediately - task continues in background via toast
     onClose();

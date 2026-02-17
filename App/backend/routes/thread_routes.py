@@ -7,7 +7,7 @@ import contextlib
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
@@ -63,10 +63,9 @@ async def _stream_thread_events(
     thread_id: UUID,
     *,
     trigger: asyncio.Task | None = None,
-    after_seq: int | None = None,
 ):
     """Stream SSE events for a thread. Breaks on terminal events."""
-    subscription = run_event_bus.subscribe(thread_id, after_seq=after_seq)
+    subscription = run_event_bus.subscribe(thread_id)
     event_iter = subscription.__aiter__()
 
     try:
@@ -90,6 +89,10 @@ async def _stream_thread_events(
                     )
                     if run is not None:
                         await run_event_emitter.emit_heartbeat(run)
+                    else:
+                        # No active run found but stream still open —
+                        # yield a raw SSE comment to keep the connection alive.
+                        yield b": heartbeat\n\n"
                 continue
 
             event_name, payload = _serialize_event(event)
@@ -117,7 +120,6 @@ async def _stream_thread_events(
 async def dispatch(
     project_id: UUID,
     req: DispatchRequest,
-    after_seq: int | None = Query(default=None, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -169,7 +171,7 @@ async def dispatch(
     )
 
     async def gen():
-        async for chunk in _stream_thread_events(thread_id, after_seq=after_seq):
+        async for chunk in _stream_thread_events(thread_id):
             yield chunk
 
     return StreamingResponse(
@@ -216,7 +218,6 @@ SSE_HEADERS = {"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel
 async def resume(
     project_id: UUID,
     thread_id: UUID,
-    after_seq: int | None = Query(default=None, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -236,7 +237,7 @@ async def resume(
     # Already running → subscribe to events without triggering pipeline
     if run.status == "running":
         async def subscribe_gen():
-            async for chunk in _stream_thread_events(thread_id, after_seq=after_seq):
+            async for chunk in _stream_thread_events(thread_id):
                 yield chunk
         return StreamingResponse(subscribe_gen(), media_type="text/event-stream", headers=SSE_HEADERS)
 
@@ -246,7 +247,7 @@ async def resume(
     task = asyncio.create_task(trigger_resume())
 
     async def gen():
-        async for chunk in _stream_thread_events(thread_id, trigger=task, after_seq=after_seq):
+        async for chunk in _stream_thread_events(thread_id, trigger=task):
             yield chunk
 
     return StreamingResponse(gen(), media_type="text/event-stream", headers=SSE_HEADERS)
@@ -323,14 +324,12 @@ async def get_state(
         .first()
     )
     last_error = str(last_error_row[0]) if last_error_row and last_error_row[0] else None
-    last_event_seq = await run_event_bus.latest_seq(thread_id)
 
     return ThreadStateResponse(
         thread=thread,
         messages=[MessageResponse.model_validate(m) for m in messages],
         tool_calls=[ToolCallResponse.model_validate(tc) for tc in tool_calls],
         last_error=last_error,
-        last_event_seq=last_event_seq,
     )
 
 

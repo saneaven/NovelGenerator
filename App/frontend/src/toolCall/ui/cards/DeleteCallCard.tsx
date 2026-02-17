@@ -81,6 +81,7 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
       category="delete"
       status={operation.status}
       title={title}
+      subtitle={operation.status === 'failed' && operation.reason ? operation.reason : undefined}
       showDecisionButtons={showDecisionButtons}
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}

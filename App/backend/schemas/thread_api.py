@@ -143,4 +143,3 @@ class ThreadStateResponse(BaseModel):
     messages: list[MessageResponse] = Field(default_factory=list)
     tool_calls: list[ToolCallResponse] = Field(default_factory=list)
     last_error: str | None = None
-    last_event_seq: int = 0

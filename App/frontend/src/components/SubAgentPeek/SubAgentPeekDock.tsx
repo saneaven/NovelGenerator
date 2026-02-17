@@ -184,14 +184,11 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   }, [childEntries, orderedKeys, selectedKey, prioritizedKeys]);
 
   const selectedChildThreadId = selectedEntry?.childThreadId;
-  const selectedChildThreadStatus = selectedEntry?.thread.status;
 
   useEffect(() => {
     if (!selectedChildThreadId) return;
 
     // Skip recovery if thread already has an active SSE stream.
-    // recover() would overwrite lastEventSeqByThread, causing the SSE backlog
-    // dedup check in handleEvent to filter out early events like thread:prompt_prepared.
     const store = useThreadStore.getState();
     if (store.isThreadStreamActive(selectedChildThreadId)) return;
 
@@ -203,6 +200,14 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
       inFlight = true;
       try {
         await threadOrchestrator.recover(projectId, selectedChildThreadId);
+        if (cancelled) return;
+
+        // If the recovered child is still running, subscribe to its SSE events
+        // so completion properly flows back to update the parent tool call.
+        const recovered = useThreadStore.getState().getThread(selectedChildThreadId);
+        if (recovered?.status === 'running' || recovered?.status === 'waiting_tools') {
+          await threadOrchestrator.resume({ projectId, threadId: selectedChildThreadId });
+        }
       } catch (error) {
         console.warn('Failed to recover sub-agent child thread:', error);
       } finally {
@@ -212,17 +217,10 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
     void recoverSelectedThread();
 
-    const shouldPoll =
-      selectedChildThreadStatus === 'running' ||
-      selectedChildThreadStatus === 'waiting_tools' ||
-      selectedChildThreadStatus === 'paused' ||
-      selectedChildThreadStatus === 'error';
-    if (!shouldPoll) {
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [projectId, selectedChildThreadId, selectedChildThreadStatus]);
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, selectedChildThreadId]);
 
   if (childEntries.length === 0 || !selectedEntry) return null;
 

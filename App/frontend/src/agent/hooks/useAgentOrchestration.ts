@@ -139,12 +139,20 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     };
   }, []);
 
-  // Recover thread state on mount
+  // Recover thread state on mount — cancel any actively running generation.
   useEffect(() => {
     if (!projectId || !selectedThreadIdForRecovery) return;
-    void threadOrchestrator.recover(projectId, selectedThreadIdForRecovery).catch((error) => {
-      console.warn('Failed to recover thread state:', error);
-    });
+    void (async () => {
+      try {
+        await threadOrchestrator.recover(projectId, selectedThreadIdForRecovery);
+        const thread = useThreadStore.getState().getThread(selectedThreadIdForRecovery);
+        if (thread?.status === 'running') {
+          await threadOrchestrator.cancel(projectId, selectedThreadIdForRecovery);
+        }
+      } catch (error) {
+        console.warn('Failed to recover thread state:', error);
+      }
+    })();
   }, [projectId, selectedAgentIdForRecovery, selectedThreadIdForRecovery]);
 
   // If selection is missing but agents exist, recover selection automatically.

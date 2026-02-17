@@ -137,10 +137,11 @@ function normalizeErrorText(value: unknown): string | null {
 export class ThreadOrchestrator {
   private streamByThread = new Map<string, StreamHandle>();
   private deltaMessageIdByThread = new Map<string, string>();
-  private lastEventSeqByThread = new Map<string, number>();
   private resumeInFlightByThread = new Set<string>();
   private pendingUserMessageByClientId = new Map<string, PendingUserMessageRef>();
   private childToParentThread = new Map<string, { threadId: string; projectId: string; messageId: string }>();
+  /** Tracks the latest processed event timestamp per thread to skip stale SSE history replays. */
+  private lastEventTsByThread = new Map<string, string>();
 
   // ── Public API ──
 
@@ -157,13 +158,9 @@ export class ThreadOrchestrator {
     inputPayload?: Record<string, unknown>;
     journeyTargetIds?: string[];
     signal?: AbortSignal;
-    afterSeq?: number;
   }): Promise<{ threadId: string }> {
     const store = useThreadStore.getState();
     let resolvedThreadId = input.threadId ?? '';
-    const dispatchAfterSeq = input.afterSeq ?? (
-      resolvedThreadId ? this.lastEventSeqByThread.get(resolvedThreadId) : undefined
-    );
     const shouldTrackClientMessage = input.threadType !== 'journey' && input.inputText.trim().length > 0;
     const clientMessageId = shouldTrackClientMessage ? createClientMessageId() : undefined;
     const pendingMessageId = shouldTrackClientMessage && resolvedThreadId ? `pending:user:${clientMessageId}` : undefined;
@@ -187,6 +184,11 @@ export class ThreadOrchestrator {
         threadId: resolvedThreadId,
         pendingMessageId,
       });
+    }
+
+    // Clear stale-event tracker — dispatch starts a fresh event stream.
+    if (resolvedThreadId) {
+      this.lastEventTsByThread.delete(resolvedThreadId);
     }
 
     let handle!: StreamHandle;
@@ -224,7 +226,6 @@ export class ThreadOrchestrator {
           }
         },
         { signal: input.signal },
-        dispatchAfterSeq,
       );
     } catch (error) {
       if (clientMessageId) {
@@ -341,7 +342,6 @@ export class ThreadOrchestrator {
       void this.resume({
         projectId: input.projectId,
         threadId: tc.childThreadId!,
-        afterSeq: undefined,
       });
     }
   }
@@ -350,14 +350,12 @@ export class ThreadOrchestrator {
     projectId: string;
     threadId: string;
     signal?: AbortSignal;
-    afterSeq?: number;
   }): Promise<void> {
     const handle = await threadService.resume(
       input.projectId,
       input.threadId,
       (event) => this.handleEvent(input.threadId, event),
       { signal: input.signal },
-      input.afterSeq ?? this.lastEventSeqByThread.get(input.threadId),
     );
 
     this.abortPreviousStream(input.threadId);
@@ -378,18 +376,11 @@ export class ThreadOrchestrator {
   }
 
   async recover(projectId: string, threadId: string): Promise<void> {
+    // Clear stale-event tracker — recovery replaces state from DB.
+    this.lastEventTsByThread.delete(threadId);
+
     const state = await threadService.getState(projectId, threadId);
     const store = useThreadStore.getState();
-
-    // If an SSE stream is already active for this thread, don't overwrite
-    // event seq tracking or stream-active state — the live stream handles this.
-    // Without this guard, recover() racing with resume() would set lastEventSeqByThread
-    // to a high value, causing the SSE backlog dedup check to filter out early events.
-    const hasActiveStream = store.isThreadStreamActive(threadId);
-    if (!hasActiveStream) {
-      const recoveredEventSeq = typeof state.last_event_seq === 'number' ? state.last_event_seq : 0;
-      this.lastEventSeqByThread.set(threadId, recoveredEventSeq);
-    }
 
     if (state.thread) {
       store.upsertThread(mapBackendThread(state.thread));
@@ -418,18 +409,29 @@ export class ThreadOrchestrator {
 
       // Create placeholder ThreadInfo for child threads so SubAgentPeekDock
       // can build childEntries (its lazy recovery will fetch full state).
+      // Also rebuild childToParentThread mapping (lost on page refresh).
       for (const raw of state.tool_calls) {
         const childId = raw.child_thread_id;
-        if (childId && !store.getThread(childId)) {
-          store.upsertThread({
-            id: childId,
+        if (childId) {
+          // Rebuild parent-child mapping so child completion events can
+          // properly update the parent tool call status after refresh.
+          this.childToParentThread.set(childId, {
+            threadId,
             projectId,
-            threadType: 'subAgent',
-            ownerId: null,
-            journeyKind: null,
-            status: 'idle',
-            lastError: null,
+            messageId: raw.message_id,
           });
+
+          if (!store.getThread(childId)) {
+            store.upsertThread({
+              id: childId,
+              projectId,
+              threadType: 'subAgent',
+              ownerId: null,
+              journeyKind: null,
+              status: 'idle',
+              lastError: null,
+            });
+          }
         }
       }
     }
@@ -440,9 +442,6 @@ export class ThreadOrchestrator {
         lastError: normalizeErrorText(state.last_error) ?? 'An error occurred during generation.',
       });
     }
-    if (!hasActiveStream) {
-      store.setThreadStreamActive(threadId, false);
-    }
   }
 
   // ── Event handling ──
@@ -451,11 +450,16 @@ export class ThreadOrchestrator {
     const data = event.data;
     if (!data || typeof data !== 'object') return;
 
-    const eventSeq = data.event_seq;
-    if (typeof eventSeq === 'number') {
-      const last = this.lastEventSeqByThread.get(threadId) ?? 0;
-      if (eventSeq <= last) return;
-      this.lastEventSeqByThread.set(threadId, eventSeq);
+    // Skip stale events from SSE history replays (RC1 fix).
+    // When resume() subscribes to the event bus, the backend replays the entire
+    // history buffer. Events older than what we already processed must be ignored
+    // to prevent state corruption (e.g. overwriting terminal tool call statuses
+    // with stale 'pending' values).
+    const eventTs = typeof data.ts === 'string' ? data.ts : '';
+    if (eventTs) {
+      const lastTs = this.lastEventTsByThread.get(threadId);
+      if (lastTs && eventTs <= lastTs) return;
+      this.lastEventTsByThread.set(threadId, eventTs);
     }
 
     const store = useThreadStore.getState();
@@ -632,21 +636,38 @@ export class ThreadOrchestrator {
       case 'thread:tool_calls': {
         store.clearPendingToolCallMessage(threadId);
         const messageId = payload.message_id;
-        const calls: ThreadToolCall[] = (payload.tool_calls ?? []).map((tc: any) => ({
-          id: `${messageId}:${tc.id}`,
-          threadId,
-          messageId,
-          callSeq: tc.call_seq ?? 0,
-          llmCallId: tc.id,
-          toolName: tc.tool_name,
-          arguments: tc.arguments ?? {},
-          status: parseThreadToolCallStatus(tc.status ?? 'pending'),
-          reason: tc.reason ?? null,
-          result: null,
-          acceptedAt: null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }));
+        const existingCalls = store.getToolCalls(messageId);
+        const existingByLlmCallId = new Map(existingCalls.map((tc) => [tc.llmCallId, tc]));
+        const calls: ThreadToolCall[] = (payload.tool_calls ?? []).map((tc: any) => {
+          const incomingStatus = parseThreadToolCallStatus(tc.status ?? 'pending');
+          const prev = existingByLlmCallId.get(tc.id);
+          // Defense-in-depth: never downgrade a terminal status to pending/running.
+          // This prevents stale SSE history replays from overwriting correct state.
+          const status = prev && TERMINAL_TOOL_STATUSES.has(prev.status) && !TERMINAL_TOOL_STATUSES.has(incomingStatus)
+            ? prev.status
+            : incomingStatus;
+          return {
+            id: `${messageId}:${tc.id}`,
+            threadId,
+            messageId,
+            callSeq: tc.call_seq ?? 0,
+            llmCallId: tc.id,
+            toolName: tc.tool_name,
+            arguments: tc.arguments ?? {},
+            status,
+            reason: prev && TERMINAL_TOOL_STATUSES.has(prev.status) && !TERMINAL_TOOL_STATUSES.has(incomingStatus) ? prev.reason : (tc.reason ?? null),
+            result: prev && TERMINAL_TOOL_STATUSES.has(prev.status) && !TERMINAL_TOOL_STATUSES.has(incomingStatus) ? prev.result : null,
+            childThreadId: prev?.childThreadId ?? null,
+            acceptedAt: prev?.acceptedAt ?? null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          } as ThreadToolCall;
+        });
+        // If all incoming calls were already terminal (stale replay), skip the upsert entirely.
+        const hasNewPending = calls.some((c) => c.status === 'pending');
+        if (calls.length > 0 && !hasNewPending && existingCalls.length > 0) {
+          break;
+        }
         store.upsertToolCalls(messageId, calls);
 
         // Auto-approve: if all pending calls match auto-approve policy, submit immediately
@@ -664,7 +685,18 @@ export class ThreadOrchestrator {
                 decisions[call.llmCallId] = 'accept';
               }
               if (allApprovable) {
-                void this.toolDecisions({ projectId, threadId, messageId, decisions });
+                this.toolDecisions({ projectId, threadId, messageId, decisions }).catch(
+                  (error) => {
+                    console.error('Auto-approve toolDecisions failed:', error);
+                    useThreadStore.getState().patchThread(threadId, {
+                      status: 'error',
+                      lastError: normalizeUnknownError(
+                        error,
+                        'Auto-approved tool decisions failed. Please retry.',
+                      ).message,
+                    });
+                  },
+                );
               }
             }
           }
@@ -849,7 +881,9 @@ export class ThreadOrchestrator {
     const store = useThreadStore.getState();
     const thread = store.getThread(threadId);
     if (!thread) return false;
-    if (store.isThreadStreamActive(threadId)) return false;
+    // Note: `resumeInFlightByThread` in autoResumeIfReady already prevents double-resume,
+    // so we intentionally do NOT check isThreadStreamActive here to avoid a race where
+    // the old stream's .finally() hasn't cleared the flag yet.
     if (!['waiting_tools', 'paused', 'error'].includes(thread.status)) return false;
 
     const messages = [...store.getMessages(threadId)].sort((a, b) => {
@@ -872,7 +906,7 @@ export class ThreadOrchestrator {
 
     this.resumeInFlightByThread.add(threadId);
     try {
-      await this.resume({ projectId, threadId, afterSeq: this.lastEventSeqByThread.get(threadId) });
+      await this.resume({ projectId, threadId });
     } catch (error) {
       console.error('Auto-resume failed:', error);
       useThreadStore.getState().patchThread(threadId, { status: 'error' });

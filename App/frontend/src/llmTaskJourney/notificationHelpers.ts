@@ -1,65 +1,45 @@
 /**
  * Journey Notification Helpers
- * Push-based notification registration, update, and removal for journeys
+ * Push-based notification registration, update, and removal for journeys.
+ * Status is derived from ThreadStore, not JourneyStore.
  */
 
 import React from 'react';
 import { useNotificationStore } from '../store/notificationStore';
-import type { Journey, JourneyStatus } from '../store/journeyStore';
+import type { Journey } from '../store/journeyStore';
+import type { ThreadInfo } from '../runtime';
 import type { NotificationStatus, NotificationHandlers } from '../store/notificationStore/types';
 
 const SOURCE = 'journey';
 
 /**
- * Maps journey status to notification status
+ * Maps ThreadStore status to notification status
  */
-function mapStatus(status: JourneyStatus): NotificationStatus {
-  switch (status) {
-    case 'running':
-    case 'applying':
-      return 'running';
-    case 'pending_confirmation':
-      return 'pending';
-    case 'success':
-      return 'success';
-    case 'error':
-      return 'error';
-    case 'cancelled':
-      return 'cancelled';
-    default:
-      return 'idle';
-  }
+function mapThreadStatusToNotification(threadStatus: string | undefined, isStreamActive: boolean): NotificationStatus {
+  if (!threadStatus) return 'idle';
+  if (isStreamActive) return 'running';
+  if (threadStatus === 'running') return 'running';
+  if (threadStatus === 'waiting_tools' || threadStatus === 'paused') return 'pending';
+  if (threadStatus === 'error') return 'error';
+  if (threadStatus === 'idle') return 'success';
+  return 'idle';
 }
 
 /**
- * Creates notification message from journey state
+ * Creates notification message from thread state
  */
-function getMessage(journey: Journey): string {
-  switch (journey.status) {
-    case 'running':
-    case 'applying':
-      if (journey.progress) {
-        return (
-          journey.progress.currentItemLabel ||
-          `${journey.progress.current}/${journey.progress.total}`
-        );
-      }
-      return 'Processing...';
-    case 'pending_confirmation':
-      return 'Needs confirmation';
-    case 'success':
-      return 'Completed';
-    case 'error':
-      return journey.error || 'An error occurred';
-    case 'cancelled':
-      return 'Cancelled';
-    default:
-      return '';
-  }
+function getMessageFromThread(thread: ThreadInfo | undefined): string {
+  if (!thread) return '';
+  if (thread.status === 'running') return 'Processing...';
+  if (thread.status === 'waiting_tools' || thread.status === 'paused') return 'Needs confirmation';
+  if (thread.status === 'error') return thread.lastError || 'An error occurred';
+  if (thread.status === 'idle') return 'Completed';
+  return '';
 }
 
 /**
- * Register a new notification for a journey
+ * Register a new notification for a journey.
+ * At registration time, the journey is always in "running" state (just dispatched).
  */
 export function registerJourneyNotification(
   journey: Journey,
@@ -70,20 +50,12 @@ export function registerJourneyNotification(
     {
       id: journey.id,
       label: journey.label,
-      message: getMessage(journey),
-      status: mapStatus(journey.status),
+      message: 'Processing...',
+      status: 'running',
       createdAt: journey.createdAt,
       updatedAt: journey.updatedAt,
       isRead: existing?.isRead ?? false,
-      progress: journey.progress
-        ? {
-            current: journey.progress.current,
-            total: journey.progress.total,
-            label: journey.progress.currentItemLabel,
-          }
-        : undefined,
       source: SOURCE,
-      warning: journey.warning,
       customSlot: { type: 'none' },
     },
     handlers
@@ -91,24 +63,19 @@ export function registerJourneyNotification(
 }
 
 /**
- * Update an existing notification with current journey state
+ * Update an existing notification with current thread state.
+ * Called by JourneyRuntime's ThreadStore subscription.
  */
-export function updateJourneyNotification(
+export function updateJourneyNotificationFromThread(
   journeyId: string,
-  journey: Journey
+  journey: Journey,
+  thread: ThreadInfo,
+  isStreamActive?: boolean,
 ): void {
   useNotificationStore.getState().update(journeyId, {
-    message: getMessage(journey),
-    status: mapStatus(journey.status),
-    updatedAt: journey.updatedAt,
-    progress: journey.progress
-      ? {
-          current: journey.progress.current,
-          total: journey.progress.total,
-          label: journey.progress.currentItemLabel,
-        }
-      : undefined,
-    warning: journey.warning,
+    message: getMessageFromThread(thread),
+    status: mapThreadStatusToNotification(thread.status, Boolean(isStreamActive)),
+    updatedAt: Date.now(),
   });
 }
 

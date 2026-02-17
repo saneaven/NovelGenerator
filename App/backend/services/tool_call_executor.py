@@ -538,18 +538,20 @@ class ToolCallExecutor:
             object_service=object_service,
             created_by=run.user_id,
         )
-        failed_call_ids: set[str] = set()
+        failed_call_reasons: dict[str, str] = {}
         for key, status in flush_results.items():
             if status.success:
                 continue
+            reason = status.reason or "unknown flush error"
             for call_id in key_to_call_ids.get(key, set()):
-                failed_call_ids.add(call_id)
-        if failed_call_ids:
+                failed_call_reasons[call_id] = reason
+        if failed_call_reasons:
             for row in rows:
-                if row.status != "accepted" or row.llm_call_id not in failed_call_ids:
+                if row.status != "accepted" or row.llm_call_id not in failed_call_reasons:
                     continue
+                flush_reason = failed_call_reasons[row.llm_call_id]
                 row.status = "failed"
-                row.reason = "EXECUTION::flush::batched flush failed"
+                row.reason = f"EXECUTION::flush::{flush_reason}"
                 row.result = self._truncate_json_value({"success": False, "message": row.reason})
                 row.accepted_at = None
                 row.updated_at = datetime.utcnow()

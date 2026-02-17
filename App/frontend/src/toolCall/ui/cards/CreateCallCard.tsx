@@ -76,6 +76,7 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
       category="create"
       status={operation.status}
       title={titleValue}
+      subtitle={operation.status === 'failed' && operation.reason ? operation.reason : undefined}
       showDecisionButtons={showDecisionButtons}
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}

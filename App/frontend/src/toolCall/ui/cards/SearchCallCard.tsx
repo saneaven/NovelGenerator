@@ -61,6 +61,7 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
       category="search"
       status={operation.status}
       title={operation.searchType === 'rag' ? 'RAG' : 'Keyword'}
+      subtitle={operation.status === 'failed' && operation.reason ? operation.reason : undefined}
       showDecisionButtons={showDecisionButtons}
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}

@@ -199,8 +199,8 @@ class ManuscriptBatch:
                     created_by=created_by,
                 )
                 results[key] = FlushStatus(success=True)
-            except SidecarUnavailableError:
-                results[key] = FlushStatus(success=False, reason="sidecar unavailable")
+            except SidecarUnavailableError as exc:
+                results[key] = FlushStatus(success=False, reason=f"sidecar unavailable: {exc}")
             except SidecarConversionError as exc:
                 results[key] = FlushStatus(success=False, reason=str(exc))
             except Exception as exc:

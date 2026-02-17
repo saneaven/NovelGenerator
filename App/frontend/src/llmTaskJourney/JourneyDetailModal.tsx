@@ -1,26 +1,41 @@
 /**
  * Journey Detail Modal
- * Renders modal for journey details from journeyStore
+ * Reads messages and tool calls directly from ThreadStore (same pipeline as AgentPanel).
+ * JourneyStore only provides metadata (kind, input, editingTargets, label, threadId).
  */
 
 import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useShallow } from 'zustand/react/shallow';
 import { BaseModal } from '../components/BaseModal';
 import { useJourneyStore, type Journey } from '../store/journeyStore';
-import { useLLMSessionStore } from '../store/llmSessionStore';
 import { useSettingsStore } from '../store/settingsStore';
 import ThinkingDisplay from '../components/common/ThinkingDisplay';
-import NotificationProgressBar from '../components/Notification/NotificationProgressBar';
 import { Close, Edit, Trash } from '../components/icons';
 import { TextButton } from '../components/TextButton';
 import { IconButton } from '../components/IconButton';
 import { FunctionCallsThread } from '../toolCall/ui';
 import { buildEditCardsFromToolCallMetadata } from '../toolCall';
-import { JourneyRuntime, applyJourneyEdits } from './index';
+import { JourneyRuntime } from './JourneyRuntime';
 import type { HandlerOptions } from '../toolCall/apply/types';
 import { CRUD_OPTIONS, TRANSLATION_OPTIONS } from '../toolCall/apply/types';
-import type { ToolCallDecisionMap, ToolCallStatus } from '../toolCall/types';
+import type { ToolCallDecisionMap } from '../toolCall/types';
+import type { ToolCallMetadata } from '../llm/requestTypes';
+import {
+  threadOrchestrator,
+  useThreadStore,
+  useConversationTimeline,
+  resolveRunMessageDisplay,
+  type ThreadToolCall,
+} from '../runtime';
 import '../llmTask/LLMTaskModals.css';
+
+type JourneyDisplayStatus =
+  | 'idle'
+  | 'running'
+  | 'pending_confirmation'
+  | 'success'
+  | 'error';
 
 function getApplyLanguage(journey: Journey, mainLanguage: string): string {
   if (journey.kind === 'translateObjects') {
@@ -43,27 +58,88 @@ function getHandlerOptions(journey: Journey): HandlerOptions {
   return CRUD_OPTIONS;
 }
 
-function isPendingStatus(status: string | undefined): boolean {
-  const normalized = (status ?? 'pending') as ToolCallStatus;
-  return normalized === 'pending' || normalized === 'validating' || normalized === 'processing' || normalized === 'running';
+function getProjectIdFromJourney(journey: Journey): string {
+  return ((journey.input as any)?.projectId as string | undefined) ?? '';
+}
+
+function getJourneyLanguage(journey: Journey): string {
+  const targets = journey.editingTargets;
+  if (targets.kind === 'translateObjects') return targets.targetLanguage;
+  if (targets.kind === 'aiEdit') return targets.language;
+  return 'English';
+}
+
+function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
+  return {
+    id: toolCall.llmCallId,
+    tool_name: toolCall.toolName,
+    arguments: toolCall.arguments,
+    status: toolCall.status as any,
+    reason: toolCall.reason ?? undefined,
+    result: toolCall.result as any,
+    acceptedAt: toolCall.acceptedAt ? new Date(toolCall.acceptedAt) : undefined,
+  };
+}
+
+function deriveJourneyDisplayStatus(params: {
+  journeyError?: string;
+  threadStatus: string | undefined;
+  hasPendingToolCalls: boolean;
+  isStreamActive: boolean;
+}): JourneyDisplayStatus {
+  const { journeyError, threadStatus, hasPendingToolCalls, isStreamActive } = params;
+  if (journeyError) return 'error';
+  if (!threadStatus) return 'idle';
+  if (isStreamActive) return 'running';
+  if (threadStatus === 'error') return 'error';
+  if (hasPendingToolCalls) return 'pending_confirmation';
+  if (threadStatus === 'waiting_tools' || threadStatus === 'paused') return 'pending_confirmation';
+  if (threadStatus === 'running') return 'running';
+  if (threadStatus === 'idle') return 'success';
+  return 'idle';
+}
+
+function getStatusLabel(status: JourneyDisplayStatus): string {
+  switch (status) {
+    case 'pending_confirmation':
+      return 'Needs confirmation';
+    case 'running':
+      return 'Running';
+    case 'success':
+      return 'Completed';
+    case 'error':
+      return 'Error';
+    default:
+      return status;
+  }
 }
 
 export const JourneyDetailModal: React.FC = () => {
   const detailJourneyId = useJourneyStore((state) => state.detailJourneyId);
   const closeDetailModal = useJourneyStore((state) => state.closeDetailModal);
-  const cancelJourney = useJourneyStore((state) => state.cancelJourney);
-  const updateMessage = useJourneyStore((state) => state.updateMessage);
-  const deleteMessage = useJourneyStore((state) => state.deleteMessage);
 
   const journey = useJourneyStore((state) =>
     detailJourneyId ? state.journeys[detailJourneyId] : null
   );
 
-  const session = useLLMSessionStore((state) =>
-    journey?.status === 'running' && journey?.activeSessionId ? state.sessions[journey.activeSessionId] : undefined
+  const threadId = journey?.threadId;
+
+  // Messages from ThreadStore (same as AgentPanel)
+  const { messages: timelineMessages } = useConversationTimeline(threadId);
+
+  // Thread state from ThreadStore
+  const { toolCallsByMessageId, threadStatus, threadError, pendingToolCallMessageId, isStreamActive } = useThreadStore(
+    useShallow((state) => ({
+      toolCallsByMessageId: state.toolCallsByMessageId,
+      threadStatus: threadId ? state.threadsById[threadId]?.status : undefined,
+      threadError: threadId ? state.threadsById[threadId]?.lastError ?? null : null,
+      pendingToolCallMessageId: threadId ? state.pendingToolCallMessageByThread[threadId] : undefined,
+      isStreamActive: threadId ? Boolean(state.activeStreamByThread[threadId]) : false,
+    }))
   );
 
   const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
+  const journeyLanguage = useMemo(() => journey ? getJourneyLanguage(journey) : mainLanguage, [journey, mainLanguage]);
 
   const [errorExpanded, setErrorExpanded] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -86,50 +162,54 @@ export const JourneyDetailModal: React.FC = () => {
     userScrolledUpRef.current = !isAtBottom;
   }, []);
 
-  const journeyMessagesLength = journey?.messages?.length ?? 0;
-  const lastContentPart = session?.contentParts?.[session.contentParts.length - 1]?.text ?? '';
-  const toolCallProgressLength = session?.toolCallProgress?.length ?? 0;
-
+  // Auto-scroll
+  const messagesLength = timelineMessages.length;
   useEffect(() => {
     if (userScrolledUpRef.current) return;
     const element = bodyRef.current;
     if (!element) return;
     element.scrollTop = element.scrollHeight;
-  }, [journeyMessagesLength, lastContentPart, toolCallProgressLength, journey?.status]);
+  }, [messagesLength, threadStatus, isStreamActive]);
 
   useEffect(() => {
     setFeedbackOpen(false);
     setFeedbackText('');
   }, [detailJourneyId]);
 
-  const lastAssistantMessageId = useMemo(() => {
-    if (!journey) return null;
-    for (let i = journey.messages.length - 1; i >= 0; i--) {
-      const message = journey.messages[i];
-      if (message.role === 'assistant') return message.id;
+  // Filter to user/assistant messages
+  const displayMessages = useMemo(
+    () => timelineMessages.filter(m => m.role === 'user' || m.role === 'assistant'),
+    [timelineMessages]
+  );
+
+  const lastAssistantMessage = useMemo(() => {
+    for (let i = displayMessages.length - 1; i >= 0; i--) {
+      const msg = displayMessages[i];
+      if (msg.role === 'assistant' && !msg.isStreaming) return msg;
     }
     return null;
-  }, [journey?.messages]);
+  }, [displayMessages]);
+
+  const lastAssistantMessageId = lastAssistantMessage?.id ?? null;
 
   const lastAssistantToolCalls = useMemo(() => {
-    if (!journey || !lastAssistantMessageId) return [];
-    const message = journey.messages.find((item) => item.id === lastAssistantMessageId);
-    return message?.toolCalls ?? [];
-  }, [journey, lastAssistantMessageId]);
+    if (!lastAssistantMessageId) return [];
+    return (toolCallsByMessageId[lastAssistantMessageId] ?? []).map(toToolCallMetadata);
+  }, [lastAssistantMessageId, toolCallsByMessageId]);
 
-  const hasStreamingCalls = journey?.status === 'running' && (session?.toolCallProgress?.length ?? 0) > 0;
+  const hasPendingToolCalls = useMemo(
+    () => lastAssistantToolCalls.some(tc => tc.status === 'pending' || tc.status === 'running'),
+    [lastAssistantToolCalls]
+  );
 
-  const statusLabel = useMemo(() => {
-    if (!journey) return '';
-    switch (journey.status) {
-      case 'pending_confirmation':
-        return 'Needs confirmation';
-      case 'applying':
-        return 'Applying...';
-      default:
-        return journey.status;
-    }
-  }, [journey?.status]);
+  const journeyStatus = useMemo(() => deriveJourneyDisplayStatus({
+    journeyError: journey?.error,
+    threadStatus,
+    hasPendingToolCalls,
+    isStreamActive,
+  }), [journey?.error, threadStatus, hasPendingToolCalls, isStreamActive]);
+
+  const statusLabel = getStatusLabel(journeyStatus);
 
   const userInput = useMemo(() => {
     if (!journey) return '';
@@ -138,7 +218,7 @@ export const JourneyDetailModal: React.FC = () => {
     return '';
   }, [journey?.kind, journey?.input]);
 
-  const projectId = ((journey?.input as any)?.projectId as string | undefined) ?? '';
+  const projectId = journey ? getProjectIdFromJourney(journey) : '';
   const applyLanguage = useMemo(
     () => (journey ? getApplyLanguage(journey, mainLanguage) : mainLanguage),
     [journey, mainLanguage]
@@ -148,25 +228,23 @@ export const JourneyDetailModal: React.FC = () => {
     [journey]
   );
 
-  const isApplying = journey?.status === 'applying';
-  const hasPendingCards = lastAssistantToolCalls.some((toolCall) => isPendingStatus(toolCall?.status));
-  const isPending = journey?.status === 'pending_confirmation' || isApplying || hasPendingCards;
+  const isPending = journeyStatus === 'pending_confirmation' || hasPendingToolCalls;
 
   const handleCancel = useCallback(() => {
-    if (!journey) return;
-    cancelJourney(journey.id);
-  }, [cancelJourney, journey?.id]);
+    if (!journey?.threadId) return;
+    void threadOrchestrator.cancel(projectId, journey.threadId);
+  }, [projectId, journey?.threadId]);
 
   const handleConfirm = useCallback(async (decisions: ToolCallDecisionMap) => {
-    if (!projectId || !journey) return;
-    await applyJourneyEdits({
-      journeyId: journey.id,
+    if (!projectId || !journey?.threadId || !lastAssistantMessageId) return;
+    await threadOrchestrator.toolDecisions({
       projectId,
-      language: applyLanguage,
+      threadId: journey.threadId,
+      messageId: lastAssistantMessageId,
       decisions,
-      options: handlerOptions,
+      options: handlerOptions as Record<string, unknown>,
     });
-  }, [projectId, journey?.id, applyLanguage, handlerOptions]);
+  }, [projectId, journey?.threadId, lastAssistantMessageId, handlerOptions]);
 
   const handleSendFeedback = useCallback(() => {
     if (!journey) return;
@@ -183,11 +261,15 @@ export const JourneyDetailModal: React.FC = () => {
   }, []);
 
   const handleSaveEdit = useCallback((messageId: string) => {
-    if (!journey) return;
-    updateMessage(journey.id, messageId, editingText);
+    if (!journey?.threadId) return;
+    const entry = {
+      contentParts: [{ type: 'content', text: editingText }],
+      thinkingDetails: [],
+    };
+    useThreadStore.getState().updateMessageData(journey.threadId, messageId, journeyLanguage, entry);
     setEditingMessageId(null);
     setEditingText('');
-  }, [journey, editingText, updateMessage]);
+  }, [journey?.threadId, editingText, journeyLanguage]);
 
   const handleCancelEdit = useCallback(() => {
     setEditingMessageId(null);
@@ -195,17 +277,25 @@ export const JourneyDetailModal: React.FC = () => {
   }, []);
 
   const handleDeleteMessage = useCallback((messageId: string) => {
-    if (!journey) return;
-    deleteMessage(journey.id, messageId);
-  }, [journey, deleteMessage]);
+    if (!journey?.threadId) return;
+    useThreadStore.getState().removeMessage(journey.threadId, messageId);
+  }, [journey?.threadId]);
 
-  const isStreamingStatus = journey?.status === 'running';
+  const displayError = useMemo(() => {
+    if (journey?.error) return journey.error;
+    if (threadError) return threadError;
+    return null;
+  }, [journey?.error, threadError]);
 
   if (!journey) return null;
 
+  const isRunning = journeyStatus === 'running';
+  const canEditDelete = !['running', 'pending_confirmation'].includes(journeyStatus);
+  const isFeedbackDisabled = isRunning || journeyStatus === 'pending_confirmation';
+
   const footer = (
     <div className="llm-task-modal-footer-actions">
-      {journey.status === 'running' && (
+      {isRunning && (
         <TextButton variant="danger" onClick={handleCancel}>
           Cancel
         </TextButton>
@@ -225,22 +315,16 @@ export const JourneyDetailModal: React.FC = () => {
       <div className="llm-task-modal-header">
         <div className="llm-task-modal-title">
           <h3>{journey.label}</h3>
-          <span className={`llm-task-modal-status llm-task-modal-status--${journey.status}`}>
+          <span className={`llm-task-modal-status llm-task-modal-status--${journeyStatus}`}>
             {statusLabel}
           </span>
 
-          {journey.status === 'error' && journey.error && (
+          {journeyStatus === 'error' && displayError && (
             <div
               className={`llm-task-modal-error-container ${errorExpanded ? 'llm-task-modal-error-container--expanded' : ''}`}
               onClick={() => setErrorExpanded((prev) => !prev)}
             >
-              <div className="llm-task-modal-error-summary-text">{journey.error}</div>
-            </div>
-          )}
-
-          {journey.warning && (
-            <div className="llm-task-modal-warning-container">
-              <div className="llm-task-modal-warning-text">{journey.warning}</div>
+              <div className="llm-task-modal-error-summary-text">{displayError}</div>
             </div>
           )}
         </div>
@@ -254,15 +338,6 @@ export const JourneyDetailModal: React.FC = () => {
         />
       </div>
 
-      {journey.status === 'running' && journey.progress && (
-        <div className="llm-task-modal-progress">
-          <div className="llm-task-modal-progress-text">
-            {journey.progress.currentItemLabel || `${journey.progress.current}/${journey.progress.total}`}
-          </div>
-          <NotificationProgressBar current={journey.progress.current} total={journey.progress.total} />
-        </div>
-      )}
-
       {userInput.trim() && (
         <div className="llm-task-modal-user-input">
           <div className="llm-task-modal-user-input-label">Input</div>
@@ -274,32 +349,38 @@ export const JourneyDetailModal: React.FC = () => {
         <div className="llm-task-modal-journey">
           <div className="llm-task-modal-journey-label">Journey</div>
           <div className="llm-task-modal-journey-messages">
-            {journey.messages.length === 0 && (
+            {displayMessages.length === 0 && (
               <div className="llm-task-modal-no-content">No messages yet.</div>
             )}
-            {journey.messages.map((message) => {
+            {displayMessages.map((message) => {
               const isLastAssistant = message.id === lastAssistantMessageId;
-              const displayContentParts =
-                isLastAssistant && isStreamingStatus ? (session?.contentParts ?? message.contentParts) : message.contentParts;
+              const isStreamingMessage = message.isStreaming === true;
 
-              const text = displayContentParts
+              // Resolve display content from multilingual data
+              const resolved = isStreamingMessage
+                ? {
+                    contentParts: (message.data['_streaming']?.contentParts ?? []),
+                    thinkingDetails: message.data['_streaming']?.thinkingDetails,
+                  }
+                : resolveRunMessageDisplay(message, journeyLanguage);
+
+              const text = resolved.contentParts
                 .filter((part) => part.type === 'content')
                 .map((part) => part.text)
                 .join('')
                 .trim();
 
-              const storedToolCalls = message.toolCalls ?? [];
+              // Tool calls from ThreadStore
+              const storedToolCalls = !isStreamingMessage
+                ? (toolCallsByMessageId[message.id] ?? []).map(toToolCallMetadata)
+                : [];
               const messageCards = storedToolCalls.length > 0
                 ? buildEditCardsFromToolCallMetadata(storedToolCalls)
                 : [];
 
-              const messageHasToolCalls =
-                messageCards.length > 0 ||
-                (isLastAssistant && hasStreamingCalls);
-
+              const messageHasToolCalls = messageCards.length > 0;
               const showContent = text || (message.role === 'assistant' && !messageHasToolCalls);
               const isEditing = editingMessageId === message.id;
-              const canEditDelete = !['running', 'applying', 'pending_confirmation'].includes(journey.status);
 
               return (
                 <div key={message.id} className={`llm-task-modal-journey-message llm-task-modal-journey-message--${message.role}`}>
@@ -329,8 +410,8 @@ export const JourneyDetailModal: React.FC = () => {
                   {message.role === 'assistant' && !isEditing && (
                     <ThinkingDisplay
                       messageId={message.id}
-                      contentParts={displayContentParts}
-                      isStreaming={isStreamingStatus && message.id === lastAssistantMessageId}
+                      contentParts={resolved.contentParts}
+                      isStreaming={isStreamingMessage}
                     />
                   )}
 
@@ -367,20 +448,19 @@ export const JourneyDetailModal: React.FC = () => {
                             cards={messageCards}
                             onCommitDecisions={isLastAssistant && isPending ? handleConfirm : undefined}
                             projectId={projectId}
-                            isApplyDisabled={Boolean(isLastAssistant && isApplying)}
-                            applyDisabledReason={isLastAssistant && isApplying ? 'Applying changes...' : undefined}
+                            isApplyDisabled={false}
+                            applyDisabledReason={undefined}
                           />
                         </div>
                       )}
 
-                      {isLastAssistant && hasStreamingCalls && (
+                      {!messageCards.length && pendingToolCallMessageId === message.id && (
                         <div className="llm-task-modal-journey-message-tool-calls">
-                          <FunctionCallsThread
-                            threadId={`journey:${journey.id}:${message.id}:stream`}
-                            mode="streaming"
-                            streamingProgress={session?.toolCallProgress}
-                            projectId={projectId}
-                          />
+                          <div className="typing-indicator">
+                            <div className="loading-track">
+                              <div className="loading-bar" />
+                            </div>
+                          </div>
                         </div>
                       )}
                     </>
@@ -388,6 +468,14 @@ export const JourneyDetailModal: React.FC = () => {
                 </div>
               );
             })}
+
+            {isRunning && displayMessages.length > 0 && !displayMessages.some(m => m.isStreaming) && (
+              <div className="typing-indicator">
+                <div className="loading-track">
+                  <div className="loading-bar" />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -395,7 +483,7 @@ export const JourneyDetailModal: React.FC = () => {
           <button
             className="llm-task-modal-feedback-header"
             onClick={() => setFeedbackOpen(!feedbackOpen)}
-            disabled={journey.status === 'running' || journey.status === 'applying' || journey.status === 'pending_confirmation'}
+            disabled={isFeedbackDisabled}
           >
             {feedbackOpen ? 'Feedback' : '+ Feedback'}
           </button>
@@ -427,7 +515,7 @@ export const JourneyDetailModal: React.FC = () => {
                     <TextButton
                       variant="primary"
                       onClick={handleSendFeedback}
-                      disabled={!feedbackText.trim() || journey.status === 'running' || journey.status === 'applying' || journey.status === 'pending_confirmation'}
+                      disabled={!feedbackText.trim() || isFeedbackDisabled}
                     >
                       Send
                     </TextButton>

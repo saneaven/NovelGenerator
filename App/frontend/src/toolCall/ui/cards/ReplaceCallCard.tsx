@@ -125,7 +125,13 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
       category="replace"
       status={operation.status}
       title={title}
-      subtitle={changedFields.length === 0 ? 'No effective field changes' : undefined}
+      subtitle={
+        operation.status === 'failed' && operation.reason
+          ? operation.reason
+          : changedFields.length === 0
+            ? 'No effective field changes'
+            : undefined
+      }
       showDecisionButtons={showDecisionButtons}
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}

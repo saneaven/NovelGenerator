@@ -212,6 +212,9 @@ function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
         arguments: toolCall.arguments,
         status: toolCall.status as any,
         reason: toolCall.reason ?? undefined,
+        failureType: toolCall.status === 'failed'
+            ? (toolCall.reason?.startsWith('VALIDATION::') ? 'validation' : 'execution')
+            : undefined,
         result: toolCall.result as any,
         acceptedAt: toolCall.acceptedAt ? new Date(toolCall.acceptedAt) : undefined,
     };

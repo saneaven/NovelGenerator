@@ -10,16 +10,42 @@ export type StreamHandle = {
   abort: () => void;
 };
 
-function buildPath(projectId: string, suffix: string): string {
-  return `/api/v1/projects/${encodeURIComponent(projectId)}/threads${suffix}`;
+/** 2× the backend heartbeat interval (15 s). */
+const SSE_READ_TIMEOUT_MS = 30_000;
+
+function readWithTimeout(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  controller: AbortController,
+  timeoutMs: number,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      controller.abort(new Error('SSE read timeout'));
+      reject(new Error('SSE stream timeout: no data received from server.'));
+    }, timeoutMs);
+
+    reader.read().then(
+      (result) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
+      },
+      (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
-function withAfterSeq(path: string, afterSeq?: number): string {
-  if (afterSeq == null || !Number.isFinite(afterSeq) || afterSeq < 0) {
-    return path;
-  }
-  const joiner = path.includes('?') ? '&' : '?';
-  return `${path}${joiner}after_seq=${Math.floor(afterSeq)}`;
+function buildPath(projectId: string, suffix: string): string {
+  return `/api/v1/projects/${encodeURIComponent(projectId)}/threads${suffix}`;
 }
 
 function parseSseFrame(frame: string): ThreadEvent | null {
@@ -138,7 +164,7 @@ async function streamPostSse(
       let buffer = '';
 
       while (true) {
-        const { value, done } = await reader.read();
+        const { value, done } = await readWithTimeout(reader, controller, SSE_READ_TIMEOUT_MS);
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
 
@@ -182,10 +208,9 @@ export const threadService = {
     },
     onEvent: (event: ThreadEvent) => void,
     requestOptions?: RequestOptions,
-    afterSeq?: number,
   ) {
     return streamPostSse(
-      withAfterSeq(buildPath(projectId, '/dispatch'), afterSeq),
+      buildPath(projectId, '/dispatch'),
       payload,
       onEvent,
       requestOptions,
@@ -216,10 +241,9 @@ export const threadService = {
     threadId: string,
     onEvent: (event: ThreadEvent) => void,
     requestOptions?: RequestOptions,
-    afterSeq?: number,
   ) {
     return streamPostSse(
-      withAfterSeq(buildPath(projectId, `/${encodeURIComponent(threadId)}/resume`), afterSeq),
+      buildPath(projectId, `/${encodeURIComponent(threadId)}/resume`),
       {},
       onEvent,
       requestOptions,
@@ -239,7 +263,6 @@ export const threadService = {
     messages: any[];
     tool_calls: any[];
     last_error: string | null;
-    last_event_seq: number;
   }> {
     return await apiClient.get(buildPath(projectId, `/${encodeURIComponent(threadId)}/state`));
   },

@@ -11,8 +11,7 @@ from uuid import UUID
 
 class RunEventBus(Protocol):
     async def publish(self, thread_id: UUID, event: dict) -> None: ...
-    def subscribe(self, thread_id: UUID, *, after_seq: int | None = None) -> AsyncIterator[dict]: ...
-    async def latest_seq(self, thread_id: UUID) -> int: ...
+    def subscribe(self, thread_id: UUID) -> AsyncIterator[dict]: ...
 
 
 @dataclass
@@ -77,7 +76,7 @@ class InMemoryRunEventBus:
                 except Exception:
                     pass
 
-    def subscribe(self, thread_id: UUID, *, after_seq: int | None = None) -> AsyncIterator[dict]:
+    def subscribe(self, thread_id: UUID) -> AsyncIterator[dict]:
         async def _generator() -> AsyncIterator[dict]:
             await self._ensure_cleanup_task()
 
@@ -89,14 +88,7 @@ class InMemoryRunEventBus:
                 if channel is None:
                     channel = _ThreadChannel()
                     self._channels[thread_id] = channel
-                if after_seq is None:
-                    backlog = list(channel.history)
-                else:
-                    backlog = [
-                        item
-                        for item in channel.history
-                        if int(item.get("event_seq") or 0) > after_seq
-                    ]
+                backlog = list(channel.history)
                 channel.subscribers.add(queue)
                 channel.updated_at = datetime.utcnow()
 
@@ -115,14 +107,6 @@ class InMemoryRunEventBus:
                         channel.updated_at = datetime.utcnow()
 
         return _generator()
-
-    async def latest_seq(self, thread_id: UUID) -> int:
-        async with self._lock:
-            channel = self._channels.get(thread_id)
-            if channel is None or not channel.history:
-                return 0
-            latest = channel.history[-1]
-            return int(latest.get("event_seq") or 0)
 
 
 run_event_bus = InMemoryRunEventBus()

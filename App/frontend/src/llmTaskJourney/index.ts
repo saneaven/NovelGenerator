@@ -1,10 +1,9 @@
-export { JourneyRuntime, applyJourneyEdits, rejectAllJourneyEdits } from './JourneyRuntime';
+export { JourneyRuntime } from './JourneyRuntime';
 export { JourneyDetailModal } from './JourneyDetailModal';
 export {
   registerJourneyNotification,
-  updateJourneyNotification,
+  updateJourneyNotificationFromThread,
   removeJourneyNotification,
   registerJourneyModals,
 } from './notificationHelpers';
-export type { LLMTaskJourney, EditingTargets } from './types';
-
+export type { EditingTargets } from './types';
