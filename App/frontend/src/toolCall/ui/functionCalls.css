@@ -177,7 +177,7 @@
 
 .function-call-status-pill--collecting,
 .function-call-status-pill--processing,
-.function-call-status-pill--running {
+.function-call-status-pill--streaming {
   background: var(--color-info-light);
   color: var(--color-info-dark);
   border-color: var(--color-info);
@@ -190,7 +190,7 @@
   border-color: var(--color-warning);
 }
 
-.function-call-status-pill--accepted {
+.function-call-status-pill--applied {
   background: var(--color-success-light);
   color: var(--color-success-dark);
   border-color: var(--color-success);

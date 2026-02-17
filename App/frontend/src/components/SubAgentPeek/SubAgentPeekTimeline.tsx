@@ -1,10 +1,12 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { ContentPart, ToolCallMetadata } from '../../types/chat';
 import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { collapseContentParts } from '../../agent/utils/contentParts';
+import ChatEngine from '../../agent/chatEngine';
+import { threadService } from '../../api/threadService';
 import { useThreadStore } from '../../store/threadStore';
 import type { ThreadMessage, ThreadToolCall } from '../../types/thread';
 import { isBlockingThreadStatus, resolveRunMessageDisplay } from '../../types/thread';
@@ -14,7 +16,6 @@ import { IconButton } from '../IconButton';
 import { ChevronRight, Trash } from '../icons';
 import { MarkdownRenderer } from '../MarkdownRenderer/MarkdownRenderer';
 import { TextButton } from '../TextButton';
-import { isUuid } from '../../utils/idUtils';
 
 function formatRole(role: string, t: (key: string) => string): string {
   if (role === 'user') return t('subAgent.parentAgent');
@@ -30,7 +31,7 @@ function formatTime(input?: Date | string): string {
 }
 
 function hasPendingStatus(status: string | undefined): boolean {
-  return status === 'pending' || status === 'running';
+  return status === 'pending' || status === 'streaming' || status === 'validating' || status === 'processing';
 }
 
 
@@ -68,6 +69,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   const [isApplying, setIsApplying] = useState(false);
   const [actionInFlight, setActionInFlight] = useState<'pause' | 'retry' | 'cancel' | null>(null);
   const [resultExpanded, setResultExpanded] = useState(false);
+  const engineRef = useRef<ChatEngine | null>(null);
 
   const { thread, threadMessages, toolCallsByMessageId } = useThreadStore(
     useShallow((state) => ({
@@ -77,7 +79,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     })),
   );
 
-  const threadStatus = thread?.status ?? 'idle';
+  const threadStatus = thread?.status ?? 'done';
   const isBlocking = isBlockingThreadStatus(threadStatus);
 
   const messages = useMemo(() => {
@@ -114,11 +116,42 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     return toContentParts(display.contentParts);
   }, []);
 
-  // TODO: reimplement via new backend orchestration API
-  const handleConfirm = useCallback(async (_messageId: string, _decisions: ToolCallDecisionMap) => {
+  useEffect(() => {
+    const engine = new ChatEngine({
+      threadId: childThreadId,
+      projectId,
+      threadType: 'subAgent',
+    });
+    engineRef.current = engine;
+    void engine.init().catch((error) => {
+      console.error('Failed to init sub-agent engine', { childThreadId, error });
+    });
+    return () => {
+      if (engineRef.current === engine) {
+        engine.disconnectSSE();
+        engineRef.current = null;
+      }
+    };
+  }, [childThreadId, projectId]);
+
+  const handleConfirm = useCallback(async (_messageId: string, decisions: ToolCallDecisionMap) => {
+    if (!engineRef.current) return;
     setIsApplying(true);
     try {
-      throw new Error('Not implemented: threadOrchestrator.toolDecisions');
+      const accepts = Object.entries(decisions)
+        .filter(([, d]) => d === 'accept')
+        .map(([id]) => id);
+      const rejects = Object.entries(decisions)
+        .filter(([, d]) => d === 'reject')
+        .map(([id]) => id);
+      if (accepts.length > 1 && rejects.length === 0) {
+        await engineRef.current.acceptToolCallsBatch(accepts);
+      } else {
+        await Promise.all([
+          ...accepts.map((id) => engineRef.current?.acceptToolCall(id)),
+          ...rejects.map((id) => engineRef.current?.rejectToolCall(id)),
+        ]);
+      }
     } finally {
       setIsApplying(false);
     }
@@ -127,28 +160,29 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   const handlePause = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('pause');
-    console.warn('Not implemented: threadOrchestrator.pause');
-    setActionInFlight(null);
+    const op = engineRef.current ? engineRef.current.cancel() : Promise.resolve();
+    void op.finally(() => setActionInFlight(null));
   }, [actionInFlight]);
 
   const handleRetry = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('retry');
-    console.warn('Not implemented: threadOrchestrator.resume');
-    setActionInFlight(null);
+    const op = engineRef.current ? engineRef.current.resume() : Promise.resolve();
+    void op.finally(() => setActionInFlight(null));
   }, [actionInFlight]);
 
   const handleCancel = useCallback(() => {
     if (actionInFlight) return;
     setActionInFlight('cancel');
-    console.warn('Not implemented: threadOrchestrator.cancel');
-    setActionInFlight(null);
+    const op = engineRef.current ? engineRef.current.cancel() : Promise.resolve();
+    void op.finally(() => setActionInFlight(null));
   }, [actionInFlight]);
 
-  // TODO: reimplement message deletion via new backend API
   const handleDeleteMessage = useCallback((messageId: string) => {
     if (!confirm('Are you sure you want to delete this message?')) return;
-    useThreadStore.getState().removeMessage(childThreadId, messageId);
+    void threadService.deleteMessage(childThreadId, messageId).then(() => {
+      useThreadStore.getState().removeMessage(childThreadId, messageId);
+    });
   }, [childThreadId]);
 
   const actionDisabled = isApplying || actionInFlight !== null;
@@ -180,7 +214,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
         const toolCalls = (toolCallsByMessageId[message.id] ?? [])
           .map(toToolCallMetadata);
         const isLatestAssistant = message.role === 'assistant' && String(message.id) === lastAssistantMessageId;
-        const waitingDecision = isLatestAssistant && threadStatus === 'waiting_tools';
+        const waitingDecision = isLatestAssistant && threadStatus === 'waiting';
         const cards = toolCalls.length > 0 ? buildEditCardsFromToolCallMetadata(toolCalls) : [];
         const hasPendingCards = cards.some((card) => hasPendingStatus(String(card.toolCall.status)));
         const showApplyingBanner = isApplying && isLatestAssistant && hasPendingCards;
@@ -287,7 +321,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
       )}
 
       <div className="sub-agent-peek-actions">
-        {isBlocking && (threadStatus === 'running' || threadStatus === 'waiting_tools') && (
+        {isBlocking && (threadStatus === 'running' || threadStatus === 'waiting') && (
           <TextButton
             size="sm"
             variant="secondary"

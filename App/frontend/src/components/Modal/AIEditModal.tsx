@@ -3,7 +3,12 @@ import { BaseModal } from '../BaseModal';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
 import type { ObjectType, ChapterObject } from '../../types/unifiedObject';
-import { JourneyRuntime } from '../../llmTaskJourney';
+import { registerJourneyNotification } from '../../llmTaskJourney';
+import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
+import { useJourneyStore } from '../../store/journeyStore';
+import { useNotificationStore } from '../../store/notificationStore';
+import { threadService } from '../../api/threadService';
+import ChatEngine from '../../agent/chatEngine';
 import { Document } from '../icons';
 import { ObjectPicker } from '../ObjectPicker';
 import { TextButton } from '../TextButton';
@@ -118,7 +123,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     setPickerLoading(false);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     const trimmedRequest = userRequest.trim();
@@ -132,14 +137,60 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       return;
     }
 
-    const { journeyId } = JourneyRuntime.start('aiEdit', {
+    const spec = getJourneySpec('aiEdit');
+    const journeyId = crypto.randomUUID();
+    const inputPayload = {
       projectId,
       category,
       targetId,
       userRequest: trimmedRequest,
       selectedContextIds,
       rawMode,
+    };
+    const editingTargets = spec.buildEditingTargets(inputPayload);
+
+    useJourneyStore.getState().createJourney({
+      id: journeyId,
+      kind: 'aiEdit',
+      input: inputPayload,
+      editingTargets,
+      label: spec.label(inputPayload),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     });
+
+    registerJourneyNotification(
+      useJourneyStore.getState().journeys[journeyId] as any,
+      {
+        onClick: () => useJourneyStore.getState().openDetailModal(journeyId),
+        onDismiss: () => useJourneyStore.getState().clearJourney(journeyId),
+      },
+    );
+
+    try {
+      const created = await threadService.createJourneyThread(projectId, 'aiEdit');
+      useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
+      const engine = new ChatEngine({
+        threadId: created.thread_id,
+        projectId,
+        threadType: 'journey',
+      });
+      await engine.init();
+      await engine.send(trimmedRequest, {
+        surface: 'story-object',
+        journey_target_ids: [targetId],
+        context_object_ids: selectedContextIds,
+      });
+    } catch (error: any) {
+      useJourneyStore.getState().updateJourney(journeyId, {
+        error: error?.message ?? 'Failed to start AI edit journey',
+      });
+      useNotificationStore.getState().update(journeyId, {
+        status: 'error',
+        message: error?.message ?? 'Failed to start AI edit journey',
+      });
+    }
+
     onTaskStarted?.(journeyId);
 
     // Close modal immediately - task continues in background via toast

@@ -99,7 +99,7 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}
       onReject={onReject}
-      defaultExpanded={operation.status === 'running' || operation.status === 'processing' || operation.status === 'pending'}
+      defaultExpanded={operation.status === 'streaming' || operation.status === 'processing' || operation.status === 'pending'}
       islands={[renderBody()]}
     />
   );

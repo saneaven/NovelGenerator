@@ -268,12 +268,12 @@ export interface ContentPart {
 // ============================================================================
 
 export type RunType = 'agent' | 'subAgent' | 'journey';
-export type RunStatus = 'running' | 'waiting' | 'paused' | 'completed' | 'error' | 'cancelled';
+export type RunStatus = 'running' | 'waiting' | 'processing' | 'paused' | 'done' | 'error' | 'canceled';
 export type RunMode = 'planMode' | 'agentMode';
 export type RunSurface = 'story-object' | 'outline-manager' | 'novel-editor' | 'config';
 export type JourneyKind = 'aiEdit' | 'translation' | 'imagePrompt';
-export type RunMessageRole = 'user' | 'assistant' | 'system' | 'tool';
-export type RunToolCallStatus = 'pending' | 'running' | 'accepted' | 'rejected' | 'cancelled';
+export type RunMessageRole = 'user' | 'assistant' | 'system' | 'tool_call' | 'tool_result';
+export type RunToolCallStatus = 'streaming' | 'validating' | 'pending' | 'processing' | 'failed' | 'rejected' | 'applied';
 export type RunToolCallFailureType = 'validation' | 'execution' | 'partial';
 
 export interface AgentStartRunRequest {

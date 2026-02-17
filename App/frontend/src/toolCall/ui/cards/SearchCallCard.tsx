@@ -20,7 +20,7 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
     [operation]
   );
 
-  const resultsIsland = operation.status === 'accepted' ? (
+  const resultsIsland = operation.status === 'applied' ? (
     <div className="function-call-search-results-island function-call-search-results-island--standalone">
       <div className="function-call-search-results-island__header">Search Results</div>
       {!payload || payload.groups.length === 0 ? (
@@ -48,7 +48,7 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
         </div>
       )}
     </div>
-  ) : operation.status === 'processing' || operation.status === 'running' ? (
+  ) : operation.status === 'processing' || operation.status === 'streaming' ? (
     <div className="function-call-search-results-island function-call-search-results-island--standalone">
       <div className="function-call-search-results-island__empty">Searching...</div>
     </div>
@@ -66,7 +66,7 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}
       onReject={onReject}
-      defaultExpanded={operation.status === 'pending' || operation.status === 'processing' || operation.status === 'running'}
+      defaultExpanded={operation.status === 'pending' || operation.status === 'processing' || operation.status === 'streaming'}
       islands={[
         <div className="function-call-search-query-island" key="query">
           <div className="function-call-search-query-island__label">Query</div>

@@ -31,7 +31,6 @@ import { useSettings } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
-// TODO: useLLMSessionStore deleted — AI edit session tracking needs reimplementation
 import AIEditModal from '../../../components/Modal/AIEditModal';
 import TranslationModal from '../../../components/Modal/TranslationModal';
 import VersionHistoryModal from '../../../components/Modal/VersionHistoryModal';
@@ -129,7 +128,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef<ManuscriptEditorRef>(null);
 
-  // TODO: AI edit session tracking needs reimplementation
+  // AI edit session tracking is handled by journey thread state.
   const aiEditSession = undefined as any;
 
   useEffect(() => {
@@ -466,7 +465,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       const updated = editorRef.current.updateImageSrc(replaceImageSrc, newSrc, asset.name, asset.id);
 
       if (!updated) {
-        console.warn('Failed to find and update image:', { from: replaceImageSrc, to: newSrc });
+        console.error('Failed to find and update image:', { from: replaceImageSrc, to: newSrc });
       }
 
       setReplaceImageSrc(null);

@@ -74,7 +74,7 @@ from .routes.variable_routes import router as variable_router
 # Preset management routes
 from .routes.preset_routes import router as preset_router
 from .routes.sub_agent_routes import router as sub_agent_router
-# TODO: thread_routes deleted — will be reimplemented with new pipeline
+from .routes.thread_routes import router as thread_router
 
 # Token counting routes
 from .routes.token_routes import router as token_router
@@ -117,6 +117,7 @@ app.include_router(variable_router)
 # Include preset management router
 app.include_router(preset_router)
 app.include_router(sub_agent_router)
+app.include_router(thread_router)
 
 # Include token counting router
 app.include_router(token_router)

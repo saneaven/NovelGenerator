@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useSettings } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-// TODO: useLLMSessionStore deleted — streaming session tracking needs reimplementation
 import {
     PROVIDER_LABELS,
     MODEL_OPTIONS,
@@ -365,8 +364,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         }
     }, [provider]);
 
-    // Subscribe to streaming session from the store
-    // TODO: streaming session tracking needs reimplementation
+    // Streaming session subscription will be restored once image runtime is migrated.
     const streamingSession = undefined as any;
 
     // Effect to extract and update prompt during streaming
@@ -383,8 +381,8 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
         // Extract prompt from contentParts (for native output mode)
         const textContent = streamingSession.contentParts
-            ?.filter(p => p.type === 'content')
-            .map(p => p.text)
+            ?.filter((p: any) => p.type === 'content')
+            .map((p: any) => p.text)
             .join('') || '';
 
         // Extract prompt from toolCallProgress (for tool call mode)

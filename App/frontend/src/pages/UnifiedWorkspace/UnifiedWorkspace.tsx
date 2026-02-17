@@ -15,7 +15,7 @@ import { translationService } from '../../api/unifiedObjectService';
 import ErrorModal from '../../components/Modal/ErrorModal';
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
 import TranslationModal from '../../components/Modal/TranslationModal';
-// TODO: AgentPanel deleted — needs full reimplementation with new backend pipeline
+import AgentPanel from '../workspace/components/AgentPanel';
 import StoryObjectPanel from '../workspace/components/StoryObjectPanel';
 import OutlinePanel from '../outlinemanager/components/OutlinePanel';
 import NovelEditorPanel from '../noveleditor/components/NovelEditorPanel';
@@ -108,12 +108,6 @@ const UnifiedWorkspace: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  // Get current agent run mode from store (subscribe to changes).
-  // IMPORTANT: surface changes must not alter agent run mode.
-  const currentRunMode = useAgentUIStore(
-    (state) => state.runModeByProject[projectId ?? ''] ?? 'agentMode'
-  );
 
   // Settings modal state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -455,8 +449,10 @@ const UnifiedWorkspace: React.FC = () => {
       />
 
       <div className={`unified-workspace-content ${isAgentVisible ? 'agent-visible' : ''}`}>
-        {/* TODO: AgentPanel deleted — needs reimplementation */}
-        <div className="agent-panel agent-panel--placeholder" />
+        <AgentPanel
+          projectId={projectId ?? ''}
+          surface={currentSubPage}
+        />
 
         {currentSubPage === 'story-object' && (
           <StoryObjectPanel

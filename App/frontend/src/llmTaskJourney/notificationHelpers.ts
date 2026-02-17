@@ -19,9 +19,11 @@ function mapThreadStatusToNotification(threadStatus: string | undefined, isStrea
   if (!threadStatus) return 'idle';
   if (isStreamActive) return 'running';
   if (threadStatus === 'running') return 'running';
-  if (threadStatus === 'waiting_tools' || threadStatus === 'paused') return 'pending';
+  if (threadStatus === 'waiting' || threadStatus === 'paused') return 'pending';
+  if (threadStatus === 'processing') return 'running';
   if (threadStatus === 'error') return 'error';
-  if (threadStatus === 'idle') return 'success';
+  if (threadStatus === 'canceled') return 'cancelled';
+  if (threadStatus === 'done') return 'success';
   return 'idle';
 }
 
@@ -31,9 +33,11 @@ function mapThreadStatusToNotification(threadStatus: string | undefined, isStrea
 function getMessageFromThread(thread: ThreadInfo | undefined): string {
   if (!thread) return '';
   if (thread.status === 'running') return 'Processing...';
-  if (thread.status === 'waiting_tools' || thread.status === 'paused') return 'Needs confirmation';
+  if (thread.status === 'processing') return 'Applying tools...';
+  if (thread.status === 'waiting' || thread.status === 'paused') return 'Needs confirmation';
   if (thread.status === 'error') return thread.lastError || 'An error occurred';
-  if (thread.status === 'idle') return 'Completed';
+  if (thread.status === 'canceled') return 'Canceled';
+  if (thread.status === 'done') return 'Completed';
   return '';
 }
 
@@ -68,7 +72,7 @@ export function registerJourneyNotification(
  */
 export function updateJourneyNotificationFromThread(
   journeyId: string,
-  journey: Journey,
+  _journey: Journey,
   thread: ThreadInfo,
   isStreamActive?: boolean,
 ): void {

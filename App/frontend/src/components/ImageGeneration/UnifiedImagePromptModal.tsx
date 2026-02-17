@@ -10,7 +10,11 @@ import { useSettings } from '../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useJourneyStore } from '../../store/journeyStore';
 import { useThreadStore } from '../../store/threadStore';
-// TODO: JourneyRuntime deleted — journey execution needs reimplementation via backend
+import { useNotificationStore } from '../../store/notificationStore';
+import { registerJourneyNotification } from '../../llmTaskJourney';
+import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
+import { threadService } from '../../api/threadService';
+import ChatEngine from '../../agent/chatEngine';
 import { TextButton } from '../TextButton';
 import { ObjectPicker } from '../ObjectPicker';
 import './UnifiedImagePromptModal.css';
@@ -58,6 +62,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   isOpen,
   onClose,
   onPromptGenerated,
+  onStreamingStart,
   onStreamingError,
   promptMode,
   contextType,
@@ -151,8 +156,8 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       return;
     }
 
-    // Completed (idle) — extract prompt from last assistant message
-    if (threadStatus === 'idle') {
+    // Completed (done) — extract prompt from last assistant message
+    if (threadStatus === 'done') {
       const messages = useThreadStore.getState().getMessages(journeyThreadId);
       const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
 
@@ -160,7 +165,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
         const data = lastAssistantMsg.data;
         const entry = data[Object.keys(data)[0]];
         const promptText = entry?.contentParts
-          ?.filter((p) => p.type === 'text' || p.type === 'content')
+          ?.filter((p) => p.type === 'content')
           .map((p) => p.text)
           .join('') || '';
 
@@ -168,7 +173,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
           onPromptGenerated({ prompt: promptText, mode: promptMode });
         } else {
           // Try extracting from tool call arguments
-          const toolCalls = useThreadStore.getState().getToolCalls(lastAssistantMsg.id);
+          const toolCalls = useThreadStore.getState().getToolCallsForAssistantMessage(lastAssistantMsg.id);
           const promptFromTool = toolCalls
             .map(tc => (tc.arguments as Record<string, unknown>)?.prompt || (tc.result as Record<string, unknown> | null)?.prompt)
             .find(Boolean) as string | undefined;
@@ -215,14 +220,68 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     }
   };
 
-  const handleGenerate = useCallback(() => {
+  const handleGenerate = useCallback(async () => {
     if (!currentProjectId) {
       console.error('Project ID is required');
       return;
     }
 
-    // TODO: JourneyRuntime.start deleted — reimplement via backend
-    console.warn('Not implemented: image prompt journey');
+    const spec = getJourneySpec('imagePrompt');
+    const journeyId = crypto.randomUUID();
+    const inputPayload = {
+      projectId: currentProjectId,
+      promptMode,
+      contextType,
+      userRequest: userRequest.trim(),
+      objectType,
+      objectId,
+      basicInfoId,
+      sceneContext,
+      selectedObjectIds,
+    };
+    useJourneyStore.getState().createJourney({
+      id: journeyId,
+      kind: 'imagePrompt',
+      input: inputPayload,
+      editingTargets: spec.buildEditingTargets(inputPayload),
+      label: spec.label(inputPayload),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    registerJourneyNotification(
+      useJourneyStore.getState().journeys[journeyId] as any,
+      {
+        onClick: () => useJourneyStore.getState().openDetailModal(journeyId),
+        onDismiss: () => useJourneyStore.getState().clearJourney(journeyId),
+      },
+    );
+    setActiveJourneyId(journeyId);
+    onStreamingStart?.(journeyId, promptMode);
+
+    try {
+      const created = await threadService.createJourneyThread(currentProjectId, 'imagePrompt');
+      useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
+      const engine = new ChatEngine({
+        threadId: created.thread_id,
+        projectId: currentProjectId,
+        threadType: 'journey',
+      });
+      await engine.init();
+      await engine.send(userRequest.trim() || 'Generate an image prompt.', {
+        surface: 'story-object',
+        context_object_ids: selectedObjectIds,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? 'Failed to start image prompt journey.';
+      useJourneyStore.getState().updateJourney(journeyId, { error: message });
+      useNotificationStore.getState().update(journeyId, {
+        status: 'error',
+        message,
+      });
+      onStreamingError?.(message, promptMode);
+      setActiveJourneyId(null);
+    }
+
     onClose();
   }, [
     currentProjectId,
@@ -234,7 +293,10 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     basicInfoId,
     sceneContext,
     selectedObjectIds,
+    onStreamingStart,
+    onStreamingError,
     onClose,
+    promptMode,
   ]);
 
   const showObjectPicker = contextType === 'cover_image' || contextType === 'scene';

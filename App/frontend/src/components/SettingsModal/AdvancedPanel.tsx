@@ -325,8 +325,6 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                     <p className="field-hint">{t('settings.advanced.thinkingHistory.hint')}</p>
                 </div>
             </div>
-
-            {/* TODO: LLM Request Logging — will be reimplemented with backend-driven pipeline */}
         </div>
     );
 };

@@ -653,7 +653,7 @@ class Thread(Base):
     owner_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     journey_kind = Column(String(40), nullable=True)  # for journey threads only
 
-    status = Column(String(20), nullable=False, default='idle')
+    status = Column(String(20), nullable=False, default='done')
 
     # Captured history snapshot for reuse within a run.
     # Stored as split fields for system/conversation/prefill.
@@ -664,6 +664,8 @@ class Thread(Base):
 
     # Stable per-thread run ordering (1-based)
     next_run_seq = Column(BigInteger, default=1, nullable=False)
+    # Stable per-thread message ordering (1-based)
+    next_message_seq = Column(BigInteger, default=1, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -679,7 +681,7 @@ class Thread(Base):
             name='ck_threads_type',
         ),
         CheckConstraint(
-            "status IN ('idle','running','waiting_tools','paused','error')",
+            "status IN ('running','waiting','processing','paused','done','error','canceled')",
             name='ck_threads_status',
         ),
         Index('ix_threads_project_type', 'project_id', 'thread_type'),
@@ -743,7 +745,7 @@ class RunModel(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('running','waiting','paused','completed','error','cancelled')",
+            "status IN ('running','waiting','processing','paused','done','error','canceled')",
             name='ck_runs_status',
         ),
         Index('ix_runs_thread_status', 'thread_id', 'status'),
@@ -786,12 +788,13 @@ class RunMessageModel(Base):
     tool_calls = relationship(
         "RunToolCallModel",
         back_populates="message",
-        cascade="all, delete-orphan",
+        cascade="all",
         order_by="RunToolCallModel.call_seq",
+        foreign_keys="RunToolCallModel.message_id",
     )
 
     __table_args__ = (
-        CheckConstraint("role IN ('user','assistant','system','tool')", name='ck_run_messages_role'),
+        CheckConstraint("role IN ('system','user','assistant','tool_call','tool_result')", name='ck_run_messages_role'),
         UniqueConstraint('run_id', 'seq', name='uq_run_messages_run_seq'),
         Index('ix_run_messages_run_created', 'run_id', 'created_at'),
         Index('ix_run_messages_thread_seq', 'thread_id', 'seq_in_thread'),
@@ -805,7 +808,12 @@ class RunToolCallModel(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     thread_id = Column(UUID(as_uuid=True), ForeignKey('threads.id', ondelete='CASCADE'), nullable=False, index=True)
     run_id = Column(UUID(as_uuid=True), ForeignKey('runs.id', ondelete='CASCADE'), nullable=False, index=True)
+    # Points to the dedicated role='tool_call' message row.
     message_id = Column(UUID(as_uuid=True), ForeignKey('run_messages.id', ondelete='CASCADE'), nullable=False, index=True)
+    # Assistant message that originated this tool call (optional for legacy rows).
+    assistant_message_id = Column(UUID(as_uuid=True), ForeignKey('run_messages.id', ondelete='SET NULL'), nullable=True, index=True)
+    # Tool-result message generated from this tool call (idempotent resume guard).
+    result_message_id = Column(UUID(as_uuid=True), ForeignKey('run_messages.id', ondelete='SET NULL'), nullable=True, index=True)
     call_seq = Column(Integer, nullable=False)
     llm_call_id = Column(String(255), nullable=False)
     tool_name = Column(String(120), nullable=False)
@@ -821,19 +829,20 @@ class RunToolCallModel(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     thread = relationship("Thread", foreign_keys=[thread_id])
-    message = relationship("RunMessageModel", back_populates="tool_calls")
+    message = relationship("RunMessageModel", back_populates="tool_calls", foreign_keys=[message_id])
     child_run = relationship("RunModel", foreign_keys=[child_run_id])
     child_thread = relationship("Thread", foreign_keys=[child_thread_id])
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending','running','accepted','rejected','failed')",
+            "status IN ('streaming','validating','pending','processing','failed','rejected','applied')",
             name='ck_run_tool_calls_status',
         ),
         UniqueConstraint('message_id', 'llm_call_id', name='uq_run_tool_calls_message_llm_call_id'),
         UniqueConstraint('message_id', 'call_seq', name='uq_run_tool_calls_message_call_seq'),
         Index('ix_run_tool_calls_message', 'message_id'),
-        Index('ix_run_tool_calls_status', 'status'),
+        Index('ix_run_tool_calls_thread_status', 'thread_id', 'status'),
+        Index('ix_run_tool_calls_assistant_message', 'assistant_message_id'),
         Index('ix_run_tool_calls_name', 'tool_name'),
     )
 

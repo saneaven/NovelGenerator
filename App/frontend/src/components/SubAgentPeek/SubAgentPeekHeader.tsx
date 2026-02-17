@@ -25,7 +25,7 @@ function statusClass(status: string): string {
       return 'sub-agent-peek-header__status--pending';
     case 'completed':
       return 'sub-agent-peek-header__status--accepted';
-    case 'cancelled':
+    case 'canceled':
       return 'sub-agent-peek-header__status--rejected';
     case 'error':
       return 'sub-agent-peek-header__status--failed';

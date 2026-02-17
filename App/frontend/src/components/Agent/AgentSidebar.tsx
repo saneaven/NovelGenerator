@@ -69,7 +69,7 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
 
       const threadInfo = threadId ? threadsById[threadId] : undefined;
       const threadStatus = threadInfo?.status;
-      const isRunning = threadStatus === 'running' || isRunningFromPreflight;
+      const isRunning = threadStatus === 'running' || threadStatus === 'processing' || isRunningFromPreflight;
 
       // Has completed since viewed: latest message arrived after lastViewedAt while thread is idle
       const messages = threadId ? messagesByThreadId[threadId] : undefined;
@@ -77,17 +77,17 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
       const latestMessageTime = latestMessage ? new Date(latestMessage.createdAt).getTime() : 0;
       const hasCompletedSinceViewed =
         selectedAgentId !== agent.id &&
-        threadStatus === 'idle' &&
+        threadStatus === 'done' &&
         latestMessageTime > lastViewedAt;
 
       // Pending tool requests: thread waiting or any tool call pending/running
-      let hasPendingToolRequest = threadStatus === 'waiting_tools';
+      let hasPendingToolRequest = threadStatus === 'waiting';
       if (!hasPendingToolRequest && messages) {
         for (const msg of messages) {
           const tcs = toolCallsByMessageId[msg.id];
           if (!tcs) continue;
           for (const tc of tcs) {
-            if (tc.status === 'pending' || tc.status === 'running') {
+            if (tc.status === 'pending' || tc.status === 'streaming' || tc.status === 'validating' || tc.status === 'processing') {
               hasPendingToolRequest = true;
               break;
             }

@@ -1,5 +1,7 @@
 export type ThreadType = 'agent' | 'subAgent' | 'journey';
-export type ThreadStatus = 'idle' | 'running' | 'waiting_tools' | 'paused' | 'error';
+export type ThreadStatus = 'running' | 'waiting' | 'processing' | 'paused' | 'done' | 'error' | 'canceled';
+export type RunStatus = ThreadStatus;
+export type ToolCallStatus = 'streaming' | 'validating' | 'pending' | 'processing' | 'failed' | 'rejected' | 'applied';
 
 export interface ThreadInfo {
   id: string;
@@ -14,22 +16,27 @@ export interface ThreadInfo {
 export interface ThreadMessage {
   id: string;
   threadId: string;
+  runId: string;
   seq: number;
-  seqInThread: number | null;
-  role: 'user' | 'assistant' | 'system' | 'tool';
+  seqInThread: number;
+  role: 'user' | 'assistant' | 'system' | 'tool_call' | 'tool_result';
   data: Record<string, { contentParts: Array<{ type: string; text: string }>; thinkingDetails?: Array<Record<string, unknown>> }>;
+  isStreaming?: boolean;
   createdAt: string;
 }
 
 export interface ThreadToolCall {
   id: string;
   threadId: string;
+  runId: string;
   messageId: string;
+  assistantMessageId: string | null;
+  resultMessageId: string | null;
   callSeq: number;
   llmCallId: string;
   toolName: string;
   arguments: Record<string, unknown>;
-  status: 'pending' | 'running' | 'accepted' | 'rejected' | 'failed';
+  status: ToolCallStatus;
   reason?: string | null;
   result?: Record<string, unknown> | null;
   childThreadId?: string | null;
@@ -128,19 +135,23 @@ export function threadPriority(status: ThreadStatus): number {
   switch (status) {
     case 'running':
       return 0;
-    case 'waiting_tools':
+    case 'processing':
       return 1;
-    case 'paused':
+    case 'waiting':
       return 2;
-    case 'error':
+    case 'paused':
       return 3;
-    case 'idle':
+    case 'error':
       return 4;
-    default:
+    case 'done':
       return 5;
+    case 'canceled':
+      return 6;
+    default:
+      return 7;
   }
 }
 
 export function isBlockingThreadStatus(status: ThreadStatus): boolean {
-  return status === 'running' || status === 'waiting_tools' || status === 'paused' || status === 'error';
+  return status === 'running' || status === 'waiting' || status === 'processing' || status === 'paused';
 }

@@ -27,14 +27,18 @@ function countPendingDecisions(
     const message = messages[i];
     if (message?.role !== 'assistant') continue;
     const toolCalls = toolCallsByMessageId[message.id] ?? [];
-    return toolCalls.filter((tc: any) => tc?.status === 'pending' || tc?.status === 'running').length;
+    return toolCalls.filter((tc: any) => (
+      tc?.status === 'pending'
+      || tc?.status === 'streaming'
+      || tc?.status === 'validating'
+      || tc?.status === 'processing'
+    )).length;
   }
   return 0;
 }
 
 function threadStatusToDisplay(status: ThreadInfo['status']): string {
-  if (status === 'waiting_tools') return 'waiting';
-  if (status === 'idle') return 'completed';
+  if (status === 'done') return 'completed';
   return status;
 }
 
@@ -177,14 +181,6 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
       : prioritizedKeys[0] ?? orderedKeys[0];
     return childEntries.find((e) => e.key === effective);
   }, [childEntries, orderedKeys, selectedKey, prioritizedKeys]);
-
-  const selectedChildThreadId = selectedEntry?.childThreadId;
-
-  // TODO: reimplement thread recovery/resume via new backend orchestration API
-  useEffect(() => {
-    if (!selectedChildThreadId) return;
-    // Thread recovery disabled — orchestrator deleted, needs reimplementation
-  }, [selectedChildThreadId]);
 
   if (childEntries.length === 0 || !selectedEntry) return null;
 

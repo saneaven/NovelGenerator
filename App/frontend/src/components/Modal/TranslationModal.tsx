@@ -5,7 +5,12 @@ import './TranslationModal.css';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
 import type { UnifiedObject, ObjectType } from '../../types/unifiedObject';
-import { JourneyRuntime } from '../../llmTaskJourney';
+import { registerJourneyNotification } from '../../llmTaskJourney';
+import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
+import { useJourneyStore } from '../../store/journeyStore';
+import { useNotificationStore } from '../../store/notificationStore';
+import { threadService } from '../../api/threadService';
+import ChatEngine from '../../agent/chatEngine';
 import { Globe, Swap, Document } from '../icons';
 import { ObjectPicker } from '../ObjectPicker';
 import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
@@ -284,15 +289,13 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     }
   }, [isOpen, defaultSourceLanguage, defaultTargetLanguage, defaultUserInput, preSelectedObjectIds]);
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (objectsToTranslate.length === 0) {
       return;
     }
-
-    // Auto-close modal - request continues in background, toast shows progress
-    onClose();
-
-    JourneyRuntime.start('translateObjects', {
+    const spec = getJourneySpec('translateObjects');
+    const journeyId = crypto.randomUUID();
+    const inputPayload = {
       projectId,
       sourceLanguage,
       targetLanguage,
@@ -300,7 +303,52 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       objectIds: objectsToTranslate.map(o => o.objectId),
       contextObjectIds: Array.from(selectedContextIds),
       rawMode,
+    };
+    useJourneyStore.getState().createJourney({
+      id: journeyId,
+      kind: 'translateObjects',
+      input: inputPayload,
+      editingTargets: spec.buildEditingTargets(inputPayload),
+      label: spec.label(inputPayload),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     });
+
+    registerJourneyNotification(
+      useJourneyStore.getState().journeys[journeyId] as any,
+      {
+        onClick: () => useJourneyStore.getState().openDetailModal(journeyId),
+        onDismiss: () => useJourneyStore.getState().clearJourney(journeyId),
+      },
+    );
+
+    try {
+      const created = await threadService.createJourneyThread(projectId, 'translation');
+      useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
+      const engine = new ChatEngine({
+        threadId: created.thread_id,
+        projectId,
+        threadType: 'journey',
+      });
+      await engine.init();
+      await engine.send(userInput.trim() || 'Translate the selected objects.', {
+        surface: 'story-object',
+        journey_target_ids: objectsToTranslate.map((o) => o.objectId),
+        context_object_ids: Array.from(selectedContextIds),
+        language: targetLanguage,
+      });
+    } catch (error: any) {
+      useJourneyStore.getState().updateJourney(journeyId, {
+        error: error?.message ?? 'Failed to start translation journey',
+      });
+      useNotificationStore.getState().update(journeyId, {
+        status: 'error',
+        message: error?.message ?? 'Failed to start translation journey',
+      });
+    }
+
+    // Auto-close modal - request continues in background, toast shows progress
+    onClose();
   };
 
   const handleSwapLanguages = () => {

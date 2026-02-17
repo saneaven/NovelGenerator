@@ -1,5 +1,7 @@
-import type { ToolCallSchema } from '../../toolCall';
+import type { ToolSchema } from '../../toolCall';
 import type { SubAgentDefinition } from '../../types/subAgents';
+
+type CallToolSchema = Pick<ToolSchema, 'name' | 'description' | 'parameters'>;
 
 export const SUB_AGENT_CALL_PREFIX = 'call_';
 
@@ -24,7 +26,7 @@ export function agentNameFromCallToolName(toolName: string): string | null {
   return suffix;
 }
 
-export function buildCallToolSchema(def: SubAgentDefinition): ToolCallSchema {
+export function buildCallToolSchema(def: SubAgentDefinition): CallToolSchema {
   const toolName = toCallToolName(def.agent_name);
   const displayName = def.display_name?.trim() ? def.display_name.trim() : def.agent_name;
   const description = def.description?.trim() ? def.description.trim() : null;

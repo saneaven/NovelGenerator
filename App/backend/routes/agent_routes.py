@@ -84,7 +84,7 @@ async def create_agent(
         user_id=current_user.id,
         thread_type="agent",
         owner_id=agent.id,
-        status="idle",
+        status="done",
     )
     db.add(thread)
     db.commit()

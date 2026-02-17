@@ -33,15 +33,15 @@ export type ExecutionMode = 'storyObject' | 'novelEditor' | 'translation' | 'edi
 
 /**
  * Status of a tool call
- * - validating: Async validation in progress (post-streaming)
- * - pending: Validation passed, awaiting Apply
- * - processing: Apply in progress for non-Sub Agent tool calls (local-only)
- * - running: Apply in progress (long-running tool call)
- * - failed: Validation or execution failed
- * - accepted: Apply completed successfully
- * - rejected: User rejected the tool call
+ * - streaming: tool call arguments are being streamed from LLM
+ * - validating: async validation in progress
+ * - pending: validation passed, awaiting user decision
+ * - processing: apply in progress
+ * - failed: validation or execution failed
+ * - rejected: user rejected
+ * - applied: execution completed successfully
  */
-export type ToolCallStatus = 'validating' | 'pending' | 'processing' | 'running' | 'failed' | 'accepted' | 'rejected';
+export type ToolCallStatus = 'streaming' | 'validating' | 'pending' | 'processing' | 'failed' | 'rejected' | 'applied';
 
 /** Type of failure when status is 'failed' */
 export type ToolCallFailureType = 'validation' | 'execution' | 'partial';

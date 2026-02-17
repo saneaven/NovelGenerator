@@ -12,7 +12,6 @@ import { registerImageTaskModals } from '../imageTask';
 import '../App.css';
 
 // Register notification modal renderers at module load (push-based - no subscribers)
-// TODO: registerLLMModals deleted (llmTask module removed)
 registerJourneyModals();
 registerImageTaskModals();
 

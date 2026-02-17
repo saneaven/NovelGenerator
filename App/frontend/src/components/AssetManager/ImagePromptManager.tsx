@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
-// TODO: useLLMSessionStore deleted — streaming session tracking needs reimplementation
 import UnifiedImagePromptModal, { type PromptMode } from '../ImageGeneration/UnifiedImagePromptModal';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import type { ObjectType } from '../../types/unifiedObject';
@@ -43,8 +42,7 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
     const [streamingMode, setStreamingMode] = useState<PromptMode | null>(null);
     const [streamingError, setStreamingError] = useState<string | null>(null);
 
-    // Subscribe to streaming session from the store
-    // TODO: streaming session tracking needs reimplementation
+    // Streaming session subscription will be restored once image runtime is migrated.
     const streamingSession = undefined as any;
 
     // Get object from store
@@ -106,8 +104,8 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
 
         // Extract prompt from contentParts (for native output mode)
         const textContent = streamingSession.contentParts
-            ?.filter(p => p.type === 'content')
-            .map(p => p.text)
+            ?.filter((p: any) => p.type === 'content')
+            .map((p: any) => p.text)
             .join('') || '';
 
         // Extract prompt from toolCallProgress (for tool call mode)

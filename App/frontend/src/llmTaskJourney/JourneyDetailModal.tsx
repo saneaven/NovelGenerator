@@ -16,13 +16,13 @@ import { TextButton } from '../components/TextButton';
 import { IconButton } from '../components/IconButton';
 import { FunctionCallsThread } from '../toolCall/ui';
 import { buildEditCardsFromToolCallMetadata } from '../toolCall';
-// TODO: JourneyRuntime deleted — journey execution needs reimplementation via backend
 import type { ToolCallDecisionMap } from '../toolCall/types';
 import type { ToolCallMetadata } from '../types/chat';
 import { useThreadStore } from '../store/threadStore';
 import type { ThreadToolCall } from '../types/thread';
 import { resolveRunMessageDisplay } from '../types/thread';
-// TODO: LLMTaskModals.css was in deleted llmTask/ — style import removed
+import type { ContentPart } from '../types/chat';
+import ChatEngine from '../agent/chatEngine';
 
 type JourneyDisplayStatus =
   | 'idle'
@@ -30,19 +30,6 @@ type JourneyDisplayStatus =
   | 'pending_confirmation'
   | 'success'
   | 'error';
-
-function getApplyLanguage(journey: Journey, mainLanguage: string): string {
-  if (journey.kind === 'translateObjects') {
-    return ((journey.input as any)?.targetLanguage as string | undefined) ?? mainLanguage;
-  }
-  return mainLanguage;
-}
-
-// TODO: HandlerOptions/CRUD_OPTIONS/TRANSLATION_OPTIONS were in deleted modules — stub
-type HandlerOptions = Record<string, unknown>;
-function getHandlerOptions(_journey: Journey): HandlerOptions {
-  return {};
-}
 
 function getProjectIdFromJourney(journey: Journey): string {
   return ((journey.input as any)?.projectId as string | undefined) ?? '';
@@ -57,7 +44,7 @@ function getJourneyLanguage(journey: Journey): string {
 
 function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
   return {
-    id: toolCall.llmCallId,
+    id: toolCall.id,
     tool_name: toolCall.toolName,
     arguments: toolCall.arguments,
     status: toolCall.status as any,
@@ -79,9 +66,9 @@ function deriveJourneyDisplayStatus(params: {
   if (isStreamActive) return 'running';
   if (threadStatus === 'error') return 'error';
   if (hasPendingToolCalls) return 'pending_confirmation';
-  if (threadStatus === 'waiting_tools' || threadStatus === 'paused') return 'pending_confirmation';
-  if (threadStatus === 'running') return 'running';
-  if (threadStatus === 'idle') return 'success';
+  if (threadStatus === 'waiting' || threadStatus === 'paused') return 'pending_confirmation';
+  if (threadStatus === 'running' || threadStatus === 'processing') return 'running';
+  if (threadStatus === 'done' || threadStatus === 'canceled') return 'success';
   return 'idle';
 }
 
@@ -143,9 +130,35 @@ export const JourneyDetailModal: React.FC = () => {
   const [feedbackText, setFeedbackText] = useState('');
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  const engineRef = useRef<ChatEngine | null>(null);
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
+
+  useEffect(() => {
+    if (!threadId || !journey) {
+      engineRef.current?.disconnectSSE();
+      engineRef.current = null;
+      return;
+    }
+
+    const engine = new ChatEngine({
+      threadId,
+      projectId: getProjectIdFromJourney(journey),
+      threadType: 'journey',
+    });
+    engineRef.current = engine;
+    void engine.init().catch((error) => {
+      console.error('Failed to init journey engine', { threadId, error });
+    });
+
+    return () => {
+      if (engineRef.current === engine) {
+        engine.disconnectSSE();
+        engineRef.current = null;
+      }
+    };
+  }, [threadId, journey]);
 
   useEffect(() => {
     userScrolledUpRef.current = false;
@@ -195,7 +208,7 @@ export const JourneyDetailModal: React.FC = () => {
   }, [lastAssistantMessageId, toolCallsByMessageId]);
 
   const hasPendingToolCalls = useMemo(
-    () => lastAssistantToolCalls.some(tc => tc.status === 'pending' || tc.status === 'running'),
+    () => lastAssistantToolCalls.some(tc => tc.status === 'pending' || tc.status === 'streaming' || tc.status === 'validating' || tc.status === 'processing'),
     [lastAssistantToolCalls]
   );
 
@@ -216,31 +229,37 @@ export const JourneyDetailModal: React.FC = () => {
   }, [journey?.kind, journey?.input]);
 
   const projectId = journey ? getProjectIdFromJourney(journey) : '';
-  const applyLanguage = useMemo(
-    () => (journey ? getApplyLanguage(journey, mainLanguage) : mainLanguage),
-    [journey, mainLanguage]
-  );
-  const handlerOptions = useMemo(
-    () => (journey ? getHandlerOptions(journey) : {}),
-    [journey]
-  );
 
   const isPending = journeyStatus === 'pending_confirmation' || hasPendingToolCalls;
 
-  // TODO: reimplement via new backend orchestration API
   const handleCancel = useCallback(() => {
-    console.warn('Not implemented: journey cancel');
+    void engineRef.current?.cancel();
   }, []);
 
-  const handleConfirm = useCallback(async (_decisions: ToolCallDecisionMap) => {
-    console.warn('Not implemented: journey tool decisions');
+  const handleConfirm = useCallback(async (decisions: ToolCallDecisionMap) => {
+    if (!engineRef.current) return;
+    const accepts = Object.entries(decisions)
+      .filter(([, d]) => d === 'accept')
+      .map(([id]) => id);
+    const rejects = Object.entries(decisions)
+      .filter(([, d]) => d === 'reject')
+      .map(([id]) => id);
+    if (accepts.length > 1 && rejects.length === 0) {
+      await engineRef.current.acceptToolCallsBatch(accepts);
+      return;
+    }
+    await Promise.all([
+      ...accepts.map((id) => engineRef.current?.acceptToolCall(id)),
+      ...rejects.map((id) => engineRef.current?.rejectToolCall(id)),
+    ]);
   }, []);
 
   const handleSendFeedback = useCallback(() => {
-    console.warn('Not implemented: journey feedback');
+    if (!feedbackText.trim()) return;
+    void engineRef.current?.send(feedbackText);
     setFeedbackText('');
     setFeedbackOpen(false);
-  }, []);
+  }, [feedbackText]);
 
   const handleStartEdit = useCallback((messageId: string, currentText: string) => {
     setEditingMessageId(messageId);
@@ -350,6 +369,10 @@ export const JourneyDetailModal: React.FC = () => {
                     thinkingDetails: message.data['_streaming']?.thinkingDetails,
                   }
                 : resolveRunMessageDisplay(message, journeyLanguage);
+              const displayContentParts = (resolved.contentParts ?? []).map((part) => ({
+                type: part.type === 'thinking' ? 'thinking' : 'content',
+                text: String(part.text ?? ''),
+              })) as ContentPart[];
 
               const text = resolved.contentParts
                 .filter((part) => part.type === 'content')
@@ -397,7 +420,7 @@ export const JourneyDetailModal: React.FC = () => {
                   {message.role === 'assistant' && !isEditing && (
                     <ThinkingDisplay
                       messageId={message.id}
-                      contentParts={resolved.contentParts}
+                      contentParts={displayContentParts}
                       isStreaming={isStreamingMessage}
                     />
                   )}

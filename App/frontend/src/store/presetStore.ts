@@ -98,8 +98,6 @@ export const usePresetStore = create<PresetStore>()((set, get) => ({
       useSettingsStore.getState().invalidatePromptCache();
       useVariableStore.getState().reset();
 
-      // TODO: fragment reload needs reimplementation (PromptManager deleted)
-
       // 5. Reload variables for new preset
       await useVariableStore.getState().loadVariables();
 

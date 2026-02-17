@@ -25,8 +25,8 @@ function isPendingOperation(operation: ObjectOperationVM): boolean {
 function buildStatusSummary(operations: ObjectOperationVM[]): string {
   const pending = operations.filter((operation) => operation.status === 'pending' || operation.status === 'validating').length;
   const processing = operations.filter((operation) => operation.status === 'processing').length;
-  const running = operations.filter((operation) => operation.status === 'running').length;
-  const accepted = operations.filter((operation) => operation.status === 'accepted').length;
+  const running = operations.filter((operation) => operation.status === 'streaming').length;
+  const accepted = operations.filter((operation) => operation.status === 'applied').length;
   const failed = operations.filter((operation) => operation.status === 'failed').length;
   const rejected = operations.filter((operation) => operation.status === 'rejected').length;
 
@@ -122,14 +122,14 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
   }, [onConfirmAndPause, isCommitting, buildDecisionMap]);
 
   const disabled = Boolean(decisionDisabled || isCommitting);
-  const groupStatus = operations.some((operation) => operation.status === 'running')
-    ? 'running'
+  const groupStatus = operations.some((operation) => operation.status === 'streaming')
+    ? 'streaming'
     : operations.some((operation) => operation.status === 'processing')
       ? 'processing'
     : operations.some((operation) => operation.status === 'pending' || operation.status === 'validating')
       ? 'pending'
-      : operations.every((operation) => operation.status === 'accepted')
-        ? 'accepted'
+      : operations.every((operation) => operation.status === 'applied')
+        ? 'applied'
         : operations.every((operation) => operation.status === 'rejected')
           ? 'rejected'
           : 'failed';
@@ -156,7 +156,7 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
       title={displayName}
       subtitle={statusSummary}
       rightActions={headerActions}
-      defaultExpanded={operations.some((operation) => operation.status === 'pending' || operation.status === 'processing' || operation.status === 'running')}
+      defaultExpanded={operations.some((operation) => operation.status === 'pending' || operation.status === 'processing' || operation.status === 'streaming')}
       islands={[
         ...operations.map((operation) => {
           const field = typeof operation.args.field === 'string' ? operation.args.field : 'content';

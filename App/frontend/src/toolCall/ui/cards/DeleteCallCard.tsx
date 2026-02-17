@@ -72,7 +72,7 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
     );
   };
 
-  const isDeleted = operation.status === 'accepted';
+  const isDeleted = operation.status === 'applied';
 
   return (
     <FunctionCallCardShell
@@ -87,7 +87,7 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
       onAccept={onAccept}
       onReject={onReject}
       canToggle={!isDeleted}
-      defaultExpanded={!isDeleted && (operation.status === 'pending' || operation.status === 'processing' || operation.status === 'running')}
+      defaultExpanded={!isDeleted && (operation.status === 'pending' || operation.status === 'processing' || operation.status === 'streaming')}
       islands={isDeleted ? undefined : [renderBody()]}
     />
   );

@@ -34,14 +34,18 @@ function coerceRecord(value: unknown): Record<string, unknown> {
 
 function normalizeStoredStatus(status?: string): HeaderStatus {
   switch (status) {
+    case 'streaming':
     case 'validating':
     case 'pending':
     case 'processing':
-    case 'running':
     case 'failed':
-    case 'accepted':
+    case 'applied':
     case 'rejected':
       return status;
+    case 'running':
+      return 'streaming';
+    case 'accepted':
+      return 'applied';
     case undefined:
       return 'pending';
     default:
@@ -221,7 +225,7 @@ export function mapToolToOperationVM(params: MapToolToVmParams): OperationVM {
   const status = normalizeStatus(params.status, source);
   const decisionEligible = DECISION_ELIGIBLE_STATUSES.has(status);
   const isValidationFailure = status === 'failed' && failureType === 'validation';
-  const isRunning = status === 'running' || status === 'processing' || status === 'collecting';
+  const isRunning = status === 'streaming' || status === 'processing' || status === 'collecting';
 
   if (category === 'call_agent') {
     const { agentName, displayName } = callAgentDisplay(toolName);

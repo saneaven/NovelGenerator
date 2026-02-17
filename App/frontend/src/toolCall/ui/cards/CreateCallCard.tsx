@@ -81,7 +81,7 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}
       onReject={onReject}
-      defaultExpanded={operation.status === 'pending' || operation.status === 'processing' || operation.status === 'running'}
+      defaultExpanded={operation.status === 'pending' || operation.status === 'processing' || operation.status === 'streaming'}
       islands={[renderBody()]}
     />
   );
