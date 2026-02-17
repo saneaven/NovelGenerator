@@ -142,62 +142,46 @@ export const UNIFIED_SCHEMA = {
       example: "story-object" as "story-object" | "outline-manager" | "novel-editor" | "config",
     },
     contextObjectIds: { desc: "IDs of objects to include in context", example: ["char-1", "loc-1"] as string[] },
-    previousSummaries: {
-      desc: "Rolling memory summaries (latest is last)",
+  },
+
+  memory: {
+    summaries: {
+      desc: "Rolling memory summaries in chronological order",
       example: ["Facts: ...\nDecisions: ...\nOpen Questions: ..."] as string[],
     },
-    relevantChats: {
-      desc: "Retrieved relevant chat messages from long-term memory (data-only; format in fragments/templates)",
+    ragTexts: {
+      desc: "Retrieved project RAG snippets",
+      example: [{
+        objectType: "character",
+        objectId: "char-1",
+        fieldPath: "content",
+        chunkIndex: 0,
+        distance: 0.12,
+        text: "A Saxon warrior raised by Danes...",
+      }] as Array<{
+        objectType: string;
+        objectId: string;
+        fieldPath: string;
+        chunkIndex?: number | null;
+        distance?: number | null;
+        text: string;
+      }>,
+    },
+    historyChats: {
+      desc: "Retrieved archived chat snippets",
       example: [{
         messageId: "msg-123",
         role: "assistant",
-        matched_snippet: "Created outline: The Hollow Crown - Main Storyline",
-        match: {
-          kind: "tool_call",
-          fieldPath: "tool_calls/call-1",
-          chunkIndex: 0,
-        },
-        toolCall: {
-          id: "call-1",
-          name: "create_outline",
-          status: "accepted",
-          result: "Created outline: The Hollow Crown - Main Storyline",
-        },
-        original: {
-          content_parts: [
-            { type: "thinking", text: "Planning the outline structure..." },
-            { type: "content", text: "The Hollow Crown - Main Storyline" },
-          ],
-          tool_calls: [
-            {
-              id: "call-1",
-              tool_name: "create_outline",
-              arguments: { title: "The Hollow Crown" },
-              status: "accepted",
-              result: { success: true, message: "Created outline" },
-              acceptedAt: "2026-01-29T12:34:56Z",
-            },
-          ],
-        },
+        matchedSnippet: "Created outline: The Hollow Crown - Main Storyline",
+        match: { kind: "tool_call", fieldPath: "tool_calls/call-1", chunkIndex: 0 },
+        toolCall: { id: "call-1", name: "create_outline", status: "accepted", result: "Applied successfully" },
       }] as Array<{
         messageId: string;
         role: string;
-        matched_snippet?: string;
-        match?: { kind: "content" | "tool_call" | "unknown"; fieldPath?: string | null; chunkIndex?: number | null };
+        matchedSnippet: string;
+        distance?: number | null;
+        match: { kind: "content" | "tool_call"; fieldPath: string; chunkIndex?: number | null };
         toolCall?: { id?: string; name: string; status: string; result: string };
-        original?: {
-          content_parts: Array<{ type: "content" | "thinking"; text: string }>;
-          tool_calls: Array<{
-            id: string;
-            tool_name: string;
-            arguments: any;
-            status: string;
-            reason?: string;
-            failureType?: string;
-            result?: { success: boolean; message: string; error?: string; objectId?: string; objectType?: string; data?: Record<string, any> };
-            acceptedAt?: string;
-          }>;
-        };
       }>,
     },
   },
@@ -307,15 +291,16 @@ export const UNIFIED_SCHEMA = {
 /**
  * Prompt types
  */
-export type PromptType = 'agent' | 'editAssistant' | 'translation' | 'objectImagePrompt' | 'sceneImagePrompt' | 'coverImagePrompt' | 'subAgent';
+export type PromptType = 'agent' | 'memory' | 'editAssistant' | 'translation' | 'objectImagePrompt' | 'sceneImagePrompt' | 'coverImagePrompt' | 'subAgent';
 
 /**
  * Maps which variable groups are available for each prompt type.
  */
 export const PROMPT_TYPE_VARIABLES: Record<PromptType, string[]> = {
-  agent: ['config', 'project', 'input', 'agent', 'memorySummary', 'variables'],
-  editAssistant: ['config', 'project', 'input', 'editAssistant', 'variables'],
-  translation: ['config', 'project', 'input', 'translation', 'variables'],
+  agent: ['config', 'project', 'input', 'agent', 'memory', 'variables'],
+  memory: ['config', 'project', 'input', 'memorySummary', 'variables'],
+  editAssistant: ['config', 'project', 'input', 'editAssistant', 'feedback', 'variables'],
+  translation: ['config', 'project', 'input', 'translation', 'feedback', 'variables'],
   objectImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
   sceneImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
   coverImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
@@ -338,6 +323,7 @@ export type ConfigData = ExtractProps<typeof UNIFIED_SCHEMA['config']>;
 export type ProjectData = ExtractProps<typeof UNIFIED_SCHEMA['project']>;
 export type InputData = ExtractProps<typeof UNIFIED_SCHEMA['input']>;
 export type AgentModeData = ExtractProps<typeof UNIFIED_SCHEMA['agent']>;
+export type MemoryData = ExtractProps<typeof UNIFIED_SCHEMA['memory']>;
 export type EditAssistantModeData = ExtractProps<typeof UNIFIED_SCHEMA['editAssistant']>;
 export type TranslationModeData = ExtractProps<typeof UNIFIED_SCHEMA['translation']>;
 export type ImagePromptModeData = ExtractProps<typeof UNIFIED_SCHEMA['imagePrompt']>;
@@ -352,6 +338,7 @@ export interface PromptData {
   project: ProjectData;
   input: InputData;
   agent?: AgentModeData;
+  memory?: MemoryData;
   memorySummary?: MemorySummaryData;
   editAssistant?: EditAssistantModeData;
   translation?: TranslationModeData;

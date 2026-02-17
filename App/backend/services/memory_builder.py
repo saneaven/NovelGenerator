@@ -1,25 +1,102 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from .prompt_runtime.prompt_renderer import PromptRenderer
+from ..models.memory_models import MessageMemorySummary
 from .credential_service import credential_service
 from .memory_service import search_memory
+from .prompt_runtime.prompt_manager import PromptBundle, PromptManager
+from .prompt_runtime.prompt_renderer import PromptRenderer
 from .rag_search_service import search_project
 from .settings_service import settings_service
 
 
-async def build_memory_prompt(
+def _coerce_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_tool_call_id(field_path: str) -> str | None:
+    if not field_path.startswith("tool_calls/"):
+        return None
+    suffix = field_path[len("tool_calls/") :].strip("/")
+    if not suffix:
+        return None
+    return suffix.split("/", 1)[0]
+
+
+def _build_queries(*, last_user_text: str, last_assistant_text: str) -> list[str]:
+    out: list[str] = []
+    for text in [last_user_text, last_assistant_text]:
+        value = str(text or "").strip()
+        if value:
+            out.append(value)
+    return out
+
+
+def _build_memory_summary_list(
     db: Session,
     *,
-    renderer: PromptRenderer,
-    task_type: str,
-    prompt_name: str,
-    project_data: dict[str, Any],
-    extra_vars: dict[str, Any],
+    user_id: UUID,
+    project_id: UUID,
+    owner_id: UUID,
+    language: str,
+    limit: int = 5,
+) -> list[str]:
+    rows = (
+        db.query(MessageMemorySummary)
+        .filter(
+            MessageMemorySummary.user_id == user_id,
+            MessageMemorySummary.project_id == project_id,
+            MessageMemorySummary.owner_id == owner_id,
+            MessageMemorySummary.language == language,
+        )
+        .order_by(desc(MessageMemorySummary.created_at))
+        .limit(limit)
+        .all()
+    )
+    if not rows:
+        rows = (
+            db.query(MessageMemorySummary)
+            .filter(
+                MessageMemorySummary.user_id == user_id,
+                MessageMemorySummary.project_id == project_id,
+                MessageMemorySummary.owner_id == owner_id,
+            )
+            .order_by(desc(MessageMemorySummary.created_at))
+            .limit(limit)
+            .all()
+        )
+
+    summaries: list[str] = []
+    for row in reversed(rows):
+        text = str(getattr(row, "summary_text", "") or "").strip()
+        if text:
+            summaries.append(text)
+    return summaries
+
+
+async def build_memory_data(
+    db: Session,
+    *,
     user_id: UUID,
     project_id: UUID,
     owner_id: UUID | None,
@@ -27,12 +104,20 @@ async def build_memory_prompt(
     last_user_text: str,
     last_assistant_text: str,
     rag_enabled: bool,
-) -> str | None:
-    queries = [q.strip() for q in [last_user_text, last_assistant_text] if isinstance(q, str) and q.strip()]
+) -> dict[str, Any] | None:
+    queries = _build_queries(last_user_text=last_user_text, last_assistant_text=last_assistant_text)
     if not queries:
         return None
 
-    rag_items: list[dict[str, Any]] = []
+    summaries = _build_memory_summary_list(
+        db,
+        user_id=user_id,
+        project_id=project_id,
+        owner_id=owner_id,
+        language=language,
+    ) if owner_id is not None else []
+
+    rag_rows: list[dict[str, Any]] = []
     if rag_enabled:
         try:
             rag_cfg = settings_service.get_rag_settings(db, user_id)
@@ -48,10 +133,24 @@ async def build_memory_prompt(
                     top_k_per_query=rag_cfg.top_k_per_query,
                     neighbor_window=rag_cfg.neighbor_window,
                 )
+                for item in rag_items[:20]:
+                    text = str(item.get("text") or "").strip()
+                    if not text:
+                        continue
+                    rag_rows.append(
+                        {
+                            "objectType": str(item.get("object_type") or ""),
+                            "objectId": str(item.get("object_id") or ""),
+                            "fieldPath": str(item.get("field_path") or ""),
+                            "chunkIndex": _coerce_int(item.get("chunk_index")),
+                            "distance": _coerce_float(item.get("distance")),
+                            "text": text,
+                        }
+                    )
         except Exception:
-            rag_items = []
+            rag_rows = []
 
-    memory_items: list[dict[str, Any]] = []
+    history_rows: list[dict[str, Any]] = []
     if owner_id is not None:
         try:
             memory_cfg = settings_service._get_settings(db, user_id)  # pylint: disable=protected-access
@@ -64,80 +163,201 @@ async def build_memory_prompt(
                 queries=queries,
                 top_k_per_query=int(getattr(memory_cfg, "agent_memory_top_k_per_query", 20)),
             )
+            for item in memory_items[:20]:
+                snippet = str(item.get("content") or "").strip()
+                if not snippet:
+                    continue
+
+                field_path = str(item.get("field_path") or "")
+                tool_call_id = _extract_tool_call_id(field_path)
+                history_row: dict[str, Any] = {
+                    "messageId": str(item.get("message_id") or ""),
+                    "role": str(item.get("role") or "assistant"),
+                    "matchedSnippet": snippet,
+                    "distance": _coerce_float(item.get("distance")),
+                    "match": {
+                        "kind": "tool_call" if tool_call_id else "content",
+                        "fieldPath": field_path,
+                        "chunkIndex": _coerce_int(item.get("chunk_index")),
+                    },
+                }
+                if tool_call_id:
+                    history_row["toolCall"] = {
+                        "id": tool_call_id,
+                        "name": "",
+                        "status": "",
+                        "result": snippet,
+                    }
+                history_rows.append(history_row)
         except Exception:
-            memory_items = []
+            history_rows = []
 
-    if not rag_items and not memory_items:
-        return None
-
-    rag_rows: list[dict[str, Any]] = []
-    rag_lines: list[str] = []
-    if rag_items:
-        for idx, item in enumerate(rag_items[:20], start=1):
-            text = str(item.get("text") or "").strip()
-            if not text:
-                continue
-            object_type = str(item.get("object_type") or "unknown")
-            rag_rows.append(
-                {
-                    "index": idx,
-                    "object_type": object_type,
-                    "text": text,
-                    "raw": item,
-                }
-            )
-            rag_lines.append(f"{idx}. ({object_type}) {text}")
-
-    history_rows: list[dict[str, Any]] = []
-    history_lines: list[str] = []
-    if memory_items:
-        for idx, item in enumerate(memory_items[:20], start=1):
-            text = str(item.get("content") or "").strip()
-            if not text:
-                continue
-            role = str(item.get("role") or "assistant")
-            history_rows.append(
-                {
-                    "index": idx,
-                    "role": role,
-                    "text": text,
-                    "raw": item,
-                }
-            )
-            history_lines.append(f"{idx}. ({role}) {text}")
-
-    if not rag_rows and not history_rows:
-        return None
-
-    xml_lines: list[str] = ["<memory>"]
-    if rag_lines:
-        xml_lines.append("[rag]")
-        xml_lines.extend(rag_lines)
-    if history_lines:
-        xml_lines.append("[history]")
-        xml_lines.extend(history_lines)
-    xml_lines.append("</memory>")
-
-    memory_block = {
-        "rag_items": rag_rows,
-        "history_items": history_rows,
-        "rag_text": "\n".join(rag_lines),
-        "history_text": "\n".join(history_lines),
-        "xml": "\n".join(xml_lines),
+    memory = {
+        "summaries": summaries,
+        "ragTexts": rag_rows,
+        "historyChats": history_rows,
     }
-    rendered = renderer.render_memory_prompt(
-        task_type=task_type,
-        prompt_name=prompt_name,
-        project_data=project_data,
-        extra_vars={
-            **(extra_vars or {}),
-            "memory": memory_block,
-            "memoryRagItems": rag_rows,
-            "memoryHistoryItems": history_rows,
-            "memoryRagText": memory_block["rag_text"],
-            "memoryHistoryText": memory_block["history_text"],
-            "memoryXml": memory_block["xml"],
-        },
+    if not memory["summaries"] and not memory["ragTexts"] and not memory["historyChats"]:
+        return None
+    return memory
+
+
+async def build_memory_prompt(
+    db: Session,
+    *,
+    prompt_manager: PromptManager,
+    prompt_bundle: PromptBundle,
+    user_id: UUID,
+    project_id: UUID,
+    owner_id: UUID | None,
+    language: str,
+    last_user_text: str,
+    last_assistant_text: str,
+    rag_enabled: bool,
+) -> str | None:
+    if not prompt_bundle.has_memory_prompt:
+        return None
+
+    memory = await build_memory_data(
+        db,
+        user_id=user_id,
+        project_id=project_id,
+        owner_id=owner_id,
+        language=language,
+        last_user_text=last_user_text,
+        last_assistant_text=last_assistant_text,
+        rag_enabled=rag_enabled,
     )
-    rendered = rendered.strip()
-    return rendered or None
+    if memory is None:
+        return None
+
+    return prompt_manager.render_memory_prompt(bundle=prompt_bundle, memory=memory)
+
+
+def build_memory_summary_template_data(
+    *,
+    project_data: dict[str, Any],
+    language: str,
+    previous_summary: str,
+    archive_until_message_id: str,
+    messages: list[dict[str, Any]],
+    variables: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "config": {
+            "mainLanguage": language,
+            "displayLanguage": language,
+            "today": datetime.now(timezone.utc).date().isoformat(),
+            "thinking_mode": "off",
+            "isPrefillEnabled": False,
+            "outputMode": "tool_call",
+        },
+        "project": project_data,
+        "input": {
+            "userMessage": "",
+            "agentMessage": "",
+            "toolResults": [],
+        },
+        "agent": {
+            "runMode": "agentMode",
+            "surface": "story-object",
+            "contextObjectIds": [],
+        },
+        "journey": {
+            "kind": "",
+            "payload": {},
+            "targetIds": [],
+        },
+        "editAssistant": {
+            "mode": "storyObject",
+            "manuscript": {
+                "currentId": "",
+                "currentChapterId": "",
+                "currentChapterName": "",
+                "currentChapterManuscript": "",
+                "objectIds": [],
+            },
+            "storyObject": {
+                "targetIds": [],
+                "contextIds": [],
+                "categoryName": "",
+                "editScope": "selected",
+            },
+        },
+        "translation": {
+            "sourceLanguage": "",
+            "targetLanguage": "",
+            "objectIds": [],
+            "contextObjectIds": [],
+            "currentTranslatedContents": [],
+            "messages": [],
+        },
+        "imagePrompt": {
+            "promptMode": "natural",
+            "currentObject": {
+                "type": "",
+                "name": "",
+                "description": "",
+                "content": "",
+                "image_prompt": "",
+                "image_prompt_positive": "",
+                "image_prompt_negative": "",
+            },
+            "scenePreContext": "",
+            "scenePostContext": "",
+            "selectedObjectIds": [],
+            "coverImage": {
+                "title": "",
+                "logline": "",
+                "genre": "",
+            },
+        },
+        "feedback": {
+            "editingObjectIds": [],
+        },
+        "memory": {
+            "summaries": [],
+            "ragTexts": [],
+            "historyChats": [],
+        },
+        "memorySummary": {
+            "previousSummary": str(previous_summary or ""),
+            "messages": messages if isinstance(messages, list) else [],
+            "language": str(language or "English"),
+            "archiveUntilMessageId": str(archive_until_message_id or ""),
+        },
+        "variables": variables if isinstance(variables, dict) else {},
+    }
+
+
+def render_memory_summary_prompt(
+    renderer: PromptRenderer,
+    *,
+    project_data: dict[str, Any],
+    language: str,
+    previous_summary: str,
+    archive_until_message_id: str,
+    messages: list[dict[str, Any]],
+    variables: dict[str, Any] | None = None,
+) -> tuple[str, str]:
+    template_data = build_memory_summary_template_data(
+        project_data=project_data,
+        language=language,
+        previous_summary=previous_summary,
+        archive_until_message_id=archive_until_message_id,
+        messages=messages,
+        variables=variables,
+    )
+    system_prompt = renderer.render_prompt(
+        task_type="memory",
+        prompt_name="summary",
+        prompt_category="systemPrompt",
+        template_data=template_data,
+    )
+    user_prompt = renderer.render_prompt(
+        task_type="memory",
+        prompt_name="summary",
+        prompt_category="userPrompt",
+        template_data=template_data,
+    )
+    return system_prompt, user_prompt

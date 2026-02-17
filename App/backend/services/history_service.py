@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from ..models.db_models import RunMessageModel, RunModel, Thread
 from .prompt_runtime.conversation_builder import build_from_runs
-from .prompt_runtime.prompt_renderer import PromptRenderer
 
 
 @dataclass(frozen=True)
@@ -49,11 +48,8 @@ def capture_history(
     *,
     thread: Thread,
     up_to_run: RunModel,
-    renderer: PromptRenderer,
-    task_type: str,
-    prompt_name: str,
-    project_data: dict[str, Any],
-    extra_vars: dict[str, Any],
+    system_prompt: str,
+    prefill: str | None,
     language: str,
     tool_call_history_limit: int,
     thinking_history_limit: int,
@@ -66,7 +62,6 @@ def capture_history(
     )
     run_ids = [r.id for r in past_runs]
 
-    system_prompt = renderer.render_system_prompt(task_type, prompt_name, project_data, extra_vars)
     conversation = build_from_runs(
         db,
         thread_id=thread.id,
@@ -75,7 +70,6 @@ def capture_history(
         thinking_history_limit=thinking_history_limit,
         include_run_ids=run_ids,
     )
-    prefill = renderer.render_prefill(task_type, prompt_name, project_data, extra_vars)
 
     thread.captured_history_system_prompt = system_prompt
     thread.captured_history_conversation_json = conversation

@@ -1,4 +1,4 @@
-export type TaskType = 'agent' | 'translation' | 'editAssistant' | 'imagePrompt' | 'subAgent';
+export type TaskType = 'agent' | 'memory' | 'translation' | 'editAssistant' | 'imagePrompt' | 'subAgent';
 export type PromptCategory =
   | 'systemPrompt'
   | 'userPrompt'

@@ -24,6 +24,8 @@ export function mapTaskTypeToSchemaType(
   switch (taskType) {
     case 'agent':
       return 'agent';
+    case 'memory':
+      return 'memory';
     case 'translation':
       return 'translation';
     case 'editAssistant':
@@ -40,7 +42,7 @@ export function mapTaskTypeToSchemaType(
 }
 
 // All valid schema groups
-const SCHEMA_GROUPS = ['config', 'project', 'input', 'agent', 'memorySummary', 'editAssistant', 'translation', 'imagePrompt', 'feedback', 'variables'] as const;
+const SCHEMA_GROUPS = ['config', 'project', 'input', 'agent', 'memory', 'memorySummary', 'editAssistant', 'translation', 'imagePrompt', 'feedback', 'variables'] as const;
 type SchemaGroup = typeof SCHEMA_GROUPS[number];
 
 /**

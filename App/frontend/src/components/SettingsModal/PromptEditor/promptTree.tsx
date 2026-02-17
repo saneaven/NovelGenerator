@@ -158,28 +158,37 @@ export const PROMPT_TREE: PromptNode[] = [
           }
         ]
       },
+    ]
+  },
+  {
+    id: 'memory',
+    label: 'Memory',
+    icon: <SpeechBubble size="sm" />,
+    type: 'category',
+    children: [
       {
-        id: 'agent-memory',
-        label: 'Memory',
+        id: 'memory-summary',
+        label: 'Summary',
         type: 'category',
+        defaultExpanded: true,
         children: [
           {
-            id: 'agent-memory-summary-system',
+            id: 'memory-summary-system',
             label: 'System Prompt',
             type: 'prompt',
-            taskType: 'agent',
+            taskType: 'memory',
             category: 'systemPrompt',
-            name: 'memorySummary',
+            name: 'summary',
             description: 'System instructions for rolling memory summarization'
           },
           {
-            id: 'agent-memory-summary-user',
+            id: 'memory-summary-user',
             label: 'User Prompt',
             type: 'prompt',
-            taskType: 'agent',
+            taskType: 'memory',
             category: 'userPrompt',
-            name: 'memorySummary',
-            description: 'User prompt template that includes previous summary + archived messages'
+            name: 'summary',
+            description: 'Summary update prompt with previous summary and archived messages'
           }
         ]
       }

@@ -11,6 +11,7 @@ import { useSettings } from '../../store/settingsStore';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { useErrorStore } from '../../store/errorStore';
 import { translationService } from '../../api/unifiedObjectService';
+import { threadRuntimeCoordinator } from '../../agent/threadRuntimeCoordinator';
 
 import ErrorModal from '../../components/Modal/ErrorModal';
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
@@ -212,6 +213,14 @@ const UnifiedWorkspace: React.FC = () => {
       setCurrentProject(projectId);
     }
   }, [projectId, setCurrentProject]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    void threadRuntimeCoordinator.start(projectId);
+    return () => {
+      threadRuntimeCoordinator.stop(projectId);
+    };
+  }, [projectId]);
 
   // Fetch projects if not loaded
   useEffect(() => {

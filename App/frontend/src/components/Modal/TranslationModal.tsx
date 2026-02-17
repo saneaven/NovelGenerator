@@ -332,6 +332,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       });
       await engine.init();
       await engine.send(userInput.trim() || 'Translate the selected objects.', {
+        input_payload: inputPayload,
         surface: 'story-object',
         journey_target_ids: objectsToTranslate.map((o) => o.objectId),
         context_object_ids: Array.from(selectedContextIds),

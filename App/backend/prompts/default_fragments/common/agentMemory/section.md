@@ -1,29 +1,41 @@
-{% if (((agent.previousSummaries)|length > 0) or ((agent.relevantChats)|length > 0)) %}
+{% set hasSummaries = (memory.summaries|length > 0) %}
+{% set hasRagTexts = (memory.ragTexts|length > 0) %}
+{% set hasHistoryChats = (memory.historyChats|length > 0) %}
+{% if hasSummaries or hasRagTexts or hasHistoryChats %}
 # Memory
 
-{% if ((agent.previousSummaries)|length > 0) %}
-## Previous Summary
+{% if hasSummaries %}
+## Summaries
 
-{% for this in agent.previousSummaries %}
+{% for this in memory.summaries %}
 {{ this }}
 
 {% endfor %}
 {% endif %}
 
-{% if ((agent.relevantChats)|length > 0) %}
+{% if hasRagTexts %}
+## Relevant Project Context
+
+{% for this in memory.ragTexts %}
+<rag_text object_type="{{ this.objectType }}" object_id="{{ this.objectId }}" field_path="{{ this.fieldPath }}" chunk_index="{{ this.chunkIndex }}">
+{{ this.text }}
+</rag_text>
+
+{% endfor %}
+{% endif %}
+
+{% if hasHistoryChats %}
 ## Relevant Archived Chats
 
-{% for this in agent.relevantChats %}
-<chat id="{{ messageId }}" role="{{ role }}">
-{% if (match.kind == "tool_call") %}
-{% if toolCall %}
-<function_call name="{{ toolCall.name }}" status="{{ toolCall.status }}">
-<result>{{ toolCall.result }}</result>
-{{ matched_snippet }}
+{% for this in memory.historyChats %}
+<chat id="{{ this.messageId }}" role="{{ this.role }}">
+{% if (this.match.kind == "tool_call") and this.toolCall %}
+<function_call name="{{ this.toolCall.name }}" status="{{ this.toolCall.status }}">
+<result>{{ this.toolCall.result }}</result>
+{{ this.matchedSnippet }}
 </function_call>
-{% endif %}
 {% else %}
-{{ matched_snippet }}
+{{ this.matchedSnippet }}
 {% endif %}
 </chat>
 

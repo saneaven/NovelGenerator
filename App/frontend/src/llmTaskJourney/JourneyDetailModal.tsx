@@ -137,7 +137,7 @@ export const JourneyDetailModal: React.FC = () => {
 
   useEffect(() => {
     if (!threadId || !journey) {
-      engineRef.current?.disconnectSSE();
+      engineRef.current?.dispose();
       engineRef.current = null;
       return;
     }
@@ -154,7 +154,7 @@ export const JourneyDetailModal: React.FC = () => {
 
     return () => {
       if (engineRef.current === engine) {
-        engine.disconnectSSE();
+        engine.dispose();
         engineRef.current = null;
       }
     };

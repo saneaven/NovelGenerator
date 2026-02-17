@@ -11,6 +11,11 @@ export interface ThreadInfo {
   journeyKind?: string | null;
   status: ThreadStatus;
   lastError?: string | null;
+  updatedAt?: string | null;
+  latestRunId?: string | null;
+  latestRunStatus?: ThreadStatus | null;
+  latestMessageAt?: string | null;
+  unresolvedToolCallCount?: number;
 }
 
 export interface ThreadMessage {

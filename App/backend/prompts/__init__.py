@@ -50,9 +50,9 @@ _AGENT_MODE_USER_PROMPT = _load_prompt_file('agent/agentMode/userPrompt.md')
 _AGENT_MODE_FIRST_USER_PROMPT = _load_prompt_file('agent/agentMode/firstUserPrompt.md')
 _AGENT_MODE_LAST_USER_PROMPT = _load_prompt_file('agent/agentMode/lastUserPrompt.md')
 _AGENT_MODE_PREFILL = _load_prompt_file('agent/agentMode/prefill.md')
-# Agent - Memory Summary
-_MEMORY_SUMMARY_SYSTEM_PROMPT = _load_prompt_file('agent/memorySummary/systemPrompt.md')
-_MEMORY_SUMMARY_USER_PROMPT = _load_prompt_file('agent/memorySummary/userPrompt.md')
+# Memory - Summary
+_MEMORY_SUMMARY_SYSTEM_PROMPT = _load_prompt_file('memory/summary/systemPrompt.md')
+_MEMORY_SUMMARY_USER_PROMPT = _load_prompt_file('memory/summary/userPrompt.md')
 # Translation - Object
 _TRANSLATION_SYSTEM_PROMPT_OBJECT = _load_prompt_file('translation/object/systemPrompt.md')
 _TRANSLATION_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/userPrompt.md')
@@ -107,7 +107,6 @@ DEFAULT_PROMPTS = {
         'systemPrompt': {
             'planMode': _PLAN_MODE_SYSTEM_PROMPT,
             'agentMode': _AGENT_MODE_SYSTEM_PROMPT,
-            'memorySummary': _MEMORY_SUMMARY_SYSTEM_PROMPT,
         },
         'memoryPrompt': {
             'planMode': _PLAN_MODE_MEMORY_PROMPT,
@@ -116,7 +115,6 @@ DEFAULT_PROMPTS = {
         'userPrompt': {
             'planMode': _PLAN_MODE_USER_PROMPT,
             'agentMode': _AGENT_MODE_USER_PROMPT,
-            'memorySummary': _MEMORY_SUMMARY_USER_PROMPT,
         },
         'firstUserPrompt': {
             'planMode': _PLAN_MODE_FIRST_USER_PROMPT,
@@ -129,6 +127,14 @@ DEFAULT_PROMPTS = {
         'prefill': {
             'planMode': _PLAN_MODE_PREFILL,
             'agentMode': _AGENT_MODE_PREFILL,
+        },
+    },
+    'memory': {
+        'systemPrompt': {
+            'summary': _MEMORY_SUMMARY_SYSTEM_PROMPT,
+        },
+        'userPrompt': {
+            'summary': _MEMORY_SUMMARY_USER_PROMPT,
         },
     },
     'translation': {

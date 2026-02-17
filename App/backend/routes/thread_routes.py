@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -16,6 +17,7 @@ from ..schemas.thread_api import (
     ChatRequest,
     ChatResponse,
     CreateThreadRequest,
+    ProjectThreadRuntimeResponse,
     SubAgentCompleteRequest,
     ThreadMessagesResponse,
     ToolCallBatchDecisionRequest,
@@ -24,6 +26,7 @@ from ..schemas.thread_api import (
     ToolCallDecisionResponse,
 )
 from ..services.run_event_bus import run_event_bus
+from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..services.run_pipeline import run_pipeline
 from ..services.tool_call_executor import complete_sub_agent_tool_call, execute as execute_tool_call
 
@@ -73,13 +76,20 @@ def _owned_thread_or_404(db: Session, *, thread_id: UUID, user_id: UUID) -> Thre
     return thread
 
 
-def _sync_run_thread_status(db: Session, *, run_id: UUID) -> None:
+def _owned_project_or_404(db: Session, *, project_id: UUID, user_id: UUID) -> Project:
+    project = db.query(Project).filter(Project.id == project_id, Project.user_id == user_id).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+def _sync_run_thread_status(db: Session, *, run_id: UUID) -> tuple[RunModel | None, Thread | None, str | None]:
     run = db.query(RunModel).filter(RunModel.id == run_id).first()
     if run is None:
-        return
+        return None, None, None
     thread = run.thread
     if thread is None:
-        return
+        return run, None, run.status
 
     statuses = [
         s
@@ -108,9 +118,38 @@ def _sync_run_thread_status(db: Session, *, run_id: UUID) -> None:
     )
     if latest_run is not None and latest_run.id == run.id:
         thread.status = next_status
+    return run, thread, next_status
 
 
-def _apply_tool_decision_sync(
+async def _emit_tool_call_status(*, thread: Thread, tool_call: RunToolCallModel) -> None:
+    await runtime_event_dispatcher.emit_runtime_event(
+        project_id=thread.project_id,
+        thread_id=thread.id,
+        event_name="tool_call:status",
+        data={
+            "run_id": str(tool_call.run_id),
+            "tool_call_id": str(tool_call.id),
+            "status": tool_call.status,
+            "reason": tool_call.reason,
+            "result": tool_call.result if isinstance(tool_call.result, dict) else None,
+        },
+    )
+
+
+async def _emit_run_status(*, thread: Thread, run: RunModel) -> None:
+    await runtime_event_dispatcher.emit_runtime_event(
+        project_id=thread.project_id,
+        thread_id=thread.id,
+        event_name="run:status",
+        data={
+            "run_id": str(run.id),
+            "status": run.status,
+            "error": run.error,
+        },
+    )
+
+
+async def _apply_tool_decision(
     *,
     user_id: UUID,
     thread_id: UUID,
@@ -126,6 +165,7 @@ def _apply_tool_decision_sync(
         project_id = thread.project_id
         tool_call = (
             db.query(RunToolCallModel)
+            .with_for_update()
             .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread.id)
             .first()
         )
@@ -143,12 +183,20 @@ def _apply_tool_decision_sync(
                     "tool_call": _serialize_tool_call(tool_call),
                     "new_objects": None,
                 }
+            if tool_call.status not in {"pending", "validating", "streaming"}:
+                raise HTTPException(status_code=409, detail=f"Cannot reject tool call in status={tool_call.status}")
+
             tool_call.status = "rejected"
             tool_call.reason = reason
             tool_call.updated_at = datetime.utcnow()
-            _sync_run_thread_status(db, run_id=tool_call.run_id)
+            synced_run, synced_thread, _ = _sync_run_thread_status(db, run_id=tool_call.run_id)
             db.commit()
             db.refresh(tool_call)
+
+            if synced_run is not None and synced_thread is not None:
+                await _emit_tool_call_status(thread=synced_thread, tool_call=tool_call)
+                await _emit_run_status(thread=synced_thread, run=synced_run)
+
             return {
                 "tool_call": _serialize_tool_call(tool_call),
                 "new_objects": None,
@@ -162,39 +210,53 @@ def _apply_tool_decision_sync(
                 "tool_call": _serialize_tool_call(tool_call),
                 "new_objects": None,
             }
-
         if tool_call.status not in {"pending", "validating", "streaming"}:
             raise HTTPException(status_code=409, detail=f"Cannot accept tool call in status={tool_call.status}")
 
         tool_call.status = "processing"
         tool_call.reason = None
+        tool_call.accepted_at = tool_call.accepted_at or datetime.utcnow()
         tool_call.updated_at = datetime.utcnow()
+        synced_run, synced_thread, _ = _sync_run_thread_status(db, run_id=tool_call.run_id)
         db.commit()
+        db.refresh(tool_call)
+
+        if synced_run is not None and synced_thread is not None:
+            await _emit_tool_call_status(thread=synced_thread, tool_call=tool_call)
+            await _emit_run_status(thread=synced_thread, run=synced_run)
     finally:
         db.close()
 
     if project_id is None:
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    # Execute using dedicated session(s)
-    execution = asyncio.run(
-        execute_tool_call(
-            SessionLocal,
-            tool_call_id,
-            user_id=user_id,
-            project_id=project_id,
-            language=run_language,
-        )
+    execution = await execute_tool_call(
+        SessionLocal,
+        tool_call_id,
+        user_id=user_id,
+        project_id=project_id,
+        language=run_language,
     )
 
     db2 = SessionLocal()
     try:
-        executed_row = db2.query(RunToolCallModel).filter(RunToolCallModel.id == tool_call_id).first()
+        thread2 = _owned_thread_or_404(db2, thread_id=thread_id, user_id=user_id)
+        executed_row = (
+            db2.query(RunToolCallModel)
+            .with_for_update()
+            .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread2.id)
+            .first()
+        )
         if executed_row is None:
             raise HTTPException(status_code=404, detail="Tool call not found after execution")
-        _sync_run_thread_status(db2, run_id=executed_row.run_id)
+        synced_run, synced_thread, _ = _sync_run_thread_status(db2, run_id=executed_row.run_id)
         db2.commit()
         db2.refresh(executed_row)
+
+        if synced_run is not None and synced_thread is not None:
+            await _emit_tool_call_status(thread=synced_thread, tool_call=executed_row)
+            await _emit_run_status(thread=synced_thread, run=synced_run)
+
         return {
             "tool_call": _serialize_tool_call(executed_row),
             "new_objects": execution.get("new_objects"),
@@ -215,6 +277,7 @@ async def chat_thread(
             thread_id=thread_id,
             user_id=current_user.id,
             input_text=text,
+            input_payload=payload.input_payload,
             run_mode=payload.run_mode,
             surface=payload.surface,
             context_object_ids=payload.context_object_ids,
@@ -225,6 +288,7 @@ async def chat_thread(
         run = await run_pipeline.resume_run(
             thread_id=thread_id,
             user_id=current_user.id,
+            input_payload=payload.input_payload,
             run_mode=payload.run_mode,
             surface=payload.surface,
             context_object_ids=payload.context_object_ids,
@@ -240,16 +304,16 @@ async def chat_thread(
     )
 
 
-@router.get("/threads/{thread_id}/stream")
-async def stream_thread_events(
-    thread_id: UUID,
+@router.get("/projects/{project_id}/stream")
+async def stream_project_events(
+    project_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
+    _owned_project_or_404(db, project_id=project_id, user_id=current_user.id)
 
     async def event_gen():
-        async for event in run_event_bus.subscribe(thread_id):
+        async for event in run_event_bus.subscribe(f"project:{project_id}"):
             name = str(event.get("event") or "message")
             data = event.get("data") if isinstance(event.get("data"), dict) else {}
             yield encode_sse(name, data)
@@ -263,6 +327,93 @@ async def stream_thread_events(
             "Connection": "keep-alive",
         },
     )
+
+
+@router.get("/projects/{project_id}/threads/runtime", response_model=ProjectThreadRuntimeResponse)
+async def list_project_threads_runtime(
+    project_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _owned_project_or_404(db, project_id=project_id, user_id=current_user.id)
+
+    threads = (
+        db.query(Thread)
+        .filter(Thread.project_id == project_id, Thread.user_id == current_user.id)
+        .order_by(Thread.updated_at.desc())
+        .all()
+    )
+    if not threads:
+        return ProjectThreadRuntimeResponse(threads=[])
+
+    thread_ids = [row.id for row in threads]
+
+    unresolved_counts = {
+        thread_id: int(count)
+        for thread_id, count in (
+            db.query(RunToolCallModel.thread_id, func.count(RunToolCallModel.id))
+            .filter(
+                RunToolCallModel.thread_id.in_(thread_ids),
+                RunToolCallModel.status.in_(["streaming", "validating", "pending", "processing"]),
+            )
+            .group_by(RunToolCallModel.thread_id)
+            .all()
+        )
+    }
+
+    latest_run_seq_subq = (
+        db.query(
+            RunModel.thread_id.label("thread_id"),
+            func.max(RunModel.run_seq).label("max_run_seq"),
+        )
+        .filter(RunModel.thread_id.in_(thread_ids))
+        .group_by(RunModel.thread_id)
+        .subquery()
+    )
+    latest_runs = (
+        db.query(RunModel)
+        .join(
+            latest_run_seq_subq,
+            and_(
+                RunModel.thread_id == latest_run_seq_subq.c.thread_id,
+                RunModel.run_seq == latest_run_seq_subq.c.max_run_seq,
+            ),
+        )
+        .all()
+    )
+    latest_run_by_thread = {row.thread_id: row for row in latest_runs}
+
+    latest_message_at_by_thread = {
+        thread_id: created_at
+        for thread_id, created_at in (
+            db.query(RunMessageModel.thread_id, func.max(RunMessageModel.created_at))
+            .filter(RunMessageModel.thread_id.in_(thread_ids))
+            .group_by(RunMessageModel.thread_id)
+            .all()
+        )
+    }
+
+    runtime_rows = []
+    for thread in threads:
+        latest_run = latest_run_by_thread.get(thread.id)
+        runtime_rows.append(
+            {
+                "id": thread.id,
+                "project_id": thread.project_id,
+                "thread_type": thread.thread_type,
+                "owner_id": thread.owner_id,
+                "journey_kind": thread.journey_kind,
+                "status": thread.status,
+                "last_error": latest_run.error if latest_run is not None else None,
+                "updated_at": thread.updated_at,
+                "latest_run_id": latest_run.id if latest_run is not None else None,
+                "latest_run_status": latest_run.status if latest_run is not None else None,
+                "latest_message_at": latest_message_at_by_thread.get(thread.id),
+                "unresolved_tool_call_count": unresolved_counts.get(thread.id, 0),
+            }
+        )
+
+    return ProjectThreadRuntimeResponse(threads=runtime_rows)
 
 
 @router.get("/threads/{thread_id}/messages", response_model=ThreadMessagesResponse)
@@ -330,8 +481,7 @@ async def decide_tool_call(
     if payload.decision not in {"accept", "reject"}:
         raise HTTPException(status_code=422, detail="decision must be accept|reject")
 
-    result = await asyncio.to_thread(
-        _apply_tool_decision_sync,
+    result = await _apply_tool_decision(
         user_id=current_user.id,
         thread_id=thread_id,
         tool_call_id=tool_call_id,
@@ -348,8 +498,7 @@ async def decide_tool_calls_batch(
     current_user: User = Depends(get_current_user),
 ):
     tasks = [
-        asyncio.to_thread(
-            _apply_tool_decision_sync,
+        _apply_tool_decision(
             user_id=current_user.id,
             thread_id=thread_id,
             tool_call_id=item.tool_call_id,
@@ -383,9 +532,13 @@ async def complete_sub_agent_call(
         raise HTTPException(status_code=409, detail="Tool call is not a sub-agent call")
 
     await complete_sub_agent_tool_call(db, tool_call=row, result_text=payload.result)
-    _sync_run_thread_status(db, run_id=row.run_id)
+    synced_run, synced_thread, _ = _sync_run_thread_status(db, run_id=row.run_id)
     db.commit()
     db.refresh(row)
+
+    if synced_run is not None and synced_thread is not None:
+        await _emit_tool_call_status(thread=synced_thread, tool_call=row)
+        await _emit_run_status(thread=synced_thread, run=synced_run)
 
     return ToolCallDecisionResponse(tool_call=_serialize_tool_call(row), new_objects=None)
 
@@ -456,9 +609,7 @@ async def create_thread(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    project = db.query(Project).filter(Project.id == project_id, Project.user_id == current_user.id).first()
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
+    _owned_project_or_404(db, project_id=project_id, user_id=current_user.id)
 
     thread = Thread(
         project_id=project_id,

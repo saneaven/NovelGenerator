@@ -29,6 +29,8 @@ interface ThreadState {
   activeStreamByThread: Record<string, boolean | undefined>;
 
   upsertThread: (thread: ThreadInfo) => void;
+  upsertThreadsRuntime: (threads: ThreadInfo[]) => void;
+  setThreadRuntime: (threadId: string, partial: Partial<ThreadInfo>) => void;
   patchThread: (threadId: string, partial: Partial<ThreadInfo>) => void;
   removeThread: (threadId: string) => void;
   getThread: (threadId: string) => ThreadInfo | undefined;
@@ -137,9 +139,32 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
   activeStreamByThread: {},
 
   upsertThread: (thread) =>
-    set((s) => ({
-      threadsById: { ...s.threadsById, [thread.id]: thread },
-    })),
+    set((s) => {
+      const existing = s.threadsById[thread.id];
+      return {
+        threadsById: { ...s.threadsById, [thread.id]: existing ? { ...existing, ...thread } : thread },
+      };
+    }),
+
+  upsertThreadsRuntime: (threads) =>
+    set((s) => {
+      if (threads.length === 0) return s;
+      const nextThreads = { ...s.threadsById };
+      for (const thread of threads) {
+        const existing = nextThreads[thread.id];
+        nextThreads[thread.id] = existing ? { ...existing, ...thread } : thread;
+      }
+      return { threadsById: nextThreads };
+    }),
+
+  setThreadRuntime: (threadId, partial) =>
+    set((s) => {
+      const existing = s.threadsById[threadId];
+      if (!existing) return s;
+      return {
+        threadsById: { ...s.threadsById, [threadId]: { ...existing, ...partial } },
+      };
+    }),
 
   patchThread: (threadId, partial) =>
     set((s) => {

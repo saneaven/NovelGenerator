@@ -68,6 +68,7 @@ export async function runAgentTranslation(
     });
     await engine.init();
     await engine.send(input.sourceContent, {
+      input_payload: journeyInput,
       surface: 'story-object',
       language: input.targetLanguage,
     });

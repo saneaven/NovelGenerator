@@ -15,4 +15,3 @@ Output requirements:
 
 Language:
 - Write the summary in the language specified by the user prompt.
-

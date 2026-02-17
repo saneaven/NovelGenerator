@@ -52,7 +52,6 @@ class CachedStaticFiles(StaticFiles):
 from .routes.auth_routes import router as auth_router
 from .routes.project_routes import router as project_router
 from .routes.agent_routes import router as agent_router
-from .routes.memory_routes import router as memory_router
 from .routes.settings_routes import router as settings_router
 from .routes.credential_routes import router as credential_router
 from .routes.prompt_routes import router as prompt_router
@@ -95,7 +94,6 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(project_router)
 app.include_router(agent_router)
-app.include_router(memory_router)
 app.include_router(settings_router)
 app.include_router(credential_router)
 app.include_router(prompt_router)

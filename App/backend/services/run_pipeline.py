@@ -4,7 +4,7 @@ import asyncio
 import json
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Callable
 from uuid import UUID
 
@@ -27,15 +27,16 @@ from ..services.credential_service import credential_service
 from ..services.history_service import capture_history, reuse_history, should_capture_or_reuse
 from ..services.memory_builder import build_memory_prompt
 from ..services.prompt_runtime.conversation_builder import build_from_runs
+from ..services.prompt_runtime.prompt_manager import PromptManager
 from ..services.prompt_runtime.project_data_builder import build_project_data
 from ..services.prompt_runtime.prompt_renderer import PromptRenderer
-from ..services.run_event_bus import InMemoryRunEventBus, run_event_bus
 from ..services.settings_service import settings_service
 from ..services.sidecar_client import sidecar_client
 from ..services.tool_schemas import ToolSchemaDef, get_dynamic_call_tools, get_tools_for_set
 from ..services.token_count_service import count_text_tokens
 from ..services.context_manager import fit_to_context_window
 from ..services.validators import GLOBAL_VALIDATORS, TOOL_VALIDATORS, ValidationContext, run_validator_chain
+from ..services.runtime_event_dispatcher import RuntimeEventDispatcher, runtime_event_dispatcher
 
 # Ensure providers are registered.
 from ..providers import async_openai_provider as _register_openai  # noqa: F401
@@ -58,9 +59,9 @@ class _ToolDeltaState:
 
 
 class RunPipeline:
-    def __init__(self, db_factory: Callable[[], Session], event_bus: InMemoryRunEventBus):
+    def __init__(self, db_factory: Callable[[], Session], event_dispatcher: RuntimeEventDispatcher):
         self._db_factory = db_factory
-        self._event_bus = event_bus
+        self._event_dispatcher = event_dispatcher
         self._tasks: dict[UUID, asyncio.Task] = {}
         self._task_lock = asyncio.Lock()
         self._thread_locks: dict[UUID, asyncio.Lock] = {}
@@ -72,15 +73,20 @@ class RunPipeline:
             self._thread_locks[thread_id] = lock
         return lock
 
-    async def _emit(self, thread_id: UUID, event_name: str, data: dict[str, Any]) -> None:
-        payload = {
-            "event": event_name,
-            "data": {
-                **data,
-                "ts": datetime.now(timezone.utc).isoformat(),
-            },
-        }
-        await self._event_bus.publish(thread_id, payload)
+    async def _emit(
+        self,
+        *,
+        project_id: UUID,
+        thread_id: UUID,
+        event_name: str,
+        data: dict[str, Any],
+    ) -> None:
+        await self._event_dispatcher.emit_runtime_event(
+            project_id=project_id,
+            thread_id=thread_id,
+            event_name=event_name,
+            data=data,
+        )
 
     async def _spawn_task(self, run_id: UUID) -> None:
         async with self._task_lock:
@@ -112,39 +118,6 @@ class RunPipeline:
         if run.run_mode == "planMode":
             return "agent_plan_mode"
         return "agent_agent_mode"
-
-    def _task_type_for_run(self, thread: Thread) -> str:
-        if thread.thread_type == "journey":
-            journey_kind = (thread.journey_kind or "").strip()
-            if journey_kind == "translation":
-                return "translation"
-            if journey_kind == "imagePrompt":
-                return "imagePrompt"
-            return "editAssistant"
-        if thread.thread_type == "subAgent":
-            return "subAgent"
-        return "agent"
-
-    def _prompt_name_for_run(self, thread: Thread, run: RunModel) -> str:
-        if thread.thread_type == "journey":
-            return str(thread.journey_kind or "workspace")
-        surface = (run.surface or "").strip()
-        if surface == "novel-editor":
-            return "novelEditor"
-        return "workspace"
-
-    def _build_extra_vars(self, thread: Thread, run: RunModel) -> dict[str, Any]:
-        return {
-            "language": run.language,
-            "inputText": run.input_text,
-            "userInput": run.input_text,
-            "runMode": run.run_mode,
-            "surface": run.surface,
-            "contextObjectIds": run.context_object_ids if isinstance(run.context_object_ids, list) else [],
-            "journeyTargetIds": run.journey_target_ids if isinstance(run.journey_target_ids, list) else [],
-            "threadType": thread.thread_type,
-            "journeyKind": thread.journey_kind,
-        }
 
     async def _materialize_resume_tool_results(self, db: Session, run: RunModel, thread: Thread) -> None:
         language = run.language
@@ -201,12 +174,9 @@ class RunPipeline:
     def _provider_tools(self, tool_defs: list[ToolSchemaDef]) -> list[dict[str, Any]]:
         return [
             {
-                "type": "function",
-                "function": {
-                    "name": d.name,
-                    "description": d.description,
-                    "parameters": d.parameters,
-                },
+                "name": d.name,
+                "description": d.description,
+                "parameters": d.parameters,
             }
             for d in tool_defs
         ]
@@ -252,6 +222,7 @@ class RunPipeline:
         thread_id: UUID,
         user_id: UUID,
         input_text: str,
+        input_payload: dict[str, Any] | None,
         run_mode: str | None,
         surface: str | None,
         context_object_ids: list[UUID],
@@ -295,6 +266,7 @@ class RunPipeline:
                 if latest is not None and latest.status in {"running", "waiting", "processing"}:
                     latest.status = "canceled"
 
+                normalized_input_payload = input_payload if isinstance(input_payload, dict) else {}
                 run = RunModel(
                     thread_id=thread.id,
                     user_id=user_id,
@@ -303,7 +275,7 @@ class RunPipeline:
                     run_seq=thread.next_run_seq,
                     language=resolved_language,
                     input_text=text,
-                    input_payload={},
+                    input_payload=normalized_input_payload,
                     run_mode=run_mode,
                     surface=surface,
                     context_object_ids=[str(x) for x in context_object_ids],
@@ -343,6 +315,7 @@ class RunPipeline:
         *,
         thread_id: UUID,
         user_id: UUID,
+        input_payload: dict[str, Any] | None,
         run_mode: str | None,
         surface: str | None,
         context_object_ids: list[UUID],
@@ -389,6 +362,8 @@ class RunPipeline:
                     run.journey_target_ids = [str(x) for x in journey_target_ids]
                 if language is not None:
                     run.language = language
+                if input_payload is not None:
+                    run.input_payload = input_payload if isinstance(input_payload, dict) else {}
 
                 run.status = "running"
                 run.error = None
@@ -409,6 +384,7 @@ class RunPipeline:
                 task.cancel()
 
         db = self._db_factory()
+        project_id: UUID | None = None
         try:
             run = (
                 db.query(RunModel)
@@ -420,14 +396,26 @@ class RunPipeline:
                 raise HTTPException(status_code=404, detail="Run not found")
 
             thread = run.thread
+            project_id = run.project_id
             run.status = "canceled"
             thread.status = "canceled"
             db.commit()
         finally:
             db.close()
 
-        await self._emit(thread_id, "run:canceled", {"run_id": str(run_id)})
-        await self._emit(thread_id, "run:status", {"run_id": str(run_id), "thread_id": str(thread_id), "status": "canceled"})
+        if project_id is not None:
+            await self._emit(
+                project_id=project_id,
+                thread_id=thread_id,
+                event_name="run:canceled",
+                data={"run_id": str(run_id)},
+            )
+            await self._emit(
+                project_id=project_id,
+                thread_id=thread_id,
+                event_name="run:status",
+                data={"run_id": str(run_id), "status": "canceled"},
+            )
 
     async def _persist_tool_calls(
         self,
@@ -505,9 +493,10 @@ class RunPipeline:
             out.append(row)
 
             await self._emit(
-                thread.id,
-                "tool_call:end",
-                {
+                project_id=run.project_id,
+                thread_id=thread.id,
+                event_name="tool_call:end",
+                data={
                     "run_id": str(run.id),
                     "tool_call_id": str(row.id),
                     "message_id": str(tool_msg.id),
@@ -518,9 +507,10 @@ class RunPipeline:
                 },
             )
             await self._emit(
-                thread.id,
-                "tool_call:status",
-                {
+                project_id=run.project_id,
+                thread_id=thread.id,
+                event_name="tool_call:status",
+                data={
                     "run_id": str(run.id),
                     "tool_call_id": str(row.id),
                     "status": row.status,
@@ -541,20 +531,44 @@ class RunPipeline:
             if thread is None:
                 return
 
-            await self._emit(thread.id, "run:status", {"run_id": str(run.id), "thread_id": str(thread.id), "status": "running"})
+            await self._emit(
+                project_id=run.project_id,
+                thread_id=thread.id,
+                event_name="run:status",
+                data={"run_id": str(run.id), "status": "running"},
+            )
 
             await self._materialize_resume_tool_results(db, run, thread)
 
             settings: UserSettings = settings_service._get_settings(db, run.user_id)  # pylint: disable=protected-access
-            task_type = self._task_type_for_run(thread)
-            prompt_name = self._prompt_name_for_run(thread, run)
             preset_id = settings_service.get_active_preset_id(db, run.user_id)
             if preset_id is None:
                 raise RuntimeError("No active preset selected")
 
             renderer = PromptRenderer(db, user_id=run.user_id, preset_id=preset_id)
+            prompt_manager = PromptManager(renderer)
             project_data = await build_project_data(db, run.project_id, run.language, sidecar_client)
-            extra_vars = self._build_extra_vars(thread, run)
+
+            has_prior_user_messages = (
+                db.query(RunMessageModel.id)
+                .join(RunModel, RunModel.id == RunMessageModel.run_id)
+                .filter(
+                    RunModel.thread_id == thread.id,
+                    RunModel.run_seq < run.run_seq,
+                    RunMessageModel.role == "user",
+                )
+                .first()
+                is not None
+            )
+            prompt_bundle = prompt_manager.build_prompt_bundle(
+                db,
+                user_id=run.user_id,
+                preset_id=preset_id,
+                thread=thread,
+                run=run,
+                project_data=project_data,
+                has_prior_user_messages=has_prior_user_messages,
+            )
 
             previous_run = (
                 db.query(RunModel)
@@ -570,11 +584,8 @@ class RunPipeline:
                     db,
                     thread=thread,
                     up_to_run=run,
-                    renderer=renderer,
-                    task_type=task_type,
-                    prompt_name=prompt_name,
-                    project_data=project_data,
-                    extra_vars=extra_vars,
+                    system_prompt=prompt_bundle.system_prompt,
+                    prefill=prompt_bundle.prefill,
                     language=run.language,
                     tool_call_history_limit=int(getattr(settings, "tool_call_history_limit", 5)),
                     thinking_history_limit=int(getattr(settings, "thinking_history_limit", 5)),
@@ -590,13 +601,12 @@ class RunPipeline:
             )
 
             if run.input_text and run.input_text.strip():
-                rendered_user = renderer.render_user_prompt(task_type, prompt_name, project_data, extra_vars)
                 recent = [msg for msg in recent if msg.get("role") != "user"]
                 recent.insert(
                     0,
                     {
                         "role": "user",
-                        "content_parts": [{"type": "content", "text": rendered_user}],
+                        "content_parts": [{"type": "content", "text": prompt_bundle.user_prompt}],
                     },
                 )
 
@@ -607,11 +617,8 @@ class RunPipeline:
             last_user_text, last_assistant_text = self._extract_last_texts(conversation)
             memory_prompt = await build_memory_prompt(
                 db,
-                renderer=renderer,
-                task_type=task_type,
-                prompt_name=prompt_name,
-                project_data=project_data,
-                extra_vars=extra_vars,
+                prompt_manager=prompt_manager,
+                prompt_bundle=prompt_bundle,
                 user_id=run.user_id,
                 project_id=run.project_id,
                 owner_id=thread.owner_id,
@@ -628,6 +635,7 @@ class RunPipeline:
                 }
                 conversation.insert(0, memory_message_ref)
 
+            task_type = prompt_bundle.target.task_type
             task_config = settings_service.get_task_config(db, run.user_id, task_type)
             tokenizer_override = task_config.advanced.get("tokenizer_override") if isinstance(task_config.advanced, dict) else None
 
@@ -649,11 +657,8 @@ class RunPipeline:
                 new_user, new_asst = self._extract_last_texts(cleaned)
                 new_mem = await build_memory_prompt(
                     db,
-                    renderer=renderer,
-                    task_type=task_type,
-                    prompt_name=prompt_name,
-                    project_data=project_data,
-                    extra_vars=extra_vars,
+                    prompt_manager=prompt_manager,
+                    prompt_bundle=prompt_bundle,
                     user_id=run.user_id,
                     project_id=run.project_id,
                     owner_id=thread.owner_id,
@@ -704,9 +709,10 @@ class RunPipeline:
             db.commit()
 
             await self._emit(
-                thread.id,
-                "message:start",
-                {
+                project_id=run.project_id,
+                thread_id=thread.id,
+                event_name="message:start",
+                data={
                     "run_id": str(run.id),
                     "message_id": str(assistant_message.id),
                     "role": "assistant",
@@ -775,9 +781,10 @@ class RunPipeline:
                     if delta.content_delta:
                         collected_parts.append({"type": "content", "text": delta.content_delta})
                         await self._emit(
-                            thread.id,
-                            "content:delta",
-                            {
+                            project_id=run.project_id,
+                            thread_id=thread.id,
+                            event_name="content:delta",
+                            data={
                                 "run_id": str(run.id),
                                 "message_id": str(assistant_message.id),
                                 "text": delta.content_delta,
@@ -787,9 +794,10 @@ class RunPipeline:
                     if delta.thinking_delta:
                         collected_parts.append({"type": "thinking", "text": delta.thinking_delta})
                         await self._emit(
-                            thread.id,
-                            "thinking:delta",
-                            {
+                            project_id=run.project_id,
+                            thread_id=thread.id,
+                            event_name="thinking:delta",
+                            data={
                                 "run_id": str(run.id),
                                 "message_id": str(assistant_message.id),
                                 "text": delta.thinking_delta,
@@ -806,9 +814,10 @@ class RunPipeline:
                             state = _ToolDeltaState(llm_call_id=init_id, name="", raw_arguments="")
                             delta_state_by_index[idx] = state
                             await self._emit(
-                                thread.id,
-                                "tool_call:start",
-                                {
+                                project_id=run.project_id,
+                                thread_id=thread.id,
+                                event_name="tool_call:start",
+                                data={
                                     "run_id": str(run.id),
                                     "tool_call_id": init_id,
                                     "message_id": "",
@@ -827,9 +836,10 @@ class RunPipeline:
                         if isinstance(fn.get("arguments"), str):
                             state.raw_arguments += fn["arguments"]
                             await self._emit(
-                                thread.id,
-                                "tool_call:delta",
-                                {
+                                project_id=run.project_id,
+                                thread_id=thread.id,
+                                event_name="tool_call:delta",
+                                data={
                                     "run_id": str(run.id),
                                     "tool_call_id": state.llm_call_id,
                                     "index": idx,
@@ -900,9 +910,10 @@ class RunPipeline:
             db.commit()
 
             await self._emit(
-                thread.id,
-                "message:end",
-                {
+                project_id=run.project_id,
+                thread_id=thread.id,
+                event_name="message:end",
+                data={
                     "run_id": str(run.id),
                     "message_id": str(assistant_message.id),
                     "seq_in_thread": int(assistant_message.seq_in_thread),
@@ -910,19 +921,20 @@ class RunPipeline:
                 },
             )
             await self._emit(
-                thread.id,
-                "run:status",
-                {
+                project_id=run.project_id,
+                thread_id=thread.id,
+                event_name="run:status",
+                data={
                     "run_id": str(run.id),
-                    "thread_id": str(thread.id),
                     "status": run.status,
                     "error": run.error,
                 },
             )
             await self._emit(
-                thread.id,
-                "run:done",
-                {
+                project_id=run.project_id,
+                thread_id=thread.id,
+                event_name="run:done",
+                data={
                     "run_id": str(run.id),
                     "final_status": run.status,
                 },
@@ -935,7 +947,12 @@ class RunPipeline:
                     run.status = "canceled"
                     if thread is not None:
                         thread.status = "canceled"
-                        await self._emit(thread.id, "run:canceled", {"run_id": str(run.id)})
+                        await self._emit(
+                            project_id=run.project_id,
+                            thread_id=thread.id,
+                            event_name="run:canceled",
+                            data={"run_id": str(run.id)},
+                        )
                     db.commit()
             finally:
                 raise
@@ -951,19 +968,20 @@ class RunPipeline:
                 db.commit()
                 if thread is not None:
                     await self._emit(
-                        thread.id,
-                        "run:error",
-                        {
+                        project_id=run.project_id,
+                        thread_id=thread.id,
+                        event_name="run:error",
+                        data={
                             "run_id": str(run.id),
                             "error": str(exc),
                         },
                     )
                     await self._emit(
-                        thread.id,
-                        "run:status",
-                        {
+                        project_id=run.project_id,
+                        thread_id=thread.id,
+                        event_name="run:status",
+                        data={
                             "run_id": str(run.id),
-                            "thread_id": str(thread.id),
                             "status": "error",
                             "error": str(exc),
                         },
@@ -972,4 +990,4 @@ class RunPipeline:
             db.close()
 
 
-run_pipeline = RunPipeline(db_factory=SessionLocal, event_bus=run_event_bus)
+run_pipeline = RunPipeline(db_factory=SessionLocal, event_dispatcher=runtime_event_dispatcher)

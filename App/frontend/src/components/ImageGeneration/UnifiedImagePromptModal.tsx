@@ -268,6 +268,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       });
       await engine.init();
       await engine.send(userRequest.trim() || 'Generate an image prompt.', {
+        input_payload: inputPayload,
         surface: 'story-object',
         context_object_ids: selectedObjectIds,
       });

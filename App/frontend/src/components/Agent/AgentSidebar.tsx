@@ -71,17 +71,25 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
       const threadStatus = threadInfo?.status;
       const isRunning = threadStatus === 'running' || threadStatus === 'processing' || isRunningFromPreflight;
 
-      // Has completed since viewed: latest message arrived after lastViewedAt while thread is idle
+      // Has completed since viewed: runtime timestamp moved forward while thread is done.
       const messages = threadId ? messagesByThreadId[threadId] : undefined;
       const latestMessage = messages?.length ? messages[messages.length - 1] : undefined;
       const latestMessageTime = latestMessage ? new Date(latestMessage.createdAt).getTime() : 0;
+      const latestRuntimeMessageTime = threadInfo?.latestMessageAt
+        ? new Date(threadInfo.latestMessageAt).getTime()
+        : 0;
+      const latestRuntimeUpdateTime = threadInfo?.updatedAt
+        ? new Date(threadInfo.updatedAt).getTime()
+        : 0;
+      const latestActivityTime = Math.max(latestMessageTime, latestRuntimeMessageTime, latestRuntimeUpdateTime);
       const hasCompletedSinceViewed =
         selectedAgentId !== agent.id &&
         threadStatus === 'done' &&
-        latestMessageTime > lastViewedAt;
+        latestActivityTime > lastViewedAt;
 
-      // Pending tool requests: thread waiting or any tool call pending/running
-      let hasPendingToolRequest = threadStatus === 'waiting';
+      // Pending tool requests: unresolved count from runtime snapshot first, fallback to local message scan.
+      const runtimeUnresolved = Number(threadInfo?.unresolvedToolCallCount ?? 0);
+      let hasPendingToolRequest = runtimeUnresolved > 0 || threadStatus === 'waiting';
       if (!hasPendingToolRequest && messages) {
         for (const msg of messages) {
           const tcs = toolCallsByMessageId[msg.id];

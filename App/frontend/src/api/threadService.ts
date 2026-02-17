@@ -8,6 +8,7 @@ import type {
 
 export interface ChatRequest {
   input_text: string;
+  input_payload?: Record<string, any>;
   run_mode?: 'planMode' | 'agentMode';
   surface?: string;
   context_object_ids?: string[];
@@ -64,16 +65,51 @@ export interface ToolCallBatchDecisionResponse {
   results: ToolCallDecisionResponse[];
 }
 
+export interface ProjectThreadRuntimeItem {
+  id: string;
+  projectId: string;
+  threadType: ThreadInfo['threadType'];
+  ownerId: string | null;
+  journeyKind: string | null;
+  status: ThreadStatus;
+  lastError: string | null;
+  updatedAt: string | null;
+  latestRunId: string | null;
+  latestRunStatus: ThreadStatus | null;
+  latestMessageAt: string | null;
+  unresolvedToolCallCount: number;
+}
+
 function toThreadInfo(raw: Record<string, unknown>): ThreadInfo {
-  return {
+  const out: ThreadInfo = {
     id: String(raw.id),
     projectId: String(raw.project_id),
     threadType: String(raw.thread_type) as ThreadInfo['threadType'],
     ownerId: raw.owner_id ? String(raw.owner_id) : null,
     journeyKind: raw.journey_kind ? String(raw.journey_kind) : null,
     status: String(raw.status) as ThreadStatus,
-    lastError: (raw.last_error ?? null) as string | null,
   };
+  if (Object.prototype.hasOwnProperty.call(raw, 'last_error')) {
+    out.lastError = (raw.last_error ?? null) as string | null;
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'updated_at')) {
+    out.updatedAt = raw.updated_at ? String(raw.updated_at) : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'latest_run_id')) {
+    out.latestRunId = raw.latest_run_id ? String(raw.latest_run_id) : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'latest_run_status')) {
+    out.latestRunStatus = raw.latest_run_status
+      ? String(raw.latest_run_status) as ThreadStatus
+      : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'latest_message_at')) {
+    out.latestMessageAt = raw.latest_message_at ? String(raw.latest_message_at) : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'unresolved_tool_call_count')) {
+    out.unresolvedToolCallCount = Number(raw.unresolved_tool_call_count ?? 0);
+  }
+  return out;
 }
 
 function toMessage(raw: Record<string, unknown>): ThreadMessage {
@@ -215,6 +251,12 @@ export const threadService = {
       thread_type: 'journey',
       journey_kind: journeyKind,
     });
+  },
+
+  async listProjectThreadRuntime(projectId: string): Promise<ProjectThreadRuntimeItem[]> {
+    const raw = await apiClient.get<Record<string, unknown>>(`/api/v1/projects/${projectId}/threads/runtime`);
+    const rows = Array.isArray(raw.threads) ? raw.threads : [];
+    return rows.map((row) => toThreadInfo(row as Record<string, unknown>)) as ProjectThreadRuntimeItem[];
   },
 };
 

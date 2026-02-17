@@ -591,7 +591,7 @@
       "tokenizerHint": "Select which tokenizer to use for token counting estimates",
       "tokenLimits": {
         "context_window_tokens": "Context Window Tokens",
-        "context_window_tokensHint": "Used for local prompt budgeting (e.g. agent memory preflight). Leave empty for no local limit. Does not change the model's actual context window.",
+        "context_window_tokensHint": "Used for local prompt budgeting preflight. Leave empty for no local limit. Does not change the model's actual context window.",
         "max_output_tokens": "Max Output Tokens",
         "max_output_tokensPlaceholder": "Default (provider)",
         "max_output_tokensHint": "Limits the maximum tokens generated in the response. Leave empty to use the provider default."
@@ -1104,11 +1104,11 @@
     },
     "memory": {
       "preflight": {
-        "summarizing": "Summarizing…",
-        "archiving": "Saving memory / indexing…",
-        "searching": "Searching memory…"
+        "summarizing": "Preparing context…",
+        "archiving": "Building prompt context…",
+        "searching": "Retrieving relevant context…"
       },
-      "preflightFailed": "Memory preflight failed: {{error}}"
+      "preflightFailed": "Prompt preparation failed: {{error}}"
     }
   },
   "unifiedWorkspace": {

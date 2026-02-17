@@ -177,6 +177,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       });
       await engine.init();
       await engine.send(trimmedRequest, {
+        input_payload: inputPayload,
         surface: 'story-object',
         journey_target_ids: [targetId],
         context_object_ids: selectedContextIds,

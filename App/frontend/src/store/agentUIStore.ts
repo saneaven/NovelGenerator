@@ -50,7 +50,7 @@ interface AgentUIState {
   // Per-project editing state
   editingByProject: Record<string, EditingState>;
 
-  // Per-project preflight toast (memory summary/archive/search)
+  // Per-project preflight toast (prompt/context preparation)
   preflightToastByProject: Record<string, AgentPreflightToast | undefined>;
 
   // Per-project agent run mode (Plan vs Agent)

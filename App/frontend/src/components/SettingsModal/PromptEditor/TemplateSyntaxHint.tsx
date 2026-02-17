@@ -16,6 +16,8 @@ const GROUP_LABELS: Record<string, string> = {
     project: 'Project Data',
     input: 'Input',
     agent: 'Agent Mode',
+    memory: 'Runtime Memory',
+    memorySummary: 'Memory Summary',
     editAssistant: 'Edit Assistant',
     translation: 'Translation',
     imagePrompt: 'Image Prompt',
@@ -61,11 +63,13 @@ function buildTooltip(desc: string, example: any): string {
 function getSchemaKey(taskType: string, name?: string): PromptType | null {
     switch (taskType) {
         case 'agent': return 'agent';
+        case 'memory': return 'memory';
         case 'translation': return 'translation';
         case 'editAssistant': return 'editAssistant';
         case 'imagePrompt':
             if (name === 'object') return 'objectImagePrompt';
             if (name === 'scene') return 'sceneImagePrompt';
+            if (name === 'coverImage') return 'coverImagePrompt';
             return null;
         default: return null;
     }

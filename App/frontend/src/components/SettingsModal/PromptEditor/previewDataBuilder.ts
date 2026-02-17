@@ -41,6 +41,8 @@ export function getPromptTypeFromTask(taskType: TaskType, promptName: string): P
   switch (taskType) {
     case 'agent':
       return 'agent';
+    case 'memory':
+      return 'memory';
     case 'editAssistant':
       return 'editAssistant';
     case 'translation':
@@ -164,34 +166,34 @@ export function buildModeSpecificData(
   promptName: string,
   filteredIds: FilteredIds,
   promptTypeOverrides?: Record<string, any>
-): Partial<Pick<TemplateData, 'agent' | 'memorySummary' | 'editAssistant' | 'translation' | 'imagePrompt'>> {
-  let modeData: Partial<Pick<TemplateData, 'agent' | 'memorySummary' | 'editAssistant' | 'translation' | 'imagePrompt'>> = {};
+): Partial<Pick<TemplateData, 'agent' | 'memorySummary' | 'editAssistant' | 'translation' | 'imagePrompt' | 'memory'>> {
+  let modeData: Partial<Pick<TemplateData, 'agent' | 'memorySummary' | 'editAssistant' | 'translation' | 'imagePrompt' | 'memory'>> = {};
 
   switch (taskType) {
     case 'agent':
-      if (promptName === 'memorySummary') {
-        modeData = {
-          memorySummary: {
-            previousSummary: '[ Placeholder for previous summary ]',
-            messages: [{
-              role: 'user',
-              content: '[ Placeholder for archived message content ]',
-              messageId: '[ placeholder-message-id ]',
-              createdAt: new Date().toISOString(),
-            }],
-            language: '[ Placeholder language ]',
-            archiveUntilMessageId: '[ placeholder-archive-boundary-id ]',
-          },
-        };
-      } else {
-        modeData = {
-          agent: {
-            runMode: promptName === 'planMode' ? 'planMode' : 'agentMode',
-            surface: 'story-object',
-            contextObjectIds: filteredIds.contextObjectIds,
-          },
-        };
-      }
+      modeData = {
+        agent: {
+          runMode: promptName === 'planMode' ? 'planMode' : 'agentMode',
+          surface: 'story-object',
+          contextObjectIds: filteredIds.contextObjectIds,
+        },
+      };
+      break;
+
+    case 'memory':
+      modeData = {
+        memorySummary: {
+          previousSummary: '[ Placeholder for previous summary ]',
+          messages: [{
+            role: 'user',
+            content: '[ Placeholder for archived message content ]',
+            messageId: '[ placeholder-message-id ]',
+            createdAt: new Date().toISOString(),
+          }],
+          language: '[ Placeholder language ]',
+          archiveUntilMessageId: '[ placeholder-archive-boundary-id ]',
+        },
+      };
       break;
 
     case 'editAssistant':
@@ -369,42 +371,57 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
     config,
     project,
     input,
+    memory: {
+      summaries: [],
+      ragTexts: [],
+      historyChats: [],
+    },
     variables,
     ...modeData,
   };
 
   // Provide richer agent-memory preview data for Memory Prompt templates
-  if (taskType === 'agent' && promptCategory === 'memoryPrompt' && templateData.agent) {
-    templateData.agent.previousSummaries = [
+  if (taskType === 'agent' && promptCategory === 'memoryPrompt' && templateData.memory) {
+    templateData.memory.summaries = [
       [
         '- Project: [Placeholder Project]',
         '- Characters: [Placeholder]',
         '- Current arc: [Placeholder]',
       ].join('\n'),
     ];
-    templateData.agent.relevantChats = [
+    templateData.memory.historyChats = [
       {
         messageId: '[placeholder-message-id-1]',
         role: 'user',
-        matched_snippet: 'We decided the protagonist is afraid of water after the incident at the river.',
+        matchedSnippet: 'We decided the protagonist is afraid of water after the incident at the river.',
         match: { kind: 'content', fieldPath: 'content', chunkIndex: 0 },
       },
       {
         messageId: '[placeholder-message-id-2]',
         role: 'assistant',
-        matched_snippet: 'Drafted a scene outline for Act 2, Chapter 3 with rising tension and a reveal.',
+        matchedSnippet: 'Drafted a scene outline for Act 2, Chapter 3 with rising tension and a reveal.',
         match: { kind: 'content', fieldPath: 'content', chunkIndex: 1 },
       },
       {
         messageId: '[placeholder-message-id-3]',
         role: 'assistant',
-        matched_snippet: 'Tool call: create_character(name="Ari", role="antagonist")',
+        matchedSnippet: 'Tool call: create_character(name="Ari", role="antagonist")',
         match: { kind: 'tool_call', fieldPath: 'tool_calls/index/0', chunkIndex: 2 },
         toolCall: {
           name: 'create_character',
           status: 'accepted',
           result: 'Applied successfully',
         },
+      },
+    ];
+    templateData.memory.ragTexts = [
+      {
+        objectType: 'character',
+        objectId: '[placeholder-char-id]',
+        fieldPath: 'content',
+        chunkIndex: 0,
+        distance: 0.11,
+        text: 'Character profile suggests a deep fear of rivers after a childhood incident.',
       },
     ];
   }

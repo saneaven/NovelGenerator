@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from ...models.db_models import PromptFragment, PromptVersion
 from ..template_engine import FragmentNotFoundError, create_environment, render_template
-from ..variable_service import variable_service
 
 
 class PromptTemplateNotFoundError(RuntimeError):
@@ -29,8 +28,7 @@ class PromptRenderInput:
     task_type: str
     prompt_name: str
     prompt_category: str
-    project_data: dict[str, Any]
-    extra_vars: dict[str, Any]
+    template_data: dict[str, Any]
 
 
 class PromptRenderer:
@@ -99,22 +97,6 @@ class PromptRenderer:
             out[key] = row.content
         return out
 
-    def _build_template_data(self, *, project_data: dict[str, Any], extra_vars: dict[str, Any]) -> dict[str, Any]:
-        try:
-            user_vars = variable_service.get_variables_for_template(
-                self._db,
-                user_id=self._user_id,
-                preset_id=self._preset_id,
-            )
-        except Exception as exc:
-            raise PromptVariableResolutionError(str(exc)) from exc
-
-        return {
-            "project": project_data,
-            "variables": user_vars,
-            **(extra_vars or {}),
-        }
-
     def _render(self, inp: PromptRenderInput) -> str:
         template_text = self._load_prompt_content(
             task_type=inp.task_type,
@@ -128,78 +110,79 @@ class PromptRenderer:
             return render_template(
                 env,
                 template_text,
-                self._build_template_data(project_data=inp.project_data, extra_vars=inp.extra_vars),
+                inp.template_data,
             )
         except FragmentNotFoundError as exc:
             raise PromptFragmentMissingError(str(exc)) from exc
 
-    def render_system_prompt(
+    def render_prompt(
         self,
+        *,
         task_type: str,
         prompt_name: str,
-        project_data: dict[str, Any],
-        extra_vars: dict[str, Any],
+        prompt_category: str,
+        template_data: dict[str, Any],
     ) -> str:
         return self._render(
             PromptRenderInput(
                 task_type=task_type,
                 prompt_name=prompt_name,
-                prompt_category="systemPrompt",
-                project_data=project_data,
-                extra_vars=extra_vars,
+                prompt_category=prompt_category,
+                template_data=template_data,
             )
+        )
+
+    def render_system_prompt(
+        self,
+        task_type: str,
+        prompt_name: str,
+        template_data: dict[str, Any],
+    ) -> str:
+        return self.render_prompt(
+            task_type=task_type,
+            prompt_name=prompt_name,
+            prompt_category="systemPrompt",
+            template_data=template_data,
         )
 
     def render_user_prompt(
         self,
         task_type: str,
         prompt_name: str,
-        project_data: dict[str, Any],
-        extra_vars: dict[str, Any],
+        template_data: dict[str, Any],
     ) -> str:
-        return self._render(
-            PromptRenderInput(
-                task_type=task_type,
-                prompt_name=prompt_name,
-                prompt_category="userPrompt",
-                project_data=project_data,
-                extra_vars=extra_vars,
-            )
+        return self.render_prompt(
+            task_type=task_type,
+            prompt_name=prompt_name,
+            prompt_category="userPrompt",
+            template_data=template_data,
         )
 
     def render_memory_prompt(
         self,
         task_type: str,
         prompt_name: str,
-        project_data: dict[str, Any],
-        extra_vars: dict[str, Any],
+        template_data: dict[str, Any],
     ) -> str:
-        return self._render(
-            PromptRenderInput(
-                task_type=task_type,
-                prompt_name=prompt_name,
-                prompt_category="memoryPrompt",
-                project_data=project_data,
-                extra_vars=extra_vars,
-            )
+        return self.render_prompt(
+            task_type=task_type,
+            prompt_name=prompt_name,
+            prompt_category="memoryPrompt",
+            template_data=template_data,
         )
 
     def render_prefill(
         self,
         task_type: str,
         prompt_name: str,
-        project_data: dict[str, Any],
-        extra_vars: dict[str, Any],
+        template_data: dict[str, Any],
     ) -> str | None:
         try:
-            rendered = self._render(
-                PromptRenderInput(
-                    task_type=task_type,
-                    prompt_name=prompt_name,
-                    prompt_category="prefill",
-                    project_data=project_data,
-                    extra_vars=extra_vars,
-                )
+            rendered = self.render_prompt(
+                task_type=task_type,
+                prompt_name=prompt_name,
+                prompt_category="prefill",
+                template_data=template_data,
             )
         except PromptTemplateNotFoundError:
             return None

@@ -591,7 +591,7 @@
       "tokenizerHint": "토큰 수 추정에 사용할 토크나이저를 선택하세요",
       "tokenLimits": {
         "context_window_tokens": "컨텍스트 윈도우 토큰 수",
-        "context_window_tokensHint": "로컬 프롬프트 예산 계산(예: 에이전트 메모리 preflight)에 사용됩니다. 비워두면 제한 없이 계산하며, 실제 모델 컨텍스트 윈도우를 변경하진 않습니다.",
+        "context_window_tokensHint": "로컬 프롬프트 예산 계산 preflight에 사용됩니다. 비워두면 제한 없이 계산하며, 실제 모델 컨텍스트 윈도우를 변경하진 않습니다.",
         "max_output_tokens": "응답 최대 토큰 수",
         "max_output_tokensPlaceholder": "기본값(프로바이더)",
         "max_output_tokensHint": "응답 생성 토큰 수 상한입니다. 비워두면 프로바이더 기본값을 사용합니다."
@@ -1104,11 +1104,11 @@
     },
     "memory": {
       "preflight": {
-        "summarizing": "요약중...",
-        "archiving": "기억 저장/인덱싱 중...",
-        "searching": "메모리 검색 중..."
+        "summarizing": "컨텍스트 준비 중...",
+        "archiving": "프롬프트 컨텍스트 구성 중...",
+        "searching": "관련 컨텍스트 조회 중..."
       },
-      "preflightFailed": "메모리 준비 실패: {{error}}"
+      "preflightFailed": "프롬프트 준비 실패: {{error}}"
     }
   },
   "unifiedWorkspace": {

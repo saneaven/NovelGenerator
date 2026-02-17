@@ -1,19 +1,26 @@
 import { API_BASE_URL, apiClient } from './client';
 import type { RunStatus, ToolCallStatus } from '../types/thread';
 
+interface RuntimeEventBase {
+  project_id: string;
+  thread_id: string;
+  run_id: string | null;
+  ts: string;
+}
+
 export type ThreadSSEEvent =
-  | { event: 'run:status'; data: { run_id: string; thread_id: string; status: RunStatus; error?: string | null; ts: string } }
-  | { event: 'message:start'; data: { run_id: string; message_id: string; role: 'assistant'; seq: number; seq_in_thread: number; ts: string } }
-  | { event: 'content:delta'; data: { run_id: string; message_id: string; text: string; ts: string } }
-  | { event: 'thinking:delta'; data: { run_id: string; message_id: string; text: string; ts: string } }
-  | { event: 'tool_call:start'; data: { run_id: string; tool_call_id: string; message_id: string; assistant_message_id: string; index: number; name: string; ts: string } }
-  | { event: 'tool_call:delta'; data: { run_id: string; tool_call_id: string; index: number; arguments_delta: string; ts: string } }
-  | { event: 'tool_call:end'; data: { run_id: string; tool_call_id: string; message_id: string; assistant_message_id: string; index: number; name: string; arguments: Record<string, unknown>; ts: string } }
-  | { event: 'tool_call:status'; data: { run_id: string; tool_call_id: string; status: ToolCallStatus; reason?: string | null; result?: Record<string, unknown> | null; ts: string } }
-  | { event: 'message:end'; data: { run_id: string; message_id: string; seq_in_thread: number; data: Record<string, unknown>; ts: string } }
-  | { event: 'run:done'; data: { run_id: string; final_status: RunStatus; ts: string } }
-  | { event: 'run:error'; data: { run_id: string; error: string; ts: string } }
-  | { event: 'run:canceled'; data: { run_id: string; ts: string } }
+  | { event: 'run:status'; data: RuntimeEventBase & { status: RunStatus; error?: string | null } }
+  | { event: 'message:start'; data: RuntimeEventBase & { message_id: string; role: 'assistant'; seq: number; seq_in_thread: number } }
+  | { event: 'content:delta'; data: RuntimeEventBase & { message_id: string; text: string } }
+  | { event: 'thinking:delta'; data: RuntimeEventBase & { message_id: string; text: string } }
+  | { event: 'tool_call:start'; data: RuntimeEventBase & { tool_call_id: string; message_id: string; assistant_message_id: string; index: number; name: string } }
+  | { event: 'tool_call:delta'; data: RuntimeEventBase & { tool_call_id: string; index: number; arguments_delta: string } }
+  | { event: 'tool_call:end'; data: RuntimeEventBase & { tool_call_id: string; message_id: string; assistant_message_id: string; index: number; name: string; arguments: Record<string, unknown> } }
+  | { event: 'tool_call:status'; data: RuntimeEventBase & { tool_call_id: string; status: ToolCallStatus; reason?: string | null; result?: Record<string, unknown> | null } }
+  | { event: 'message:end'; data: RuntimeEventBase & { message_id: string; seq_in_thread: number; data: Record<string, unknown> } }
+  | { event: 'run:done'; data: RuntimeEventBase & { final_status: RunStatus } }
+  | { event: 'run:error'; data: RuntimeEventBase & { error: string } }
+  | { event: 'run:canceled'; data: RuntimeEventBase }
   | { event: string; data: Record<string, unknown> };
 
 interface ConnectOptions {
@@ -91,34 +98,30 @@ async function openAndReadStream(
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
-
     while (true) {
       const boundary = buffer.indexOf('\n\n');
       if (boundary < 0) break;
-
       const frame = buffer.slice(0, boundary);
       buffer = buffer.slice(boundary + 2);
-
       const event = parseSseFrame(frame);
       if (event) onEvent(event);
     }
   }
 }
 
-export async function connectThreadStream(
-  threadId: string,
+export async function connectProjectStream(
+  projectId: string,
   onEvent: (event: ThreadSSEEvent) => void,
   signal: AbortSignal,
   options?: ConnectOptions,
 ): Promise<void> {
-  const streamUrl = `${API_BASE_URL}/api/v1/threads/${threadId}/stream`;
+  const streamUrl = `${API_BASE_URL}/api/v1/projects/${projectId}/stream`;
   let attempt = 0;
 
   while (!signal.aborted) {
     try {
       await openAndReadStream(streamUrl, signal, onEvent);
       if (signal.aborted) return;
-
       attempt += 1;
       const delay = reconnectDelayMs(attempt);
       await new Promise((resolve) => setTimeout(resolve, delay));
@@ -127,8 +130,8 @@ export async function connectThreadStream(
       if (signal.aborted) return;
       attempt += 1;
       const delay = reconnectDelayMs(attempt);
-      console.warn('Thread SSE disconnected. Reconnecting...', {
-        threadId,
+      console.warn('Project SSE disconnected. Reconnecting...', {
+        projectId,
         attempt,
         delay,
         error,
@@ -139,4 +142,5 @@ export async function connectThreadStream(
   }
 }
 
-export default connectThreadStream;
+export default connectProjectStream;
+

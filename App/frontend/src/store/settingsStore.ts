@@ -107,7 +107,7 @@ export interface TaskAIConfig {
     // Max output tokens for the LLM response (maps to backend `max_tokens`)
     // If omitted, provider defaults are used.
     max_output_tokens?: number;
-    // Context window upper bound (used for local budgeting like agent memory preflight)
+    // Context window upper bound (used for local prompt budgeting preflight)
     // If omitted, falls back to conservative defaults.
     context_window_tokens?: number;
     advanced: AdvancedTaskSettings;

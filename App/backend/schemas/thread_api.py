@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 class ChatRequest(BaseModel):
     input_text: str = ""
+    input_payload: dict[str, Any] | None = None
     run_mode: Literal["planMode", "agentMode"] | None = None
     surface: str | None = None
     context_object_ids: list[UUID] = Field(default_factory=list)
@@ -84,6 +85,25 @@ class ThreadMessagesResponse(BaseModel):
     latest_run: dict[str, Any] | None
     messages: list[MessageResponse]
     tool_calls: list[ToolCallResponse]
+
+
+class ThreadRuntimeItemResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    thread_type: Literal["agent", "subAgent", "journey"]
+    owner_id: UUID | None
+    journey_kind: str | None
+    status: str
+    last_error: str | None
+    updated_at: datetime
+    latest_run_id: UUID | None
+    latest_run_status: str | None
+    latest_message_at: datetime | None
+    unresolved_tool_call_count: int
+
+
+class ProjectThreadRuntimeResponse(BaseModel):
+    threads: list[ThreadRuntimeItemResponse]
 
 
 class ToolCallDecisionResponse(BaseModel):

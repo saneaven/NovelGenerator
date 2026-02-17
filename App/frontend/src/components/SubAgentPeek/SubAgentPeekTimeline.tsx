@@ -128,7 +128,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     });
     return () => {
       if (engineRef.current === engine) {
-        engine.disconnectSSE();
+        engine.dispose();
         engineRef.current = null;
       }
     };
