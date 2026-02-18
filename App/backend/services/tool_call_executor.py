@@ -351,8 +351,6 @@ async def _execute_sub_agent(
     if definition is None:
         raise ValueError(f"Sub-agent not found: {agent_name}")
 
-    # TODO: After creating the child thread, auto-start a run with the call_
-    # arguments as input_text, and auto-complete the parent tool call when done.
     child_thread = Thread(
         project_id=project_id,
         user_id=user_id,
@@ -372,9 +370,16 @@ async def _execute_sub_agent(
     tool_call.updated_at = datetime.utcnow()
     db.flush()
 
+    # Build input text from tool call arguments for the child run
+    args = tool_call.arguments if isinstance(tool_call.arguments, dict) else {}
+    input_text = args.get("input") or args.get("task") or ""
+    if not input_text:
+        input_text = json.dumps(args, ensure_ascii=False)
+
     return {
         "child_thread_id": str(child_thread.id),
         "agent_name": agent_name,
+        "input_text": input_text,
     }
 
 
@@ -460,19 +465,3 @@ async def execute(
         raise
     finally:
         db.close()
-
-
-async def complete_sub_agent_tool_call(
-    db: Session,
-    *,
-    tool_call: RunToolCallModel,
-    result_text: str,
-) -> RunToolCallModel:
-    tool_call.result = {
-        "success": True,
-        "content": result_text,
-    }
-    tool_call.status = "applied"
-    tool_call.updated_at = datetime.utcnow()
-    db.flush()
-    return tool_call

@@ -1058,6 +1058,92 @@ class RunPipeline:
             },
         )
 
+        await self._complete_parent_tool_call(db, thread, run)
+
+    async def _complete_parent_tool_call(self, db: Session, thread: Thread, run: RunModel) -> None:
+        """When a sub-agent run completes, mark the parent tool call as applied."""
+        if thread.thread_type != "subAgent" or run.status != "done":
+            return
+
+        parent_tc = (
+            db.query(RunToolCallModel)
+            .filter(RunToolCallModel.child_thread_id == thread.id)
+            .first()
+        )
+        if parent_tc is None or parent_tc.status != "processing":
+            return
+
+        # Extract final assistant message text as the result
+        final_msg = (
+            db.query(RunMessageModel)
+            .filter(RunMessageModel.run_id == run.id, RunMessageModel.role == "assistant")
+            .order_by(RunMessageModel.seq.desc())
+            .first()
+        )
+        result_text = ""
+        if final_msg and isinstance(final_msg.data, dict):
+            final_data = final_msg.data.get("_final", {})
+            parts = final_data.get("contentParts", [])
+            result_text = "\n".join(
+                p.get("text", "") for p in parts if p.get("type") == "content"
+            )
+
+        parent_tc.status = "applied"
+        parent_tc.result = {"success": True, "content": result_text}
+        parent_tc.updated_at = datetime.utcnow()
+
+        parent_thread = db.query(Thread).filter(Thread.id == parent_tc.thread_id).first()
+        parent_run = db.query(RunModel).filter(RunModel.id == parent_tc.run_id).first()
+        if not parent_thread or not parent_run:
+            db.commit()
+            return
+
+        # Sync parent run/thread status from tool call statuses
+        statuses = [
+            s
+            for (s,) in db.query(RunToolCallModel.status)
+            .filter(RunToolCallModel.run_id == parent_run.id)
+            .all()
+        ]
+        if any(s == "pending" for s in statuses):
+            parent_run.status = "waiting"
+            parent_thread.status = "waiting"
+        elif any(s in {"streaming", "validating", "processing"} for s in statuses):
+            parent_run.status = "processing"
+            parent_thread.status = "processing"
+        elif any(s == "rejected" for s in statuses):
+            parent_run.status = "paused"
+            parent_thread.status = "paused"
+        else:
+            parent_run.status = "done"
+            parent_thread.status = "done"
+
+        db.commit()
+
+        await self._emit(
+            project_id=parent_thread.project_id,
+            thread_id=parent_thread.id,
+            event_name="tool_call:status",
+            data={
+                "run_id": str(parent_tc.run_id),
+                "tool_call_id": str(parent_tc.id),
+                "status": parent_tc.status,
+                "reason": parent_tc.reason,
+                "result": parent_tc.result if isinstance(parent_tc.result, dict) else None,
+                "child_thread_id": str(parent_tc.child_thread_id) if parent_tc.child_thread_id else None,
+            },
+        )
+        await self._emit(
+            project_id=parent_thread.project_id,
+            thread_id=parent_thread.id,
+            event_name="run:status",
+            data={
+                "run_id": str(parent_run.id),
+                "status": parent_run.status,
+                "error": parent_run.error,
+            },
+        )
+
     async def execute_loop(self, run_id: UUID, *, create_ctx: CreateContext | None = None) -> None:
         db = self._db_factory()
         assistant_message_ref: list[RunMessageModel | None] = [None]

@@ -39,10 +39,6 @@ class ToolCallBatchDecisionRequest(BaseModel):
     decisions: list[ToolCallBatchDecisionItem]
 
 
-class SubAgentCompleteRequest(BaseModel):
-    result: str
-
-
 class CreateThreadRequest(BaseModel):
     thread_type: Literal["journey"] = "journey"
     journey_kind: str

@@ -38,10 +38,6 @@ export interface ToolCallBatchDecisionRequest {
   decisions: ToolCallBatchDecisionItem[];
 }
 
-export interface SubAgentCompleteRequest {
-  result: string;
-}
-
 export interface ThreadMessagesResponse {
   thread: ThreadInfo;
   latestRun: {
@@ -217,18 +213,6 @@ export const threadService = {
     return {
       results: rows.map((row) => toDecisionResponse(row as Record<string, unknown>)),
     };
-  },
-
-  async completeSubAgentToolCall(
-    threadId: string,
-    toolCallId: string,
-    req: SubAgentCompleteRequest,
-  ): Promise<ToolCallDecisionResponse> {
-    const raw = await apiClient.post<Record<string, unknown>>(
-      `/api/v1/threads/${threadId}/tool-calls/${toolCallId}/complete`,
-      req,
-    );
-    return toDecisionResponse(raw);
   },
 
   async deleteMessage(threadId: string, messageId: string): Promise<void> {

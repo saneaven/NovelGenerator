@@ -18,7 +18,6 @@ from ..schemas.thread_api import (
     ChatResponse,
     CreateThreadRequest,
     ProjectThreadRuntimeResponse,
-    SubAgentCompleteRequest,
     ThreadMessagesResponse,
     ToolCallBatchDecisionRequest,
     ToolCallBatchDecisionResponse,
@@ -28,7 +27,7 @@ from ..schemas.thread_api import (
 from ..services.run_event_bus import run_event_bus
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..services.run_pipeline import run_pipeline
-from ..services.tool_call_executor import complete_sub_agent_tool_call, execute as execute_tool_call
+from ..services.tool_call_executor import execute as execute_tool_call
 
 
 router = APIRouter(prefix="/api/v1", tags=["threads"])
@@ -258,12 +257,34 @@ async def _apply_tool_decision(
             await _emit_tool_call_status(thread=synced_thread, tool_call=executed_row)
             await _emit_run_status(thread=synced_thread, run=synced_run)
 
-        return {
+        result_payload = {
             "tool_call": _serialize_tool_call(executed_row),
             "new_objects": execution.get("new_objects"),
         }
     finally:
         db2.close()
+
+    # Start child run for sub-agent calls
+    exec_result = execution.get("result") if isinstance(execution.get("result"), dict) else None
+    if isinstance(exec_result, dict) and exec_result.get("child_thread_id"):
+        child_input = exec_result.get("input_text", "")
+        if child_input:
+            try:
+                await run_pipeline.start_run(
+                    thread_id=UUID(exec_result["child_thread_id"]),
+                    user_id=user_id,
+                    input_text=child_input,
+                    input_payload=None,
+                    run_mode=None,
+                    surface=None,
+                    context_object_ids=[],
+                    journey_target_ids=[],
+                    language=None,
+                )
+            except Exception:
+                pass  # Child run failure shouldn't crash parent decision
+
+    return result_payload
 
 
 @router.post("/threads/{thread_id}/chat", response_model=ChatResponse)
@@ -535,38 +556,6 @@ async def decide_tool_calls_batch(
     ]
     results = await asyncio.gather(*tasks)
     return ToolCallBatchDecisionResponse(results=[ToolCallDecisionResponse(**r) for r in results])
-
-
-@router.post("/threads/{thread_id}/tool-calls/{tool_call_id}/complete", response_model=ToolCallDecisionResponse)
-async def complete_sub_agent_call(
-    thread_id: UUID,
-    tool_call_id: UUID,
-    payload: SubAgentCompleteRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
-    row = (
-        db.query(RunToolCallModel)
-        .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread_id)
-        .first()
-    )
-    if row is None:
-        raise HTTPException(status_code=404, detail="Tool call not found")
-
-    if not row.tool_name.startswith("call_"):
-        raise HTTPException(status_code=409, detail="Tool call is not a sub-agent call")
-
-    await complete_sub_agent_tool_call(db, tool_call=row, result_text=payload.result)
-    synced_run, synced_thread, _ = _sync_run_thread_status(db, run_id=row.run_id)
-    db.commit()
-    db.refresh(row)
-
-    if synced_run is not None and synced_thread is not None:
-        await _emit_tool_call_status(thread=synced_thread, tool_call=row)
-        await _emit_run_status(thread=synced_thread, run=synced_run)
-
-    return ToolCallDecisionResponse(tool_call=_serialize_tool_call(row), new_objects=None)
 
 
 @router.delete("/threads/{thread_id}/messages/{message_id}", status_code=204)

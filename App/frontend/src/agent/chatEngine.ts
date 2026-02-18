@@ -49,14 +49,13 @@ export class ChatEngine {
     await threadRuntimeCoordinator.loadThreadSnapshot(this.projectId, this.threadId);
   }
 
-  async send(inputText: string, opts?: Partial<ChatRequest>): Promise<void> {
+  async send(inputText: string, opts?: Partial<ChatRequest>): Promise<boolean> {
     const trimmed = inputText.trim();
     if (!trimmed) {
-      await this.resume(opts);
-      return;
+      return this.resume(opts);
     }
     await this.init();
-    if (this.inFlightChat) return;
+    if (this.inFlightChat) return false;
 
     // Insert optimistic user message so it appears immediately.
     const store = useThreadStore.getState();
@@ -84,14 +83,24 @@ export class ChatEngine {
       });
       this.lastRunId = response.runId;
       this.upsertThreadStatus(response.threadStatus, null, response.runId, response.status);
+      return true;
+    } catch (error) {
+      // Remove optimistic message on failure
+      const msgs = useThreadStore.getState().getMessages(this.threadId);
+      for (const m of msgs) {
+        if (m.id.startsWith('optimistic:user:')) {
+          useThreadStore.getState().removeMessage(this.threadId, m.id);
+        }
+      }
+      throw error;
     } finally {
       this.inFlightChat = false;
     }
   }
 
-  async resume(opts?: Partial<ChatRequest>): Promise<void> {
+  async resume(opts?: Partial<ChatRequest>): Promise<boolean> {
     await this.init();
-    if (this.inFlightChat) return;
+    if (this.inFlightChat) return false;
 
     this.inFlightChat = true;
     try {
@@ -101,6 +110,7 @@ export class ChatEngine {
       });
       this.lastRunId = response.runId;
       this.upsertThreadStatus(response.threadStatus, null, response.runId, response.status);
+      return true;
     } finally {
       this.inFlightChat = false;
     }
@@ -134,13 +144,6 @@ export class ChatEngine {
     };
     const response = await threadService.decideToolCallsBatch(this.threadId, req);
     response.results.forEach((item) => this.applyToolDecisionResponse(item));
-  }
-
-  async completeSubAgentToolCall(toolCallId: string, result: string): Promise<void> {
-    const response = await threadService.completeSubAgentToolCall(this.threadId, toolCallId, {
-      result,
-    });
-    this.applyToolDecisionResponse(response);
   }
 
   async cancel(runId?: string): Promise<void> {

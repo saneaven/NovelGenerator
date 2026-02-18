@@ -566,6 +566,7 @@ class ProjectRuntimeConnection {
         this.finalizeStreamingMessagesForThread(threadId);
         useThreadStore.getState().setThreadStreamActive(threadId, false);
       }
+      await this.checkAutoContinue(threadId);
       return;
     }
 
@@ -683,6 +684,13 @@ class ProjectRuntimeConnection {
         if (childThreadId) patch.childThreadId = childThreadId;
         store.patchToolCall(toolCallId, patch);
       }
+
+      // Load child thread info so SubAgentPeekDock can render immediately
+      if (childThreadId) {
+        this.trackedThreadIds.add(childThreadId);
+        void this.loadThreadSnapshot(childThreadId);
+      }
+
       await this.checkAutoContinue(threadId);
       this.refreshUnresolvedCount(threadId);
       return;
