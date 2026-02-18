@@ -53,7 +53,6 @@ def _serialize_tool_call(row: RunToolCallModel) -> dict:
         "run_id": row.run_id,
         "message_id": row.message_id,
         "assistant_message_id": row.assistant_message_id,
-        "result_message_id": row.result_message_id,
         "call_seq": int(row.call_seq),
         "llm_call_id": row.llm_call_id,
         "tool_name": row.tool_name,
@@ -567,8 +566,8 @@ async def delete_thread_message(
 ):
     """Delete a message. FK cascades handle cleanup:
     - assistant message: CASCADE deletes tool calls via assistant_message_id FK,
-      which CASCADE deletes their tool_call/tool_result messages via parent_tool_call_id FK.
-    - tool_call/tool_result message: SET NULL on the tool call's message_id/result_message_id.
+      which CASCADE deletes their tool_call messages via parent_tool_call_id FK.
+    - tool_call message: SET NULL on the tool call's message_id.
     """
     _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
     row = (
@@ -591,7 +590,7 @@ async def delete_thread_tool_call(
     db: Session = Depends(get_db),
 ):
     """Delete a tool call. FK CASCADE via parent_tool_call_id on run_messages
-    automatically deletes the associated tool_call and tool_result messages."""
+    automatically deletes the associated tool_call messages."""
     _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
     row = (
         db.query(RunToolCallModel)

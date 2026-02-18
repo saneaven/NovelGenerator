@@ -778,7 +778,7 @@ class RunMessageModel(Base):
     data = Column(JSONB, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    # Parent tool call that owns this message (for role='tool_call' and 'tool_result').
+    # Parent tool call that owns this message (role='tool_call').
     # Cascade: deleting the tool call deletes its child messages.
     parent_tool_call_id = Column(
         UUID(as_uuid=True),
@@ -799,7 +799,7 @@ class RunMessageModel(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("role IN ('system','user','assistant','tool_call','tool_result')", name='ck_run_messages_role'),
+        CheckConstraint("role IN ('system','user','assistant','tool_call')", name='ck_run_messages_role'),
         UniqueConstraint('run_id', 'seq', name='uq_run_messages_run_seq'),
         Index('ix_run_messages_run_created', 'run_id', 'created_at'),
         Index('ix_run_messages_thread_seq', 'thread_id', 'seq_in_thread'),
@@ -818,8 +818,6 @@ class RunToolCallModel(Base):
     # Assistant message that originated this tool call.
     # Cascade: deleting the assistant message deletes its tool calls.
     assistant_message_id = Column(UUID(as_uuid=True), ForeignKey('run_messages.id', ondelete='CASCADE'), nullable=True, index=True)
-    # Tool-result message generated from this tool call (idempotent resume guard).
-    result_message_id = Column(UUID(as_uuid=True), ForeignKey('run_messages.id', ondelete='SET NULL'), nullable=True, index=True)
     call_seq = Column(Integer, nullable=False)
     llm_call_id = Column(String(255), nullable=False)
     tool_name = Column(String(120), nullable=False)

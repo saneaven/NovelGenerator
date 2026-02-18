@@ -170,7 +170,7 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
     const messages = messagesByThreadId[agent.thread_id];
     if (!messages || messages.length === 0) return t('agent.sidebar.noMessagesYet');
 
-    // Find last user/assistant message (skip delta, tool_call, tool_result, system)
+    // Find last user/assistant message (skip delta, tool_call, system)
     let lastMessage = null;
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];

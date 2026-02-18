@@ -47,9 +47,6 @@ from ..providers import xai_provider as _register_xai  # noqa: F401
 from ..providers import custom as _register_custom  # noqa: F401
 
 
-TERMINAL_TOOL_STATUSES = {"applied", "failed", "rejected"}
-
-
 @dataclass
 class _ToolDeltaState:
     llm_call_id: str
@@ -123,59 +120,6 @@ class RunPipeline:
         if run.run_mode == "planMode":
             return "agent_plan_mode"
         return "agent_agent_mode"
-
-    async def _materialize_resume_tool_results(self, db: Session, run: RunModel, thread: Thread) -> None:
-        language = run.language
-        rows = (
-            db.query(RunToolCallModel)
-            .filter(
-                RunToolCallModel.run_id == run.id,
-                RunToolCallModel.result_message_id.is_(None),
-                RunToolCallModel.status.in_(list(TERMINAL_TOOL_STATUSES)),
-            )
-            .order_by(RunToolCallModel.call_seq.asc())
-            .all()
-        )
-        for row in rows:
-            content = ""
-            if isinstance(row.result, dict):
-                content = json.dumps(row.result, ensure_ascii=False)
-            if not content:
-                content = str(row.reason or row.status)
-
-            msg = RunMessageModel(
-                thread_id=thread.id,
-                run_id=run.id,
-                seq=run.next_message_seq,
-                seq_in_thread=thread.next_message_seq,
-                role="tool_result",
-                parent_tool_call_id=row.id,
-                data={
-                    language: {
-                        "contentParts": [{"type": "content", "text": content}],
-                        "toolResult": {
-                            "tool_call_id": str(row.id),
-                            "tool_name": row.tool_name,
-                            "content": content,
-                        },
-                    },
-                    "_final": {
-                        "contentParts": [{"type": "content", "text": content}],
-                        "toolResult": {
-                            "tool_call_id": str(row.id),
-                            "tool_name": row.tool_name,
-                            "content": content,
-                        },
-                    },
-                },
-            )
-            db.add(msg)
-            db.flush()
-
-            row.result_message_id = msg.id
-            row.updated_at = datetime.utcnow()
-            run.next_message_seq += 1
-            thread.next_message_seq += 1
 
     def _provider_tools(self, tool_defs: list[ToolSchemaDef]) -> list[dict[str, Any]]:
         return [
@@ -1169,7 +1113,6 @@ class RunPipeline:
                     db, run=run, thread=thread, settings=settings, create_ctx=create_ctx,
                 )
             else:
-                await self._materialize_resume_tool_results(db, run, thread)
                 system_prompt, conversation, prefill, prompt_bundle = self._assemble_resume(
                     db, run=run, thread=thread, settings=settings,
                 )

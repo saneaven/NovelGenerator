@@ -129,7 +129,6 @@ function toToolCall(raw: Record<string, unknown>): ThreadToolCall {
     runId: String(raw.run_id),
     messageId: String(raw.message_id),
     assistantMessageId: raw.assistant_message_id ? String(raw.assistant_message_id) : null,
-    resultMessageId: raw.result_message_id ? String(raw.result_message_id) : null,
     callSeq: Number(raw.call_seq ?? 0),
     llmCallId: String(raw.llm_call_id ?? ''),
     toolName: String(raw.tool_name ?? ''),

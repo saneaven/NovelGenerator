@@ -9,6 +9,9 @@ from sqlalchemy.orm import Session
 from ...models.db_models import RunMessageModel, RunToolCallModel
 
 
+TERMINAL_TOOL_STATUSES = {"applied", "failed", "rejected"}
+
+
 def _resolve_lang_entry(data: dict[str, Any], language: str) -> dict[str, Any]:
     if isinstance(data.get(language), dict):
         return data[language]
@@ -37,28 +40,21 @@ def _normalize_content_parts(entry: dict[str, Any]) -> list[dict[str, str]]:
     return out
 
 
-def _tool_result_from_message(message: RunMessageModel, entry: dict[str, Any]) -> dict[str, Any] | None:
-    tool_result = entry.get("toolResult") if isinstance(entry, dict) else None
-    if isinstance(tool_result, dict):
-        tid = tool_result.get("tool_call_id")
-        tname = tool_result.get("tool_name")
-        content = tool_result.get("content")
-        if isinstance(tid, str) and isinstance(tname, str) and isinstance(content, str):
-            return {
-                "tool_call_id": tid,
-                "tool_name": tname,
-                "content": content,
-            }
-
-    parts = _normalize_content_parts(entry)
-    joined = "".join(part["text"] for part in parts if part["type"] == "content")
-    if not joined.strip():
+def _tool_result_from_tool_call(tool: RunToolCallModel) -> dict[str, Any] | None:
+    content = ""
+    if tool.result is not None:
+        try:
+            content = json.dumps(tool.result, ensure_ascii=False)
+        except TypeError:
+            content = str(tool.result)
+    if not content:
+        content = str(tool.reason or tool.status or "")
+    if not content.strip():
         return None
-
     return {
-        "tool_call_id": f"tool-result-{message.id}",
-        "tool_name": "tool_result",
-        "content": joined,
+        "tool_call_id": str(tool.id),
+        "tool_name": str(tool.tool_name or "tool_result"),
+        "content": content,
     }
 
 
@@ -81,6 +77,7 @@ def build_from_runs(
     # Tool calls are looked up by assistant_message_id and attached to assistant turns.
     assistant_ids = [row.id for row in rows if row.role == "assistant"]
     tool_calls_by_assistant: dict[UUID, list[RunToolCallModel]] = {}
+    terminal_tools_by_assistant: dict[UUID, list[RunToolCallModel]] = {}
     if assistant_ids:
         tool_rows = (
             db.query(RunToolCallModel)
@@ -92,6 +89,8 @@ def build_from_runs(
             if tool.assistant_message_id is None:
                 continue
             tool_calls_by_assistant.setdefault(tool.assistant_message_id, []).append(tool)
+            if tool.status in TERMINAL_TOOL_STATUSES:
+                terminal_tools_by_assistant.setdefault(tool.assistant_message_id, []).append(tool)
 
     assistant_order = [row.id for row in rows if row.role == "assistant"]
     if tool_call_history_limit >= 0:
@@ -137,18 +136,19 @@ def build_from_runs(
                     msg["tool_calls"] = tool_calls
 
             conversation.append(msg)
-            continue
 
-        if row.role == "tool_result":
-            payload = _tool_result_from_message(row, entry)
-            if payload is None:
-                continue
-            conversation.append(
-                {
-                    "role": "tool_results",
-                    "content_parts": [],
-                    "tool_results": [payload],
-                }
-            )
+            if row.role == "assistant" and row.id in kept_assistant_for_tools:
+                for tool in terminal_tools_by_assistant.get(row.id, []):
+                    payload = _tool_result_from_tool_call(tool)
+                    if payload is None:
+                        continue
+                    conversation.append(
+                        {
+                            "role": "tool_results",
+                            "content_parts": [],
+                            "tool_results": [payload],
+                        }
+                    )
+            continue
 
     return conversation

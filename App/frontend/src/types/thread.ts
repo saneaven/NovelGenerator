@@ -24,7 +24,7 @@ export interface ThreadMessage {
   runId: string;
   seq: number;
   seqInThread: number;
-  role: 'user' | 'assistant' | 'system' | 'tool_call' | 'tool_result';
+  role: 'user' | 'assistant' | 'system' | 'tool_call';
   data: Record<string, LangEntry>;
   /** Transient streaming buffer — only present while `isStreaming` is true. */
   streamingData?: LangEntry;
@@ -38,7 +38,6 @@ export interface ThreadToolCall {
   runId: string;
   messageId: string;
   assistantMessageId: string | null;
-  resultMessageId: string | null;
   callSeq: number;
   llmCallId: string;
   toolName: string;

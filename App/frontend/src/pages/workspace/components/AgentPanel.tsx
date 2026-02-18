@@ -641,7 +641,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
 
     // Local cleanup first (optimistic)
     if (tc.messageId) state.removeMessage(threadId, tc.messageId);
-    if (tc.resultMessageId) state.removeMessage(threadId, tc.resultMessageId);
     state.removeToolCall(toolCallId);
 
     // Backend — deleteToolCall cascades to messages via parent_tool_call_id FK
@@ -670,13 +669,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       .filter((tc) => tc.threadId === threadId && (
         tc.assistantMessageId === messageId
         || tc.messageId === messageId
-        || tc.resultMessageId === messageId
       ));
 
     // Local cleanup first (optimistic)
     for (const tc of linkedToolCalls) {
       if (tc.messageId) state.removeMessage(threadId, tc.messageId);
-      if (tc.resultMessageId) state.removeMessage(threadId, tc.resultMessageId);
       state.removeToolCall(tc.id);
     }
     state.removeMessage(threadId, messageId);

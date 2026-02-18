@@ -49,7 +49,7 @@ class MessageResponse(BaseModel):
     id: UUID
     thread_id: UUID
     run_id: UUID
-    role: Literal["system", "user", "assistant", "tool_call", "tool_result"]
+    role: Literal["system", "user", "assistant", "tool_call"]
     seq: int
     seq_in_thread: int
     data: dict[str, Any]
@@ -62,7 +62,6 @@ class ToolCallResponse(BaseModel):
     run_id: UUID
     message_id: UUID
     assistant_message_id: UUID | None
-    result_message_id: UUID | None
     call_seq: int
     llm_call_id: str
     tool_name: str
