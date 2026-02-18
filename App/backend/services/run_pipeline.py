@@ -303,10 +303,30 @@ class RunPipeline:
                 thread.status = "running"
                 db.commit()
                 db.refresh(run)
+                db.refresh(msg)
                 _ = run.thread  # eager-load before session closes
+
+                # Capture user message fields before session closes.
+                user_msg_id = msg.id
+                user_msg_seq = msg.seq
+                user_msg_seq_in_thread = msg.seq_in_thread
+                user_msg_data = msg.data
             finally:
                 db.close()
 
+        await self._emit(
+            project_id=run.project_id,
+            thread_id=run.thread.id,
+            event_name="message:user",
+            data={
+                "run_id": str(run.id),
+                "message_id": str(user_msg_id),
+                "role": "user",
+                "seq": int(user_msg_seq),
+                "seq_in_thread": int(user_msg_seq_in_thread),
+                "data": user_msg_data,
+            },
+        )
         await self._spawn_task(run.id)
         return run
 
@@ -505,6 +525,7 @@ class RunPipeline:
                     "name": tool_name,
                     "arguments": arguments,
                     "status": row.status,
+                    "seq_in_thread": int(tool_msg.seq_in_thread),
                 },
             )
             await self._emit(

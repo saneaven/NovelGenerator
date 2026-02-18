@@ -71,11 +71,12 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   const [resultExpanded, setResultExpanded] = useState(false);
   const engineRef = useRef<ChatEngine | null>(null);
 
-  const { thread, threadMessages, toolCallsByMessageId } = useThreadStore(
+  const { thread, threadMessages, toolCallsById, toolCallIdsByAssistantMessageId } = useThreadStore(
     useShallow((state) => ({
       thread: state.threadsById[childThreadId],
       threadMessages: state.messagesByThreadId[childThreadId],
-      toolCallsByMessageId: state.toolCallsByMessageId,
+      toolCallsById: state.toolCallsById,
+      toolCallIdsByAssistantMessageId: state.toolCallIdsByAssistantMessageId,
     })),
   );
 
@@ -215,7 +216,10 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
       {messages.map((message, index) => {
         const contentParts = getMessageContentParts(message);
         const text = getMessageText(message);
-        const toolCalls = (toolCallsByMessageId[message.id] ?? [])
+        const tcIds = toolCallIdsByAssistantMessageId[message.id] ?? [];
+        const toolCalls = tcIds
+          .map((id) => toolCallsById[id])
+          .filter((tc): tc is ThreadToolCall => Boolean(tc))
           .map(toToolCallMetadata);
         const isLatestAssistant = message.role === 'assistant' && String(message.id) === lastAssistantMessageId;
         const waitingDecision = isLatestAssistant && threadStatus === 'waiting';

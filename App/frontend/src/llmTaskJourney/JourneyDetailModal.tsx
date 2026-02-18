@@ -112,12 +112,12 @@ export const JourneyDetailModal: React.FC = () => {
   }, [threadId, threadMessages]);
 
   // Thread state from ThreadStore
-  const { toolCallsByMessageId, threadStatus, threadError, pendingToolCallMessageId, isStreamActive } = useThreadStore(
+  const { toolCallsById, toolCallIdsByAssistantMessageId, threadStatus, threadError, isStreamActive } = useThreadStore(
     useShallow((state) => ({
-      toolCallsByMessageId: state.toolCallsByMessageId,
+      toolCallsById: state.toolCallsById,
+      toolCallIdsByAssistantMessageId: state.toolCallIdsByAssistantMessageId,
       threadStatus: threadId ? state.threadsById[threadId]?.status : undefined,
       threadError: threadId ? state.threadsById[threadId]?.lastError ?? null : null,
-      pendingToolCallMessageId: threadId ? state.pendingToolCallMessageByThread[threadId] : undefined,
       isStreamActive: threadId ? Boolean(state.activeStreamByThread[threadId]) : false,
     }))
   );
@@ -204,8 +204,12 @@ export const JourneyDetailModal: React.FC = () => {
 
   const lastAssistantToolCalls = useMemo(() => {
     if (!lastAssistantMessageId) return [];
-    return (toolCallsByMessageId[lastAssistantMessageId] ?? []).map(toToolCallMetadata);
-  }, [lastAssistantMessageId, toolCallsByMessageId]);
+    const tcIds = toolCallIdsByAssistantMessageId[lastAssistantMessageId] ?? [];
+    return tcIds
+      .map((id) => toolCallsById[id])
+      .filter((tc): tc is ThreadToolCall => Boolean(tc))
+      .map(toToolCallMetadata);
+  }, [lastAssistantMessageId, toolCallIdsByAssistantMessageId, toolCallsById]);
 
   const hasPendingToolCalls = useMemo(
     () => lastAssistantToolCalls.some(tc => tc.status === 'pending' || tc.status === 'streaming' || tc.status === 'validating' || tc.status === 'processing'),
@@ -380,9 +384,12 @@ export const JourneyDetailModal: React.FC = () => {
                 .join('')
                 .trim();
 
-              // Tool calls from ThreadStore
+              // Tool calls from ThreadStore (look up by assistant message ID)
               const storedToolCalls = !isStreamingMessage
-                ? (toolCallsByMessageId[message.id] ?? []).map(toToolCallMetadata)
+                ? (toolCallIdsByAssistantMessageId[message.id] ?? [])
+                    .map((id) => toolCallsById[id])
+                    .filter((tc): tc is ThreadToolCall => Boolean(tc))
+                    .map(toToolCallMetadata)
                 : [];
               const messageCards = storedToolCalls.length > 0
                 ? buildEditCardsFromToolCallMetadata(storedToolCalls)
@@ -464,15 +471,6 @@ export const JourneyDetailModal: React.FC = () => {
                         </div>
                       )}
 
-                      {!messageCards.length && pendingToolCallMessageId === message.id && (
-                        <div className="llm-task-modal-journey-message-tool-calls">
-                          <div className="typing-indicator">
-                            <div className="loading-track">
-                              <div className="loading-bar" />
-                            </div>
-                          </div>
-                        </div>
-                      )}
                     </>
                   )}
                 </div>

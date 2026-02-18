@@ -363,7 +363,25 @@ class ProjectRuntimeConnection {
       createdAt: nowIso(),
       updatedAt: nowIso(),
     };
-    useThreadStore.getState().upsertToolCall(toolCall);
+    const store = useThreadStore.getState();
+    store.upsertToolCall(toolCall);
+
+    // Create the tool_call role message so it appears in the timeline.
+    const toolCallMessageId = String(payload.message_id ?? '');
+    if (toolCallMessageId && !store.getMessages(threadId).some((m) => m.id === toolCallMessageId)) {
+      store.appendMessage({
+        id: toolCallMessageId,
+        threadId,
+        runId: toolCall.runId,
+        role: 'tool_call',
+        seq: 0,
+        seqInThread: Number(payload.seq_in_thread ?? 0),
+        data: {},
+        isStreaming: false,
+        createdAt: nowIso(),
+      });
+    }
+
     this.refreshUnresolvedCount(threadId);
   }
 
@@ -497,6 +515,36 @@ class ProjectRuntimeConnection {
       this.patchThreadFromRunStatus(threadId, status, error, payload);
       if (THREAD_TERMINAL_STATUSES.has(status)) {
         useThreadStore.getState().setThreadStreamActive(threadId, false);
+      }
+      return;
+    }
+
+    if (event.event === 'message:user') {
+      const messageId = String(payload.message_id ?? '');
+      const runId = payload.run_id ? String(payload.run_id) : '';
+      if (!messageId || !runId) return;
+
+      const store = useThreadStore.getState();
+      // Remove any optimistic user messages for this thread.
+      const existing = store.getMessages(threadId);
+      for (const m of existing) {
+        if (m.id.startsWith('optimistic:user:') && m.role === 'user') {
+          store.removeMessage(threadId, m.id);
+        }
+      }
+      // Upsert the real user message if it doesn't already exist.
+      if (!existing.some((m) => m.id === messageId)) {
+        store.appendMessage({
+          id: messageId,
+          threadId,
+          runId,
+          role: 'user',
+          seq: Number(payload.seq ?? 0),
+          seqInThread: Number(payload.seq_in_thread ?? 0),
+          data: (payload.data ?? {}) as ThreadMessage['data'],
+          isStreaming: false,
+          createdAt: nowIso(),
+        });
       }
       return;
     }

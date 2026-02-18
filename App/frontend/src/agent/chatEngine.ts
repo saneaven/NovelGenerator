@@ -58,6 +58,24 @@ export class ChatEngine {
     await this.init();
     if (this.inFlightChat) return;
 
+    // Insert optimistic user message so it appears immediately.
+    const store = useThreadStore.getState();
+    const existingMessages = store.getMessages(this.threadId);
+    const maxSeq = existingMessages.reduce((max, m) => Math.max(max, m.seqInThread), 0);
+    store.appendMessage({
+      id: `optimistic:user:${Date.now()}`,
+      threadId: this.threadId,
+      runId: '',
+      role: 'user',
+      seq: 0,
+      seqInThread: maxSeq + 1,
+      data: {
+        _final: { contentParts: [{ type: 'content', text: trimmed }] },
+      },
+      isStreaming: false,
+      createdAt: nowIso(),
+    });
+
     this.inFlightChat = true;
     try {
       const response = await threadService.chat(this.threadId, {

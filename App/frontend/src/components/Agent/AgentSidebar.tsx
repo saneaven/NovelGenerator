@@ -170,12 +170,17 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
     const messages = messagesByThreadId[agent.thread_id];
     if (!messages || messages.length === 0) return t('agent.sidebar.noMessagesYet');
 
-    // Find last non-streaming message
-    let lastMessage = messages[messages.length - 1];
-    if (lastMessage.id.startsWith('delta:')) {
-      if (messages.length < 2) return t('agent.sidebar.noMessagesYet');
-      lastMessage = messages[messages.length - 2];
+    // Find last user/assistant message (skip delta, tool_call, tool_result, system)
+    let lastMessage = null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.id.startsWith('delta:')) continue;
+      if (m.role === 'user' || m.role === 'assistant') {
+        lastMessage = m;
+        break;
+      }
     }
+    if (!lastMessage) return t('agent.sidebar.noMessagesYet');
 
     const resolved = resolveRunMessageDisplay(lastMessage, mainLanguage, defaultSubLanguage);
     const content = resolved.contentParts

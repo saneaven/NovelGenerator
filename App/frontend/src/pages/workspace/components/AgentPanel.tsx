@@ -55,6 +55,10 @@ interface ToolCallBlockingSummary {
   firstMessageId?: string;
 }
 
+type DisplayItem =
+  | { kind: 'message'; info: DisplayMessageInfo }
+  | { kind: 'tool_group'; assistantMessageId: string; toolCalls: ThreadToolCall[]; messageIds: string[] };
+
 type SendBlockReason = 'missing_agent' | 'running' | 'pending_tool_calls' | null;
 
 interface SendBlockingState {
@@ -267,13 +271,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     thread,
     messages,
     toolCallsByMessageId,
-    pendingToolCallMessageId,
   } = useThreadStore(
     useShallow((state) => ({
       thread: threadId ? state.threadsById[threadId] : undefined,
       messages: threadId ? state.messagesByThreadId[threadId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES,
       toolCallsByMessageId: state.toolCallsByMessageId,
-      pendingToolCallMessageId: threadId ? state.pendingToolCallMessageByThread[threadId] : undefined,
     })),
   );
 
@@ -301,10 +303,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     [messages],
   );
 
-  const displayMessages = useMemo(() => (
-    orderedMessages
-      .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
-      .map((msg): DisplayMessageInfo => {
+  const displayItems = useMemo(() => {
+    const items: DisplayItem[] = [];
+    let i = 0;
+
+    while (i < orderedMessages.length) {
+      const msg = orderedMessages[i];
+
+      if (msg.role === 'user' || msg.role === 'assistant') {
         const wantsSecondary = messageLanguageView[msg.id] === 'secondary' && Boolean(secondaryLanguage);
         const requestedLanguage = wantsSecondary && secondaryLanguage ? secondaryLanguage : primaryLanguage;
         const fallbackLanguage = wantsSecondary ? primaryLanguage : secondaryLanguage;
@@ -316,11 +322,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
               displayLanguage: requestedLanguage,
               isFallback: false,
             }
-          : resolveRunMessageDisplay(
-              msg,
-              requestedLanguage,
-              fallbackLanguage,
-            );
+          : resolveRunMessageDisplay(msg, requestedLanguage, fallbackLanguage);
 
         const chatMessage: ChatMessage = {
           id: msg.id,
@@ -330,16 +332,51 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
           timestamp: new Date(msg.createdAt),
         };
 
-        return {
-          source: msg,
-          chatMessage,
-          requestedLanguage,
-          displayLanguage: resolved.displayLanguage,
-          hasRequestedLanguage: !resolved.isFallback,
-          fallbackLanguage: resolved.isFallback ? resolved.displayLanguage : null,
-        };
-      })
-  ), [orderedMessages, messageLanguageView, primaryLanguage, secondaryLanguage]);
+        items.push({
+          kind: 'message',
+          info: {
+            source: msg,
+            chatMessage,
+            requestedLanguage,
+            displayLanguage: resolved.displayLanguage,
+            hasRequestedLanguage: !resolved.isFallback,
+            fallbackLanguage: resolved.isFallback ? resolved.displayLanguage : null,
+          },
+        });
+        i++;
+      } else if (msg.role === 'tool_call') {
+        const firstTcs = toolCallsByMessageId[msg.id] ?? [];
+        const assistantMsgId = firstTcs[0]?.assistantMessageId ?? null;
+
+        const groupToolCalls: ThreadToolCall[] = [...firstTcs];
+        const groupMessageIds: string[] = [msg.id];
+
+        let j = i + 1;
+        while (j < orderedMessages.length && orderedMessages[j].role === 'tool_call') {
+          const nextTcs = toolCallsByMessageId[orderedMessages[j].id] ?? [];
+          const nextAssistantId = nextTcs[0]?.assistantMessageId ?? null;
+          if (nextAssistantId !== assistantMsgId) break;
+          groupToolCalls.push(...nextTcs);
+          groupMessageIds.push(orderedMessages[j].id);
+          j++;
+        }
+
+        if (groupToolCalls.length > 0) {
+          items.push({
+            kind: 'tool_group',
+            assistantMessageId: assistantMsgId ?? '',
+            toolCalls: groupToolCalls,
+            messageIds: groupMessageIds,
+          });
+        }
+        i = j;
+      } else {
+        i++;
+      }
+    }
+
+    return items;
+  }, [orderedMessages, toolCallsByMessageId, messageLanguageView, primaryLanguage, secondaryLanguage]);
 
   const lastAssistantMessageId = useMemo(() => {
     for (let i = orderedMessages.length - 1; i >= 0; i--) {
@@ -396,9 +433,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
 
   const latestRunError = useMemo(() => {
     if (thread?.status !== 'error') return undefined;
-    if (displayMessages.length === 0) return undefined;
+    if (displayItems.length === 0) return undefined;
     return thread.lastError || 'An error occurred during generation.';
-  }, [thread?.status, thread?.lastError, displayMessages.length]);
+  }, [thread?.status, thread?.lastError, displayItems.length]);
 
   useEffect(() => {
     if (!projectId || !selectedAgentId) return;
@@ -490,7 +527,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     const container = scrollContainerRef.current;
     if (!container || !isUserNearBottomRef.current) return;
     container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
-  }, [displayMessages.length, hasStreamingMessage, isLoading]);
+  }, [displayItems.length, hasStreamingMessage, isLoading]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -611,6 +648,32 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     }
   }, [threadId]);
 
+  const handleDeleteSingleToolCall = useCallback(async (toolCallId: string) => {
+    if (!threadId) {
+      showError('Delete Failed', 'Could not find the thread.');
+      return;
+    }
+    if (!window.confirm('Are you sure you want to delete this tool call?')) return;
+
+    const state = useThreadStore.getState();
+    const toolCall = state.toolCallsById[toolCallId];
+    if (!toolCall) return;
+
+    const messageId = toolCall.messageId;
+    state.removeToolCall(toolCallId);
+
+    if (messageId) {
+      if (isUuid(messageId)) {
+        try {
+          await threadService.deleteMessage(threadId, messageId);
+        } catch (error) {
+          console.error('Failed to delete tool call message:', error);
+        }
+      }
+      state.removeMessage(threadId, messageId);
+    }
+  }, [threadId, showError]);
+
   const handleDeleteMessage = useCallback(async (messageId: string) => {
     if (!threadId) {
       showError('Delete Failed', 'Could not find the thread.');
@@ -682,7 +745,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       </div>
 
       <div className="agent-messages" ref={scrollContainerRef}>
-        {displayMessages.length === 0 && (
+        {displayItems.length === 0 && (
           <div className="welcome-message">
             <div className="ai-avatar">{t('agent.ai')}</div>
             <div className="message-content">
@@ -691,9 +754,70 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
           </div>
         )}
 
-        {displayMessages.map((message, index) => {
-          const previousMessage = index > 0 ? displayMessages[index - 1] : null;
-          const isSameRoleAsPrevious = previousMessage?.chatMessage.role === message.chatMessage.role;
+        {displayItems.map((item, index) => {
+          if (item.kind === 'tool_group') {
+            const hasSubAgentCalls = item.toolCalls.some((tc) => (
+              tc.toolName.startsWith('call_') && Boolean(tc.childThreadId)
+            ));
+            const isActiveSubAgentParent = item.assistantMessageId === lastAssistantMessageId;
+            const showRunError = Boolean(latestRunError) && index === displayItems.length - 1;
+
+            return (
+              <React.Fragment key={`toolgroup:${item.messageIds[0]}`}>
+                {item.toolCalls.map((tc) => {
+                  const cards = buildEditCardsFromToolCallMetadata([toToolCallMetadata(tc)]);
+                  if (cards.length === 0) return null;
+
+                  const hasPending = isBlockingToolCallStatus(tc.status);
+                  const cardMode = hasPending ? 'pending' : 'confirmed';
+
+                  return (
+                    <div key={tc.id} className="agent-tool-call">
+                      <div className="message-function-calls" data-function-call-message-id={tc.messageId}>
+                        <FunctionCallsThread
+                          threadId={`agent:${selectedAgentId ?? 'none'}:tc:${tc.id}`}
+                          mode={cardMode}
+                          cards={cards}
+                          onCommitDecisions={cardMode === 'pending' ? handleCommitDecisions : undefined}
+                          projectId={projectId}
+                        />
+                      </div>
+                      <div className="message-actions">
+                        <div className="action-buttons">
+                          <IconButton
+                            icon={<Trash size="sm" />}
+                            onClick={() => void handleDeleteSingleToolCall(tc.id)}
+                            title={t('agent.delete')}
+                            variant="ghost"
+                            size="sm"
+                            className="icon-button--ghost-danger"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {selectedAgentId && hasSubAgentCalls && threadId && (
+                  <SubAgentPeekDock
+                    parentThreadId={threadId}
+                    parentMessageId={item.assistantMessageId}
+                    projectId={projectId}
+                    isActiveParent={isActiveSubAgentParent}
+                  />
+                )}
+
+                {showRunError && (
+                  <div className="message-error">{latestRunError}</div>
+                )}
+              </React.Fragment>
+            );
+          }
+
+          const message = item.info;
+          const prevItem = index > 0 ? displayItems[index - 1] : null;
+          const isSameRoleAsPrevious = prevItem?.kind === 'message'
+            && prevItem.info.chatMessage.role === message.chatMessage.role;
           const isUser = message.chatMessage.role === 'user';
           const isStreamingMessage = message.source.isStreaming === true;
 
@@ -702,23 +826,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
             { projectId, surface: (surface ?? 'story-object') as any },
           );
 
-          const toolCalls = !isStreamingMessage
-            ? (toolCallsByMessageId[message.source.id] ?? [])
-            : [];
-          const cardsToRender = toolCalls.length > 0
-            ? buildEditCardsFromToolCallMetadata(toolCalls.map(toToolCallMetadata))
-            : [];
-          const hasEditCards = cardsToRender.length > 0;
-          const hasPendingCards = toolCalls.some((toolCall) => isBlockingToolCallStatus(toolCall.status));
-          const cardMode = hasPendingCards ? 'pending' : 'confirmed';
-          const functionThreadId = `agent:${selectedAgentId ?? 'none'}:${message.source.id}`;
-
-          const hasSubAgentCalls = toolCalls.some((toolCall) => (
-            toolCall.toolName.startsWith('call_') && Boolean(toolCall.childThreadId)
-          ));
-          const isActiveSubAgentParent = message.source.id === lastAssistantMessageId;
-
-          const showRunError = Boolean(latestRunError) && index === displayMessages.length - 1;
+          const showRunError = Boolean(latestRunError) && index === displayItems.length - 1;
           const translationAvailable = secondaryLanguage
             ? Boolean(message.source.data[secondaryLanguage])
             : false;
@@ -764,42 +872,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                         </div>
                       )}
                     </div>
-                  )}
-
-                  {hasEditCards && (
-                    <div
-                      className="message-function-calls"
-                      data-function-call-message-id={message.source.id}
-                    >
-                      <FunctionCallsThread
-                        threadId={`${functionThreadId}:cards`}
-                        mode={cardMode}
-                        cards={cardsToRender}
-                        onCommitDecisions={
-                          cardMode === 'pending' ? handleCommitDecisions : undefined
-                        }
-                        projectId={projectId}
-                      />
-                    </div>
-                  )}
-
-                  {!hasEditCards && pendingToolCallMessageId === message.source.id && (
-                    <div className="message-function-calls">
-                      <div className="typing-indicator">
-                        <div className="loading-track">
-                          <div className="loading-bar" />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedAgentId && hasSubAgentCalls && threadId && (
-                    <SubAgentPeekDock
-                      parentThreadId={threadId}
-                      parentMessageId={message.source.id}
-                      projectId={projectId}
-                      isActiveParent={isActiveSubAgentParent}
-                    />
                   )}
 
                   {showRunError && (

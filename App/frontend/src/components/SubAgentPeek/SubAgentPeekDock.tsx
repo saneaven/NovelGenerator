@@ -57,10 +57,12 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 }) => {
   const peekKey = `${parentThreadId}:${parentMessageId}:peek`;
 
-  const { threadsById, messagesByThreadId, toolCallsByMessageId } = useThreadStore(
+  const { threadsById, messagesByThreadId, toolCallsById, toolCallIdsByAssistantMessageId, toolCallsByMessageId } = useThreadStore(
     useShallow((state) => ({
       threadsById: state.threadsById,
       messagesByThreadId: state.messagesByThreadId,
+      toolCallsById: state.toolCallsById,
+      toolCallIdsByAssistantMessageId: state.toolCallIdsByAssistantMessageId,
       toolCallsByMessageId: state.toolCallsByMessageId,
     })),
   );
@@ -76,7 +78,11 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   );
 
   const childEntries = useMemo(() => {
-    const parentToolCalls: ThreadToolCall[] = toolCallsByMessageId[parentMessageId] ?? [];
+    // parentMessageId is the assistant message ID — look up via the assistant message index
+    const tcIds = toolCallIdsByAssistantMessageId[parentMessageId] ?? [];
+    const parentToolCalls: ThreadToolCall[] = tcIds
+      .map((id) => toolCallsById[id])
+      .filter((tc): tc is ThreadToolCall => Boolean(tc));
     const result: ChildEntry[] = [];
 
     for (const tc of parentToolCalls) {
@@ -94,7 +100,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
     result.sort((a, b) => a.callSeq - b.callSeq);
     return result;
-  }, [toolCallsByMessageId, parentMessageId, threadsById]);
+  }, [toolCallIdsByAssistantMessageId, toolCallsById, parentMessageId, threadsById]);
 
   const pendingCountByKey = useMemo(() => {
     const map: Record<string, number> = {};
@@ -185,10 +191,10 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   if (childEntries.length === 0 || !selectedEntry) return null;
 
   // Extract finalOutput from parent tool call result
-  const parentToolCalls: ThreadToolCall[] = toolCallsByMessageId[parentMessageId] ?? [];
-  const selectedParentTc = parentToolCalls.find(
-    (tc) => tc.childThreadId === selectedEntry.childThreadId,
-  );
+  const parentTcIds = toolCallIdsByAssistantMessageId[parentMessageId] ?? [];
+  const selectedParentTc = parentTcIds
+    .map((id) => toolCallsById[id])
+    .find((tc) => tc?.childThreadId === selectedEntry.childThreadId);
   const finalOutput = (selectedParentTc?.result as any)?.message ?? null;
 
   const items = childEntries.map((entry) => ({
