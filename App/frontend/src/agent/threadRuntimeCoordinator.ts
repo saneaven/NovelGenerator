@@ -29,10 +29,6 @@ function isPendingToolStatus(status: ToolCallStatus): boolean {
   return status === 'pending' || status === 'streaming' || status === 'validating' || status === 'processing';
 }
 
-function isTerminalToolStatus(status: ToolCallStatus): boolean {
-  return status === 'applied' || status === 'failed' || status === 'rejected';
-}
-
 function toToolCallStatus(value: unknown): ToolCallStatus {
   const text = String(value ?? 'pending') as ToolCallStatus;
   if (
@@ -114,6 +110,7 @@ class ProjectRuntimeConnection {
       store.upsertThread(snapshot.thread);
       store.replaceMessagesAndToolCalls(threadId, snapshot.messages, snapshot.toolCalls);
       this.refreshUnresolvedCount(threadId);
+      await this.checkAutoContinue(threadId);
     } catch (error) {
       console.warn('Failed to load thread snapshot', { threadId, error });
     }
@@ -480,25 +477,7 @@ class ProjectRuntimeConnection {
       const toolCalls = store.getToolCallsForAssistantMessage(latestAssistant.id);
       if (toolCalls.length === 0) return;
 
-      const unresolved = toolCalls.filter((tc) => isPendingToolStatus(tc.status));
-      if (unresolved.length > 0) {
-        const hasPending = unresolved.some((tc) => tc.status === 'pending');
-        store.setThreadRuntime(threadId, { status: hasPending ? 'waiting' : 'processing' });
-        return;
-      }
-
-      if (!toolCalls.every((tc) => isTerminalToolStatus(tc.status))) return;
-
-      const hasRejected = toolCalls.some((tc) => tc.status === 'rejected');
-      if (hasRejected) {
-        store.setThreadRuntime(threadId, { status: 'paused' });
-        return;
-      }
-
-      const thread = store.threadsById[threadId];
-      if (thread && (thread.status === 'running' || thread.status === 'processing')) {
-        return;
-      }
+      if (!toolCalls.every((tc) => tc.status === 'applied')) return;
 
       if (this.inFlightResumeByThread.has(threadId)) return;
       this.inFlightResumeByThread.add(threadId);
@@ -525,7 +504,6 @@ class ProjectRuntimeConnection {
     if (payload.project_id && String(payload.project_id) !== this.projectId) return;
 
     const threadPartial: Partial<ThreadInfo> = {
-      updatedAt: payload.ts ? String(payload.ts) : nowIso(),
       latestRunId: payload.run_id ? String(payload.run_id) : null,
     };
     if (payload.thread_type) {

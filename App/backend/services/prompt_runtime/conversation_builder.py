@@ -51,8 +51,12 @@ def _tool_result_from_tool_call(tool: RunToolCallModel) -> dict[str, Any] | None
         content = str(tool.reason or tool.status or "")
     if not content.strip():
         return None
+    # Provider tool-response matching expects the original LLM call ID.
+    llm_tool_call_id = str(getattr(tool, "llm_call_id", "") or "").strip()
+    if not llm_tool_call_id:
+        llm_tool_call_id = str(tool.id)
     return {
-        "tool_call_id": str(tool.id),
+        "tool_call_id": llm_tool_call_id,
         "tool_name": str(tool.tool_name or "tool_result"),
         "content": content,
     }
