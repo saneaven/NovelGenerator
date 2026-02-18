@@ -61,6 +61,7 @@ class ProjectRuntimeConnection {
   private autoContinueLockByThread = new Set<string>();
   private inFlightResumeByThread = new Set<string>();
   private autoAcceptLockByThread = new Set<string>();
+  private disposed = false;
 
   constructor(projectId: string) {
     this.projectId = projectId;
@@ -70,12 +71,14 @@ class ProjectRuntimeConnection {
     this.refCount += 1;
     if (this.streamTask) return;
     await this.syncRuntimeSnapshot();
+    if (this.disposed) return;
     this.connect();
   }
 
   stop(): void {
     this.refCount = Math.max(0, this.refCount - 1);
     if (this.refCount > 0) return;
+    this.disposed = true;
     this.abortController?.abort();
     this.abortController = null;
     this.streamTask = null;
@@ -535,11 +538,13 @@ class ProjectRuntimeConnection {
     if (event.event === 'llm:request') {
       const d = event.data as Record<string, unknown>;
       const msgs = d.messages as Array<{ role: string }> | null;
+      const runId = d.run_id ? String(d.run_id) : 'n/a';
       console.groupCollapsed(
-        `%c[LLM Request]%c ${d.provider}/${d.model} · temp=${d.temperature} · ${msgs?.length ?? 0} msgs`,
+        `%c[LLM Request]%c run=${runId} · ${d.provider}/${d.model} · temp=${d.temperature} · ${msgs?.length ?? 0} msgs`,
         'color: #6366f1; font-weight: bold',
         'color: inherit',
       );
+      console.log('Run ID:', runId);
       console.log('Provider:', d.provider);
       console.log('Model:', d.model);
       console.log('Temperature:', d.temperature);
