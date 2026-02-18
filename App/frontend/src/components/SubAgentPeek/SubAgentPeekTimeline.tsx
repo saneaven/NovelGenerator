@@ -44,7 +44,7 @@ function toContentParts(parts: Array<{ type: string; text: string }>): ContentPa
 
 function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
   return {
-    id: toolCall.llmCallId,
+    id: toolCall.id,
     tool_name: toolCall.toolName,
     arguments: toolCall.arguments,
     status: toolCall.status as any,
@@ -86,7 +86,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   const messages = useMemo(() => {
     if (!threadMessages) return [];
     return [...threadMessages]
-      .filter((msg) => msg.role === 'assistant' && !msg.id.startsWith('delta:'))
+      .filter((msg) => msg.role === 'assistant' && !msg.isStreaming)
       .sort((a, b) => {
         const aSit = a.seqInThread ?? Number.MAX_SAFE_INTEGER;
         const bSit = b.seqInThread ?? Number.MAX_SAFE_INTEGER;
@@ -95,9 +95,9 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
       });
   }, [threadMessages]);
 
-  const deltaMessage = useMemo(() => {
+  const streamingMessage = useMemo(() => {
     if (!threadMessages) return null;
-    return threadMessages.find((m) => m.id.startsWith('delta:')) ?? null;
+    return threadMessages.find((m) => m.role === 'assistant' && m.isStreaming) ?? null;
   }, [threadMessages]);
 
   const lastAssistantMessageId = useMemo(() => {
@@ -192,13 +192,13 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
 
   const actionDisabled = isApplying || actionInFlight !== null;
 
-  // Streaming content from delta message
+  // Streaming content from actively streaming assistant message
   const streamingContentParts = useMemo<ContentPart[] | null>(() => {
-    if (!deltaMessage) return null;
-    const entry = deltaMessage.streamingData;
+    if (!streamingMessage) return null;
+    const entry = streamingMessage.streamingData;
     if (!entry?.contentParts) return null;
     return toContentParts(entry.contentParts);
-  }, [deltaMessage]);
+  }, [streamingMessage]);
 
   const streamingText = useMemo(() => {
     if (!streamingContentParts) return '';
@@ -245,7 +245,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
                 <ThinkingDisplay
                   messageId={String(message.id)}
                   contentParts={contentParts}
-                  isStreaming={false}
+                  isStreaming={message.isStreaming === true}
                 />
               )}
               {text && <div className="message-content">{text}</div>}
@@ -282,7 +282,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
         );
       })}
 
-      {deltaMessage && streamingContentParts && (
+      {streamingMessage && streamingContentParts && (
         <div className={`agent-message assistant${messages.length > 0 && messages[messages.length - 1].role === 'assistant' ? ' same-role-as-previous' : ''}`}>
           <div className="message-wrapper">
             {!(messages.length > 0 && messages[messages.length - 1].role === 'assistant') && (

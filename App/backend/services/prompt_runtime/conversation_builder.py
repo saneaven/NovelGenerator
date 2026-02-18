@@ -71,7 +71,7 @@ def build_from_runs(
     include_run_ids: list[UUID] | None = None,
 ) -> list[dict[str, Any]]:
     q = db.query(RunMessageModel).filter(RunMessageModel.thread_id == thread_id)
-    if include_run_ids:
+    if include_run_ids is not None:
         q = q.filter(RunMessageModel.run_id.in_(include_run_ids))
 
     rows = q.order_by(RunMessageModel.seq_in_thread.asc(), RunMessageModel.created_at.asc()).all()

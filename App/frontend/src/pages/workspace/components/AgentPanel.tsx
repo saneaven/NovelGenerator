@@ -628,26 +628,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     );
   }, [showError]);
 
-  const removeMessageToolCalls = useCallback((messageId: string) => {
-    if (!threadId) return;
-    const state = useThreadStore.getState();
-    const toolCallIds = Object.values(state.toolCallsById)
-      .filter((toolCall): toolCall is ThreadToolCall => Boolean(toolCall))
-      .filter((toolCall) => (
-        toolCall.threadId === threadId
-        && (
-          toolCall.messageId === messageId
-          || toolCall.assistantMessageId === messageId
-          || toolCall.resultMessageId === messageId
-        )
-      ))
-      .map((toolCall) => toolCall.id);
-
-    for (const toolCallId of toolCallIds) {
-      state.removeToolCall(toolCallId);
-    }
-  }, [threadId]);
-
   const handleDeleteSingleToolCall = useCallback(async (toolCallId: string) => {
     if (!threadId) {
       showError('Delete Failed', 'Could not find the thread.');
@@ -656,21 +636,21 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     if (!window.confirm('Are you sure you want to delete this tool call?')) return;
 
     const state = useThreadStore.getState();
-    const toolCall = state.toolCallsById[toolCallId];
-    if (!toolCall) return;
+    const tc = state.toolCallsById[toolCallId];
+    if (!tc) return;
 
-    const messageId = toolCall.messageId;
+    // Local cleanup first (optimistic)
+    if (tc.messageId) state.removeMessage(threadId, tc.messageId);
+    if (tc.resultMessageId) state.removeMessage(threadId, tc.resultMessageId);
     state.removeToolCall(toolCallId);
 
-    if (messageId) {
-      if (isUuid(messageId)) {
-        try {
-          await threadService.deleteMessage(threadId, messageId);
-        } catch (error) {
-          console.error('Failed to delete tool call message:', error);
-        }
+    // Backend — deleteToolCall cascades to messages via parent_tool_call_id FK
+    if (isUuid(toolCallId)) {
+      try {
+        await threadService.deleteToolCall(threadId, toolCallId);
+      } catch (error) {
+        console.error('Failed to delete tool call:', error);
       }
-      state.removeMessage(threadId, messageId);
     }
   }, [threadId, showError]);
 
@@ -682,27 +662,35 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
 
     if (!window.confirm('Are you sure you want to delete this message?')) return;
 
-    const removeLocal = () => {
-      removeMessageToolCalls(messageId);
-      useThreadStore.getState().removeMessage(threadId, messageId);
-    };
+    const state = useThreadStore.getState();
 
-    if (!isUuid(messageId)) {
-      removeLocal();
-      return;
-    }
+    // Find all tool calls linked to this message (via any of the three ID fields)
+    const linkedToolCalls = Object.values(state.toolCallsById)
+      .filter((tc): tc is ThreadToolCall => Boolean(tc))
+      .filter((tc) => tc.threadId === threadId && (
+        tc.assistantMessageId === messageId
+        || tc.messageId === messageId
+        || tc.resultMessageId === messageId
+      ));
 
-    try {
-      await threadService.deleteMessage(threadId, messageId);
-      removeLocal();
-    } catch (error) {
-      console.error('Failed to delete message:', error);
-      showError(
-        'Delete Failed',
-        error instanceof Error ? error.message : 'Failed to delete message.',
-      );
+    // Local cleanup first (optimistic)
+    for (const tc of linkedToolCalls) {
+      if (tc.messageId) state.removeMessage(threadId, tc.messageId);
+      if (tc.resultMessageId) state.removeMessage(threadId, tc.resultMessageId);
+      state.removeToolCall(tc.id);
     }
-  }, [threadId, removeMessageToolCalls, showError]);
+    state.removeMessage(threadId, messageId);
+
+    // Backend — for assistant messages, DB cascade handles everything:
+    // assistant_message_id CASCADE → deletes tool calls → parent_tool_call_id CASCADE → deletes their messages
+    if (isUuid(messageId)) {
+      try {
+        await threadService.deleteMessage(threadId, messageId);
+      } catch (error) {
+        console.error('Failed to delete message:', error);
+      }
+    }
+  }, [threadId, showError]);
 
   const handleCloseAgent = useCallback(() => {
     setIsOverlayClosing(true);
@@ -864,7 +852,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                         </div>
                       )}
                       {processed.displayContent}
-                      {isStreamingMessage && (
+                      {isStreamingMessage && thread?.status === 'running' && (
                         <div className="typing-indicator inline">
                           <div className="loading-track">
                             <div className="loading-bar" />

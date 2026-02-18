@@ -351,12 +351,14 @@ async def _execute_sub_agent(
     if definition is None:
         raise ValueError(f"Sub-agent not found: {agent_name}")
 
+    # TODO: After creating the child thread, auto-start a run with the call_
+    # arguments as input_text, and auto-complete the parent tool call when done.
     child_thread = Thread(
         project_id=project_id,
         user_id=user_id,
         thread_type="subAgent",
         owner_id=definition.id,
-        status="done",
+        status="waiting",
     )
     db.add(child_thread)
     db.flush()

@@ -655,12 +655,10 @@ class Thread(Base):
 
     status = Column(String(20), nullable=False, default='done')
 
-    # Captured history snapshot for reuse within a run.
-    # Stored as split fields for system/conversation/prefill.
+    # Rendered conversation snapshot — re-captured on every create, reused on resume.
     captured_history_system_prompt = Column(Text, nullable=True)
     captured_history_conversation_json = Column(JSONB, nullable=True)
     captured_history_prefill = Column(Text, nullable=True)
-    captured_from_run_id = Column(UUID(as_uuid=True), nullable=True)
 
     # Stable per-thread run ordering (1-based)
     next_run_seq = Column(BigInteger, default=1, nullable=False)
@@ -710,9 +708,6 @@ class RunModel(Base):
     run_seq = Column(BigInteger, nullable=True)  # Ordering within thread
 
     language = Column(String(50), nullable=False)
-    input_text = Column(Text, nullable=False, default='')
-    input_payload = Column(JSONB, nullable=False, default=dict)
-    final_output = Column(Text, nullable=True)
     error = Column(Text, nullable=True)
 
     # Agent-only metadata (per-run, can differ between runs in same thread)
@@ -783,12 +778,22 @@ class RunMessageModel(Base):
     data = Column(JSONB, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
+    # Parent tool call that owns this message (for role='tool_call' and 'tool_result').
+    # Cascade: deleting the tool call deletes its child messages.
+    parent_tool_call_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey('run_tool_calls.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
+
     thread = relationship("Thread")
     run = relationship("RunModel", back_populates="messages")
     tool_calls = relationship(
         "RunToolCallModel",
         back_populates="message",
-        cascade="all",
+        cascade="save-update, merge",
+        passive_deletes=True,
         order_by="RunToolCallModel.call_seq",
         foreign_keys="RunToolCallModel.message_id",
     )
@@ -808,10 +813,11 @@ class RunToolCallModel(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     thread_id = Column(UUID(as_uuid=True), ForeignKey('threads.id', ondelete='CASCADE'), nullable=False, index=True)
     run_id = Column(UUID(as_uuid=True), ForeignKey('runs.id', ondelete='CASCADE'), nullable=False, index=True)
-    # Points to the dedicated role='tool_call' message row.
-    message_id = Column(UUID(as_uuid=True), ForeignKey('run_messages.id', ondelete='CASCADE'), nullable=False, index=True)
-    # Assistant message that originated this tool call (optional for legacy rows).
-    assistant_message_id = Column(UUID(as_uuid=True), ForeignKey('run_messages.id', ondelete='SET NULL'), nullable=True, index=True)
+    # Denormalized pointer to the dedicated role='tool_call' message row.
+    message_id = Column(UUID(as_uuid=True), ForeignKey('run_messages.id', ondelete='SET NULL'), nullable=True, index=True)
+    # Assistant message that originated this tool call.
+    # Cascade: deleting the assistant message deletes its tool calls.
+    assistant_message_id = Column(UUID(as_uuid=True), ForeignKey('run_messages.id', ondelete='CASCADE'), nullable=True, index=True)
     # Tool-result message generated from this tool call (idempotent resume guard).
     result_message_id = Column(UUID(as_uuid=True), ForeignKey('run_messages.id', ondelete='SET NULL'), nullable=True, index=True)
     call_seq = Column(Integer, nullable=False)
@@ -829,7 +835,13 @@ class RunToolCallModel(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     thread = relationship("Thread", foreign_keys=[thread_id])
-    message = relationship("RunMessageModel", back_populates="tool_calls", foreign_keys=[message_id])
+    message = relationship("RunMessageModel", back_populates="tool_calls", foreign_keys=[message_id], passive_deletes=True)
+    child_messages = relationship(
+        "RunMessageModel",
+        foreign_keys="RunMessageModel.parent_tool_call_id",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     child_run = relationship("RunModel", foreign_keys=[child_run_id])
     child_thread = relationship("Thread", foreign_keys=[child_thread_id])
 

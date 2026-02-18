@@ -23,6 +23,19 @@ export type ThreadSSEEvent =
   | { event: 'run:done'; data: RuntimeEventBase & { final_status: RunStatus } }
   | { event: 'run:error'; data: RuntimeEventBase & { error: string } }
   | { event: 'run:canceled'; data: RuntimeEventBase }
+  | { event: 'llm:request'; data: RuntimeEventBase & {
+      message_id: string;
+      provider: string;
+      model: string;
+      temperature: number;
+      max_tokens: number | null;
+      tool_choice: string | null;
+      thinking_config: Record<string, unknown> | null;
+      thinking_mode: string;
+      native_tool_call: boolean;
+      messages: Array<{ role: string; content_parts: Array<{ type: string; text: string }> }>;
+      tools: Array<{ name: string; description: string; parameters: Record<string, unknown> }> | null;
+    }}
   | { event: string; data: Record<string, unknown> };
 
 interface ConnectOptions {

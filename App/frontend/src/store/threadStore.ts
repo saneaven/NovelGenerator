@@ -316,10 +316,12 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
     set((s) => {
       const nextToolCallsById = { ...s.toolCallsById, [toolCall.id]: toolCall };
 
-      const nextIdsByMessage = {
-        ...s.toolCallIdsByMessageId,
-        [toolCall.messageId]: uniqueIds([...(s.toolCallIdsByMessageId[toolCall.messageId] ?? []), toolCall.id]),
-      };
+      const nextIdsByMessage = toolCall.messageId
+        ? {
+            ...s.toolCallIdsByMessageId,
+            [toolCall.messageId]: uniqueIds([...(s.toolCallIdsByMessageId[toolCall.messageId] ?? []), toolCall.id]),
+          }
+        : { ...s.toolCallIdsByMessageId };
 
       const nextIdsByAssistant = { ...s.toolCallIdsByAssistantMessageId };
       if (toolCall.assistantMessageId) {
@@ -366,7 +368,9 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
       delete nextToolCallsById[toolCallId];
 
       const nextIdsByMessage = { ...s.toolCallIdsByMessageId };
-      nextIdsByMessage[existing.messageId] = (nextIdsByMessage[existing.messageId] ?? []).filter((id) => id !== toolCallId);
+      if (existing.messageId) {
+        nextIdsByMessage[existing.messageId] = (nextIdsByMessage[existing.messageId] ?? []).filter((id) => id !== toolCallId);
+      }
 
       const nextIdsByAssistant = { ...s.toolCallIdsByAssistantMessageId };
       if (existing.assistantMessageId) {

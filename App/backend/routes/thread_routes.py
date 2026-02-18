@@ -132,6 +132,7 @@ async def _emit_tool_call_status(*, thread: Thread, tool_call: RunToolCallModel)
             "status": tool_call.status,
             "reason": tool_call.reason,
             "result": tool_call.result if isinstance(tool_call.result, dict) else None,
+            "child_thread_id": str(tool_call.child_thread_id) if tool_call.child_thread_id else None,
         },
     )
 
@@ -270,8 +271,10 @@ async def chat_thread(
     thread_id: UUID,
     payload: ChatRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     text = (payload.input_text or "").strip()
+
     if text:
         run = await run_pipeline.start_run(
             thread_id=thread_id,
@@ -285,16 +288,39 @@ async def chat_thread(
             language=payload.language,
         )
     else:
-        run = await run_pipeline.resume_run(
-            thread_id=thread_id,
-            user_id=current_user.id,
-            input_payload=payload.input_payload,
-            run_mode=payload.run_mode,
-            surface=payload.surface,
-            context_object_ids=payload.context_object_ids,
-            journey_target_ids=payload.journey_target_ids,
-            language=payload.language,
+        last_msg = (
+            db.query(RunMessageModel)
+            .filter(RunMessageModel.thread_id == thread_id)
+            .order_by(RunMessageModel.seq_in_thread.desc())
+            .first()
         )
+        if last_msg is not None and last_msg.role == "user":
+            reuse_text = last_msg.data["_final"]["contentParts"][0]["text"]
+            stale_run = db.query(RunModel).filter(RunModel.id == last_msg.run_id).first()
+            if stale_run:
+                db.delete(stale_run)
+                db.commit()
+            run = await run_pipeline.start_run(
+                thread_id=thread_id,
+                user_id=current_user.id,
+                input_text=reuse_text,
+                input_payload=payload.input_payload,
+                run_mode=payload.run_mode,
+                surface=payload.surface,
+                context_object_ids=payload.context_object_ids,
+                journey_target_ids=payload.journey_target_ids,
+                language=payload.language,
+            )
+        else:
+            run = await run_pipeline.resume_run(
+                thread_id=thread_id,
+                user_id=current_user.id,
+                run_mode=payload.run_mode,
+                surface=payload.surface,
+                context_object_ids=payload.context_object_ids,
+                journey_target_ids=payload.journey_target_ids,
+                language=payload.language,
+            )
 
     return ChatResponse(
         thread_id=thread_id,
@@ -550,6 +576,11 @@ async def delete_thread_message(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Delete a message. FK cascades handle cleanup:
+    - assistant message: CASCADE deletes tool calls via assistant_message_id FK,
+      which CASCADE deletes their tool_call/tool_result messages via parent_tool_call_id FK.
+    - tool_call/tool_result message: SET NULL on the tool call's message_id/result_message_id.
+    """
     _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
     row = (
         db.query(RunMessageModel)
@@ -570,6 +601,8 @@ async def delete_thread_tool_call(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Delete a tool call. FK CASCADE via parent_tool_call_id on run_messages
+    automatically deletes the associated tool_call and tool_result messages."""
     _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
     row = (
         db.query(RunToolCallModel)
@@ -578,15 +611,6 @@ async def delete_thread_tool_call(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Tool call not found")
-    # Cascade-delete the associated tool_call and tool_result messages.
-    if row.message_id:
-        msg = db.query(RunMessageModel).filter(RunMessageModel.id == row.message_id).first()
-        if msg:
-            db.delete(msg)
-    if row.result_message_id:
-        result_msg = db.query(RunMessageModel).filter(RunMessageModel.id == row.result_message_id).first()
-        if result_msg:
-            db.delete(result_msg)
     db.delete(row)
     db.commit()
     return Response(status_code=204)

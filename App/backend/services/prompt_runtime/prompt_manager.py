@@ -11,14 +11,13 @@ from sqlalchemy.orm import Session
 from ...models.db_models import PromptVersion, RunModel, SubAgentDefinitionModel, Thread
 from ..settings_service import settings_service
 from ..variable_service import variable_service
-from .prompt_renderer import PromptRenderer, PromptTemplateNotFoundError
+from .prompt_renderer import PromptRenderer
 
 
 @dataclass(frozen=True)
 class PromptTarget:
     task_type: str
     prompt_name: str
-    message_input_key: str
     required_categories: tuple[str, ...]
     supports_memory_prompt: bool = False
 
@@ -26,10 +25,9 @@ class PromptTarget:
 @dataclass(frozen=True)
 class PromptBundle:
     target: PromptTarget
-    selected_user_category: str
+    prompt_map: dict[str, str]
     template_data: dict[str, Any]
     system_prompt: str
-    user_prompt: str
     prefill: str | None
     has_memory_prompt: bool
 
@@ -78,16 +76,14 @@ class PromptManager:
     def __init__(self, renderer: PromptRenderer):
         self._renderer = renderer
 
-    def resolve_target(self, db: Session, *, thread: Thread, run: RunModel) -> PromptTarget:
+    def resolve_target(self, db: Session, *, thread: Thread, run: RunModel, payload: dict[str, Any]) -> PromptTarget:
         if thread.thread_type == "journey":
             journey_kind = str(thread.journey_kind or "").strip()
-            payload = _as_dict(run.input_payload)
 
             if journey_kind == "translation":
                 return PromptTarget(
                     task_type="translation",
                     prompt_name="object",
-                    message_input_key="userMessage",
                     required_categories=("systemPrompt", "userPrompt", "initialUserPrompt", "firstUserPrompt", "lastUserPrompt"),
                 )
 
@@ -104,7 +100,6 @@ class PromptManager:
                 return PromptTarget(
                     task_type="imagePrompt",
                     prompt_name=prompt_name,
-                    message_input_key="userMessage",
                     required_categories=("systemPrompt", "userPrompt", "initialUserPrompt", "firstUserPrompt", "lastUserPrompt"),
                 )
 
@@ -114,7 +109,6 @@ class PromptManager:
             return PromptTarget(
                 task_type="editAssistant",
                 prompt_name=prompt_name,
-                message_input_key="userMessage",
                 required_categories=("systemPrompt", "userPrompt", "initialUserPrompt", "firstUserPrompt", "lastUserPrompt"),
             )
 
@@ -127,7 +121,6 @@ class PromptManager:
             return PromptTarget(
                 task_type="subAgent",
                 prompt_name=prompt_name,
-                message_input_key="agentMessage",
                 required_categories=("systemPrompt", "userPrompt"),
             )
 
@@ -135,10 +128,22 @@ class PromptManager:
         return PromptTarget(
             task_type="agent",
             prompt_name=prompt_name,
-            message_input_key="userMessage",
             required_categories=("systemPrompt", "memoryPrompt", "userPrompt", "firstUserPrompt", "lastUserPrompt"),
             supports_memory_prompt=True,
         )
+
+    @staticmethod
+    def resolve_task_type(*, thread: Thread, run: RunModel) -> str:
+        if thread.thread_type == "journey":
+            kind = (thread.journey_kind or "").strip()
+            if kind == "translation":
+                return "translation"
+            if kind == "imagePrompt":
+                return "imagePrompt"
+            return "editAssistant"
+        if thread.thread_type == "subAgent":
+            return "subAgent"
+        return "agent"
 
     def _load_latest_prompt_map(
         self,
@@ -172,21 +177,42 @@ class PromptManager:
         return out
 
     @staticmethod
-    def _select_user_category(
+    def _resolve_user_category(
         *,
         prompt_map: dict[str, str],
-        has_prior_user_messages: bool,
+        run_index: int,
+        total_runs: int,
     ) -> str:
-        if not has_prior_user_messages:
-            if "initialUserPrompt" in prompt_map:
-                return "initialUserPrompt"
-            if "firstUserPrompt" in prompt_map:
-                return "firstUserPrompt"
-            return "userPrompt"
-
-        if "lastUserPrompt" in prompt_map:
+        if total_runs == 1 and "initialUserPrompt" in prompt_map:
+            return "initialUserPrompt"
+        if run_index == total_runs - 1 and "lastUserPrompt" in prompt_map:
             return "lastUserPrompt"
+        if run_index == 0 and "firstUserPrompt" in prompt_map:
+            return "firstUserPrompt"
         return "userPrompt"
+
+    def render_conversation_user_prompts(
+        self,
+        *,
+        prompt_map: dict[str, str],
+        target: PromptTarget,
+        template_data: dict[str, Any],
+        user_texts: list[str],
+    ) -> list[str]:
+        total = len(user_texts)
+        rendered: list[str] = []
+        for i, text in enumerate(user_texts):
+            category = self._resolve_user_category(prompt_map=prompt_map, run_index=i, total_runs=total)
+            patched = {**template_data, "input": {**template_data.get("input", {}), "userMessage": text}}
+            rendered.append(
+                self._renderer.render_prompt(
+                    task_type=target.task_type,
+                    prompt_name=target.prompt_name,
+                    prompt_category=category,
+                    template_data=patched,
+                )
+            )
+        return rendered
 
     @staticmethod
     def _resolve_output_mode(*, payload: dict[str, Any]) -> str:
@@ -367,11 +393,13 @@ class PromptManager:
         thread: Thread,
         run: RunModel,
         project_data: dict[str, Any],
+        input_text: str,
+        input_payload: dict[str, Any],
     ) -> tuple[dict[str, Any], bool]:
         task_cfg = settings_service.get_task_config(db, user_id, target.task_type)
         prefill_enabled = bool(task_cfg.advanced.get("enable_prefill", False))
 
-        payload = _as_dict(run.input_payload)
+        payload = input_payload
         language = str(run.language or "English")
         context_object_ids = _as_str_list(run.context_object_ids)
         journey_target_ids = _as_str_list(run.journey_target_ids)
@@ -394,8 +422,8 @@ class PromptManager:
             },
             "project": project_data,
             "input": {
-                "userMessage": str(run.input_text or ""),
-                "agentMessage": str(run.input_text or ""),
+                "userMessage": input_text,
+                "agentMessage": input_text,
                 "toolResults": [],
             },
             "agent": {
@@ -463,9 +491,10 @@ class PromptManager:
         thread: Thread,
         run: RunModel,
         project_data: dict[str, Any],
-        has_prior_user_messages: bool,
+        input_text: str,
+        input_payload: dict[str, Any],
     ) -> PromptBundle:
-        target = self.resolve_target(db, thread=thread, run=run)
+        target = self.resolve_target(db, thread=thread, run=run, payload=input_payload)
         prompt_map = self._load_latest_prompt_map(
             db,
             user_id=user_id,
@@ -482,6 +511,8 @@ class PromptManager:
             thread=thread,
             run=run,
             project_data=project_data,
+            input_text=input_text,
+            input_payload=input_payload,
         )
         self._validate_required_categories(
             prompt_map=prompt_map,
@@ -489,25 +520,10 @@ class PromptManager:
             prefill_enabled=prefill_enabled,
         )
 
-        selected_user_category = self._select_user_category(
-            prompt_map=prompt_map,
-            has_prior_user_messages=has_prior_user_messages,
-        )
-        if selected_user_category not in prompt_map:
-            raise PromptTemplateNotFoundError(
-                f"Prompt template not found: {target.task_type}/{selected_user_category}/{target.prompt_name}"
-            )
-
         system_prompt = self._renderer.render_prompt(
             task_type=target.task_type,
             prompt_name=target.prompt_name,
             prompt_category="systemPrompt",
-            template_data=template_data,
-        )
-        user_prompt = self._renderer.render_prompt(
-            task_type=target.task_type,
-            prompt_name=target.prompt_name,
-            prompt_category=selected_user_category,
             template_data=template_data,
         )
         prefill = (
@@ -522,10 +538,9 @@ class PromptManager:
 
         return PromptBundle(
             target=target,
-            selected_user_category=selected_user_category,
+            prompt_map=prompt_map,
             template_data=template_data,
             system_prompt=system_prompt,
-            user_prompt=user_prompt,
             prefill=prefill,
             has_memory_prompt=target.supports_memory_prompt and "memoryPrompt" in prompt_map,
         )
