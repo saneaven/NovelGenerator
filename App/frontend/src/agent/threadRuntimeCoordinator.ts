@@ -488,7 +488,7 @@ class ProjectRuntimeConnection {
       const toolCalls = store.getToolCallsForAssistantMessage(latestAssistant.id);
       if (toolCalls.length === 0) return;
 
-      if (!toolCalls.every((tc) => tc.status === 'applied')) return;
+      if (!toolCalls.every((tc) => tc.status === 'applied' || tc.status === 'failed')) return;
 
       const thread = store.threadsById[threadId];
       const blockedByPausedOrError =

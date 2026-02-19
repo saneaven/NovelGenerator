@@ -247,13 +247,6 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
   if (childEntries.length === 0 || !selectedEntry) return null;
 
-  // Extract finalOutput from parent tool call result
-  const parentTcIds = toolCallIdsByAssistantMessageId[parentMessageId] ?? [];
-  const selectedParentTc = parentTcIds
-    .map((id) => toolCallsById[id])
-    .find((tc) => tc?.childThreadId === selectedEntry.childThreadId);
-  const finalOutput = (selectedParentTc?.result as any)?.content ?? null;
-
   const items = childEntries.map((entry) => ({
     key: entry.key,
     displayName: entry.displayName,
@@ -278,7 +271,6 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
           <SubAgentPeekTimeline
             childThreadId={selectedEntry.childThreadId}
             projectId={projectId}
-            finalOutput={finalOutput}
             engine={engineRef.current}
           />
         </div>

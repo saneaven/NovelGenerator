@@ -135,6 +135,28 @@ function collapseContent(parts: Array<{ type: string; text: string }>): string {
     .trim();
 }
 
+function hasNonEmptyPartText(message: ThreadMessage, partType: 'content' | 'thinking'): boolean {
+  return Object.values(message.data).some((entry) => (
+    entry.contentParts.some((part) => (
+      part.type === partType && typeof part.text === 'string' && part.text.trim().length > 0
+    ))
+  ));
+}
+
+function hasThinkingDetails(message: ThreadMessage): boolean {
+  return Object.values(message.data).some((entry) => (
+    Array.isArray(entry.thinkingDetails) && entry.thinkingDetails.length > 0
+  ));
+}
+
+function shouldDeleteAssistantMessageAfterToolCallCleanup(message: ThreadMessage): boolean {
+  if (message.role !== 'assistant') return false;
+  const hasContent = hasNonEmptyPartText(message, 'content');
+  if (hasContent) return false;
+  const hasThinking = hasNonEmptyPartText(message, 'thinking') || hasThinkingDetails(message);
+  return !hasThinking;
+}
+
 const AgentContextTrigger: React.FC<AgentContextTriggerProps> = React.memo(({
   selectedCount,
   totalCount,
@@ -638,10 +660,29 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     const state = useThreadStore.getState();
     const tc = state.toolCallsById[toolCallId];
     if (!tc) return;
+    const assistantMessageId = tc.assistantMessageId;
 
     // Local cleanup first (optimistic)
     if (tc.messageId) state.removeMessage(threadId, tc.messageId);
     state.removeToolCall(toolCallId);
+
+    // Remove the assistant message when its last tool call is removed and
+    // it has neither content nor thinking.
+    if (assistantMessageId) {
+      const nextState = useThreadStore.getState();
+      const remainingToolCalls = nextState
+        .getToolCallsForAssistantMessage(assistantMessageId)
+        .filter((linkedTc) => linkedTc.threadId === threadId);
+
+      if (remainingToolCalls.length === 0) {
+        const assistantMessage = nextState
+          .getMessages(threadId)
+          .find((msg) => msg.id === assistantMessageId && msg.role === 'assistant');
+        if (assistantMessage && shouldDeleteAssistantMessageAfterToolCallCleanup(assistantMessage)) {
+          nextState.removeMessage(threadId, assistantMessageId);
+        }
+      }
+    }
 
     // Backend — deleteToolCall cascades to messages via parent_tool_call_id FK
     if (isUuid(toolCallId)) {
@@ -649,6 +690,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         await threadService.deleteToolCall(threadId, toolCallId);
       } catch (error) {
         console.error('Failed to delete tool call:', error);
+        try {
+          await engineRef.current?.listMessages();
+        } catch (syncError) {
+          console.error('Failed to resync messages after tool call deletion failure:', syncError);
+        }
       }
     }
   }, [threadId, showError]);

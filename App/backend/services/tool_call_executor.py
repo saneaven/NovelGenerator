@@ -186,7 +186,21 @@ async def _execute_object_tool(
             created_by=user_id,
         )
         new_objects.append(created)
-        return (_make_result("Created chapter", object_id=created["id"], object_type="chapter"), new_objects, False)
+
+        # Also sync the auto-created manuscript
+        manuscript_id = created.get("metadata", {}).get("manuscript_id")
+        if manuscript_id:
+            manuscript = object_service.get_object(
+                db, "manuscript", UUID(manuscript_id), project_id=project_id
+            )
+            if manuscript:
+                new_objects.append(manuscript)
+
+        return (
+            _make_result("Created chapter", object_id=created["id"], object_type="chapter", data={"manuscriptId": manuscript_id}),
+            new_objects,
+            False,
+        )
 
     if tool_name == "delete_story_object":
         object_id = _to_uuid(args.get("id"), "id")

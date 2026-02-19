@@ -13,7 +13,7 @@ import { resolveRunMessageDisplay } from '../../types/thread';
 import { FunctionCallsThread } from '../../toolCall/ui';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import { IconButton } from '../IconButton';
-import { ChevronRight, Trash } from '../icons';
+import { Trash } from '../icons';
 import { MarkdownRenderer } from '../MarkdownRenderer/MarkdownRenderer';
 
 function formatRole(role: string, t: (key: string) => string): string {
@@ -56,19 +56,16 @@ function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
 export interface SubAgentPeekTimelineProps {
   childThreadId: string;
   projectId: string;
-  finalOutput?: string | null;
   engine?: ChatEngine | null;
 }
 
 export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   childThreadId,
   projectId,
-  finalOutput,
   engine,
 }) => {
   const { t } = useTranslation();
   const [isApplying, setIsApplying] = useState(false);
-  const [resultExpanded, setResultExpanded] = useState(false);
 
   const { thread, threadMessages, toolCallsById, toolCallIdsByAssistantMessageId } = useThreadStore(
     useShallow((state) => ({
@@ -205,7 +202,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
                   isStreaming={message.isStreaming === true}
                 />
               )}
-              {text && <div className="message-content">{text}</div>}
+              {text && <div className="message-content"><MarkdownRenderer>{text}</MarkdownRenderer></div>}
 
               {cards.length > 0 && (
                 <div className="message-function-calls">
@@ -254,7 +251,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
               isStreaming={true}
             />
             {streamingText && (
-              <div className="message-content">{streamingText}</div>
+              <div className="message-content"><MarkdownRenderer>{streamingText}</MarkdownRenderer></div>
             )}
             <div className="typing-indicator inline">
               <div className="loading-track">
@@ -262,26 +259,6 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {finalOutput && (
-        <div className="sub-agent-result-section">
-          <button
-            type="button"
-            className="sub-agent-result-toggle"
-            onClick={() => setResultExpanded((prev) => !prev)}
-          >
-            <span className={`sub-agent-result-chevron${resultExpanded ? ' expanded' : ''}`}>
-              <ChevronRight size="sm" />
-            </span>
-            <span className="sub-agent-result-label">Sub Agent Result</span>
-          </button>
-          {resultExpanded && (
-            <div className="sub-agent-result-content">
-              <MarkdownRenderer>{finalOutput}</MarkdownRenderer>
-            </div>
-          )}
         </div>
       )}
 

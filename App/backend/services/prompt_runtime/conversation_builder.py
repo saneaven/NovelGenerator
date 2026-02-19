@@ -112,6 +112,9 @@ def _format_result_content(result: dict[str, Any], tool_name: str) -> str:
         attrs["type"] = str(ot)
     if oid:
         attrs["id"] = str(oid)
+    for key, val in data.items():
+        if isinstance(val, str) and val:
+            attrs[key] = val
     root = ET.Element("tool_result", **attrs)
     root.text = str(result.get("message", "OK"))
     return _to_xml_string(root)

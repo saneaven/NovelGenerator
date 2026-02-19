@@ -105,6 +105,25 @@ class RunPipeline:
 
             task.add_done_callback(_cleanup)
 
+    async def _cancel_task_and_wait(self, run_id: UUID, *, timeout_s: float = 5.0) -> bool:
+        task: asyncio.Task | None = None
+        async with self._task_lock:
+            existing = self._tasks.get(run_id)
+            if existing is None or existing.done():
+                return True
+            existing.cancel()
+            task = existing
+
+        try:
+            await asyncio.wait_for(task, timeout=max(float(timeout_s), 0.1))
+            return True
+        except asyncio.CancelledError:
+            return True
+        except asyncio.TimeoutError:
+            return False
+        except Exception:
+            return True
+
     def _toolset_for_run(self, thread: Thread, run: RunModel) -> str:
         if thread.thread_type == "journey":
             journey_kind = (thread.journey_kind or "").strip()
@@ -183,7 +202,46 @@ class RunPipeline:
         if not text:
             raise HTTPException(status_code=400, detail="input_text is required for create run")
 
+        normalized_input_payload = input_payload if isinstance(input_payload, dict) else {}
+        latest_active_run_id: UUID | None = None
+
         async with self._thread_lock(thread_id):
+            db = self._db_factory()
+            try:
+                thread = (
+                    db.query(Thread)
+                    .filter(Thread.id == thread_id, Thread.user_id == user_id)
+                    .with_for_update()
+                    .first()
+                )
+                if thread is None:
+                    raise HTTPException(status_code=404, detail="Thread not found")
+
+                has_pending_tool = (
+                    db.query(RunToolCallModel.id)
+                    .filter(RunToolCallModel.thread_id == thread.id, RunToolCallModel.status == "pending")
+                    .first()
+                    is not None
+                )
+                if has_pending_tool:
+                    raise HTTPException(status_code=409, detail="Pending tool call exists in thread")
+
+                latest = (
+                    db.query(RunModel)
+                    .filter(RunModel.thread_id == thread.id)
+                    .order_by(RunModel.run_seq.desc())
+                    .first()
+                )
+                if latest is not None and latest.status in {"running", "waiting", "processing"}:
+                    latest_active_run_id = latest.id
+            finally:
+                db.close()
+
+            if latest_active_run_id is not None:
+                canceled = await self._cancel_task_and_wait(latest_active_run_id, timeout_s=5.0)
+                if not canceled:
+                    raise HTTPException(status_code=409, detail="Existing run cancellation timed out; retry")
+
             db = self._db_factory()
             try:
                 thread = (
@@ -216,7 +274,6 @@ class RunPipeline:
                 if latest is not None and latest.status in {"running", "waiting", "processing"}:
                     latest.status = "canceled"
 
-                normalized_input_payload = input_payload if isinstance(input_payload, dict) else {}
                 run = RunModel(
                     thread_id=thread.id,
                     user_id=user_id,

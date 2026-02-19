@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -65,6 +66,37 @@ def _serialize_tool_call(row: RunToolCallModel) -> dict:
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }
+
+
+def _has_non_empty_part_text(parts: Any, *, part_type: str) -> bool:
+    if not isinstance(parts, list):
+        return False
+    for part in parts:
+        if not isinstance(part, dict):
+            continue
+        if str(part.get("type") or "") != part_type:
+            continue
+        text = part.get("text")
+        if isinstance(text, str) and text.strip():
+            return True
+    return False
+
+
+def _assistant_has_content_or_thinking(data: Any) -> bool:
+    if not isinstance(data, dict):
+        return False
+    for entry in data.values():
+        if not isinstance(entry, dict):
+            continue
+        parts = entry.get("contentParts")
+        if _has_non_empty_part_text(parts, part_type="content"):
+            return True
+        if _has_non_empty_part_text(parts, part_type="thinking"):
+            return True
+        thinking_details = entry.get("thinkingDetails")
+        if isinstance(thinking_details, list) and len(thinking_details) > 0:
+            return True
+    return False
 
 
 def _owned_thread_or_404(db: Session, *, thread_id: UUID, user_id: UUID) -> Thread:
@@ -599,7 +631,33 @@ async def delete_thread_tool_call(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Tool call not found")
+    assistant_message_id = row.assistant_message_id
     db.delete(row)
+    db.flush()
+
+    if assistant_message_id is not None:
+        has_remaining_tool_calls = (
+            db.query(RunToolCallModel.id)
+            .filter(
+                RunToolCallModel.thread_id == thread_id,
+                RunToolCallModel.assistant_message_id == assistant_message_id,
+            )
+            .first()
+            is not None
+        )
+        if not has_remaining_tool_calls:
+            assistant_row = (
+                db.query(RunMessageModel)
+                .filter(
+                    RunMessageModel.id == assistant_message_id,
+                    RunMessageModel.thread_id == thread_id,
+                    RunMessageModel.role == "assistant",
+                )
+                .first()
+            )
+            if assistant_row is not None and not _assistant_has_content_or_thinking(assistant_row.data):
+                db.delete(assistant_row)
+
     db.commit()
     return Response(status_code=204)
 
