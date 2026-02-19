@@ -788,9 +788,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
           }
 
           const message = item.info;
-          const prevItem = index > 0 ? displayItems[index - 1] : null;
-          const isSameRoleAsPrevious = prevItem?.kind === 'message'
-            && prevItem.info.chatMessage.role === message.chatMessage.role;
+          let prevMessageItem: DisplayItem | null = null;
+          for (let j = index - 1; j >= 0; j--) {
+            if (displayItems[j].kind === 'message') {
+              prevMessageItem = displayItems[j];
+              break;
+            }
+          }
+          const isSameRoleAsPrevious = prevMessageItem?.kind === 'message'
+            && prevMessageItem.info.chatMessage.role === message.chatMessage.role;
           const isUser = message.chatMessage.role === 'user';
           const isStreamingMessage = message.source.isStreaming === true;
 

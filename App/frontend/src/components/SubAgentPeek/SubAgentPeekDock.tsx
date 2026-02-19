@@ -1,9 +1,12 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
+import ChatEngine from '../../agent/chatEngine';
 import { useThreadStore } from '../../store/threadStore';
 import type { ThreadInfo, ThreadToolCall } from '../../types/thread';
 import { threadPriority, isBlockingThreadStatus } from '../../types/thread';
 import { useFunctionCallUIStore } from '../../toolCall/ui/store';
+import { TextButton } from '../TextButton';
 import { SubAgentPeekHeader } from './SubAgentPeekHeader';
 import { SubAgentPeekTimeline } from './SubAgentPeekTimeline';
 import './subAgentPeek.css';
@@ -187,6 +190,61 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     return childEntries.find((e) => e.key === effective);
   }, [childEntries, orderedKeys, selectedKey, prioritizedKeys]);
 
+  // ── ChatEngine lifecycle ──
+  const { t } = useTranslation();
+  const engineRef = useRef<ChatEngine | null>(null);
+  const [actionInFlight, setActionInFlight] = useState<'pause' | 'retry' | 'cancel' | null>(null);
+
+  const selectedChildThreadId = selectedEntry?.childThreadId;
+
+  useEffect(() => {
+    if (!selectedChildThreadId) return;
+    const engine = new ChatEngine({
+      threadId: selectedChildThreadId,
+      projectId,
+      threadType: 'subAgent',
+    });
+    engineRef.current = engine;
+    void engine.init().catch((error) => {
+      console.error('Failed to init sub-agent engine', { childThreadId: selectedChildThreadId, error });
+    });
+    return () => {
+      if (engineRef.current === engine) {
+        engine.dispose();
+        engineRef.current = null;
+      }
+    };
+  }, [selectedChildThreadId, projectId]);
+
+  // Reset action state when switching threads
+  useEffect(() => {
+    setActionInFlight(null);
+  }, [selectedChildThreadId]);
+
+  const selectedThreadStatus = selectedEntry?.thread.status ?? 'done';
+  const isBlocking = isBlockingThreadStatus(selectedThreadStatus);
+
+  const handlePause = useCallback(() => {
+    if (actionInFlight) return;
+    setActionInFlight('pause');
+    const op = engineRef.current ? engineRef.current.cancel() : Promise.resolve();
+    void op.finally(() => setActionInFlight(null));
+  }, [actionInFlight]);
+
+  const handleRetry = useCallback(() => {
+    if (actionInFlight) return;
+    setActionInFlight('retry');
+    const op = engineRef.current ? engineRef.current.resume() : Promise.resolve();
+    void op.finally(() => setActionInFlight(null));
+  }, [actionInFlight]);
+
+  const handleCancel = useCallback(() => {
+    if (actionInFlight) return;
+    setActionInFlight('cancel');
+    const op = engineRef.current ? engineRef.current.cancel() : Promise.resolve();
+    void op.finally(() => setActionInFlight(null));
+  }, [actionInFlight]);
+
   if (childEntries.length === 0 || !selectedEntry) return null;
 
   // Extract finalOutput from parent tool call result
@@ -204,6 +262,8 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     selected: selectedEntry.key === entry.key,
   }));
 
+  const showFooter = peekOpen && isBlocking;
+
   return (
     <div className="sub-agent-peek-dock">
       <SubAgentPeekHeader
@@ -219,9 +279,48 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
             childThreadId={selectedEntry.childThreadId}
             projectId={projectId}
             finalOutput={finalOutput}
+            engine={engineRef.current}
           />
         </div>
       </div>
+
+      {showFooter && (
+        <div className="sub-agent-peek-dock__footer">
+          {(selectedThreadStatus === 'running' || selectedThreadStatus === 'waiting') && (
+            <TextButton
+              size="sm"
+              variant="secondary"
+              onClick={handlePause}
+              disabled={actionInFlight !== null}
+              loading={actionInFlight === 'pause'}
+            >
+              {t('subAgent.pause')}
+            </TextButton>
+          )}
+          {(selectedThreadStatus === 'paused' || selectedThreadStatus === 'error') && (
+            <>
+              <TextButton
+                size="sm"
+                variant="primary"
+                onClick={handleRetry}
+                disabled={actionInFlight !== null}
+                loading={actionInFlight === 'retry'}
+              >
+                {t('common.retry')}
+              </TextButton>
+              <TextButton
+                size="sm"
+                variant="warning"
+                onClick={handleCancel}
+                disabled={actionInFlight !== null}
+                loading={actionInFlight === 'cancel'}
+              >
+                {t('common.cancel')}
+              </TextButton>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };

@@ -1,21 +1,20 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { ContentPart, ToolCallMetadata } from '../../types/chat';
 import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { collapseContentParts } from '../../agent/utils/contentParts';
-import ChatEngine from '../../agent/chatEngine';
+import type ChatEngine from '../../agent/chatEngine';
 import { threadService } from '../../api/threadService';
 import { useThreadStore } from '../../store/threadStore';
 import type { ThreadMessage, ThreadToolCall } from '../../types/thread';
-import { isBlockingThreadStatus, resolveRunMessageDisplay } from '../../types/thread';
+import { resolveRunMessageDisplay } from '../../types/thread';
 import { FunctionCallsThread } from '../../toolCall/ui';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import { IconButton } from '../IconButton';
 import { ChevronRight, Trash } from '../icons';
 import { MarkdownRenderer } from '../MarkdownRenderer/MarkdownRenderer';
-import { TextButton } from '../TextButton';
 
 function formatRole(role: string, t: (key: string) => string): string {
   if (role === 'user') return t('subAgent.parentAgent');
@@ -58,18 +57,18 @@ export interface SubAgentPeekTimelineProps {
   childThreadId: string;
   projectId: string;
   finalOutput?: string | null;
+  engine?: ChatEngine | null;
 }
 
 export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   childThreadId,
   projectId,
   finalOutput,
+  engine,
 }) => {
   const { t } = useTranslation();
   const [isApplying, setIsApplying] = useState(false);
-  const [actionInFlight, setActionInFlight] = useState<'pause' | 'retry' | 'cancel' | null>(null);
   const [resultExpanded, setResultExpanded] = useState(false);
-  const engineRef = useRef<ChatEngine | null>(null);
 
   const { thread, threadMessages, toolCallsById, toolCallIdsByAssistantMessageId } = useThreadStore(
     useShallow((state) => ({
@@ -81,7 +80,6 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   );
 
   const threadStatus = thread?.status ?? 'done';
-  const isBlocking = isBlockingThreadStatus(threadStatus);
 
   const messages = useMemo(() => {
     if (!threadMessages) return [];
@@ -121,26 +119,8 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     return toContentParts(display.contentParts);
   }, []);
 
-  useEffect(() => {
-    const engine = new ChatEngine({
-      threadId: childThreadId,
-      projectId,
-      threadType: 'subAgent',
-    });
-    engineRef.current = engine;
-    void engine.init().catch((error) => {
-      console.error('Failed to init sub-agent engine', { childThreadId, error });
-    });
-    return () => {
-      if (engineRef.current === engine) {
-        engine.dispose();
-        engineRef.current = null;
-      }
-    };
-  }, [childThreadId, projectId]);
-
   const handleConfirm = useCallback(async (_messageId: string, decisions: ToolCallDecisionMap) => {
-    if (!engineRef.current) return;
+    if (!engine) return;
     setIsApplying(true);
     try {
       const accepts = Object.entries(decisions)
@@ -150,38 +130,17 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
         .filter(([, d]) => d === 'reject')
         .map(([id]) => id);
       if (accepts.length > 1 && rejects.length === 0) {
-        await engineRef.current.acceptToolCallsBatch(accepts);
+        await engine.acceptToolCallsBatch(accepts);
       } else {
         await Promise.all([
-          ...accepts.map((id) => engineRef.current?.acceptToolCall(id)),
-          ...rejects.map((id) => engineRef.current?.rejectToolCall(id)),
+          ...accepts.map((id) => engine?.acceptToolCall(id)),
+          ...rejects.map((id) => engine?.rejectToolCall(id)),
         ]);
       }
     } finally {
       setIsApplying(false);
     }
-  }, []);
-
-  const handlePause = useCallback(() => {
-    if (actionInFlight) return;
-    setActionInFlight('pause');
-    const op = engineRef.current ? engineRef.current.cancel() : Promise.resolve();
-    void op.finally(() => setActionInFlight(null));
-  }, [actionInFlight]);
-
-  const handleRetry = useCallback(() => {
-    if (actionInFlight) return;
-    setActionInFlight('retry');
-    const op = engineRef.current ? engineRef.current.resume() : Promise.resolve();
-    void op.finally(() => setActionInFlight(null));
-  }, [actionInFlight]);
-
-  const handleCancel = useCallback(() => {
-    if (actionInFlight) return;
-    setActionInFlight('cancel');
-    const op = engineRef.current ? engineRef.current.cancel() : Promise.resolve();
-    void op.finally(() => setActionInFlight(null));
-  }, [actionInFlight]);
+  }, [engine]);
 
   const handleDeleteMessage = useCallback((messageId: string) => {
     if (!confirm('Are you sure you want to delete this message?')) return;
@@ -189,8 +148,6 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
       useThreadStore.getState().removeMessage(childThreadId, messageId);
     });
   }, [childThreadId]);
-
-  const actionDisabled = isApplying || actionInFlight !== null;
 
   // Streaming content from actively streaming assistant message
   const streamingContentParts = useMemo<ContentPart[] | null>(() => {
@@ -328,41 +285,6 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
         </div>
       )}
 
-      <div className="sub-agent-peek-actions">
-        {isBlocking && (threadStatus === 'running' || threadStatus === 'waiting') && (
-          <TextButton
-            size="sm"
-            variant="secondary"
-            onClick={handlePause}
-            disabled={actionDisabled}
-            loading={actionInFlight === 'pause'}
-          >
-            {t('subAgent.pause')}
-          </TextButton>
-        )}
-        {isBlocking && (threadStatus === 'paused' || threadStatus === 'error') && (
-          <>
-            <TextButton
-              size="sm"
-              variant="primary"
-              onClick={handleRetry}
-              disabled={actionDisabled}
-              loading={actionInFlight === 'retry'}
-            >
-              {t('common.retry')}
-            </TextButton>
-            <TextButton
-              size="sm"
-              variant="warning"
-              onClick={handleCancel}
-              disabled={actionDisabled}
-              loading={actionInFlight === 'cancel'}
-            >
-              {t('common.cancel')}
-            </TextButton>
-          </>
-        )}
-      </div>
     </div>
   );
 };
