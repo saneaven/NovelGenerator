@@ -747,41 +747,29 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
             const isActiveSubAgentParent = item.assistantMessageId === lastAssistantMessageId;
             const showRunError = Boolean(latestRunError) && index === displayItems.length - 1;
 
+            const allCards = buildEditCardsFromToolCallMetadata(
+              item.toolCalls.map(toToolCallMetadata),
+            );
+            const hasAnyPending = item.toolCalls.some((tc) => isBlockingToolCallStatus(tc.status));
+            const groupMode = hasAnyPending ? 'pending' : 'confirmed';
+
             return (
               <React.Fragment key={`toolgroup:${item.messageIds[0]}`}>
-                {item.toolCalls.map((tc) => {
-                  const cards = buildEditCardsFromToolCallMetadata([toToolCallMetadata(tc)]);
-                  if (cards.length === 0) return null;
-
-                  const hasPending = isBlockingToolCallStatus(tc.status);
-                  const cardMode = hasPending ? 'pending' : 'confirmed';
-
-                  return (
-                    <div key={tc.id} className="agent-tool-call">
-                      <div className="message-function-calls" data-function-call-message-id={tc.messageId}>
-                        <FunctionCallsThread
-                          threadId={`agent:${selectedAgentId ?? 'none'}:tc:${tc.id}`}
-                          mode={cardMode}
-                          cards={cards}
-                          onCommitDecisions={cardMode === 'pending' ? handleCommitDecisions : undefined}
-                          projectId={projectId}
-                        />
-                      </div>
-                      <div className="message-actions">
-                        <div className="action-buttons">
-                          <IconButton
-                            icon={<Trash size="sm" />}
-                            onClick={() => void handleDeleteSingleToolCall(tc.id)}
-                            title={t('agent.delete')}
-                            variant="ghost"
-                            size="sm"
-                            className="icon-button--ghost-danger"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                {allCards.length > 0 && (
+                  <div className="agent-tool-group">
+                    {item.messageIds.map((mid) => (
+                      <span key={mid} data-function-call-message-id={mid} />
+                    ))}
+                    <FunctionCallsThread
+                      threadId={`agent:${selectedAgentId ?? 'none'}:tg:${item.assistantMessageId}`}
+                      mode={groupMode}
+                      cards={allCards}
+                      onCommitDecisions={groupMode === 'pending' ? handleCommitDecisions : undefined}
+                      onDeleteCard={(cardId) => void handleDeleteSingleToolCall(cardId)}
+                      projectId={projectId}
+                    />
+                  </div>
+                )}
 
                 {selectedAgentId && hasSubAgentCalls && threadId && (
                   <SubAgentPeekDock

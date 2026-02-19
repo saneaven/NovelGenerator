@@ -111,6 +111,17 @@ class ProjectRuntimeConnection {
       store.replaceMessagesAndToolCalls(threadId, snapshot.messages, snapshot.toolCalls);
       this.refreshUnresolvedCount(threadId);
       await this.checkAutoContinue(threadId);
+
+      // Load child threads referenced by sub-agent tool calls
+      const childThreadIds = snapshot.toolCalls
+        .filter((tc) => tc.childThreadId && !this.trackedThreadIds.has(tc.childThreadId))
+        .map((tc) => tc.childThreadId!);
+      for (const childId of childThreadIds) {
+        this.trackedThreadIds.add(childId);
+      }
+      if (childThreadIds.length > 0) {
+        await Promise.all(childThreadIds.map((id) => this.loadThreadSnapshot(id)));
+      }
     } catch (error) {
       console.warn('Failed to load thread snapshot', { threadId, error });
     }

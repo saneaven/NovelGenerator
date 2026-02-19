@@ -4,7 +4,6 @@
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--border-radius-lg);
   background: var(--color-surface-subtle);
-  overflow: hidden;
 }
 
 .sub-agent-peek-header {
@@ -139,7 +138,21 @@
 }
 
 .sub-agent-peek-dock__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.25s ease, opacity 0.2s ease;
+}
+
+.sub-agent-peek-dock__body--open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.sub-agent-peek-dock__body-inner {
   overflow-y: auto;
+  min-height: 0;
+  max-height: 400px;
 }
 
 /* Timeline container — body flows seamlessly from header within

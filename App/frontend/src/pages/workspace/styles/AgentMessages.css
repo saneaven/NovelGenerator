@@ -93,26 +93,11 @@
 }
 
 /* ===== Tool Group ===== */
-.agent-tool-call {
+.agent-tool-group {
     display: flex;
     flex-direction: column;
     position: relative;
     animation: messageSlideIn var(--transition-base) ease-out;
-}
-
-.agent-tool-call .message-actions {
-    padding: 0 var(--spacing-sm);
-    max-height: 0;
-    overflow: hidden;
-    opacity: 0;
-    transition: max-height 0.2s ease-out, opacity 0.2s ease-out, padding 0.2s ease-out;
-}
-
-.agent-tool-call:hover .message-actions {
-    max-height: 3rem;
-    opacity: 1;
-    padding-top: var(--spacing-xs);
-    padding-bottom: var(--spacing-sm);
 }
 
 /* ===== Message Base ===== */

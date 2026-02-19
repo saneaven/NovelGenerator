@@ -137,17 +137,17 @@ def keyword_search_project(
     for r in rows:
         results.append(
             {
-                "chunk_id": r.chunk_id,
-                "source_id": r.source_id,
+                "chunk_id": str(r.chunk_id),
+                "source_id": str(r.source_id),
                 "object_type": r.object_type,
-                "object_id": r.object_id,
+                "object_id": str(r.object_id),
                 "type_group": r.type_group,
                 "story_object_type": r.story_object_type,
                 "story_object_order": r.story_object_order,
                 "outline_order": r.outline_order,
                 "act_order": r.act_order,
                 "chapter_order": r.chapter_order,
-                "chapter_id": r.chapter_id,
+                "chapter_id": str(r.chapter_id) if r.chapter_id else None,
                 "field_path": r.field_path,
                 "chunk_index": r.chunk_index,
                 "text": r.text,
@@ -231,20 +231,20 @@ async def search_project(
             prev = best.get(chunk_id)
             if prev is None or (r.distance is not None and r.distance < prev.get("distance", 1e18)):
                 best[chunk_id] = {
-                    "chunk_id": r.chunk_id,
-                    "source_id": r.source_id,
+                    "chunk_id": str(r.chunk_id),
+                    "source_id": str(r.source_id),
                     "chunk_index": r.chunk_index,
                     "field_path": r.field_path,
                     "text": r.text,
                     "object_type": r.object_type,
-                    "object_id": r.object_id,
+                    "object_id": str(r.object_id),
                     "type_group": r.type_group,
                     "story_object_type": r.story_object_type,
                     "story_object_order": r.story_object_order,
                     "outline_order": r.outline_order,
                     "act_order": r.act_order,
                     "chapter_order": r.chapter_order,
-                    "chapter_id": r.chapter_id,
+                    "chapter_id": str(r.chapter_id) if r.chapter_id else None,
                     "distance": float(r.distance) if r.distance is not None else None,
                 }
 
@@ -294,20 +294,20 @@ async def search_project(
                 if r.chunk_id in best:
                     continue
                 best[r.chunk_id] = {
-                    "chunk_id": r.chunk_id,
-                    "source_id": r.source_id,
+                    "chunk_id": str(r.chunk_id),
+                    "source_id": str(r.source_id),
                     "chunk_index": r.chunk_index,
                     "field_path": r.field_path,
                     "text": r.text,
                     "object_type": r.object_type,
-                    "object_id": r.object_id,
+                    "object_id": str(r.object_id),
                     "type_group": r.type_group,
                     "story_object_type": r.story_object_type,
                     "story_object_order": r.story_object_order,
                     "outline_order": r.outline_order,
                     "act_order": r.act_order,
                     "chapter_order": r.chapter_order,
-                    "chapter_id": r.chapter_id,
+                    "chapter_id": str(r.chapter_id) if r.chapter_id else None,
                     "distance": None,
                 }
 

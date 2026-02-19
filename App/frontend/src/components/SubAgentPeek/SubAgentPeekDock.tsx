@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
 import { useThreadStore } from '../../store/threadStore';
 import type { ThreadInfo, ThreadToolCall } from '../../types/thread';
@@ -214,23 +213,15 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
         onSelect={(key) => setSelectedPeekRun(peekKey, key)}
       />
 
-      <AnimatePresence initial={false}>
-        {peekOpen && (
-          <motion.div
-            className="sub-agent-peek-dock__body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
-          >
-            <SubAgentPeekTimeline
-              childThreadId={selectedEntry.childThreadId}
-              projectId={projectId}
-              finalOutput={finalOutput}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div className={`sub-agent-peek-dock__body${peekOpen ? ' sub-agent-peek-dock__body--open' : ''}`}>
+        <div className="sub-agent-peek-dock__body-inner">
+          <SubAgentPeekTimeline
+            childThreadId={selectedEntry.childThreadId}
+            projectId={projectId}
+            finalOutput={finalOutput}
+          />
+        </div>
+      </div>
     </div>
   );
 };

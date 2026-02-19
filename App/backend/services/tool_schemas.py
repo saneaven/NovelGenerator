@@ -233,7 +233,7 @@ PATCH_OUTLINE_CHAPTER = ToolSchemaDef(
 READ_STORY_OBJECT = ToolSchemaDef(
     "read_story_object",
     "Read a story object.",
-    _obj_schema({"id": _ID, "type": {"type": "string", "enum": ["character", "location", "organization", "lorebook", "basic_info", "guidelines"]}}, ["id", "type"]),
+    _obj_schema({"id": _ID, "type": {"type": "string", "enum": ["character", "location", "organization", "lorebook", "guidelines"]}}, ["id", "type"]),
 )
 READ_OUTLINE = ToolSchemaDef(
     "read_outline",

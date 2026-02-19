@@ -13,6 +13,8 @@ import { SearchCallCard } from './cards/SearchCallCard';
 import { CallAgentCard } from './cards/CallAgentCard';
 import { PatchGroupCard } from './cards/PatchGroupCard';
 import { StickyDecisionBar } from './StickyDecisionBar';
+import { IconButton } from '../../components/IconButton';
+import { Trash } from '../../components/icons';
 import './functionCalls.css';
 
 export interface FunctionCallsThreadProps {
@@ -22,6 +24,7 @@ export interface FunctionCallsThreadProps {
   streamingProgress?: ToolCallProgress[];
   onCommitDecisions?: (decisions: ToolCallDecisionMap) => Promise<void>;
   onCommitDecisionsAndPause?: (decisions: ToolCallDecisionMap) => Promise<void>;
+  onDeleteCard?: (cardId: string) => void;
   projectId: string;
   isApplyDisabled?: boolean;
   applyDisabledReason?: string;
@@ -42,6 +45,7 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
   streamingProgress = [],
   onCommitDecisions,
   onCommitDecisionsAndPause,
+  onDeleteCard,
   projectId,
   isApplyDisabled = false,
   applyDisabledReason,
@@ -164,7 +168,60 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
     }
   }, [hasDecisionFlow, isApplyDisabled, unresolvedIds, setPatchDecisionsBulk, threadId, commitDecisions]);
 
+  const wrapCard = useCallback((element: React.ReactElement, operationId: string) => {
+    if (!onDeleteCard) return element;
+    return (
+      <div className="function-call-card-slot" key={operationId}>
+        {element}
+        <div className="function-call-card-slot__actions">
+          <div className="action-buttons">
+            <IconButton
+              icon={<Trash size="sm" />}
+              onClick={() => onDeleteCard(operationId)}
+              title="Delete"
+              variant="ghost"
+              size="sm"
+              className="icon-button--ghost-danger"
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }, [onDeleteCard]);
+
   if (operations.length === 0) return null;
+
+  const renderCard = (operation: OperationVM) => {
+    const showDecisionButtons = hasDecisionFlow && operation.decisionEligible;
+    const decisionDisabled = isApplyDisabled || committingById[operation.id] === true;
+    const cardProps = {
+      threadId,
+      projectId,
+      showDecisionButtons,
+      decisionDisabled,
+      onAccept: showDecisionButtons ? () => void handleSingleDecision(operation.id, 'accept') : undefined,
+      onReject: showDecisionButtons ? () => void handleSingleDecision(operation.id, 'reject') : undefined,
+    };
+
+    let card: React.ReactElement | null = null;
+
+    if (operation.category === 'read' && isObjectOperation(operation)) {
+      card = <ReadCallCard key={operation.id} operation={operation} {...cardProps} />;
+    } else if (operation.category === 'create' && isObjectOperation(operation)) {
+      card = <CreateCallCard key={operation.id} operation={operation} {...cardProps} />;
+    } else if (operation.category === 'replace' && isObjectOperation(operation)) {
+      card = <ReplaceCallCard key={operation.id} operation={operation} {...cardProps} />;
+    } else if (operation.category === 'delete' && isObjectOperation(operation)) {
+      card = <DeleteCallCard key={operation.id} operation={operation} {...cardProps} />;
+    } else if (operation.category === 'search') {
+      card = <SearchCallCard key={operation.id} operation={operation} {...cardProps} />;
+    } else if (operation.category === 'call_agent') {
+      card = <CallAgentCard key={operation.id} operation={operation} {...cardProps} />;
+    }
+
+    if (!card) return null;
+    return wrapCard(card, operation.id);
+  };
 
   return (
     <div className={`function-calls-thread function-calls-thread--${mode}`}>
@@ -172,102 +229,7 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
         <div className="function-calls-thread__warning">{applyDisabledReason}</div>
       )}
 
-      {nonPatchOperations.map((operation) => {
-        const showDecisionButtons = hasDecisionFlow && operation.decisionEligible;
-        const decisionDisabled = isApplyDisabled || committingById[operation.id] === true;
-
-        if (operation.category === 'read' && isObjectOperation(operation)) {
-          return (
-            <ReadCallCard
-              key={operation.id}
-              threadId={threadId}
-              projectId={projectId}
-              operation={operation}
-              showDecisionButtons={showDecisionButtons}
-              decisionDisabled={decisionDisabled}
-              onAccept={showDecisionButtons ? () => void handleSingleDecision(operation.id, 'accept') : undefined}
-              onReject={showDecisionButtons ? () => void handleSingleDecision(operation.id, 'reject') : undefined}
-            />
-          );
-        }
-
-        if (operation.category === 'create' && isObjectOperation(operation)) {
-          return (
-            <CreateCallCard
-              key={operation.id}
-              threadId={threadId}
-              projectId={projectId}
-              operation={operation}
-              showDecisionButtons={showDecisionButtons}
-              decisionDisabled={decisionDisabled}
-              onAccept={showDecisionButtons ? () => void handleSingleDecision(operation.id, 'accept') : undefined}
-              onReject={showDecisionButtons ? () => void handleSingleDecision(operation.id, 'reject') : undefined}
-            />
-          );
-        }
-
-        if (operation.category === 'replace' && isObjectOperation(operation)) {
-          return (
-            <ReplaceCallCard
-              key={operation.id}
-              threadId={threadId}
-              projectId={projectId}
-              operation={operation}
-              showDecisionButtons={showDecisionButtons}
-              decisionDisabled={decisionDisabled}
-              onAccept={showDecisionButtons ? () => void handleSingleDecision(operation.id, 'accept') : undefined}
-              onReject={showDecisionButtons ? () => void handleSingleDecision(operation.id, 'reject') : undefined}
-            />
-          );
-        }
-
-        if (operation.category === 'delete' && isObjectOperation(operation)) {
-          return (
-            <DeleteCallCard
-              key={operation.id}
-              threadId={threadId}
-              projectId={projectId}
-              operation={operation}
-              showDecisionButtons={showDecisionButtons}
-              decisionDisabled={decisionDisabled}
-              onAccept={showDecisionButtons ? () => void handleSingleDecision(operation.id, 'accept') : undefined}
-              onReject={showDecisionButtons ? () => void handleSingleDecision(operation.id, 'reject') : undefined}
-            />
-          );
-        }
-
-        if (operation.category === 'search') {
-          return (
-            <SearchCallCard
-              key={operation.id}
-              threadId={threadId}
-              projectId={projectId}
-              operation={operation}
-              showDecisionButtons={showDecisionButtons}
-              decisionDisabled={decisionDisabled}
-              onAccept={showDecisionButtons ? () => void handleSingleDecision(operation.id, 'accept') : undefined}
-              onReject={showDecisionButtons ? () => void handleSingleDecision(operation.id, 'reject') : undefined}
-            />
-          );
-        }
-
-        if (operation.category === 'call_agent') {
-          return (
-            <CallAgentCard
-              key={operation.id}
-              threadId={threadId}
-              projectId={projectId}
-              operation={operation}
-              showDecisionButtons={showDecisionButtons}
-              decisionDisabled={decisionDisabled}
-              onAccept={showDecisionButtons ? () => void handleSingleDecision(operation.id, 'accept') : undefined}
-              onReject={showDecisionButtons ? () => void handleSingleDecision(operation.id, 'reject') : undefined}
-            />
-          );
-        }
-
-        return null;
-      })}
+      {nonPatchOperations.map(renderCard)}
 
       {patchGroups.length > 0 && (
         <div className="function-calls-thread__patch-groups">
