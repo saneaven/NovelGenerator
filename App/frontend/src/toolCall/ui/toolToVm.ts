@@ -21,7 +21,7 @@ interface MapToolToVmParams {
   status?: string;
   reason?: string;
   failureType?: ToolCallFailureType;
-  result?: ApplicationResult;
+  result?: unknown;
   source: OperationSource;
 }
 
@@ -30,6 +30,20 @@ function coerceRecord(value: unknown): Record<string, unknown> {
     return {};
   }
   return value as Record<string, unknown>;
+}
+
+function toApplicationResult(raw: unknown): ApplicationResult | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  return {
+    success: Boolean(r.success ?? true),
+    message: typeof r.message === 'string' ? r.message : '',
+    error: typeof r.error === 'string' ? r.error : undefined,
+    objectId: typeof r.objectId === 'string' ? r.objectId : undefined,
+    objectType: typeof r.objectType === 'string' ? r.objectType : undefined,
+    data: r.data && typeof r.data === 'object' && !Array.isArray(r.data)
+      ? r.data as Record<string, unknown> : undefined,
+  };
 }
 
 function normalizeStoredStatus(status?: string): HeaderStatus {
@@ -217,8 +231,8 @@ export function mapToolToOperationVM(params: MapToolToVmParams): OperationVM {
     source,
     reason,
     failureType,
-    result,
   } = params;
+  const result = toApplicationResult(params.result);
 
   const args = coerceRecord(params.args);
   const category = getCategory(toolName);

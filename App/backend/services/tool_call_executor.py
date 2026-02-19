@@ -11,7 +11,7 @@ from ..models.db_models import RunToolCallModel, SubAgentDefinitionModel, Thread
 from ..services.credential_service import credential_service
 from ..services.object_service import object_service
 from ..services.patch_utils import apply_single_replacement
-from ..services.rag_search_service import keyword_search_project, search_project
+from ..services.rag_search_service import build_search_payload, keyword_search_project, search_project
 from ..services.settings_service import settings_service
 
 
@@ -46,6 +46,35 @@ def _read_object(db: Session, project_id: UUID, object_type: str, object_id: UUI
     if obj is None:
         raise ValueError(f"{object_type} not found: {object_id}")
     return obj
+
+
+def _extract_lang_data(obj: dict[str, Any], language: str) -> dict[str, Any]:
+    """Extract language-specific data from a serialized object."""
+    data = obj.get("data", {})
+    if isinstance(data.get(language), dict):
+        return data[language]
+    for v in data.values():
+        if isinstance(v, dict):
+            return v
+    return {}
+
+
+def _make_result(
+    message: str,
+    *,
+    object_id: str | None = None,
+    object_type: str | None = None,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build an ApplicationResult-shaped dict for tool call results."""
+    result: dict[str, Any] = {"success": True, "message": message}
+    if object_id is not None:
+        result["objectId"] = object_id
+    if object_type is not None:
+        result["objectType"] = object_type
+    if data is not None:
+        result["data"] = data
+    return result
 
 
 def _patch_object_data(current: dict[str, Any], args: dict[str, Any], *, is_manuscript: bool = False) -> dict[str, Any]:
@@ -101,7 +130,7 @@ async def _execute_object_tool(
             created_by=user_id,
         )
         new_objects.append(created)
-        return ({"success": True, "object": created}, new_objects, False)
+        return (_make_result(f"Created {object_type}", object_id=created["id"], object_type=object_type), new_objects, False)
 
     if tool_name == "create_outline":
         payload = {
@@ -119,7 +148,7 @@ async def _execute_object_tool(
             created_by=user_id,
         )
         new_objects.append(created)
-        return ({"success": True, "object": created}, new_objects, False)
+        return (_make_result("Created outline", object_id=created["id"], object_type="outline"), new_objects, False)
 
     if tool_name == "create_outline_act":
         payload = {
@@ -138,7 +167,7 @@ async def _execute_object_tool(
             created_by=user_id,
         )
         new_objects.append(created)
-        return ({"success": True, "object": created}, new_objects, False)
+        return (_make_result("Created act", object_id=created["id"], object_type="act"), new_objects, False)
 
     if tool_name == "create_outline_chapter":
         payload = {
@@ -157,28 +186,28 @@ async def _execute_object_tool(
             created_by=user_id,
         )
         new_objects.append(created)
-        return ({"success": True, "object": created}, new_objects, False)
+        return (_make_result("Created chapter", object_id=created["id"], object_type="chapter"), new_objects, False)
 
     if tool_name == "delete_story_object":
         object_id = _to_uuid(args.get("id"), "id")
         object_type = str(args.get("type") or "")
         object_service.delete_object(db, project_id=project_id, object_type=object_type, object_id=object_id, user_id=user_id)
-        return ({"success": True, "deleted": {"id": str(object_id), "type": object_type}}, new_objects, False)
+        return (_make_result(f"Deleted {object_type}", object_id=str(object_id), object_type=object_type), new_objects, False)
 
     if tool_name == "delete_outline":
         object_id = _to_uuid(args.get("id"), "id")
         object_service.delete_object(db, project_id=project_id, object_type="outline", object_id=object_id, user_id=user_id)
-        return ({"success": True, "deleted": {"id": str(object_id), "type": "outline"}}, new_objects, False)
+        return (_make_result("Deleted outline", object_id=str(object_id), object_type="outline"), new_objects, False)
 
     if tool_name == "delete_outline_act":
         object_id = _to_uuid(args.get("id"), "id")
         object_service.delete_object(db, project_id=project_id, object_type="act", object_id=object_id, user_id=user_id)
-        return ({"success": True, "deleted": {"id": str(object_id), "type": "act"}}, new_objects, False)
+        return (_make_result("Deleted act", object_id=str(object_id), object_type="act"), new_objects, False)
 
     if tool_name == "delete_outline_chapter":
         object_id = _to_uuid(args.get("id"), "id")
         object_service.delete_object(db, project_id=project_id, object_type="chapter", object_id=object_id, user_id=user_id)
-        return ({"success": True, "deleted": {"id": str(object_id), "type": "chapter"}}, new_objects, False)
+        return (_make_result("Deleted chapter", object_id=str(object_id), object_type="chapter"), new_objects, False)
 
     if tool_name.startswith("replace_") or tool_name.startswith("patch_"):
         if tool_name.endswith("basic_info"):
@@ -243,7 +272,7 @@ async def _execute_object_tool(
                 created_by=user_id,
             )
             new_objects.append(updated)
-            return ({"success": True, "object": updated}, new_objects, False)
+            return (_make_result(f"Replaced {object_type}", object_id=str(object_id), object_type=object_type), new_objects, False)
 
         # patch_
         next_data = _patch_object_data(lang_data, args, is_manuscript=(object_type == "manuscript"))
@@ -268,37 +297,52 @@ async def _execute_object_tool(
             created_by=user_id,
         )
         new_objects.append(updated)
-        return ({"success": True, "object": updated}, new_objects, False)
+        return (_make_result(f"Patched {object_type}", object_id=str(object_id), object_type=object_type), new_objects, False)
 
     if tool_name == "read_story_object":
         object_type = str(args.get("type") or "")
         object_id = _to_uuid(args.get("id"), "id")
         obj = _read_object(db, project_id, object_type, object_id, language)
-        return ({"success": True, "object": obj}, new_objects, False)
+        lang_data = _extract_lang_data(obj, language)
+        return (_make_result("Read successful", object_id=str(object_id), object_type=object_type, data={"object": lang_data}), new_objects, False)
 
     if tool_name == "read_outline":
         object_type = str(args.get("type") or "outline")
         object_id = _to_uuid(args.get("id"), "id")
         obj = _read_object(db, project_id, object_type, object_id, language)
-        return ({"success": True, "object": obj}, new_objects, False)
+        lang_data = _extract_lang_data(obj, language)
+        return (_make_result("Read successful", object_id=str(object_id), object_type=object_type, data={"object": lang_data}), new_objects, False)
 
     if tool_name == "read_manuscript":
         object_id = _to_uuid(args.get("id"), "id")
         obj = _read_object(db, project_id, "manuscript", object_id, language)
-        return ({"success": True, "object": obj}, new_objects, False)
+        lang_data = _extract_lang_data(obj, language)
+        return (_make_result("Read successful", object_id=str(object_id), object_type="manuscript", data={"object": lang_data}), new_objects, False)
 
     if tool_name == "keyword_search":
         keyword = str(args.get("keyword") or "").strip()
         page = int(args.get("page") or 1)
-        payload = keyword_search_project(
+        page_size = 20
+        raw = keyword_search_project(
             db,
             user_id=user_id,
             project_id=project_id,
             keyword=keyword,
             page=page,
-            page_size=20,
+            page_size=page_size,
         )
-        return ({"success": True, "search": payload}, new_objects, False)
+        total = raw.get("total", 0)
+        grouped = build_search_payload(
+            db,
+            search_type="keyword",
+            results=raw.get("results", []),
+            language=language,
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+            total=total,
+        )
+        return (_make_result(f"Found {total} results for '{keyword}'", data={"searchPayload": grouped}), new_objects, False)
 
     if tool_name == "rag_search":
         queries = args.get("queries")
@@ -308,7 +352,7 @@ async def _execute_object_tool(
         rag_cfg = settings_service.get_rag_settings(db, user_id)
         embed_cfg = settings_service.get_embedding_config(db, user_id, "ragSearch")
         provider_config = credential_service.get_provider_config(db, user_id, embed_cfg.provider)
-        payload = await search_project(
+        raw_results = await search_project(
             db,
             user_id=user_id,
             project_id=project_id,
@@ -317,7 +361,15 @@ async def _execute_object_tool(
             top_k_per_query=rag_cfg.top_k_per_query,
             neighbor_window=rag_cfg.neighbor_window,
         )
-        return ({"success": True, "search": payload}, new_objects, False)
+        grouped = build_search_payload(
+            db,
+            search_type="rag",
+            results=raw_results,
+            language=language,
+            queries=queries,
+            total=len(raw_results),
+        )
+        return (_make_result(f"Found {len(raw_results)} results", data={"searchPayload": grouped}), new_objects, False)
 
     raise ValueError(f"Unsupported tool: {tool_name}")
 
@@ -453,7 +505,7 @@ async def execute(
         if row is not None:
             row.status = "failed"
             row.reason = str(exc)
-            row.result = {"success": False, "error": str(exc)}
+            row.result = {"success": False, "message": str(exc), "error": str(exc)}
             row.updated_at = datetime.utcnow()
             db.commit()
             db.refresh(row)

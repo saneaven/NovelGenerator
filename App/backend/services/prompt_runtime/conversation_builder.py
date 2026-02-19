@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import xml.etree.ElementTree as ET
 from typing import Any
 from uuid import UUID
 
@@ -40,24 +41,103 @@ def _normalize_content_parts(entry: dict[str, Any]) -> list[dict[str, str]]:
     return out
 
 
+def _to_xml_string(root: ET.Element) -> str:
+    ET.indent(root, space="  ")
+    return ET.tostring(root, encoding="unicode")
+
+
+def _format_search_result_xml(result: dict[str, Any]) -> str:
+    data = result.get("data") or {}
+    payload = data.get("searchPayload") or {}
+
+    root = ET.Element("search_result", type=str(payload.get("type", "rag")), total=str(payload.get("total", 0)))
+    for group in payload.get("groups", []):
+        if not isinstance(group, dict):
+            continue
+        obj_el = ET.SubElement(root, "object",
+            type=str(group.get("objectType", "")),
+            id=str(group.get("objectId", "")),
+            displayName=str(group.get("displayName", "")),
+        )
+        for entry in group.get("entries", []):
+            if not isinstance(entry, dict):
+                continue
+            attrs: dict[str, str] = {}
+            field = entry.get("fieldPath")
+            if field:
+                attrs["field"] = str(field)
+            result_el = ET.SubElement(obj_el, "result", **attrs)
+            result_el.text = str(entry.get("text", ""))
+    return _to_xml_string(root)
+
+
+def _format_read_result_xml(result: dict[str, Any]) -> str:
+    root = ET.Element("read_result",
+        type=str(result.get("objectType", "")),
+        id=str(result.get("objectId", "")),
+    )
+    data = result.get("data") or {}
+    obj = data.get("object") or {}
+    for key in ("name", "title", "logline", "genre", "description", "content", "authorNote"):
+        value = obj.get(key)
+        if isinstance(value, str) and value.strip():
+            child = ET.SubElement(root, key)
+            child.text = value
+    return _to_xml_string(root)
+
+
+def _format_result_content(result: dict[str, Any], tool_name: str) -> str:
+    """Format an ApplicationResult dict as structured XML for LLM consumption."""
+    success = result.get("success", True)
+    if not success:
+        error = str(result.get("error") or result.get("message") or "Unknown error")
+        root = ET.Element("tool_result", status="failed")
+        root.text = error
+        return _to_xml_string(root)
+
+    # Search results
+    data = result.get("data") or {}
+    if data.get("searchPayload"):
+        return _format_search_result_xml(result)
+
+    # Read results
+    if data.get("object") and tool_name.startswith("read_"):
+        return _format_read_result_xml(result)
+
+    # CRUD confirmations
+    attrs: dict[str, str] = {"status": "success"}
+    ot = result.get("objectType")
+    oid = result.get("objectId")
+    if ot:
+        attrs["type"] = str(ot)
+    if oid:
+        attrs["id"] = str(oid)
+    root = ET.Element("tool_result", **attrs)
+    root.text = str(result.get("message", "OK"))
+    return _to_xml_string(root)
+
+
 def _tool_result_from_tool_call(tool: RunToolCallModel) -> dict[str, Any] | None:
-    content = ""
-    if tool.result is not None:
-        try:
-            content = json.dumps(tool.result, ensure_ascii=False)
-        except TypeError:
-            content = str(tool.result)
-    if not content:
+    result = tool.result
+    tool_name = str(tool.tool_name or "")
+
+    if isinstance(result, dict) and result:
+        content = _format_result_content(result, tool_name)
+    elif tool.reason or tool.status:
         content = str(tool.reason or tool.status or "")
+    else:
+        return None
+
     if not content.strip():
         return None
+
     # Provider tool-response matching expects the original LLM call ID.
     llm_tool_call_id = str(getattr(tool, "llm_call_id", "") or "").strip()
     if not llm_tool_call_id:
         llm_tool_call_id = str(tool.id)
     return {
         "tool_call_id": llm_tool_call_id,
-        "tool_name": str(tool.tool_name or "tool_result"),
+        "tool_name": tool_name or "tool_result",
         "content": content,
     }
 
