@@ -723,6 +723,10 @@ class RunModel(Base):
     parent_run_message_id = Column(UUID(as_uuid=True), nullable=True)
     parent_run_tool_call_id = Column(String(255), nullable=True)
 
+    # Resolved once during _assemble_create, read by _run_llm.
+    resolved_output_mode = Column(String(20), nullable=False, server_default="tool_call")
+    resolved_toolset = Column(String(40), nullable=False, server_default="agent_agent_mode")
+
     next_message_seq = Column(BigInteger, default=1, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
