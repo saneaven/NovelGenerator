@@ -9,8 +9,7 @@
       "Bash(npx tsc:*)",
       "Bash(tree:*)",
       "Bash(find:*)",
-      "mcp__context7__query-docs",
-      "Bash(git log:*)"
+      "mcp__context7__query-docs"
     ],
     "deny": [],
     "ask": []

@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
-from ..models.db_models import RunMessageModel, RunModel, RunToolCallModel, SubAgentDefinitionModel, Thread, UserSettings
+from ..models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thread, UserSettings
 from ..providers.contracts import (
     DeltaPayload,
     MetaPayload,
@@ -124,19 +124,14 @@ class RunPipeline:
         except Exception:
             return True
 
-    def _toolset_for_run(self, thread: Thread, run: RunModel, input_payload: dict | None = None) -> str:
+    def _toolset_for_run(self, thread: Thread, run: RunModel) -> str:
         if thread.thread_type == "journey":
             journey_kind = (thread.journey_kind or "").strip()
             if journey_kind == "translation":
                 return "translateObjects"
             if journey_kind == "imagePrompt":
-                return ""  # always raw_output, no tools needed
-            # aiEdit: read category directly from flat payload
-            if isinstance(input_payload, dict):
-                category = str(input_payload.get("category") or "").strip()
-                if category == "manuscript":
-                    return "manuscript"
-            return "storyObject"
+                return "storyObject"
+            return "agent_agent_mode"
 
         if thread.thread_type == "subAgent":
             return "agent_agent_mode"
@@ -457,7 +452,6 @@ class RunPipeline:
         tool_calls: list[Any],
         schema_by_name: dict[str, ToolSchemaDef],
         rag_search_enabled: bool,
-        allowed_tool_names: set[str] | None = None,
     ) -> list[RunToolCallModel]:
         out: list[RunToolCallModel] = []
 
@@ -510,7 +504,7 @@ class RunPipeline:
             validation_ctx = ValidationContext(
                 db=db,
                 run=run,
-                allowed_tool_names=allowed_tool_names,
+                allowed_tool_names=None,
                 schema_by_name=schema_by_name,
                 rag_search_enabled=rag_search_enabled,
                 sidecar=sidecar_client,
@@ -583,16 +577,7 @@ class RunPipeline:
             project_data=project_data,
             input_text=create_ctx.input_text,
             input_payload=create_ctx.input_payload,
-            native_output_mode=bool(getattr(settings, "native_output_mode", False)),
         )
-
-        # Store resolved output mode and toolset on RunModel (single source of truth).
-        run.resolved_output_mode = prompt_bundle.resolved_output_mode
-        # imagePrompt journeys are always raw_output regardless of payload.
-        if thread.thread_type == "journey" and (thread.journey_kind or "").strip() == "imagePrompt":
-            run.resolved_output_mode = "raw_output"
-        run.resolved_toolset = self._toolset_for_run(thread, run, create_ctx.input_payload)
-        db.flush()
 
         all_runs = (
             db.query(RunModel)
@@ -837,46 +822,18 @@ class RunPipeline:
         )
         assistant_message_ref_out[0] = assistant_message
 
-        resolved_mode = run.resolved_output_mode
-        use_native = resolved_mode == "native_tool_call"
-        use_raw = resolved_mode == "raw_output"
-
-        sub_agent_allowed: set[str] | None = None
-        if use_raw:
-            # Raw output: no tools at all.
-            tool_defs: list[ToolSchemaDef] = []
-            schema_by_name: dict[str, ToolSchemaDef] = {}
-            tools_wire = None
-        else:
-            tool_set_name = run.resolved_toolset
-            dynamic_call_tools = [] if thread.thread_type == "journey" else get_dynamic_call_tools(
-                db,
-                user_id=run.user_id,
-                preset_id=preset_id,
-            )
-            tool_defs = get_tools_for_set(
-                tool_set_name,
-                rag_search_enabled=bool(getattr(settings, "rag_search_enabled", False)),
-                dynamic_call_tools=dynamic_call_tools,
-            )
-
-            # Sub-agent tool restrictions.
-            if thread.thread_type == "subAgent" and thread.owner_id:
-                defn = db.query(SubAgentDefinitionModel).filter(
-                    SubAgentDefinitionModel.id == thread.owner_id
-                ).first()
-                if defn and isinstance(defn.allowed_tool_names, list):
-                    sub_agent_allowed = set(defn.allowed_tool_names)
-                    if isinstance(defn.allowed_sub_agent_ids, list) and defn.allowed_sub_agent_ids:
-                        child_defs = db.query(SubAgentDefinitionModel).filter(
-                            SubAgentDefinitionModel.id.in_(defn.allowed_sub_agent_ids)
-                        ).all()
-                        for cd in child_defs:
-                            sub_agent_allowed.add(f"call_{cd.agent_name}")
-                    tool_defs = [d for d in tool_defs if d.name in sub_agent_allowed]
-
-            schema_by_name = {d.name: d for d in tool_defs}
-            tools_wire = None if use_native else self._provider_tools(tool_defs)
+        tool_set_name = self._toolset_for_run(thread, run)
+        dynamic_call_tools = [] if thread.thread_type == "journey" else get_dynamic_call_tools(
+            db,
+            user_id=run.user_id,
+            preset_id=preset_id,
+        )
+        tool_defs = get_tools_for_set(
+            tool_set_name,
+            rag_search_enabled=bool(getattr(settings, "rag_search_enabled", False)),
+            dynamic_call_tools=dynamic_call_tools,
+        )
+        schema_by_name = {d.name: d for d in tool_defs}
 
         provider_config = credential_service.get_provider_config(db, run.user_id, task_config.provider)
         if task_config.provider == "custom":
@@ -888,6 +845,9 @@ class RunPipeline:
         provider = ProviderRegistry.get_provider(task_config.provider, provider_config)
         if not provider.validate_config():
             raise RuntimeError(f"Invalid provider configuration: {task_config.provider}")
+
+        native_output_mode = bool(getattr(settings, "native_output_mode", False))
+        tools_wire = None if native_output_mode else self._provider_tools(tool_defs)
 
         messages = [{"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]}] + conversation
 
@@ -905,7 +865,7 @@ class RunPipeline:
                 "tool_choice": "auto" if tools_wire else None,
                 "thinking_config": task_config.advanced.get("thinking_config") if isinstance(task_config.advanced, dict) else None,
                 "thinking_mode": task_config.advanced.get("thinking_mode") if isinstance(task_config.advanced, dict) else "off",
-                "native_tool_call": use_native,
+                "native_tool_call": native_output_mode,
                 "messages": messages,
                 "tools": tools_wire,
             },
@@ -924,7 +884,7 @@ class RunPipeline:
             thinking_format=task_config.advanced.get("thinking_format") if isinstance(task_config.advanced, dict) else None,
             request_format=task_config.advanced.get("request_format") if isinstance(task_config.advanced, dict) else None,
             retry_config=settings_service.get_retry_config(db, run.user_id),
-            native_tool_call=use_native,
+            native_tool_call=native_output_mode,
         )
 
         assembler = FallbackSnapshotAssembler(provider=task_config.provider, model=task_config.model)
@@ -1026,7 +986,7 @@ class RunPipeline:
         else:
             final_snapshot = assembler.finalize_or_raise()
 
-        if use_native:
+        if native_output_mode:
             final_snapshot = extract_native_tool_calls_from_snapshot(final_snapshot)
 
         db.refresh(run)
@@ -1054,7 +1014,6 @@ class RunPipeline:
             tool_calls=final_snapshot.tool_calls,
             schema_by_name=schema_by_name,
             rag_search_enabled=bool(getattr(settings, "rag_search_enabled", False)),
-            allowed_tool_names=sub_agent_allowed,
         )
 
         if any(tc.status == "pending" for tc in persisted_tools):
