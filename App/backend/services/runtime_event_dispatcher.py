@@ -50,6 +50,30 @@ class RuntimeEventDispatcher:
         await self._bus.publish(f"project:{project_id_str}", event)
         return event
 
+    async def emit_project_event(
+        self,
+        *,
+        project_id: UUID | str,
+        event_name: str,
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
+        project_id_str = _to_str(project_id)
+        if not project_id_str:
+            raise ValueError("project_id is required")
+
+        payload = {
+            **data,
+            "project_id": project_id_str,
+            "ts": datetime.now(timezone.utc).isoformat(),
+        }
+        event = {
+            "event": event_name,
+            "data": payload,
+        }
+
+        await self._bus.publish(f"project:{project_id_str}", event)
+        return event
+
 
 runtime_event_dispatcher = RuntimeEventDispatcher(run_event_bus)
 

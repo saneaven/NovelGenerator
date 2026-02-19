@@ -231,7 +231,6 @@ async def _apply_tool_decision(
             if tool_call.status in {"rejected", "applied", "failed"}:
                 return {
                     "tool_call": _serialize_tool_call(tool_call),
-                    "new_objects": None,
                 }
             if tool_call.status not in {"pending", "validating", "streaming"}:
                 raise HTTPException(status_code=409, detail=f"Cannot reject tool call in status={tool_call.status}")
@@ -249,7 +248,6 @@ async def _apply_tool_decision(
 
             return {
                 "tool_call": _serialize_tool_call(tool_call),
-                "new_objects": None,
             }
 
         if decision != "accept":
@@ -258,7 +256,6 @@ async def _apply_tool_decision(
         if tool_call.status in {"applied", "failed", "processing"}:
             return {
                 "tool_call": _serialize_tool_call(tool_call),
-                "new_objects": None,
             }
         if tool_call.status not in {"pending", "validating", "streaming"}:
             raise HTTPException(status_code=409, detail=f"Cannot accept tool call in status={tool_call.status}")
@@ -309,7 +306,6 @@ async def _apply_tool_decision(
 
         result_payload = {
             "tool_call": _serialize_tool_call(executed_row),
-            "new_objects": execution.get("new_objects"),
         }
     finally:
         db2.close()

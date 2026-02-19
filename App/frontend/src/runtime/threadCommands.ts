@@ -1,6 +1,5 @@
 import { threadService, type ChatRequest, type ToolCallDecisionResponse } from '../api/threadService';
 import { useThreadStore } from '../store/threadStore';
-import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { nowIso, toThreadType, type ThreadInfo, type ThreadStatus } from '../types/thread';
 
 interface ThreadContextParams {
@@ -99,14 +98,6 @@ function refreshUnresolvedCount(threadId: string): void {
 function applyToolDecisionResponse(response: ToolCallDecisionResponse): void {
   const store = useThreadStore.getState();
   store.upsertToolCall(response.toolCall);
-
-  const toolResult = response.toolCall.result as Record<string, unknown> | null | undefined;
-  const deletedId = toolResult && typeof toolResult.deleted === 'object'
-    ? String((toolResult.deleted as Record<string, unknown>).id ?? '')
-    : '';
-  const deletedIds = deletedId ? [deletedId] : [];
-  const objects = Array.isArray(response.newObjects) ? response.newObjects : [];
-  useUnifiedObjectStore.getState().applyAffectedObjects(objects as any[], deletedIds);
 
   refreshUnresolvedCount(response.toolCall.threadId);
 }

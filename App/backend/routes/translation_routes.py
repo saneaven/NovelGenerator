@@ -18,7 +18,10 @@ from ..database import get_db
 from ..auth import get_current_user
 from ..models.db_models import User, Project
 from ..models.translation_models import ObjectVersion
+from ..services.object_change_events import queue_object_change
+from ..services.object_service import object_service
 from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
+from .unified_object_routes import get_object_or_404, resolve_project_id_for_object
 
 LOREBOOK_TYPE = normalize_object_type('lorebook')
 
@@ -266,8 +269,6 @@ async def batch_delete_translations(
     Delete translations for a specific language across multiple objects.
     WARNING: This cannot be undone!
     """
-    from ..routes.unified_object_routes import get_object_or_404
-
     object_type = normalize_object_type(object_type)
     deleted_count = 0
 
@@ -294,6 +295,19 @@ async def batch_delete_translations(
             next_data = dict(version_data)
             del next_data[language]
             latest_version.data = next_data
+            project_id = resolve_project_id_for_object(
+                db,
+                object_type=object_type,
+                object_id=object_id,
+                user_id=current_user.id,
+            )
+            queue_object_change(
+                db,
+                project_id=project_id,
+                object_type=object_type,
+                object_id=object_id,
+                action="updated",
+            )
             deleted_count += 1
 
         except Exception as e:
@@ -319,49 +333,57 @@ async def add_translations(
     All translations are atomic - fails immediately if any translation fails.
     Returns updated objects for immediate frontend store update (matches PUT pattern).
     """
-    from ..routes.unified_object_routes import (
-        create_or_update_version,
-        get_object_or_404,
-        get_object
-    )
-
     translated_count = 0
-    translated_objects = []  # Track objects to return after commit
+    translated_objects: list[tuple[str, UUID, UUID]] = []
+    seen_targets: set[tuple[str, UUID, UUID]] = set()
 
     try:
         for translation_data in request.translations:
+            if translation_data.target_version_number is not None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="target_version_number is not supported for this endpoint",
+                )
+
             object_type = normalize_object_type(translation_data.object_type)
             object_id = UUID(translation_data.object_id)
+            project_id = resolve_project_id_for_object(
+                db,
+                object_type=object_type,
+                object_id=object_id,
+                user_id=current_user.id,
+            )
 
-            # Verify object exists
-            get_object_or_404(db, object_type, object_id, user_id=current_user.id)
-
-            # Create or update version with new language (in-place, don't create new version)
-            # If target_version_number is provided, update that specific version instead of latest
-            create_or_update_version(
-                db=db,
+            object_service.add_translation(
+                db,
+                project_id=project_id,
                 object_type=object_type,
                 object_id=object_id,
                 language=translation_data.language,
-                new_data=translation_data.data,
+                data=translation_data.data,
                 user_request=request.user_request,
-                user_id=current_user.id,
-                create_new=False,
-                target_version_number=translation_data.target_version_number
+                created_by=current_user.id,
             )
 
-            # Track for returning after commit
-            translated_objects.append((object_type, object_id))
+            key = (object_type, object_id, project_id)
+            if key not in seen_targets:
+                seen_targets.add(key)
+                translated_objects.append(key)
             translated_count += 1
 
-        # Single commit at the end (atomic operation)
         db.commit()
 
-        # Fetch updated objects to return (matches PUT pattern for immediate store update)
         updated_objects = []
-        for obj_type, obj_id in translated_objects:
-            obj = await get_object(obj_type, obj_id, None, db, current_user)
-            updated_objects.append(obj)
+        for obj_type, obj_id, project_id in translated_objects:
+            obj = object_service.get_object(
+                db,
+                object_type=obj_type,
+                object_id=obj_id,
+                project_id=project_id,
+                language=None,
+            )
+            if obj is not None:
+                updated_objects.append(obj)
 
         return {
             "success": True,
@@ -373,8 +395,13 @@ async def add_translations(
     except HTTPException:
         db.rollback()
         raise
+    except ValueError as exc:
+        db.rollback()
+        message = str(exc)
+        if "not found" in message.lower():
+            raise HTTPException(status_code=404, detail=message)
+        raise HTTPException(status_code=400, detail=message)
     except Exception as e:
-        # Rollback on any error
         db.rollback()
         raise HTTPException(
             status_code=500,
@@ -392,8 +419,6 @@ async def get_object_languages(
     """
     Get list of available languages for a specific object.
     """
-    from ..routes.unified_object_routes import get_object_or_404
-
     object_type = normalize_object_type(object_type)
     get_object_or_404(db, object_type, object_id, user_id=current_user.id)
 
@@ -424,10 +449,14 @@ async def delete_translation(
     Delete a specific language translation for an object.
     WARNING: Cannot delete if it's the only language!
     """
-    from ..routes.unified_object_routes import get_object_or_404
-
     object_type = normalize_object_type(object_type)
     get_object_or_404(db, object_type, object_id, user_id=current_user.id)
+    project_id = resolve_project_id_for_object(
+        db,
+        object_type=object_type,
+        object_id=object_id,
+        user_id=current_user.id,
+    )
 
     latest_version = db.query(ObjectVersion).filter(
         ObjectVersion.object_type == object_type,
@@ -453,6 +482,13 @@ async def delete_translation(
     next_data = dict(version_data)
     del next_data[language]
     latest_version.data = next_data
+    queue_object_change(
+        db,
+        project_id=project_id,
+        object_type=object_type,
+        object_id=object_id,
+        action="updated",
+    )
 
     db.commit()
 

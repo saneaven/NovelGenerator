@@ -116,7 +116,6 @@ class ProjectThreadRuntimeResponse(BaseModel):
 
 class ToolCallDecisionResponse(BaseModel):
     tool_call: ToolCallResponse
-    new_objects: list[dict[str, Any]] | None = None
 
 
 class ToolCallBatchDecisionResponse(BaseModel):

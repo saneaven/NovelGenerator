@@ -54,7 +54,6 @@ export interface ThreadMessagesResponse {
 
 export interface ToolCallDecisionResponse {
   toolCall: ThreadToolCall;
-  newObjects: Array<Record<string, unknown>> | null;
 }
 
 export interface ToolCallBatchDecisionResponse {
@@ -153,7 +152,6 @@ function toToolCall(raw: Record<string, unknown>): ThreadToolCall {
 function toDecisionResponse(raw: Record<string, unknown>): ToolCallDecisionResponse {
   return {
     toolCall: toToolCall((raw.tool_call ?? {}) as Record<string, unknown>),
-    newObjects: (raw.new_objects ?? null) as Array<Record<string, unknown>> | null,
   };
 }
 

@@ -1,5 +1,6 @@
 import { API_BASE_URL, apiClient } from './client';
 import type { RunStatus, ToolCallStatus } from '../types/thread';
+import type { ObjectType } from '../types/unifiedObject';
 
 interface RuntimeEventBase {
   project_id: string;
@@ -9,7 +10,25 @@ interface RuntimeEventBase {
   thread_type?: string;
 }
 
-export type ThreadSSEEvent =
+export interface ObjectChangedChange {
+  action: 'created' | 'updated' | 'deleted';
+  object_type: ObjectType;
+  object_id: string;
+}
+
+export interface ObjectChangedEventData {
+  project_id: string;
+  ts: string;
+  batch_id: string;
+  changes: ObjectChangedChange[];
+}
+
+export type ObjectChangedEvent = {
+  event: 'object:changed';
+  data: ObjectChangedEventData;
+};
+
+export type ThreadRuntimeEvent =
   | { event: 'run:status'; data: RuntimeEventBase & { status: RunStatus; error?: string | null } }
   | { event: 'message:user'; data: RuntimeEventBase & { message_id: string; role: 'user'; seq: number; seq_in_thread: number; data: Record<string, unknown> } }
   | { event: 'message:start'; data: RuntimeEventBase & { message_id: string; role: 'assistant'; seq: number; seq_in_thread: number } }
@@ -39,11 +58,13 @@ export type ThreadSSEEvent =
     }}
   | { event: string; data: Record<string, unknown> };
 
+export type ProjectSSEEvent = ObjectChangedEvent | ThreadRuntimeEvent;
+
 interface ConnectOptions {
   onReconnect?: () => Promise<void> | void;
 }
 
-function parseSseFrame(frame: string): ThreadSSEEvent | null {
+function parseSseFrame(frame: string): ProjectSSEEvent | null {
   const lines = frame
     .split('\n')
     .map((line) => line.trimEnd())
@@ -67,7 +88,7 @@ function parseSseFrame(frame: string): ThreadSSEEvent | null {
   const payload = dataLines.join('\n');
   try {
     const parsed = JSON.parse(payload) as Record<string, unknown>;
-    return { event: eventName, data: parsed } as ThreadSSEEvent;
+    return { event: eventName, data: parsed } as ProjectSSEEvent;
   } catch (error) {
     console.warn('Discarding malformed SSE payload', { eventName, payload, error });
     return null;
@@ -82,7 +103,7 @@ function reconnectDelayMs(attempt: number): number {
 async function openAndReadStream(
   url: string,
   signal: AbortSignal,
-  onEvent: (event: ThreadSSEEvent) => void,
+  onEvent: (event: ProjectSSEEvent) => void,
 ): Promise<void> {
   const token = apiClient.getAuthToken();
   const headers: HeadersInit = {
@@ -127,7 +148,7 @@ async function openAndReadStream(
 
 export async function connectProjectStream(
   projectId: string,
-  onEvent: (event: ThreadSSEEvent) => void,
+  onEvent: (event: ProjectSSEEvent) => void,
   signal: AbortSignal,
   options?: ConnectOptions,
 ): Promise<void> {

@@ -32,6 +32,7 @@ from .database import get_db
 from .models.db_models import User
 from .services.credential_service import CredentialServiceError, credential_service
 from .services.embedding_models_service import list_embedding_models
+from .services.object_change_events import register_object_change_event_hooks
 
 # Ensure correct Content-Type for AVIF assets when served via StaticFiles.
 mimetypes.add_type("image/avif", ".avif")
@@ -89,6 +90,9 @@ app = FastAPI(
     version="2.0.0",
     description="Multi-provider LLM API with Database-backed Story Management for Novel Buds"
 )
+
+# Register SQLAlchemy session hooks for object:changed SSE batching.
+register_object_change_event_hooks()
 
 # Include all database API routers
 app.include_router(auth_router)

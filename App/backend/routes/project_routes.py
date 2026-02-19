@@ -26,6 +26,7 @@ from ..services.deletion_service import (
     delete_project_assets_with_files,
     delete_rag_sources_for_project,
 )
+from ..services.object_change_events import queue_object_change
 from ..services.storage_quota_service import StorageQuotaExceededError
 
 
@@ -147,6 +148,20 @@ async def create_project(
     )
     db.add(guidelines_version)
 
+    queue_object_change(
+        db,
+        project_id=project_id,
+        object_type="basic_info",
+        object_id=basic_info_id,
+        action="created",
+    )
+    queue_object_change(
+        db,
+        project_id=project_id,
+        object_type="guidelines",
+        object_id=guidelines_id,
+        action="created",
+    )
 
     db.commit()
     db.refresh(new_project)

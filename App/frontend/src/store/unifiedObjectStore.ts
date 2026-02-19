@@ -93,8 +93,11 @@ interface UnifiedObjectStore {
     objectIds: string[]
   ) => Promise<void>;
 
-  // Bulk sync from tool call results
-  applyAffectedObjects: (objects: UnifiedObject[], deletedIds: string[]) => void;
+  // Bulk sync from SSE object change events
+  applyObjectChanges: (params: {
+    upserts?: UnifiedObject[];
+    deletes?: string[];
+  }) => void;
 }
 
 // ============================================================================
@@ -513,17 +516,30 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     }
   },
 
-  applyAffectedObjects: (objects: UnifiedObject[], deletedIds: string[]) => {
-    if (!objects.length && !deletedIds.length) return;
-    set((s) => {
-      const next = { ...s.objects };
-      for (const obj of objects) {
-        next[obj.id] = obj;
+  applyObjectChanges: ({ upserts = [], deletes = [] }) => {
+    if (!upserts.length && !deletes.length) return;
+    set((state) => {
+      const nextObjects = { ...state.objects };
+      const nextLoading = { ...state.loading };
+      const nextErrors = { ...state.errors };
+      const nextTranslating = { ...state.translating };
+
+      for (const obj of upserts) {
+        nextObjects[obj.id] = obj;
       }
-      for (const id of deletedIds) {
-        delete next[id];
+      for (const id of deletes) {
+        delete nextObjects[id];
+        delete nextLoading[id];
+        delete nextErrors[id];
+        delete nextTranslating[id];
       }
-      return { objects: next };
+
+      return {
+        objects: nextObjects,
+        loading: nextLoading,
+        errors: nextErrors,
+        translating: nextTranslating,
+      };
     });
   },
   });

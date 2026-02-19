@@ -40,6 +40,7 @@ from ..schemas.assets import (
 from ..services.storage_service import storage_service
 from ..services.deletion_service import delete_assets_with_files
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
+from ..services.object_change_events import queue_object_change
 from ..services.storage_quota_service import StorageQuotaExceededError, enforce_user_asset_quota
 from ..services.credential_service import CredentialServiceError, credential_service
 from ..image_providers.registry import ImageProviderRegistry
@@ -60,6 +61,41 @@ OBJECT_BINDING_MODELS = {
     "location": Location,
     "lorebook": LorebookEntry,
 }
+
+
+def _collect_story_object_refs_for_asset_ids(
+    db: Session,
+    *,
+    asset_ids: list[UUID],
+) -> list[tuple[str, UUID]]:
+    if not asset_ids:
+        return []
+    rows = (
+        db.query(StoryObjectAsset.object_type, StoryObjectAsset.object_id)
+        .filter(StoryObjectAsset.asset_id.in_(asset_ids))
+        .all()
+    )
+    out: list[tuple[str, UUID]] = []
+    for object_type, object_id in rows:
+        if isinstance(object_type, str) and isinstance(object_id, UUID):
+            out.append((object_type, object_id))
+    return out
+
+
+def _queue_story_object_updates(
+    db: Session,
+    *,
+    project_id: UUID,
+    refs: list[tuple[str, UUID]],
+) -> None:
+    for object_type, object_id in set(refs):
+        queue_object_change(
+            db,
+            project_id=project_id,
+            object_type=object_type,
+            object_id=object_id,
+            action="updated",
+        )
 
 
 def _jsonb_to_styled_prompt(data: Optional[Dict[str, Any]]) -> Optional[StyledPrompt]:
@@ -401,6 +437,13 @@ async def generate_image(
                 display_order=max_order
             )
             db.add(link)
+            queue_object_change(
+                db,
+                project_id=project_id,
+                object_type=normalized_object_type,
+                object_id=object_id,
+                action="updated",
+            )
 
         try:
             db.commit()
@@ -676,6 +719,13 @@ async def upload_asset(
                 display_order=max_order
             )
             db.add(link)
+            queue_object_change(
+                db,
+                project_id=project_id,
+                object_type=normalized_object_type,
+                object_id=object_id,
+                action="updated",
+            )
 
         db.commit()
         db.refresh(asset)
@@ -750,8 +800,11 @@ async def delete_asset(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
+    affected_refs = _collect_story_object_refs_for_asset_ids(db, asset_ids=[asset_id])
+
     # Delete from storage + DB, and scrub stale generation_reference_images pointers.
     delete_assets_with_files(db, assets=[asset], scrub_references_in_project_id=project_id)
+    _queue_story_object_updates(db, project_id=project_id, refs=affected_refs)
     db.commit()
 
     return {"success": True}
@@ -1010,6 +1063,10 @@ async def execute_image_cleanup(
             )
 
     to_delete: List[Asset] = [assets_by_id[a_id] for a_id in delete_ids]
+    affected_story_object_refs = _collect_story_object_refs_for_asset_ids(
+        db,
+        asset_ids=[asset.id for asset in to_delete],
+    )
 
     scrubbed_entries = 0
     deleted: List[str] = []
@@ -1049,6 +1106,7 @@ async def execute_image_cleanup(
         db.delete(asset)
         deleted.append(str(asset.id))
 
+    _queue_story_object_updates(db, project_id=project_id, refs=affected_story_object_refs)
     db.commit()
 
     for file_path in file_deletions:
@@ -1218,6 +1276,13 @@ async def set_main_asset(
     ).update({"is_main": False})
 
     link.is_main = True
+    queue_object_change(
+        db,
+        project_id=project_id,
+        object_type=object_type,
+        object_id=object_id,
+        action="updated",
+    )
     db.commit()
     db.refresh(link)
 

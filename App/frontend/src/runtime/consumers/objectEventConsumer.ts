@@ -1,0 +1,149 @@
+import { unifiedObjectService } from '../../api/unifiedObjectService';
+import type { ObjectChangedEvent } from '../../api/sseClient';
+import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import type { ObjectType, UnifiedObject } from '../../types/unifiedObject';
+
+const FLUSH_DEBOUNCE_MS = 50;
+
+const OBJECT_TYPE_SET: ReadonlySet<ObjectType> = new Set([
+  'basic_info',
+  'guidelines',
+  'character',
+  'organization',
+  'location',
+  'lorebook',
+  'outline',
+  'act',
+  'chapter',
+  'manuscript',
+]);
+
+type PendingUpsert = {
+  objectType: ObjectType;
+  objectId: string;
+  revision: number;
+};
+
+export class ObjectEventConsumer {
+  private readonly projectId: string;
+  private readonly pendingDeleteIds = new Set<string>();
+  private readonly pendingDeleteKeys = new Set<string>();
+  private readonly pendingUpserts = new Map<string, PendingUpsert>();
+  private readonly revisionByKey = new Map<string, number>();
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private disposed = false;
+
+  constructor(projectId: string) {
+    this.projectId = projectId;
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.pendingDeleteIds.clear();
+    this.pendingDeleteKeys.clear();
+    this.pendingUpserts.clear();
+    this.revisionByKey.clear();
+  }
+
+  consume(event: ObjectChangedEvent): void {
+    if (this.disposed) return;
+    const payload = event.data;
+    if (!payload || String(payload.project_id ?? '') !== this.projectId) return;
+    if (!Array.isArray(payload.changes) || payload.changes.length === 0) return;
+
+    for (const change of payload.changes) {
+      const action = String(change?.action ?? '').toLowerCase();
+      const objectId = String(change?.object_id ?? '');
+      const objectTypeRaw = change?.object_type;
+      if (!objectId || !this.isObjectType(objectTypeRaw)) continue;
+
+      const objectType = objectTypeRaw;
+      const key = this.objectKey(objectType, objectId);
+      const revision = this.bumpRevision(key);
+
+      if (action === 'deleted') {
+        this.pendingDeleteIds.add(objectId);
+        this.pendingDeleteKeys.add(key);
+        this.pendingUpserts.delete(key);
+        continue;
+      }
+
+      if (action === 'created' || action === 'updated') {
+        if (this.pendingDeleteKeys.has(key)) continue;
+        this.pendingUpserts.set(key, { objectType, objectId, revision });
+      }
+    }
+
+    this.scheduleFlush();
+  }
+
+  private objectKey(objectType: ObjectType, objectId: string): string {
+    return `${objectType}:${objectId}`;
+  }
+
+  private isObjectType(value: unknown): value is ObjectType {
+    return typeof value === 'string' && OBJECT_TYPE_SET.has(value as ObjectType);
+  }
+
+  private bumpRevision(key: string): number {
+    const next = (this.revisionByKey.get(key) ?? 0) + 1;
+    this.revisionByKey.set(key, next);
+    return next;
+  }
+
+  private scheduleFlush(): void {
+    if (this.flushTimer !== null) return;
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      void this.flush();
+    }, FLUSH_DEBOUNCE_MS);
+  }
+
+  private async flush(): Promise<void> {
+    if (this.disposed) return;
+    const deletes = [...this.pendingDeleteIds];
+    const deleteKeys = new Set(this.pendingDeleteKeys);
+    const upserts = [...this.pendingUpserts.values()];
+
+    this.pendingDeleteIds.clear();
+    this.pendingDeleteKeys.clear();
+    this.pendingUpserts.clear();
+
+    if (!deletes.length && !upserts.length) return;
+
+    if (deletes.length > 0) {
+      useUnifiedObjectStore.getState().applyObjectChanges({ deletes });
+    }
+    if (upserts.length === 0) return;
+
+    const fetched: UnifiedObject[] = [];
+    await Promise.all(
+      upserts.map(async (item) => {
+        const key = this.objectKey(item.objectType, item.objectId);
+        try {
+          const object = await unifiedObjectService.getObject(item.objectType, item.objectId);
+          const latestRevision = this.revisionByKey.get(key) ?? 0;
+          if (latestRevision !== item.revision) return;
+          if (deleteKeys.has(key) || this.pendingDeleteKeys.has(key)) return;
+          fetched.push(object);
+        } catch (error) {
+          console.warn('Failed to fetch changed object from SSE event', {
+            projectId: this.projectId,
+            objectType: item.objectType,
+            objectId: item.objectId,
+            error,
+          });
+        }
+      }),
+    );
+
+    if (fetched.length > 0) {
+      useUnifiedObjectStore.getState().applyObjectChanges({ upserts: fetched });
+    }
+  }
+}
+

@@ -562,6 +562,54 @@ Provider credentials are resolved server-side from `server_credentials`.
 
 ---
 
+## Thread Runtime SSE
+
+### Project Event Stream
+
+```http
+GET /api/v1/projects/{project_id}/stream
+```
+
+Single SSE stream for both thread runtime events and object synchronization events.
+
+### Object Change Event
+
+Event name: `object:changed`
+
+```json
+{
+  "project_id": "uuid",
+  "ts": "2026-02-19T12:34:56.000000+00:00",
+  "batch_id": "uuid",
+  "changes": [
+    { "action": "created", "object_type": "character", "object_id": "uuid" },
+    { "action": "updated", "object_type": "chapter", "object_id": "uuid" },
+    { "action": "deleted", "object_type": "manuscript", "object_id": "uuid" }
+  ]
+}
+```
+
+- `action` is one of `created | updated | deleted`
+- `object_type` uses external object type names (same strings as frontend `ObjectType`)
+
+### Tool Decision Response
+
+`PATCH /api/v1/threads/{thread_id}/tool-calls/{tool_call_id}` and batch decision APIs return only:
+
+```json
+{
+  "tool_call": {
+    "id": "uuid",
+    "status": "applied",
+    "result": { "success": true, "message": "..." }
+  }
+}
+```
+
+`new_objects` is no longer part of the response contract.
+
+---
+
 ## Error Responses
 
 ### 400 Bad Request

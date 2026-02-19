@@ -43,6 +43,7 @@ from ..services.deletion_service import (
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.rag_index_service import index_object
 from ..utils.object_type_aliases import externalize_object_type, normalize_object_type
+from .object_change_events import queue_object_change
 from .credential_service import CredentialServiceError, credential_service
 from .settings_service import settings_service
 
@@ -511,6 +512,7 @@ class ObjectService:
 
         model_class = _model_for_object_type(t)
         object_id = uuid4()
+        manuscript_id: UUID | None = None
         md = metadata or {}
 
         if t in {"character", "organization", "location", LOREBOOK_TYPE}:
@@ -667,6 +669,21 @@ class ObjectService:
             object_type=t,
             object_id=object_id,
         )
+        queue_object_change(
+            db,
+            project_id=project_id,
+            object_type=t,
+            object_id=object_id,
+            action="created",
+        )
+        if manuscript_id is not None:
+            queue_object_change(
+                db,
+                project_id=project_id,
+                object_type="manuscript",
+                object_id=manuscript_id,
+                action="created",
+            )
 
         return _serialize_object(db, t, core_obj, language)
 
@@ -749,6 +766,13 @@ class ObjectService:
             object_type=t,
             object_id=object_id,
         )
+        queue_object_change(
+            db,
+            project_id=project_id,
+            object_type=t,
+            object_id=object_id,
+            action="updated",
+        )
 
         return _serialize_object(db, t, obj)
 
@@ -795,6 +819,13 @@ class ObjectService:
             project_id=project_id,
             object_type=t,
             object_id=object_id,
+        )
+        queue_object_change(
+            db,
+            project_id=project_id,
+            object_type=t,
+            object_id=object_id,
+            action="updated",
         )
 
         refreshed_latest = _latest_version(db, t, object_id)
@@ -890,6 +921,13 @@ class ObjectService:
             object_type=t,
             object_id=object_id,
         )
+        queue_object_change(
+            db,
+            project_id=project_id,
+            object_type=t,
+            object_id=object_id,
+            action="updated",
+        )
 
         return {
             "message": f"Restored v{version_to_restore.version_number} as new v{next_version_number}",
@@ -942,6 +980,16 @@ class ObjectService:
 
         delete_rag_sources_bulk(db, user_id=user_id, project_id=resolved_project_id, ids_by_type=ids_by_type)
         delete_object_versions_bulk(db, ids_by_type=ids_by_type)
+
+        for deleted_type, deleted_ids in ids_by_type.items():
+            for deleted_id in set(deleted_ids):
+                queue_object_change(
+                    db,
+                    project_id=resolved_project_id,
+                    object_type=deleted_type,
+                    object_id=deleted_id,
+                    action="deleted",
+                )
 
         db.delete(obj)
         db.flush()
@@ -1010,6 +1058,13 @@ class ObjectService:
 
         obj.updated_at = datetime.utcnow()
         db.flush()
+        queue_object_change(
+            db,
+            project_id=project_id,
+            object_type=t,
+            object_id=object_id,
+            action="updated",
+        )
 
         return {
             "success": True,
@@ -1032,6 +1087,7 @@ class ObjectService:
             raise ValueError(f"Reordering not supported for {t}")
 
         model_class = _model_for_object_type(t)
+        changed_ids: list[UUID] = []
         for index, object_id in enumerate(object_ids, start=1):
             obj = (
                 db.query(model_class)
@@ -1042,8 +1098,17 @@ class ObjectService:
                 raise ValueError(f"Object {object_id} not found in project")
             obj.order = index
             obj.updated_at = datetime.utcnow()
+            changed_ids.append(object_id)
 
         db.flush()
+        for changed_id in changed_ids:
+            queue_object_change(
+                db,
+                project_id=project_id,
+                object_type=t,
+                object_id=changed_id,
+                action="updated",
+            )
         return len(object_ids)
 
 
