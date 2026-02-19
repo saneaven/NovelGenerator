@@ -1,46 +1,58 @@
-import type { ContentPart } from '../types/chat';
-import ChatEngine from './chatEngine';
 import { threadService } from '../api/threadService';
 import { registerJourneyNotification } from '../llmTaskJourney';
 import { getJourneySpec } from '../llmTaskJourney/journeySpecs';
 import { useJourneyStore } from '../store/journeyStore';
 import { useNotificationStore } from '../store/notificationStore';
+import { sendThreadMessage } from '../runtime/threadCommands';
 
-export interface AgentTranslationInput {
+export interface MessageTranslationInput {
   projectId: string;
-  agentId: string;
-  threadId: string;
-  messageId: string;
+  sourceThreadId: string;
+  sourceMessageId: string;
   sourceLanguage: string;
   targetLanguage: string;
   sourceContent: string;
-  originalContentParts: ContentPart[];
 }
 
-export interface AgentTranslationResult {
-  agentId: string;
-  messageId: string;
-  targetLanguage: string;
+export interface MessageTranslationResult {
+  journeyId: string;
+  journeyThreadId: string;
 }
 
-export async function runAgentTranslation(
-  input: AgentTranslationInput,
-  _onSessionCreated?: (sessionId: string) => void,
-): Promise<string> {
-  const spec = getJourneySpec('translateObjects');
+export async function runMessageTranslation(
+  input: MessageTranslationInput,
+): Promise<MessageTranslationResult> {
+  const spec = getJourneySpec('messageTranslation');
   const journeyId = crypto.randomUUID();
   const journeyInput = {
     projectId: input.projectId,
+    sourceThreadId: input.sourceThreadId,
+    sourceMessageId: input.sourceMessageId,
     sourceLanguage: input.sourceLanguage,
     targetLanguage: input.targetLanguage,
-    userInput: input.sourceContent,
-    objectIds: [],
-    contextObjectIds: [],
+  };
+  const payload = {
+    projectId: input.projectId,
+    rawMode: true,
+    outputMode: 'raw_output' as const,
+    translation: {
+      sourceLanguage: input.sourceLanguage,
+      targetLanguage: input.targetLanguage,
+      sourceThreadId: input.sourceThreadId,
+      sourceMessageId: input.sourceMessageId,
+      messages: [
+        {
+          messageId: input.sourceMessageId,
+          role: 'assistant' as const,
+          content: input.sourceContent,
+        },
+      ],
+    },
   };
 
   useJourneyStore.getState().createJourney({
     id: journeyId,
-    kind: 'translateObjects',
+    kind: 'messageTranslation',
     input: journeyInput,
     editingTargets: spec.buildEditingTargets(journeyInput),
     label: spec.label(journeyInput),
@@ -56,26 +68,29 @@ export async function runAgentTranslation(
   );
 
   try {
-    const created = await threadService.createJourneyThread(input.projectId, 'translation');
+    const created = await threadService.createJourneyThread(input.projectId, 'messageTranslation');
     useJourneyStore.getState().updateJourney(journeyId, {
       threadId: created.thread_id,
     });
 
-    const engine = new ChatEngine({
+    await sendThreadMessage({
       threadId: created.thread_id,
       projectId: input.projectId,
       threadType: 'journey',
+      inputText: input.sourceContent,
+      request: {
+        input_payload: payload,
+        surface: 'story-object',
+        language: input.targetLanguage,
+      },
     });
-    await engine.init();
-    await engine.send(input.sourceContent, {
-      input_payload: journeyInput,
-      surface: 'story-object',
-      language: input.targetLanguage,
-    });
-    _onSessionCreated?.(created.thread_id);
-    return created.thread_id;
+
+    return {
+      journeyId,
+      journeyThreadId: created.thread_id,
+    };
   } catch (error: any) {
-    const message = error?.message ?? 'Failed to start translation';
+    const message = error?.message ?? 'Failed to start message translation';
     useJourneyStore.getState().updateJourney(journeyId, { error: message });
     useNotificationStore.getState().update(journeyId, {
       status: 'error',

@@ -709,11 +709,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     size="sm"
                     onClick={() => setIsAIEditModalOpen(true)}
                     disabled={isSaving || !selectedChapter}
-                    title={t('novelEditor.toolbar.aiEditChapter')}
+                    title={t('novelEditor.toolbar.objectEditChapter')}
                     iconLeft={<AIAssist size="sm" />}
                     className="desktop-only"
                   >
-                    {t('novelEditor.toolbar.aiEdit')}
+                    {t('novelEditor.toolbar.objectEdit')}
                   </TextButton>
 
                   {/* Manual Save Button */}
@@ -743,7 +743,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     {/* AI Edit - accessible via dropdown on mobile */}
                     <DropdownItem
                       icon={<AIAssist size="sm" />}
-                      label={t('novelEditor.toolbar.aiEdit')}
+                      label={t('novelEditor.toolbar.objectEdit')}
                       onClick={() => setIsAIEditModalOpen(true)}
                       disabled={isSaving || !selectedChapter}
                       className="mobile-only-item"

@@ -6,18 +6,18 @@ import type { JourneySpec, EditingTargets } from './types';
 // Input Types
 // =====================================================================
 
-export type AiEditCategory = string;
+export type ObjectEditCategory = string;
 
-export interface AiEditInput {
+export interface ObjectEditInput {
   projectId: string;
-  category: AiEditCategory;
+  category: ObjectEditCategory;
   targetId?: string;
   userRequest: string;
   selectedContextIds: string[];
   rawMode?: boolean;
 }
 
-export interface TranslateObjectsInput {
+export interface ObjectTranslationInput {
   projectId: string;
   sourceLanguage: string;
   targetLanguage: string;
@@ -25,6 +25,14 @@ export interface TranslateObjectsInput {
   objectIds: string[];
   contextObjectIds?: string[];
   rawMode?: boolean;
+}
+
+export interface MessageTranslationInput {
+  projectId: string;
+  sourceThreadId: string;
+  sourceMessageId: string;
+  sourceLanguage: string;
+  targetLanguage: string;
 }
 
 export type PromptMode = 'natural' | 'positive' | 'negative';
@@ -64,11 +72,11 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 // =====================================================================
-// aiEdit Spec
+// objectEdit Spec
 // =====================================================================
 
-const aiEditSpec: JourneySpec<AiEditInput> = {
-  kind: 'aiEdit',
+const objectEditSpec: JourneySpec<ObjectEditInput> = {
+  kind: 'objectEdit',
 
   label: (input) => {
     const categoryLabel = CATEGORY_LABELS[input.category] ?? input.category;
@@ -102,10 +110,10 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
     const mainLanguage = settingsStore.getSettings().mainLanguage;
     const targetId = (input.targetId ?? '').trim();
     if (!targetId) {
-      throw new Error('aiEdit requires targetId.');
+      throw new Error('objectEdit requires targetId.');
     }
     return {
-      kind: 'aiEdit',
+      kind: 'objectEdit',
       projectId: input.projectId,
       category: input.category,
       targetId,
@@ -116,21 +124,38 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
 };
 
 // =====================================================================
-// translateObjects Spec
+// objectTranslation Spec
 // =====================================================================
 
-const translateObjectsSpec: JourneySpec<TranslateObjectsInput> = {
-  kind: 'translateObjects',
+const objectTranslationSpec: JourneySpec<ObjectTranslationInput> = {
+  kind: 'objectTranslation',
 
   label: () => 'Translation',
 
   buildEditingTargets: (input) => ({
-    kind: 'translateObjects',
+    kind: 'objectTranslation',
     projectId: input.projectId,
     objectIds: input.objectIds,
     sourceLanguage: input.sourceLanguage,
     targetLanguage: input.targetLanguage,
     contextObjectIds: input.contextObjectIds,
+  }),
+};
+
+// =====================================================================
+// messageTranslation Spec
+// =====================================================================
+
+const messageTranslationSpec: JourneySpec<MessageTranslationInput> = {
+  kind: 'messageTranslation',
+  label: () => 'Message Translation',
+  buildEditingTargets: (input) => ({
+    kind: 'messageTranslation',
+    projectId: input.projectId,
+    sourceThreadId: input.sourceThreadId,
+    sourceMessageId: input.sourceMessageId,
+    sourceLanguage: input.sourceLanguage,
+    targetLanguage: input.targetLanguage,
   }),
 };
 
@@ -145,7 +170,7 @@ const imagePromptSpec: JourneySpec<ImagePromptInput> = {
 
   buildEditingTargets: (input) =>
     ({
-      kind: input.contextType === 'scene' ? 'sceneImage' : 'imagePrompt',
+      kind: input.contextType === 'scene' ? 'sceneImagePrompt' : 'imagePrompt',
       projectId: input.projectId,
       contextType: input.contextType as any,
       promptMode: input.promptMode,
@@ -158,11 +183,11 @@ const imagePromptSpec: JourneySpec<ImagePromptInput> = {
 };
 
 // =====================================================================
-// sceneImage Spec (uses same config as imagePrompt)
+// sceneImagePrompt Spec (uses same config as imagePrompt)
 // =====================================================================
 
-const sceneImageSpec: JourneySpec<ImagePromptInput> = {
-  kind: 'sceneImage',
+const sceneImagePromptSpec: JourneySpec<ImagePromptInput> = {
+  kind: 'sceneImagePrompt',
   label: () => 'Scene Image Prompt',
   buildEditingTargets: imagePromptSpec.buildEditingTargets,
 };
@@ -172,10 +197,11 @@ const sceneImageSpec: JourneySpec<ImagePromptInput> = {
 // =====================================================================
 
 export const journeySpecs = {
-  aiEdit: aiEditSpec,
-  translateObjects: translateObjectsSpec,
+  objectEdit: objectEditSpec,
+  objectTranslation: objectTranslationSpec,
   imagePrompt: imagePromptSpec,
-  sceneImage: sceneImageSpec,
+  sceneImagePrompt: sceneImagePromptSpec,
+  messageTranslation: messageTranslationSpec,
 } as const;
 
 export type JourneyKind = keyof typeof journeySpecs;

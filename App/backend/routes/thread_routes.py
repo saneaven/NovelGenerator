@@ -18,6 +18,8 @@ from ..schemas.thread_api import (
     ChatRequest,
     ChatResponse,
     CreateThreadRequest,
+    MessageResponse,
+    PatchMessageRequest,
     ProjectThreadRuntimeResponse,
     ThreadMessagesResponse,
     ToolCallBatchDecisionRequest,
@@ -66,6 +68,23 @@ def _serialize_tool_call(row: RunToolCallModel) -> dict:
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }
+
+
+def _normalize_content_parts(parts: Any) -> list[dict[str, str]]:
+    if not isinstance(parts, list):
+        raise HTTPException(status_code=422, detail="content_parts must be a list")
+    out: list[dict[str, str]] = []
+    for item in parts:
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=422, detail="content_parts items must be objects")
+        ptype = str(item.get("type") or "")
+        text = item.get("text")
+        if ptype not in {"content", "thinking"}:
+            raise HTTPException(status_code=422, detail="content_parts.type must be content|thinking")
+        if not isinstance(text, str):
+            raise HTTPException(status_code=422, detail="content_parts.text must be string")
+        out.append({"type": ptype, "text": text})
+    return out
 
 
 def _has_non_empty_part_text(parts: Any, *, part_type: str) -> bool:
@@ -547,6 +566,58 @@ async def list_thread_messages(
         messages=[_serialize_message(m) for m in messages],
         tool_calls=[_serialize_tool_call(t) for t in tool_calls],
     )
+
+
+@router.patch("/threads/{thread_id}/messages/{message_id}", response_model=MessageResponse)
+async def patch_thread_message(
+    thread_id: UUID,
+    message_id: UUID,
+    payload: PatchMessageRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    thread = _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
+    row = (
+        db.query(RunMessageModel)
+        .filter(RunMessageModel.id == message_id, RunMessageModel.thread_id == thread.id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    language = str(payload.language or "").strip()
+    if not language:
+        raise HTTPException(status_code=422, detail="language is required")
+
+    entry: dict[str, Any] = {
+        "contentParts": _normalize_content_parts(payload.content_parts),
+    }
+    if payload.thinking_details is not None:
+        if not isinstance(payload.thinking_details, list):
+            raise HTTPException(status_code=422, detail="thinking_details must be a list when provided")
+        entry["thinkingDetails"] = payload.thinking_details
+
+    current = row.data if isinstance(row.data, dict) else {}
+    updated = dict(current)
+    updated[language] = entry
+    if bool(payload.set_final):
+        updated["_final"] = entry
+    row.data = updated
+    db.commit()
+    db.refresh(row)
+
+    await runtime_event_dispatcher.emit_runtime_event(
+        project_id=thread.project_id,
+        thread_id=thread.id,
+        event_name="message:update",
+        data={
+            "run_id": str(row.run_id),
+            "message_id": str(row.id),
+            "data": {language: entry},
+        },
+    )
+
+    return _serialize_message(row)
 
 
 @router.patch("/threads/{thread_id}/tool-calls/{tool_call_id}", response_model=ToolCallDecisionResponse)

@@ -15,7 +15,7 @@ ToolSetName = Literal[
     "manuscript",
     "storyObject",
     "outline",
-    "translateObjects",
+    "objectTranslation",
 ]
 
 AutoApproveCategory = Literal["read", "search", "create", "delete", "replace", "patch", "subAgent"]
@@ -333,7 +333,7 @@ TOOL_SET_SCHEMAS: dict[ToolSetName, list[str]] = {
         "patch_outline_act",
         "patch_outline_chapter",
     ],
-    "translateObjects": [
+    "objectTranslation": [
         "replace_basic_info",
         "replace_guidelines",
         "replace_story_object",
@@ -372,17 +372,27 @@ def build_call_tool_schema(agent_name: str, display_name: str, description: str 
     )
 
 
-def get_dynamic_call_tools(db: Session, *, user_id: UUID, preset_id: UUID) -> list[ToolSchemaDef]:
-    defs = (
+def get_dynamic_call_tools(
+    db: Session,
+    *,
+    user_id: UUID,
+    preset_id: UUID,
+    allowed_sub_agent_ids: set[UUID] | None = None,
+) -> list[ToolSchemaDef]:
+    q = (
         db.query(SubAgentDefinitionModel)
         .filter(
             SubAgentDefinitionModel.user_id == user_id,
             SubAgentDefinitionModel.preset_id == preset_id,
             SubAgentDefinitionModel.enabled == True,
         )
-        .order_by(SubAgentDefinitionModel.agent_name.asc())
-        .all()
     )
+    if allowed_sub_agent_ids is not None:
+        if len(allowed_sub_agent_ids) == 0:
+            return []
+        q = q.filter(SubAgentDefinitionModel.id.in_(allowed_sub_agent_ids))
+
+    defs = q.order_by(SubAgentDefinitionModel.agent_name.asc()).all()
     out: list[ToolSchemaDef] = []
     for d in defs:
         display = (d.display_name or d.agent_name or "").strip() or d.agent_name

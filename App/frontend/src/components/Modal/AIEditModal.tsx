@@ -8,7 +8,7 @@ import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import { useJourneyStore } from '../../store/journeyStore';
 import { useNotificationStore } from '../../store/notificationStore';
 import { threadService } from '../../api/threadService';
-import ChatEngine from '../../agent/chatEngine';
+import { sendThreadMessage } from '../../runtime/threadCommands';
 import { Document } from '../icons';
 import { ObjectPicker } from '../ObjectPicker';
 import { TextButton } from '../TextButton';
@@ -137,8 +137,11 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       return;
     }
 
-    const spec = getJourneySpec('aiEdit');
+    const spec = getJourneySpec('objectEdit');
     const journeyId = crypto.randomUUID();
+    const outputMode = rawMode
+      ? 'raw_output'
+      : (settings.nativeOutputMode ? 'native_tool_call' : 'tool_call');
     const inputPayload = {
       projectId,
       category,
@@ -146,12 +149,13 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       userRequest: trimmedRequest,
       selectedContextIds,
       rawMode,
+      outputMode,
     };
     const editingTargets = spec.buildEditingTargets(inputPayload);
 
     useJourneyStore.getState().createJourney({
       id: journeyId,
-      kind: 'aiEdit',
+      kind: 'objectEdit',
       input: inputPayload,
       editingTargets,
       label: spec.label(inputPayload),
@@ -168,19 +172,19 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     );
 
     try {
-      const created = await threadService.createJourneyThread(projectId, 'aiEdit');
+      const created = await threadService.createJourneyThread(projectId, 'objectEdit');
       useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
-      const engine = new ChatEngine({
+      await sendThreadMessage({
         threadId: created.thread_id,
         projectId,
         threadType: 'journey',
-      });
-      await engine.init();
-      await engine.send(trimmedRequest, {
-        input_payload: inputPayload,
-        surface: 'story-object',
-        journey_target_ids: [targetId],
-        context_object_ids: selectedContextIds,
+        inputText: trimmedRequest,
+        request: {
+          input_payload: inputPayload,
+          surface: 'story-object',
+          journey_target_ids: [targetId],
+          context_object_ids: selectedContextIds,
+        },
       });
     } catch (error: any) {
       useJourneyStore.getState().updateJourney(journeyId, {

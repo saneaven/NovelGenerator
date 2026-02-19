@@ -41,7 +41,13 @@ class ToolCallBatchDecisionRequest(BaseModel):
 
 class CreateThreadRequest(BaseModel):
     thread_type: Literal["journey"] = "journey"
-    journey_kind: str
+    journey_kind: Literal[
+        "objectEdit",
+        "objectTranslation",
+        "imagePrompt",
+        "sceneImagePrompt",
+        "messageTranslation",
+    ]
     owner_id: UUID | None = None
 
 
@@ -54,6 +60,13 @@ class MessageResponse(BaseModel):
     seq_in_thread: int
     data: dict[str, Any]
     created_at: datetime
+
+
+class PatchMessageRequest(BaseModel):
+    language: str
+    content_parts: list[dict[str, Any]]
+    thinking_details: list[dict[str, Any]] | None = None
+    set_final: bool = False
 
 
 class ToolCallResponse(BaseModel):

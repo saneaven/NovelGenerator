@@ -972,7 +972,7 @@
   "languageDropdown": {
     "selectLanguage": "언어 선택",
     "translate": "번역 ({{count}})",
-    "translateObjects": "{{count}}개 객체 번역"
+    "objectTranslation": "{{count}}개 객체 번역"
   },
   "agentRunModeToggle": {
     "plan": "플랜",
@@ -1229,8 +1229,8 @@
     },
     "wordCount": "{{count}} 단어",
     "toolbar": {
-      "aiEdit": "AI 편집",
-      "aiEditChapter": "AI 챕터 편집",
+      "objectEdit": "AI 편집",
+      "objectEditChapter": "AI 챕터 편집",
       "save": "저장",
       "saveSnapshot": "버전 스냅샷 생성 (Ctrl+S)",
       "moreActions": "더 많은 작업",

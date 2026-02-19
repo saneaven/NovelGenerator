@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import ChatEngine from '../../agent/chatEngine';
 import { useThreadStore } from '../../store/threadStore';
 import type { ThreadInfo, ThreadToolCall } from '../../types/thread';
 import { threadPriority, isBlockingThreadStatus } from '../../types/thread';
@@ -9,6 +8,7 @@ import { useFunctionCallUIStore } from '../../toolCall/ui/store';
 import { TextButton } from '../TextButton';
 import { SubAgentPeekHeader } from './SubAgentPeekHeader';
 import { SubAgentPeekTimeline } from './SubAgentPeekTimeline';
+import { cancelThread, resumeThread } from '../../runtime/threadCommands';
 import './subAgentPeek.css';
 
 interface ChildEntry {
@@ -190,31 +190,10 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     return childEntries.find((e) => e.key === effective);
   }, [childEntries, orderedKeys, selectedKey, prioritizedKeys]);
 
-  // ── ChatEngine lifecycle ──
   const { t } = useTranslation();
-  const engineRef = useRef<ChatEngine | null>(null);
   const [actionInFlight, setActionInFlight] = useState<'pause' | 'retry' | 'cancel' | null>(null);
 
   const selectedChildThreadId = selectedEntry?.childThreadId;
-
-  useEffect(() => {
-    if (!selectedChildThreadId) return;
-    const engine = new ChatEngine({
-      threadId: selectedChildThreadId,
-      projectId,
-      threadType: 'subAgent',
-    });
-    engineRef.current = engine;
-    void engine.init().catch((error) => {
-      console.error('Failed to init sub-agent engine', { childThreadId: selectedChildThreadId, error });
-    });
-    return () => {
-      if (engineRef.current === engine) {
-        engine.dispose();
-        engineRef.current = null;
-      }
-    };
-  }, [selectedChildThreadId, projectId]);
 
   // Reset action state when switching threads
   useEffect(() => {
@@ -225,25 +204,29 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   const isBlocking = isBlockingThreadStatus(selectedThreadStatus);
 
   const handlePause = useCallback(() => {
-    if (actionInFlight) return;
+    if (actionInFlight || !selectedChildThreadId) return;
     setActionInFlight('pause');
-    const op = engineRef.current ? engineRef.current.cancel() : Promise.resolve();
+    const op = cancelThread({ threadId: selectedChildThreadId });
     void op.finally(() => setActionInFlight(null));
-  }, [actionInFlight]);
+  }, [actionInFlight, selectedChildThreadId]);
 
   const handleRetry = useCallback(() => {
-    if (actionInFlight) return;
+    if (actionInFlight || !selectedChildThreadId) return;
     setActionInFlight('retry');
-    const op = engineRef.current ? engineRef.current.resume() : Promise.resolve();
+    const op = resumeThread({
+      threadId: selectedChildThreadId,
+      projectId,
+      threadType: 'subAgent',
+    });
     void op.finally(() => setActionInFlight(null));
-  }, [actionInFlight]);
+  }, [actionInFlight, selectedChildThreadId, projectId]);
 
   const handleCancel = useCallback(() => {
-    if (actionInFlight) return;
+    if (actionInFlight || !selectedChildThreadId) return;
     setActionInFlight('cancel');
-    const op = engineRef.current ? engineRef.current.cancel() : Promise.resolve();
+    const op = cancelThread({ threadId: selectedChildThreadId });
     void op.finally(() => setActionInFlight(null));
-  }, [actionInFlight]);
+  }, [actionInFlight, selectedChildThreadId]);
 
   if (childEntries.length === 0 || !selectedEntry) return null;
 
@@ -271,7 +254,6 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
           <SubAgentPeekTimeline
             childThreadId={selectedEntry.childThreadId}
             projectId={projectId}
-            engine={engineRef.current}
           />
         </div>
       </div>

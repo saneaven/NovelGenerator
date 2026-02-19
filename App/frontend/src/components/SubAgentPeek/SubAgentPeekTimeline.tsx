@@ -5,7 +5,6 @@ import type { ContentPart, ToolCallMetadata } from '../../types/chat';
 import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { collapseContentParts } from '../../agent/utils/contentParts';
-import type ChatEngine from '../../agent/chatEngine';
 import { threadService } from '../../api/threadService';
 import { useThreadStore } from '../../store/threadStore';
 import type { ThreadMessage, ThreadToolCall } from '../../types/thread';
@@ -15,6 +14,7 @@ import ThinkingDisplay from '../common/ThinkingDisplay';
 import { IconButton } from '../IconButton';
 import { Trash } from '../icons';
 import { MarkdownRenderer } from '../MarkdownRenderer/MarkdownRenderer';
+import { decideToolCall, decideToolCallsBatch } from '../../runtime/threadCommands';
 
 function formatRole(role: string, t: (key: string) => string): string {
   if (role === 'user') return t('subAgent.parentAgent');
@@ -56,13 +56,11 @@ function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
 export interface SubAgentPeekTimelineProps {
   childThreadId: string;
   projectId: string;
-  engine?: ChatEngine | null;
 }
 
 export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   childThreadId,
   projectId,
-  engine,
 }) => {
   const { t } = useTranslation();
   const [isApplying, setIsApplying] = useState(false);
@@ -117,7 +115,6 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   }, []);
 
   const handleConfirm = useCallback(async (_messageId: string, decisions: ToolCallDecisionMap) => {
-    if (!engine) return;
     setIsApplying(true);
     try {
       const accepts = Object.entries(decisions)
@@ -127,17 +124,20 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
         .filter(([, d]) => d === 'reject')
         .map(([id]) => id);
       if (accepts.length > 1 && rejects.length === 0) {
-        await engine.acceptToolCallsBatch(accepts);
+        await decideToolCallsBatch({
+          threadId: childThreadId,
+          decisions: accepts.map((id) => ({ toolCallId: id, decision: 'accept' })),
+        });
       } else {
         await Promise.all([
-          ...accepts.map((id) => engine?.acceptToolCall(id)),
-          ...rejects.map((id) => engine?.rejectToolCall(id)),
+          ...accepts.map((id) => decideToolCall({ threadId: childThreadId, toolCallId: id, decision: 'accept' })),
+          ...rejects.map((id) => decideToolCall({ threadId: childThreadId, toolCallId: id, decision: 'reject' })),
         ]);
       }
     } finally {
       setIsApplying(false);
     }
-  }, [engine]);
+  }, [childThreadId]);
 
   const handleDeleteMessage = useCallback((messageId: string) => {
     if (!confirm('Are you sure you want to delete this message?')) return;

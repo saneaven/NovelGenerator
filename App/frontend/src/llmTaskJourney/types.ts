@@ -1,6 +1,6 @@
 export type EditingTargets =
   | {
-      kind: 'aiEdit';
+      kind: 'objectEdit';
       projectId: string;
       category: string;
       targetId: string;
@@ -8,7 +8,7 @@ export type EditingTargets =
       language: string;
     }
   | {
-      kind: 'translateObjects';
+      kind: 'objectTranslation';
       projectId: string;
       objectIds: string[];
       sourceLanguage: string;
@@ -27,7 +27,7 @@ export type EditingTargets =
       selectedObjectIds?: string[];
     }
   | {
-      kind: 'sceneImage';
+      kind: 'sceneImagePrompt';
       projectId: string;
       contextType: 'scene';
       promptMode: string;
@@ -35,10 +35,10 @@ export type EditingTargets =
       selectedObjectIds?: string[];
     }
   | {
-      kind: 'agentTranslation';
+      kind: 'messageTranslation';
       projectId: string;
-      agentId: string;
-      messageId: string;
+      sourceThreadId: string;
+      sourceMessageId: string;
       sourceLanguage: string;
       targetLanguage: string;
     };

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
@@ -12,7 +11,16 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
-from ..models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thread, UserSettings
+from ..models.db_models import (
+    Manuscript,
+    RunMessageModel,
+    RunModel,
+    RunToolCallModel,
+    SubAgentDefinitionModel,
+    Thread,
+    UserSettings,
+)
+from ..models.translation_models import ObjectVersion
 from ..providers.contracts import (
     DeltaPayload,
     MetaPayload,
@@ -26,9 +34,11 @@ from ..providers.registry import ProviderRegistry
 from ..services.credential_service import credential_service
 from ..services.memory_builder import build_memory_prompt
 from ..services.prompt_runtime.conversation_builder import build_from_runs
+from ..services.prompt_runtime.output_mode import resolve_output_mode
 from ..services.prompt_runtime.prompt_manager import PromptBundle, PromptManager, PromptTarget
 from ..services.prompt_runtime.project_data_builder import build_project_data
 from ..services.prompt_runtime.prompt_renderer import PromptRenderer
+from ..services.object_service import object_service
 from ..services.settings_service import settings_service
 from ..services.sidecar_client import sidecar_client
 from ..services.tool_schemas import ToolSchemaDef, get_dynamic_call_tools, get_tools_for_set
@@ -124,14 +134,25 @@ class RunPipeline:
         except Exception:
             return True
 
-    def _toolset_for_run(self, thread: Thread, run: RunModel) -> str:
+    def _toolset_for_run(
+        self,
+        thread: Thread,
+        run: RunModel,
+        *,
+        input_payload: dict[str, Any],
+    ) -> str:
         if thread.thread_type == "journey":
             journey_kind = (thread.journey_kind or "").strip()
-            if journey_kind == "translation":
-                return "translateObjects"
-            if journey_kind == "imagePrompt":
+            if journey_kind == "objectTranslation":
+                return "objectTranslation"
+            if journey_kind == "objectEdit":
+                category = str(input_payload.get("category") or "").strip()
+                if category == "manuscript":
+                    return "manuscript"
+                if category in {"outline", "act", "chapter"}:
+                    return "outline"
                 return "storyObject"
-            return "agent_agent_mode"
+            return "storyObject"
 
         if thread.thread_type == "subAgent":
             return "agent_agent_mode"
@@ -139,6 +160,276 @@ class RunPipeline:
         if run.run_mode == "planMode":
             return "agent_plan_mode"
         return "agent_agent_mode"
+
+    @staticmethod
+    def _as_str_list(value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [str(item) for item in value if item is not None and str(item).strip()]
+
+    @staticmethod
+    def _as_dict(value: Any) -> dict[str, Any]:
+        return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _collapse_content_text(parts: list[dict[str, Any]]) -> str:
+        chunks: list[str] = []
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            if str(part.get("type") or "") != "content":
+                continue
+            text = part.get("text")
+            if isinstance(text, str):
+                chunks.append(text)
+        return "".join(chunks).strip()
+
+    @staticmethod
+    def _content_to_doc(content: str) -> dict[str, Any]:
+        return {
+            "type": "doc",
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [{"type": "text", "text": content}],
+                }
+            ],
+        }
+
+    def _resolve_sub_agent_permissions(
+        self,
+        db: Session,
+        *,
+        thread: Thread,
+        user_id: UUID,
+    ) -> tuple[set[str], set[UUID]]:
+        if thread.thread_type != "subAgent" or thread.owner_id is None:
+            return set(), set()
+
+        definition = (
+            db.query(SubAgentDefinitionModel)
+            .filter(
+                SubAgentDefinitionModel.id == thread.owner_id,
+                SubAgentDefinitionModel.user_id == user_id,
+                SubAgentDefinitionModel.enabled == True,  # noqa: E712
+            )
+            .first()
+        )
+        if definition is None:
+            return set(), set()
+
+        allowed_tool_names = {
+            str(name).strip()
+            for name in (definition.allowed_tool_names or [])
+            if isinstance(name, str) and str(name).strip()
+        }
+        allowed_sub_agent_ids: set[UUID] = set()
+        for raw in definition.allowed_sub_agent_ids or []:
+            try:
+                allowed_sub_agent_ids.add(UUID(str(raw)))
+            except (TypeError, ValueError):
+                continue
+
+        return allowed_tool_names, allowed_sub_agent_ids
+
+    async def _apply_raw_output(
+        self,
+        db: Session,
+        *,
+        thread: Thread,
+        run: RunModel,
+        input_payload: dict[str, Any],
+        content_parts: list[dict[str, Any]],
+    ) -> None:
+        journey_kind = str(thread.journey_kind or "").strip()
+        text = self._collapse_content_text(content_parts)
+        if not text:
+            raise RuntimeError("Raw output mode requires non-empty content text")
+
+        if journey_kind in {"imagePrompt", "sceneImagePrompt"}:
+            return
+
+        if journey_kind == "messageTranslation":
+            translation_payload = self._as_dict(input_payload.get("translation"))
+            source_thread_id = UUID(str(translation_payload.get("sourceThreadId") or ""))
+            source_message_id = UUID(str(translation_payload.get("sourceMessageId") or ""))
+            target_language = str(translation_payload.get("targetLanguage") or run.language).strip()
+            if not target_language:
+                raise RuntimeError("messageTranslation raw output requires translation.targetLanguage")
+
+            source_thread = (
+                db.query(Thread)
+                .filter(
+                    Thread.id == source_thread_id,
+                    Thread.user_id == run.user_id,
+                )
+                .first()
+            )
+            if source_thread is None:
+                raise RuntimeError("messageTranslation source thread not found")
+
+            source_message = (
+                db.query(RunMessageModel)
+                .filter(
+                    RunMessageModel.id == source_message_id,
+                    RunMessageModel.thread_id == source_thread_id,
+                )
+                .first()
+            )
+            if source_message is None:
+                raise RuntimeError("messageTranslation source message not found")
+
+            entry: dict[str, Any] = {
+                "contentParts": [{"type": "content", "text": text}],
+                "thinkingDetails": [],
+            }
+            current = source_message.data if isinstance(source_message.data, dict) else {}
+            updated = dict(current)
+            updated[target_language] = entry
+            source_message.data = updated
+            db.flush()
+
+            await self._emit(
+                project_id=source_thread.project_id,
+                thread_id=source_thread.id,
+                event_name="message:update",
+                data={
+                    "run_id": str(run.id),
+                    "message_id": str(source_message.id),
+                    "data": {target_language: entry},
+                },
+            )
+            return
+
+        if journey_kind == "objectEdit":
+            category = str(input_payload.get("category") or "").strip()
+            target_id = UUID(str(input_payload.get("targetId") or ""))
+            user_request = str(input_payload.get("userRequest") or "").strip() or "raw:objectEdit"
+
+            if category == "manuscript":
+                manuscript = (
+                    db.query(Manuscript)
+                    .filter(Manuscript.chapter_id == target_id)
+                    .first()
+                )
+                if manuscript is None:
+                    raise RuntimeError("objectEdit manuscript target not found")
+                object_service.update_object(
+                    db,
+                    project_id=run.project_id,
+                    object_type="manuscript",
+                    object_id=manuscript.id,
+                    data={
+                        "doc": self._content_to_doc(text),
+                        "wordCount": len(text.split()),
+                    },
+                    language=run.language,
+                    user_request=user_request,
+                    created_by=run.user_id,
+                )
+                return
+
+            current = object_service.get_object(
+                db,
+                object_type=category,
+                object_id=target_id,
+                project_id=run.project_id,
+                language=run.language,
+            )
+            if current is None:
+                raise RuntimeError("objectEdit target object not found")
+
+            data_by_lang = current.get("data", {}) if isinstance(current.get("data"), dict) else {}
+            current_data = data_by_lang.get(run.language) if isinstance(data_by_lang.get(run.language), dict) else {}
+            if not current_data:
+                for entry in data_by_lang.values():
+                    if isinstance(entry, dict):
+                        current_data = dict(entry)
+                        break
+            next_data = dict(current_data)
+            if category == "basic_info":
+                next_data["logline"] = text
+            elif category == "guidelines":
+                next_data["authorNote"] = text
+            else:
+                next_data["content"] = text
+
+            object_service.update_object(
+                db,
+                project_id=run.project_id,
+                object_type=category,
+                object_id=target_id,
+                data=next_data,
+                language=run.language,
+                user_request=user_request,
+                created_by=run.user_id,
+            )
+            return
+
+        if journey_kind == "objectTranslation":
+            translation_payload = self._as_dict(input_payload.get("translation"))
+            object_ids = self._as_str_list(translation_payload.get("objectIds"))
+            if len(object_ids) != 1:
+                raise RuntimeError("objectTranslation raw output requires exactly one objectId")
+
+            target_language = str(translation_payload.get("targetLanguage") or "").strip()
+            if not target_language:
+                raise RuntimeError("objectTranslation raw output requires targetLanguage")
+
+            object_id = UUID(object_ids[0])
+            object_type_row = (
+                db.query(ObjectVersion.object_type)
+                .filter(ObjectVersion.object_id == object_id)
+                .order_by(ObjectVersion.version_number.desc())
+                .first()
+            )
+            if object_type_row is None:
+                raise RuntimeError("objectTranslation target object not found")
+
+            object_type = str(object_type_row[0] or "").strip()
+            current = object_service.get_object(
+                db,
+                object_type=object_type,
+                object_id=object_id,
+                project_id=run.project_id,
+                language=target_language,
+            )
+            if current is None:
+                raise RuntimeError("objectTranslation target object not found in project")
+
+            data_by_lang = current.get("data", {}) if isinstance(current.get("data"), dict) else {}
+            target_data = data_by_lang.get(target_language) if isinstance(data_by_lang.get(target_language), dict) else {}
+            if not target_data:
+                for entry in data_by_lang.values():
+                    if isinstance(entry, dict):
+                        target_data = dict(entry)
+                        break
+            next_data = dict(target_data)
+            if object_type == "manuscript":
+                next_data = {
+                    "doc": self._content_to_doc(text),
+                    "wordCount": len(text.split()),
+                }
+            elif object_type == "basic_info":
+                next_data["logline"] = text
+            elif object_type == "guidelines":
+                next_data["authorNote"] = text
+            else:
+                next_data["content"] = text
+
+            object_service.update_object(
+                db,
+                project_id=run.project_id,
+                object_type=object_type,
+                object_id=object_id,
+                data=next_data,
+                language=target_language,
+                user_request="raw:objectTranslation",
+                created_by=run.user_id,
+            )
+            return
+
+        raise RuntimeError(f"Unsupported journey kind for raw output: {journey_kind}")
 
     def _provider_tools(self, tool_defs: list[ToolSchemaDef]) -> list[dict[str, Any]]:
         return [
@@ -451,6 +742,7 @@ class RunPipeline:
         assistant_message: RunMessageModel,
         tool_calls: list[Any],
         schema_by_name: dict[str, ToolSchemaDef],
+        allowed_tool_names: set[str],
         rag_search_enabled: bool,
     ) -> list[RunToolCallModel]:
         out: list[RunToolCallModel] = []
@@ -504,7 +796,7 @@ class RunPipeline:
             validation_ctx = ValidationContext(
                 db=db,
                 run=run,
-                allowed_tool_names=None,
+                allowed_tool_names=allowed_tool_names,
                 schema_by_name=schema_by_name,
                 rag_search_enabled=rag_search_enabled,
                 sidecar=sidecar_client,
@@ -700,6 +992,7 @@ class RunPipeline:
         conversation: list[dict[str, Any]],
         prefill: str | None,
         prompt_bundle: PromptBundle | None,
+        input_payload: dict[str, Any],
         assistant_message_ref_out: list[RunMessageModel | None],
     ) -> None:
         preset_id = settings_service.get_active_preset_id(db, run.user_id)
@@ -822,18 +1115,45 @@ class RunPipeline:
         )
         assistant_message_ref_out[0] = assistant_message
 
-        tool_set_name = self._toolset_for_run(thread, run)
+        output_mode = resolve_output_mode(
+            journey_kind=thread.journey_kind,
+            payload=input_payload if isinstance(input_payload, dict) else {},
+            native_output_mode=bool(getattr(settings, "native_output_mode", False)),
+        )
+
+        tool_set_name = self._toolset_for_run(
+            thread,
+            run,
+            input_payload=input_payload if isinstance(input_payload, dict) else {},
+        )
+
+        sub_agent_allowed_tools: set[str] | None = None
+        sub_agent_allowed_ids: set[UUID] | None = None
+        if thread.thread_type == "subAgent":
+            allowed_tools, allowed_ids = self._resolve_sub_agent_permissions(
+                db,
+                thread=thread,
+                user_id=run.user_id,
+            )
+            sub_agent_allowed_tools = allowed_tools
+            sub_agent_allowed_ids = allowed_ids
+
         dynamic_call_tools = [] if thread.thread_type == "journey" else get_dynamic_call_tools(
             db,
             user_id=run.user_id,
             preset_id=preset_id,
+            allowed_sub_agent_ids=sub_agent_allowed_ids,
         )
         tool_defs = get_tools_for_set(
             tool_set_name,
             rag_search_enabled=bool(getattr(settings, "rag_search_enabled", False)),
             dynamic_call_tools=dynamic_call_tools,
         )
+        if sub_agent_allowed_tools is not None:
+            tool_defs = [d for d in tool_defs if d.name in sub_agent_allowed_tools or d.name.startswith("call_")]
+
         schema_by_name = {d.name: d for d in tool_defs}
+        allowed_tool_names = set(schema_by_name.keys())
 
         provider_config = credential_service.get_provider_config(db, run.user_id, task_config.provider)
         if task_config.provider == "custom":
@@ -846,8 +1166,13 @@ class RunPipeline:
         if not provider.validate_config():
             raise RuntimeError(f"Invalid provider configuration: {task_config.provider}")
 
-        native_output_mode = bool(getattr(settings, "native_output_mode", False))
-        tools_wire = None if native_output_mode else self._provider_tools(tool_defs)
+        native_tool_call_mode = output_mode == "native_tool_call"
+        if output_mode == "raw_output":
+            tools_wire = None
+        elif native_tool_call_mode:
+            tools_wire = None
+        else:
+            tools_wire = self._provider_tools(tool_defs)
 
         messages = [{"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]}] + conversation
 
@@ -865,7 +1190,7 @@ class RunPipeline:
                 "tool_choice": "auto" if tools_wire else None,
                 "thinking_config": task_config.advanced.get("thinking_config") if isinstance(task_config.advanced, dict) else None,
                 "thinking_mode": task_config.advanced.get("thinking_mode") if isinstance(task_config.advanced, dict) else "off",
-                "native_tool_call": native_output_mode,
+                "native_tool_call": native_tool_call_mode,
                 "messages": messages,
                 "tools": tools_wire,
             },
@@ -884,7 +1209,7 @@ class RunPipeline:
             thinking_format=task_config.advanced.get("thinking_format") if isinstance(task_config.advanced, dict) else None,
             request_format=task_config.advanced.get("request_format") if isinstance(task_config.advanced, dict) else None,
             retry_config=settings_service.get_retry_config(db, run.user_id),
-            native_tool_call=native_output_mode,
+            native_tool_call=native_tool_call_mode,
         )
 
         assembler = FallbackSnapshotAssembler(provider=task_config.provider, model=task_config.model)
@@ -986,8 +1311,11 @@ class RunPipeline:
         else:
             final_snapshot = assembler.finalize_or_raise()
 
-        if native_output_mode:
+        if native_tool_call_mode:
             final_snapshot = extract_native_tool_calls_from_snapshot(final_snapshot)
+
+        if output_mode == "raw_output" and final_snapshot.tool_calls:
+            raise RuntimeError("Raw output mode cannot include tool calls")
 
         db.refresh(run)
         db.refresh(thread)
@@ -1006,15 +1334,26 @@ class RunPipeline:
             },
         }
 
-        persisted_tools = await self._persist_tool_calls(
-            db,
-            thread=thread,
-            run=run,
-            assistant_message=assistant_message,
-            tool_calls=final_snapshot.tool_calls,
-            schema_by_name=schema_by_name,
-            rag_search_enabled=bool(getattr(settings, "rag_search_enabled", False)),
-        )
+        persisted_tools: list[RunToolCallModel] = []
+        if output_mode == "raw_output":
+            await self._apply_raw_output(
+                db,
+                thread=thread,
+                run=run,
+                input_payload=input_payload if isinstance(input_payload, dict) else {},
+                content_parts=final_snapshot.content_parts,
+            )
+        else:
+            persisted_tools = await self._persist_tool_calls(
+                db,
+                thread=thread,
+                run=run,
+                assistant_message=assistant_message,
+                tool_calls=final_snapshot.tool_calls,
+                schema_by_name=schema_by_name,
+                allowed_tool_names=allowed_tool_names,
+                rag_search_enabled=bool(getattr(settings, "rag_search_enabled", False)),
+            )
 
         if any(tc.status == "pending" for tc in persisted_tools):
             run.status = "waiting"
@@ -1183,6 +1522,7 @@ class RunPipeline:
                 conversation=conversation,
                 prefill=prefill,
                 prompt_bundle=prompt_bundle,
+                input_payload=create_ctx.input_payload if create_ctx is not None else {},
                 assistant_message_ref_out=assistant_message_ref,
             )
         except asyncio.CancelledError:

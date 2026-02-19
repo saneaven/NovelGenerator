@@ -449,6 +449,59 @@ async def _execute_sub_agent(
     }
 
 
+def _load_sub_agent_allowed_tool_names(
+    db: Session,
+    *,
+    thread: Thread,
+    user_id: UUID,
+) -> set[str] | None:
+    if thread.thread_type != "subAgent" or thread.owner_id is None:
+        return None
+
+    definition = (
+        db.query(SubAgentDefinitionModel)
+        .filter(
+            SubAgentDefinitionModel.id == thread.owner_id,
+            SubAgentDefinitionModel.user_id == user_id,
+            SubAgentDefinitionModel.enabled == True,  # noqa: E712
+        )
+        .first()
+    )
+    if definition is None:
+        return set()
+
+    allowed_names = {
+        str(name).strip()
+        for name in (definition.allowed_tool_names or [])
+        if isinstance(name, str) and str(name).strip()
+    }
+
+    allowed_sub_agent_ids: list[UUID] = []
+    for raw in definition.allowed_sub_agent_ids or []:
+        try:
+            allowed_sub_agent_ids.append(UUID(str(raw)))
+        except (TypeError, ValueError):
+            continue
+
+    if allowed_sub_agent_ids:
+        rows = (
+            db.query(SubAgentDefinitionModel.agent_name)
+            .filter(
+                SubAgentDefinitionModel.user_id == user_id,
+                SubAgentDefinitionModel.preset_id == definition.preset_id,
+                SubAgentDefinitionModel.enabled == True,  # noqa: E712
+                SubAgentDefinitionModel.id.in_(allowed_sub_agent_ids),
+            )
+            .all()
+        )
+        for (agent_name,) in rows:
+            name = str(agent_name or "").strip()
+            if name:
+                allowed_names.add(f"call_{name}")
+
+    return allowed_names
+
+
 async def execute(
     db_factory: Callable[[], Session],
     tool_call_id: UUID,
@@ -462,6 +515,17 @@ async def execute(
         tool_call = db.query(RunToolCallModel).filter(RunToolCallModel.id == tool_call_id).first()
         if tool_call is None:
             raise ValueError("Tool call not found")
+        thread = db.query(Thread).filter(Thread.id == tool_call.thread_id, Thread.user_id == user_id).first()
+        if thread is None:
+            raise ValueError("Thread not found")
+
+        allowed_tool_names = _load_sub_agent_allowed_tool_names(
+            db,
+            thread=thread,
+            user_id=user_id,
+        )
+        if allowed_tool_names is not None and tool_call.tool_name not in allowed_tool_names:
+            raise ValueError(f"Tool not allowed for sub-agent: {tool_call.tool_name}")
 
         if tool_call.status in {"applied", "failed", "rejected"}:
             return {

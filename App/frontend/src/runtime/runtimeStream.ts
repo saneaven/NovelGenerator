@@ -50,9 +50,7 @@ class ProjectRuntimeConnection {
   private refCount = 0;
   private abortController: AbortController | null = null;
   private streamTask: Promise<void> | null = null;
-  private trackedThreadIds = new Set<string>();
   private streamingToolCallsByThread = new Map<string, Map<number, string>>();
-  /** Raw argument buffer for streaming tool calls, keyed by temp ID. */
   private streamingArgBuffers = new Map<string, string>();
   private autoContinueLockByThread = new Set<string>();
   private inFlightResumeByThread = new Set<string>();
@@ -66,19 +64,20 @@ class ProjectRuntimeConnection {
   async start(): Promise<void> {
     this.refCount += 1;
     if (this.streamTask) return;
-    await this.syncRuntimeSnapshot();
-    if (this.disposed) return;
+    if (this.disposed) {
+      this.disposed = false;
+    }
     this.connect();
   }
 
   stop(): void {
     this.refCount = Math.max(0, this.refCount - 1);
     if (this.refCount > 0) return;
+
     this.disposed = true;
     this.abortController?.abort();
     this.abortController = null;
     this.streamTask = null;
-    this.trackedThreadIds.clear();
     this.streamingToolCallsByThread.clear();
     this.streamingArgBuffers.clear();
     this.autoContinueLockByThread.clear();
@@ -90,45 +89,9 @@ class ProjectRuntimeConnection {
     return this.refCount === 0;
   }
 
-  registerThread(threadId: string): void {
-    if (!threadId) return;
-    this.trackedThreadIds.add(threadId);
-  }
-
-  unregisterThread(threadId: string): void {
-    if (!threadId) return;
-    this.trackedThreadIds.delete(threadId);
-    this.streamingToolCallsByThread.delete(threadId);
-  }
-
-  async loadThreadSnapshot(threadId: string): Promise<void> {
-    if (!threadId) return;
-    this.trackedThreadIds.add(threadId);
-    try {
-      const snapshot = await threadService.listMessages(threadId);
-      const store = useThreadStore.getState();
-      store.upsertThread(snapshot.thread);
-      store.replaceMessagesAndToolCalls(threadId, snapshot.messages, snapshot.toolCalls);
-      this.refreshUnresolvedCount(threadId);
-      await this.checkAutoContinue(threadId);
-
-      // Load child threads referenced by sub-agent tool calls
-      const childThreadIds = snapshot.toolCalls
-        .filter((tc) => tc.childThreadId && !this.trackedThreadIds.has(tc.childThreadId))
-        .map((tc) => tc.childThreadId!);
-      for (const childId of childThreadIds) {
-        this.trackedThreadIds.add(childId);
-      }
-      if (childThreadIds.length > 0) {
-        await Promise.all(childThreadIds.map((id) => this.loadThreadSnapshot(id)));
-      }
-    } catch (error) {
-      console.warn('Failed to load thread snapshot', { threadId, error });
-    }
-  }
-
   private connect(): void {
     if (this.streamTask) return;
+
     this.abortController = new AbortController();
     this.streamTask = connectProjectStream(
       this.projectId,
@@ -136,14 +99,6 @@ class ProjectRuntimeConnection {
         void this.handleEvent(event);
       },
       this.abortController.signal,
-      {
-        onReconnect: async () => {
-          this.streamingToolCallsByThread.clear();
-          this.streamingArgBuffers.clear();
-          await this.syncRuntimeSnapshot();
-          await Promise.all([...this.trackedThreadIds].map((threadId) => this.loadThreadSnapshot(threadId)));
-        },
-      },
     ).catch((error) => {
       if (this.abortController?.signal.aborted) return;
       console.error('Project runtime stream failed', { projectId: this.projectId, error });
@@ -153,15 +108,6 @@ class ProjectRuntimeConnection {
     });
   }
 
-  private async syncRuntimeSnapshot(): Promise<void> {
-    try {
-      const runtime = await threadService.listProjectThreadRuntime(this.projectId);
-      useThreadStore.getState().upsertThreadsRuntime(runtime);
-    } catch (error) {
-      console.warn('Failed to sync project runtime snapshot', { projectId: this.projectId, error });
-    }
-  }
-
   private ensureThread(threadId: string, partial?: Partial<ThreadInfo>): void {
     const store = useThreadStore.getState();
     const existing = store.threadsById[threadId];
@@ -169,6 +115,7 @@ class ProjectRuntimeConnection {
       if (partial) store.patchThread(threadId, partial);
       return;
     }
+
     store.upsertThread({
       id: threadId,
       projectId: this.projectId,
@@ -211,7 +158,7 @@ class ProjectRuntimeConnection {
       isStreaming: true,
       createdAt: nowIso(),
     };
-    store.appendMessage(message);
+    store.upsertMessage(message);
     return message;
   }
 
@@ -297,7 +244,6 @@ class ProjectRuntimeConnection {
       }
     }
 
-    // Clean up streaming tool call tracking for this thread.
     const toolMap = this.streamingToolCallsByThread.get(threadId);
     if (toolMap) {
       for (const tempId of toolMap.values()) {
@@ -306,6 +252,8 @@ class ProjectRuntimeConnection {
       }
       this.streamingToolCallsByThread.delete(threadId);
     }
+
+    store.setThreadStreamActive(threadId, false);
   }
 
   private handleToolCallStart(threadId: string, payload: Record<string, unknown>): void {
@@ -340,6 +288,7 @@ class ProjectRuntimeConnection {
     const index = Number(payload.index ?? 0);
     const tempId = this.getStreamingToolMap(threadId).get(index);
     if (!tempId) return;
+
     const store = useThreadStore.getState();
     const existing = store.toolCallsById[tempId];
     if (!existing) return;
@@ -349,6 +298,7 @@ class ProjectRuntimeConnection {
     const prevRaw = this.streamingArgBuffers.get(tempId) ?? '';
     const nextRaw = prevRaw + argsDelta;
     this.streamingArgBuffers.set(tempId, nextRaw);
+
     let parsed: Record<string, unknown> = {};
     try {
       const obj = JSON.parse(nextRaw);
@@ -395,13 +345,13 @@ class ProjectRuntimeConnection {
       createdAt: nowIso(),
       updatedAt: nowIso(),
     };
+
     const store = useThreadStore.getState();
     store.upsertToolCall(toolCall);
 
-    // Create the tool_call role message so it appears in the timeline.
     const toolCallMessageId = String(payload.message_id ?? '');
-    if (toolCallMessageId && !store.getMessages(threadId).some((m) => m.id === toolCallMessageId)) {
-      store.appendMessage({
+    if (toolCallMessageId) {
+      store.upsertMessage({
         id: toolCallMessageId,
         threadId,
         runId: toolCall.runId,
@@ -559,7 +509,6 @@ class ProjectRuntimeConnection {
       this.patchThreadFromRunStatus(threadId, status, error, payload);
       if (THREAD_TERMINAL_STATUSES.has(status)) {
         this.finalizeStreamingMessagesForThread(threadId);
-        useThreadStore.getState().setThreadStreamActive(threadId, false);
       }
       await this.checkAutoContinue(threadId);
       return;
@@ -571,27 +520,24 @@ class ProjectRuntimeConnection {
       if (!messageId || !runId) return;
 
       const store = useThreadStore.getState();
-      // Remove any optimistic user messages for this thread.
       const existing = store.getMessages(threadId);
-      for (const m of existing) {
-        if (m.id.startsWith('optimistic:user:') && m.role === 'user') {
-          store.removeMessage(threadId, m.id);
+      for (const message of existing) {
+        if (message.id.startsWith('optimistic:user:') && message.role === 'user') {
+          store.removeMessage(threadId, message.id);
         }
       }
-      // Upsert the real user message if it doesn't already exist.
-      if (!existing.some((m) => m.id === messageId)) {
-        store.appendMessage({
-          id: messageId,
-          threadId,
-          runId,
-          role: 'user',
-          seq: Number(payload.seq ?? 0),
-          seqInThread: Number(payload.seq_in_thread ?? 0),
-          data: (payload.data ?? {}) as ThreadMessage['data'],
-          isStreaming: false,
-          createdAt: nowIso(),
-        });
-      }
+
+      store.upsertMessage({
+        id: messageId,
+        threadId,
+        runId,
+        role: 'user',
+        seq: Number(payload.seq ?? 0),
+        seqInThread: Number(payload.seq_in_thread ?? 0),
+        data: (payload.data ?? {}) as ThreadMessage['data'],
+        isStreaming: false,
+        createdAt: nowIso(),
+      });
       return;
     }
 
@@ -646,6 +592,7 @@ class ProjectRuntimeConnection {
     if (event.event === 'tool_call:status') {
       const toolCallId = String(payload.tool_call_id ?? '');
       if (!toolCallId) return;
+
       const store = useThreadStore.getState();
       const existing = store.toolCallsById[toolCallId];
       const childThreadId = payload.child_thread_id ? String(payload.child_thread_id) : null;
@@ -679,14 +626,36 @@ class ProjectRuntimeConnection {
         store.patchToolCall(toolCallId, patch);
       }
 
-      // Load child thread info so SubAgentPeekDock can render immediately
       if (childThreadId) {
-        this.trackedThreadIds.add(childThreadId);
-        void this.loadThreadSnapshot(childThreadId);
+        this.ensureThread(childThreadId, {
+          threadType: 'subAgent',
+          updatedAt: nowIso(),
+        });
       }
 
       await this.checkAutoContinue(threadId);
       this.refreshUnresolvedCount(threadId);
+      return;
+    }
+
+    if (event.event === 'message:update') {
+      const store = useThreadStore.getState();
+      const messageId = String(payload.message_id ?? '');
+      if (!messageId) return;
+      const existing = store.getMessages(threadId).find((m) => m.id === messageId);
+      if (!existing) return;
+
+      const patchData = (payload.data ?? {}) as ThreadMessage['data'];
+      store.patchMessage(threadId, messageId, {
+        data: {
+          ...(existing.data ?? {}),
+          ...(patchData ?? {}),
+        },
+      });
+      store.setThreadRuntime(threadId, {
+        latestMessageAt: payload.ts ? String(payload.ts) : nowIso(),
+        updatedAt: payload.ts ? String(payload.ts) : nowIso(),
+      });
       return;
     }
 
@@ -696,35 +665,19 @@ class ProjectRuntimeConnection {
       const runId = payload.run_id ? String(payload.run_id) : '';
       if (!messageId || !runId) return;
 
-      const existing = store.getMessages(threadId).find((m) => m.id === messageId);
-      if (!existing) {
-        store.appendMessage({
-          id: messageId,
-          threadId,
-          runId,
-          role: 'assistant',
-          seq: 0,
-          seqInThread: Number(payload.seq_in_thread ?? 0),
-          data: (payload.data ?? {}) as ThreadMessage['data'],
-          streamingData: undefined,
-          isStreaming: false,
-          createdAt: nowIso(),
-        });
-      } else {
-        store.patchMessage(threadId, messageId, {
-          runId,
-          data: (payload.data ?? {}) as ThreadMessage['data'],
-          streamingData: undefined,
-          seqInThread: Number(payload.seq_in_thread ?? existing.seqInThread ?? 0),
-          isStreaming: false,
-        });
-      }
+      store.finalizeMessageFromEnd({
+        threadId,
+        messageId,
+        runId,
+        seqInThread: Number(payload.seq_in_thread ?? 0),
+        data: (payload.data ?? {}) as ThreadMessage['data'],
+        ts: payload.ts ? String(payload.ts) : nowIso(),
+      });
 
       store.setThreadRuntime(threadId, {
         latestMessageAt: payload.ts ? String(payload.ts) : nowIso(),
         updatedAt: payload.ts ? String(payload.ts) : nowIso(),
       });
-      store.setThreadStreamActive(threadId, false);
 
       await this.tryAutoAcceptForAssistant(threadId, messageId);
       await this.checkAutoContinue(threadId);
@@ -744,19 +697,17 @@ class ProjectRuntimeConnection {
       const error = String(payload.error ?? 'Unknown error');
       this.patchThreadFromRunStatus(threadId, 'error', error, payload);
       this.finalizeStreamingMessagesForThread(threadId);
-      useThreadStore.getState().setThreadStreamActive(threadId, false);
       return;
     }
 
     if (event.event === 'run:canceled') {
       this.patchThreadFromRunStatus(threadId, 'canceled', null, payload);
       this.finalizeStreamingMessagesForThread(threadId);
-      useThreadStore.getState().setThreadStreamActive(threadId, false);
     }
   }
 }
 
-class ThreadRuntimeCoordinator {
+class RuntimeStreamManager {
   private byProject = new Map<string, ProjectRuntimeConnection>();
 
   private getOrCreate(projectId: string): ProjectRuntimeConnection {
@@ -782,24 +733,16 @@ class ThreadRuntimeCoordinator {
       this.byProject.delete(projectId);
     }
   }
-
-  registerThread(projectId: string, threadId: string): void {
-    if (!projectId || !threadId) return;
-    this.getOrCreate(projectId).registerThread(threadId);
-  }
-
-  unregisterThread(projectId: string, threadId: string): void {
-    if (!projectId || !threadId) return;
-    const conn = this.byProject.get(projectId);
-    if (!conn) return;
-    conn.unregisterThread(threadId);
-  }
-
-  async loadThreadSnapshot(projectId: string, threadId: string): Promise<void> {
-    if (!projectId || !threadId) return;
-    await this.getOrCreate(projectId).loadThreadSnapshot(threadId);
-  }
 }
 
-export const threadRuntimeCoordinator = new ThreadRuntimeCoordinator();
-export default threadRuntimeCoordinator;
+export const runtimeStream = new RuntimeStreamManager();
+
+export async function startProjectRuntime(projectId: string): Promise<void> {
+  await runtimeStream.start(projectId);
+}
+
+export function stopProjectRuntime(projectId: string): void {
+  runtimeStream.stop(projectId);
+}
+
+export default runtimeStream;

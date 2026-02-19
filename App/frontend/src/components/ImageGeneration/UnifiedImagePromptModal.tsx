@@ -14,7 +14,7 @@ import { useNotificationStore } from '../../store/notificationStore';
 import { registerJourneyNotification } from '../../llmTaskJourney';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import { threadService } from '../../api/threadService';
-import ChatEngine from '../../agent/chatEngine';
+import { sendThreadMessage } from '../../runtime/threadCommands';
 import { TextButton } from '../TextButton';
 import { ObjectPicker } from '../ObjectPicker';
 import './UnifiedImagePromptModal.css';
@@ -228,6 +228,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
 
     const spec = getJourneySpec('imagePrompt');
     const journeyId = crypto.randomUUID();
+    const journeyKind = contextType === 'scene' ? 'sceneImagePrompt' : 'imagePrompt';
     const inputPayload = {
       projectId: currentProjectId,
       promptMode,
@@ -238,10 +239,12 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       basicInfoId,
       sceneContext,
       selectedObjectIds,
+      rawMode: true,
+      outputMode: 'raw_output' as const,
     };
     useJourneyStore.getState().createJourney({
       id: journeyId,
-      kind: 'imagePrompt',
+      kind: journeyKind,
       input: inputPayload,
       editingTargets: spec.buildEditingTargets(inputPayload),
       label: spec.label(inputPayload),
@@ -259,18 +262,18 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     onStreamingStart?.(journeyId, promptMode);
 
     try {
-      const created = await threadService.createJourneyThread(currentProjectId, 'imagePrompt');
+      const created = await threadService.createJourneyThread(currentProjectId, journeyKind);
       useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
-      const engine = new ChatEngine({
+      await sendThreadMessage({
         threadId: created.thread_id,
         projectId: currentProjectId,
         threadType: 'journey',
-      });
-      await engine.init();
-      await engine.send(userRequest.trim() || 'Generate an image prompt.', {
-        input_payload: inputPayload,
-        surface: 'story-object',
-        context_object_ids: selectedObjectIds,
+        inputText: userRequest.trim() || 'Generate an image prompt.',
+        request: {
+          input_payload: inputPayload,
+          surface: 'story-object',
+          context_object_ids: selectedObjectIds,
+        },
       });
     } catch (error: any) {
       const message = error?.message ?? 'Failed to start image prompt journey.';

@@ -22,7 +22,13 @@ import { useThreadStore } from '../store/threadStore';
 import type { ThreadToolCall } from '../types/thread';
 import { resolveRunMessageDisplay } from '../types/thread';
 import type { ContentPart } from '../types/chat';
-import ChatEngine from '../agent/chatEngine';
+import { threadService } from '../api/threadService';
+import {
+  cancelThread,
+  decideToolCall,
+  decideToolCallsBatch,
+  sendThreadMessage,
+} from '../runtime/threadCommands';
 
 type JourneyDisplayStatus =
   | 'idle'
@@ -37,8 +43,8 @@ function getProjectIdFromJourney(journey: Journey): string {
 
 function getJourneyLanguage(journey: Journey): string {
   const targets = journey.editingTargets;
-  if (targets.kind === 'translateObjects') return targets.targetLanguage;
-  if (targets.kind === 'aiEdit') return targets.language;
+  if (targets.kind === 'objectTranslation' || targets.kind === 'messageTranslation') return targets.targetLanguage;
+  if (targets.kind === 'objectEdit') return targets.language;
   return 'English';
 }
 
@@ -130,35 +136,9 @@ export const JourneyDetailModal: React.FC = () => {
   const [feedbackText, setFeedbackText] = useState('');
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
-  const engineRef = useRef<ChatEngine | null>(null);
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
-
-  useEffect(() => {
-    if (!threadId || !journey) {
-      engineRef.current?.dispose();
-      engineRef.current = null;
-      return;
-    }
-
-    const engine = new ChatEngine({
-      threadId,
-      projectId: getProjectIdFromJourney(journey),
-      threadType: 'journey',
-    });
-    engineRef.current = engine;
-    void engine.init().catch((error) => {
-      console.error('Failed to init journey engine', { threadId, error });
-    });
-
-    return () => {
-      if (engineRef.current === engine) {
-        engine.dispose();
-        engineRef.current = null;
-      }
-    };
-  }, [threadId, journey]);
 
   useEffect(() => {
     userScrolledUpRef.current = false;
@@ -227,8 +207,8 @@ export const JourneyDetailModal: React.FC = () => {
 
   const userInput = useMemo(() => {
     if (!journey) return '';
-    if (journey.kind === 'aiEdit') return ((journey.input as any)?.userRequest as string | undefined) ?? '';
-    if (journey.kind === 'translateObjects') return ((journey.input as any)?.userInput as string | undefined) ?? '';
+    if (journey.kind === 'objectEdit') return ((journey.input as any)?.userRequest as string | undefined) ?? '';
+    if (journey.kind === 'objectTranslation') return ((journey.input as any)?.userInput as string | undefined) ?? '';
     return '';
   }, [journey?.kind, journey?.input]);
 
@@ -237,11 +217,12 @@ export const JourneyDetailModal: React.FC = () => {
   const isPending = journeyStatus === 'pending_confirmation' || hasPendingToolCalls;
 
   const handleCancel = useCallback(() => {
-    void engineRef.current?.cancel();
-  }, []);
+    if (!threadId) return;
+    void cancelThread({ threadId });
+  }, [threadId]);
 
   const handleConfirm = useCallback(async (decisions: ToolCallDecisionMap) => {
-    if (!engineRef.current) return;
+    if (!threadId) return;
     const accepts = Object.entries(decisions)
       .filter(([, d]) => d === 'accept')
       .map(([id]) => id);
@@ -249,36 +230,62 @@ export const JourneyDetailModal: React.FC = () => {
       .filter(([, d]) => d === 'reject')
       .map(([id]) => id);
     if (accepts.length > 1 && rejects.length === 0) {
-      await engineRef.current.acceptToolCallsBatch(accepts);
+      await decideToolCallsBatch({
+        threadId,
+        decisions: accepts.map((id) => ({ toolCallId: id, decision: 'accept' })),
+      });
       return;
     }
     await Promise.all([
-      ...accepts.map((id) => engineRef.current?.acceptToolCall(id)),
-      ...rejects.map((id) => engineRef.current?.rejectToolCall(id)),
+      ...accepts.map((id) => decideToolCall({ threadId, toolCallId: id, decision: 'accept' })),
+      ...rejects.map((id) => decideToolCall({ threadId, toolCallId: id, decision: 'reject' })),
     ]);
-  }, []);
+  }, [threadId]);
 
   const handleSendFeedback = useCallback(() => {
-    if (!feedbackText.trim()) return;
-    void engineRef.current?.send(feedbackText);
+    if (!threadId || !journey || !feedbackText.trim()) return;
+    void sendThreadMessage({
+      threadId,
+      projectId: getProjectIdFromJourney(journey),
+      threadType: 'journey',
+      inputText: feedbackText,
+    });
     setFeedbackText('');
     setFeedbackOpen(false);
-  }, [feedbackText]);
+  }, [threadId, journey, feedbackText]);
 
   const handleStartEdit = useCallback((messageId: string, currentText: string) => {
     setEditingMessageId(messageId);
     setEditingText(currentText);
   }, []);
 
-  const handleSaveEdit = useCallback((messageId: string) => {
+  const handleSaveEdit = useCallback(async (messageId: string) => {
     if (!journey?.threadId) return;
+    const contentText = editingText.trim();
+    if (!contentText) return;
     const entry = {
-      contentParts: [{ type: 'content', text: editingText }],
+      contentParts: [{ type: 'content' as const, text: contentText }],
       thinkingDetails: [],
     };
-    useThreadStore.getState().updateMessageData(journey.threadId, messageId, journeyLanguage, entry);
-    setEditingMessageId(null);
-    setEditingText('');
+    const store = useThreadStore.getState();
+    const existing = store.getMessages(journey.threadId).find((m) => m.id === messageId);
+    store.patchMessage(journey.threadId, messageId, {
+      data: {
+        ...(existing?.data ?? {}),
+        [journeyLanguage]: entry,
+      },
+    });
+    try {
+      await threadService.updateMessage(journey.threadId, messageId, {
+        language: journeyLanguage,
+        content_parts: entry.contentParts,
+        thinking_details: entry.thinkingDetails,
+      });
+      setEditingMessageId(null);
+      setEditingText('');
+    } catch (error) {
+      console.error('Failed to update journey message', error);
+    }
   }, [journey?.threadId, editingText, journeyLanguage]);
 
   const handleCancelEdit = useCallback(() => {

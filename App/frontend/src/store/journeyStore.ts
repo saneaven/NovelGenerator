@@ -9,7 +9,12 @@ import type { EditingTargets } from '../llmTaskJourney/types';
  * and modal state.
  */
 
-export type JourneyKind = 'aiEdit' | 'translateObjects' | 'imagePrompt' | 'sceneImage';
+export type JourneyKind =
+  | 'objectEdit'
+  | 'objectTranslation'
+  | 'imagePrompt'
+  | 'sceneImagePrompt'
+  | 'messageTranslation';
 
 export interface Journey<TInput = unknown> {
   id: string;

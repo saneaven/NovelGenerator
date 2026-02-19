@@ -61,6 +61,13 @@ export interface ToolCallBatchDecisionResponse {
   results: ToolCallDecisionResponse[];
 }
 
+export interface PatchMessageRequest {
+  language: string;
+  content_parts: Array<{ type: 'content' | 'thinking'; text: string }>;
+  thinking_details?: Array<Record<string, unknown>>;
+  set_final?: boolean;
+}
+
 export interface ProjectThreadRuntimeItem {
   id: string;
   projectId: string;
@@ -228,12 +235,24 @@ export const threadService = {
 
   async createJourneyThread(
     projectId: string,
-    journeyKind: string,
+    journeyKind: 'objectEdit' | 'objectTranslation' | 'imagePrompt' | 'sceneImagePrompt' | 'messageTranslation',
   ): Promise<{ thread_id: string; status: ThreadStatus }> {
     return apiClient.post(`/api/v1/projects/${projectId}/threads`, {
       thread_type: 'journey',
       journey_kind: journeyKind,
     });
+  },
+
+  async updateMessage(
+    threadId: string,
+    messageId: string,
+    req: PatchMessageRequest,
+  ): Promise<ThreadMessage> {
+    const raw = await apiClient.patch<Record<string, unknown>>(
+      `/api/v1/threads/${threadId}/messages/${messageId}`,
+      req,
+    );
+    return toMessage(raw);
   },
 
   async listProjectThreadRuntime(projectId: string): Promise<ProjectThreadRuntimeItem[]> {

@@ -11,8 +11,14 @@ import { useSettings } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useThreadStore } from '../../../store/threadStore';
 import { threadService } from '../../../api/threadService';
+import { runMessageTranslation } from '../../../agent/messageTranslation';
 import { isUuid } from '../../../utils/idUtils';
-import ChatEngine from '../../../agent/chatEngine';
+import {
+  cancelThread,
+  decideToolCall,
+  decideToolCallsBatch,
+  sendThreadMessage,
+} from '../../../runtime/threadCommands';
 import ObjectPicker from '../../../components/ObjectPicker/ObjectPicker';
 import AgentSidebar from '../../../components/Agent/AgentSidebar';
 import { DefaultDisplayProcessor } from '../../../agent/processors/DisplayProcessor';
@@ -279,12 +285,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [selectedContextIds, setSelectedContextIds] = useState<string[]>([]);
   const [messageLanguageView, setMessageLanguageView] = useState<Record<string, 'primary' | 'secondary'>>({});
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [editingSaving, setEditingSaving] = useState(false);
+  const [translatingByMessageId, setTranslatingByMessageId] = useState<Record<string, boolean>>({});
 
   const contextDropdownRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const isUserNearBottomRef = useRef(true);
-  const engineRef = useRef<ChatEngine | null>(null);
 
   const threadId = selectedAgent?.thread_id ?? null;
   const isAgentVisible = isDesktop ? true : agentVisibleState;
@@ -469,6 +478,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   }, [selectedAgentId]);
 
   useEffect(() => {
+    setEditingMessageId(null);
+    setEditingText('');
+    setTranslatingByMessageId({});
+  }, [selectedAgentId, threadId]);
+
+  useEffect(() => {
     if (selectedContextIds.length === 0) return;
     setSelectedContextIds((prev) => prev.filter((id) => contextIdSet.has(id)));
   }, [contextIdSet, selectedContextIds.length]);
@@ -502,31 +517,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isContextDropdownOpen]);
-
-  useEffect(() => {
-    if (!threadId) {
-      engineRef.current?.dispose();
-      engineRef.current = null;
-      return;
-    }
-
-    const engine = new ChatEngine({
-      threadId,
-      projectId,
-      threadType: 'agent',
-    });
-    engineRef.current = engine;
-    void engine.init().catch((error) => {
-      console.error('Failed to init chat engine', { threadId, error });
-    });
-
-    return () => {
-      if (engineRef.current === engine) {
-        engine.dispose();
-        engineRef.current = null;
-      }
-    };
-  }, [threadId, projectId]);
 
   const handleScroll = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -580,13 +570,19 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
 
   const handleSubmit = useCallback(async (e: React.FormEvent, inputText: string) => {
     e.preventDefault();
-    if (!engineRef.current || !threadId) return;
+    if (!threadId) return;
 
     const shouldClear = inputText.trim().length > 0;
-    await engineRef.current.send(inputText, {
-      run_mode: runMode,
-      surface,
-      context_object_ids: selectedContextIds,
+    await sendThreadMessage({
+      threadId,
+      projectId,
+      threadType: 'agent',
+      inputText,
+      request: {
+        run_mode: runMode,
+        surface,
+        context_object_ids: selectedContextIds,
+      },
     });
     if (shouldClear) {
       setInput(projectId, '');
@@ -617,14 +613,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   ]);
 
   const handleStop = useCallback(() => {
-    if (!engineRef.current) return;
-    void engineRef.current.cancel().catch((error) => {
+    if (!threadId) return;
+    void cancelThread({ threadId }).catch((error) => {
       console.error('Failed to cancel run:', error);
     });
-  }, []);
+  }, [threadId]);
 
   const handleCommitDecisions = useCallback(async (decisions: ToolCallDecisionMap) => {
-    if (!engineRef.current) return;
+    if (!threadId) return;
     const accepts = Object.entries(decisions)
       .filter(([, decision]) => decision === 'accept')
       .map(([id]) => id);
@@ -633,22 +629,89 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       .map(([id]) => id);
 
     if (accepts.length > 1 && rejects.length === 0) {
-      await engineRef.current.acceptToolCallsBatch(accepts);
+      await decideToolCallsBatch({
+        threadId,
+        decisions: accepts.map((id) => ({ toolCallId: id, decision: 'accept' })),
+      });
       return;
     }
 
     await Promise.all([
-      ...accepts.map((id) => engineRef.current?.acceptToolCall(id)),
-      ...rejects.map((id) => engineRef.current?.rejectToolCall(id)),
+      ...accepts.map((id) => decideToolCall({ threadId, toolCallId: id, decision: 'accept' })),
+      ...rejects.map((id) => decideToolCall({ threadId, toolCallId: id, decision: 'reject' })),
     ]);
+  }, [threadId]);
+
+  const handleStartMessageEdit = useCallback((messageId: string, currentText: string) => {
+    setEditingMessageId(messageId);
+    setEditingText(currentText);
   }, []);
 
-  const handleUnsupportedAction = useCallback((actionName: string) => {
-    showError(
-      'Feature Unavailable',
-      `${actionName} is currently unavailable in the new chat engine.`,
-    );
-  }, [showError]);
+  const handleCancelMessageEdit = useCallback(() => {
+    setEditingMessageId(null);
+    setEditingText('');
+  }, []);
+
+  const handleSaveMessageEdit = useCallback(async (message: ThreadMessage) => {
+    if (!threadId || !editingMessageId || editingSaving) return;
+    const content = editingText.trim();
+    if (!content) return;
+
+    setEditingSaving(true);
+    const state = useThreadStore.getState();
+    const existing = state.getMessages(threadId).find((m) => m.id === message.id);
+    const entry = {
+      contentParts: [{ type: 'content' as const, text: content }],
+      thinkingDetails: [],
+    };
+
+    if (existing) {
+      state.patchMessage(threadId, message.id, {
+        data: {
+          ...(existing.data ?? {}),
+          [primaryLanguage]: entry,
+        },
+      });
+    }
+
+    try {
+      await threadService.updateMessage(threadId, message.id, {
+        language: primaryLanguage,
+        content_parts: entry.contentParts,
+        thinking_details: entry.thinkingDetails,
+        set_final: true,
+      });
+      setEditingMessageId(null);
+      setEditingText('');
+    } catch (error: any) {
+      showError('Edit Failed', error?.message ?? 'Failed to update message.');
+    } finally {
+      setEditingSaving(false);
+    }
+  }, [threadId, editingMessageId, editingSaving, editingText, primaryLanguage, showError]);
+
+  const handleTranslateMessage = useCallback(async (message: ThreadMessage, sourceContent: string) => {
+    if (!threadId || !secondaryLanguage) return;
+    const text = sourceContent.trim();
+    if (!text) return;
+    if (translatingByMessageId[message.id]) return;
+
+    setTranslatingByMessageId((prev) => ({ ...prev, [message.id]: true }));
+    try {
+      await runMessageTranslation({
+        projectId,
+        sourceThreadId: threadId,
+        sourceMessageId: message.id,
+        sourceLanguage: primaryLanguage,
+        targetLanguage: secondaryLanguage,
+        sourceContent: text,
+      });
+    } catch (error: any) {
+      showError('Translation Failed', error?.message ?? 'Failed to translate message.');
+    } finally {
+      setTranslatingByMessageId((prev) => ({ ...prev, [message.id]: false }));
+    }
+  }, [threadId, projectId, primaryLanguage, secondaryLanguage, showError, translatingByMessageId]);
 
   const handleDeleteSingleToolCall = useCallback(async (toolCallId: string) => {
     if (!threadId) {
@@ -690,11 +753,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         await threadService.deleteToolCall(threadId, toolCallId);
       } catch (error) {
         console.error('Failed to delete tool call:', error);
-        try {
-          await engineRef.current?.listMessages();
-        } catch (syncError) {
-          console.error('Failed to resync messages after tool call deletion failure:', syncError);
-        }
       }
     }
   }, [threadId, showError]);
@@ -855,6 +913,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
           const translationAvailable = secondaryLanguage
             ? Boolean(message.source.data[secondaryLanguage])
             : false;
+          const translating = Boolean(translatingByMessageId[message.source.id]);
+          const isEditing = editingMessageId === message.source.id;
           const primaryEntry = message.source.data[primaryLanguage];
           const primaryPlainContent = collapseContent(
             primaryEntry?.contentParts ?? message.chatMessage.contentParts,
@@ -871,7 +931,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                     </div>
                   )}
 
-                  {message.chatMessage.role === 'assistant' && (
+                  {message.chatMessage.role === 'assistant' && !isEditing && (
                     <ThinkingDisplay
                       messageId={message.chatMessage.id}
                       contentParts={message.chatMessage.contentParts}
@@ -879,7 +939,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                     />
                   )}
 
-                  {(primaryPlainContent || isStreamingMessage) && (
+                  {!isEditing && (primaryPlainContent || isStreamingMessage) && (
                     <div className="message-content">
                       {!message.hasRequestedLanguage && (
                         <div className="language-fallback-badge">
@@ -899,13 +959,39 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                     </div>
                   )}
 
+                  {isEditing && (
+                    <div className="message-edit">
+                      <textarea
+                        value={editingText}
+                        onChange={(event) => setEditingText(event.target.value)}
+                        autoFocus
+                      />
+                      <div className="edit-actions">
+                        <TextButton
+                          variant="secondary"
+                          onClick={handleCancelMessageEdit}
+                          disabled={editingSaving}
+                        >
+                          {t('agent.cancel')}
+                        </TextButton>
+                        <TextButton
+                          variant="primary"
+                          onClick={() => void handleSaveMessageEdit(message.source)}
+                          disabled={editingSaving || !editingText.trim()}
+                        >
+                          {editingSaving ? t('common.loading') : t('agent.save')}
+                        </TextButton>
+                      </div>
+                    </div>
+                  )}
+
                   {showRunError && (
                     <div className="message-error">
                       {latestRunError}
                     </div>
                   )}
 
-                  {!isStreamingMessage && (
+                  {!isStreamingMessage && !isEditing && (
                     <div className="message-actions">
                       <div className="action-buttons">
                         {translationAvailable && secondaryLanguage && (
@@ -923,20 +1009,21 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                               : t('agent.switchToLanguage', { language: secondaryLanguage })}
                           />
                         )}
-                        {secondaryLanguage && (
+                        {!isUser && secondaryLanguage && (
                           <IconButton
-                            icon={translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />}
-                            onClick={() => handleUnsupportedAction('Message translation')}
+                            icon={translating ? <CircularArrow size="sm" /> : (translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />)}
+                            onClick={() => void handleTranslateMessage(message.source, primaryPlainContent)}
                             title={translationAvailable
                               ? t('agent.refreshTranslation', { language: secondaryLanguage })
                               : t('agent.translateTo', { language: secondaryLanguage })}
                             variant="ghost"
                             size="sm"
+                            disabled={translating || !primaryPlainContent}
                           />
                         )}
                         <IconButton
                           icon={<Edit size="sm" />}
-                          onClick={() => handleUnsupportedAction('Message edit')}
+                          onClick={() => handleStartMessageEdit(message.source.id, primaryPlainContent)}
                           disabled={!primaryPlainContent}
                           title={t('agent.edit')}
                           variant="ghost"

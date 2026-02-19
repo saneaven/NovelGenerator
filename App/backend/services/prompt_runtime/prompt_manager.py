@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from ...models.db_models import PromptVersion, RunModel, SubAgentDefinitionModel, Thread
 from ..settings_service import settings_service
 from ..variable_service import variable_service
+from .output_mode import resolve_output_mode
 from .prompt_renderer import PromptRenderer
 
 
@@ -80,16 +81,22 @@ class PromptManager:
         if thread.thread_type == "journey":
             journey_kind = str(thread.journey_kind or "").strip()
 
-            if journey_kind == "translation":
+            if journey_kind == "objectTranslation":
                 return PromptTarget(
                     task_type="translation",
                     prompt_name="object",
                     required_categories=("systemPrompt", "userPrompt", "initialUserPrompt", "firstUserPrompt", "lastUserPrompt"),
                 )
 
-            if journey_kind == "imagePrompt":
-                image_payload = _as_dict(payload.get("imagePrompt"))
-                context_type = str(payload.get("contextType") or image_payload.get("contextType") or "").strip()
+            if journey_kind == "messageTranslation":
+                return PromptTarget(
+                    task_type="translation",
+                    prompt_name="message",
+                    required_categories=("systemPrompt", "userPrompt"),
+                )
+
+            if journey_kind in {"imagePrompt", "sceneImagePrompt"}:
+                context_type = str(payload.get("contextType") or "").strip()
                 if context_type == "cover_image":
                     prompt_name = "coverImage"
                 elif context_type == "scene":
@@ -103,14 +110,16 @@ class PromptManager:
                     required_categories=("systemPrompt", "userPrompt", "initialUserPrompt", "firstUserPrompt", "lastUserPrompt"),
                 )
 
-            edit_payload = _as_dict(payload.get("editAssistant"))
-            mode = str(edit_payload.get("mode") or payload.get("category") or "").strip()
-            prompt_name = "manuscript" if mode == "manuscript" else "storyObject"
-            return PromptTarget(
-                task_type="editAssistant",
-                prompt_name=prompt_name,
-                required_categories=("systemPrompt", "userPrompt", "initialUserPrompt", "firstUserPrompt", "lastUserPrompt"),
-            )
+            if journey_kind == "objectEdit":
+                mode = str(payload.get("category") or "").strip()
+                prompt_name = "manuscript" if mode == "manuscript" else "storyObject"
+                return PromptTarget(
+                    task_type="editAssistant",
+                    prompt_name=prompt_name,
+                    required_categories=("systemPrompt", "userPrompt", "initialUserPrompt", "firstUserPrompt", "lastUserPrompt"),
+                )
+
+            raise RuntimeError(f"Unsupported journey kind: {journey_kind}")
 
         if thread.thread_type == "subAgent":
             prompt_name = "default"
@@ -136,11 +145,13 @@ class PromptManager:
     def resolve_task_type(*, thread: Thread, run: RunModel) -> str:
         if thread.thread_type == "journey":
             kind = (thread.journey_kind or "").strip()
-            if kind == "translation":
+            if kind in {"objectTranslation", "messageTranslation"}:
                 return "translation"
-            if kind == "imagePrompt":
+            if kind in {"imagePrompt", "sceneImagePrompt"}:
                 return "imagePrompt"
-            return "editAssistant"
+            if kind == "objectEdit":
+                return "editAssistant"
+            raise RuntimeError(f"Unsupported journey kind: {kind}")
         if thread.thread_type == "subAgent":
             return "subAgent"
         return "agent"
@@ -215,15 +226,6 @@ class PromptManager:
         return rendered
 
     @staticmethod
-    def _resolve_output_mode(*, payload: dict[str, Any]) -> str:
-        explicit_mode = str(payload.get("outputMode") or "").strip()
-        if explicit_mode in {"tool_call", "native_tool_call", "raw_output"}:
-            return explicit_mode
-        if bool(payload.get("rawMode")):
-            return "raw_output"
-        return "tool_call"
-
-    @staticmethod
     def _build_edit_assistant_data(
         *,
         payload: dict[str, Any],
@@ -247,27 +249,6 @@ class PromptManager:
                 "editScope": "selected",
             },
         }
-
-        edit_payload = _as_dict(payload.get("editAssistant"))
-        if edit_payload:
-            manuscript_payload = _as_dict(edit_payload.get("manuscript"))
-            story_payload = _as_dict(edit_payload.get("storyObject"))
-            return {
-                "mode": str(edit_payload.get("mode") or defaults["mode"]),
-                "manuscript": {
-                    "currentId": str(manuscript_payload.get("currentId") or ""),
-                    "currentChapterId": str(manuscript_payload.get("currentChapterId") or ""),
-                    "currentChapterName": str(manuscript_payload.get("currentChapterName") or ""),
-                    "currentChapterManuscript": str(manuscript_payload.get("currentChapterManuscript") or ""),
-                    "objectIds": _as_str_list(manuscript_payload.get("objectIds")),
-                },
-                "storyObject": {
-                    "targetIds": _as_str_list(story_payload.get("targetIds")),
-                    "contextIds": _as_str_list(story_payload.get("contextIds")),
-                    "categoryName": str(story_payload.get("categoryName") or ""),
-                    "editScope": str(story_payload.get("editScope") or "selected"),
-                },
-            }
 
         category = str(payload.get("category") or "").strip()
         target_id = str(payload.get("targetId") or "").strip()
@@ -309,27 +290,17 @@ class PromptManager:
         language: str,
     ) -> dict[str, Any]:
         translation_payload = _as_dict(payload.get("translation"))
-        if translation_payload:
-            return {
-                "sourceLanguage": str(translation_payload.get("sourceLanguage") or ""),
-                "targetLanguage": str(translation_payload.get("targetLanguage") or language),
-                "objectIds": _as_str_list(translation_payload.get("objectIds")),
-                "contextObjectIds": _as_str_list(translation_payload.get("contextObjectIds")),
-                "currentTranslatedContents": translation_payload.get("currentTranslatedContents")
-                if isinstance(translation_payload.get("currentTranslatedContents"), list)
-                else [],
-                "messages": translation_payload.get("messages") if isinstance(translation_payload.get("messages"), list) else [],
-            }
-
         return {
-            "sourceLanguage": str(payload.get("sourceLanguage") or ""),
-            "targetLanguage": str(payload.get("targetLanguage") or language),
-            "objectIds": _as_str_list(payload.get("objectIds")) or journey_target_ids,
-            "contextObjectIds": _as_str_list(payload.get("contextObjectIds")) or context_object_ids,
-            "currentTranslatedContents": payload.get("currentTranslatedContents")
-            if isinstance(payload.get("currentTranslatedContents"), list)
+            "sourceLanguage": str(translation_payload.get("sourceLanguage") or ""),
+            "targetLanguage": str(translation_payload.get("targetLanguage") or language),
+            "sourceThreadId": str(translation_payload.get("sourceThreadId") or ""),
+            "sourceMessageId": str(translation_payload.get("sourceMessageId") or ""),
+            "objectIds": _as_str_list(translation_payload.get("objectIds")) or journey_target_ids,
+            "contextObjectIds": _as_str_list(translation_payload.get("contextObjectIds")) or context_object_ids,
+            "currentTranslatedContents": translation_payload.get("currentTranslatedContents")
+            if isinstance(translation_payload.get("currentTranslatedContents"), list)
             else [],
-            "messages": payload.get("messages") if isinstance(payload.get("messages"), list) else [],
+            "messages": translation_payload.get("messages") if isinstance(translation_payload.get("messages"), list) else [],
         }
 
     @staticmethod
@@ -339,19 +310,16 @@ class PromptManager:
         project_data: dict[str, Any],
         context_object_ids: list[str],
     ) -> dict[str, Any]:
-        image_payload = _as_dict(payload.get("imagePrompt"))
-        base_payload = image_payload if image_payload else payload
-
-        selected_object_ids = _as_str_list(base_payload.get("selectedObjectIds")) or context_object_ids
-        object_id = str(base_payload.get("objectId") or "").strip()
+        selected_object_ids = _as_str_list(payload.get("selectedObjectIds")) or context_object_ids
+        object_id = str(payload.get("objectId") or "").strip()
         object_row = _find_story_object(project_data, object_id)
         basic_info = _as_dict(project_data.get("basicInfo"))
-        scene_context = _as_dict(base_payload.get("sceneContext"))
+        scene_context = _as_dict(payload.get("sceneContext"))
 
         return {
-            "promptMode": str(base_payload.get("promptMode") or "natural"),
+            "promptMode": str(payload.get("promptMode") or "natural"),
             "currentObject": {
-                "type": str(object_row.get("type") or base_payload.get("objectType") or ""),
+                "type": str(object_row.get("type") or payload.get("objectType") or ""),
                 "name": str(object_row.get("name") or ""),
                 "description": str(object_row.get("description") or ""),
                 "content": str(object_row.get("content") or ""),
@@ -359,8 +327,8 @@ class PromptManager:
                 "image_prompt_positive": str(object_row.get("imagePromptPositive") or ""),
                 "image_prompt_negative": str(object_row.get("imagePromptNegative") or ""),
             },
-            "scenePreContext": str(scene_context.get("preContext") or base_payload.get("scenePreContext") or ""),
-            "scenePostContext": str(scene_context.get("postContext") or base_payload.get("scenePostContext") or ""),
+            "scenePreContext": str(scene_context.get("preContext") or ""),
+            "scenePostContext": str(scene_context.get("postContext") or ""),
             "selectedObjectIds": selected_object_ids,
             "coverImage": {
                 "title": str(basic_info.get("title") or ""),
@@ -403,7 +371,12 @@ class PromptManager:
         language = str(run.language or "English")
         context_object_ids = _as_str_list(run.context_object_ids)
         journey_target_ids = _as_str_list(run.journey_target_ids)
-        output_mode = self._resolve_output_mode(payload=payload)
+        native_output_mode = bool(getattr(settings_service._get_settings(db, user_id), "native_output_mode", False))
+        output_mode = resolve_output_mode(
+            journey_kind=thread.journey_kind,
+            payload=payload,
+            native_output_mode=native_output_mode,
+        )
 
         variables = variable_service.get_variables_for_template(
             db,

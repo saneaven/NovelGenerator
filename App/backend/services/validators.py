@@ -219,7 +219,7 @@ def validate_tool_schema(args: dict[str, Any], tool_name: str, ctx: ValidationCo
 
 def validate_tool_allowed_in_session(args: dict[str, Any], tool_name: str, ctx: ValidationContext) -> ValidationResult:
     _ = args
-    if not ctx.allowed_tool_names:
+    if ctx.allowed_tool_names is None:
         return valid_result()
     if tool_name in ctx.allowed_tool_names:
         return valid_result()

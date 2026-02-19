@@ -108,7 +108,7 @@ const LanguageDropdown: React.FC<LanguageDropdownProps> = ({
                 onTranslateAllClick?.();
                 setIsOpen(false);
               }}
-              title={t('languageDropdown.translateObjects', { count: translateCount })}
+              title={t('languageDropdown.objectTranslation', { count: translateCount })}
               iconLeft={<Globe size="sm" />}
               fullWidth
             >

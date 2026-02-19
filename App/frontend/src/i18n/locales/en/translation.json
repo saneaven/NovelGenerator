@@ -972,7 +972,7 @@
   "languageDropdown": {
     "selectLanguage": "Select language",
     "translate": "Translate ({{count}})",
-    "translateObjects": "Translate {{count}} objects"
+    "objectTranslation": "Translate {{count}} objects"
   },
   "agentRunModeToggle": {
     "plan": "Plan",
@@ -1229,8 +1229,8 @@
     },
     "wordCount": "{{count}} words",
     "toolbar": {
-      "aiEdit": "AI Edit",
-      "aiEditChapter": "AI Edit Chapter",
+      "objectEdit": "AI Edit",
+      "objectEditChapter": "AI Edit Chapter",
       "save": "Save",
       "saveSnapshot": "Create version snapshot (Ctrl+S)",
       "moreActions": "More actions",

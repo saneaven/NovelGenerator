@@ -10,7 +10,7 @@ import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import { useJourneyStore } from '../../store/journeyStore';
 import { useNotificationStore } from '../../store/notificationStore';
 import { threadService } from '../../api/threadService';
-import ChatEngine from '../../agent/chatEngine';
+import { sendThreadMessage } from '../../runtime/threadCommands';
 import { Globe, Swap, Document } from '../icons';
 import { ObjectPicker } from '../ObjectPicker';
 import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
@@ -293,20 +293,33 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     if (objectsToTranslate.length === 0) {
       return;
     }
-    const spec = getJourneySpec('translateObjects');
+    const spec = getJourneySpec('objectTranslation');
     const journeyId = crypto.randomUUID();
+    const selectedObjectIds = objectsToTranslate.map((o) => o.objectId);
+    const selectedContext = Array.from(selectedContextIds);
+    const outputMode = rawMode
+      ? 'raw_output'
+      : (settings.nativeOutputMode ? 'native_tool_call' : 'tool_call');
     const inputPayload = {
       projectId,
       sourceLanguage,
       targetLanguage,
       userInput: userInput.trim() || undefined,
-      objectIds: objectsToTranslate.map(o => o.objectId),
-      contextObjectIds: Array.from(selectedContextIds),
+      objectIds: selectedObjectIds,
+      contextObjectIds: selectedContext,
       rawMode,
+      outputMode,
+      translation: {
+        sourceLanguage,
+        targetLanguage,
+        objectIds: selectedObjectIds,
+        contextObjectIds: selectedContext,
+        currentTranslatedContents: [],
+      },
     };
     useJourneyStore.getState().createJourney({
       id: journeyId,
-      kind: 'translateObjects',
+      kind: 'objectTranslation',
       input: inputPayload,
       editingTargets: spec.buildEditingTargets(inputPayload),
       label: spec.label(inputPayload),
@@ -323,20 +336,20 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     );
 
     try {
-      const created = await threadService.createJourneyThread(projectId, 'translation');
+      const created = await threadService.createJourneyThread(projectId, 'objectTranslation');
       useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
-      const engine = new ChatEngine({
+      await sendThreadMessage({
         threadId: created.thread_id,
         projectId,
         threadType: 'journey',
-      });
-      await engine.init();
-      await engine.send(userInput.trim() || 'Translate the selected objects.', {
-        input_payload: inputPayload,
-        surface: 'story-object',
-        journey_target_ids: objectsToTranslate.map((o) => o.objectId),
-        context_object_ids: Array.from(selectedContextIds),
-        language: targetLanguage,
+        inputText: userInput.trim() || 'Translate the selected objects.',
+        request: {
+          input_payload: inputPayload,
+          surface: 'story-object',
+          journey_target_ids: selectedObjectIds,
+          context_object_ids: selectedContext,
+          language: targetLanguage,
+        },
       });
     } catch (error: any) {
       useJourneyStore.getState().updateJourney(journeyId, {

@@ -13,6 +13,15 @@ import type {
 export type { ThreadInfo, ThreadMessage, ThreadToolCall };
 export type { ThreadType, ThreadStatus } from '../types/thread';
 
+export interface FinalizeMessageFromEndParams {
+  threadId: string;
+  messageId: string;
+  runId: string;
+  seqInThread?: number;
+  data?: ThreadMessage['data'];
+  ts?: string;
+}
+
 interface ThreadState {
   threadsById: Record<string, ThreadInfo | undefined>;
   messagesByThreadId: Record<string, ThreadMessage[] | undefined>;
@@ -35,8 +44,8 @@ interface ThreadState {
   removeThread: (threadId: string) => void;
   getThread: (threadId: string) => ThreadInfo | undefined;
 
-  replaceMessagesAndToolCalls: (threadId: string, messages: ThreadMessage[], toolCalls: ThreadToolCall[]) => void;
-  replaceMessages: (threadId: string, messages: ThreadMessage[]) => void;
+  upsertMessage: (message: ThreadMessage) => void;
+  finalizeMessageFromEnd: (params: FinalizeMessageFromEndParams) => void;
   appendMessage: (message: ThreadMessage) => void;
   patchMessage: (threadId: string, messageId: string, partial: Partial<ThreadMessage>) => void;
   removeMessage: (threadId: string, messageId: string) => void;
@@ -125,6 +134,24 @@ function buildPendingMessageByThread(
   return out;
 }
 
+function hasMessageData(data: ThreadMessage['data'] | undefined): boolean {
+  return Boolean(data && Object.keys(data).length > 0);
+}
+
+function fallbackDataFromStreaming(message: ThreadMessage | undefined): ThreadMessage['data'] | undefined {
+  if (!message?.streamingData?.contentParts || message.streamingData.contentParts.length === 0) return undefined;
+  const preferLanguage = Object.keys(message.data ?? {}).find((key) => key !== '_final') ?? 'English';
+  const entry = {
+    contentParts: message.streamingData.contentParts,
+    thinkingDetails: message.streamingData.thinkingDetails ?? [],
+  };
+  return {
+    ...(message.data ?? {}),
+    [preferLanguage]: entry,
+    _final: entry,
+  };
+}
+
 export const useThreadStore = create<ThreadState>()((set, get) => ({
   threadsById: {},
   messagesByThreadId: {},
@@ -184,48 +211,74 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
 
   getThread: (threadId) => get().threadsById[threadId],
 
-  replaceMessagesAndToolCalls: (threadId, messages, toolCalls) =>
+  upsertMessage: (message) =>
     set((s) => {
-      const nextToolCallsById = { ...s.toolCallsById };
-      const nextIdsByMessage = { ...s.toolCallIdsByMessageId };
-      const nextIdsByAssistant = { ...s.toolCallIdsByAssistantMessageId };
-
-      for (const tc of toolCalls) {
-        nextToolCallsById[tc.id] = tc;
-
-        const messageIds = nextIdsByMessage[tc.messageId] ?? [];
-        nextIdsByMessage[tc.messageId] = uniqueIds([...messageIds, tc.id]);
-
-        if (tc.assistantMessageId) {
-          const assistantIds = nextIdsByAssistant[tc.assistantMessageId] ?? [];
-          nextIdsByAssistant[tc.assistantMessageId] = uniqueIds([...assistantIds, tc.id]);
-        }
+      const existing = s.messagesByThreadId[message.threadId] ?? [];
+      const index = existing.findIndex((m) => m.id === message.id);
+      if (index < 0) {
+        return {
+          messagesByThreadId: {
+            ...s.messagesByThreadId,
+            [message.threadId]: sortMessages([...existing, message]),
+          },
+        };
       }
 
-      const pendingToolCallIdsByThread = buildPendingByThread(nextToolCallsById);
-      const pendingToolCallMessageByThread = buildPendingMessageByThread(nextToolCallsById, pendingToolCallIdsByThread);
+      const merged = existing.map((m) => (m.id === message.id ? { ...m, ...message } : m));
+      return {
+        messagesByThreadId: {
+          ...s.messagesByThreadId,
+          [message.threadId]: sortMessages(merged),
+        },
+      };
+    }),
+
+  finalizeMessageFromEnd: (params) =>
+    set((s) => {
+      const messages = s.messagesByThreadId[params.threadId] ?? [];
+      const existing = messages.find((m) => m.id === params.messageId);
+      const fallbackData = fallbackDataFromStreaming(existing);
+      const finalData = hasMessageData(params.data)
+        ? params.data!
+        : (fallbackData ?? existing?.data ?? {});
+
+      const finalized: ThreadMessage = existing
+        ? {
+            ...existing,
+            runId: params.runId,
+            data: finalData,
+            seqInThread: Number(params.seqInThread ?? existing.seqInThread ?? 0),
+            streamingData: undefined,
+            isStreaming: false,
+          }
+        : {
+            id: params.messageId,
+            threadId: params.threadId,
+            runId: params.runId,
+            role: 'assistant',
+            seq: 0,
+            seqInThread: Number(params.seqInThread ?? 0),
+            data: finalData,
+            streamingData: undefined,
+            isStreaming: false,
+            createdAt: params.ts ?? new Date().toISOString(),
+          };
+
+      const nextMessages = existing
+        ? messages.map((m) => (m.id === params.messageId ? finalized : m))
+        : [...messages, finalized];
 
       return {
         messagesByThreadId: {
           ...s.messagesByThreadId,
-          [threadId]: sortMessages(messages),
+          [params.threadId]: sortMessages(nextMessages),
         },
-        toolCallsById: nextToolCallsById,
-        toolCallIdsByMessageId: nextIdsByMessage,
-        toolCallIdsByAssistantMessageId: nextIdsByAssistant,
-        toolCallsByMessageId: buildMessageMap(nextToolCallsById),
-        pendingToolCallIdsByThread,
-        pendingToolCallMessageByThread,
+        activeStreamByThread: {
+          ...s.activeStreamByThread,
+          [params.threadId]: false,
+        },
       };
     }),
-
-  replaceMessages: (threadId, messages) =>
-    set((s) => ({
-      messagesByThreadId: {
-        ...s.messagesByThreadId,
-        [threadId]: sortMessages(messages),
-      },
-    })),
 
   appendMessage: (message) =>
     set((s) => {
