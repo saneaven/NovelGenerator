@@ -139,7 +139,7 @@
 }
 
 .sub-agent-peek-dock__body {
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 /* Timeline container — body flows seamlessly from header within

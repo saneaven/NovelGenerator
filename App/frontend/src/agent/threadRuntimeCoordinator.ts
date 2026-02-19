@@ -479,6 +479,14 @@ class ProjectRuntimeConnection {
 
       if (!toolCalls.every((tc) => tc.status === 'applied')) return;
 
+      const thread = store.threadsById[threadId];
+      const blockedByPausedOrError =
+        thread?.status === 'paused'
+        || thread?.status === 'error'
+        || thread?.latestRunStatus === 'paused'
+        || thread?.latestRunStatus === 'error';
+      if (blockedByPausedOrError) return;
+
       if (this.inFlightResumeByThread.has(threadId)) return;
       this.inFlightResumeByThread.add(threadId);
       try {

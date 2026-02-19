@@ -29,7 +29,6 @@ export class ChatEngine {
 
   private initialized = false;
   private inFlightChat = false;
-  private lastRunId: string | null = null;
 
   constructor(params: ChatEngineParams) {
     this.threadId = params.threadId;
@@ -81,7 +80,6 @@ export class ChatEngine {
         input_text: trimmed,
         ...opts,
       });
-      this.lastRunId = response.runId;
       this.upsertThreadStatus(response.threadStatus, null, response.runId, response.status);
       return true;
     } catch (error) {
@@ -108,7 +106,6 @@ export class ChatEngine {
         input_text: '',
         ...opts,
       });
-      this.lastRunId = response.runId;
       this.upsertThreadStatus(response.threadStatus, null, response.runId, response.status);
       return true;
     } finally {
@@ -147,8 +144,13 @@ export class ChatEngine {
   }
 
   async cancel(runId?: string): Promise<void> {
-    const target = runId ?? this.lastRunId;
-    if (!target) return;
+    const target = runId
+      ?? useThreadStore.getState().threadsById[this.threadId]?.latestRunId
+      ?? null;
+    if (!target) {
+      console.error('ChatEngine.cancel(): no run ID available to cancel');
+      return;
+    }
     await threadService.cancelRun(this.threadId, target);
   }
 
