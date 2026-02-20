@@ -55,9 +55,9 @@ def test_thread_info_response_exposes_memory_boundary_message_id() -> None:
 
 def test_run_pipeline_executes_preflight_before_memory_prompt_build() -> None:
     backend_root = Path(__file__).resolve().parents[1]
-    source = (backend_root / "services" / "run_pipeline.py").read_text(encoding="utf-8")
+    source = (backend_root / "services" / "run_pipeline" / "llm_executor.py").read_text(encoding="utf-8")
 
-    preflight_idx = source.find("await self._prepare_thread_memory_preflight(")
+    preflight_idx = source.find("await _mem.prepare_thread_memory_preflight(")
     memory_prompt_idx = source.find("memory_prompt = await build_memory_prompt(")
 
     assert preflight_idx != -1

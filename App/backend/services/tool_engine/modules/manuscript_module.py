@@ -6,7 +6,7 @@ from ..contexts import ToolExecutionContext, ToolValidationContext
 from ..contracts import ToolSpec
 from ..registry import ToolRegistry
 from ..result_utils import invalid_result, make_result, valid_result
-from .common_object_helpers import content_to_doc, extract_lang_data, obj_schema, read_object, to_uuid
+from .common_object_helpers import extract_lang_data, obj_schema, read_object, to_uuid
 from ....services.object_service import object_service
 from ....services.patch_utils import apply_single_replacement
 from ....services.sidecar_client import SidecarConversionError, SidecarUnavailableError
@@ -80,14 +80,9 @@ async def _execute_replace_manuscript(args: dict[str, Any], ctx: ToolExecutionCo
     object_id = to_uuid(args.get("id"), "id")
     content = str(args.get("content") or "")
 
-    doc: dict[str, Any]
-    if ctx.sidecar is not None:
-        try:
-            doc = await ctx.sidecar.markdown_to_doc(content)
-        except (SidecarUnavailableError, SidecarConversionError):
-            doc = content_to_doc(content)
-    else:
-        doc = content_to_doc(content)
+    if ctx.sidecar is None:
+        raise ValueError("SIDECAR_ERROR: sidecar client unavailable")
+    doc = await ctx.sidecar.markdown_to_doc(content)
 
     object_service.update_object(
         ctx.db,
