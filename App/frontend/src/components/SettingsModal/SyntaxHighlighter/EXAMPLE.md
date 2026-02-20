@@ -5,16 +5,28 @@ This demonstrates all supported syntax highlighting:
 ## Template Variables
 
 Access data with double brackets:
-- Variable: {{var::chapterName}}
-- Context: {{context::storyData}}
+- Variable: {{ config.mainLanguage }}
+- Nested: {{ project.basicInfo.title }}
 
 ## Conditional Logic
 
-```
-{{#if::thinking}}
+{% if config.thinking_mode == "custom" %}
 Use thinking blocks for analysis
-{{/if}}
-```
+{% endif %}
+
+## Loops
+
+{% for obj in project.objects|filter_by_type("character") %}
+- {{ obj.name }}: {{ obj.content }}
+{% endfor %}
+
+## Fragment Inclusion
+
+{% include "fragment:common/projectContext/full" %}
+
+## Comments
+
+{# This comment will not appear in the rendered output #}
 
 ## XML Tags
 
@@ -54,16 +66,16 @@ function example() {
 
 ## Complete Example
 
-{{#if::thinking}}
+{% if config.thinking_mode != "off" %}
 <thinking>
 Before responding:
-1. Analyze **{{var::chapterName}}**
-2. Review context: {{context::storyData}}
+1. Analyze **{{ project.basicInfo.title }}**
+2. Review the outline structure
 3. Plan the response
 </thinking>
-{{/if}}
+{% endif %}
 
-The chapter **{{var::chapterName}}** should be:
-- Consistent with `{{context::worldBuilding}}`
-- Written in *{{var::language}}*
-- Following the style guide
+{% for chapter in project.outline.chapters %}
+### {{ chapter.title }}
+{{ chapter.summary }}
+{% endfor %}

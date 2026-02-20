@@ -65,8 +65,12 @@ from .routes.translation_routes import router as translation_router
 # Asset management routes
 from .routes.asset_routes import router as asset_router
 
-# Fragment management routes
+# Fragment & folder management routes
 from .routes.fragment_routes import router as fragment_router
+from .routes.folder_routes import router as folder_router
+
+# Template rendering/validation routes
+from .routes.template_routes import router as template_router
 
 # Variable management routes
 from .routes.variable_routes import router as variable_router
@@ -111,8 +115,12 @@ app.include_router(translation_router, prefix="/api/v1", tags=["translations"])
 # Include asset management router
 app.include_router(asset_router)
 
-# Include fragment management router
+# Include fragment & folder management routers
 app.include_router(fragment_router)
+app.include_router(folder_router)
+
+# Include template rendering/validation router
+app.include_router(template_router)
 
 # Include variable management router
 app.include_router(variable_router)

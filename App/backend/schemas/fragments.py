@@ -7,14 +7,15 @@ from pydantic import BaseModel, Field
 
 class FragmentIdentifier(BaseModel):
     """Identifier for a specific fragment"""
-    folder_path: Optional[str] = Field(None, max_length=200)
+    folder_id: Optional[str] = None
     fragment_name: str = Field(..., min_length=1, max_length=100)
 
 
 class FragmentContentResponse(BaseModel):
     """Response with active fragment content"""
     id: str
-    folder_path: Optional[str]
+    folder_id: Optional[str]
+    folder_path: Optional[str]  # Computed path for display
     fragment_name: str
     content: str
     description: Optional[str]
@@ -23,13 +24,11 @@ class FragmentContentResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class FragmentCreate(BaseModel):
-    """Create new fragment"""
-    folder_path: Optional[str] = Field(None, max_length=200)
+    """Create new fragment. Provide folder_id OR folder_path (resolved to folder_id server-side)."""
+    folder_id: Optional[str] = None
+    folder_path: Optional[str] = Field(None, max_length=200)  # Alternative: resolved via get_or_create
     fragment_name: str = Field(..., min_length=1, max_length=100)
     content: str = Field(..., min_length=1)
     description: Optional[str] = Field(None, max_length=500)
@@ -45,13 +44,14 @@ class FragmentUpdate(BaseModel):
 
 class FragmentMoveRequest(BaseModel):
     """Request to move fragment to different folder"""
-    new_folder_path: Optional[str] = Field(None, max_length=200)
+    new_folder_id: Optional[str] = None
 
 
 class FragmentVersionResponse(BaseModel):
     """Full fragment version details"""
     id: str
-    folder_path: Optional[str]
+    folder_id: Optional[str]
+    folder_path: Optional[str]  # Computed path for display
     fragment_name: str
     content: str
     description: Optional[str]
@@ -60,9 +60,6 @@ class FragmentVersionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     note: Optional[str]
-
-    class Config:
-        from_attributes = True
 
 
 class FragmentVersionHistoryItem(BaseModel):
@@ -85,39 +82,34 @@ class FragmentRestoreRequest(BaseModel):
 class FragmentListItem(BaseModel):
     """Fragment item for list responses"""
     id: str
-    folder_path: Optional[str]
+    folder_id: Optional[str]
+    folder_path: Optional[str]  # Computed path for display
     fragment_name: str
     description: Optional[str]
     is_system_default: bool
     version_number: int
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class FragmentWithContent(BaseModel):
     """Fragment with content for template engine"""
     id: str
-    folder_path: Optional[str]
+    folder_id: Optional[str]
+    folder_path: Optional[str]  # Computed path for display
     fragment_name: str
     content: str
     description: Optional[str]
     is_system_default: bool
 
-    class Config:
-        from_attributes = True
-
 
 class FolderTreeNode(BaseModel):
     """Node in folder tree structure"""
+    id: str
     name: str
-    path: Optional[str]  # Full path, None for root
+    path: str  # Full computed path
+    parent_id: Optional[str]
     fragments: List[FragmentListItem]
     children: List['FolderTreeNode']
-
-    class Config:
-        from_attributes = True
 
 
 # Allow forward reference for recursive type
@@ -140,4 +132,4 @@ class FragmentValidationResponse(BaseModel):
     is_valid: bool
     syntax_errors: List[str]
     warnings: List[str]
-    referenced_fragments: List[str]  # Paths of fragments referenced via {{prompt ...}}
+    referenced_fragments: List[str]  # Paths of fragments referenced via {% include "fragment:..." %}

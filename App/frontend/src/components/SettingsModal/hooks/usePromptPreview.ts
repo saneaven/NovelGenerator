@@ -94,8 +94,6 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
     setError(null);
 
     try {
-      // TODO: fragment reload needs reimplementation (PromptManager deleted)
-
       // Build preview data
       const previewData = buildPreviewData({
         taskType,
@@ -109,8 +107,8 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
         variableOverrides,
       });
 
-      // Render the template
-      const rendered = renderTemplate(templateContent, previewData);
+      // Render the template via backend Jinja2 engine
+      const rendered = await renderTemplate(templateContent, previewData);
 
       // Check if rendering returned an error
       if (rendered.startsWith('[Template Error:') || rendered.includes('[Fragment Error:')) {

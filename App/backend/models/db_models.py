@@ -201,6 +201,7 @@ class PromptPreset(Base):
     # Relationships
     user = relationship("User")
     prompts = relationship("PromptVersion", back_populates="preset", cascade="all, delete-orphan")
+    folders = relationship("PromptFolder", back_populates="preset", cascade="all, delete-orphan")
     fragments = relationship("PromptFragment", back_populates="preset", cascade="all, delete-orphan")
     variables = relationship("PromptVariable", back_populates="preset", cascade="all, delete-orphan")
     sub_agents = relationship("SubAgentDefinitionModel", back_populates="preset", cascade="all, delete-orphan")
@@ -287,6 +288,37 @@ class SubAgentDefinitionModel(Base):
 
 
 # ============================================================================
+# PROMPT FOLDERS
+# ============================================================================
+
+class PromptFolder(Base):
+    """Folder entity for organizing prompt fragments hierarchically"""
+    __tablename__ = 'prompt_folders'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    preset_id = Column(UUID(as_uuid=True), ForeignKey('prompt_presets.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    name = Column(String(100), nullable=False)
+    parent_id = Column(UUID(as_uuid=True), ForeignKey('prompt_folders.id', ondelete='CASCADE'), nullable=True, index=True)
+    display_order = Column(Integer, default=0, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    user = relationship("User")
+    preset = relationship("PromptPreset", back_populates="folders")
+    parent = relationship("PromptFolder", remote_side=[id], backref="children")
+    fragments = relationship("PromptFragment", back_populates="folder")
+
+    __table_args__ = (
+        UniqueConstraint('preset_id', 'parent_id', 'name', name='uq_folder_preset_parent_name'),
+        Index('idx_folder_preset_parent', 'preset_id', 'parent_id'),
+    )
+
+
+# ============================================================================
 # PROMPT FRAGMENTS
 # ============================================================================
 
@@ -299,7 +331,7 @@ class PromptFragment(Base):
     preset_id = Column(UUID(as_uuid=True), ForeignKey('prompt_presets.id', ondelete='CASCADE'), nullable=False, index=True)
 
     # Fragment identification
-    folder_path = Column(String(200), nullable=True)  # e.g., 'common', 'thinking/custom', null for root
+    folder_id = Column(UUID(as_uuid=True), ForeignKey('prompt_folders.id', ondelete='CASCADE'), nullable=True, index=True)
     fragment_name = Column(String(100), nullable=False)
 
     # Content
@@ -320,6 +352,7 @@ class PromptFragment(Base):
     # Relationships
     user = relationship("User")
     preset = relationship("PromptPreset", back_populates="fragments")
+    folder = relationship("PromptFolder", back_populates="fragments")
 
 
 # ============================================================================

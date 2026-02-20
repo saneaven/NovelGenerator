@@ -2,8 +2,8 @@ import { StreamLanguage } from '@codemirror/language';
 import type { StreamParser } from '@codemirror/language';
 
 /**
- * CodeMirror StreamLanguage for Handlebars template syntax highlighting
- * Supports: {{ variable }}, {{#block}}...{{/block}}, XML tags, and Markdown
+ * CodeMirror StreamLanguage for Jinja2 template syntax highlighting
+ * Supports: {{ variable }}, {% tag %}, {# comment #}, XML tags, and Markdown
  */
 
 interface TemplateState {
@@ -11,7 +11,7 @@ interface TemplateState {
 }
 
 const templateParser: StreamParser<TemplateState> = {
-  name: 'handlebars',
+  name: 'jinja2',
 
   startState: (): TemplateState => ({
     inCodeBlock: false,
@@ -44,21 +44,10 @@ const templateParser: StreamParser<TemplateState> = {
       return 'list';
     }
 
-    // Try to match Handlebars block helpers {{#...}}, {{/...}}, {{^...}}
-    if (stream.match(/^\{\{[#/^]/)) {
+    // Jinja2 comments: {# ... #}
+    if (stream.match(/^\{#/)) {
       while (!stream.eol()) {
-        if (stream.match(/^\}\}/)) {
-          return 'keyword';
-        }
-        stream.next();
-      }
-      return 'keyword';
-    }
-
-    // Try to match Handlebars comments {{!-- ... --}} or {{! ... }}
-    if (stream.match(/^\{\{!/)) {
-      while (!stream.eol()) {
-        if (stream.match(/^--\}\}/) || stream.match(/^\}\}/)) {
+        if (stream.match(/^#\}/)) {
           return 'comment';
         }
         stream.next();
@@ -66,18 +55,29 @@ const templateParser: StreamParser<TemplateState> = {
       return 'comment';
     }
 
-    // Try to match {{prompt "..."}} helper (fragment inclusion)
-    if (stream.match(/^\{\{\s*prompt\s+"/)) {
+    // Jinja2 fragment include: {% include "fragment:..." %} (check BEFORE general {% %})
+    if (stream.match(/^\{%[-\s]*include\s+"/)) {
       while (!stream.eol()) {
-        if (stream.match(/^\}\}/)) {
-          return 'atom'; // Different color for prompt fragments
+        if (stream.match(/^%\}/)) {
+          return 'atom';
         }
         stream.next();
       }
       return 'atom';
     }
 
-    // Try to match Handlebars output {{ ... }}
+    // Jinja2 tags: {% if %}, {% for %}, {% endif %}, {% set %}, etc.
+    if (stream.match(/^\{%/)) {
+      while (!stream.eol()) {
+        if (stream.match(/^%\}/)) {
+          return 'keyword';
+        }
+        stream.next();
+      }
+      return 'keyword';
+    }
+
+    // Jinja2 variable output: {{ ... }}
     if (stream.match(/^\{\{/)) {
       while (!stream.eol()) {
         if (stream.match(/^\}\}/)) {
@@ -85,7 +85,7 @@ const templateParser: StreamParser<TemplateState> = {
         }
         stream.next();
       }
-      return 'variableName'; // Unclosed variable is still highlighted
+      return 'variableName';
     }
 
     // Try to match XML tags <...>

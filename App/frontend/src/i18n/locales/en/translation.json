@@ -919,7 +919,7 @@
         "noVariablesForType": "No variables available for this prompt type.",
         "noVariables": "No variables available.",
         "viewSyntaxTokens": "View template syntax tokens",
-        "handlebarsSyntax": "Handlebars Syntax",
+        "templateSyntax": "Template Syntax",
         "closeSyntaxPanel": "Close syntax panel",
         "variables": "Variables",
         "helpers": "Helpers"

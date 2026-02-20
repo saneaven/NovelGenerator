@@ -27,8 +27,6 @@ import { useSubAgentStore } from '../../../store/subAgentStore';
 import { useVariableStore } from '../../../store/variableStore';
 import { promptService } from '../../../api/promptService';
 import { fragmentService } from '../../../api/fragmentService';
-// TODO: PromptManager deleted — fragment reload needs reimplementation
-const PromptManager = { reloadFragments: () => Promise.resolve() };
 import { PROMPT_TREE, getFirstPromptNode, type PromptNode } from './promptTree';
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
@@ -39,7 +37,7 @@ import PromptPreviewModal from './PromptPreviewModal';
 import type { PresetListItem } from '../../../types/presets';
 import type { PromptCategory, TaskType } from '../../../types/prompts';
 import { mapTaskTypeToSchemaType } from '../../../templateEngine/validator';
-import { extractFragmentReferences, getFragmentRegistry, validateTemplate } from '../../../templateEngine/engine';
+import { extractFragmentReferences, validateTemplate } from '../../../templateEngine/engine';
 import { useSettingsToast } from '../SettingsToastContext';
 import {
   makeFragmentDraftKey,
@@ -54,8 +52,9 @@ import {
 type SubTab = 'prompts' | 'fragments' | 'variables' | 'subAgents';
 
 interface SelectedFragment {
-  folderPath: string | null;
+  folderId: string | null;
   fragmentName: string;
+  fullPath: string;
 }
 
 interface TemplateValidationResult {
@@ -82,7 +81,7 @@ type PromptDraft = {
 type FragmentDraft = {
   key: string;
   label: string;
-  folderPath: string | null;
+  folderId: string | null;
   fragmentName: string;
   fullPath: string;
   isLoading: boolean;
@@ -100,10 +99,6 @@ function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
   return 'Unknown error';
-}
-
-function fragmentFullPath(folderPath: string | null, fragmentName: string): string {
-  return folderPath ? `${folderPath}/${fragmentName}` : fragmentName;
 }
 
 async function validatePromptContent(taskType: TaskType, name: string, content: string): Promise<TemplateValidationResult> {
@@ -171,7 +166,8 @@ function detectCircularFragmentReferences(startPath: string, contentByPath: Map<
 async function validateFragmentContent(
   content: string,
   fullPath: string,
-  fragmentDrafts: Record<string, FragmentDraft>
+  fragmentDrafts: Record<string, FragmentDraft>,
+  allFragmentContents: Map<string, string>,
 ): Promise<TemplateValidationResult> {
   const syntaxResult = await validateTemplate(content);
   if (!syntaxResult.isValid) {
@@ -187,7 +183,7 @@ async function validateFragmentContent(
     };
   }
 
-  const contentByPath = getFragmentRegistry();
+  const contentByPath = new Map(allFragmentContents);
   for (const d of Object.values(fragmentDrafts)) {
     contentByPath.set(d.fullPath, d.content);
   }
@@ -222,7 +218,7 @@ interface CreateFragmentModalProps {
   isOpen: boolean;
   folderPath: string | null;
   onClose: () => void;
-  onCreate: (folderPath: string | null, fragmentName: string) => void;
+  onCreate: (folderId: string | null, fragmentName: string, fullPath: string) => void;
 }
 
 const CreateFragmentModal: React.FC<CreateFragmentModalProps> = ({ isOpen, folderPath, onClose, onCreate }) => {
@@ -250,14 +246,15 @@ const CreateFragmentModal: React.FC<CreateFragmentModalProps> = ({ isOpen, folde
 
     try {
       const finalFolderPath = newFolderPath.trim() || null;
-      await fragmentService.createFragment(
-        finalFolderPath,
+      const result = await fragmentService.createFragment(
+        { folderPath: finalFolderPath },
         name.trim(),
-        content || `{{! ${name} fragment }}`,
+        content || `{# ${name} fragment #}`,
         description || undefined,
         'Initial creation'
       );
-      onCreate(finalFolderPath, name.trim());
+      const fullPath = result.folder_path ? `${result.folder_path}/${name.trim()}` : name.trim();
+      onCreate(result.folder_id, name.trim(), fullPath);
       onClose();
     } catch (err: any) {
       if (err.message?.includes('409') || err.message?.includes('already exists')) {
@@ -388,6 +385,21 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   const [showCreateSubAgentModal, setShowCreateSubAgentModal] = useState(false);
   const [createFolderPath, setCreateFolderPath] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [allFragmentContents, setAllFragmentContents] = useState<Map<string, string>>(new Map());
+  const allFragmentContentsRef = useRef(allFragmentContents);
+  useEffect(() => { allFragmentContentsRef.current = allFragmentContents; }, [allFragmentContents]);
+
+  const loadFragmentContents = useCallback(async () => {
+    try {
+      const fragments = await fragmentService.getAllFragmentsWithContent();
+      const map = new Map<string, string>();
+      for (const f of fragments) {
+        const path = f.folder_path ? `${f.folder_path}/${f.fragment_name}` : f.fragment_name;
+        map.set(path, f.content);
+      }
+      setAllFragmentContents(map);
+    } catch { /* ignore */ }
+  }, []);
 
   const [promptDrafts, setPromptDrafts] = useState<Record<string, PromptDraft>>({});
   const [fragmentDrafts, setFragmentDrafts] = useState<Record<string, FragmentDraft>>({});
@@ -441,7 +453,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     if (firstPrompt) setSelectedPrompt(firstPrompt);
   }, []);
 
-  // Clear drafts on preset switch, and refresh fragment tree + registry.
+  // Clear drafts on preset switch, and refresh fragment tree + contents.
   useEffect(() => {
     setPromptDrafts({});
     setFragmentDrafts({});
@@ -454,14 +466,14 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     setShowVersionHistory(false);
     setShowPreviewModal(false);
     setRefreshTrigger((prev) => prev + 1);
-    PromptManager.reloadFragments().catch(() => undefined);
+    loadFragmentContents().catch(() => undefined);
     loadVariables().catch(() => undefined);
     loadSubAgents().catch(() => undefined);
-  }, [activePresetId, loadSubAgents, loadVariables]);
+  }, [activePresetId, loadFragmentContents, loadSubAgents, loadVariables]);
 
   const selectedPath = useMemo(() => {
     if (!selectedFragment) return null;
-    return fragmentFullPath(selectedFragment.folderPath, selectedFragment.fragmentName);
+    return selectedFragment.fullPath;
   }, [selectedFragment]);
 
   const selectedPromptKey = useMemo(() => {
@@ -472,7 +484,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   const selectedFragmentKey = useMemo(() => {
     if (!selectedFragment) return null;
-    return makeFragmentDraftKey(selectedFragment.folderPath, selectedFragment.fragmentName);
+    return makeFragmentDraftKey(selectedFragment.folderId, selectedFragment.fragmentName);
   }, [selectedFragment]);
 
   const selectedVariableKey = useMemo(() => {
@@ -629,7 +641,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         kind: 'fragment',
         key: d.key,
         label: d.label,
-        folderPath: d.folderPath,
+        folderId: d.folderId,
         fragmentName: d.fragmentName,
         fullPath: d.fullPath,
       });
@@ -903,14 +915,14 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       let didSaveAnyFragment = false;
       for (const d of dirtyFragments) {
         attempted += 1;
-        const validation = await validateFragmentContent(d.content, d.fullPath, fragmentDraftsRef.current);
+        const validation = await validateFragmentContent(d.content, d.fullPath, fragmentDraftsRef.current, allFragmentContentsRef.current);
         if (!validation.valid) {
           failures.push({
             item: {
               kind: 'fragment',
               key: d.key,
               label: d.label,
-              folderPath: d.folderPath,
+              folderId: d.folderId,
               fragmentName: d.fragmentName,
               fullPath: d.fullPath,
             },
@@ -925,7 +937,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         }
 
         try {
-          await fragmentService.saveFragment(d.folderPath, d.fragmentName, d.content, d.description || undefined, undefined);
+          await fragmentService.saveFragment(d.folderId, d.fragmentName, d.content, d.description || undefined, undefined);
           didSaveAnyFragment = true;
           saved += 1;
           setFragmentDrafts((prev) => {
@@ -948,7 +960,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
               kind: 'fragment',
               key: d.key,
               label: d.label,
-              folderPath: d.folderPath,
+              folderId: d.folderId,
               fragmentName: d.fragmentName,
               fullPath: d.fullPath,
             },
@@ -958,7 +970,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       }
 
       if (didSaveAnyFragment) {
-        await PromptManager.reloadFragments();
+        await loadFragmentContents();
       }
 
       const dirtyVariables = Object.values(variableDraftsRef.current).filter((d) => d.dirty);
@@ -1117,17 +1129,16 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     [loadPrompt]
   );
 
-  const ensureFragmentDraftLoaded = useCallback(async (folderPath: string | null, fragmentName: string) => {
-    const key = makeFragmentDraftKey(folderPath, fragmentName);
+  const ensureFragmentDraftLoaded = useCallback(async (folderId: string | null, fragmentName: string, fullPath: string) => {
+    const key = makeFragmentDraftKey(folderId, fragmentName);
     if (fragmentDraftsRef.current[key]?.originalContent !== undefined) return;
 
-    const fullPath = fragmentFullPath(folderPath, fragmentName);
     setFragmentDrafts((prev) => ({
       ...prev,
       [key]: {
         key,
         label: fullPath,
-        folderPath,
+        folderId,
         fragmentName,
         fullPath,
         isLoading: true,
@@ -1142,7 +1153,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     }));
 
     try {
-      const fragment = await fragmentService.getFragment(folderPath, fragmentName);
+      const fragment = await fragmentService.getFragment(folderId, fragmentName);
       setFragmentDrafts((prev) => ({
         ...prev,
         [key]: {
@@ -1268,8 +1279,8 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   }, [selectedPrompt?.id, ensurePromptDraftLoaded]);
   useEffect(() => {
     if (!selectedFragment) return;
-    ensureFragmentDraftLoaded(selectedFragment.folderPath, selectedFragment.fragmentName);
-  }, [selectedFragment?.folderPath, selectedFragment?.fragmentName, ensureFragmentDraftLoaded]);
+    ensureFragmentDraftLoaded(selectedFragment.folderId, selectedFragment.fragmentName, selectedFragment.fullPath);
+  }, [selectedFragment?.folderId, selectedFragment?.fragmentName, selectedFragment?.fullPath, ensureFragmentDraftLoaded]);
   useEffect(() => {
     if (!selectedVariableId) return;
     ensureVariableDraftLoaded(selectedVariableId);
@@ -1320,7 +1331,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     if (!currentFragmentDraft || currentFragmentDraft.isLoading) return;
     const key = currentFragmentDraft.key;
     const timer = window.setTimeout(async () => {
-      const validation = await validateFragmentContent(currentFragmentDraft.content, currentFragmentDraft.fullPath, fragmentDraftsRef.current);
+      const validation = await validateFragmentContent(currentFragmentDraft.content, currentFragmentDraft.fullPath, fragmentDraftsRef.current, allFragmentContentsRef.current);
       setFragmentDrafts((prev) => {
         const cur = prev[key];
         if (!cur) return prev;
@@ -1336,8 +1347,8 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
   };
 
-  const handleFragmentSelect = (folderPath: string | null, fragmentName: string) => {
-    setSelectedFragment({ folderPath, fragmentName });
+  const handleFragmentSelect = (folderId: string | null, fragmentName: string, fullPath: string) => {
+    setSelectedFragment({ folderId, fragmentName, fullPath });
     if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
   };
 
@@ -1346,16 +1357,16 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     setShowCreateModal(true);
   };
 
-  const handleFragmentCreated = (folderPath: string | null, fragmentName: string) => {
+  const handleFragmentCreated = (folderId: string | null, fragmentName: string, fullPath: string) => {
     setRefreshTrigger((prev) => prev + 1);
-    setSelectedFragment({ folderPath, fragmentName });
-    PromptManager.reloadFragments().catch(() => undefined);
+    setSelectedFragment({ folderId, fragmentName, fullPath });
+    loadFragmentContents().catch(() => undefined);
   };
 
   const handleFragmentDeleted = () => {
     setSelectedFragment(null);
     setRefreshTrigger((prev) => prev + 1);
-    PromptManager.reloadFragments().catch(() => undefined);
+    loadFragmentContents().catch(() => undefined);
   };
 
   const toggleSidebar = () => {
@@ -1385,7 +1396,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   const handleCopyFragmentPath = async () => {
     if (!selectedPath) return;
-    const pathToCopy = `{{prompt "${selectedPath}"}}`;
+    const pathToCopy = `{% include "fragment:${selectedPath}" %}`;
     try {
       await navigator.clipboard.writeText(pathToCopy);
       toast.success(t('common.copied', { value: pathToCopy }));
@@ -1446,15 +1457,15 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     }
 
     if (subTab === 'fragments' && selectedFragment) {
-      const folderPath = selectedFragment.folderPath;
+      const folderId = selectedFragment.folderId;
       const fragmentName = selectedFragment.fragmentName;
-      const key = makeFragmentDraftKey(folderPath, fragmentName);
+      const key = makeFragmentDraftKey(folderId, fragmentName);
       return {
         title: 'Fragment Version History',
-        loadVersions: () => fragmentService.getVersionHistory(folderPath, fragmentName),
+        loadVersions: () => fragmentService.getVersionHistory(folderId, fragmentName),
         restoreVersion: async (vn: number) => {
-          await fragmentService.restoreVersion(folderPath, fragmentName, vn);
-          const fragment = await fragmentService.getFragment(folderPath, fragmentName);
+          await fragmentService.restoreVersion(folderId, fragmentName, vn);
+          const fragment = await fragmentService.getFragment(folderId, fragmentName);
           setFragmentDrafts((prev) => {
             const cur = prev[key];
             if (!cur) return prev;
@@ -1521,7 +1532,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     });
 
     try {
-      await fragmentService.deleteFragment(currentFragmentDraft.folderPath, currentFragmentDraft.fragmentName);
+      await fragmentService.deleteFragment(currentFragmentDraft.folderId, currentFragmentDraft.fragmentName);
       setFragmentDrafts((prev) => {
         const next = { ...prev };
         delete next[key];
@@ -1590,11 +1601,6 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   return (
     <div className="prompts-templates-panel">
-      <div className="panel-header">
-        <h3>{t('settings.promptEditor.title')}</h3>
-        <p className="panel-description">{t('settings.promptEditor.description')}</p>
-      </div>
-
       <div className="prompts-layout__content">
         <div className={`panel-editor ${isSidebarCollapsed ? 'panel-editor--collapsed' : ''}`}>
           {!isSidebarCollapsed && <div className="panel-editor__backdrop" onClick={() => setIsSidebarCollapsed(true)} />}

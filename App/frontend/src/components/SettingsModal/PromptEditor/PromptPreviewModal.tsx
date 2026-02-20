@@ -210,9 +210,12 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
         {/* Prompt-Type Controls Panel */}
         {promptTypeFields.length > 0 && (
           <div className="prompt-preview-overrides">
-            <button
+            <div
               className={`prompt-preview-overrides-header ${promptTypeExpanded ? 'expanded' : ''}`}
+              role="button"
+              tabIndex={0}
               onClick={() => setPromptTypeExpanded(!promptTypeExpanded)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPromptTypeExpanded(!promptTypeExpanded); } }}
             >
               <span className="prompt-preview-overrides-chevron">
                 <ChevronRight size="sm" />
@@ -220,7 +223,7 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
               <span className="prompt-preview-overrides-title">
                 {t('settings.promptEditor.preview.promptTypeControls')}
               </span>
-            </button>
+            </div>
 
             {promptTypeExpanded && (
               <div className="prompt-preview-overrides-content">
@@ -239,9 +242,12 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
 
         {/* Config Overrides Panel */}
         <div className="prompt-preview-overrides">
-          <button
+          <div
             className={`prompt-preview-overrides-header ${configExpanded ? 'expanded' : ''}`}
+            role="button"
+            tabIndex={0}
             onClick={() => setConfigExpanded(!configExpanded)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setConfigExpanded(!configExpanded); } }}
           >
             <span className="prompt-preview-overrides-chevron">
               <ChevronRight size="sm" />
@@ -260,7 +266,7 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
                 {t('settings.promptEditor.preview.resetOverrides')}
               </button>
             )}
-          </button>
+          </div>
 
           {configExpanded && (
             <div className="prompt-preview-overrides-content">
@@ -317,9 +323,12 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
         {/* User Variables Panel */}
         {userVariables.length > 0 && (
           <div className="prompt-preview-overrides">
-            <button
+            <div
               className={`prompt-preview-overrides-header ${variablesExpanded ? 'expanded' : ''}`}
+              role="button"
+              tabIndex={0}
               onClick={() => setVariablesExpanded(!variablesExpanded)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setVariablesExpanded(!variablesExpanded); } }}
             >
               <span className="prompt-preview-overrides-chevron">
                 <ChevronRight size="sm" />
@@ -327,7 +336,7 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
               <span className="prompt-preview-overrides-title">
                 {t('settings.promptEditor.preview.variablesSection')}
               </span>
-            </button>
+            </div>
 
             {variablesExpanded && (
               <div className="prompt-preview-overrides-content">

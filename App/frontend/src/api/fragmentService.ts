@@ -40,12 +40,12 @@ export const fragmentService = {
    * Get active fragment content
    */
   async getFragment(
-    folderPath: string | null,
+    folderId: string | null,
     fragmentName: string
   ): Promise<FragmentContent> {
     const params = new URLSearchParams();
-    if (folderPath !== null) {
-      params.append('folder_path', folderPath);
+    if (folderId !== null) {
+      params.append('folder_id', folderId);
     }
     params.append('fragment_name', fragmentName);
     return await apiClient.get<FragmentContent>(`${BASE_PATH}/content?${params.toString()}`);
@@ -55,14 +55,15 @@ export const fragmentService = {
    * Create a new fragment
    */
   async createFragment(
-    folderPath: string | null,
+    folder: { folderId?: string | null; folderPath?: string | null },
     fragmentName: string,
     content: string,
     description?: string,
     note?: string
   ): Promise<FragmentVersion> {
     return await apiClient.post<FragmentVersion>(BASE_PATH, {
-      folder_path: folderPath,
+      folder_id: folder.folderId ?? undefined,
+      folder_path: folder.folderPath ?? undefined,
       fragment_name: fragmentName,
       content,
       description,
@@ -74,15 +75,15 @@ export const fragmentService = {
    * Save new version of a fragment
    */
   async saveFragment(
-    folderPath: string | null,
+    folderId: string | null,
     fragmentName: string,
     content: string,
     description?: string,
     note?: string
   ): Promise<FragmentVersion> {
     const params = new URLSearchParams();
-    if (folderPath !== null) {
-      params.append('folder_path', folderPath);
+    if (folderId !== null) {
+      params.append('folder_id', folderId);
     }
     params.append('fragment_name', fragmentName);
     return await apiClient.post<FragmentVersion>(`${BASE_PATH}/save?${params.toString()}`, {
@@ -96,12 +97,12 @@ export const fragmentService = {
    * Get version history for a fragment
    */
   async getVersionHistory(
-    folderPath: string | null,
+    folderId: string | null,
     fragmentName: string
   ): Promise<FragmentVersionHistoryItem[]> {
     const params = new URLSearchParams();
-    if (folderPath !== null) {
-      params.append('folder_path', folderPath);
+    if (folderId !== null) {
+      params.append('folder_id', folderId);
     }
     params.append('fragment_name', fragmentName);
     return await apiClient.get<FragmentVersionHistoryItem[]>(`${BASE_PATH}/versions?${params.toString()}`);
@@ -111,13 +112,13 @@ export const fragmentService = {
    * Restore a specific version by creating a new version with the restored content
    */
   async restoreVersion(
-    folderPath: string | null,
+    folderId: string | null,
     fragmentName: string,
     versionNumber: number
   ): Promise<{ new_version: number }> {
     const params = new URLSearchParams();
-    if (folderPath !== null) {
-      params.append('folder_path', folderPath);
+    if (folderId !== null) {
+      params.append('folder_id', folderId);
     }
     params.append('fragment_name', fragmentName);
     return await apiClient.post<{ new_version: number }>(`${BASE_PATH}/restore?${params.toString()}`, {
@@ -129,12 +130,12 @@ export const fragmentService = {
    * Delete a fragment (all versions)
    */
   async deleteFragment(
-    folderPath: string | null,
+    folderId: string | null,
     fragmentName: string
   ): Promise<void> {
     const params = new URLSearchParams();
-    if (folderPath !== null) {
-      params.append('folder_path', folderPath);
+    if (folderId !== null) {
+      params.append('folder_id', folderId);
     }
     params.append('fragment_name', fragmentName);
     await apiClient.delete(`${BASE_PATH}?${params.toString()}`);
@@ -144,17 +145,17 @@ export const fragmentService = {
    * Move fragment to a different folder
    */
   async moveFragment(
-    folderPath: string | null,
+    folderId: string | null,
     fragmentName: string,
-    newFolderPath: string | null
+    newFolderId: string | null
   ): Promise<void> {
     const params = new URLSearchParams();
-    if (folderPath !== null) {
-      params.append('folder_path', folderPath);
+    if (folderId !== null) {
+      params.append('folder_id', folderId);
     }
     params.append('fragment_name', fragmentName);
     await apiClient.post(`${BASE_PATH}/move?${params.toString()}`, {
-      new_folder_path: newFolderPath,
+      new_folder_id: newFolderId,
     });
   },
 

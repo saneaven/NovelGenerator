@@ -11,8 +11,8 @@ export function makePromptDraftKey(taskType: TaskType, category: PromptCategory,
   return `prompt:${taskType}:${category}:${name}`;
 }
 
-export function makeFragmentDraftKey(folderPath: string | null, fragmentName: string): FragmentDraftKey {
-  return `fragment:${folderPath ?? '@root'}:${fragmentName}`;
+export function makeFragmentDraftKey(folderId: string | null, fragmentName: string): FragmentDraftKey {
+  return `fragment:${folderId ?? '@root'}:${fragmentName}`;
 }
 
 export function makeVariableDraftKey(variableId: string): VariableDraftKey {
@@ -37,7 +37,7 @@ export type DirtyItem =
       kind: 'fragment';
       key: FragmentDraftKey;
       label: string;
-      folderPath: string | null;
+      folderId: string | null;
       fragmentName: string;
       fullPath: string;
     }

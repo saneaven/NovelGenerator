@@ -7,7 +7,7 @@ import './FragmentTreeNav.css';
 
 interface FragmentTreeNavProps {
   selectedPath: string | null;
-  onFragmentSelect: (folderPath: string | null, fragmentName: string) => void;
+  onFragmentSelect: (folderId: string | null, fragmentName: string, fullPath: string) => void;
   onCreateFragment: (folderPath: string | null) => void;
   refreshTrigger?: number;
   onClose?: () => void;
@@ -18,8 +18,8 @@ interface FolderNodeProps {
   level: number;
   selectedPath: string | null;
   expandedNodes: Set<string>;
-  onFragmentSelect: (folderPath: string | null, fragmentName: string) => void;
-  onToggleExpand: (path: string) => void;
+  onFragmentSelect: (folderId: string | null, fragmentName: string, fullPath: string) => void;
+  onToggleExpand: (id: string) => void;
   onCreateFragment: (folderPath: string | null) => void;
 }
 
@@ -53,11 +53,11 @@ const FolderNode: React.FC<FolderNodeProps> = ({
   onToggleExpand,
   onCreateFragment,
 }) => {
-  const isExpanded = expandedNodes.has(node.path || '');
+  const isExpanded = expandedNodes.has(node.id);
   const hasChildren = (node.children && node.children.length > 0) || (node.fragments && node.fragments.length > 0);
 
   const handleClick = () => {
-    onToggleExpand(node.path || '');
+    onToggleExpand(node.id);
   };
 
   const handleAddClick = (e: React.MouseEvent) => {
@@ -90,7 +90,7 @@ const FolderNode: React.FC<FolderNodeProps> = ({
         <div className="tree-node__children">
           {node.children?.map((child) => (
             <FolderNode
-              key={child.path}
+              key={child.id}
               node={child}
               level={level + 1}
               selectedPath={selectedPath}
@@ -111,7 +111,7 @@ const FolderNode: React.FC<FolderNodeProps> = ({
                 fragment={fragment}
                 level={level + 1}
                 isSelected={selectedPath === fragmentPath}
-                onSelect={() => onFragmentSelect(fragment.folder_path, fragment.fragment_name)}
+                onSelect={() => onFragmentSelect(fragment.folder_id, fragment.fragment_name, fragmentPath)}
               />
             );
           })}
@@ -142,19 +142,17 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
       const tree = await fragmentService.getFolderTree();
       setTreeData(tree);
 
-      const allPaths = new Set<string>();
-      const collectPaths = (folders: FolderTreeNode[]) => {
+      const allIds = new Set<string>();
+      const collectIds = (folders: FolderTreeNode[]) => {
         folders.forEach(folder => {
-          if (folder.path) {
-            allPaths.add(folder.path);
-          }
+          allIds.add(folder.id);
           if (folder.children) {
-            collectPaths(folder.children);
+            collectIds(folder.children);
           }
         });
       };
-      collectPaths(tree.folders);
-      setExpandedNodes(allPaths);
+      collectIds(tree.folders);
+      setExpandedNodes(allIds);
     } catch (error) {
       console.error('Failed to load fragment tree:', error);
     } finally {
@@ -162,13 +160,13 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
     }
   };
 
-  const handleToggleExpand = (path: string) => {
+  const handleToggleExpand = (id: string) => {
     setExpandedNodes((prev) => {
       const next = new Set(prev);
-      if (next.has(path)) {
-        next.delete(path);
+      if (next.has(id)) {
+        next.delete(id);
       } else {
-        next.add(path);
+        next.add(id);
       }
       return next;
     });
@@ -228,14 +226,14 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
                   fragment={fragment}
                   level={0}
                   isSelected={selectedPath === fragmentPath}
-                  onSelect={() => onFragmentSelect(null, fragment.fragment_name)}
+                  onSelect={() => onFragmentSelect(null, fragment.fragment_name, fragment.fragment_name)}
                 />
               );
             })}
 
             {treeData?.folders.map((folder) => (
               <FolderNode
-                key={folder.path}
+                key={folder.id}
                 node={folder}
                 level={0}
                 selectedPath={selectedPath}

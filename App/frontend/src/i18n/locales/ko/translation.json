@@ -919,7 +919,7 @@
         "noVariablesForType": "이 프롬프트 유형에 사용할 수 있는 변수가 없습니다.",
         "noVariables": "사용 가능한 변수가 없습니다.",
         "viewSyntaxTokens": "템플릿 구문 토큰 보기",
-        "handlebarsSyntax": "핸들바 구문",
+        "templateSyntax": "템플릿 구문",
         "closeSyntaxPanel": "구문 패널 닫기",
         "variables": "변수",
         "helpers": "헬퍼"

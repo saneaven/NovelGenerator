@@ -22,6 +22,7 @@ from ..schemas.fragments import (
     FragmentValidationResponse
 )
 from ..services.fragment_service import fragment_service
+from ..services.folder_service import FolderService
 from ..prompts import get_default_fragments
 
 router = APIRouter(prefix="/api/v1/fragments", tags=["fragments"])
@@ -35,6 +36,13 @@ def get_active_preset_id(current_user: User) -> uuid.UUID:
             detail="No active preset set. Please select or create a preset first."
         )
     return current_user.settings.active_preset_id
+
+
+def _parse_folder_id(folder_id: Optional[str]) -> Optional[uuid.UUID]:
+    """Parse optional folder_id string to UUID."""
+    if folder_id is None:
+        return None
+    return uuid.UUID(folder_id)
 
 
 @router.get(
@@ -85,10 +93,7 @@ async def validate_fragment(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Validate fragment content for syntax errors and circular references.
-    This is a simple validation - full Handlebars validation happens on frontend.
-    """
+    """Validate fragment content for syntax errors and circular references."""
     import re
 
     preset_id = get_active_preset_id(current_user)
@@ -96,8 +101,8 @@ async def validate_fragment(
     warnings = []
     referenced_fragments = []
 
-    # Extract {{prompt "path"}} references
-    pattern = r'\{\{\s*prompt\s+"([^"]+)"'
+    # Extract {% include "fragment:path" %} references
+    pattern = r'\{%\s*include\s+"fragment:([^"]+)"\s*%\}'
     matches = re.findall(pattern, data.content)
     referenced_fragments = list(set(matches))
 
@@ -112,11 +117,12 @@ async def validate_fragment(
         if ref not in fragment_paths:
             warnings.append(f"Referenced fragment not found: {ref}")
 
-    # Basic syntax check for unclosed handlebars
-    open_count = data.content.count('{{')
-    close_count = data.content.count('}}')
-    if open_count != close_count:
-        errors.append(f"Mismatched handlebars: {open_count} opening, {close_count} closing")
+    # Basic syntax check for unclosed Jinja2 delimiters
+    for open_d, close_d in [('{{', '}}'), ('{%', '%}'), ('{#', '#}')]:
+        o = data.content.count(open_d)
+        c = data.content.count(close_d)
+        if o != c:
+            errors.append(f"Mismatched delimiters: {o} '{open_d}' vs {c} '{close_d}'")
 
     return FragmentValidationResponse(
         is_valid=len(errors) == 0,
@@ -138,26 +144,34 @@ async def create_fragment(
 ):
     """Create a new fragment"""
     preset_id = get_active_preset_id(current_user)
-    # Check if fragment already exists
+
+    # Resolve folder: folder_id takes priority, then folder_path (creates folders as needed)
+    folder_id = _parse_folder_id(data.folder_id)
+    if folder_id is None and data.folder_path:
+        folder = FolderService.get_or_create_folder_by_path(
+            db, current_user.id, preset_id, data.folder_path
+        )
+        folder_id = folder.id
+
     existing = fragment_service.get_active_fragment(
         db=db,
         user_id=current_user.id,
         preset_id=preset_id,
-        folder_path=data.folder_path,
+        folder_id=folder_id,
         fragment_name=data.fragment_name
     )
 
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Fragment already exists: {data.folder_path or ''}/{data.fragment_name}"
+            detail=f"Fragment already exists: {data.fragment_name}"
         )
 
     return fragment_service.save_new_version(
         db=db,
         user_id=current_user.id,
         preset_id=preset_id,
-        folder_path=data.folder_path,
+        folder_id=folder_id,
         fragment_name=data.fragment_name,
         content=data.content,
         description=data.description,
@@ -165,15 +179,12 @@ async def create_fragment(
     )
 
 
-# Routes with path parameters - using query params to avoid path conflicts
-# Since folder_path can have slashes, we use query parameters
-
 @router.get(
     "/content",
     response_model=FragmentContentResponse
 )
 async def get_fragment(
-    folder_path: Optional[str] = Query(None, description="Folder path (None for root)"),
+    folder_id: Optional[str] = Query(None, description="Folder ID (None for root)"),
     fragment_name: str = Query(..., description="Fragment name"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -184,15 +195,14 @@ async def get_fragment(
         db=db,
         user_id=current_user.id,
         preset_id=preset_id,
-        folder_path=folder_path,
+        folder_id=_parse_folder_id(folder_id),
         fragment_name=fragment_name
     )
 
     if not result:
-        path = f"{folder_path}/{fragment_name}" if folder_path else fragment_name
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Fragment not found: {path}"
+            detail=f"Fragment not found: {fragment_name}"
         )
 
     return result
@@ -204,7 +214,7 @@ async def get_fragment(
 )
 async def save_fragment(
     data: FragmentUpdate,
-    folder_path: Optional[str] = Query(None, description="Folder path (None for root)"),
+    folder_id: Optional[str] = Query(None, description="Folder ID (None for root)"),
     fragment_name: str = Query(..., description="Fragment name"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -215,7 +225,7 @@ async def save_fragment(
         db=db,
         user_id=current_user.id,
         preset_id=preset_id,
-        folder_path=folder_path,
+        folder_id=_parse_folder_id(folder_id),
         fragment_name=fragment_name,
         content=data.content,
         description=data.description,
@@ -228,7 +238,7 @@ async def save_fragment(
     response_model=List[FragmentVersionHistoryItem]
 )
 async def get_version_history(
-    folder_path: Optional[str] = Query(None, description="Folder path (None for root)"),
+    folder_id: Optional[str] = Query(None, description="Folder ID (None for root)"),
     fragment_name: str = Query(..., description="Fragment name"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -239,7 +249,7 @@ async def get_version_history(
         db=db,
         user_id=current_user.id,
         preset_id=preset_id,
-        folder_path=folder_path,
+        folder_id=_parse_folder_id(folder_id),
         fragment_name=fragment_name
     )
 
@@ -250,7 +260,7 @@ async def get_version_history(
 )
 async def restore_version(
     data: FragmentRestoreRequest,
-    folder_path: Optional[str] = Query(None, description="Folder path (None for root)"),
+    folder_id: Optional[str] = Query(None, description="Folder ID (None for root)"),
     fragment_name: str = Query(..., description="Fragment name"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -261,7 +271,7 @@ async def restore_version(
         db=db,
         user_id=current_user.id,
         preset_id=preset_id,
-        folder_path=folder_path,
+        folder_id=_parse_folder_id(folder_id),
         fragment_name=fragment_name,
         version_number=data.version_number
     )
@@ -284,7 +294,7 @@ async def restore_version(
     status_code=status.HTTP_200_OK
 )
 async def delete_fragment(
-    folder_path: Optional[str] = Query(None, description="Folder path (None for root)"),
+    folder_id: Optional[str] = Query(None, description="Folder ID (None for root)"),
     fragment_name: str = Query(..., description="Fragment name"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -295,15 +305,14 @@ async def delete_fragment(
         db=db,
         user_id=current_user.id,
         preset_id=preset_id,
-        folder_path=folder_path,
+        folder_id=_parse_folder_id(folder_id),
         fragment_name=fragment_name
     )
 
     if not success:
-        path = f"{folder_path}/{fragment_name}" if folder_path else fragment_name
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Fragment not found: {path}"
+            detail=f"Fragment not found: {fragment_name}"
         )
 
     return {"success": True}
@@ -315,7 +324,7 @@ async def delete_fragment(
 )
 async def move_fragment(
     data: FragmentMoveRequest,
-    folder_path: Optional[str] = Query(None, description="Current folder path"),
+    folder_id: Optional[str] = Query(None, description="Current folder ID"),
     fragment_name: str = Query(..., description="Fragment name"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -326,9 +335,9 @@ async def move_fragment(
         db=db,
         user_id=current_user.id,
         preset_id=preset_id,
-        folder_path=folder_path,
+        folder_id=_parse_folder_id(folder_id),
         fragment_name=fragment_name,
-        new_folder_path=data.new_folder_path
+        new_folder_id=_parse_folder_id(data.new_folder_id)
     )
 
     if not success:
@@ -337,7 +346,7 @@ async def move_fragment(
             detail="Failed to move fragment. Fragment not found or target already exists."
         )
 
-    return {"success": True, "new_folder_path": data.new_folder_path}
+    return {"success": True, "new_folder_id": data.new_folder_id}
 
 
 @router.post(
@@ -348,30 +357,34 @@ async def initialize_default_fragments(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Initialize default fragments for the current user's active preset.
-    Only adds fragments that don't already exist.
-    """
+    """Initialize default fragments for the current user's active preset.
+    Only adds fragments that don't already exist."""
     preset_id = get_active_preset_id(current_user)
     default_fragments = get_default_fragments()
     added_count = 0
+    folder_cache: dict[str, uuid.UUID] = {}
 
     for path, content in default_fragments.items():
-        # Parse path into folder_path and fragment_name
         if '/' in path:
             parts = path.rsplit('/', 1)
-            folder_path = parts[0]
+            folder_path_str = parts[0]
             fragment_name = parts[1]
+
+            if folder_path_str not in folder_cache:
+                folder = FolderService.get_or_create_folder_by_path(
+                    db, current_user.id, preset_id, folder_path_str
+                )
+                folder_cache[folder_path_str] = folder.id
+            folder_id = folder_cache[folder_path_str]
         else:
-            folder_path = None
+            folder_id = None
             fragment_name = path
 
-        # Check if fragment already exists
         existing = fragment_service.get_active_fragment(
             db=db,
             user_id=current_user.id,
             preset_id=preset_id,
-            folder_path=folder_path,
+            folder_id=folder_id,
             fragment_name=fragment_name
         )
 
@@ -380,7 +393,7 @@ async def initialize_default_fragments(
                 db=db,
                 user_id=current_user.id,
                 preset_id=preset_id,
-                folder_path=folder_path,
+                folder_id=folder_id,
                 fragment_name=fragment_name,
                 content=content,
                 description=None,

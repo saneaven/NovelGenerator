@@ -7,6 +7,7 @@
  */
 export interface FragmentContent {
   id: string;
+  folder_id: string | null;
   folder_path: string | null;
   fragment_name: string;
   content: string;
@@ -22,6 +23,7 @@ export interface FragmentContent {
  */
 export interface FragmentVersion {
   id: string;
+  folder_id: string | null;
   folder_path: string | null;
   fragment_name: string;
   content: string;
@@ -49,6 +51,7 @@ export interface FragmentVersionHistoryItem {
  */
 export interface FragmentListItem {
   id: string;
+  folder_id: string | null;
   folder_path: string | null;
   fragment_name: string;
   description: string | null;
@@ -62,6 +65,7 @@ export interface FragmentListItem {
  */
 export interface FragmentWithContent {
   id: string;
+  folder_id: string | null;
   folder_path: string | null;
   fragment_name: string;
   content: string;
@@ -73,8 +77,10 @@ export interface FragmentWithContent {
  * Folder tree node for hierarchical display
  */
 export interface FolderTreeNode {
+  id: string;
   name: string;
-  path: string | null;
+  path: string;
+  parent_id: string | null;
   fragments: FragmentListItem[];
   children: FolderTreeNode[];
 }
@@ -98,7 +104,19 @@ export interface FragmentValidationResponse {
 }
 
 /**
- * Get the full path for a fragment
+ * Folder response from API
+ */
+export interface FolderResponse {
+  id: string;
+  name: string;
+  path: string;
+  parent_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Get the full path for a fragment (uses computed folder_path)
  */
 export function getFragmentPath(fragment: FragmentListItem | FragmentContent): string {
   return fragment.folder_path

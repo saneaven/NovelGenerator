@@ -11,6 +11,7 @@ from ..models.db_models import (
     PromptPreset,
     PromptVersion,
     PromptFragment,
+    PromptFolder,
     PromptVariable,
     UserSettings,
     SubAgentDefinitionModel,
@@ -23,6 +24,7 @@ from ..schemas.presets import (
     ActivePresetResponse
 )
 from ..prompts import get_default_prompts, get_default_fragments
+from .folder_service import FolderService
 from .sub_agent_seed_service import seed_default_sub_agents
 
 
@@ -126,9 +128,9 @@ class PresetService:
 
     @staticmethod
     def _count_unique_fragments(db: Session, preset_id: uuid.UUID) -> int:
-        """Count unique fragments (by folder_path, fragment_name combination)"""
+        """Count unique fragments (by folder_id, fragment_name combination)"""
         return db.query(
-            PromptFragment.folder_path,
+            PromptFragment.folder_id,
             PromptFragment.fragment_name
         ).filter(
             PromptFragment.preset_id == preset_id
@@ -245,21 +247,29 @@ class PresetService:
         """Initialize default fragments for a preset. Returns count of fragments created."""
         now = datetime.utcnow()
         count = 0
+        folder_cache: dict[str, uuid.UUID] = {}
 
         for path, content in default_fragments.items():
             if '/' in path:
                 parts = path.rsplit('/', 1)
-                folder_path = parts[0]
+                folder_path_str = parts[0]
                 fragment_name = parts[1]
+
+                if folder_path_str not in folder_cache:
+                    folder = FolderService.get_or_create_folder_by_path(
+                        db, user_id, preset_id, folder_path_str
+                    )
+                    folder_cache[folder_path_str] = folder.id
+                folder_id = folder_cache[folder_path_str]
             else:
-                folder_path = None
+                folder_id = None
                 fragment_name = path
 
             fragment = PromptFragment(
                 id=uuid.uuid4(),
                 user_id=user_id,
                 preset_id=preset_id,
-                folder_path=folder_path,
+                folder_id=folder_id,
                 fragment_name=fragment_name,
                 content=content,
                 description=None,
@@ -403,9 +413,14 @@ class PresetService:
         source_preset_id: uuid.UUID,
         target_preset_id: uuid.UUID
     ) -> int:
-        """Copy latest version of each fragment to target preset."""
+        """Copy folder tree + latest version of each fragment to target preset."""
+        # Copy folder tree first, get old→new ID mapping
+        folder_id_map = FolderService.copy_folder_tree(
+            db, user_id, source_preset_id, target_preset_id
+        )
+
         unique_fragments = db.query(
-            PromptFragment.folder_path,
+            PromptFragment.folder_id,
             PromptFragment.fragment_name
         ).filter(
             PromptFragment.preset_id == source_preset_id
@@ -414,27 +429,28 @@ class PresetService:
         count = 0
         now = datetime.utcnow()
 
-        for folder_path, fragment_name in unique_fragments:
+        for folder_id, fragment_name in unique_fragments:
             latest = db.query(PromptFragment).filter(
                 and_(
                     PromptFragment.preset_id == source_preset_id,
-                    PromptFragment.folder_path == folder_path,
+                    PromptFragment.folder_id == folder_id if folder_id else PromptFragment.folder_id.is_(None),
                     PromptFragment.fragment_name == fragment_name
                 )
             ).order_by(PromptFragment.version_number.desc()).first()
 
             if latest:
+                new_folder_id = folder_id_map.get(latest.folder_id) if latest.folder_id else None
                 new_fragment = PromptFragment(
                     id=uuid.uuid4(),
                     user_id=user_id,
                     preset_id=target_preset_id,
-                    folder_path=latest.folder_path,
+                    folder_id=new_folder_id,
                     fragment_name=latest.fragment_name,
                     content=latest.content,
                     description=latest.description,
                     is_system_default=False,
                     version_number=1,
-                    note=f"Copied from preset",
+                    note="Copied from preset",
                     created_at=now,
                     updated_at=now
                 )
@@ -810,22 +826,24 @@ class PresetService:
 
         # 3. Get unique fragments (latest version of each)
         fragments_dict = {}
+        path_cache = FolderService.build_folder_path_cache(db, preset_id)
+
         unique_fragments = db.query(
-            PromptFragment.folder_path,
+            PromptFragment.folder_id,
             PromptFragment.fragment_name
         ).filter(PromptFragment.preset_id == preset_id).distinct().all()
 
-        for folder_path, fragment_name in unique_fragments:
+        for folder_id, fragment_name in unique_fragments:
             latest = db.query(PromptFragment).filter(
                 and_(
                     PromptFragment.preset_id == preset_id,
-                    PromptFragment.folder_path == folder_path,
+                    PromptFragment.folder_id == folder_id if folder_id else PromptFragment.folder_id.is_(None),
                     PromptFragment.fragment_name == fragment_name
                 )
             ).order_by(PromptFragment.version_number.desc()).first()
 
             if latest:
-                folder_key = folder_path or "_root"
+                folder_key = path_cache.get(latest.folder_id, "_root") if latest.folder_id else "_root"
                 if folder_key not in fragments_dict:
                     fragments_dict[folder_key] = {}
                 fragments_dict[folder_key][fragment_name] = {
@@ -961,14 +979,25 @@ class PresetService:
 
         # 4. Create fragments from nested structure
         fragments_data = data.get("fragments", {})
+        import_folder_cache: dict[str, uuid.UUID] = {}
+
         for folder_key, fragments in fragments_data.items():
-            folder_path = None if folder_key == "_root" else folder_key
+            if folder_key == "_root":
+                folder_id = None
+            else:
+                if folder_key not in import_folder_cache:
+                    folder = FolderService.get_or_create_folder_by_path(
+                        db, user_id, preset.id, folder_key
+                    )
+                    import_folder_cache[folder_key] = folder.id
+                folder_id = import_folder_cache[folder_key]
+
             for frag_name, frag_data in fragments.items():
                 fragment = PromptFragment(
                     id=uuid.uuid4(),
                     user_id=user_id,
                     preset_id=preset.id,
-                    folder_path=folder_path,
+                    folder_id=folder_id,
                     fragment_name=frag_name,
                     content=frag_data["content"],
                     description=frag_data.get("description"),

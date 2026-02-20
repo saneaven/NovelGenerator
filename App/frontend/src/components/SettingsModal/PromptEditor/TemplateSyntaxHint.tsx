@@ -23,31 +23,35 @@ const GROUP_LABELS: Record<string, string> = {
     imagePrompt: 'Image Prompt',
 };
 
-// Handlebars helpers documentation
-const HANDLEBARS_HELPERS = {
-    'Fragment Helpers': [
-        { name: 'prompt', syntax: '{{prompt "folder/name"}}', desc: 'Include a reusable prompt fragment' },
-        { name: 'prompt (with args)', syntax: '{{prompt "path" arg1 arg2}}', desc: 'Include fragment with positional arguments (accessible via params.[0], params.[1])' },
+// Jinja2 syntax documentation
+const JINJA_SYNTAX = {
+    'Fragment Inclusion': [
+        { name: 'include', syntax: '{% include "fragment:folder/name" %}', desc: 'Include a reusable prompt fragment' },
     ],
-    'Filtering Helpers': [
-        { name: 'filterByType', syntax: '{{#each (filterByType arr "type")}}', desc: 'Filter objects by type field' },
-        { name: 'filterByIds', syntax: '{{#each (filterByIds arr ids)}}', desc: 'Filter array by ID list' },
-        { name: 'getById', syntax: '{{#with (getById arr id)}}', desc: 'Get single object by ID' },
-        { name: 'getManuscript', syntax: '{{#with (getManuscript manuscripts chapterId)}}', desc: 'Get manuscript by chapter ID' },
-        { name: 'getObjectsOfLanguage', syntax: '{{#each (getObjectsOfLanguage project lang ids)}}', desc: 'Get objects for a specific language' },
-        { name: 'getManuscriptsOfLanguage', syntax: '{{#each (getManuscriptsOfLanguage project lang ids)}}', desc: 'Get manuscripts for a specific language' },
+    'Filters': [
+        { name: 'filter_by_type', syntax: '{% for item in arr|filter_by_type("type") %}', desc: 'Filter objects by type field' },
+        { name: 'filter_by_ids', syntax: '{% for item in arr|filter_by_ids(ids) %}', desc: 'Filter array by ID list' },
+        { name: 'get_by_id', syntax: '{% set item = arr|get_by_id(id) %}', desc: 'Get single object by ID' },
+        { name: 'get_manuscript', syntax: '{% set ms = manuscripts|get_manuscript(chapterId) %}', desc: 'Get manuscript by chapter ID' },
+        { name: 'length', syntax: '{{ arr|length }}', desc: 'Count array items' },
+        { name: 'tojson', syntax: '{{ obj|tojson }}', desc: 'Output as JSON string' },
     ],
-    'Utility Helpers': [
-        { name: 'count', syntax: '{{count arr}}', desc: 'Count array items' },
-        { name: 'hasItems', syntax: '{{#if (hasItems arr)}}', desc: 'Check if array has items' },
-        { name: 'json', syntax: '{{json obj}}', desc: 'Output as JSON string' },
+    'Global Functions': [
+        { name: 'get_objects_of_language', syntax: '{% for obj in get_objects_of_language(project, lang) %}', desc: 'Get objects for a specific language' },
+        { name: 'get_manuscripts_of_language', syntax: '{% for ms in get_manuscripts_of_language(project, lang) %}', desc: 'Get manuscripts for a specific language' },
     ],
-    'Logic Helpers': [
-        { name: 'eq', syntax: '{{#if (eq a b)}}', desc: 'Equal comparison' },
-        { name: 'neq', syntax: '{{#if (neq a b)}}', desc: 'Not equal comparison' },
-        { name: 'and', syntax: '{{#if (and a b)}}', desc: 'Logical AND' },
-        { name: 'or', syntax: '{{#if (or a b)}}', desc: 'Logical OR' },
-        { name: 'not', syntax: '{{#if (not a)}}', desc: 'Logical NOT' },
+    'Control Flow': [
+        { name: 'if / endif', syntax: '{% if condition %}...{% endif %}', desc: 'Conditional block' },
+        { name: 'for / endfor', syntax: '{% for item in items %}...{% endfor %}', desc: 'Loop over items' },
+        { name: 'set', syntax: '{% set var = value %}', desc: 'Set a local variable' },
+        { name: 'comment', syntax: '{# This is a comment #}', desc: 'Template comment (not rendered)' },
+    ],
+    'Operators': [
+        { name: '==', syntax: '{% if a == b %}', desc: 'Equal comparison' },
+        { name: '!=', syntax: '{% if a != b %}', desc: 'Not equal comparison' },
+        { name: 'and', syntax: '{% if a and b %}', desc: 'Logical AND' },
+        { name: 'or', syntax: '{% if a or b %}', desc: 'Logical OR' },
+        { name: 'not', syntax: '{% if not a %}', desc: 'Logical NOT' },
     ],
 };
 
@@ -184,7 +188,7 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
     const renderHelpersSection = () => {
         return (
             <>
-                {Object.entries(HANDLEBARS_HELPERS).map(([category, helpers]) => (
+                {Object.entries(JINJA_SYNTAX).map(([category, helpers]) => (
                     <section key={category} className="syntax-section">
                         <header className="syntax-section-header">
                             <span className="syntax-section-title">{category}</span>
@@ -234,9 +238,9 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
             />
 
             {isOpen && (
-                <div className="syntax-popover" role="dialog" aria-label="Handlebars syntax tokens">
+                <div className="syntax-popover" role="dialog" aria-label="Jinja2 syntax tokens">
                     <header className="syntax-popover-header">
-                        <h4>Handlebars Syntax</h4>
+                        <h4>Template Syntax</h4>
                         <IconButton
                             icon={<Close size="sm" />}
                             onClick={() => setIsOpen(false)}
@@ -258,7 +262,7 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
                             className={`syntax-tab ${activeTab === 'helpers' ? 'active' : ''}`}
                             onClick={() => setActiveTab('helpers')}
                         >
-                            Helpers
+                            Syntax Guide
                         </button>
                     </div>
                     <div className="syntax-popover-content">

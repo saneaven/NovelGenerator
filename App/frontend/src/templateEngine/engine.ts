@@ -1,202 +1,6 @@
-import Handlebars from 'handlebars';
-import type { PromptData, PromptType } from './schema';
+import type { PromptType } from './schema';
 import { validateVariablesAgainstSchema } from './validator';
-
-// Create a new Handlebars instance to avoid polluting global helpers
-const handlebars = Handlebars.create();
-
-// ============================================================================
-// CUSTOM HELPERS
-// ============================================================================
-
-// filterByType(array, type) - Filter objects by type field
-handlebars.registerHelper('filterByType', (arr: any[] | undefined, type: string) => {
-  if (!arr || !Array.isArray(arr)) return [];
-  return arr.filter(obj => obj?.type === type);
-});
-
-// filterByIds(array, ids, idField = 'id') - Filter by ID array
-handlebars.registerHelper('filterByIds', (arr: any[] | undefined, ids: string | string[] | undefined, idField?: string) => {
-  if (!arr || !Array.isArray(arr)) return [];
-  if (!ids) return [];
-  const field = typeof idField === 'string' ? idField : 'id';
-  const idSet = new Set(Array.isArray(ids) ? ids : [ids]);
-  return arr.filter(obj => idSet.has(obj?.[field]));
-});
-
-// getById(array, id, idField = 'id') - Get single object by ID
-handlebars.registerHelper('getById', (arr: any[] | undefined, id: string | undefined, idField?: string) => {
-  if (!arr || !Array.isArray(arr) || !id) return undefined;
-  const field = typeof idField === 'string' ? idField : 'id';
-  return arr.find(obj => obj?.[field] === id);
-});
-
-// getManuscript(manuscripts, chapterId) - Shorthand for manuscript lookup
-handlebars.registerHelper('getManuscript', (manuscripts: any[] | undefined, chapterId: string | undefined) => {
-  if (!manuscripts || !Array.isArray(manuscripts) || !chapterId) return undefined;
-  return manuscripts.find(m => m?.chapterId === chapterId);
-});
-
-// getObjectsOfLanguage(project, language, ids?) - Get objects for any language
-// When ids is provided, returns objects in the same order as ids array
-handlebars.registerHelper('getObjectsOfLanguage', (project: any, language: string | undefined, ids?: string | string[]) => {
-  if (!project || !language) return [];
-  const langObjects = project?.languages?.[language]?.objects || [];
-  if (!ids) return langObjects;
-  const idArray = Array.isArray(ids) ? ids : [ids];
-  const objectMap = new Map(langObjects.map((obj: any) => [obj?.id, obj]));
-  return idArray.map(id => objectMap.get(id)).filter(Boolean);
-});
-
-// getManuscriptsOfLanguage(project, language, ids?) - Get manuscripts for any language
-// When ids is provided, returns manuscripts in the same order as ids array
-handlebars.registerHelper('getManuscriptsOfLanguage', (project: any, language: string | undefined, ids?: string | string[]) => {
-  if (!project || !language) return [];
-  const langManuscripts = project?.languages?.[language]?.manuscripts || [];
-  if (!ids) return langManuscripts;
-  const idArray = Array.isArray(ids) ? ids : [ids];
-  const manuscriptMap = new Map(langManuscripts.map((ms: any) => [ms?.id, ms]));
-  return idArray.map(id => manuscriptMap.get(id)).filter(Boolean);
-});
-
-// count(array) - Count array items
-handlebars.registerHelper('count', (arr: any[] | undefined) => {
-  if (!arr || !Array.isArray(arr)) return 0;
-  return arr.length;
-});
-
-// hasItems(array) - Check if array has items
-handlebars.registerHelper('hasItems', (arr: any[] | undefined) => {
-  return arr && Array.isArray(arr) && arr.length > 0;
-});
-
-// eq(a, b) - Equality comparison
-handlebars.registerHelper('eq', (a: any, b: any) => a === b);
-
-// neq(a, b) - Not equal comparison
-handlebars.registerHelper('neq', (a: any, b: any) => a !== b);
-
-// and(a, b) - Logical AND
-handlebars.registerHelper('and', (a: any, b: any) => a && b);
-
-// or(a, b) - Logical OR
-handlebars.registerHelper('or', (a: any, b: any) => a || b);
-
-// not(a) - Logical NOT
-handlebars.registerHelper('not', (a: any) => !a);
-
-// json(obj) - Convert to JSON string (useful for debugging)
-handlebars.registerHelper('json', (obj: any) => JSON.stringify(obj, null, 2));
-
-// array(item) - Wrap single item in array (useful for filterByIds with single object)
-handlebars.registerHelper('array', (item: any) => item ? [item] : []);
-
-// last(array) - Get last element of an array
-handlebars.registerHelper('last', (arr: any[] | undefined) => {
-  if (!arr || !Array.isArray(arr) || arr.length === 0) return undefined;
-  return arr[arr.length - 1];
-});
-
-// includes(array, value) - Check if array includes value
-handlebars.registerHelper('includes', (arr: any[] | undefined, value: any) => {
-  if (!arr || !Array.isArray(arr)) return false;
-  return arr.includes(value);
-});
-
-// ============================================================================
-// FRAGMENT SYSTEM
-// ============================================================================
-
-/**
- * Fragment interface for the registry
- */
-export interface PromptFragment {
-  id: string;
-  folderPath: string | null;
-  fragmentName: string;
-  content: string;
-  description: string | null;
-  isSystemDefault: boolean;
-}
-
-/**
- * Fragment registry - stores fragment content keyed by path
- */
-let fragmentRegistry: Map<string, string> = new Map();
-
-/**
- * Register fragments for use in templates.
- * Call this before rendering templates that use {{prompt ...}}.
- * @param fragments Array of fragments to register
- */
-export function registerFragments(fragments: PromptFragment[]): void {
-  fragmentRegistry.clear();
-  for (const fragment of fragments) {
-    const path = fragment.folderPath
-      ? `${fragment.folderPath}/${fragment.fragmentName}`
-      : fragment.fragmentName;
-    fragmentRegistry.set(path, fragment.content);
-  }
-}
-
-/**
- * Clear all registered fragments
- */
-export function clearFragments(): void {
-  fragmentRegistry.clear();
-}
-
-/**
- * Get the current fragment registry (for validation)
- */
-export function getFragmentRegistry(): Map<string, string> {
-  return new Map(fragmentRegistry);
-}
-
-// prompt("path/to/fragment", ...args) - Include a fragment with optional parameters
-// Usage: {{prompt "common/projectContext/full"}}
-// Usage: {{prompt "common/projectContext/filtered" editAssistant.manuscript.objectIds}}
-// Usage: {{prompt "common/format" title="Hello" items=someArray}}
-handlebars.registerHelper('prompt', function (this: any, ...args: any[]) {
-  // Last argument is always the Handlebars options object
-  const options = args.pop() as Handlebars.HelperOptions;
-  const path = args[0] as string | undefined;
-  const positionalParams = args.slice(1);
-
-  if (!path || typeof path !== 'string') {
-    return new Handlebars.SafeString(`[Fragment Error: Missing path]`);
-  }
-
-  const fragmentContent = fragmentRegistry.get(path);
-  if (!fragmentContent) {
-    console.log(`[Template Debug] Fragment ${path} not found! Available fragments:`, [...fragmentRegistry.keys()]);
-    return new Handlebars.SafeString(`[Fragment Error: Not found - ${path}]`);
-  }
-
-  // Check for circular reference (simple depth check)
-  const depth = ((this as any).__fragmentDepth || 0) + 1;
-  if (depth > 10) {
-    return new Handlebars.SafeString(`[Fragment Error: Max depth exceeded (${depth}) - possible circular reference at ${path}]`);
-  }
-
-  // Build context for fragment rendering
-  // - Inherit parent context (this)
-  // - Add positional params as 'params' array
-  // - Add named params (hash) as top-level properties
-  const fragmentContext: Record<string, any> = {
-    ...this,
-    params: positionalParams,
-    ...options.hash,
-    __fragmentDepth: depth,
-  };
-
-  try {
-    const compiled = handlebars.compile(fragmentContent, { noEscape: true });
-    return new Handlebars.SafeString(compiled(fragmentContext));
-  } catch (error) {
-    return new Handlebars.SafeString(`[Fragment Error: ${error instanceof Error ? error.message : String(error)}]`);
-  }
-});
+import { templateService } from '../api/templateService';
 
 // ============================================================================
 // TYPES
@@ -233,221 +37,130 @@ export interface ValidationResult {
 // ============================================================================
 
 /**
- * Renders a template string with the provided data.
- * @param template The Handlebars template string
+ * Renders a Jinja2 template string via the backend API.
+ * The backend loads fragments from the DB using the same pipeline as production.
+ * @param template The Jinja2 template string
  * @param data The data object containing variable groups
  * @returns The rendered string
  */
-export const renderTemplate = (template: string, data: PromptData | Record<string, any>): string => {
+export const renderTemplate = async (
+  template: string,
+  data: Record<string, any>,
+): Promise<string> => {
   try {
-    const compiled = handlebars.compile(template, { noEscape: true });
-    return compiled(data);
+    const response = await templateService.render(template, data);
+    if (response.error) {
+      return `[Template Error: ${response.error}]`;
+    }
+    return response.rendered;
   } catch (error) {
-    console.error("Template rendering error:", error);
-    // In case of error, return a formatted error string to make it visible in the UI
+    console.error('Template rendering error:', error);
     return `[Template Error: ${error instanceof Error ? error.message : String(error)}]`;
   }
 };
 
 // ============================================================================
-// VARIABLE EXTRACTION (AST PARSING)
+// VARIABLE EXTRACTION (REGEX-BASED)
 // ============================================================================
 
+/** Jinja2 built-in names that are not user-defined variables */
+const JINJA_BUILTINS = new Set([
+  'true', 'false', 'none', 'True', 'False', 'None',
+  'loop', 'super', 'self', 'varargs', 'kwargs',
+  'range', 'lipsum', 'dict', 'cycler', 'joiner', 'namespace',
+]);
+
 /**
- * Recursively extracts variable paths from Handlebars AST nodes
+ * Extract locally-defined variable names from Jinja2 tags.
+ * Detects: {% for VAR in ... %} and {% set VAR = ... %}
  */
-function extractPathsFromNode(node: hbs.AST.Node, results: VariableReference[], localVars: Set<string>): void {
-  if (!node) return;
+function extractLocalVariables(template: string): Set<string> {
+  const locals = new Set<string>();
 
-  switch (node.type) {
-    case 'Program': {
-      const program = node as hbs.AST.Program;
-      for (const statement of program.body) {
-        extractPathsFromNode(statement, results, localVars);
-      }
-      break;
+  // {% for VAR in ... %}  (also handles tuple unpacking: {% for a, b in ... %})
+  const forRegex = /\{%[-\s]*for\s+([\w\s,]+?)\s+in\s+/g;
+  let match;
+  while ((match = forRegex.exec(template)) !== null) {
+    const vars = match[1].split(',');
+    for (const v of vars) {
+      const trimmed = v.trim();
+      if (trimmed) locals.add(trimmed);
     }
-
-    case 'MustacheStatement':
-    case 'SubExpression': {
-      const mustache = node as hbs.AST.MustacheStatement | hbs.AST.SubExpression;
-      extractPathsFromExpression(mustache.path, results, localVars, mustache.loc);
-      for (const param of mustache.params) {
-        extractPathsFromNode(param, results, localVars);
-      }
-      if (mustache.hash) {
-        for (const pair of mustache.hash.pairs) {
-          extractPathsFromNode(pair.value, results, localVars);
-        }
-      }
-      break;
-    }
-
-    case 'BlockStatement': {
-      const block = node as hbs.AST.BlockStatement;
-      extractPathsFromExpression(block.path, results, localVars, block.loc);
-      for (const param of block.params) {
-        extractPathsFromNode(param, results, localVars);
-      }
-      if (block.hash) {
-        for (const pair of block.hash.pairs) {
-          extractPathsFromNode(pair.value, results, localVars);
-        }
-      }
-
-      // Handle #each - introduces local variable
-      const helperName = (block.path as hbs.AST.PathExpression).original;
-      if (helperName === 'each') {
-        const newLocalVars = new Set(localVars);
-        // In #each, 'this' and block params become local
-        if (block.program.blockParams && block.program.blockParams.length > 0) {
-          for (const param of block.program.blockParams) {
-            newLocalVars.add(param);
-          }
-        }
-        extractPathsFromNode(block.program, results, newLocalVars);
-        if (block.inverse) {
-          extractPathsFromNode(block.inverse, results, localVars);
-        }
-      } else if (helperName === 'with') {
-        // #with also introduces context change
-        const newLocalVars = new Set(localVars);
-        if (block.program.blockParams && block.program.blockParams.length > 0) {
-          for (const param of block.program.blockParams) {
-            newLocalVars.add(param);
-          }
-        }
-        extractPathsFromNode(block.program, results, newLocalVars);
-        if (block.inverse) {
-          extractPathsFromNode(block.inverse, results, localVars);
-        }
-      } else if (helperName === 'let') {
-        // #let introduces local variables via hash
-        const newLocalVars = new Set(localVars);
-        if (block.hash) {
-          for (const pair of block.hash.pairs) {
-            newLocalVars.add(pair.key);
-          }
-        }
-        extractPathsFromNode(block.program, results, newLocalVars);
-        if (block.inverse) {
-          extractPathsFromNode(block.inverse, results, localVars);
-        }
-      } else {
-        // Other block helpers
-        extractPathsFromNode(block.program, results, localVars);
-        if (block.inverse) {
-          extractPathsFromNode(block.inverse, results, localVars);
-        }
-      }
-      break;
-    }
-
-    case 'PathExpression': {
-      const pathExpr = node as hbs.AST.PathExpression;
-      extractPathsFromExpression(pathExpr, results, localVars, pathExpr.loc);
-      break;
-    }
-
-    case 'ContentStatement':
-    case 'CommentStatement':
-      // No variables in content or comments
-      break;
-
-    default:
-      // Handle any other node types with children
-      const anyNode = node as any;
-      if (anyNode.body) {
-        for (const child of anyNode.body) {
-          extractPathsFromNode(child, results, localVars);
-        }
-      }
-      if (anyNode.program) {
-        extractPathsFromNode(anyNode.program, results, localVars);
-      }
-      if (anyNode.inverse) {
-        extractPathsFromNode(anyNode.inverse, results, localVars);
-      }
-      break;
   }
+
+  // {% set VAR = ... %}
+  const setRegex = /\{%[-\s]*set\s+(\w+)\s*=/g;
+  while ((match = setRegex.exec(template)) !== null) {
+    locals.add(match[1]);
+  }
+
+  return locals;
 }
 
 /**
- * Extracts variable path from a path expression if it's a global variable
- */
-function extractPathsFromExpression(
-  expr: hbs.AST.Expression,
-  results: VariableReference[],
-  localVars: Set<string>,
-  loc?: hbs.AST.SourceLocation
-): void {
-  if (expr.type !== 'PathExpression') return;
-
-  const pathExpr = expr as hbs.AST.PathExpression;
-  const parts = pathExpr.parts;
-
-  if (parts.length === 0) return;
-
-  // Skip if it's a helper (determined by context)
-  // Helpers are typically all-lowercase single words like 'if', 'each', 'unless'
-  // Our custom helpers: filterByType, filterByIds, getById, etc.
-  const builtinHelpers = new Set([
-    'if', 'unless', 'each', 'with', 'lookup', 'log',
-    'filterByType', 'filterByIds', 'getById', 'getManuscript',
-    'getObjectsOfLanguage', 'count', 'hasItems', 'eq', 'neq',
-    'and', 'or', 'not', 'json', 'array', 'includes',
-    'prompt'  // Fragment inclusion helper
-  ]);
-
-  const firstPart = String(parts[0]);
-
-  // Skip helpers
-  if (builtinHelpers.has(firstPart)) return;
-
-  // Skip 'this' references (used inside #each) and parent context references (../)
-  // Note: Handlebars parses 'this.foo' as parts=['foo'] but original='this.foo'
-  // Similarly, '../name' has parts=['name'] but original='../name'
-  const original = pathExpr.original;
-  if (original === 'this' || original.startsWith('this.') || original.startsWith('../') || pathExpr.data) return;
-
-  // Skip local variables
-  if (localVars.has(firstPart)) return;
-
-  // This is a global variable reference
-  const stringParts = parts.map(p => String(p));
-  results.push({
-    path: stringParts,
-    fullPath: stringParts.join('.'),
-    location: loc ? {
-      row: loc.start.line,
-      col: loc.start.column
-    } : undefined
-  });
-}
-
-/**
- * Extracts all GLOBAL variable references from a template.
- * Uses Handlebars AST parsing to find global variable uses.
- * Automatically excludes local variables from #each, #with, and #let blocks.
+ * Extracts all GLOBAL variable references from a Jinja2 template.
+ * Uses regex to find variable uses in {{ }} expressions.
+ * Excludes local variables from {% for %} and {% set %} blocks.
  * @param template The template string to analyze
  * @returns Array of variable references with paths and locations
  */
 export const extractVariableReferences = async (template: string): Promise<VariableReference[]> => {
   try {
-    const ast = Handlebars.parse(template);
+    const localVars = extractLocalVariables(template);
+
+    // Strip comments: {# ... #}
+    let cleaned = template.replace(/\{#[\s\S]*?#\}/g, '');
+
+    // Strip tags: {% ... %}
+    cleaned = cleaned.replace(/\{%[\s\S]*?%\}/g, '');
+
+    // Match {{ expression }} — capture the inner expression
+    const varRegex = /\{\{\s*([^}]+?)\s*\}\}/g;
     const results: VariableReference[] = [];
-    const localVars = new Set<string>();
+    let match;
 
-    extractPathsFromNode(ast, results, localVars);
+    while ((match = varRegex.exec(cleaned)) !== null) {
+      let expression = match[1].trim();
 
-    // Remove duplicates based on fullPath
-    const uniqueRefs = results.filter((ref, index, self) =>
-      index === self.findIndex(r => r.fullPath === ref.fullPath)
-    );
+      // Remove filter expressions: "variable|filter" -> "variable"
+      const pipeIndex = expression.indexOf('|');
+      if (pipeIndex > 0) {
+        expression = expression.substring(0, pipeIndex).trim();
+      }
 
-    return uniqueRefs;
-  } catch (error) {
-    // If parsing fails, return empty array (syntax errors will be caught by validateTemplate)
+      // Must be a valid identifier path (letters, digits, underscores, dots)
+      if (!/^[a-zA-Z_][\w.]*$/.test(expression)) continue;
+
+      const parts = expression.split('.');
+      const firstPart = parts[0];
+
+      // Skip builtins
+      if (JINJA_BUILTINS.has(firstPart)) continue;
+
+      // Skip local variables (from for/set)
+      if (localVars.has(firstPart)) continue;
+
+      // Calculate approximate location in the original template
+      const beforeMatch = template.substring(0, match.index);
+      const lines = beforeMatch.split('\n');
+      const row = lines.length;
+      const col = (lines[lines.length - 1]?.length || 0) + 1;
+
+      results.push({
+        path: parts,
+        fullPath: expression,
+        location: { row, col },
+      });
+    }
+
+    // Deduplicate
+    const seen = new Set<string>();
+    return results.filter((ref) => {
+      if (seen.has(ref.fullPath)) return false;
+      seen.add(ref.fullPath);
+      return true;
+    });
+  } catch {
     return [];
   }
 };
@@ -457,27 +170,47 @@ export const extractVariableReferences = async (template: string): Promise<Varia
 // ============================================================================
 
 /**
- * Validates a template string syntax and optionally checks variables against schema.
+ * Validates a Jinja2 template string.
+ * Performs a quick frontend delimiter balance check and backend syntax validation.
  * @param template The template string to validate
  * @param schemaType Optional schema type for variable validation
  * @returns Object containing validity, error message, and warnings
  */
 export const validateTemplate = async (
   template: string,
-  schemaType?: PromptType
+  schemaType?: PromptType,
 ): Promise<ValidationResult> => {
-  // Step 1: Validate syntax
-  try {
-    Handlebars.parse(template);
-  } catch (error) {
-    return {
-      isValid: false,
-      error: error instanceof Error ? error.message : String(error),
-      warnings: []
-    };
+  // Step 1: Quick frontend delimiter balance check
+  const pairs: [string, string][] = [['{{', '}}'], ['{%', '%}'], ['{#', '#}']];
+  for (const [open, close] of pairs) {
+    const openEscaped = open.replace(/[{}%#]/g, '\\$&');
+    const closeEscaped = close.replace(/[{}%#]/g, '\\$&');
+    const openCount = (template.match(new RegExp(openEscaped, 'g')) || []).length;
+    const closeCount = (template.match(new RegExp(closeEscaped, 'g')) || []).length;
+    if (openCount !== closeCount) {
+      return {
+        isValid: false,
+        error: `Mismatched delimiters: ${openCount} '${open}' vs ${closeCount} '${close}'`,
+        warnings: [],
+      };
+    }
   }
 
-  // Step 2: Validate variables if schema type is provided
+  // Step 2: Backend Jinja2 parse validation
+  try {
+    const response = await templateService.validate(template);
+    if (!response.is_valid) {
+      return {
+        isValid: false,
+        error: response.error || 'Template syntax error',
+        warnings: [],
+      };
+    }
+  } catch {
+    // If backend is unreachable, pass with frontend checks only
+  }
+
+  // Step 3: Variable schema validation
   const warnings: Array<{
     message: string;
     line?: number;
@@ -490,126 +223,35 @@ export const validateTemplate = async (
       const references = await extractVariableReferences(template);
       const variableWarnings = validateVariablesAgainstSchema(references, schemaType);
       warnings.push(...variableWarnings);
-    } catch (error) {
-      // If variable validation fails, log it but don't fail the whole validation
-      console.warn('Variable validation failed:', error);
+    } catch {
+      // Graceful degradation
     }
   }
 
   return {
     isValid: true,
-    warnings
+    warnings,
   };
 };
 
 // ============================================================================
-// FRAGMENT VALIDATION
+// FRAGMENT REFERENCES
 // ============================================================================
 
 /**
- * Result of fragment reference validation
- */
-export interface FragmentValidationResult {
-  isValid: boolean;
-  errors: string[];
-  warnings: string[];
-  referencedFragments: string[];
-}
-
-/**
- * Extract all fragment references from a template
+ * Extract all fragment references from a Jinja2 template
  * @param template The template content to analyze
- * @returns Array of fragment paths referenced via {{prompt ...}}
+ * @returns Array of fragment paths referenced via {% include "fragment:..." %}
  */
 export function extractFragmentReferences(template: string): string[] {
-  // First, remove Handlebars comments to avoid matching prompt references inside comments
-  const withoutComments = template.replace(/\{\{!--[\s\S]*?--\}\}/g, '');
+  // Remove Jinja2 comments to avoid matching references inside comments
+  const withoutComments = template.replace(/\{#[\s\S]*?#\}/g, '');
 
-  const regex = /\{\{\s*prompt\s+"([^"]+)"/g;
+  const regex = /\{%\s*include\s+"fragment:([^"]+)"\s*%\}/g;
   const refs: string[] = [];
   let match;
   while ((match = regex.exec(withoutComments)) !== null) {
     refs.push(match[1]);
   }
-  return [...new Set(refs)]; // Remove duplicates
+  return [...new Set(refs)];
 }
-
-/**
- * Validate fragment references in content.
- * Checks if referenced fragments exist and detects circular references.
- * @param content The content to validate
- * @param currentPath Optional path of current fragment (for self-reference detection)
- * @returns Validation result with errors, warnings, and referenced fragments
- */
-export function validateFragmentReferences(
-  content: string,
-  currentPath?: string
-): FragmentValidationResult {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-  const referencedFragments = extractFragmentReferences(content);
-
-  // Check if referenced fragments exist
-  for (const ref of referencedFragments) {
-    if (!fragmentRegistry.has(ref)) {
-      warnings.push(`Referenced fragment not found: "${ref}"`);
-    }
-  }
-
-  // Check for self-reference
-  if (currentPath && referencedFragments.includes(currentPath)) {
-    errors.push(`Self-reference detected: fragment "${currentPath}" references itself`);
-  }
-
-  // Detect circular references using DFS
-  if (currentPath) {
-    const circularPath = detectCircularReferences(currentPath, new Set());
-    if (circularPath) {
-      errors.push(`Circular reference detected: ${circularPath.join(' -> ')}`);
-    }
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-    warnings,
-    referencedFragments
-  };
-}
-
-/**
- * Detect circular references in fragment dependencies
- * @param startPath The fragment path to start from
- * @param visited Set of already visited paths
- * @param path Current path for error message
- * @returns Array representing the circular path, or null if no cycle
- */
-function detectCircularReferences(
-  startPath: string,
-  visited: Set<string>,
-  path: string[] = []
-): string[] | null {
-  if (visited.has(startPath)) {
-    return [...path, startPath];
-  }
-
-  const content = fragmentRegistry.get(startPath);
-  if (!content) {
-    return null; // Fragment doesn't exist, no cycle possible
-  }
-
-  visited.add(startPath);
-  path.push(startPath);
-
-  const refs = extractFragmentReferences(content);
-  for (const ref of refs) {
-    const cycle = detectCircularReferences(ref, new Set(visited), [...path]);
-    if (cycle) {
-      return cycle;
-    }
-  }
-
-  return null;
-}
-
-export default handlebars;
