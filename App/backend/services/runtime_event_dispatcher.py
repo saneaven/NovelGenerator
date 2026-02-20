@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+from ..database import SessionLocal
+from .notification_service import serialize_notification, sync_journey_notification_from_runtime_status
 from .run_event_bus import InMemoryRunEventBus, run_event_bus
+
+logger = logging.getLogger(__name__)
 
 
 def _to_str(value: Any) -> str | None:
@@ -48,6 +53,20 @@ class RuntimeEventDispatcher:
 
         await self._bus.publish(f"thread:{thread_id_str}", event)
         await self._bus.publish(f"project:{project_id_str}", event)
+
+        if event_name == "run:status":
+            notification_payload = self._sync_journey_notification_payload(
+                thread_id=thread_id_str,
+                status=str(data.get("status") or ""),
+                error=data.get("error"),
+            )
+            if notification_payload is not None:
+                await self.emit_project_event(
+                    project_id=project_id_str,
+                    event_name="notification:upsert",
+                    data=notification_payload,
+                )
+
         return event
 
     async def emit_project_event(
@@ -73,6 +92,35 @@ class RuntimeEventDispatcher:
 
         await self._bus.publish(f"project:{project_id_str}", event)
         return event
+
+    @staticmethod
+    def _sync_journey_notification_payload(
+        *,
+        thread_id: str,
+        status: str,
+        error: Any,
+    ) -> dict[str, Any] | None:
+        db = SessionLocal()
+        try:
+            row = sync_journey_notification_from_runtime_status(
+                db,
+                thread_id=thread_id,
+                status=status,
+                error=str(error) if isinstance(error, str) and error.strip() else None,
+            )
+            if row is None:
+                db.rollback()
+                return None
+
+            db.commit()
+            db.refresh(row)
+            return serialize_notification(row)
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to sync journey notification from run:status event")
+            return None
+        finally:
+            db.close()
 
 
 runtime_event_dispatcher = RuntimeEventDispatcher(run_event_bus)

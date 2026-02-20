@@ -82,6 +82,11 @@ export interface ProjectThreadRuntimeItem {
   unresolvedToolCallCount: number;
 }
 
+export interface CreateJourneyThreadOptions {
+  notificationLabel?: string;
+  notificationMeta?: Record<string, unknown>;
+}
+
 function toThreadInfo(raw: Record<string, unknown>): ThreadInfo {
   const out: ThreadInfo = {
     id: String(raw.id),
@@ -234,10 +239,13 @@ export const threadService = {
   async createJourneyThread(
     projectId: string,
     journeyKind: 'objectEdit' | 'objectTranslation' | 'imagePrompt' | 'sceneImagePrompt' | 'messageTranslation',
-  ): Promise<{ thread_id: string; status: ThreadStatus }> {
+    options?: CreateJourneyThreadOptions,
+  ): Promise<{ thread_id: string; status: ThreadStatus; notification_id?: string }> {
     return apiClient.post(`/api/v1/projects/${projectId}/threads`, {
       thread_type: 'journey',
       journey_kind: journeyKind,
+      notification_label: options?.notificationLabel ?? undefined,
+      notification_meta: options?.notificationMeta ?? undefined,
     });
   },
 

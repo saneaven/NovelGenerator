@@ -7,13 +7,7 @@ import { useTheme } from '../hooks/useTheme';
 import { Loading } from '../components/common/Loading';
 import { NotificationModals } from '../components/Notification';
 import { NotificationToastManager } from '../components/ActivityPanel/NotificationToastManager';
-import { registerJourneyModals } from '../llmTaskJourney/notificationHelpers';
-import { registerImageTaskModals } from '../imageTask';
 import '../App.css';
-
-// Register notification modal renderers at module load (push-based - no subscribers)
-registerJourneyModals();
-registerImageTaskModals();
 
 function ProtectedAppShell() {
   const settings = useSettings();

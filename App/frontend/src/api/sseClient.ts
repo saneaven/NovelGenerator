@@ -1,6 +1,7 @@
 import { API_BASE_URL, apiClient } from './client';
 import type { RunStatus, ToolCallStatus } from '../types/thread';
 import type { ObjectType } from '../types/unifiedObject';
+import type { NotificationDTO, NotificationSource } from './notificationService';
 
 interface RuntimeEventBase {
   project_id: string;
@@ -58,7 +59,37 @@ export type ThreadRuntimeEvent =
     }}
   | { event: string; data: Record<string, unknown> };
 
-export type ProjectSSEEvent = ObjectChangedEvent | ThreadRuntimeEvent;
+export type NotificationUpsertEvent = {
+  event: 'notification:upsert';
+  data: NotificationDTO & { project_id: string; ts: string };
+};
+
+export type NotificationDeleteEvent = {
+  event: 'notification:delete';
+  data: {
+    id: string;
+    source: NotificationSource;
+    source_ref_id: string;
+    project_id: string;
+    ts: string;
+  };
+};
+
+export type NotificationBulkDeleteEvent = {
+  event: 'notification:bulk_delete';
+  data: {
+    ids: string[];
+    project_id: string;
+    ts: string;
+  };
+};
+
+export type NotificationSSEEvent =
+  | NotificationUpsertEvent
+  | NotificationDeleteEvent
+  | NotificationBulkDeleteEvent;
+
+export type ProjectSSEEvent = ObjectChangedEvent | ThreadRuntimeEvent | NotificationSSEEvent;
 
 interface ConnectOptions {
   onReconnect?: () => Promise<void> | void;

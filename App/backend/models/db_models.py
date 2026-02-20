@@ -858,6 +858,48 @@ class RunToolCallModel(Base):
 
 
 # ============================================================================
+# NOTIFICATIONS
+# ============================================================================
+
+class NotificationModel(Base):
+    """Project-scoped user notifications (single source of truth)."""
+    __tablename__ = "notifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    source = Column(String(32), nullable=False)  # 'journey' | 'imageTask'
+    source_ref_id = Column(String(128), nullable=False)
+    thread_id = Column(UUID(as_uuid=True), ForeignKey("threads.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    status = Column(String(16), nullable=False)  # 'running' | 'pending' | 'success' | 'error' | 'cancelled'
+    label = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    warning = Column(Text, nullable=True)
+
+    progress_json = Column(JSONB, nullable=True)
+    custom_slot_json = Column(JSONB, nullable=True)
+    meta_json = Column(JSONB, nullable=True)
+
+    is_read = Column(Boolean, default=False, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("source IN ('journey','imageTask')", name="ck_notifications_source"),
+        CheckConstraint(
+            "status IN ('running','pending','success','error','cancelled')",
+            name="ck_notifications_status",
+        ),
+        UniqueConstraint("user_id", "project_id", "source", "source_ref_id", name="uq_notifications_source_ref"),
+        Index("ix_notifications_project_order", "user_id", "project_id", "updated_at", "id"),
+        Index("ix_notifications_project_read", "user_id", "project_id", "is_read"),
+    )
+
+
+# ============================================================================
 # ASSET MANAGEMENT
 # ============================================================================
 

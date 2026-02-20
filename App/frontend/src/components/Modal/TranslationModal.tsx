@@ -5,10 +5,8 @@ import './TranslationModal.css';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
 import type { UnifiedObject, ObjectType } from '../../types/unifiedObject';
-import { registerJourneyNotification } from '../../llmTaskJourney';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import { useJourneyStore } from '../../store/journeyStore';
-import { useNotificationStore } from '../../store/notificationStore';
 import { threadService } from '../../api/threadService';
 import { sendThreadMessage } from '../../runtime/threadCommands';
 import { Globe, Swap, Document } from '../icons';
@@ -327,16 +325,21 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       updatedAt: Date.now(),
     });
 
-    registerJourneyNotification(
-      useJourneyStore.getState().journeys[journeyId] as any,
-      {
-        onClick: () => useJourneyStore.getState().openDetailModal(journeyId),
-        onDismiss: () => useJourneyStore.getState().clearJourney(journeyId),
-      },
-    );
-
     try {
-      const created = await threadService.createJourneyThread(projectId, 'objectTranslation');
+      const created = await threadService.createJourneyThread(
+        projectId,
+        'objectTranslation',
+        {
+          notificationLabel: spec.label(inputPayload),
+          notificationMeta: {
+            journey_kind: 'objectTranslation',
+            project_id: projectId,
+            entry_input: userInput.trim() || null,
+            target_language: targetLanguage,
+            target_ids: selectedObjectIds,
+          },
+        },
+      );
       useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
       await sendThreadMessage({
         threadId: created.thread_id,
@@ -354,10 +357,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     } catch (error: any) {
       useJourneyStore.getState().updateJourney(journeyId, {
         error: error?.message ?? 'Failed to start translation journey',
-      });
-      useNotificationStore.getState().update(journeyId, {
-        status: 'error',
-        message: error?.message ?? 'Failed to start translation journey',
       });
     }
 

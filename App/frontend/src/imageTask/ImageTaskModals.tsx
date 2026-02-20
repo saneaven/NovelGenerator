@@ -10,7 +10,6 @@ import { TextButton } from '../components/TextButton';
 import { UnifiedImageModal } from '../components/AssetManager';
 import { getAssetUrl } from '../utils/assetUrl';
 import { useProjectStore } from '../store/projectStore';
-import { useNotificationStore } from '../store/notificationStore';
 import { useImageTaskStore } from './store';
 import { ImageTaskRuntime } from './ImageTaskRuntime';
 import type { GenerationRecipe, ImageProgressStage, ImageTaskBinding } from './types';
@@ -52,12 +51,7 @@ export const ImageTaskModals: React.FC = () => {
     });
 
     // Auto-dismiss the failed/cancelled task being retried to avoid duplicated placeholders.
-    const notifications = useNotificationStore.getState();
-    if (notifications.getNotification(session.id)) {
-      notifications.remove(session.id);
-    } else {
-      useImageTaskStore.getState().clearSession(session.id);
-    }
+    useImageTaskStore.getState().clearSession(session.id);
     closeDetailModal();
   }, [session, closeDetailModal]);
 

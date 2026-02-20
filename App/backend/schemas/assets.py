@@ -53,12 +53,18 @@ class ImageGenerationRequest(BaseModel):
     # Asset type for categorization ('scene', 'object', or None)
     asset_type: Optional[str] = None
 
+    # Notification metadata (server-managed notifications)
+    notification_source_ref_id: Optional[str] = None
+    notification_label: Optional[str] = None
+    notification_meta: Optional[Dict[str, Any]] = None
+
 
 class ImageGenerationResponse(BaseModel):
     """Response from image generation"""
     success: bool
     asset_id: Optional[str] = None
     file_path: Optional[str] = None
+    notification_id: Optional[str] = None
     revised_prompt: Optional[str] = None
     object_link: Optional["StoryObjectAssetResponse"] = None  # Present when object binding is used
     error: Optional[str] = None

@@ -10,8 +10,6 @@ import { useSettings } from '../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useJourneyStore } from '../../store/journeyStore';
 import { useThreadStore } from '../../store/threadStore';
-import { useNotificationStore } from '../../store/notificationStore';
-import { registerJourneyNotification } from '../../llmTaskJourney';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import { threadService } from '../../api/threadService';
 import { sendThreadMessage } from '../../runtime/threadCommands';
@@ -251,18 +249,27 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
-    registerJourneyNotification(
-      useJourneyStore.getState().journeys[journeyId] as any,
-      {
-        onClick: () => useJourneyStore.getState().openDetailModal(journeyId),
-        onDismiss: () => useJourneyStore.getState().clearJourney(journeyId),
-      },
-    );
     setActiveJourneyId(journeyId);
     onStreamingStart?.(journeyId, promptMode);
 
     try {
-      const created = await threadService.createJourneyThread(currentProjectId, journeyKind);
+      const notificationTargetIds = contextType === 'object'
+        ? (objectId ? [objectId] : [])
+        : selectedObjectIds;
+      const created = await threadService.createJourneyThread(
+        currentProjectId,
+        journeyKind,
+        {
+          notificationLabel: spec.label(inputPayload),
+          notificationMeta: {
+            journey_kind: journeyKind,
+            project_id: currentProjectId,
+            entry_input: userRequest.trim() || null,
+            target_language: null,
+            target_ids: notificationTargetIds,
+          },
+        },
+      );
       useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
       await sendThreadMessage({
         threadId: created.thread_id,
@@ -278,10 +285,6 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     } catch (error: any) {
       const message = error?.message ?? 'Failed to start image prompt journey.';
       useJourneyStore.getState().updateJourney(journeyId, { error: message });
-      useNotificationStore.getState().update(journeyId, {
-        status: 'error',
-        message,
-      });
       onStreamingError?.(message, promptMode);
       setActiveJourneyId(null);
     }

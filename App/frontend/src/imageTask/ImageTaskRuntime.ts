@@ -5,7 +5,6 @@ import { generateTempId } from '../utils/tempId';
 import { useImageTaskStore } from './store';
 import type { ImageProgressStage, ImageTaskInput, ImageTaskSession } from './types';
 import { buildGenerateRequest } from './recipe/buildGenerateRequest';
-import { registerImageTaskNotification, updateImageTaskNotification } from './notificationHelpers';
 
 const abortControllers = new Map<string, AbortController>();
 const handlersByTaskId = new Map<
@@ -20,8 +19,6 @@ const handlersByTaskId = new Map<
 
 function setStage(taskId: string, stage: ImageProgressStage, message: string) {
   useImageTaskStore.getState().updateSession(taskId, { status: 'running', progress: { stage, message } });
-  const session = useImageTaskStore.getState().sessions[taskId];
-  if (session) updateImageTaskNotification(session);
 }
 
 function upsertAssetIntoStore(asset: Asset) {
@@ -51,12 +48,13 @@ async function runTask(taskId: string) {
 
     setStage(taskId, 'preparing', 'Preparing...');
 
-    const { url, body } = buildGenerateRequest(session.input);
+    const { url, body } = buildGenerateRequest(session.input, { notificationSourceRefId: taskId });
 
     setStage(taskId, 'generating', 'Generating...');
     const resp = await apiClient.post<{
       success: boolean;
       asset_id?: string;
+      notification_id?: string;
       revised_prompt?: string;
       object_link?: any;
       error?: string;
@@ -85,24 +83,18 @@ async function runTask(taskId: string) {
       progress: undefined,
       result: { assetId: asset.id, asset, revisedPrompt: resp.revised_prompt },
     });
-    const updated = useImageTaskStore.getState().sessions[taskId];
-    if (updated) updateImageTaskNotification(updated);
 
     handlers?.onSuccess?.({ assetId: asset.id, asset, revisedPrompt: resp.revised_prompt });
   } catch (err) {
     // Abort -> cancelled
     if (controller.signal.aborted || (err instanceof ApiError && err.status === 0)) {
       useImageTaskStore.getState().updateSession(taskId, { status: 'cancelled', progress: undefined });
-      const s = useImageTaskStore.getState().sessions[taskId];
-      if (s) updateImageTaskNotification(s);
       handlers?.onCancelled?.();
       return;
     }
 
     const message = err instanceof Error ? err.message : String(err);
     useImageTaskStore.getState().updateSession(taskId, { status: 'error', error: message, progress: undefined });
-    const s = useImageTaskStore.getState().sessions[taskId];
-    if (s) updateImageTaskNotification(s);
     handlers?.onError?.(err instanceof Error ? err : new Error(message));
   } finally {
     abortControllers.delete(taskId);
@@ -137,13 +129,6 @@ export const ImageTaskRuntime = {
     useImageTaskStore.getState().createSession(session);
     if (handlers) handlersByTaskId.set(taskId, handlers);
 
-    registerImageTaskNotification(session, {
-      onClick: () => useImageTaskStore.getState().openDetailModal(taskId),
-      onCancel: () => ImageTaskRuntime.cancel(taskId),
-      onRetry: () => ImageTaskRuntime.retry(taskId),
-      onDismiss: () => useImageTaskStore.getState().clearSession(taskId),
-    });
-
     void runTask(taskId);
     return { taskId };
   },
@@ -154,8 +139,6 @@ export const ImageTaskRuntime = {
     abortControllers.delete(taskId);
 
     useImageTaskStore.getState().updateSession(taskId, { status: 'cancelled', progress: undefined });
-    const s = useImageTaskStore.getState().sessions[taskId];
-    if (s) updateImageTaskNotification(s);
   },
 
   retry(taskId: string) {

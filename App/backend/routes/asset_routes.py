@@ -43,6 +43,8 @@ from ..services.manuscript_image_index_service import rebuild_manuscript_images_
 from ..services.object_change_events import queue_object_change
 from ..services.storage_quota_service import StorageQuotaExceededError, enforce_user_asset_quota
 from ..services.credential_service import CredentialServiceError, credential_service
+from ..services.notification_service import serialize_notification, upsert_notification
+from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..image_providers.registry import ImageProviderRegistry
 from ..image_providers.base import ReferenceImageData
 from ..utils.object_type_aliases import normalize_object_type
@@ -273,15 +275,84 @@ async def generate_image(
         if not obj:
             raise HTTPException(status_code=404, detail="Object not found")
 
+    notification_source_ref_id = str(request.notification_source_ref_id or "").strip()
+    if not notification_source_ref_id:
+        raise HTTPException(status_code=422, detail="notification_source_ref_id is required")
+
+    notification_label = str(request.notification_label or "").strip() or "Image generation"
+    incoming_notification_meta = (
+        dict(request.notification_meta)
+        if isinstance(request.notification_meta, dict)
+        else {}
+    )
+    notification_id: Optional[str] = None
+
+    def _build_image_notification_meta(*, asset_id: UUID | str | None = None) -> Dict[str, Any]:
+        resolved_asset_id = str(asset_id) if asset_id is not None else None
+        return {
+            **incoming_notification_meta,
+            "project_id": str(project_id),
+            "binding_type": "scene" if manuscript_id else "object",
+            "manuscript_id": str(manuscript_id) if manuscript_id else None,
+            "object_type": normalized_object_type if normalized_object_type else None,
+            "object_id": str(object_id) if object_id else None,
+            "asset_id": resolved_asset_id,
+        }
+
+    async def _emit_notification_upsert(
+        *,
+        status: str,
+        message: str,
+        warning: Optional[str] = None,
+        progress: Optional[Dict[str, Any]] = None,
+        custom_slot: Optional[Dict[str, Any]] = None,
+        asset_id: UUID | str | None = None,
+    ) -> None:
+        nonlocal notification_id
+        row = upsert_notification(
+            db,
+            user_id=current_user.id,
+            project_id=project_id,
+            source="imageTask",
+            source_ref_id=notification_source_ref_id,
+            status=status,
+            label=notification_label,
+            message=message,
+            warning=warning,
+            progress=progress,
+            custom_slot=custom_slot or {"type": "none"},
+            meta=_build_image_notification_meta(asset_id=asset_id),
+        )
+        db.commit()
+        db.refresh(row)
+        notification_id = str(row.id)
+        await runtime_event_dispatcher.emit_project_event(
+            project_id=project_id,
+            event_name="notification:upsert",
+            data=serialize_notification(row),
+        )
+
     try:
+        await _emit_notification_upsert(
+            status="running",
+            message="Preparing...",
+            progress={"current": 1, "total": 4, "stage": "preparing", "percentage": 25},
+        )
+
         # Get provider instance
         provider_cfg = credential_service.get_provider_config(db, current_user.id, request.provider)
         provider = ImageProviderRegistry.get_provider(request.provider, provider_cfg)
 
         if not provider.validate_config():
+            await _emit_notification_upsert(
+                status="error",
+                message="Invalid provider configuration",
+                warning="Invalid provider configuration",
+            )
             return ImageGenerationResponse(
                 success=False,
-                error="Invalid provider configuration"
+                error="Invalid provider configuration",
+                notification_id=notification_id,
             )
 
         # Load reference images if provided and provider supports image input
@@ -329,6 +400,12 @@ async def generate_image(
         quality = provider_settings.get("quality") or "standard"
         style = provider_settings.get("style") or "natural"
 
+        await _emit_notification_upsert(
+            status="running",
+            message="Generating...",
+            progress={"current": 2, "total": 4, "stage": "generating", "percentage": 50},
+        )
+
         # Generate image
         result = await provider.generate_image(
             prompt=final_prompt,
@@ -343,14 +420,26 @@ async def generate_image(
         )
 
         if not result.success:
+            failure_message = result.error or "Image generation failed"
+            await _emit_notification_upsert(
+                status="error",
+                message=failure_message,
+                warning=failure_message,
+            )
             return ImageGenerationResponse(
                 success=False,
-                error=result.error
+                error=result.error,
+                notification_id=notification_id,
             )
+
+        await _emit_notification_upsert(
+            status="running",
+            message="Saving...",
+            progress={"current": 3, "total": 4, "stage": "saving", "percentage": 75},
+        )
 
         # Save to storage
         if result.image_b64:
-            import base64
             file_path, mime_type, width, height, file_size = storage_service.save_generated_image(
                 base64_data=result.image_b64,
                 project_id=project_id,
@@ -363,9 +452,15 @@ async def generate_image(
                 format=result.format
             )
         else:
+            await _emit_notification_upsert(
+                status="error",
+                message="No image data returned from provider",
+                warning="No image data returned from provider",
+            )
             return ImageGenerationResponse(
                 success=False,
-                error="No image data returned from provider"
+                error="No image data returned from provider",
+                notification_id=notification_id,
             )
 
         # Prepare reference images metadata for persistence (regen restoration)
@@ -387,6 +482,12 @@ async def generate_image(
                 {"id": obj.id, "type": obj.type, "name": obj.name}
                 for obj in request.reference_objects
             ]
+
+        await _emit_notification_upsert(
+            status="running",
+            message="Binding...",
+            progress={"current": 4, "total": 4, "stage": "binding", "percentage": 90},
+        )
 
         # Enforce user storage quota after we know actual sizes.
         try:
@@ -470,23 +571,75 @@ async def generate_image(
                 asset=_asset_to_response(asset)
             )
 
+        file_url = f"/storage/assets/{file_path}"
+        await _emit_notification_upsert(
+            status="success",
+            message="Completed",
+            progress={"current": 4, "total": 4, "stage": "completed", "percentage": 100},
+            custom_slot={
+                "type": "image",
+                "url": file_url,
+                "alt": asset.name,
+            },
+            asset_id=asset.id,
+        )
+
         return ImageGenerationResponse(
             success=True,
             asset_id=str(asset.id),
-            file_path=f"/storage/assets/{file_path}",
+            file_path=file_url,
+            notification_id=notification_id,
             revised_prompt=result.revised_prompt,
             object_link=object_link
         )
 
-    except HTTPException:
+    except HTTPException as exc:
+        detail_text = exc.detail if isinstance(exc.detail, str) else "Image generation request failed"
+        if notification_source_ref_id:
+            try:
+                await _emit_notification_upsert(
+                    status="error",
+                    message=detail_text,
+                    warning=detail_text,
+                )
+            except Exception:
+                db.rollback()
         raise
     except CredentialServiceError as e:
+        if notification_source_ref_id:
+            try:
+                await _emit_notification_upsert(
+                    status="error",
+                    message=str(e),
+                    warning=str(e),
+                )
+            except Exception:
+                db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
+        if notification_source_ref_id:
+            try:
+                await _emit_notification_upsert(
+                    status="error",
+                    message=str(e),
+                    warning=str(e),
+                )
+            except Exception:
+                db.rollback()
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        if notification_source_ref_id:
+            try:
+                await _emit_notification_upsert(
+                    status="error",
+                    message=str(e),
+                    warning=str(e),
+                )
+            except Exception:
+                db.rollback()
         return ImageGenerationResponse(
             success=False,
+            notification_id=notification_id,
             error=str(e)
         )
 

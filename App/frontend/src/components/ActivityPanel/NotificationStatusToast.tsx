@@ -6,12 +6,13 @@ import './NotificationStatusToast.css';
 const NotificationStatusToast: React.FC = () => {
   const toast = useNotificationToastStore((s) => s.toast);
   const clear = useNotificationToastStore((s) => s.clear);
+  const openDetail = useNotificationStore((s) => s.openDetail);
 
   const handleClick = useCallback(() => {
     if (!toast) return;
-    useNotificationStore.getState().invokeHandler(toast.id, 'onClick');
+    openDetail(toast.id);
     clear();
-  }, [toast, clear]);
+  }, [toast, clear, openDetail]);
 
   if (!toast) return null;
 
@@ -38,4 +39,3 @@ const NotificationStatusToast: React.FC = () => {
 };
 
 export default NotificationStatusToast;
-

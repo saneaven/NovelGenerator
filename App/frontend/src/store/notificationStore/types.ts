@@ -1,89 +1,40 @@
-import type { ComponentType, ReactNode } from 'react';
+import type {
+  NotificationDTO,
+  NotificationSource,
+  NotificationStatus as ServerNotificationStatus,
+} from '../../api/notificationService';
 
-/**
- * Normalized notification status for display purposes.
- * All consumers must map their internal statuses to these.
- */
-export type NotificationStatus =
-  | 'idle'
-  | 'running'    // Any active/in-progress state
-  | 'pending'    // Requires user action (e.g., confirmation)
-  | 'success'
-  | 'error'
-  | 'cancelled';
+export type NotificationStatus = ServerNotificationStatus | 'idle';
+export type NotificationServerDTO = NotificationDTO;
+export type NotificationMeta = Record<string, unknown> | null;
+export type NotificationSourceType = NotificationSource;
 
-/**
- * Custom slot for consumer-specific rendering (e.g., image previews)
- */
-export type NotificationCustomSlot =
-  | { type: 'image'; url: string; alt?: string }
-  | { type: 'component'; render: ComponentType<{ notification: NotificationData }> }
-  | { type: 'none' };
-
-/**
- * Progress information for running notifications
- */
 export interface NotificationProgress {
-  current: number;
-  total: number;
+  current?: number;
+  total?: number;
+  stage?: string;
   label?: string;
   percentage?: number;
 }
 
-/**
- * Core notification data - generic and consumer-agnostic
- */
-export interface NotificationData {
-  id: string;
+export type NotificationCustomSlot =
+  | { type: 'none' }
+  | { type: 'image'; url: string; alt?: string };
 
-  // Display properties
+export interface NotificationEntry {
+  id: string;
+  projectId: string;
+  source: NotificationSourceType;
+  sourceRefId: string;
+  threadId: string | null;
+  status: NotificationStatus;
   label: string;
   message: string;
-  status: NotificationStatus;
-
-  // Timestamps
+  warning?: string;
+  progress?: NotificationProgress;
+  customSlot: NotificationCustomSlot;
+  meta: NotificationMeta;
+  isRead: boolean;
   createdAt: number;
   updatedAt: number;
-
-  // Notification state
-  isRead: boolean;
-
-  // Progress (optional - for running tasks)
-  progress?: NotificationProgress;
-
-  // Consumer identification (e.g., 'llm', 'image', 'export')
-  source: string;
-
-  // Custom rendering slot (for image previews, extra UI elements)
-  customSlot?: NotificationCustomSlot;
-
-  // Warning message (optional)
-  warning?: string;
 }
-
-/**
- * Handler configuration for notification interactions.
- * Consumers register these when adding notifications.
- */
-export interface NotificationHandlers {
-  /** Called when the notification is clicked */
-  onClick?: () => void;
-  /** Called before the notification is removed (cleanup) */
-  onDismiss?: () => void;
-  /** For cancellable tasks - shown only when running */
-  onCancel?: () => void;
-  /** For retryable tasks - shown on error */
-  onRetry?: () => void;
-}
-
-/**
- * Full notification entry stored in the notification store
- */
-export interface NotificationEntry extends NotificationData {
-  handlers: NotificationHandlers;
-}
-
-/**
- * Modal renderer function for consumer-registered modals
- */
-export type ModalRenderer = () => ReactNode;

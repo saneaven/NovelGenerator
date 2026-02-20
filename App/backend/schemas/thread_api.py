@@ -49,6 +49,8 @@ class CreateThreadRequest(BaseModel):
         "messageTranslation",
     ]
     owner_id: UUID | None = None
+    notification_label: str | None = None
+    notification_meta: dict[str, Any] | None = None
 
 
 class MessageResponse(BaseModel):

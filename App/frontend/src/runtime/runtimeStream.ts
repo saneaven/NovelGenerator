@@ -1,5 +1,7 @@
 import { connectProjectStream, type ProjectSSEEvent } from '../api/sseClient';
+import { notificationService } from '../api/notificationService';
 import { EventRouter } from './eventRouter';
+import { useNotificationStore } from '../store/notificationStore';
 
 class ProjectRuntimeConnection {
   readonly projectId: string;
@@ -48,6 +50,23 @@ class ProjectRuntimeConnection {
         void this.router.handleEvent(event);
       },
       this.abortController.signal,
+      {
+        onReconnect: async () => {
+          try {
+            const response = await notificationService.list(this.projectId, {
+              limit: 50,
+              offset: 0,
+              includeRead: true,
+            });
+            useNotificationStore.getState().hydrate(response.items);
+          } catch (error) {
+            console.warn('Failed to rehydrate notifications after SSE reconnect', {
+              projectId: this.projectId,
+              error,
+            });
+          }
+        },
+      },
     ).catch((error) => {
       if (this.abortController?.signal.aborted) return;
       console.error('Project runtime stream failed', { projectId: this.projectId, error });

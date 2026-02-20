@@ -16,6 +16,9 @@ export type GenerateRequestBody = {
   reference_images?: Array<{ asset_id: string; strength: number }>;
 
   asset_type?: 'scene' | 'object' | 'cover';
+  notification_source_ref_id: string;
+  notification_label?: string;
+  notification_meta?: Record<string, unknown>;
 };
 
 function bindingToQuery(binding: ImageTaskBinding): string {
@@ -31,11 +34,29 @@ function refsToRequest(refs?: ReferenceImageRef[]): Array<{ asset_id: string; st
 }
 
 export function buildGenerateRequest(
-  input: ImageTaskInput
+  input: ImageTaskInput,
+  options: { notificationSourceRefId: string },
 ): { url: string; body: GenerateRequestBody } {
   const { projectId, binding, recipe } = input;
   const qs = bindingToQuery(binding);
   const url = `/api/v1/assets/${projectId}/generate?${qs}`;
+  const notificationMeta: Record<string, unknown> = binding.type === 'scene'
+    ? {
+        project_id: projectId,
+        binding_type: 'scene',
+        manuscript_id: binding.manuscriptId,
+        object_type: null,
+        object_id: null,
+        asset_id: null,
+      }
+    : {
+        project_id: projectId,
+        binding_type: 'object',
+        manuscript_id: null,
+        object_type: binding.objectType,
+        object_id: binding.objectId,
+        asset_id: null,
+      };
 
   const base: GenerateRequestBody = {
     provider: recipe.provider,
@@ -44,6 +65,9 @@ export function buildGenerateRequest(
     provider_settings: recipe.providerSettings,
     reference_images: refsToRequest(recipe.referenceImages),
     asset_type: binding.type === 'scene' ? 'scene' : 'object',
+    notification_source_ref_id: options.notificationSourceRefId,
+    notification_label: input.label ?? 'Image generation',
+    notification_meta: notificationMeta,
   };
 
   if (recipe.promptType === 'natural') {

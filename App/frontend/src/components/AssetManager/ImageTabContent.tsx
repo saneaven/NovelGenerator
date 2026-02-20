@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useAssetStore } from '../../store/assetStore';
 import { useErrorStore } from '../../store/errorStore';
 import { useProjectStore } from '../../store/projectStore';
-import { useNotificationStore } from '../../store/notificationStore';
 import { ImageGenerationModal } from '../ImageGeneration';
 import ImagePromptManager from './ImagePromptManager';
 import { TextButton } from '../TextButton';
@@ -564,23 +563,10 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     const handleRetryTask = useCallback((_taskId: string, recipe: GenerationRecipe) => {
         setGenerationRecipe(recipe);
         setShowGeneratePanel(true);
-
-        // Auto-dismiss the failed/cancelled task being retried to avoid duplicated placeholders.
-        const notifications = useNotificationStore.getState();
-        if (notifications.getNotification(_taskId)) {
-            notifications.remove(_taskId);
-            return;
-        }
         useImageTaskStore.getState().clearSession(_taskId);
     }, []);
 
     const handleDismissTask = useCallback((taskId: string) => {
-        // Remove notification (also clears the session via onDismiss handler)
-        const notifications = useNotificationStore.getState();
-        if (notifications.getNotification(taskId)) {
-            notifications.remove(taskId);
-            return;
-        }
         useImageTaskStore.getState().clearSession(taskId);
     }, []);
 

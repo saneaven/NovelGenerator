@@ -7,9 +7,11 @@ import { useSidebarStore } from '../../store/sidebarStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore, type SimplifiedStoryObjects } from '../../store/unifiedObjectStore';
 import { useNovelEditorStore } from '../../store/novelEditorStore';
+import { useNotificationStore } from '../../store/notificationStore';
 import { useSettings } from '../../store/settingsStore';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { useErrorStore } from '../../store/errorStore';
+import { notificationService } from '../../api/notificationService';
 import { translationService } from '../../api/unifiedObjectService';
 import { startProjectRuntime, stopProjectRuntime } from '../../runtime/runtimeStream';
 
@@ -68,6 +70,7 @@ const UnifiedWorkspace: React.FC = () => {
   const { fetchAgents } = useAgentStore();
   const unifiedObjects = useUnifiedObjectStore(state => state.objects);
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
+  const hydrateNotifications = useNotificationStore((state) => state.hydrate);
 
   // NovelEditor specific stores
   const selectedChapterByProject = useNovelEditorStore(state => state.selectedChapterByProject);
@@ -221,6 +224,23 @@ const UnifiedWorkspace: React.FC = () => {
       stopProjectRuntime(projectId);
     };
   }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    void notificationService
+      .list(projectId, { limit: 50, offset: 0, includeRead: true })
+      .then((response) => {
+        if (cancelled) return;
+        hydrateNotifications(response.items);
+      })
+      .catch((error) => {
+        console.warn('Failed to hydrate notifications', { projectId, error });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, hydrateNotifications]);
 
   // Fetch projects if not loaded
   useEffect(() => {

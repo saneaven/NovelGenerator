@@ -1,4 +1,6 @@
 import React from 'react';
+import { notificationService } from '../../api/notificationService';
+import { useProjectStore } from '../../store/projectStore';
 import { useTranslation } from 'react-i18next';
 import { useNotificationStore } from '../../store/notificationStore';
 import { Bell, Sliders } from '../icons';
@@ -19,15 +21,22 @@ const ActivityPanelContainer: React.FC<ActivityPanelContainerProps> = ({
   isMobile = false,
 }) => {
   const { t } = useTranslation();
-  const removeAll = useNotificationStore((state) => state.removeAll);
+  const removeManyFromServer = useNotificationStore((state) => state.removeManyFromServer);
   const notificationsMap = useNotificationStore((state) => state.notifications);
+  const currentProjectId = useProjectStore((state) => state.currentProjectId);
 
   const hasNotifications = Object.values(notificationsMap).some(
     (n) => n !== undefined && n.status !== 'idle'
   );
 
-  const handleClearAll = () => {
-    removeAll();
+  const handleClearAll = async () => {
+    if (!currentProjectId) return;
+    try {
+      const response = await notificationService.deleteAll(currentProjectId, { only_read: false });
+      removeManyFromServer(response.ids);
+    } catch (error) {
+      console.warn('Failed to clear notifications', { currentProjectId, error });
+    }
   };
 
   const title = activeView === 'notifications' ? t('activity.notifications') : t('activity.variables');

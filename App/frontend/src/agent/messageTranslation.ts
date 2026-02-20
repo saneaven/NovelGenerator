@@ -1,8 +1,6 @@
 import { threadService } from '../api/threadService';
-import { registerJourneyNotification } from '../llmTaskJourney';
 import { getJourneySpec } from '../llmTaskJourney/journeySpecs';
 import { useJourneyStore } from '../store/journeyStore';
-import { useNotificationStore } from '../store/notificationStore';
 import { sendThreadMessage } from '../runtime/threadCommands';
 
 export interface MessageTranslationInput {
@@ -59,16 +57,22 @@ export async function runMessageTranslation(
     createdAt: Date.now(),
     updatedAt: Date.now(),
   });
-  registerJourneyNotification(
-    useJourneyStore.getState().journeys[journeyId] as any,
-    {
-      onClick: () => useJourneyStore.getState().openDetailModal(journeyId),
-      onDismiss: () => useJourneyStore.getState().clearJourney(journeyId),
-    },
-  );
 
   try {
-    const created = await threadService.createJourneyThread(input.projectId, 'messageTranslation');
+    const created = await threadService.createJourneyThread(
+      input.projectId,
+      'messageTranslation',
+      {
+        notificationLabel: spec.label(journeyInput),
+        notificationMeta: {
+          journey_kind: 'messageTranslation',
+          project_id: input.projectId,
+          entry_input: input.sourceContent,
+          target_language: input.targetLanguage,
+          target_ids: [input.sourceMessageId],
+        },
+      },
+    );
     useJourneyStore.getState().updateJourney(journeyId, {
       threadId: created.thread_id,
     });
@@ -92,10 +96,6 @@ export async function runMessageTranslation(
   } catch (error: any) {
     const message = error?.message ?? 'Failed to start message translation';
     useJourneyStore.getState().updateJourney(journeyId, { error: message });
-    useNotificationStore.getState().update(journeyId, {
-      status: 'error',
-      message,
-    });
     throw error;
   }
 }

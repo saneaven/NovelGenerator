@@ -29,6 +29,12 @@ from ..schemas.thread_api import (
 )
 from ..services.run_event_bus import run_event_bus
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
+from ..services.notification_service import (
+    default_journey_label,
+    message_from_notification_status,
+    serialize_notification,
+    upsert_notification,
+)
 from ..services.run_pipeline import run_pipeline
 from ..services.tool_call_executor import execute as execute_tool_call
 
@@ -748,6 +754,13 @@ async def create_thread(
 ):
     _owned_project_or_404(db, project_id=project_id, user_id=current_user.id)
 
+    notification_label = str(payload.notification_label or "").strip()
+    notification_meta = (
+        dict(payload.notification_meta)
+        if isinstance(payload.notification_meta, dict)
+        else {}
+    )
+
     thread = Thread(
         project_id=project_id,
         user_id=current_user.id,
@@ -757,10 +770,43 @@ async def create_thread(
         status="done",
     )
     db.add(thread)
+    db.flush()
+
+    merged_notification_meta = {
+        **notification_meta,
+        "thread_id": str(thread.id),
+        "journey_kind": payload.journey_kind,
+        "project_id": str(project_id),
+    }
+
+    notification_row = upsert_notification(
+        db,
+        user_id=current_user.id,
+        project_id=project_id,
+        source="journey",
+        source_ref_id=str(thread.id),
+        thread_id=thread.id,
+        status="running",
+        label=notification_label or default_journey_label(payload.journey_kind),
+        message=message_from_notification_status(status="running"),
+        warning=None,
+        progress=None,
+        custom_slot={"type": "none"},
+        meta=merged_notification_meta,
+    )
+
     db.commit()
     db.refresh(thread)
+    db.refresh(notification_row)
+
+    await runtime_event_dispatcher.emit_project_event(
+        project_id=project_id,
+        event_name="notification:upsert",
+        data=serialize_notification(notification_row),
+    )
 
     return {
         "thread_id": str(thread.id),
         "status": thread.status,
+        "notification_id": str(notification_row.id),
     }

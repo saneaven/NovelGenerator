@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { notificationService } from '../../api/notificationService';
+import { useProjectStore } from '../../store/projectStore';
 import { useNotificationStore } from '../../store/notificationStore';
 import NotificationItem from '../Notification/NotificationItem';
 import { useScroll } from 'motion/react';
@@ -28,8 +30,9 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobil
 
   // Subscribe to raw state, derive sorted list with useMemo
   const notificationsMap = useNotificationStore((state) => state.notifications);
-  const remove = useNotificationStore((state) => state.remove);
-  const invokeHandler = useNotificationStore((state) => state.invokeHandler);
+  const removeFromServer = useNotificationStore((state) => state.removeFromServer);
+  const openDetail = useNotificationStore((state) => state.openDetail);
+  const currentProjectId = useProjectStore((state) => state.currentProjectId);
 
   // Derive sorted notifications from raw state
   const notifications = useMemo(
@@ -48,16 +51,23 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobil
 
   const handleDismiss = useCallback(
     (id: string) => {
-      remove(id);
+      if (!currentProjectId) return;
+      void notificationService.deleteOne(currentProjectId, id)
+        .then(() => {
+          removeFromServer(id);
+        })
+        .catch((error) => {
+          console.warn('Failed to delete notification', { id, currentProjectId, error });
+        });
     },
-    [remove]
+    [currentProjectId, removeFromServer]
   );
 
   const handleClick = useCallback(
     (id: string) => {
-      invokeHandler(id, 'onClick');
+      openDetail(id);
     },
-    [invokeHandler]
+    [openDetail]
   );
 
   // Detect mobile viewport

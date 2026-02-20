@@ -193,11 +193,6 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
       );
     }
 
-    if (customSlot.type === 'component') {
-      const Component = customSlot.render;
-      return <Component notification={notification} />;
-    }
-
     return null;
   };
 
