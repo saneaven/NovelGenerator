@@ -26,8 +26,8 @@ interface UsePromptEditorResult {
 
 export function usePromptEditor(
     taskType: TaskType,
+    taskSubtype: string,
     category: PromptCategory,
-    name: string
 ): UsePromptEditorResult {
     const { t } = useTranslation();
     const toast = useSettingsToast();
@@ -44,7 +44,7 @@ export function usePromptEditor(
     const loadPromptContent = useCallback(async () => {
         setIsLoading(true);
         try {
-            const promptContent = await loadPrompt(taskType, category, name);
+            const promptContent = await loadPrompt(taskType, taskSubtype, category);
             setContent(promptContent);
             setOriginalContent(promptContent);
         } catch (error) {
@@ -52,7 +52,7 @@ export function usePromptEditor(
         } finally {
             setIsLoading(false);
         }
-    }, [taskType, category, name, loadPrompt, activePresetId]);
+    }, [taskType, taskSubtype, category, loadPrompt, activePresetId]);
 
     useEffect(() => {
         loadPromptContent();
@@ -64,10 +64,10 @@ export function usePromptEditor(
             validateContent(content);
         }, 500);
         return () => clearTimeout(timer);
-    }, [content, taskType, category, name]);
+    }, [content, taskType, taskSubtype, category]);
 
     const validateContent = async (text: string) => {
-        const schemaType = mapTaskTypeToSchemaType(taskType, name);
+        const schemaType = mapTaskTypeToSchemaType(taskType, taskSubtype);
         const result = await validateTemplate(text, schemaType || undefined);
 
         if (result.isValid) {
@@ -108,11 +108,11 @@ export function usePromptEditor(
         try {
             await promptService.savePrompt(
                 taskType,
+                taskSubtype,
                 category,
                 content,
-                name
             );
-            invalidatePromptCache(taskType, category, name);
+            invalidatePromptCache(taskType, taskSubtype, category);
             setOriginalContent(content);
             toast.success(t('settings.promptEditor.toast.promptSaved'));
         } catch (error) {
@@ -127,9 +127,9 @@ export function usePromptEditor(
 
     const versionHistoryProps = {
         title: "Prompt Version History",
-        loadVersions: () => promptService.getVersionHistory(taskType, category, name),
+        loadVersions: () => promptService.getVersionHistory(taskType, taskSubtype, category),
         restoreVersion: async (vn: number) => {
-            await promptService.restoreVersion(taskType, category, vn, name);
+            await promptService.restoreVersion(taskType, taskSubtype, category, vn);
             await loadPromptContent();  // Reload to get the new version
         },
     };

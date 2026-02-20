@@ -27,8 +27,8 @@ class PromptVariableResolutionError(RuntimeError):
 @dataclass(frozen=True)
 class PromptRenderInput:
     task_type: str
-    prompt_name: str
-    prompt_category: str
+    task_subtype: str  # planMode, agentMode, object, etc.
+    prompt_category: str  # systemPrompt, userPrompt, prefill, etc.
     template_data: dict[str, Any]
 
 
@@ -83,7 +83,7 @@ class PromptRenderer:
         self._user_id = user_id
         self._preset_id = preset_id
 
-    def _load_prompt_content(self, *, task_type: str, prompt_category: str, prompt_name: str) -> str:
+    def _load_prompt_content(self, *, task_type: str, task_subtype: str, prompt_category: str) -> str:
         prompt = (
             self._db.query(PromptVersion)
             .filter(
@@ -92,7 +92,7 @@ class PromptRenderer:
                     PromptVersion.preset_id == self._preset_id,
                     PromptVersion.task_type == task_type,
                     PromptVersion.prompt_category == prompt_category,
-                    PromptVersion.prompt_name == prompt_name,
+                    PromptVersion.task_subtype == task_subtype,
                 )
             )
             .order_by(desc(PromptVersion.version_number))
@@ -100,7 +100,7 @@ class PromptRenderer:
         )
         if prompt is None or not isinstance(prompt.content, str) or not prompt.content.strip():
             raise PromptTemplateNotFoundError(
-                f"Prompt template not found: {task_type}/{prompt_category}/{prompt_name}"
+                f"Prompt template not found: {task_type}/{task_subtype}/{prompt_category}"
             )
         return prompt.content
 
@@ -110,8 +110,8 @@ class PromptRenderer:
     def _render(self, inp: PromptRenderInput) -> str:
         template_text = self._load_prompt_content(
             task_type=inp.task_type,
+            task_subtype=inp.task_subtype,
             prompt_category=inp.prompt_category,
-            prompt_name=inp.prompt_name,
         )
         fragment_map = self._load_fragment_map()
         env = create_environment(fragment_map=fragment_map)
@@ -129,14 +129,14 @@ class PromptRenderer:
         self,
         *,
         task_type: str,
-        prompt_name: str,
+        task_subtype: str,
         prompt_category: str,
         template_data: dict[str, Any],
     ) -> str:
         return self._render(
             PromptRenderInput(
                 task_type=task_type,
-                prompt_name=prompt_name,
+                task_subtype=task_subtype,
                 prompt_category=prompt_category,
                 template_data=template_data,
             )
@@ -145,12 +145,12 @@ class PromptRenderer:
     def render_system_prompt(
         self,
         task_type: str,
-        prompt_name: str,
+        task_subtype: str,
         template_data: dict[str, Any],
     ) -> str:
         return self.render_prompt(
             task_type=task_type,
-            prompt_name=prompt_name,
+            task_subtype=task_subtype,
             prompt_category="systemPrompt",
             template_data=template_data,
         )
@@ -158,12 +158,12 @@ class PromptRenderer:
     def render_user_prompt(
         self,
         task_type: str,
-        prompt_name: str,
+        task_subtype: str,
         template_data: dict[str, Any],
     ) -> str:
         return self.render_prompt(
             task_type=task_type,
-            prompt_name=prompt_name,
+            task_subtype=task_subtype,
             prompt_category="userPrompt",
             template_data=template_data,
         )
@@ -171,12 +171,12 @@ class PromptRenderer:
     def render_memory_prompt(
         self,
         task_type: str,
-        prompt_name: str,
+        task_subtype: str,
         template_data: dict[str, Any],
     ) -> str:
         return self.render_prompt(
             task_type=task_type,
-            prompt_name=prompt_name,
+            task_subtype=task_subtype,
             prompt_category="memoryPrompt",
             template_data=template_data,
         )
@@ -184,13 +184,13 @@ class PromptRenderer:
     def render_prefill(
         self,
         task_type: str,
-        prompt_name: str,
+        task_subtype: str,
         template_data: dict[str, Any],
     ) -> str | None:
         try:
             rendered = self.render_prompt(
                 task_type=task_type,
-                prompt_name=prompt_name,
+                task_subtype=task_subtype,
                 prompt_category="prefill",
                 template_data=template_data,
             )

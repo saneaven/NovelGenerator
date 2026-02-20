@@ -116,12 +116,11 @@ class PresetService:
 
     @staticmethod
     def _count_unique_prompts(db: Session, preset_id: uuid.UUID) -> int:
-        """Count unique prompts (by task_type, category, name combination)"""
-        # Use distinct on the identifying columns
+        """Count unique prompts (by task_type, task_subtype, category combination)"""
         return db.query(
             PromptVersion.task_type,
+            PromptVersion.task_subtype,
             PromptVersion.prompt_category,
-            PromptVersion.prompt_name
         ).filter(
             PromptVersion.preset_id == preset_id
         ).distinct().count()
@@ -213,19 +212,19 @@ class PresetService:
         now = datetime.utcnow()
         count = 0
 
-        for task_type, categories in default_prompts.items():
-            for category, prompts in categories.items():
-                if not isinstance(prompts, dict):
-                    raise ValueError("Default prompts must be nested by name (no legacy category-level prompts).")
+        for task_type, subtypes in default_prompts.items():
+            for task_subtype, categories in subtypes.items():
+                if not isinstance(categories, dict):
+                    raise ValueError("Default prompts must be nested as {task_type: {task_subtype: {category: content}}}.")
 
-                for name, content in prompts.items():
+                for category, content in categories.items():
                     prompt = PromptVersion(
                         id=uuid.uuid4(),
                         user_id=user_id,
                         preset_id=preset_id,
                         task_type=task_type,
+                        task_subtype=task_subtype,
                         prompt_category=category,
-                        prompt_name=name,
                         content=content,
                         version_number=1,
                         is_default=True,
@@ -367,8 +366,8 @@ class PresetService:
         # Get all unique prompt identifiers
         unique_prompts = db.query(
             PromptVersion.task_type,
+            PromptVersion.task_subtype,
             PromptVersion.prompt_category,
-            PromptVersion.prompt_name
         ).filter(
             PromptVersion.preset_id == source_preset_id
         ).distinct().all()
@@ -376,14 +375,14 @@ class PresetService:
         count = 0
         now = datetime.utcnow()
 
-        for task_type, prompt_category, prompt_name in unique_prompts:
+        for task_type, task_subtype, prompt_category in unique_prompts:
             # Get latest version
             latest = db.query(PromptVersion).filter(
                 and_(
                     PromptVersion.preset_id == source_preset_id,
                     PromptVersion.task_type == task_type,
+                    PromptVersion.task_subtype == task_subtype,
                     PromptVersion.prompt_category == prompt_category,
-                    PromptVersion.prompt_name == prompt_name
                 )
             ).order_by(PromptVersion.version_number.desc()).first()
 
@@ -393,8 +392,8 @@ class PresetService:
                     user_id=user_id,
                     preset_id=target_preset_id,
                     task_type=latest.task_type,
+                    task_subtype=latest.task_subtype,
                     prompt_category=latest.prompt_category,
-                    prompt_name=latest.prompt_name,
                     content=latest.content,
                     version_number=1,
                     is_default=False,
@@ -805,22 +804,22 @@ class PresetService:
         prompts_dict = {}
         unique_prompts = db.query(
             PromptVersion.task_type,
+            PromptVersion.task_subtype,
             PromptVersion.prompt_category,
-            PromptVersion.prompt_name
         ).filter(PromptVersion.preset_id == preset_id).distinct().all()
 
-        for func_type, category, name in unique_prompts:
+        for task_type, task_subtype, category in unique_prompts:
             latest = db.query(PromptVersion).filter(
                 and_(
                     PromptVersion.preset_id == preset_id,
-                    PromptVersion.task_type == func_type,
+                    PromptVersion.task_type == task_type,
+                    PromptVersion.task_subtype == task_subtype,
                     PromptVersion.prompt_category == category,
-                    PromptVersion.prompt_name == name
                 )
             ).order_by(PromptVersion.version_number.desc()).first()
 
             if latest:
-                prompts_dict.setdefault(func_type, {}).setdefault(category, {})[name] = {
+                prompts_dict.setdefault(task_type, {}).setdefault(task_subtype, {})[category] = {
                     "content": latest.content
                 }
 
@@ -950,15 +949,15 @@ class PresetService:
         if not isinstance(prompts_data, dict):
             raise ValueError("Invalid preset file: prompts must be an object")
 
-        for task_type, categories in prompts_data.items():
-            if not isinstance(categories, dict):
-                raise ValueError("Invalid preset file: prompts categories must be an object")
+        for task_type, subtypes in prompts_data.items():
+            if not isinstance(subtypes, dict):
+                raise ValueError("Invalid preset file: prompts subtypes must be an object")
 
-            for category, names in categories.items():
-                if not isinstance(names, dict):
-                    raise ValueError("Invalid preset file: prompts must be nested by name")
+            for task_subtype, categories in subtypes.items():
+                if not isinstance(categories, dict):
+                    raise ValueError("Invalid preset file: prompts categories must be an object")
 
-                for prompt_name, prompt_data in names.items():
+                for category, prompt_data in categories.items():
                     if not isinstance(prompt_data, dict) or "content" not in prompt_data:
                         raise ValueError("Invalid preset file: prompt must have content")
 
@@ -967,8 +966,8 @@ class PresetService:
                         user_id=user_id,
                         preset_id=preset.id,
                         task_type=str(task_type),
+                        task_subtype=str(task_subtype),
                         prompt_category=str(category),
-                        prompt_name=str(prompt_name),
                         content=str(prompt_data["content"]),
                         version_number=1,
                         is_default=False,

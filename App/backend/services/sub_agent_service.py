@@ -175,8 +175,8 @@ class SubAgentService:
                 user_id=user_id,
                 preset_id=preset_id,
                 task_type="subAgent",
+                task_subtype=agent_name,
                 prompt_category="systemPrompt",
-                prompt_name=agent_name,
                 content=system_content,
                 version_number=1,
                 is_default=prompt_is_default,
@@ -188,8 +188,8 @@ class SubAgentService:
                 user_id=user_id,
                 preset_id=preset_id,
                 task_type="subAgent",
+                task_subtype=agent_name,
                 prompt_category="userPrompt",
-                prompt_name=agent_name,
                 content=user_content,
                 version_number=1,
                 is_default=prompt_is_default,
@@ -201,8 +201,8 @@ class SubAgentService:
                 user_id=user_id,
                 preset_id=preset_id,
                 task_type="subAgent",
+                task_subtype=agent_name,
                 prompt_category="prefill",
-                prompt_name=agent_name,
                 content=prefill_content,
                 version_number=1,
                 is_default=prompt_is_default,
@@ -266,10 +266,10 @@ class SubAgentService:
                         PromptVersion.user_id == user_id,
                         PromptVersion.preset_id == preset_id,
                         PromptVersion.task_type == "subAgent",
-                        PromptVersion.prompt_name == old_agent_name,
+                        PromptVersion.task_subtype == old_agent_name,
                     )
                 ).update(
-                    {PromptVersion.prompt_name: agent_name},
+                    {PromptVersion.task_subtype: agent_name},
                     synchronize_session=False,
                 )
 
@@ -328,7 +328,7 @@ class SubAgentService:
                 PromptVersion.user_id == user_id,
                 PromptVersion.preset_id == preset_id,
                 PromptVersion.task_type == "subAgent",
-                PromptVersion.prompt_name == agent_name,
+                PromptVersion.task_subtype == agent_name,
             )
         ).delete(synchronize_session=False)
 

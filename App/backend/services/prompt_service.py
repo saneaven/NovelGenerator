@@ -22,8 +22,8 @@ class PromptService:
         user_id: uuid.UUID,
         preset_id: uuid.UUID,
         task_type: str,
+        task_subtype: str,
         prompt_category: str,
-        prompt_name: str
     ) -> Optional[PromptContentResponse]:
         """
         Get the currently active prompt for a user within a preset.
@@ -33,8 +33,8 @@ class PromptService:
             user_id: User ID
             preset_id: Preset ID
             task_type: Task type (agent, translation, etc.)
+            task_subtype: Task subtype (planMode, agentMode, object, etc.)
             prompt_category: Prompt category (systemPrompt, prefill, etc.)
-            prompt_name: Optional prompt name (workspace, novelEditor, etc.)
 
         Returns:
             PromptContentResponse or None if not found
@@ -46,7 +46,7 @@ class PromptService:
                 PromptVersion.preset_id == preset_id,
                 PromptVersion.task_type == task_type,
                 PromptVersion.prompt_category == prompt_category,
-                PromptVersion.prompt_name == prompt_name,
+                PromptVersion.task_subtype == task_subtype,
             )
         ).order_by(desc(PromptVersion.version_number)).first()
 
@@ -66,9 +66,9 @@ class PromptService:
         user_id: uuid.UUID,
         preset_id: uuid.UUID,
         task_type: str,
+        task_subtype: str,
         prompt_category: str,
         content: str,
-        prompt_name: str,
         note: Optional[str] = None
     ) -> PromptVersionResponse:
         """
@@ -79,10 +79,10 @@ class PromptService:
             user_id: User ID
             preset_id: Preset ID
             task_type: Task type
+            task_subtype: Task subtype
             prompt_category: Prompt category
             content: Prompt content
             note: Optional version note
-            prompt_name: Optional prompt name
 
         Returns:
             PromptVersionResponse with new version details
@@ -94,7 +94,7 @@ class PromptService:
                 PromptVersion.preset_id == preset_id,
                 PromptVersion.task_type == task_type,
                 PromptVersion.prompt_category == prompt_category,
-                PromptVersion.prompt_name == prompt_name
+                PromptVersion.task_subtype == task_subtype
             )
         ).order_by(desc(PromptVersion.version_number)).first()
 
@@ -106,8 +106,8 @@ class PromptService:
             user_id=user_id,
             preset_id=preset_id,
             task_type=task_type,
+            task_subtype=task_subtype,
             prompt_category=prompt_category,
-            prompt_name=prompt_name,
             content=content,
             version_number=new_version_number,
             is_default=False,
@@ -134,8 +134,8 @@ class PromptService:
         user_id: uuid.UUID,
         preset_id: uuid.UUID,
         task_type: str,
+        task_subtype: str,
         prompt_category: str,
-        prompt_name: str
     ) -> List[VersionHistoryItem]:
         """
         Get version history for a prompt.
@@ -145,8 +145,8 @@ class PromptService:
             user_id: User ID
             preset_id: Preset ID
             task_type: Task type
+            task_subtype: Task subtype
             prompt_category: Prompt category
-            prompt_name: Optional prompt name
 
         Returns:
             List of VersionHistoryItem ordered by version number (descending)
@@ -157,7 +157,7 @@ class PromptService:
                 PromptVersion.preset_id == preset_id,
                 PromptVersion.task_type == task_type,
                 PromptVersion.prompt_category == prompt_category,
-                PromptVersion.prompt_name == prompt_name
+                PromptVersion.task_subtype == task_subtype
             )
         ).order_by(desc(PromptVersion.version_number)).all()
 
@@ -178,9 +178,9 @@ class PromptService:
         user_id: uuid.UUID,
         preset_id: uuid.UUID,
         task_type: str,
+        task_subtype: str,
         prompt_category: str,
         version_number: int,
-        prompt_name: str
     ) -> Optional[PromptVersionResponse]:
         """
         Restore a specific version by creating a NEW version with the restored content.
@@ -191,9 +191,9 @@ class PromptService:
             user_id: User ID
             preset_id: Preset ID
             task_type: Task type
+            task_subtype: Task subtype
             prompt_category: Prompt category
             version_number: Version number to restore
-            prompt_name: Optional prompt name
 
         Returns:
             PromptVersionResponse with new version details, or None if source version not found
@@ -205,7 +205,7 @@ class PromptService:
                 PromptVersion.preset_id == preset_id,
                 PromptVersion.task_type == task_type,
                 PromptVersion.prompt_category == prompt_category,
-                PromptVersion.prompt_name == prompt_name,
+                PromptVersion.task_subtype == task_subtype,
                 PromptVersion.version_number == version_number
             )
         ).first()
@@ -222,7 +222,7 @@ class PromptService:
             prompt_category=prompt_category,
             content=version_to_restore.content,
             note=f"Restored from v{version_to_restore.version_number}",
-            prompt_name=prompt_name
+            task_subtype=task_subtype
         )
 
 

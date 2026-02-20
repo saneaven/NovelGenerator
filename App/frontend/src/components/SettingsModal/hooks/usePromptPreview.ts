@@ -17,7 +17,7 @@ import { buildPreviewData } from '../PromptEditor/previewDataBuilder';
 export interface UsePromptPreviewOptions {
   templateContent: string;
   taskType: TaskType;
-  promptName: string;
+  taskSubtype: string;
   promptCategory: PromptCategory;
 }
 
@@ -65,7 +65,7 @@ export interface UsePromptPreviewResult {
 const DEBOUNCE_DELAY = 300;
 
 export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPreviewResult {
-  const { templateContent, taskType, promptName, promptCategory } = options;
+  const { templateContent, taskType, taskSubtype, promptCategory } = options;
 
   // Store access
   const currentProjectId = useProjectStore(state => state.currentProjectId);
@@ -97,7 +97,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
       // Build preview data
       const previewData = buildPreviewData({
         taskType,
-        promptName,
+        taskSubtype,
         promptCategory,
         showProjectContext,
         includeAllFilteredIds,
@@ -124,7 +124,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
     } finally {
       setIsLoading(false);
     }
-  }, [templateContent, taskType, promptName, promptCategory, showProjectContext, includeAllFilteredIds, currentProjectId, configOverrides, promptTypeOverrides, variableOverrides]);
+  }, [templateContent, taskType, taskSubtype, promptCategory, showProjectContext, includeAllFilteredIds, currentProjectId, configOverrides, promptTypeOverrides, variableOverrides]);
 
   // Debounced render effect
   useEffect(() => {

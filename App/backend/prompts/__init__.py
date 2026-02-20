@@ -6,7 +6,7 @@ The structure mirrors the frontend prompts structure defined in:
 - App/frontend/src/prompts/defaults.ts
 - App/frontend/src/agent/
 
-Format: {task_type: {category: {name?: content}}}
+Format: {task_type: {task_subtype: {prompt_category: content}}}
 """
 
 from pathlib import Path
@@ -101,121 +101,89 @@ _COVER_IMAGE_PROMPT_LAST_USER_PROMPT = _load_prompt_file('imagePrompt/coverImage
 _COVER_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/coverImage/prefill.md')
 
 # Default prompts structure
-# Format matches the frontend structure: {task_type: {category: {name?: content}}}
+# Format: {task_type: {task_subtype: {prompt_category: content}}}
 DEFAULT_PROMPTS = {
     'agent': {
-        'systemPrompt': {
-            'planMode': _PLAN_MODE_SYSTEM_PROMPT,
-            'agentMode': _AGENT_MODE_SYSTEM_PROMPT,
+        'planMode': {
+            'systemPrompt': _PLAN_MODE_SYSTEM_PROMPT,
+            'memoryPrompt': _PLAN_MODE_MEMORY_PROMPT,
+            'userPrompt': _PLAN_MODE_USER_PROMPT,
+            'firstUserPrompt': _PLAN_MODE_FIRST_USER_PROMPT,
+            'lastUserPrompt': _PLAN_MODE_LAST_USER_PROMPT,
+            'prefill': _PLAN_MODE_PREFILL,
         },
-        'memoryPrompt': {
-            'planMode': _PLAN_MODE_MEMORY_PROMPT,
-            'agentMode': _AGENT_MODE_MEMORY_PROMPT,
-        },
-        'userPrompt': {
-            'planMode': _PLAN_MODE_USER_PROMPT,
-            'agentMode': _AGENT_MODE_USER_PROMPT,
-        },
-        'firstUserPrompt': {
-            'planMode': _PLAN_MODE_FIRST_USER_PROMPT,
-            'agentMode': _AGENT_MODE_FIRST_USER_PROMPT,
-        },
-        'lastUserPrompt': {
-            'planMode': _PLAN_MODE_LAST_USER_PROMPT,
-            'agentMode': _AGENT_MODE_LAST_USER_PROMPT,
-        },
-        'prefill': {
-            'planMode': _PLAN_MODE_PREFILL,
-            'agentMode': _AGENT_MODE_PREFILL,
+        'agentMode': {
+            'systemPrompt': _AGENT_MODE_SYSTEM_PROMPT,
+            'memoryPrompt': _AGENT_MODE_MEMORY_PROMPT,
+            'userPrompt': _AGENT_MODE_USER_PROMPT,
+            'firstUserPrompt': _AGENT_MODE_FIRST_USER_PROMPT,
+            'lastUserPrompt': _AGENT_MODE_LAST_USER_PROMPT,
+            'prefill': _AGENT_MODE_PREFILL,
         },
     },
     'memory': {
-        'systemPrompt': {
-            'summary': _MEMORY_SUMMARY_SYSTEM_PROMPT,
-        },
-        'userPrompt': {
-            'summary': _MEMORY_SUMMARY_USER_PROMPT,
+        'summary': {
+            'systemPrompt': _MEMORY_SUMMARY_SYSTEM_PROMPT,
+            'userPrompt': _MEMORY_SUMMARY_USER_PROMPT,
         },
     },
     'translation': {
-        'systemPrompt': {
-            'object': _TRANSLATION_SYSTEM_PROMPT_OBJECT,
-            'message': _TRANSLATION_SYSTEM_PROMPT_MESSAGE,
+        'object': {
+            'systemPrompt': _TRANSLATION_SYSTEM_PROMPT_OBJECT,
+            'userPrompt': _TRANSLATION_USER_PROMPT_OBJECT,
+            'initialUserPrompt': _TRANSLATION_INITIAL_USER_PROMPT_OBJECT,
+            'firstUserPrompt': _TRANSLATION_FIRST_USER_PROMPT_OBJECT,
+            'lastUserPrompt': _TRANSLATION_LAST_USER_PROMPT_OBJECT,
+            'prefill': _TRANSLATION_PREFILL_OBJECT,
         },
-        'userPrompt': {
-            'object': _TRANSLATION_USER_PROMPT_OBJECT,
-            'message': _TRANSLATION_USER_PROMPT_MESSAGE,
-        },
-        'initialUserPrompt': {
-            'object': _TRANSLATION_INITIAL_USER_PROMPT_OBJECT,
-        },
-        'firstUserPrompt': {
-            'object': _TRANSLATION_FIRST_USER_PROMPT_OBJECT,
-        },
-        'lastUserPrompt': {
-            'object': _TRANSLATION_LAST_USER_PROMPT_OBJECT,
-        },
-        'prefill': {
-            'object': _TRANSLATION_PREFILL_OBJECT,
-            'message': _TRANSLATION_PREFILL_MESSAGE,
+        'message': {
+            'systemPrompt': _TRANSLATION_SYSTEM_PROMPT_MESSAGE,
+            'userPrompt': _TRANSLATION_USER_PROMPT_MESSAGE,
+            'prefill': _TRANSLATION_PREFILL_MESSAGE,
         },
     },
     'editAssistant': {
-        'systemPrompt': {
-            'manuscript': _EDIT_ASSISTANT_MANUSCRIPT_SYSTEM_PROMPT,
-            'storyObject': _EDIT_ASSISTANT_STORY_OBJECT_SYSTEM_PROMPT,
+        'manuscript': {
+            'systemPrompt': _EDIT_ASSISTANT_MANUSCRIPT_SYSTEM_PROMPT,
+            'userPrompt': _EDIT_ASSISTANT_MANUSCRIPT_USER_PROMPT,
+            'initialUserPrompt': _EDIT_ASSISTANT_MANUSCRIPT_INITIAL_USER_PROMPT,
+            'firstUserPrompt': _EDIT_ASSISTANT_MANUSCRIPT_FIRST_USER_PROMPT,
+            'lastUserPrompt': _EDIT_ASSISTANT_MANUSCRIPT_LAST_USER_PROMPT,
+            'prefill': _EDIT_ASSISTANT_MANUSCRIPT_PREFILL,
         },
-        'userPrompt': {
-            'manuscript': _EDIT_ASSISTANT_MANUSCRIPT_USER_PROMPT,
-            'storyObject': _EDIT_ASSISTANT_STORY_OBJECT_USER_PROMPT,
-        },
-        'initialUserPrompt': {
-            'manuscript': _EDIT_ASSISTANT_MANUSCRIPT_INITIAL_USER_PROMPT,
-            'storyObject': _EDIT_ASSISTANT_STORY_OBJECT_INITIAL_USER_PROMPT,
-        },
-        'firstUserPrompt': {
-            'manuscript': _EDIT_ASSISTANT_MANUSCRIPT_FIRST_USER_PROMPT,
-            'storyObject': _EDIT_ASSISTANT_STORY_OBJECT_FIRST_USER_PROMPT,
-        },
-        'lastUserPrompt': {
-            'manuscript': _EDIT_ASSISTANT_MANUSCRIPT_LAST_USER_PROMPT,
-            'storyObject': _EDIT_ASSISTANT_STORY_OBJECT_LAST_USER_PROMPT,
-        },
-        'prefill': {
-            'manuscript': _EDIT_ASSISTANT_MANUSCRIPT_PREFILL,
-            'storyObject': _EDIT_ASSISTANT_STORY_OBJECT_PREFILL,
+        'storyObject': {
+            'systemPrompt': _EDIT_ASSISTANT_STORY_OBJECT_SYSTEM_PROMPT,
+            'userPrompt': _EDIT_ASSISTANT_STORY_OBJECT_USER_PROMPT,
+            'initialUserPrompt': _EDIT_ASSISTANT_STORY_OBJECT_INITIAL_USER_PROMPT,
+            'firstUserPrompt': _EDIT_ASSISTANT_STORY_OBJECT_FIRST_USER_PROMPT,
+            'lastUserPrompt': _EDIT_ASSISTANT_STORY_OBJECT_LAST_USER_PROMPT,
+            'prefill': _EDIT_ASSISTANT_STORY_OBJECT_PREFILL,
         },
     },
     'imagePrompt': {
-        'systemPrompt': {
-            'object': _OBJECT_IMAGE_PROMPT_SYSTEM_PROMPT,
-            'scene': _SCENE_IMAGE_PROMPT_SYSTEM_PROMPT,
-            'coverImage': _COVER_IMAGE_PROMPT_SYSTEM_PROMPT,
+        'object': {
+            'systemPrompt': _OBJECT_IMAGE_PROMPT_SYSTEM_PROMPT,
+            'userPrompt': _OBJECT_IMAGE_PROMPT_USER_PROMPT,
+            'initialUserPrompt': _OBJECT_IMAGE_PROMPT_INITIAL_USER_PROMPT,
+            'firstUserPrompt': _OBJECT_IMAGE_PROMPT_FIRST_USER_PROMPT,
+            'lastUserPrompt': _OBJECT_IMAGE_PROMPT_LAST_USER_PROMPT,
+            'prefill': _OBJECT_IMAGE_PROMPT_PREFILL,
         },
-        'userPrompt': {
-            'object': _OBJECT_IMAGE_PROMPT_USER_PROMPT,
-            'scene': _SCENE_IMAGE_PROMPT_USER_PROMPT,
-            'coverImage': _COVER_IMAGE_PROMPT_USER_PROMPT,
+        'scene': {
+            'systemPrompt': _SCENE_IMAGE_PROMPT_SYSTEM_PROMPT,
+            'userPrompt': _SCENE_IMAGE_PROMPT_USER_PROMPT,
+            'initialUserPrompt': _SCENE_IMAGE_PROMPT_INITIAL_USER_PROMPT,
+            'firstUserPrompt': _SCENE_IMAGE_PROMPT_FIRST_USER_PROMPT,
+            'lastUserPrompt': _SCENE_IMAGE_PROMPT_LAST_USER_PROMPT,
+            'prefill': _SCENE_IMAGE_PROMPT_PREFILL,
         },
-        'initialUserPrompt': {
-            'object': _OBJECT_IMAGE_PROMPT_INITIAL_USER_PROMPT,
-            'scene': _SCENE_IMAGE_PROMPT_INITIAL_USER_PROMPT,
-            'coverImage': _COVER_IMAGE_PROMPT_INITIAL_USER_PROMPT,
-        },
-        'firstUserPrompt': {
-            'object': _OBJECT_IMAGE_PROMPT_FIRST_USER_PROMPT,
-            'scene': _SCENE_IMAGE_PROMPT_FIRST_USER_PROMPT,
-            'coverImage': _COVER_IMAGE_PROMPT_FIRST_USER_PROMPT,
-        },
-        'lastUserPrompt': {
-            'object': _OBJECT_IMAGE_PROMPT_LAST_USER_PROMPT,
-            'scene': _SCENE_IMAGE_PROMPT_LAST_USER_PROMPT,
-            'coverImage': _COVER_IMAGE_PROMPT_LAST_USER_PROMPT,
-        },
-        'prefill': {
-            'object': _OBJECT_IMAGE_PROMPT_PREFILL,
-            'scene': _SCENE_IMAGE_PROMPT_PREFILL,
-            'coverImage': _COVER_IMAGE_PROMPT_PREFILL,
+        'coverImage': {
+            'systemPrompt': _COVER_IMAGE_PROMPT_SYSTEM_PROMPT,
+            'userPrompt': _COVER_IMAGE_PROMPT_USER_PROMPT,
+            'initialUserPrompt': _COVER_IMAGE_PROMPT_INITIAL_USER_PROMPT,
+            'firstUserPrompt': _COVER_IMAGE_PROMPT_FIRST_USER_PROMPT,
+            'lastUserPrompt': _COVER_IMAGE_PROMPT_LAST_USER_PROMPT,
+            'prefill': _COVER_IMAGE_PROMPT_PREFILL,
         },
     },
 }
@@ -226,7 +194,7 @@ def get_default_prompts():
     Get the default prompts dictionary.
 
     Returns:
-        dict: Default prompts in the format {task_type: {category: {name?: content}}}
+        dict: Default prompts in the format {task_type: {task_subtype: {prompt_category: content}}}
     """
     return DEFAULT_PROMPTS
 

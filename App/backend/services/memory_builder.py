@@ -315,13 +315,13 @@ def render_memory_summary_prompt(
     )
     system_prompt = renderer.render_prompt(
         task_type="memory",
-        prompt_name="summary",
+        task_subtype="summary",
         prompt_category="systemPrompt",
         template_data=template_data,
     )
     user_prompt = renderer.render_prompt(
         task_type="memory",
-        prompt_name="summary",
+        task_subtype="summary",
         prompt_category="userPrompt",
         template_data=template_data,
     )

@@ -69,7 +69,7 @@ type PromptDraft = {
   nodeId?: string;
   taskType: TaskType;
   category: PromptCategory;
-  name: string;
+  taskSubtype: string;
   isLoading: boolean;
   loadError?: string;
   originalContent: string;
@@ -101,8 +101,8 @@ function toErrorMessage(error: unknown): string {
   return 'Unknown error';
 }
 
-async function validatePromptContent(taskType: TaskType, name: string, content: string): Promise<TemplateValidationResult> {
-  const schemaType = mapTaskTypeToSchemaType(taskType, name);
+async function validatePromptContent(taskType: TaskType, taskSubtype: string, content: string): Promise<TemplateValidationResult> {
+  const schemaType = mapTaskTypeToSchemaType(taskType, taskSubtype);
   const result = await validateTemplate(content, schemaType || undefined);
 
   if (!result.isValid) {
@@ -478,8 +478,8 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   const selectedPromptKey = useMemo(() => {
     if (!selectedPrompt || selectedPrompt.type !== 'prompt') return null;
-    if (!selectedPrompt.taskType || !selectedPrompt.category || !selectedPrompt.name) return null;
-    return makePromptDraftKey(selectedPrompt.taskType, selectedPrompt.category, selectedPrompt.name);
+    if (!selectedPrompt.taskType || !selectedPrompt.taskSubtype || !selectedPrompt.category) return null;
+    return makePromptDraftKey(selectedPrompt.taskType, selectedPrompt.taskSubtype, selectedPrompt.category);
   }, [selectedPrompt]);
 
   const selectedFragmentKey = useMemo(() => {
@@ -520,7 +520,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     if (!subAgentPromptIdentityName) return empty;
 
     const pick = (category: PromptCategory): { content: string; isLoading: boolean } | null => {
-      const key = makePromptDraftKey('subAgent', category, subAgentPromptIdentityName);
+      const key = makePromptDraftKey('subAgent', subAgentPromptIdentityName, category);
       const d = promptDrafts[key];
       return d ? { content: d.content, isLoading: d.isLoading } : null;
     };
@@ -547,7 +547,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   const handleSubAgentPromptContentChange = useCallback(
     (tab: 'systemPrompt' | 'userPrompt' | 'prefill', content: string) => {
       if (!subAgentPromptIdentityName) return;
-      const key = makePromptDraftKey('subAgent', tab, subAgentPromptIdentityName);
+      const key = makePromptDraftKey('subAgent', subAgentPromptIdentityName, tab);
       const nodeId = selectedSubAgentId ? `subAgent-${selectedSubAgentId}-${tab}` : undefined;
       const label = `Sub Agent: ${subAgentPromptDisplayName} / call_${subAgentPromptIdentityName} / ${tab}`;
       setPromptDrafts((prev) => {
@@ -561,7 +561,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
               nodeId,
               taskType: 'subAgent',
               category: tab,
-              name: subAgentPromptIdentityName,
+              taskSubtype: subAgentPromptIdentityName,
               isLoading: false,
               originalContent: '',
               content,
@@ -576,7 +576,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
             ...cur,
             label,
             nodeId: cur.nodeId ?? nodeId,
-            name: subAgentPromptIdentityName,
+            taskSubtype: subAgentPromptIdentityName,
             content,
             dirty: content !== cur.originalContent,
           },
@@ -589,8 +589,8 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   const reloadSubAgentPrompt = useCallback(
     async (tab: 'systemPrompt' | 'userPrompt' | 'prefill') => {
       if (!subAgentPromptIdentityName) return;
-      const key = makePromptDraftKey('subAgent', tab, subAgentPromptIdentityName);
-      const content = await loadPrompt('subAgent', tab, subAgentPromptIdentityName);
+      const key = makePromptDraftKey('subAgent', subAgentPromptIdentityName, tab);
+      const content = await loadPrompt('subAgent', subAgentPromptIdentityName, tab);
       setPromptDrafts((prev) => {
         const cur = prev[key];
         if (!cur) return prev;
@@ -631,7 +631,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         label: d.label,
         taskType: d.taskType,
         category: d.category,
-        name: d.name,
+        taskSubtype: d.taskSubtype,
         nodeId: d.nodeId,
       });
     }
@@ -741,18 +741,18 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         const categories: Array<PromptCategory> = ['systemPrompt', 'userPrompt', 'prefill'];
 
         for (const category of categories) {
-          const oldKey = makePromptDraftKey('subAgent', category, oldName);
+          const oldKey = makePromptDraftKey('subAgent', oldName, category);
           const oldDraft = prev[oldKey];
           if (!oldDraft) continue;
 
           if (!next) next = { ...prev };
 
-          const newKey = makePromptDraftKey('subAgent', category, newName);
+          const newKey = makePromptDraftKey('subAgent', newName, category);
           delete next[oldKey];
           next[newKey] = {
             ...oldDraft,
             key: newKey,
-            name: newName,
+            taskSubtype: newName,
             label: `Sub Agent: call_${newName} / ${category}`,
           };
         }
@@ -856,7 +856,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       const dirtyPrompts = Object.values(promptDraftsRef.current).filter((d) => d.dirty);
       for (const d of dirtyPrompts) {
         attempted += 1;
-        const validation = await validatePromptContent(d.taskType, d.name, d.content);
+        const validation = await validatePromptContent(d.taskType, d.taskSubtype, d.content);
         if (!validation.valid) {
           failures.push({
             item: {
@@ -865,7 +865,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
               label: d.label,
               taskType: d.taskType,
               category: d.category,
-              name: d.name,
+              taskSubtype: d.taskSubtype,
               nodeId: d.nodeId,
             },
             error: validation.errors[0]?.message || t('settings.promptEditor.toast.templateSyntaxError'),
@@ -879,8 +879,8 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         }
 
         try {
-          await promptService.savePrompt(d.taskType, d.category, d.content, d.name);
-          invalidatePromptCache(d.taskType, d.category, d.name);
+          await promptService.savePrompt(d.taskType, d.taskSubtype, d.category, d.content);
+          invalidatePromptCache(d.taskType, d.taskSubtype, d.category);
           saved += 1;
           setPromptDrafts((prev) => {
             const cur = prev[d.key];
@@ -903,7 +903,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
               label: d.label,
               taskType: d.taskType,
               category: d.category,
-              name: d.name,
+              taskSubtype: d.taskSubtype,
               nodeId: d.nodeId,
             },
             error: toErrorMessage(error),
@@ -1075,9 +1075,9 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   const ensurePromptDraftLoaded = useCallback(
     async (node: PromptNode) => {
-      if (node.type !== 'prompt' || !node.taskType || !node.category || !node.name) return;
+      if (node.type !== 'prompt' || !node.taskType || !node.taskSubtype || !node.category) return;
 
-      const key = makePromptDraftKey(node.taskType, node.category, node.name);
+      const key = makePromptDraftKey(node.taskType, node.taskSubtype, node.category);
       if (promptDraftsRef.current[key]?.originalContent !== undefined) return;
 
       setPromptDrafts((prev) => ({
@@ -1088,7 +1088,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
           nodeId: node.id,
           taskType: node.taskType!,
           category: node.category!,
-          name: node.name!,
+          taskSubtype: node.taskSubtype!,
           isLoading: true,
           originalContent: '',
           content: '',
@@ -1098,7 +1098,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       }));
 
       try {
-        const content = await loadPrompt(node.taskType!, node.category!, node.name!);
+        const content = await loadPrompt(node.taskType!, node.taskSubtype!, node.category!);
         setPromptDrafts((prev) => ({
           ...prev,
           [key]: {
@@ -1107,7 +1107,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
             nodeId: node.id,
             taskType: node.taskType!,
             category: node.category!,
-            name: node.name!,
+            taskSubtype: node.taskSubtype!,
             isLoading: false,
             loadError: undefined,
             originalContent: content,
@@ -1304,7 +1304,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       type: 'prompt',
       taskType: 'subAgent',
       category,
-      name: agentName,
+      taskSubtype: agentName,
     });
 
     ensurePromptDraftLoaded(makeNode('systemPrompt'));
@@ -1317,7 +1317,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     if (!currentPromptDraft || currentPromptDraft.isLoading) return;
     const key = currentPromptDraft.key;
     const timer = window.setTimeout(async () => {
-      const validation = await validatePromptContent(currentPromptDraft.taskType, currentPromptDraft.name, currentPromptDraft.content);
+      const validation = await validatePromptContent(currentPromptDraft.taskType, currentPromptDraft.taskSubtype, currentPromptDraft.content);
       setPromptDrafts((prev) => {
         const cur = prev[key];
         if (!cur) return prev;
@@ -1325,7 +1325,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       });
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [currentPromptDraft?.content, currentPromptDraft?.isLoading, currentPromptDraft?.key, currentPromptDraft?.name, currentPromptDraft?.taskType]);
+  }, [currentPromptDraft?.content, currentPromptDraft?.isLoading, currentPromptDraft?.key, currentPromptDraft?.taskSubtype, currentPromptDraft?.taskType]);
 
   useEffect(() => {
     if (!currentFragmentDraft || currentFragmentDraft.isLoading) return;
@@ -1428,17 +1428,17 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   const currentEditorDirty = subTab === 'prompts' ? currentPromptDraft?.dirty : currentFragmentDraft?.dirty;
 
   const currentVersionHistoryProps = useMemo(() => {
-    if (subTab === 'prompts' && selectedPrompt && selectedPrompt.type === 'prompt' && selectedPrompt.taskType && selectedPrompt.category && selectedPrompt.name) {
+    if (subTab === 'prompts' && selectedPrompt && selectedPrompt.type === 'prompt' && selectedPrompt.taskType && selectedPrompt.taskSubtype && selectedPrompt.category) {
       const taskType = selectedPrompt.taskType;
+      const taskSubtype = selectedPrompt.taskSubtype;
       const category = selectedPrompt.category;
-      const name = selectedPrompt.name;
-      const key = makePromptDraftKey(taskType, category, name);
+      const key = makePromptDraftKey(taskType, taskSubtype, category);
       return {
         title: 'Prompt Version History',
-        loadVersions: () => promptService.getVersionHistory(taskType, category, name),
+        loadVersions: () => promptService.getVersionHistory(taskType, taskSubtype, category),
         restoreVersion: async (vn: number) => {
-          await promptService.restoreVersion(taskType, category, vn, name);
-          const content = await loadPrompt(taskType, category, name);
+          await promptService.restoreVersion(taskType, taskSubtype, category, vn);
+          const content = await loadPrompt(taskType, taskSubtype, category);
           setPromptDrafts((prev) => {
             const cur = prev[key];
             if (!cur) return prev;
@@ -1725,11 +1725,11 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                     content={currentPromptDraft?.content || ''}
                     onContentChange={(text) => {
                       const taskType = selectedPrompt.taskType;
+                      const taskSubtype = selectedPrompt.taskSubtype;
                       const category = selectedPrompt.category;
-                      const name = selectedPrompt.name;
-                      if (!taskType || !category || !name) return;
+                      if (!taskType || !taskSubtype || !category) return;
 
-                      const draftKey = makePromptDraftKey(taskType, category, name);
+                      const draftKey = makePromptDraftKey(taskType, taskSubtype, category);
                       setPromptDrafts((prev) => {
                         const cur = prev[draftKey];
                         if (!cur) {
@@ -1741,7 +1741,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                               nodeId: selectedPrompt.id,
                               taskType,
                               category,
-                              name,
+                              taskSubtype,
                               isLoading: false,
                               originalContent: '',
                               content: text,
@@ -1836,9 +1836,9 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                       if (name) {
                         setPromptDrafts((prev) => {
                           const next = { ...prev };
-                          delete next[makePromptDraftKey('subAgent', 'systemPrompt', name)];
-                          delete next[makePromptDraftKey('subAgent', 'userPrompt', name)];
-                          delete next[makePromptDraftKey('subAgent', 'prefill', name)];
+                          delete next[makePromptDraftKey('subAgent', name, 'systemPrompt')];
+                          delete next[makePromptDraftKey('subAgent', name, 'userPrompt')];
+                          delete next[makePromptDraftKey('subAgent', name, 'prefill')];
                           return next;
                         });
                       }

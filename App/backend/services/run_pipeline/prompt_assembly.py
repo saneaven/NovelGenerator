@@ -123,15 +123,15 @@ def assemble_resume(
         if preset_id is not None:
             renderer = PromptRenderer(db, user_id=run.user_id, preset_id=preset_id)
             pm = PromptManager(renderer)
-            prompt_name = "planMode" if run.run_mode == "planMode" else "agentMode"
+            task_subtype = "planMode" if run.run_mode == "planMode" else "agentMode"
             prompt_map = pm._load_latest_prompt_map(
                 db, user_id=run.user_id, preset_id=preset_id,
-                task_type=task_type, prompt_name=prompt_name,
+                task_type=task_type, task_subtype=task_subtype,
             )
             if "memoryPrompt" in prompt_map:
                 target = PromptTarget(
                     task_type=task_type,
-                    prompt_name=prompt_name,
+                    task_subtype=task_subtype,
                     required_categories=("systemPrompt", "memoryPrompt", "userPrompt", "firstUserPrompt", "lastUserPrompt"),
                     supports_memory_prompt=True,
                 )

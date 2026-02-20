@@ -224,10 +224,10 @@ class PromptVersion(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     preset_id = Column(UUID(as_uuid=True), ForeignKey('prompt_presets.id', ondelete='CASCADE'), nullable=False, index=True)
 
-    # Prompt identification
+    # Prompt identification (hierarchy: task_type → task_subtype → prompt_category)
     task_type = Column(String(50), nullable=False)  # 'agent', 'translation', 'editAssistant', 'imagePrompt'
-    prompt_category = Column(String(50), nullable=False)  # 'systemPrompt', 'prefill', 'userMessageTag'
-    prompt_name = Column(String(50), nullable=False)  # 'storyObject', 'novelEditor', etc (required)
+    task_subtype = Column(String(50), nullable=False)  # 'planMode', 'agentMode', 'object', 'manuscript', etc.
+    prompt_category = Column(String(50), nullable=False)  # 'systemPrompt', 'userPrompt', 'prefill', etc.
 
     # Version data
     content = Column(Text, nullable=False)
@@ -255,7 +255,7 @@ class SubAgentDefinitionModel(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     preset_id = Column(UUID(as_uuid=True), ForeignKey("prompt_presets.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    # Stable key used as PromptVersion.prompt_name (agent_name). Also the suffix for call_{agent_name}.
+    # Stable key used as PromptVersion.task_subtype (agent_name). Also the suffix for call_{agent_name}.
     agent_name = Column(String(50), nullable=False)
 
     display_name = Column(String(200), nullable=False)

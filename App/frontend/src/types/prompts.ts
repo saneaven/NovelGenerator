@@ -13,8 +13,8 @@ export type PromptCategory =
  */
 export function getPromptKey(
   taskType: TaskType,
+  taskSubtype: string,
   category: PromptCategory,
-  name: string
 ): string {
-  return `${taskType}:${category}:${name}`;
+  return `${taskType}:${taskSubtype}:${category}`;
 }

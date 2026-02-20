@@ -309,9 +309,9 @@ export interface SettingsStore {
     setLLMLoggingEnabled: (enabled: boolean) => void;
 
     // Prompt methods
-    loadPrompt: (functionType: TaskType, category: PromptCategory, name: string) => Promise<string>;
-    getPromptFromCache: (functionType: TaskType, category: PromptCategory, name: string) => string | null;
-    invalidatePromptCache: (functionType?: TaskType, category?: PromptCategory, name?: string) => void;
+    loadPrompt: (functionType: TaskType, taskSubtype: string, category: PromptCategory) => Promise<string>;
+    getPromptFromCache: (functionType: TaskType, taskSubtype: string, category: PromptCategory) => string | null;
+    invalidatePromptCache: (functionType?: TaskType, taskSubtype?: string, category?: PromptCategory) => void;
 
     // Other methods
     updateSettings: (updates: Partial<Settings>) => void;
@@ -652,12 +652,12 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
     },
 
     // Prompt methods
-    loadPrompt: async (functionType, category, name) => {
-        const key = getPromptKey(functionType, category, name);
+    loadPrompt: async (functionType, taskSubtype, category) => {
+        const key = getPromptKey(functionType, taskSubtype, category);
 
         try {
             // Try to load from backend
-            const promptData = await promptService.getPrompt(functionType, category, name);
+            const promptData = await promptService.getPrompt(functionType, taskSubtype, category);
 
             // Cache the content
             const cache = get().promptCache;
@@ -671,23 +671,23 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
         }
     },
 
-    getPromptFromCache: (functionType, category, name) => {
-        const key = getPromptKey(functionType, category, name);
+    getPromptFromCache: (functionType, taskSubtype, category) => {
+        const key = getPromptKey(functionType, taskSubtype, category);
         return get().promptCache.get(key) || null;
     },
 
-    invalidatePromptCache: (functionType?, category?, name?) => {
+    invalidatePromptCache: (functionType?, taskSubtype?, category?) => {
         if (!functionType) {
             // Clear all cache
             set({ promptCache: new Map() });
             return;
         }
 
-        if (!category || !name) {
-            throw new Error('invalidatePromptCache requires functionType, category, and name (or no args to clear all)');
+        if (!taskSubtype || !category) {
+            throw new Error('invalidatePromptCache requires functionType, taskSubtype, and category (or no args to clear all)');
         }
 
-        const key = getPromptKey(functionType, category, name);
+        const key = getPromptKey(functionType, taskSubtype, category);
         const cache = get().promptCache;
         cache.delete(key);
         set({ promptCache: new Map(cache) });

@@ -18,7 +18,7 @@ from .prompt_renderer import PromptRenderer
 @dataclass(frozen=True)
 class PromptTarget:
     task_type: str
-    prompt_name: str
+    task_subtype: str
     required_categories: tuple[str, ...]
     supports_memory_prompt: bool = False
 
@@ -84,59 +84,59 @@ class PromptManager:
             if journey_kind == "objectTranslation":
                 return PromptTarget(
                     task_type="translation",
-                    prompt_name="object",
+                    task_subtype="object",
                     required_categories=("systemPrompt", "userPrompt", "initialUserPrompt", "firstUserPrompt", "lastUserPrompt"),
                 )
 
             if journey_kind == "messageTranslation":
                 return PromptTarget(
                     task_type="translation",
-                    prompt_name="message",
+                    task_subtype="message",
                     required_categories=("systemPrompt", "userPrompt"),
                 )
 
             if journey_kind in {"imagePrompt", "sceneImagePrompt"}:
                 context_type = str(payload.get("contextType") or "").strip()
                 if context_type == "cover_image":
-                    prompt_name = "coverImage"
+                    task_subtype = "coverImage"
                 elif context_type == "scene":
-                    prompt_name = "scene"
+                    task_subtype = "scene"
                 else:
-                    prompt_name = "object"
+                    task_subtype = "object"
 
                 return PromptTarget(
                     task_type="imagePrompt",
-                    prompt_name=prompt_name,
+                    task_subtype=task_subtype,
                     required_categories=("systemPrompt", "userPrompt", "initialUserPrompt", "firstUserPrompt", "lastUserPrompt"),
                 )
 
             if journey_kind == "objectEdit":
                 mode = str(payload.get("category") or "").strip()
-                prompt_name = "manuscript" if mode == "manuscript" else "storyObject"
+                task_subtype = "manuscript" if mode == "manuscript" else "storyObject"
                 return PromptTarget(
                     task_type="editAssistant",
-                    prompt_name=prompt_name,
+                    task_subtype=task_subtype,
                     required_categories=("systemPrompt", "userPrompt", "initialUserPrompt", "firstUserPrompt", "lastUserPrompt"),
                 )
 
             raise RuntimeError(f"Unsupported journey kind: {journey_kind}")
 
         if thread.thread_type == "subAgent":
-            prompt_name = "default"
+            task_subtype = "default"
             if thread.owner_id:
                 defn = db.query(SubAgentDefinitionModel).filter(SubAgentDefinitionModel.id == thread.owner_id).first()
                 if defn is not None and str(defn.agent_name or "").strip():
-                    prompt_name = str(defn.agent_name).strip()
+                    task_subtype = str(defn.agent_name).strip()
             return PromptTarget(
                 task_type="subAgent",
-                prompt_name=prompt_name,
+                task_subtype=task_subtype,
                 required_categories=("systemPrompt", "userPrompt"),
             )
 
-        prompt_name = "planMode" if run.run_mode == "planMode" else "agentMode"
+        task_subtype = "planMode" if run.run_mode == "planMode" else "agentMode"
         return PromptTarget(
             task_type="agent",
-            prompt_name=prompt_name,
+            task_subtype=task_subtype,
             required_categories=("systemPrompt", "memoryPrompt", "userPrompt", "firstUserPrompt", "lastUserPrompt"),
             supports_memory_prompt=True,
         )
@@ -163,7 +163,7 @@ class PromptManager:
         user_id: UUID,
         preset_id: UUID,
         task_type: str,
-        prompt_name: str,
+        task_subtype: str,
     ) -> dict[str, str]:
         rows = (
             db.query(PromptVersion)
@@ -172,7 +172,7 @@ class PromptManager:
                     PromptVersion.user_id == user_id,
                     PromptVersion.preset_id == preset_id,
                     PromptVersion.task_type == task_type,
-                    PromptVersion.prompt_name == prompt_name,
+                    PromptVersion.task_subtype == task_subtype,
                 )
             )
             .order_by(PromptVersion.prompt_category.asc(), desc(PromptVersion.version_number))
@@ -218,7 +218,7 @@ class PromptManager:
             rendered.append(
                 self._renderer.render_prompt(
                     task_type=target.task_type,
-                    prompt_name=target.prompt_name,
+                    task_subtype=target.task_subtype,
                     prompt_category=category,
                     template_data=patched,
                 )
@@ -451,7 +451,7 @@ class PromptManager:
         if missing:
             joined = ", ".join(missing)
             raise PromptCategoryMissingError(
-                f"Missing prompt categories for {target.task_type}/{target.prompt_name}: {joined}"
+                f"Missing prompt categories for {target.task_type}/{target.task_subtype}: {joined}"
             )
 
     def build_prompt_bundle(
@@ -472,7 +472,7 @@ class PromptManager:
             user_id=user_id,
             preset_id=preset_id,
             task_type=target.task_type,
-            prompt_name=target.prompt_name,
+            task_subtype=target.task_subtype,
         )
 
         template_data, prefill_enabled = self._build_template_data(
@@ -494,14 +494,14 @@ class PromptManager:
 
         system_prompt = self._renderer.render_prompt(
             task_type=target.task_type,
-            prompt_name=target.prompt_name,
+            task_subtype=target.task_subtype,
             prompt_category="systemPrompt",
             template_data=template_data,
         )
         prefill = (
             self._renderer.render_prefill(
                 task_type=target.task_type,
-                prompt_name=target.prompt_name,
+                task_subtype=target.task_subtype,
                 template_data=template_data,
             )
             if prefill_enabled
@@ -532,7 +532,7 @@ class PromptManager:
         }
         rendered = self._renderer.render_memory_prompt(
             task_type=bundle.target.task_type,
-            prompt_name=bundle.target.prompt_name,
+            task_subtype=bundle.target.task_subtype,
             template_data=template_data,
         ).strip()
         return rendered or None

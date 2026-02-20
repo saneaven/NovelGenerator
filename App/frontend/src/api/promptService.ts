@@ -46,13 +46,13 @@ export interface ValidationResult {
  */
 function buildPromptPath(
   taskType: TaskType,
+  taskSubtype: string,
   category: PromptCategory,
-  name: string
 ): string {
-  if (!name) {
-    throw new Error(`Prompt name is required for ${taskType}/${category}`);
+  if (!taskSubtype) {
+    throw new Error(`Task subtype is required for ${taskType}/${category}`);
   }
-  return `/api/v1/prompts/${taskType}/${category}/${name}`;
+  return `/api/v1/prompts/${taskType}/${taskSubtype}/${category}`;
 }
 
 export const promptService = {
@@ -61,10 +61,10 @@ export const promptService = {
    */
   async getPrompt(
     taskType: TaskType,
+    taskSubtype: string,
     category: PromptCategory,
-    name: string
   ): Promise<PromptContent> {
-    const path = buildPromptPath(taskType, category, name);
+    const path = buildPromptPath(taskType, taskSubtype, category);
     return await apiClient.get<PromptContent>(path);
   },
 
@@ -73,12 +73,12 @@ export const promptService = {
    */
   async savePrompt(
     taskType: TaskType,
+    taskSubtype: string,
     category: PromptCategory,
     content: string,
-    name: string,
-    note?: string
+    note?: string,
   ): Promise<PromptVersion> {
-    const path = buildPromptPath(taskType, category, name);
+    const path = buildPromptPath(taskType, taskSubtype, category);
     return await apiClient.post<PromptVersion>(`${path}/save`, {
       content,
       note,
@@ -90,10 +90,10 @@ export const promptService = {
    */
   async getVersionHistory(
     taskType: TaskType,
+    taskSubtype: string,
     category: PromptCategory,
-    name: string
   ): Promise<VersionHistoryItem[]> {
-    const path = buildPromptPath(taskType, category, name);
+    const path = buildPromptPath(taskType, taskSubtype, category);
     return await apiClient.get<VersionHistoryItem[]>(`${path}/versions`);
   },
 
@@ -102,11 +102,11 @@ export const promptService = {
    */
   async restoreVersion(
     taskType: TaskType,
+    taskSubtype: string,
     category: PromptCategory,
     versionNumber: number,
-    name: string
   ): Promise<{ new_version: number }> {
-    const path = buildPromptPath(taskType, category, name);
+    const path = buildPromptPath(taskType, taskSubtype, category);
     return await apiClient.post<{ new_version: number }>(`${path}/restore`, {
       version_number: versionNumber,
     });

@@ -7,8 +7,8 @@ export type FragmentDraftKey = DraftKey;
 export type VariableDraftKey = DraftKey;
 export type SubAgentDraftKey = DraftKey;
 
-export function makePromptDraftKey(taskType: TaskType, category: PromptCategory, name: string): PromptDraftKey {
-  return `prompt:${taskType}:${category}:${name}`;
+export function makePromptDraftKey(taskType: TaskType, taskSubtype: string, category: PromptCategory): PromptDraftKey {
+  return `prompt:${taskType}:${taskSubtype}:${category}`;
 }
 
 export function makeFragmentDraftKey(folderId: string | null, fragmentName: string): FragmentDraftKey {
@@ -29,8 +29,8 @@ export type DirtyItem =
       key: PromptDraftKey;
       label: string;
       taskType: TaskType;
+      taskSubtype: string;
       category: PromptCategory;
-      name: string;
       nodeId?: string;
     }
   | {

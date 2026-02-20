@@ -62,7 +62,7 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
   } = usePromptPreview({
     templateContent,
     taskType,
-    promptName: promptNode.name || '',
+    taskSubtype: promptNode.taskSubtype || '',
     promptCategory: promptNode.category || 'userPrompt',
   });
 

@@ -16,7 +16,7 @@ type TemplateData = any;
 
 export interface PreviewDataOptions {
   taskType: TaskType;
-  promptName: string;
+  taskSubtype: string;
   promptCategory: PromptCategory;
   showProjectContext: boolean;
   includeAllFilteredIds: boolean;
@@ -35,9 +35,9 @@ interface FilteredIds {
 }
 
 /**
- * Map taskType and promptName to the PromptType used in schema validation.
+ * Map taskType and taskSubtype to the PromptType used in schema validation.
  */
-export function getPromptTypeFromTask(taskType: TaskType, promptName: string): PromptType {
+export function getPromptTypeFromTask(taskType: TaskType, taskSubtype: string): PromptType {
   switch (taskType) {
     case 'agent':
       return 'agent';
@@ -48,8 +48,8 @@ export function getPromptTypeFromTask(taskType: TaskType, promptName: string): P
     case 'translation':
       return 'translation';
     case 'imagePrompt':
-      if (promptName === 'scene') return 'sceneImagePrompt';
-      if (promptName === 'coverImage') return 'coverImagePrompt';
+      if (taskSubtype === 'scene') return 'sceneImagePrompt';
+      if (taskSubtype === 'coverImage') return 'coverImagePrompt';
       return 'objectImagePrompt';
     default:
       return 'agent';
@@ -163,7 +163,7 @@ function buildFilteredIds(
  */
 export function buildModeSpecificData(
   taskType: TaskType,
-  promptName: string,
+  taskSubtype: string,
   filteredIds: FilteredIds,
   promptTypeOverrides?: Record<string, any>
 ): Partial<Pick<TemplateData, 'agent' | 'memorySummary' | 'editAssistant' | 'translation' | 'imagePrompt' | 'memory'>> {
@@ -173,7 +173,7 @@ export function buildModeSpecificData(
     case 'agent':
       modeData = {
         agent: {
-          runMode: promptName === 'planMode' ? 'planMode' : 'agentMode',
+          runMode: taskSubtype === 'planMode' ? 'planMode' : 'agentMode',
           surface: 'story-object',
           contextObjectIds: filteredIds.contextObjectIds,
         },
@@ -197,7 +197,7 @@ export function buildModeSpecificData(
       break;
 
     case 'editAssistant':
-      if (promptName === 'manuscript') {
+      if (taskSubtype === 'manuscript') {
         modeData = {
           editAssistant: {
             mode: 'manuscript',
@@ -315,7 +315,7 @@ function buildConfigData(overrides?: Partial<ConfigData>): ConfigData {
 export function buildPreviewData(options: PreviewDataOptions): TemplateData {
   const {
     taskType,
-    promptName,
+    taskSubtype,
     promptCategory,
     showProjectContext,
     includeAllFilteredIds,
@@ -364,7 +364,7 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
   const filteredIds = buildFilteredIds(projectId, includeAllFilteredIds);
 
   // Build mode-specific data with filtered IDs and prompt type overrides
-  const modeData = buildModeSpecificData(taskType, promptName, filteredIds, promptTypeOverrides);
+  const modeData = buildModeSpecificData(taskType, taskSubtype, filteredIds, promptTypeOverrides);
 
   // Build complete template data
   const templateData: TemplateData = {

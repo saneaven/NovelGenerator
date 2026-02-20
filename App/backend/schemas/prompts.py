@@ -8,8 +8,8 @@ from pydantic import BaseModel, Field
 class PromptIdentifier(BaseModel):
     """Identifier for a specific prompt"""
     task_type: str = Field(..., min_length=1, max_length=50)
+    task_subtype: Optional[str] = Field(None, max_length=50)
     prompt_category: str = Field(..., min_length=1, max_length=50)
-    prompt_name: Optional[str] = Field(None, max_length=50)
 
 
 class PromptContentResponse(BaseModel):

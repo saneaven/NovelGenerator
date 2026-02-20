@@ -19,7 +19,7 @@ export interface VariableWarning {
  */
 export function mapTaskTypeToSchemaType(
   taskType: TaskType,
-  name?: string
+  taskSubtype?: string
 ): PromptType | null {
   switch (taskType) {
     case 'agent':
@@ -33,8 +33,8 @@ export function mapTaskTypeToSchemaType(
     case 'subAgent':
       return 'subAgent';
     case 'imagePrompt':
-      if (name === 'scene') return 'sceneImagePrompt';
-      if (name === 'coverImage') return 'coverImagePrompt';
+      if (taskSubtype === 'scene') return 'sceneImagePrompt';
+      if (taskSubtype === 'coverImage') return 'coverImagePrompt';
       return 'objectImagePrompt';
     default:
       return null;
