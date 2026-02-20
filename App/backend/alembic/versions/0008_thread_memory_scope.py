@@ -87,8 +87,49 @@ def upgrade() -> None:
     )
 
     # Remove legacy rows that cannot be mapped to thread scope.
-    op.execute("DELETE FROM message_memory_summaries WHERE thread_id IS NULL")
-    op.execute("DELETE FROM message_rag_sources WHERE thread_id IS NULL")
+    op.execute(
+        """
+        DELETE FROM message_memory_summaries s
+        WHERE s.thread_id IS NULL
+           OR NOT EXISTS (
+               SELECT 1
+               FROM run_messages m
+               WHERE m.id = s.to_message_id
+                 AND m.thread_id = s.thread_id
+           )
+        """
+    )
+    op.execute(
+        """
+        DELETE FROM message_rag_sources s
+        WHERE s.thread_id IS NULL
+           OR NOT EXISTS (
+               SELECT 1
+               FROM run_messages m
+               WHERE m.id = s.message_id
+                 AND m.thread_id = s.thread_id
+           )
+        """
+    )
+    op.execute(
+        """
+        DELETE FROM message_rag_sources s
+        USING (
+            SELECT id
+            FROM (
+                SELECT
+                    id,
+                    row_number() OVER (
+                        PARTITION BY user_id, thread_id, message_id, language
+                        ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST, id DESC
+                    ) AS rn
+                FROM message_rag_sources
+            ) ranked
+            WHERE ranked.rn > 1
+        ) d
+        WHERE s.id = d.id
+        """
+    )
 
     # Remove any pre-existing FK names if present.
     op.execute("ALTER TABLE message_memory_summaries DROP CONSTRAINT IF EXISTS message_memory_summaries_thread_id_fkey")

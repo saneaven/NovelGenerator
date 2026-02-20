@@ -155,7 +155,7 @@ export const UNIFIED_SCHEMA = {
         messageId: "msg-123",
         role: "assistant",
         matchedSnippet: "Created outline: The Hollow Crown - Main Storyline",
-        match: { kind: "tool_call", fieldPath: "tool_calls/call-1", chunkIndex: 0 },
+        match: { kind: "tool_call", fieldPath: "tool_calls/call-1/result", chunkIndex: 0 },
         toolCall: { id: "call-1", name: "create_outline", status: "accepted", result: "Applied successfully" },
       }] as Array<{
         messageId: string;

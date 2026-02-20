@@ -405,7 +405,7 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
         messageId: '[placeholder-message-id-3]',
         role: 'assistant',
         matchedSnippet: 'Tool call: create_character(name="Ari", role="antagonist")',
-        match: { kind: 'tool_call', fieldPath: 'tool_calls/index/0', chunkIndex: 2 },
+        match: { kind: 'tool_call', fieldPath: 'tool_calls/index/0/result', chunkIndex: 2 },
         toolCall: {
           name: 'create_character',
           status: 'accepted',

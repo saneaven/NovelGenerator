@@ -67,7 +67,10 @@ def _build_memory_summary_list(
             MessageMemorySummary.thread_id == thread_id,
             MessageMemorySummary.language == language,
         )
-        .order_by(desc(MessageMemorySummary.created_at))
+        .order_by(
+            desc(MessageMemorySummary.to_seq_in_thread),
+            desc(MessageMemorySummary.created_at),
+        )
         .limit(limit)
         .all()
     )
@@ -79,7 +82,10 @@ def _build_memory_summary_list(
                 MessageMemorySummary.project_id == project_id,
                 MessageMemorySummary.thread_id == thread_id,
             )
-            .order_by(desc(MessageMemorySummary.created_at))
+            .order_by(
+                desc(MessageMemorySummary.to_seq_in_thread),
+                desc(MessageMemorySummary.created_at),
+            )
             .limit(limit)
             .all()
         )

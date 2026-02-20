@@ -130,13 +130,14 @@ def _build_memory_chunks(*, message_req: Dict[str, Any]) -> List[Dict[str, Any]]
             tc_id = str(tool_call.get("id") or f"index/{idx}").strip() or f"index/{idx}"
 
             allowed_paths = {
-                "name": f"tool_calls/{tc_id}/name",
                 "arguments": f"tool_calls/{tc_id}/arguments",
                 "result": f"tool_calls/{tc_id}/result",
                 "reason": f"tool_calls/{tc_id}/reason",
-                "status": f"tool_calls/{tc_id}/status",
             }
             blocks_by_field: Dict[str, List[str]] = {path: [] for path in allowed_paths.values()}
+            tool_name = str(tool_call.get("name") or "").strip()
+            if tool_name:
+                blocks_by_field[allowed_paths["arguments"]].append(f"tool_name: {tool_name}")
 
             leaves = _extract_string_leaves(tool_call)
             for leaf_path, leaf_value in leaves:

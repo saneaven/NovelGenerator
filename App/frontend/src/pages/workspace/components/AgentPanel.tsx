@@ -964,6 +964,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
             primaryEntry?.contentParts ?? message.chatMessage.contentParts,
           );
 
+          if (isSameRoleAsPrevious && !isStreamingMessage && !primaryPlainContent) {
+            const hasThinking = (message.chatMessage.contentParts ?? []).some(
+              (p: any) => p.type === 'thinking' && typeof p.text === 'string' && p.text.trim().length > 0
+            );
+            if (!hasThinking) {
+              return null;
+            }
+          }
+
           return (
             <React.Fragment key={message.chatMessage.id}>
               <div className={`agent-message ${message.chatMessage.role}${isSameRoleAsPrevious ? ' same-role-as-previous' : ''}`}>
