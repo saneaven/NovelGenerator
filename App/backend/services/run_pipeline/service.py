@@ -281,6 +281,13 @@ class RunPipeline:
                 if run is None:
                     raise HTTPException(status_code=409, detail="No run exists to resume")
 
+                _RESUMABLE_STATUSES = {"waiting", "paused", "done"}
+                if run.status not in _RESUMABLE_STATUSES:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Run status '{run.status}' is not resumable",
+                    )
+
                 if run_mode is not None:
                     run.run_mode = run_mode
                 if surface is not None:

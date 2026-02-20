@@ -162,6 +162,7 @@ export class ThreadEventConsumer {
       messageId: params.messageId,
       runId: params.runId,
     });
+    if (!message.isStreaming) return; // Already finalized (e.g. hydrated from API); skip replayed deltas
     const streaming = message.streamingData ?? { contentParts: [], thinkingDetails: [] };
     const parts = [...(streaming.contentParts ?? [])];
     const last = parts[parts.length - 1];
@@ -402,12 +403,10 @@ export class ThreadEventConsumer {
 
       if (!toolCalls.every((tc) => tc.status === 'applied' || tc.status === 'failed')) return;
 
-      const blockedByPausedOrError =
-        thread?.status === 'paused'
-        || thread?.status === 'error'
-        || thread?.latestRunStatus === 'paused'
-        || thread?.latestRunStatus === 'error';
-      if (blockedByPausedOrError) return;
+      const allowedForContinue =
+        thread?.status === 'waiting'
+        || thread?.status === 'done';
+      if (!allowedForContinue) return;
 
       if (this.inFlightResumeByThread.has(threadId)) return;
       this.inFlightResumeByThread.add(threadId);
