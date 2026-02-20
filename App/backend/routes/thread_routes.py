@@ -36,7 +36,7 @@ from ..services.notification_service import (
     upsert_notification,
 )
 from ..services.run_pipeline import run_pipeline
-from ..services.tool_call_executor import execute as execute_tool_call
+from ..services.tool_engine import tool_engine
 
 
 router = APIRouter(prefix="/api/v1", tags=["threads"])
@@ -283,7 +283,7 @@ async def _apply_tool_decision(
     if project_id is None:
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    execution = await execute_tool_call(
+    execution = await tool_engine.execute_tool_call_by_id(
         SessionLocal,
         tool_call_id,
         user_id=user_id,
@@ -333,8 +333,36 @@ async def _apply_tool_decision(
                     journey_target_ids=[],
                     language=None,
                 )
-            except Exception:
-                pass  # Child run failure shouldn't crash parent decision
+            except Exception as exc:  # noqa: BLE001
+                db3 = SessionLocal()
+                try:
+                    thread3 = _owned_thread_or_404(db3, thread_id=thread_id, user_id=user_id)
+                    failed_row = (
+                        db3.query(RunToolCallModel)
+                        .with_for_update()
+                        .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread3.id)
+                        .first()
+                    )
+                    if failed_row is not None and failed_row.status == "processing":
+                        failed_row.status = "failed"
+                        failed_row.reason = f"Child run start failed: {exc}"
+                        base_result = failed_row.result if isinstance(failed_row.result, dict) else {}
+                        failed_row.result = {
+                            **base_result,
+                            "success": False,
+                            "message": "Child run start failed",
+                            "error": str(exc),
+                        }
+                        failed_row.updated_at = datetime.utcnow()
+
+                        synced_run, synced_thread, _ = _sync_run_thread_status(db3, run_id=failed_row.run_id)
+                        db3.commit()
+                        db3.refresh(failed_row)
+                        if synced_run is not None and synced_thread is not None:
+                            await _emit_tool_call_status(thread=synced_thread, tool_call=failed_row)
+                            await _emit_run_status(thread=synced_thread, run=synced_run)
+                finally:
+                    db3.close()
 
     return result_payload
 

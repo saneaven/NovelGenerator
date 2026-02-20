@@ -1,5 +1,3 @@
-{{ ! }}
-
 # Context (targets)
 {% with params = [feedback.editingObjectIds] %}{% include "fragment:common/projectContext/filtered" %}{% endwith %}
 

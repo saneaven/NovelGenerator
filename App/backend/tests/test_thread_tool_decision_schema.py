@@ -38,7 +38,7 @@ def test_tool_call_decision_response_has_no_new_objects_field() -> None:
 def test_tool_decision_backend_contract_has_no_new_objects_literal() -> None:
     backend_root = Path(__file__).resolve().parents[1]
     routes_text = (backend_root / "routes" / "thread_routes.py").read_text(encoding="utf-8")
-    executor_text = (backend_root / "services" / "tool_call_executor.py").read_text(encoding="utf-8")
+    engine_text = (backend_root / "services" / "tool_engine" / "service.py").read_text(encoding="utf-8")
 
     assert "new_objects" not in routes_text
-    assert "new_objects" not in executor_text
+    assert "new_objects" not in engine_text

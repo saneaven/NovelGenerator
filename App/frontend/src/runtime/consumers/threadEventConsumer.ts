@@ -2,6 +2,7 @@ import { threadService, type ToolCallDecisionResponse } from '../../api/threadSe
 import type { ThreadRuntimeEvent } from '../../api/sseClient';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useThreadStore } from '../../store/threadStore';
+import { getAutoApproveCategory } from '../../toolCall/registry/autoApprove';
 import {
   toThreadType,
   nowIso,
@@ -340,13 +341,14 @@ export class ThreadEventConsumer {
   }
 
   private isToolAutoApprovable(toolName: string, config: AutoApproveConfig): boolean {
-    if (toolName.startsWith('create_')) return config.create;
-    if (toolName.startsWith('delete_')) return config.delete;
-    if (toolName.startsWith('patch_')) return config.patch;
-    if (toolName.startsWith('replace_')) return config.replace;
-    if (toolName.startsWith('read_')) return config.read;
-    if (toolName === 'rag_search' || toolName === 'keyword_search') return config.search;
-    if (toolName.startsWith('call_')) return config.subAgent;
+    const category = getAutoApproveCategory(toolName);
+    if (category === 'create') return config.create;
+    if (category === 'delete') return config.delete;
+    if (category === 'patch') return config.patch;
+    if (category === 'replace') return config.replace;
+    if (category === 'read') return config.read;
+    if (category === 'search') return config.search;
+    if (category === 'subAgent') return config.subAgent;
     return false;
   }
 
@@ -658,4 +660,3 @@ export class ThreadEventConsumer {
     }
   }
 }
-

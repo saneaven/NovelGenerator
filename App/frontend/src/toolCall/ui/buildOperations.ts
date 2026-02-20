@@ -1,11 +1,12 @@
 import type { ToolCallProgress } from '../../types/chat';
 import type { EditCard } from '../types';
+import { resolveToolUiSpec } from '../registry';
 import type { OperationVM } from './vmTypes';
-import { mapToolToOperationVM } from './toolToVm';
 
 export function buildStoredOperations(cards: EditCard[]): OperationVM[] {
-  return cards.map((card) =>
-    mapToolToOperationVM({
+  return cards.map((card) => {
+    const spec = resolveToolUiSpec(card.toolCall.toolName);
+    return spec.toOperationVM({
       id: card.id,
       toolName: card.toolCall.toolName,
       args: card.data,
@@ -14,8 +15,8 @@ export function buildStoredOperations(cards: EditCard[]): OperationVM[] {
       failureType: card.toolCall.failureType,
       result: card.toolCall.result,
       source: 'stored',
-    })
-  );
+    });
+  });
 }
 
 function toArgs(progress: ToolCallProgress): Record<string, unknown> {
@@ -42,9 +43,11 @@ export function buildStreamingOperations(progressList: ToolCallProgress[]): Oper
 
   return ordered.map((progress) => {
     const id = progress.draft?.id || `stream-${progress.draft?.index ?? 0}`;
-    return mapToolToOperationVM({
+    const toolName = progress.draft?.toolName || 'unknown';
+    const spec = resolveToolUiSpec(toolName);
+    return spec.toOperationVM({
       id,
-      toolName: progress.draft?.toolName || 'unknown',
+      toolName,
       args: toArgs(progress),
       status: progress.status,
       reason: progress.error,

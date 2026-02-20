@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, Callable
 from uuid import UUID
 
@@ -16,7 +15,6 @@ from ..models.db_models import (
     RunMessageModel,
     RunModel,
     RunToolCallModel,
-    SubAgentDefinitionModel,
     Thread,
     UserSettings,
 )
@@ -41,10 +39,10 @@ from ..services.prompt_runtime.prompt_renderer import PromptRenderer
 from ..services.object_service import object_service
 from ..services.settings_service import settings_service
 from ..services.sidecar_client import sidecar_client
-from ..services.tool_schemas import ToolSchemaDef, get_dynamic_call_tools, get_tools_for_set
+from ..services.tool_engine import tool_engine
+from ..services.tool_engine.contracts import ToolOffer
 from ..services.token_count_service import count_text_tokens
 from ..services.context_manager import fit_to_context_window
-from ..services.validators import GLOBAL_VALIDATORS, TOOL_VALIDATORS, ValidationContext, run_validator_chain
 from ..services.runtime_event_dispatcher import RuntimeEventDispatcher, runtime_event_dispatcher
 
 # Ensure providers are registered.
@@ -134,33 +132,6 @@ class RunPipeline:
         except Exception:
             return True
 
-    def _toolset_for_run(
-        self,
-        thread: Thread,
-        run: RunModel,
-        *,
-        input_payload: dict[str, Any],
-    ) -> str:
-        if thread.thread_type == "journey":
-            journey_kind = (thread.journey_kind or "").strip()
-            if journey_kind == "objectTranslation":
-                return "objectTranslation"
-            if journey_kind == "objectEdit":
-                category = str(input_payload.get("category") or "").strip()
-                if category == "manuscript":
-                    return "manuscript"
-                if category in {"outline", "act", "chapter"}:
-                    return "outline"
-                return "storyObject"
-            return "storyObject"
-
-        if thread.thread_type == "subAgent":
-            return "agent_agent_mode"
-
-        if run.run_mode == "planMode":
-            return "agent_plan_mode"
-        return "agent_agent_mode"
-
     @staticmethod
     def _as_str_list(value: Any) -> list[str]:
         if not isinstance(value, list):
@@ -195,42 +166,6 @@ class RunPipeline:
                 }
             ],
         }
-
-    def _resolve_sub_agent_permissions(
-        self,
-        db: Session,
-        *,
-        thread: Thread,
-        user_id: UUID,
-    ) -> tuple[set[str], set[UUID]]:
-        if thread.thread_type != "subAgent" or thread.owner_id is None:
-            return set(), set()
-
-        definition = (
-            db.query(SubAgentDefinitionModel)
-            .filter(
-                SubAgentDefinitionModel.id == thread.owner_id,
-                SubAgentDefinitionModel.user_id == user_id,
-                SubAgentDefinitionModel.enabled == True,  # noqa: E712
-            )
-            .first()
-        )
-        if definition is None:
-            return set(), set()
-
-        allowed_tool_names = {
-            str(name).strip()
-            for name in (definition.allowed_tool_names or [])
-            if isinstance(name, str) and str(name).strip()
-        }
-        allowed_sub_agent_ids: set[UUID] = set()
-        for raw in definition.allowed_sub_agent_ids or []:
-            try:
-                allowed_sub_agent_ids.add(UUID(str(raw)))
-            except (TypeError, ValueError):
-                continue
-
-        return allowed_tool_names, allowed_sub_agent_ids
 
     async def _apply_raw_output(
         self,
@@ -430,16 +365,6 @@ class RunPipeline:
             return
 
         raise RuntimeError(f"Unsupported journey kind for raw output: {journey_kind}")
-
-    def _provider_tools(self, tool_defs: list[ToolSchemaDef]) -> list[dict[str, Any]]:
-        return [
-            {
-                "name": d.name,
-                "description": d.description,
-                "parameters": d.parameters,
-            }
-            for d in tool_defs
-        ]
 
     async def _count_tokens(
         self,
@@ -741,9 +666,8 @@ class RunPipeline:
         run: RunModel,
         assistant_message: RunMessageModel,
         tool_calls: list[Any],
-        schema_by_name: dict[str, ToolSchemaDef],
-        allowed_tool_names: set[str],
-        rag_search_enabled: bool,
+        offer: ToolOffer,
+        preset_id: UUID | None,
     ) -> list[RunToolCallModel]:
         out: list[RunToolCallModel] = []
 
@@ -793,16 +717,18 @@ class RunPipeline:
             # Link the tool_call message back to its parent tool call for cascade deletion.
             tool_msg.parent_tool_call_id = row.id
 
-            validation_ctx = ValidationContext(
+            validation = await tool_engine.validate_tool_call(
                 db=db,
+                thread=thread,
                 run=run,
-                allowed_tool_names=allowed_tool_names,
-                schema_by_name=schema_by_name,
-                rag_search_enabled=rag_search_enabled,
-                sidecar=sidecar_client,
+                tool_name=tool_name,
+                args=arguments,
+                offer=offer,
+                user_id=run.user_id,
+                project_id=run.project_id,
+                language=run.language,
+                preset_id=preset_id,
             )
-            validators = GLOBAL_VALIDATORS + TOOL_VALIDATORS.get(tool_name, [])
-            validation = await run_validator_chain(validators, arguments, tool_name, validation_ctx)
             if validation.valid:
                 row.status = "pending"
                 row.reason = None
@@ -1121,39 +1047,23 @@ class RunPipeline:
             native_output_mode=bool(getattr(settings, "native_output_mode", False)),
         )
 
-        tool_set_name = self._toolset_for_run(
+        tool_set_name = tool_engine.tool_set_for_run(
             thread,
             run,
             input_payload=input_payload if isinstance(input_payload, dict) else {},
         )
-
-        sub_agent_allowed_tools: set[str] | None = None
-        sub_agent_allowed_ids: set[UUID] | None = None
-        if thread.thread_type == "subAgent":
-            allowed_tools, allowed_ids = self._resolve_sub_agent_permissions(
-                db,
-                thread=thread,
-                user_id=run.user_id,
-            )
-            sub_agent_allowed_tools = allowed_tools
-            sub_agent_allowed_ids = allowed_ids
-
-        dynamic_call_tools = [] if thread.thread_type == "journey" else get_dynamic_call_tools(
+        tool_offer = tool_engine.build_offer_for_run(
             db,
-            user_id=run.user_id,
+            thread=thread,
+            run=run,
+            settings=settings,
             preset_id=preset_id,
-            allowed_sub_agent_ids=sub_agent_allowed_ids,
-        )
-        tool_defs = get_tools_for_set(
-            tool_set_name,
+            user_id=run.user_id,
+            project_id=run.project_id,
+            input_payload=input_payload if isinstance(input_payload, dict) else {},
             rag_search_enabled=bool(getattr(settings, "rag_search_enabled", False)),
-            dynamic_call_tools=dynamic_call_tools,
+            tool_set_name=tool_set_name,
         )
-        if sub_agent_allowed_tools is not None:
-            tool_defs = [d for d in tool_defs if d.name in sub_agent_allowed_tools or d.name.startswith("call_")]
-
-        schema_by_name = {d.name: d for d in tool_defs}
-        allowed_tool_names = set(schema_by_name.keys())
 
         provider_config = credential_service.get_provider_config(db, run.user_id, task_config.provider)
         if task_config.provider == "custom":
@@ -1172,7 +1082,7 @@ class RunPipeline:
         elif native_tool_call_mode:
             tools_wire = None
         else:
-            tools_wire = self._provider_tools(tool_defs)
+            tools_wire = tool_offer.provider_tools
 
         messages = [{"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]}] + conversation
 
@@ -1350,9 +1260,8 @@ class RunPipeline:
                 run=run,
                 assistant_message=assistant_message,
                 tool_calls=final_snapshot.tool_calls,
-                schema_by_name=schema_by_name,
-                allowed_tool_names=allowed_tool_names,
-                rag_search_enabled=bool(getattr(settings, "rag_search_enabled", False)),
+                offer=tool_offer,
+                preset_id=preset_id,
             )
 
         if any(tc.status == "pending" for tc in persisted_tools):
@@ -1398,90 +1307,11 @@ class RunPipeline:
             },
         )
 
-        await self._complete_parent_tool_call(db, thread, run)
-
-    async def _complete_parent_tool_call(self, db: Session, thread: Thread, run: RunModel) -> None:
-        """When a sub-agent run completes, mark the parent tool call as applied."""
-        if thread.thread_type != "subAgent" or run.status != "done":
-            return
-
-        parent_tc = (
-            db.query(RunToolCallModel)
-            .filter(RunToolCallModel.child_thread_id == thread.id)
-            .first()
-        )
-        if parent_tc is None or parent_tc.status != "processing":
-            return
-
-        # Extract final assistant message text as the result
-        final_msg = (
-            db.query(RunMessageModel)
-            .filter(RunMessageModel.run_id == run.id, RunMessageModel.role == "assistant")
-            .order_by(RunMessageModel.seq.desc())
-            .first()
-        )
-        result_text = ""
-        if final_msg and isinstance(final_msg.data, dict):
-            final_data = final_msg.data.get("_final", {})
-            parts = final_data.get("contentParts", [])
-            result_text = "\n".join(
-                p.get("text", "") for p in parts if p.get("type") == "content"
-            )
-
-        parent_tc.status = "applied"
-        parent_tc.result = {"success": True, "content": result_text}
-        parent_tc.updated_at = datetime.utcnow()
-
-        parent_thread = db.query(Thread).filter(Thread.id == parent_tc.thread_id).first()
-        parent_run = db.query(RunModel).filter(RunModel.id == parent_tc.run_id).first()
-        if not parent_thread or not parent_run:
-            db.commit()
-            return
-
-        # Sync parent run/thread status from tool call statuses
-        statuses = [
-            s
-            for (s,) in db.query(RunToolCallModel.status)
-            .filter(RunToolCallModel.run_id == parent_run.id)
-            .all()
-        ]
-        if any(s == "pending" for s in statuses):
-            parent_run.status = "waiting"
-            parent_thread.status = "waiting"
-        elif any(s in {"streaming", "validating", "processing"} for s in statuses):
-            parent_run.status = "processing"
-            parent_thread.status = "processing"
-        elif any(s == "rejected" for s in statuses):
-            parent_run.status = "paused"
-            parent_thread.status = "paused"
-        else:
-            parent_run.status = "done"
-            parent_thread.status = "done"
-
-        db.commit()
-
-        await self._emit(
-            project_id=parent_thread.project_id,
-            thread_id=parent_thread.id,
-            event_name="tool_call:status",
-            data={
-                "run_id": str(parent_tc.run_id),
-                "tool_call_id": str(parent_tc.id),
-                "status": parent_tc.status,
-                "reason": parent_tc.reason,
-                "result": parent_tc.result if isinstance(parent_tc.result, dict) else None,
-                "child_thread_id": str(parent_tc.child_thread_id) if parent_tc.child_thread_id else None,
-            },
-        )
-        await self._emit(
-            project_id=parent_thread.project_id,
-            thread_id=parent_thread.id,
-            event_name="run:status",
-            data={
-                "run_id": str(parent_run.id),
-                "status": parent_run.status,
-                "error": parent_run.error,
-            },
+        await tool_engine.complete_parent_tool_call(
+            db,
+            thread=thread,
+            run=run,
+            emit=self._emit,
         )
 
     async def execute_loop(self, run_id: UUID, *, create_ctx: CreateContext | None = None) -> None:

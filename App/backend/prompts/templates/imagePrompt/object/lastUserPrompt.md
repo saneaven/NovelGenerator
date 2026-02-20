@@ -1,5 +1,3 @@
-{{ ! }}
-
 # User Feedback
 
 The user has feedback on your generated prompt:

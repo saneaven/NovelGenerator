@@ -1,16 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import type { ToolCallProgress } from '../../types/chat';
 import type { EditCard, ToolCallDecision, ToolCallDecisionMap } from '../types';
+import { resolveToolUiSpec } from '../registry';
 import { buildStoredOperations, buildStreamingOperations } from './buildOperations';
 import { groupPatchOperations } from './patchGrouping';
 import type { ObjectOperationVM, OperationVM } from './vmTypes';
 import { useFunctionCallUIStore } from './store';
-import { CreateCallCard } from './cards/CreateCallCard';
-import { ReadCallCard } from './cards/ReadCallCard';
-import { ReplaceCallCard } from './cards/ReplaceCallCard';
-import { DeleteCallCard } from './cards/DeleteCallCard';
-import { SearchCallCard } from './cards/SearchCallCard';
-import { CallAgentCard } from './cards/CallAgentCard';
 import { PatchGroupCard } from './cards/PatchGroupCard';
 import { StickyDecisionBar } from './StickyDecisionBar';
 import { IconButton } from '../../components/IconButton';
@@ -32,10 +27,6 @@ export interface FunctionCallsThreadProps {
 
 function isPatchOperation(operation: OperationVM): operation is ObjectOperationVM {
   return operation.category === 'patch';
-}
-
-function isObjectOperation(operation: OperationVM): operation is ObjectOperationVM {
-  return operation.category !== 'search' && operation.category !== 'call_agent';
 }
 
 export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
@@ -194,30 +185,16 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
   const renderCard = (operation: OperationVM) => {
     const showDecisionButtons = hasDecisionFlow && operation.decisionEligible;
     const decisionDisabled = isApplyDisabled || committingById[operation.id] === true;
-    const cardProps = {
+    const spec = resolveToolUiSpec(operation.toolName);
+    const card = spec.renderCard({
       threadId,
       projectId,
+      operation,
       showDecisionButtons,
       decisionDisabled,
       onAccept: showDecisionButtons ? () => void handleSingleDecision(operation.id, 'accept') : undefined,
       onReject: showDecisionButtons ? () => void handleSingleDecision(operation.id, 'reject') : undefined,
-    };
-
-    let card: React.ReactElement | null = null;
-
-    if (operation.category === 'read' && isObjectOperation(operation)) {
-      card = <ReadCallCard key={operation.id} operation={operation} {...cardProps} />;
-    } else if (operation.category === 'create' && isObjectOperation(operation)) {
-      card = <CreateCallCard key={operation.id} operation={operation} {...cardProps} />;
-    } else if (operation.category === 'replace' && isObjectOperation(operation)) {
-      card = <ReplaceCallCard key={operation.id} operation={operation} {...cardProps} />;
-    } else if (operation.category === 'delete' && isObjectOperation(operation)) {
-      card = <DeleteCallCard key={operation.id} operation={operation} {...cardProps} />;
-    } else if (operation.category === 'search') {
-      card = <SearchCallCard key={operation.id} operation={operation} {...cardProps} />;
-    } else if (operation.category === 'call_agent') {
-      card = <CallAgentCard key={operation.id} operation={operation} {...cardProps} />;
-    }
+    });
 
     if (!card) return null;
     return wrapCard(card, operation.id);
