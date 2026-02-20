@@ -10,6 +10,7 @@ export interface ThreadInfo {
   ownerId?: string | null;
   journeyKind?: string | null;
   status: ThreadStatus;
+  memoryBoundaryMessageId?: string | null;
   lastError?: string | null;
   updatedAt?: string | null;
   latestRunId?: string | null;

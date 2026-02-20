@@ -8,11 +8,9 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from ..models.memory_models import MessageMemorySummary
-from .credential_service import credential_service
-from .memory_service import search_memory
+from .memory_service import search_thread_memory
 from .prompt_runtime.prompt_manager import PromptBundle, PromptManager
 from .prompt_runtime.prompt_renderer import PromptRenderer
-from .rag_search_service import search_project
 from .settings_service import settings_service
 
 
@@ -57,7 +55,7 @@ def _build_memory_summary_list(
     *,
     user_id: UUID,
     project_id: UUID,
-    owner_id: UUID,
+    thread_id: UUID,
     language: str,
     limit: int = 5,
 ) -> list[str]:
@@ -66,7 +64,7 @@ def _build_memory_summary_list(
         .filter(
             MessageMemorySummary.user_id == user_id,
             MessageMemorySummary.project_id == project_id,
-            MessageMemorySummary.owner_id == owner_id,
+            MessageMemorySummary.thread_id == thread_id,
             MessageMemorySummary.language == language,
         )
         .order_by(desc(MessageMemorySummary.created_at))
@@ -79,7 +77,7 @@ def _build_memory_summary_list(
             .filter(
                 MessageMemorySummary.user_id == user_id,
                 MessageMemorySummary.project_id == project_id,
-                MessageMemorySummary.owner_id == owner_id,
+                MessageMemorySummary.thread_id == thread_id,
             )
             .order_by(desc(MessageMemorySummary.created_at))
             .limit(limit)
@@ -99,11 +97,10 @@ async def build_memory_data(
     *,
     user_id: UUID,
     project_id: UUID,
-    owner_id: UUID | None,
+    thread_id: UUID,
     language: str,
     last_user_text: str,
     last_assistant_text: str,
-    rag_enabled: bool,
 ) -> dict[str, Any] | None:
     queries = _build_queries(last_user_text=last_user_text, last_assistant_text=last_assistant_text)
     if not queries:
@@ -113,91 +110,56 @@ async def build_memory_data(
         db,
         user_id=user_id,
         project_id=project_id,
-        owner_id=owner_id,
+        thread_id=thread_id,
         language=language,
-    ) if owner_id is not None else []
-
-    rag_rows: list[dict[str, Any]] = []
-    if rag_enabled:
-        try:
-            rag_cfg = settings_service.get_rag_settings(db, user_id)
-            embed_cfg = settings_service.get_embedding_config(db, user_id, "ragSearch")
-            if embed_cfg.provider and embed_cfg.model:
-                provider_config = credential_service.get_provider_config(db, user_id, embed_cfg.provider)
-                rag_items = await search_project(
-                    db,
-                    user_id=user_id,
-                    project_id=project_id,
-                    queries=queries,
-                    provider_config=provider_config,
-                    top_k_per_query=rag_cfg.top_k_per_query,
-                    neighbor_window=rag_cfg.neighbor_window,
-                )
-                for item in rag_items[:20]:
-                    text = str(item.get("text") or "").strip()
-                    if not text:
-                        continue
-                    rag_rows.append(
-                        {
-                            "objectType": str(item.get("object_type") or ""),
-                            "objectId": str(item.get("object_id") or ""),
-                            "fieldPath": str(item.get("field_path") or ""),
-                            "chunkIndex": _coerce_int(item.get("chunk_index")),
-                            "distance": _coerce_float(item.get("distance")),
-                            "text": text,
-                        }
-                    )
-        except Exception:
-            rag_rows = []
+    )
 
     history_rows: list[dict[str, Any]] = []
-    if owner_id is not None:
-        try:
-            memory_cfg = settings_service._get_settings(db, user_id)  # pylint: disable=protected-access
-            memory_items = await search_memory(
-                db,
-                user_id=user_id,
-                project_id=project_id,
-                owner_id=owner_id,
-                language=language,
-                queries=queries,
-                top_k_per_query=int(getattr(memory_cfg, "agent_memory_top_k_per_query", 20)),
-            )
-            for item in memory_items[:20]:
-                snippet = str(item.get("content") or "").strip()
-                if not snippet:
-                    continue
+    try:
+        memory_cfg = settings_service._get_settings(db, user_id)  # pylint: disable=protected-access
+        memory_items = await search_thread_memory(
+            db,
+            user_id=user_id,
+            project_id=project_id,
+            thread_id=thread_id,
+            language=language,
+            queries=queries,
+            top_k_per_query=int(getattr(memory_cfg, "agent_memory_top_k_per_query", 20)),
+        )
+        for item in memory_items[:20]:
+            snippet = str(item.get("content") or "").strip()
+            if not snippet:
+                continue
 
-                field_path = str(item.get("field_path") or "")
-                tool_call_id = _extract_tool_call_id(field_path)
-                history_row: dict[str, Any] = {
-                    "messageId": str(item.get("message_id") or ""),
-                    "role": str(item.get("role") or "assistant"),
-                    "matchedSnippet": snippet,
-                    "distance": _coerce_float(item.get("distance")),
-                    "match": {
-                        "kind": "tool_call" if tool_call_id else "content",
-                        "fieldPath": field_path,
-                        "chunkIndex": _coerce_int(item.get("chunk_index")),
-                    },
+            field_path = str(item.get("field_path") or "")
+            tool_call_id = _extract_tool_call_id(field_path)
+            history_row: dict[str, Any] = {
+                "messageId": str(item.get("message_id") or ""),
+                "role": str(item.get("role") or "assistant"),
+                "matchedSnippet": snippet,
+                "distance": _coerce_float(item.get("distance")),
+                "match": {
+                    "kind": "tool_call" if tool_call_id else "content",
+                    "fieldPath": field_path,
+                    "chunkIndex": _coerce_int(item.get("chunk_index")),
+                },
+            }
+            if tool_call_id:
+                history_row["toolCall"] = {
+                    "id": tool_call_id,
+                    "name": "",
+                    "status": "",
+                    "result": snippet,
                 }
-                if tool_call_id:
-                    history_row["toolCall"] = {
-                        "id": tool_call_id,
-                        "name": "",
-                        "status": "",
-                        "result": snippet,
-                    }
-                history_rows.append(history_row)
-        except Exception:
-            history_rows = []
+            history_rows.append(history_row)
+    except Exception:
+        history_rows = []
 
     memory = {
         "summaries": summaries,
-        "ragTexts": rag_rows,
         "historyChats": history_rows,
     }
-    if not memory["summaries"] and not memory["ragTexts"] and not memory["historyChats"]:
+    if not memory["summaries"] and not memory["historyChats"]:
         return None
     return memory
 
@@ -209,11 +171,10 @@ async def build_memory_prompt(
     prompt_bundle: PromptBundle,
     user_id: UUID,
     project_id: UUID,
-    owner_id: UUID | None,
+    thread_id: UUID,
     language: str,
     last_user_text: str,
     last_assistant_text: str,
-    rag_enabled: bool,
 ) -> str | None:
     if not prompt_bundle.has_memory_prompt:
         return None
@@ -222,11 +183,10 @@ async def build_memory_prompt(
         db,
         user_id=user_id,
         project_id=project_id,
-        owner_id=owner_id,
+        thread_id=thread_id,
         language=language,
         last_user_text=last_user_text,
         last_assistant_text=last_assistant_text,
-        rag_enabled=rag_enabled,
     )
     if memory is None:
         return None
@@ -317,7 +277,6 @@ def build_memory_summary_template_data(
         },
         "memory": {
             "summaries": [],
-            "ragTexts": [],
             "historyChats": [],
         },
         "memorySummary": {

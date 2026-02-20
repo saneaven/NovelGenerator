@@ -373,7 +373,6 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
     input,
     memory: {
       summaries: [],
-      ragTexts: [],
       historyChats: [],
     },
     variables,
@@ -412,16 +411,6 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
           status: 'accepted',
           result: 'Applied successfully',
         },
-      },
-    ];
-    templateData.memory.ragTexts = [
-      {
-        objectType: 'character',
-        objectId: '[placeholder-char-id]',
-        fieldPath: 'content',
-        chunkIndex: 0,
-        distance: 0.11,
-        text: 'Character profile suggests a deep fear of rivers after a childhood incident.',
       },
     ];
   }

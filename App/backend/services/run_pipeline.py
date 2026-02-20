@@ -30,7 +30,8 @@ from ..providers.contracts import (
 from ..providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from ..providers.registry import ProviderRegistry
 from ..services.credential_service import credential_service
-from ..services.memory_builder import build_memory_prompt
+from ..services.memory_builder import build_memory_prompt, render_memory_summary_prompt
+from ..services.memory_service import archive_thread_until, get_thread_memory_status
 from ..services.prompt_runtime.conversation_builder import build_from_runs
 from ..services.prompt_runtime.output_mode import resolve_output_mode
 from ..services.prompt_runtime.prompt_manager import PromptBundle, PromptManager, PromptTarget
@@ -69,6 +70,10 @@ class CreateContext:
 
 
 class RunPipeline:
+    MEMORY_PREFLIGHT_MAX_ARCHIVE_LOOPS = 3
+    MEMORY_PREFLIGHT_SAFETY_MARGIN = 256
+    MEMORY_PREFLIGHT_DEFAULT_RESERVED_COMPLETION = 2048
+
     def __init__(self, db_factory: Callable[[], Session], event_dispatcher: RuntimeEventDispatcher):
         self._db_factory = db_factory
         self._event_dispatcher = event_dispatcher
@@ -400,6 +405,350 @@ class RunPipeline:
             if role == "assistant" and text.strip():
                 last_assistant = text
         return last_user, last_assistant
+
+    @staticmethod
+    def _extract_message_content_text(data: dict[str, Any], language: str) -> str:
+        if not isinstance(data, dict):
+            return ""
+        lang_blob = data.get(language)
+        if not isinstance(lang_blob, dict) or "contentParts" not in lang_blob:
+            for value in data.values():
+                if isinstance(value, dict) and "contentParts" in value:
+                    lang_blob = value
+                    break
+        if not isinstance(lang_blob, dict):
+            return ""
+        parts = lang_blob.get("contentParts")
+        if not isinstance(parts, list):
+            return ""
+        out: list[str] = []
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            if str(part.get("type") or "") != "content":
+                continue
+            text = part.get("text")
+            if isinstance(text, str):
+                out.append(text)
+        return "".join(out).strip()
+
+    @staticmethod
+    def _tool_call_result_text(tool_call: RunToolCallModel) -> str:
+        if isinstance(tool_call.result, dict):
+            msg = tool_call.result.get("message")
+            if isinstance(msg, str) and msg.strip():
+                return msg
+            return json.dumps(tool_call.result, ensure_ascii=False)
+        if isinstance(tool_call.reason, str) and tool_call.reason.strip():
+            return tool_call.reason
+        return str(tool_call.status or "")
+
+    def _serialize_active_message_for_budget(
+        self,
+        *,
+        message: RunMessageModel,
+        language: str,
+        tool_calls: list[RunToolCallModel],
+    ) -> str:
+        text = self._extract_message_content_text(message.data if isinstance(message.data, dict) else {}, language)
+        chunks: list[str] = [f"role={message.role}"]
+        if text:
+            chunks.append(text)
+        for tool_call in tool_calls:
+            chunks.append(f"tool={tool_call.tool_name}")
+            chunks.append(f"status={tool_call.status}")
+            chunks.append(self._tool_call_result_text(tool_call))
+        return "\n".join(chunks)
+
+    def _build_archive_payload_for_message(
+        self,
+        *,
+        message: RunMessageModel,
+        language: str,
+        tool_calls: list[RunToolCallModel],
+    ) -> dict[str, Any]:
+        content = self._extract_message_content_text(message.data if isinstance(message.data, dict) else {}, language)
+        tc_payload: list[dict[str, Any]] = []
+        for tool_call in tool_calls:
+            tc_payload.append(
+                {
+                    "id": str(tool_call.llm_call_id or tool_call.id),
+                    "name": str(tool_call.tool_name or ""),
+                    "status": str(tool_call.status or ""),
+                    "arguments": tool_call.arguments if isinstance(tool_call.arguments, dict) else {},
+                    "result": tool_call.result if tool_call.result is not None else "",
+                    "reason": str(tool_call.reason or ""),
+                }
+            )
+        return {
+            "message_id": message.id,
+            "role": message.role,
+            "content": content,
+            "created_at": message.created_at.isoformat() if message.created_at else None,
+            "tool_calls": tc_payload,
+        }
+
+    def _format_summary_message_content(
+        self,
+        *,
+        content: str,
+        tool_calls: list[RunToolCallModel],
+    ) -> str:
+        chunks: list[str] = []
+        if content:
+            chunks.append(content)
+        for tool_call in tool_calls:
+            result = self._tool_call_result_text(tool_call)
+            chunks.append(
+                (
+                    f'<function_call name="{tool_call.tool_name}" status="{tool_call.status}">\n'
+                    f"<result>{result}</result>\n"
+                    "</function_call>"
+                )
+            )
+        return "\n\n".join(chunks).strip()
+
+    async def _run_summary_model(
+        self,
+        db: Session,
+        *,
+        user_id: UUID,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> str:
+        summary_cfg = settings_service.get_task_config(db, user_id, "summary")
+        provider_config = credential_service.get_provider_config(db, user_id, summary_cfg.provider)
+        if summary_cfg.provider == "custom":
+            provider_config = {
+                **provider_config,
+                "request_format": summary_cfg.advanced.get("request_format") or "openai_sdk",
+            }
+
+        provider = ProviderRegistry.get_provider(summary_cfg.provider, provider_config)
+        if not provider.validate_config():
+            raise RuntimeError(f"Invalid summary provider configuration: {summary_cfg.provider}")
+
+        stream = provider.stream_chat(
+            messages=[
+                {"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]},
+                {"role": "user", "content_parts": [{"type": "content", "text": user_prompt}]},
+            ],
+            model=summary_cfg.model,
+            temperature=float(summary_cfg.temperature),
+            tools=None,
+            tool_choice=None,
+            max_tokens=summary_cfg.max_output_tokens,
+            provider_preference=summary_cfg.advanced.get("provider_preference") if isinstance(summary_cfg.advanced, dict) else None,
+            thinking_config=summary_cfg.advanced.get("thinking_config") if isinstance(summary_cfg.advanced, dict) else None,
+            thinking_mode=summary_cfg.advanced.get("thinking_mode") if isinstance(summary_cfg.advanced, dict) else "off",
+            thinking_format=summary_cfg.advanced.get("thinking_format") if isinstance(summary_cfg.advanced, dict) else None,
+            request_format=summary_cfg.advanced.get("request_format") if isinstance(summary_cfg.advanced, dict) else None,
+            retry_config=settings_service.get_retry_config(db, user_id),
+            native_tool_call=False,
+        )
+
+        assembler = FallbackSnapshotAssembler(provider=summary_cfg.provider, model=summary_cfg.model)
+        native_final = None
+        merged_meta: MetaPayload | None = None
+
+        async for event in stream:
+            if event.kind == "delta" and event.delta is not None:
+                assembler.apply_delta(event.delta)
+            elif event.kind == "meta" and event.meta is not None:
+                assembler.apply_meta(event.meta)
+                merged_meta = merge_meta_payload(merged_meta, event.meta)
+            elif event.kind == "final_native" and event.final_native is not None:
+                native_final = event.final_native
+            elif event.kind == "error":
+                err = event.error or ProviderErrorPayload(message="Unknown provider error", status=None)
+                raise RuntimeError(err.message)
+
+        if hasattr(stream, "aclose"):
+            await stream.aclose()
+
+        if native_final is not None:
+            final_snapshot = patch_snapshot_with_meta(native_final, merged_meta)
+        else:
+            final_snapshot = assembler.finalize_or_raise()
+
+        summary_text = "".join(
+            str(part.get("text") or "")
+            for part in final_snapshot.content_parts
+            if isinstance(part, dict) and str(part.get("type") or "") == "content"
+        ).strip()
+        if not summary_text:
+            raise RuntimeError("Summary model returned empty content")
+        return summary_text
+
+    async def _prepare_thread_memory_preflight(
+        self,
+        db: Session,
+        *,
+        run: RunModel,
+        thread: Thread,
+        task_config: Any,
+        tokenizer_override: str | None,
+        prompt_bundle: PromptBundle,
+        renderer: PromptRenderer,
+    ) -> None:
+        context_window_tokens = int(task_config.context_window_tokens or 32000)
+        reserved_completion = (
+            int(task_config.max_output_tokens)
+            if task_config.max_output_tokens is not None
+            else self.MEMORY_PREFLIGHT_DEFAULT_RESERVED_COMPLETION
+        )
+        budget_tokens = context_window_tokens - reserved_completion - self.MEMORY_PREFLIGHT_SAFETY_MARGIN
+        if budget_tokens <= 0:
+            return
+
+        for _ in range(self.MEMORY_PREFLIGHT_MAX_ARCHIVE_LOOPS):
+            status = get_thread_memory_status(
+                db,
+                user_id=run.user_id,
+                project_id=run.project_id,
+                thread_id=thread.id,
+                language=run.language,
+            )
+            boundary_seq = status.get("archivedUntilSeqInThread")
+            active_q = (
+                db.query(RunMessageModel)
+                .filter(RunMessageModel.thread_id == thread.id)
+                .order_by(RunMessageModel.seq_in_thread.asc(), RunMessageModel.created_at.asc())
+            )
+            if boundary_seq is not None:
+                active_q = active_q.filter(RunMessageModel.seq_in_thread > int(boundary_seq))
+            active_messages = active_q.all()
+            if not active_messages:
+                return
+
+            assistant_ids = [msg.id for msg in active_messages if msg.role == "assistant"]
+            tool_calls_by_assistant: dict[UUID, list[RunToolCallModel]] = {}
+            if assistant_ids:
+                tc_rows = (
+                    db.query(RunToolCallModel)
+                    .filter(
+                        RunToolCallModel.thread_id == thread.id,
+                        RunToolCallModel.assistant_message_id.in_(assistant_ids),
+                    )
+                    .order_by(RunToolCallModel.call_seq.asc())
+                    .all()
+                )
+                for row in tc_rows:
+                    if row.assistant_message_id is None:
+                        continue
+                    tool_calls_by_assistant.setdefault(row.assistant_message_id, []).append(row)
+
+            token_map: dict[UUID, int] = {}
+            active_total_tokens = 0
+            for msg in active_messages:
+                row_text = self._serialize_active_message_for_budget(
+                    message=msg,
+                    language=run.language,
+                    tool_calls=tool_calls_by_assistant.get(msg.id, []),
+                )
+                row_tokens = await self._count_tokens(
+                    db,
+                    user_id=run.user_id,
+                    provider=task_config.provider,
+                    model=task_config.model,
+                    text=row_text,
+                    tokenizer_override=tokenizer_override,
+                )
+                token_map[msg.id] = row_tokens
+                active_total_tokens += row_tokens
+
+            if active_total_tokens <= budget_tokens:
+                return
+
+            current_user_message_id: UUID | None = None
+            if active_messages:
+                last_active = active_messages[-1]
+                if last_active.run_id == run.id and last_active.role == "user":
+                    current_user_message_id = last_active.id
+
+            archivable_messages = [
+                msg
+                for msg in active_messages
+                if current_user_message_id is None or msg.id != current_user_message_id
+            ]
+            if not archivable_messages:
+                return
+
+            overflow = active_total_tokens - budget_tokens
+            removed_tokens = 0
+            boundary_message_id: UUID | None = None
+            for msg in archivable_messages:
+                removed_tokens += int(token_map.get(msg.id, 0))
+                boundary_message_id = msg.id
+                if removed_tokens >= overflow:
+                    break
+            if boundary_message_id is None:
+                return
+
+            boundary_index = next(
+                (idx for idx, msg in enumerate(active_messages) if msg.id == boundary_message_id),
+                -1,
+            )
+            if boundary_index < 0:
+                return
+            archive_rows = active_messages[: boundary_index + 1]
+            if not archive_rows:
+                return
+
+            archived_messages_payload: list[dict[str, Any]] = []
+            summary_messages: list[dict[str, Any]] = []
+            for msg in archive_rows:
+                tool_calls = tool_calls_by_assistant.get(msg.id, [])
+                payload = self._build_archive_payload_for_message(
+                    message=msg,
+                    language=run.language,
+                    tool_calls=tool_calls,
+                )
+                archived_messages_payload.append(payload)
+                summary_messages.append(
+                    {
+                        "role": msg.role,
+                        "content": self._format_summary_message_content(
+                            content=str(payload.get("content") or ""),
+                            tool_calls=tool_calls,
+                        ),
+                        "messageId": str(msg.id),
+                        "createdAt": msg.created_at.isoformat() if msg.created_at else None,
+                    }
+                )
+
+            project_data = prompt_bundle.template_data.get("project")
+            if not isinstance(project_data, dict):
+                project_data = {}
+            variables = prompt_bundle.template_data.get("variables")
+            if not isinstance(variables, dict):
+                variables = {}
+
+            summary_system_prompt, summary_user_prompt = render_memory_summary_prompt(
+                renderer,
+                project_data=project_data,
+                language=run.language,
+                previous_summary=str(status.get("lastSummaryText") or ""),
+                archive_until_message_id=str(boundary_message_id),
+                messages=summary_messages,
+                variables=variables,
+            )
+            summary_text = await self._run_summary_model(
+                db,
+                user_id=run.user_id,
+                system_prompt=summary_system_prompt,
+                user_prompt=summary_user_prompt,
+            )
+            await archive_thread_until(
+                db,
+                user_id=run.user_id,
+                project_id=run.project_id,
+                thread_id=thread.id,
+                language=run.language,
+                archive_until_message_id=boundary_message_id,
+                summary_text=summary_text,
+                archived_messages=archived_messages_payload,
+            )
 
     async def start_run(
         self,
@@ -898,7 +1247,7 @@ class RunPipeline:
                             "config": {"mainLanguage": run.language, "displayLanguage": run.language},
                             "project": {},
                             "input": {"userMessage": "", "agentMessage": "", "toolResults": []},
-                            "memory": {"summaries": [], "ragTexts": [], "historyChats": []},
+                            "memory": {"summaries": [], "historyChats": []},
                         },
                         system_prompt=system_prompt,
                         prefill=prefill,
@@ -925,10 +1274,30 @@ class RunPipeline:
         if preset_id is None:
             raise RuntimeError("No active preset selected")
 
+        renderer: PromptRenderer | None = None
         prompt_manager: PromptManager | None = None
         if prompt_bundle is not None:
             renderer = PromptRenderer(db, user_id=run.user_id, preset_id=preset_id)
             prompt_manager = PromptManager(renderer)
+
+        task_type = prompt_bundle.target.task_type if prompt_bundle else PromptManager.resolve_task_type(thread=thread, run=run)
+        task_config = settings_service.get_task_config(db, run.user_id, task_type)
+        tokenizer_override = task_config.advanced.get("tokenizer_override") if isinstance(task_config.advanced, dict) else None
+
+        if prompt_bundle is not None and renderer is not None and prompt_bundle.has_memory_prompt:
+            try:
+                await self._prepare_thread_memory_preflight(
+                    db,
+                    run=run,
+                    thread=thread,
+                    task_config=task_config,
+                    tokenizer_override=tokenizer_override,
+                    prompt_bundle=prompt_bundle,
+                    renderer=renderer,
+                )
+            except Exception:
+                # Fail-open: memory preflight failure must not fail the run.
+                pass
 
         last_user_text, last_assistant_text = self._extract_last_texts(conversation)
         memory_prompt: str | None = None
@@ -939,11 +1308,10 @@ class RunPipeline:
                 prompt_bundle=prompt_bundle,
                 user_id=run.user_id,
                 project_id=run.project_id,
-                owner_id=thread.owner_id,
+                thread_id=thread.id,
                 language=run.language,
                 last_user_text=last_user_text,
                 last_assistant_text=last_assistant_text,
-                rag_enabled=bool(getattr(settings, "rag_search_enabled", False)),
             )
         memory_message_ref: dict[str, Any] | None = None
         if memory_prompt:
@@ -952,10 +1320,6 @@ class RunPipeline:
                 "content_parts": [{"type": "content", "text": memory_prompt}],
             }
             conversation.insert(0, memory_message_ref)
-
-        task_type = prompt_bundle.target.task_type if prompt_bundle else PromptManager.resolve_task_type(thread=thread, run=run)
-        task_config = settings_service.get_task_config(db, run.user_id, task_type)
-        tokenizer_override = task_config.advanced.get("tokenizer_override") if isinstance(task_config.advanced, dict) else None
 
         async def _token_counter(text: str) -> int:
             return await self._count_tokens(
@@ -981,11 +1345,10 @@ class RunPipeline:
                 prompt_bundle=prompt_bundle,
                 user_id=run.user_id,
                 project_id=run.project_id,
-                owner_id=thread.owner_id,
+                thread_id=thread.id,
                 language=run.language,
                 last_user_text=new_user,
                 last_assistant_text=new_asst,
-                rag_enabled=bool(getattr(settings, "rag_search_enabled", False)),
             )
             memory_message_ref = None
             if new_mem:

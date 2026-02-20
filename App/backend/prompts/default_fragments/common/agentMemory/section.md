@@ -1,7 +1,6 @@
 {% set hasSummaries = (memory.summaries|length > 0) %}
-{% set hasRagTexts = (memory.ragTexts|length > 0) %}
 {% set hasHistoryChats = (memory.historyChats|length > 0) %}
-{% if hasSummaries or hasRagTexts or hasHistoryChats %}
+{% if hasSummaries or hasHistoryChats %}
 # Memory
 
 {% if hasSummaries %}
@@ -9,17 +8,6 @@
 
 {% for this in memory.summaries %}
 {{ this }}
-
-{% endfor %}
-{% endif %}
-
-{% if hasRagTexts %}
-## Relevant Project Context
-
-{% for this in memory.ragTexts %}
-<rag_text object_type="{{ this.objectType }}" object_id="{{ this.objectId }}" field_path="{{ this.fieldPath }}" chunk_index="{{ this.chunkIndex }}">
-{{ this.text }}
-</rag_text>
 
 {% endfor %}
 {% endif %}

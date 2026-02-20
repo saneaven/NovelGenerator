@@ -429,7 +429,6 @@ class PromptManager:
             "feedback": self._build_feedback_data(payload=payload, journey_target_ids=journey_target_ids),
             "memory": {
                 "summaries": [],
-                "ragTexts": [],
                 "historyChats": [],
             },
             "variables": variables if isinstance(variables, dict) else {},
@@ -529,7 +528,7 @@ class PromptManager:
 
         template_data = {
             **bundle.template_data,
-            "memory": memory if isinstance(memory, dict) else {"summaries": [], "ragTexts": [], "historyChats": []},
+            "memory": memory if isinstance(memory, dict) else {"summaries": [], "historyChats": []},
         }
         rendered = self._renderer.render_memory_prompt(
             task_type=bundle.target.task_type,

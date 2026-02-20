@@ -95,6 +95,7 @@ function toThreadInfo(raw: Record<string, unknown>): ThreadInfo {
     ownerId: raw.owner_id ? String(raw.owner_id) : null,
     journeyKind: raw.journey_kind ? String(raw.journey_kind) : null,
     status: String(raw.status) as ThreadStatus,
+    memoryBoundaryMessageId: raw.memory_boundary_message_id ? String(raw.memory_boundary_message_id) : null,
   };
   if (Object.prototype.hasOwnProperty.call(raw, 'last_error')) {
     out.lastError = (raw.last_error ?? null) as string | null;

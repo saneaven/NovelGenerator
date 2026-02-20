@@ -1087,7 +1087,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                 </div>
               </div>
 
-              {selectedAgent?.archived_until_message_id === message.source.id && (
+              {thread?.memoryBoundaryMessageId === message.source.id && (
                 <div className="agent-archive-divider" role="separator" aria-label="Memory boundary">
                   <div className="agent-archive-divider-line" />
                   <span className="agent-archive-divider-label">Memory boundary</span>

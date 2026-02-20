@@ -1,13 +1,10 @@
 """Message long-term memory models (pgvector-backed).
 
 These tables store:
-- Rolling summaries of archived conversations (agent or sub-agent).
-- Vector index for archived messages (separate from project knowledge RAG).
+- Rolling summaries of archived conversations scoped to a thread.
+- Vector index for archived thread messages.
 
 Embedding profile is configured in `user_settings.embedding_configs["agentMemory"]`.
-
-`owner_id` is a unified identifier: it equals `agent.id` for root-agent memory
-and `sub_agent_definition.id` for sub-agent memory (no FK constraint).
 """
 
 from __future__ import annotations
@@ -17,7 +14,7 @@ import os
 import sys
 import uuid
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, Index
+from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -34,16 +31,18 @@ class MessageMemorySummary(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     project_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    owner_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    thread_id = Column(UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False, index=True)
 
     language = Column(String(50), nullable=False)
-    to_message_id = Column(UUID(as_uuid=True), nullable=False)
+    to_message_id = Column(UUID(as_uuid=True), ForeignKey("run_messages.id", ondelete="CASCADE"), nullable=False)
+    to_seq_in_thread = Column(BigInteger, nullable=True)
     summary_text = Column(Text, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     __table_args__ = (
-        Index("ix_message_memory_summaries_owner_to_message", "owner_id", "to_message_id"),
+        Index("ix_message_memory_summaries_thread_to_message", "thread_id", "to_message_id"),
+        Index("ix_message_memory_summaries_thread_to_seq", "thread_id", "to_seq_in_thread"),
     )
 
 
@@ -53,9 +52,9 @@ class MessageRagSource(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     project_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    owner_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    thread_id = Column(UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    message_id = Column(UUID(as_uuid=True), nullable=False)
+    message_id = Column(UUID(as_uuid=True), ForeignKey("run_messages.id", ondelete="CASCADE"), nullable=False)
     language = Column(String(50), nullable=False)
 
     content_hash = Column(String(64), nullable=True)
@@ -68,8 +67,8 @@ class MessageRagSource(Base):
     chunks = relationship("MessageRagChunk", back_populates="source", cascade="all, delete-orphan")
 
     __table_args__ = (
-        UniqueConstraint("user_id", "owner_id", "message_id", "language", name="uq_message_rag_source_identity"),
-        Index("ix_message_rag_sources_owner_language", "owner_id", "language"),
+        UniqueConstraint("user_id", "thread_id", "message_id", "language", name="uq_message_rag_source_identity"),
+        Index("ix_message_rag_sources_thread_language", "thread_id", "language"),
     )
 
 

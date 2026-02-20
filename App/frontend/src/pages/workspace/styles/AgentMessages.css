@@ -120,10 +120,6 @@
     }
 }
 
-.agent-message.same-role-as-previous {
-    margin-top: calc(var(--spacing-lg) * -1);
-}
-
 .agent-message .message-wrapper {
     display: flex;
     flex-direction: column;

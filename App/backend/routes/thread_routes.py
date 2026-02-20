@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user
 from ..database import SessionLocal, get_db
 from ..models.db_models import Project, RunMessageModel, RunModel, RunToolCallModel, Thread, User
+from ..models.memory_models import MessageMemorySummary
 from ..providers.sse_encoder import encode_sse
 from ..schemas.thread_api import (
     ChatRequest,
@@ -588,6 +589,21 @@ async def list_thread_messages(
         .all()
     )
 
+    boundary_row = (
+        db.query(MessageMemorySummary.to_message_id)
+        .filter(
+            MessageMemorySummary.user_id == current_user.id,
+            MessageMemorySummary.project_id == thread.project_id,
+            MessageMemorySummary.thread_id == thread.id,
+        )
+        .order_by(
+            MessageMemorySummary.to_seq_in_thread.desc().nullslast(),
+            MessageMemorySummary.created_at.desc(),
+        )
+        .first()
+    )
+    memory_boundary_message_id = boundary_row[0] if boundary_row else None
+
     return ThreadMessagesResponse(
         thread={
             "id": thread.id,
@@ -598,6 +614,7 @@ async def list_thread_messages(
             "status": thread.status,
             "created_at": thread.created_at,
             "updated_at": thread.updated_at,
+            "memory_boundary_message_id": memory_boundary_message_id,
         },
         latest_run={
             "id": latest_run.id,

@@ -149,24 +149,6 @@ export const UNIFIED_SCHEMA = {
       desc: "Rolling memory summaries in chronological order",
       example: ["Facts: ...\nDecisions: ...\nOpen Questions: ..."] as string[],
     },
-    ragTexts: {
-      desc: "Retrieved project RAG snippets",
-      example: [{
-        objectType: "character",
-        objectId: "char-1",
-        fieldPath: "content",
-        chunkIndex: 0,
-        distance: 0.12,
-        text: "A Saxon warrior raised by Danes...",
-      }] as Array<{
-        objectType: string;
-        objectId: string;
-        fieldPath: string;
-        chunkIndex?: number | null;
-        distance?: number | null;
-        text: string;
-      }>,
-    },
     historyChats: {
       desc: "Retrieved archived chat snippets",
       example: [{

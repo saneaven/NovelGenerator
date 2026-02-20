@@ -90,8 +90,20 @@ class ToolCallResponse(BaseModel):
     updated_at: datetime
 
 
+class ThreadInfoResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    thread_type: Literal["agent", "subAgent", "journey"]
+    owner_id: UUID | None
+    journey_kind: str | None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    memory_boundary_message_id: UUID | None = None
+
+
 class ThreadMessagesResponse(BaseModel):
-    thread: dict[str, Any]
+    thread: ThreadInfoResponse
     latest_run: dict[str, Any] | None
     messages: list[MessageResponse]
     tool_calls: list[ToolCallResponse]
