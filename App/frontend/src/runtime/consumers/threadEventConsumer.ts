@@ -52,6 +52,7 @@ export class ThreadEventConsumer {
   private readonly autoContinueLockByThread = new Set<string>();
   private readonly inFlightResumeByThread = new Set<string>();
   private readonly autoAcceptLockByThread = new Set<string>();
+  private readonly autoContinuedAssistantByThread = new Map<string, string>();
   private disposed = false;
 
   constructor(projectId: string) {
@@ -65,6 +66,7 @@ export class ThreadEventConsumer {
     this.autoContinueLockByThread.clear();
     this.inFlightResumeByThread.clear();
     this.autoAcceptLockByThread.clear();
+    this.autoContinuedAssistantByThread.clear();
   }
 
   private ensureThread(threadId: string, partial?: Partial<ThreadInfo>): void {
@@ -381,18 +383,25 @@ export class ThreadEventConsumer {
     this.autoContinueLockByThread.add(threadId);
     try {
       const store = useThreadStore.getState();
+      const thread = store.threadsById[threadId];
+      const latestRunId = thread?.latestRunId ?? null;
       const messages = store.getMessages(threadId);
       const latestAssistant = [...messages]
         .sort((a, b) => b.seqInThread - a.seqInThread)
         .find((m) => m.role === 'assistant');
       if (!latestAssistant) return;
 
+      // Ignore stale assistants from older runs.
+      if (latestRunId && latestAssistant.runId && latestAssistant.runId !== latestRunId) return;
+
+      // Prevent repeated auto-continue on the same assistant message.
+      if (this.autoContinuedAssistantByThread.get(threadId) === latestAssistant.id) return;
+
       const toolCalls = store.getToolCallsForAssistantMessage(latestAssistant.id);
       if (toolCalls.length === 0) return;
 
       if (!toolCalls.every((tc) => tc.status === 'applied' || tc.status === 'failed')) return;
 
-      const thread = store.threadsById[threadId];
       const blockedByPausedOrError =
         thread?.status === 'paused'
         || thread?.status === 'error'
@@ -402,6 +411,7 @@ export class ThreadEventConsumer {
 
       if (this.inFlightResumeByThread.has(threadId)) return;
       this.inFlightResumeByThread.add(threadId);
+      this.autoContinuedAssistantByThread.set(threadId, latestAssistant.id);
       try {
         const response = await threadService.chat(threadId, { input_text: '' });
         store.setThreadRuntime(threadId, {

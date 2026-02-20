@@ -100,6 +100,7 @@ function isBlockingToolCallStatus(status: string | undefined): boolean {
 function summarizeToolCallBlocking(
   messageIds: string[],
   toolCallsByMessageId: Record<string, ThreadToolCall[] | undefined>,
+  latestRunId?: string | null,
 ): ToolCallBlockingSummary {
   let count = 0;
   let firstMessageId: string | undefined;
@@ -107,6 +108,8 @@ function summarizeToolCallBlocking(
   for (const messageId of messageIds) {
     const toolCalls = toolCallsByMessageId[messageId] ?? [];
     for (const toolCall of toolCalls) {
+      // Only block sending for unresolved tool calls from the latest run.
+      if (latestRunId && toolCall.runId && toolCall.runId !== latestRunId) continue;
       if (!isBlockingToolCallStatus(toolCall.status)) continue;
       count += 1;
       if (!firstMessageId) {
@@ -425,6 +428,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     const unresolvedToolCalls = summarizeToolCallBlocking(
       orderedMessages.map((message) => message.id),
       toolCallsByMessageId,
+      thread?.latestRunId ?? null,
     );
     const running = isLoading;
 
@@ -442,7 +446,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       reason,
       unresolvedToolCalls,
     };
-  }, [selectedAgentId, orderedMessages, toolCallsByMessageId, isLoading]);
+  }, [selectedAgentId, orderedMessages, toolCallsByMessageId, isLoading, thread?.latestRunId]);
 
   const sendBlockedReason = useMemo(() => {
     if (!sendBlockingState.blocked || !sendBlockingState.reason) return null;
