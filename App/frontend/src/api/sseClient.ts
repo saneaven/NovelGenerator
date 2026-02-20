@@ -95,7 +95,48 @@ interface ConnectOptions {
   onReconnect?: () => Promise<void> | void;
 }
 
-function parseSseFrame(frame: string): ProjectSSEEvent | null {
+const STREAM_CURSOR_KEY_PREFIX = 'projectStreamCursor:';
+
+function streamCursorKey(projectId: string): string {
+  return `${STREAM_CURSOR_KEY_PREFIX}${projectId}`;
+}
+
+function readStreamCursor(projectId: string): number | null {
+  try {
+    const raw = sessionStorage.getItem(streamCursorKey(projectId));
+    if (!raw) return null;
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStreamCursor(projectId: string, eventId: number): void {
+  if (!Number.isInteger(eventId) || eventId < 0) return;
+  try {
+    sessionStorage.setItem(streamCursorKey(projectId), String(eventId));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function buildStreamUrl(projectId: string, afterEventId: number | null): string {
+  const params = new URLSearchParams();
+  if (afterEventId !== null) {
+    params.set('after_event_id', String(afterEventId));
+  } else {
+    params.set('start_from', 'latest');
+  }
+  return `${API_BASE_URL}/api/v1/projects/${projectId}/stream?${params.toString()}`;
+}
+
+type ParsedSseFrame = {
+  event: ProjectSSEEvent;
+  eventId: number | null;
+};
+
+function parseSseFrame(frame: string): ParsedSseFrame | null {
   const lines = frame
     .split('\n')
     .map((line) => line.trimEnd())
@@ -104,8 +145,17 @@ function parseSseFrame(frame: string): ProjectSSEEvent | null {
   if (lines.length === 0) return null;
 
   let eventName = 'message';
+  let eventId: number | null = null;
   const dataLines: string[] = [];
   for (const line of lines) {
+    if (line.startsWith('id:')) {
+      const raw = line.slice(3).trim();
+      const parsed = Number.parseInt(raw, 10);
+      if (Number.isInteger(parsed) && parsed >= 0) {
+        eventId = parsed;
+      }
+      continue;
+    }
     if (line.startsWith('event:')) {
       eventName = line.slice(6).trim();
       continue;
@@ -119,7 +169,10 @@ function parseSseFrame(frame: string): ProjectSSEEvent | null {
   const payload = dataLines.join('\n');
   try {
     const parsed = JSON.parse(payload) as Record<string, unknown>;
-    return { event: eventName, data: parsed } as ProjectSSEEvent;
+    return {
+      event: { event: eventName, data: parsed } as ProjectSSEEvent,
+      eventId,
+    };
   } catch (error) {
     console.warn('Discarding malformed SSE payload', { eventName, payload, error });
     return null;
@@ -134,7 +187,7 @@ function reconnectDelayMs(attempt: number): number {
 async function openAndReadStream(
   url: string,
   signal: AbortSignal,
-  onEvent: (event: ProjectSSEEvent) => void,
+  onEvent: (event: ProjectSSEEvent, eventId: number | null) => void,
 ): Promise<void> {
   const token = apiClient.getAuthToken();
   const headers: HeadersInit = {
@@ -172,7 +225,7 @@ async function openAndReadStream(
       const frame = buffer.slice(0, boundary);
       buffer = buffer.slice(boundary + 2);
       const event = parseSseFrame(frame);
-      if (event) onEvent(event);
+      if (event) onEvent(event.event, event.eventId);
     }
   }
 }
@@ -183,14 +236,19 @@ export async function connectProjectStream(
   signal: AbortSignal,
   options?: ConnectOptions,
 ): Promise<void> {
-  const streamUrl = `${API_BASE_URL}/api/v1/projects/${projectId}/stream`;
+  let lastEventId = readStreamCursor(projectId);
   let attempt = 0;
 
   while (!signal.aborted) {
     try {
       let receivedEvent = false;
-      await openAndReadStream(streamUrl, signal, (event) => {
+      const streamUrl = buildStreamUrl(projectId, lastEventId);
+      await openAndReadStream(streamUrl, signal, (event, eventId) => {
         receivedEvent = true;
+        if (eventId !== null) {
+          lastEventId = eventId;
+          writeStreamCursor(projectId, eventId);
+        }
         onEvent(event);
       });
       if (signal.aborted) return;

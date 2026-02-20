@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { ContentPart, ToolCallMetadata } from '../../types/chat';
@@ -64,6 +64,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
 }) => {
   const { t } = useTranslation();
   const [isApplying, setIsApplying] = useState(false);
+  const hydratedThreadIdsRef = useRef<Set<string>>(new Set());
 
   const { thread, threadMessages, toolCallsById, toolCallIdsByAssistantMessageId } = useThreadStore(
     useShallow((state) => ({
@@ -75,6 +76,45 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   );
 
   const threadStatus = thread?.status ?? 'done';
+
+  useEffect(() => {
+    hydratedThreadIdsRef.current.clear();
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!childThreadId) return;
+
+    const store = useThreadStore.getState();
+    const existingMessages = store.getMessages(childThreadId);
+    if (hydratedThreadIdsRef.current.has(childThreadId) || existingMessages.length > 0) {
+      hydratedThreadIdsRef.current.add(childThreadId);
+      return;
+    }
+
+    let cancelled = false;
+    void threadService
+      .listMessages(childThreadId)
+      .then((response) => {
+        if (cancelled) return;
+        const nextStore = useThreadStore.getState();
+        nextStore.upsertThread(response.thread);
+        for (const msg of response.messages) {
+          nextStore.upsertMessage(msg);
+        }
+        for (const tc of response.toolCalls) {
+          nextStore.upsertToolCall(tc);
+        }
+        hydratedThreadIdsRef.current.add(childThreadId);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.warn('Failed to hydrate sub-agent thread messages', { childThreadId, error });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [childThreadId]);
 
   const messages = useMemo(() => {
     if (!threadMessages) return [];

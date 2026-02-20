@@ -294,6 +294,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const isUserNearBottomRef = useRef(true);
+  const hydratedThreadIdsRef = useRef<Set<string>>(new Set());
 
   const threadId = selectedAgent?.thread_id ?? null;
   const isAgentVisible = isDesktop ? true : agentVisibleState;
@@ -482,6 +483,45 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     setEditingText('');
     setTranslatingByMessageId({});
   }, [selectedAgentId, threadId]);
+
+  useEffect(() => {
+    hydratedThreadIdsRef.current.clear();
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!threadId) return;
+
+    const store = useThreadStore.getState();
+    const existingMessages = store.getMessages(threadId);
+    if (hydratedThreadIdsRef.current.has(threadId) || existingMessages.length > 0) {
+      hydratedThreadIdsRef.current.add(threadId);
+      return;
+    }
+
+    let cancelled = false;
+    void threadService
+      .listMessages(threadId)
+      .then((response) => {
+        if (cancelled) return;
+        const nextStore = useThreadStore.getState();
+        nextStore.upsertThread(response.thread);
+        for (const msg of response.messages) {
+          nextStore.upsertMessage(msg);
+        }
+        for (const tc of response.toolCalls) {
+          nextStore.upsertToolCall(tc);
+        }
+        hydratedThreadIdsRef.current.add(threadId);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.warn('Failed to hydrate thread messages', { threadId, error });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [threadId]);
 
   useEffect(() => {
     if (selectedContextIds.length === 0) return;

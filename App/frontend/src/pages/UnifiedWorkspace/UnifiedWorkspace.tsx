@@ -11,7 +11,9 @@ import { useNotificationStore } from '../../store/notificationStore';
 import { useSettings } from '../../store/settingsStore';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { useErrorStore } from '../../store/errorStore';
+import { useThreadStore } from '../../store/threadStore';
 import { notificationService } from '../../api/notificationService';
+import { threadService } from '../../api/threadService';
 import { translationService } from '../../api/unifiedObjectService';
 import { startProjectRuntime, stopProjectRuntime } from '../../runtime/runtimeStream';
 
@@ -71,6 +73,7 @@ const UnifiedWorkspace: React.FC = () => {
   const unifiedObjects = useUnifiedObjectStore(state => state.objects);
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const hydrateNotifications = useNotificationStore((state) => state.hydrate);
+  const upsertThreadsRuntime = useThreadStore((state) => state.upsertThreadsRuntime);
 
   // NovelEditor specific stores
   const selectedChapterByProject = useNovelEditorStore(state => state.selectedChapterByProject);
@@ -216,6 +219,23 @@ const UnifiedWorkspace: React.FC = () => {
       setCurrentProject(projectId);
     }
   }, [projectId, setCurrentProject]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    void threadService
+      .listProjectThreadRuntime(projectId)
+      .then((threads) => {
+        if (cancelled) return;
+        upsertThreadsRuntime(threads);
+      })
+      .catch((error) => {
+        console.warn('Failed to hydrate thread runtime', { projectId, error });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, upsertThreadsRuntime]);
 
   useEffect(() => {
     if (!projectId) return;

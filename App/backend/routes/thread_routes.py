@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
@@ -434,16 +434,32 @@ async def chat_thread(
 @router.get("/projects/{project_id}/stream")
 async def stream_project_events(
     project_id: UUID,
+    after_event_id: int | None = Query(default=None, ge=0),
+    start_from: Literal["latest", "history"] = Query(default="latest"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _owned_project_or_404(db, project_id=project_id, user_id=current_user.id)
 
     async def event_gen():
-        async for event in run_event_bus.subscribe(f"project:{project_id}"):
+        async for envelope in run_event_bus.subscribe(
+            f"project:{project_id}",
+            after_event_id=after_event_id,
+            start_from=start_from,
+        ):
+            event_id: int | None = None
+            event: dict[str, Any]
+            if isinstance(envelope, dict) and isinstance(envelope.get("event"), dict):
+                event = envelope.get("event") or {}
+                raw_event_id = envelope.get("event_id")
+                if isinstance(raw_event_id, int):
+                    event_id = raw_event_id
+            else:
+                event = envelope if isinstance(envelope, dict) else {}
+
             name = str(event.get("event") or "message")
             data = event.get("data") if isinstance(event.get("data"), dict) else {}
-            yield encode_sse(name, data)
+            yield encode_sse(name, data, event_id=event_id)
 
     return StreamingResponse(
         event_gen(),

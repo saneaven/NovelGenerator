@@ -107,8 +107,6 @@ function statusLabel(status: DisplayStatus): string {
 const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   threadId,
   label,
-  status: notificationStatus,
-  message: notificationMessage,
   warning,
   projectId,
   onClose,
@@ -127,13 +125,12 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const threadMessages = useThreadStore(
     useShallow((s) => s.messagesByThreadId[threadId]),
   );
-  const { toolCallsById, toolCallIdsByAssistantMessageId, threadStatus, threadError, isStreamActive } =
+  const { toolCallsById, toolCallIdsByAssistantMessageId, threadStatus, isStreamActive } =
     useThreadStore(
       useShallow((s) => ({
         toolCallsById: s.toolCallsById,
         toolCallIdsByAssistantMessageId: s.toolCallIdsByAssistantMessageId,
         threadStatus: s.threadsById[threadId]?.status,
-        threadError: s.threadsById[threadId]?.lastError ?? null,
         isStreamActive: Boolean(s.activeStreamByThread[threadId]),
       })),
     );
@@ -437,7 +434,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
           <div className="journey-detail-empty">No messages yet.</div>
         )}
 
-        {timelineMessages.map((message, idx) => {
+        {timelineMessages.map((message) => {
           if (message.role === 'user') return renderUserMessage(message);
           if (message.role === 'assistant') {
             const isLastAssistant = message.id === lastAssistantMessage?.id;

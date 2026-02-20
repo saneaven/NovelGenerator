@@ -5,19 +5,26 @@ from collections import deque
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Protocol
+from typing import Any, Literal, Protocol
 
 
 class RunEventBus(Protocol):
-    async def publish(self, channel_key: str, event: dict) -> None: ...
-    def subscribe(self, channel_key: str) -> AsyncIterator[dict]: ...
+    async def publish(self, channel_key: str, event: dict[str, Any]) -> None: ...
+    def subscribe(
+        self,
+        channel_key: str,
+        *,
+        after_event_id: int | None = None,
+        start_from: Literal["history", "latest"] = "history",
+    ) -> AsyncIterator[dict[str, Any]]: ...
 
 
 @dataclass
 class _Channel:
     subscribers: set[asyncio.Queue] = field(default_factory=set)
-    history: deque[dict] = field(default_factory=deque)
+    history: deque[dict[str, Any]] = field(default_factory=deque)
     updated_at: datetime = field(default_factory=datetime.utcnow)
+    next_event_id: int = 1
 
 
 class InMemoryRunEventBus:
@@ -55,7 +62,7 @@ class InMemoryRunEventBus:
 
         self._cleanup_task = asyncio.create_task(_cleanup_loop())
 
-    async def publish(self, channel_key: str, event: dict) -> None:
+    async def publish(self, channel_key: str, event: dict[str, Any]) -> None:
         await self._ensure_cleanup_task()
         key = self._normalize_channel_key(channel_key)
         async with self._lock:
@@ -63,15 +70,18 @@ class InMemoryRunEventBus:
             if channel is None:
                 channel = _Channel()
                 self._channels[key] = channel
+            event_id = channel.next_event_id
+            channel.next_event_id += 1
+            envelope = {"event_id": event_id, "event": event}
             channel.updated_at = datetime.utcnow()
-            channel.history.append(event)
+            channel.history.append(envelope)
             while len(channel.history) > self._max_history:
                 channel.history.popleft()
             subscribers = list(channel.subscribers)
 
         for queue in subscribers:
             try:
-                queue.put_nowait(event)
+                queue.put_nowait(envelope)
             except asyncio.QueueFull:
                 # Backpressure policy: drop oldest then enqueue latest.
                 try:
@@ -79,24 +89,41 @@ class InMemoryRunEventBus:
                 except Exception:
                     pass
                 try:
-                    queue.put_nowait(event)
+                    queue.put_nowait(envelope)
                 except Exception:
                     pass
 
-    def subscribe(self, channel_key: str) -> AsyncIterator[dict]:
-        async def _generator() -> AsyncIterator[dict]:
+    def subscribe(
+        self,
+        channel_key: str,
+        *,
+        after_event_id: int | None = None,
+        start_from: Literal["history", "latest"] = "history",
+    ) -> AsyncIterator[dict[str, Any]]:
+        async def _generator() -> AsyncIterator[dict[str, Any]]:
             await self._ensure_cleanup_task()
             key = self._normalize_channel_key(channel_key)
+            if start_from not in {"history", "latest"}:
+                raise ValueError("start_from must be 'history' or 'latest'")
 
             queue: asyncio.Queue = asyncio.Queue(maxsize=256)
-            backlog: list[dict] = []
+            backlog: list[dict[str, Any]] = []
 
             async with self._lock:
                 channel = self._channels.get(key)
                 if channel is None:
                     channel = _Channel()
                     self._channels[key] = channel
-                backlog = list(channel.history)
+                if after_event_id is not None:
+                    backlog = [
+                        item
+                        for item in channel.history
+                        if int(item.get("event_id", 0)) > after_event_id
+                    ]
+                elif start_from == "latest":
+                    backlog = []
+                else:
+                    backlog = list(channel.history)
                 channel.subscribers.add(queue)
                 channel.updated_at = datetime.utcnow()
 
