@@ -225,15 +225,17 @@ def build_from_runs(
             conversation.append(msg)
 
             if row.role == "assistant" and row.id in kept_assistant_for_tools:
+                payloads = []
                 for tool in terminal_tools_by_assistant.get(row.id, []):
                     payload = _tool_result_from_tool_call(tool)
-                    if payload is None:
-                        continue
+                    if payload is not None:
+                        payloads.append(payload)
+                if payloads:
                     conversation.append(
                         {
                             "role": "tool_results",
                             "content_parts": [],
-                            "tool_results": [payload],
+                            "tool_results": payloads,
                         }
                     )
             continue
