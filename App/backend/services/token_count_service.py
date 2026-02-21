@@ -10,7 +10,12 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from .credential_service import CredentialServiceError, credential_service
-from .token_counting_service import count_tokens_claude, count_tokens_gemini
+from .token_counting_service import (
+    count_tokens_claude,
+    count_tokens_claude_messages,
+    count_tokens_gemini,
+    count_tokens_gemini_contents,
+)
 
 try:
     import tiktoken
@@ -196,35 +201,146 @@ async def count_text_tokens(
         raise RuntimeError(f"Token counting failed with unknown error; tiktoken fallback failed: {fallback_exc}") from fallback_exc
 
 
-def _message_to_count_text(message: dict[str, Any]) -> str:
-    role = str(message.get("role") or "")
-
+def _content_text(message: dict[str, Any]) -> str:
     parts = message.get("content_parts")
     content_parts: list[dict[str, Any]] = parts if isinstance(parts, list) else []
-    content = "".join(
+    return "".join(
         str(part.get("text") or "")
         for part in content_parts
         if isinstance(part, dict) and part.get("type") == "content"
     )
 
-    tool_calls = message.get("tool_calls")
-    tool_calls_text = ""
-    if isinstance(tool_calls, list) and tool_calls:
-        compact = []
-        for call in tool_calls:
-            if not isinstance(call, dict):
-                continue
-            compact.append(
-                {
-                    "id": call.get("id"),
-                    "type": call.get("type"),
-                    "function": call.get("function"),
-                    "extra_content": call.get("extra_content"),
-                }
-            )
-        tool_calls_text = json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
 
-    return f"{role}\n{content}\n{tool_calls_text}"
+def _compact_tool_calls(message: dict[str, Any]) -> list[dict[str, Any]]:
+    tool_calls = message.get("tool_calls")
+    if not isinstance(tool_calls, list):
+        return []
+    compact: list[dict[str, Any]] = []
+    for call in tool_calls:
+        if not isinstance(call, dict):
+            continue
+        compact.append(
+            {
+                "id": call.get("id"),
+                "type": call.get("type"),
+                "function": call.get("function"),
+                "extra_content": call.get("extra_content"),
+            }
+        )
+    return compact
+
+
+def _parse_tool_arguments(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {}
+    return {}
+
+
+def _openai_message_payload_text(message: dict[str, Any]) -> str:
+    payload = {
+        "role": str(message.get("role") or ""),
+        "content": _content_text(message),
+        "tool_calls": _compact_tool_calls(message),
+    }
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def count_openai_message_tokens(model: str, message: dict[str, Any]) -> int:
+    return _count_tokens_tiktoken(_openai_message_payload_text(message), model)
+
+
+async def count_claude_message_tokens(
+    db: Session,
+    *,
+    user_id: UUID,
+    model: str,
+    message: dict[str, Any],
+    allow_custom_base_url: bool = True,
+) -> int:
+    provider_config = credential_service.get_provider_config(db, user_id, "claude")
+    api_key = _extract_api_key(provider_config)
+    if not api_key:
+        raise CredentialServiceError("Credential for provider 'claude' not found")
+    base_url_raw = provider_config.get("base_url") if allow_custom_base_url else None
+    base_url = str(base_url_raw).strip() if isinstance(base_url_raw, str) and base_url_raw.strip() else None
+
+    role = "assistant" if str(message.get("role") or "") == "assistant" else "user"
+    content_blocks: list[dict[str, Any]] = []
+    content_text = _content_text(message)
+    if content_text:
+        content_blocks.append({"type": "text", "text": content_text})
+    for tool_call in _compact_tool_calls(message):
+        function = tool_call.get("function") if isinstance(tool_call.get("function"), dict) else {}
+        content_blocks.append(
+            {
+                "type": "tool_use",
+                "id": str(tool_call.get("id") or ""),
+                "name": str(function.get("name") or ""),
+                "input": _parse_tool_arguments(function.get("arguments")),
+            }
+        )
+
+    if not content_blocks:
+        return 0
+
+    claude_messages: list[dict[str, Any]]
+    claude_messages = [{"role": role, "content": content_blocks}]
+
+    return await count_tokens_claude_messages(
+        claude_messages,
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+    )
+
+
+async def count_gemini_message_tokens(
+    db: Session,
+    *,
+    user_id: UUID,
+    model: str,
+    message: dict[str, Any],
+    allow_custom_base_url: bool = True,
+) -> int:
+    from google.genai import types as gemini_types
+
+    provider_config = credential_service.get_provider_config(db, user_id, "gemini")
+    api_key = _extract_api_key(provider_config)
+    if not api_key:
+        raise CredentialServiceError("Credential for provider 'gemini' not found")
+    base_url_raw = provider_config.get("base_url") if allow_custom_base_url else None
+    base_url = str(base_url_raw).strip() if isinstance(base_url_raw, str) and base_url_raw.strip() else None
+
+    role = "model" if str(message.get("role") or "") == "assistant" else "user"
+    parts: list[Any] = []
+    content_text = _content_text(message)
+    if content_text:
+        parts.append(gemini_types.Part.from_text(text=content_text))
+    for tool_call in _compact_tool_calls(message):
+        function = tool_call.get("function") if isinstance(tool_call.get("function"), dict) else {}
+        parts.append(
+            gemini_types.Part.from_function_call(
+                name=str(function.get("name") or ""),
+                args=_parse_tool_arguments(function.get("arguments")),
+            )
+        )
+    if not parts:
+        return 0
+
+    contents = [gemini_types.Content(role=role, parts=parts)]
+    return await count_tokens_gemini_contents(
+        contents,
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+    )
 
 
 async def count_message_tokens(
@@ -237,15 +353,50 @@ async def count_message_tokens(
     tokenizer_override: str | None = None,
     allow_custom_base_url: bool = True,
 ) -> int:
-    text = _message_to_count_text(message)
-    result = await count_text_tokens(
-        db,
-        user_id=user_id,
-        provider=provider,
-        model=model,
-        text=text,
-        tokenizer_override=tokenizer_override,
-        allow_custom_base_url=allow_custom_base_url,
-    )
-    return int(result.token_count)
+    provider_name = _normalize_provider(provider)
+    tokenizer = resolve_tokenizer(provider_name, tokenizer_override)
+    safe_model = str(model or "").strip()
+
+    primary_error: Exception | None = None
+
+    if tokenizer == "openai":
+        return int(count_openai_message_tokens(safe_model, message))
+
+    if tokenizer == "claude":
+        try:
+            return int(
+                await count_claude_message_tokens(
+                    db,
+                    user_id=user_id,
+                    model=safe_model,
+                    message=message,
+                    allow_custom_base_url=allow_custom_base_url,
+                )
+            )
+        except Exception as exc:
+            primary_error = exc
+
+    if tokenizer == "gemini":
+        try:
+            return int(
+                await count_gemini_message_tokens(
+                    db,
+                    user_id=user_id,
+                    model=safe_model,
+                    message=message,
+                    allow_custom_base_url=allow_custom_base_url,
+                )
+            )
+        except Exception as exc:
+            primary_error = exc
+
+    try:
+        return int(count_openai_message_tokens(safe_model, message))
+    except Exception as fallback_exc:
+        if primary_error is not None:
+            raise RuntimeError(
+                f"Token counting failed (primary={tokenizer}, provider={provider_name}): {primary_error}; "
+                f"tiktoken fallback failed: {fallback_exc}"
+            ) from fallback_exc
+        raise RuntimeError(f"Token counting failed with unknown error; tiktoken fallback failed: {fallback_exc}") from fallback_exc
 

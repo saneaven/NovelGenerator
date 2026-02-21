@@ -14,7 +14,7 @@ class DeltaPayload:
     content_delta: Optional[str] = None
     thinking_delta: Optional[str] = None
     tool_call_deltas: List[Dict[str, Any]] = field(default_factory=list)
-    thinking_details_delta: List[Dict[str, Any]] = field(default_factory=list)
+    reasoning_detail_delta: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -41,7 +41,7 @@ class FinalSnapshot:
     finish_reason: str
     content_parts: List[Dict[str, str]]
     tool_calls: List[FinalToolCall]
-    thinking_details: List[Dict[str, Any]]
+    reasoning_details: List[Dict[str, Any]]
     usage: Optional[Dict[str, int]] = None
     reasoning_tokens: Optional[int] = None
     final_source: FinalSource = "native"
@@ -120,7 +120,7 @@ def delta_payload_to_wire(seq: int, payload: DeltaPayload) -> Dict[str, Any]:
         "contentDelta": payload.content_delta,
         "thinkingDelta": payload.thinking_delta,
         "toolCallDeltas": payload.tool_call_deltas,
-        "reasoningDetailDelta": payload.thinking_details_delta,
+        "reasoningDetailDelta": payload.reasoning_detail_delta,
     }
 
 
@@ -229,7 +229,7 @@ def extract_native_tool_calls_from_snapshot(snapshot: FinalSnapshot) -> FinalSna
         finish_reason=finish_reason,
         content_parts=new_content_parts,
         tool_calls=new_tool_calls,
-        thinking_details=snapshot.thinking_details,
+        reasoning_details=snapshot.reasoning_details,
         usage=snapshot.usage,
         reasoning_tokens=snapshot.reasoning_tokens,
         final_source=snapshot.final_source,
@@ -243,7 +243,7 @@ def final_snapshot_to_wire(snapshot: FinalSnapshot) -> Dict[str, Any]:
         "finishReason": snapshot.finish_reason,
         "contentParts": snapshot.content_parts,
         "toolCalls": [final_tool_call_to_wire(tc) for tc in snapshot.tool_calls],
-        "reasoningDetail": snapshot.thinking_details,
+        "reasoningDetail": snapshot.reasoning_details,
         "usage": normalize_usage_dict(snapshot.usage),
         "reasoningTokens": snapshot.reasoning_tokens,
         "finalSource": snapshot.final_source,

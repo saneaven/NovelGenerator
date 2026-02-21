@@ -48,6 +48,12 @@ def filter_history_by_run(
             result.append(out)
             continue
 
+        # Current run history must always pass through unchanged.
+        # Limits apply only to previous completed runs.
+        if run_id == current_run_id:
+            result.append(out)
+            continue
+
         if role == "assistant":
             if run_id not in reasoning_runs:
                 parts = out.get("content_parts")

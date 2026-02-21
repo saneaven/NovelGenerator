@@ -190,18 +190,26 @@ class GeminiProvider(BaseProvider):
                     for part in raw_parts:
                         if not isinstance(part, dict):
                             continue
+                        kwargs: Dict[str, Any] = {}
                         text_value = part.get("text")
-                        if not isinstance(text_value, str) or not text_value:
-                            continue
-                        thought = bool(part.get("thought"))
+                        if isinstance(text_value, str) and text_value:
+                            kwargs["text"] = text_value
                         thought_signature = part.get("thought_signature")
-                        kwargs: Dict[str, Any] = {"text": text_value, "thought": thought}
                         if isinstance(thought_signature, str) and thought_signature:
                             kwargs["thought_signature"] = thought_signature
+                        if "thought" in part:
+                            kwargs["thought"] = bool(part.get("thought"))
+                        elif "thought_signature" in kwargs:
+                            kwargs["thought"] = True
+                        if "text" not in kwargs and "thought_signature" not in kwargs:
+                            continue
                         try:
                             reasoning_parts.append(types.Part.model_validate(kwargs))
                         except Exception:
-                            continue
+                            try:
+                                reasoning_parts.append(types.Part.model_validate(part))
+                            except Exception:
+                                continue
 
             if role == "assistant" and tool_calls:
                 parts = []
@@ -406,7 +414,7 @@ class GeminiProvider(BaseProvider):
                                 yield ProviderEvent(
                                     kind="delta",
                                     delta=DeltaPayload(
-                                        thinking_details_delta=[thought_detail]
+                                        reasoning_detail_delta=[thought_detail]
                                     ),
                                 )
                             continue

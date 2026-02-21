@@ -237,9 +237,13 @@ class AsyncOpenAIProvider(BaseProvider):
             thinking_delta = thinking_obj.get("text")
 
         tool_call_deltas = delta.get("tool_calls") if isinstance(delta.get("tool_calls"), list) else []
-        thinking_details = delta.get("thinking_details") if isinstance(delta.get("thinking_details"), list) else []
+        reasoning_details = []
+        if isinstance(delta.get("reasoning_details"), list):
+            reasoning_details = delta.get("reasoning_details")
+        elif isinstance(delta.get("thinking_details"), list):
+            reasoning_details = delta.get("thinking_details")
 
-        if content_delta or thinking_delta or tool_call_deltas or thinking_details:
+        if content_delta or thinking_delta or tool_call_deltas or reasoning_details:
             events.append(
                 ProviderEvent(
                     kind="delta",
@@ -247,7 +251,7 @@ class AsyncOpenAIProvider(BaseProvider):
                         content_delta=content_delta,
                         thinking_delta=thinking_delta,
                         tool_call_deltas=tool_call_deltas,
-                        thinking_details_delta=thinking_details,
+                        reasoning_detail_delta=reasoning_details,
                     ),
                 )
             )

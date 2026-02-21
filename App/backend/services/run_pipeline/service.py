@@ -281,7 +281,7 @@ class RunPipeline:
                 if run is None:
                     raise HTTPException(status_code=409, detail="No run exists to resume")
 
-                _RESUMABLE_STATUSES = {"waiting", "paused", "done"}
+                _RESUMABLE_STATUSES = {"waiting", "canceled", "paused", "done"}
                 if run.status not in _RESUMABLE_STATUSES:
                     raise HTTPException(
                         status_code=409,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Any, Awaitable, Callable
-from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -24,6 +23,7 @@ from ..prompt_runtime.prompt_renderer import PromptRenderer
 from ..reasoning.history_filter import filter_history_by_run
 from ..reasoning.mode_policy import apply_thinking_mode
 from ..reasoning.normalize import normalize_reasoning_detail
+from ..reasoning.provider_io import get_provider_io
 from ..settings_service import settings_service
 from ..token_count_service import count_message_tokens
 from ..tool_engine import tool_engine
@@ -44,18 +44,9 @@ def _strip_internal_message_keys(messages: list[dict[str, Any]]) -> list[dict[st
         item = dict(message)
         item.pop("run_id", None)
         item.pop("seq_in_thread", None)
+        item.pop("is_memory_prompt", None)
         out.append(item)
     return out
-
-
-def _first_openrouter_format(details: list[dict[str, Any]]) -> str | None:
-    for detail in details:
-        if not isinstance(detail, dict):
-            continue
-        fmt = detail.get("format")
-        if isinstance(fmt, str) and fmt.strip():
-            return fmt
-    return None
 
 
 def _reasoning_text_from_parts(content_parts: list[dict[str, Any]]) -> str:
@@ -71,106 +62,18 @@ def _reasoning_text_from_parts(content_parts: list[dict[str, Any]]) -> str:
     return "".join(chunks)
 
 
-def _build_reasoning_detail(
-    *,
-    provider: str,
-    thinking_mode: str,
-    advanced: dict[str, Any],
-    content_parts: list[dict[str, Any]],
-    thinking_details: list[dict[str, Any]],
-) -> dict[str, Any] | None:
-    if thinking_mode == "off":
-        return None
-
+def _build_custom_reasoning_detail(content_parts: list[dict[str, Any]]) -> dict[str, Any] | None:
     thinking_text = _reasoning_text_from_parts(content_parts)
-    has_reasoning = bool(thinking_text.strip()) or bool(thinking_details)
-    if not has_reasoning:
+    if not thinking_text.strip():
         return None
-
-    provider_name = str(provider or "").strip().lower()
-    if thinking_mode == "custom":
-        return normalize_reasoning_detail(
-            {
-                "type": "custom",
-                "meta": {"provider": "custom"},
-                "data": {"text": thinking_text},
-                "token_count": 0,
-            }
-        )
-
-    if provider_name == "openai":
-        payload = {
-            "type": "openai",
-            "meta": {"provider": "openai"},
-            "data": {"items": list(thinking_details)},
+    return normalize_reasoning_detail(
+        {
+            "type": "custom",
+            "meta": {"provider": "custom"},
+            "data": {"text": thinking_text},
             "token_count": 0,
         }
-        return normalize_reasoning_detail(payload)
-
-    if provider_name == "gemini":
-        payload = {
-            "type": "gemini",
-            "meta": {"provider": "gemini"},
-            "data": {"parts": list(thinking_details)},
-            "token_count": 0,
-        }
-        return normalize_reasoning_detail(payload)
-
-    if provider_name == "claude":
-        payload = {
-            "type": "claude",
-            "meta": {"provider": "claude"},
-            "data": {"details": list(thinking_details)},
-            "token_count": 0,
-        }
-        return normalize_reasoning_detail(payload)
-
-    if provider_name == "openrouter":
-        details = [d for d in thinking_details if isinstance(d, dict)]
-        fmt = _first_openrouter_format(details)
-        meta: dict[str, Any] = {"provider": "openrouter"}
-        if fmt is not None:
-            meta["openrouter_reasoning_format"] = fmt
-        payload = {
-            "type": "openrouter",
-            "meta": meta,
-            "data": {
-                "reasoning": thinking_text,
-                "reasoning_details": details,
-            },
-            "token_count": 0,
-        }
-        return normalize_reasoning_detail(payload)
-
-    if provider_name == "custom":
-        thinking_format = str(advanced.get("thinking_format") or "openai").strip().lower()
-        payload = {
-            "type": "openai_compatible",
-            "meta": {
-                "provider": "custom",
-                "openai_compatible_thinking_format": thinking_format,
-            },
-            "data": {"details": list(thinking_details), "text": thinking_text},
-            "token_count": 0,
-        }
-        return normalize_reasoning_detail(payload)
-
-    payload = {
-        "type": "custom",
-        "meta": {"provider": "custom"},
-        "data": {"details": list(thinking_details), "text": thinking_text},
-        "token_count": 0,
-    }
-    return normalize_reasoning_detail(payload)
-
-
-def _reasoning_tokens_from_snapshot(final_snapshot: Any) -> int | None:
-    value = getattr(final_snapshot, "reasoning_tokens", None)
-    if isinstance(value, bool):
-        value = int(value)
-    if isinstance(value, int):
-        return max(0, value)
-    return None
+    )
 
 
 async def _fill_reasoning_token_count(
@@ -179,8 +82,9 @@ async def _fill_reasoning_token_count(
     run: RunModel,
     task_config: Any,
     final_snapshot: Any,
+    provider_io: Any,
 ) -> int:
-    direct = _reasoning_tokens_from_snapshot(final_snapshot)
+    direct = provider_io.read_reasoning_tokens(final_snapshot)
     if isinstance(direct, int):
         return max(0, int(direct))
 
@@ -213,14 +117,17 @@ async def _fill_reasoning_token_count(
         if isinstance(getattr(task_config, "advanced", None), dict)
         else None
     )
-    non_reasoning_tokens = await count_message_tokens(
-        db,
-        user_id=run.user_id,
-        provider=task_config.provider,
-        model=task_config.model,
-        message=assistant_output_message,
-        tokenizer_override=tokenizer_override,
-    )
+    try:
+        non_reasoning_tokens = await count_message_tokens(
+            db,
+            user_id=run.user_id,
+            provider=task_config.provider,
+            model=task_config.model,
+            message=assistant_output_message,
+            tokenizer_override=tokenizer_override,
+        )
+    except Exception:
+        return 0
 
     estimated = total_output - int(non_reasoning_tokens)
     if estimated < 0:
@@ -291,6 +198,7 @@ async def run_llm(
         memory_message_ref = {
             "role": "user",
             "content_parts": [{"type": "content", "text": memory_prompt}],
+            "is_memory_prompt": True,
         }
         conversation.insert(0, memory_message_ref)
 
@@ -309,8 +217,7 @@ async def run_llm(
         if prompt_bundle is None or prompt_manager is None:
             return current_conversation, None
         cleaned = list(current_conversation)
-        if memory_message_ref is not None:
-            cleaned = [m for m in cleaned if m is not memory_message_ref]
+        cleaned = [m for m in cleaned if not (isinstance(m, dict) and m.get("is_memory_prompt") is True)]
         new_user, new_asst = extract_last_texts(cleaned)
         new_mem = await build_memory_prompt(
             db,
@@ -328,26 +235,10 @@ async def run_llm(
             memory_message_ref = {
                 "role": "user",
                 "content_parts": [{"type": "content", "text": new_mem}],
+                "is_memory_prompt": True,
             }
             cleaned.insert(0, memory_message_ref)
         return cleaned, new_mem
-
-    conversation, memory_prompt = await fit_to_context_window(
-        system_prompt,
-        conversation,
-        prefill,
-        int(task_config.context_window_tokens or 32000),
-        rebuild_memory_cb=_rebuild_memory,
-        count_tokens_cb=_token_counter,
-    )
-
-    if prefill and bool(task_config.advanced.get("enable_prefill", False)):
-        conversation.append(
-            {
-                "role": "assistant",
-                "content_parts": [{"type": "content", "text": prefill}],
-            }
-        )
 
     assistant_message = RunMessageModel(
         thread_id=thread.id,
@@ -424,7 +315,7 @@ async def run_llm(
     thinking_mode = str(advanced.get("thinking_mode") or "off")
     tool_history_limit = int(getattr(settings, "tool_call_history_limit", 5) or 0)
     thinking_history_limit = int(getattr(settings, "thinking_history_limit", 5) or 0)
-
+    provider_io = get_provider_io(task_config.provider, advanced)
     messages = [{"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]}] + conversation
     messages = filter_history_by_run(
         messages,
@@ -433,6 +324,38 @@ async def run_llm(
         thinking_limit=thinking_history_limit,
     )
     messages = apply_thinking_mode(messages, thinking_mode)
+
+    fit_system_prompt = system_prompt
+    fit_conversation = list(messages)
+    if fit_conversation and fit_conversation[0].get("role") == "system":
+        system_parts = fit_conversation[0].get("content_parts")
+        if isinstance(system_parts, list):
+            fit_system_prompt = "".join(
+                str(part.get("text") or "")
+                for part in system_parts
+                if isinstance(part, dict) and part.get("type") == "content"
+            )
+        fit_conversation = fit_conversation[1:]
+
+    fit_conversation, memory_prompt = await fit_to_context_window(
+        fit_system_prompt,
+        fit_conversation,
+        prefill,
+        int(task_config.context_window_tokens or 32000),
+        rebuild_memory_cb=_rebuild_memory,
+        count_tokens_cb=_token_counter,
+    )
+
+    messages = [{"role": "system", "content_parts": [{"type": "content", "text": fit_system_prompt}]}] + fit_conversation
+    if prefill and bool(task_config.advanced.get("enable_prefill", False)):
+        messages.append(
+            {
+                "role": "assistant",
+                "content_parts": [{"type": "content", "text": prefill}],
+            }
+        )
+
+    messages = provider_io.to_provider_messages(messages, task_config.model, advanced)
     provider_messages = _strip_internal_message_keys(messages)
     effective_thinking_config = advanced.get("thinking_config") if thinking_mode == "model" else None
 
@@ -577,19 +500,19 @@ async def run_llm(
     if output_mode == "raw_output" and final_snapshot.tool_calls:
         raise RuntimeError("Raw output mode cannot include tool calls")
 
-    reasoning_detail = _build_reasoning_detail(
-        provider=task_config.provider,
-        thinking_mode=thinking_mode,
-        advanced=advanced,
-        content_parts=final_snapshot.content_parts,
-        thinking_details=final_snapshot.thinking_details,
-    )
+    reasoning_detail: dict[str, Any] | None = None
+    if thinking_mode == "custom":
+        reasoning_detail = _build_custom_reasoning_detail(final_snapshot.content_parts)
+    elif thinking_mode == "model":
+        reasoning_detail = normalize_reasoning_detail(provider_io.read_reasoning_detail(final_snapshot, advanced))
+
     if reasoning_detail is not None:
         reasoning_detail["token_count"] = await _fill_reasoning_token_count(
             db,
             run=run,
             task_config=task_config,
             final_snapshot=final_snapshot,
+            provider_io=provider_io,
         )
 
     db.refresh(run)

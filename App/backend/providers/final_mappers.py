@@ -45,6 +45,25 @@ def _append_part(parts: List[Dict[str, str]], part_type: str, text: Optional[str
         parts.append({"type": part_type, "text": text})
 
 
+def _extract_openai_reasoning_item(item: Any) -> Dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    item_id = item.get("id")
+    if not isinstance(item_id, str) or not item_id:
+        return None
+    out: Dict[str, Any] = {
+        "id": item_id,
+        "type": str(item.get("type") or "reasoning"),
+    }
+    encrypted_content = item.get("encrypted_content")
+    if isinstance(encrypted_content, str) and encrypted_content:
+        out["encrypted_content"] = encrypted_content
+    summary = item.get("summary")
+    if isinstance(summary, (str, list, dict)) and summary:
+        out["summary"] = summary
+    return out
+
+
 def map_openai_response_to_snapshot(
     response_obj: Any,
     provider: str,
@@ -64,7 +83,7 @@ def map_openai_response_to_snapshot(
 
     content_parts: List[Dict[str, str]] = []
     tool_calls: List[FinalToolCall] = []
-    thinking_details: List[Dict[str, Any]] = []
+    reasoning_details: List[Dict[str, Any]] = []
 
     output = data.get("output") or []
     for item in output:
@@ -80,7 +99,6 @@ def map_openai_response_to_snapshot(
                     _append_part(content_parts, "content", chunk.get("text"))
                 elif chunk_type in {"reasoning", "reasoning_text"}:
                     _append_part(content_parts, "thinking", chunk.get("text"))
-                    thinking_details.append(chunk)
             continue
 
         if item_type == "function_call":
@@ -98,8 +116,15 @@ def map_openai_response_to_snapshot(
 
         if item_type in {"reasoning", "reasoning_summary"}:
             text = item.get("summary") or item.get("text")
-            _append_part(content_parts, "thinking", text if isinstance(text, str) else None)
-            thinking_details.append(item)
+            if isinstance(text, str):
+                _append_part(content_parts, "thinking", text)
+            elif isinstance(text, list):
+                for piece in text:
+                    if isinstance(piece, dict) and isinstance(piece.get("text"), str):
+                        _append_part(content_parts, "thinking", piece.get("text"))
+            reasoning_item = _extract_openai_reasoning_item(item)
+            if isinstance(reasoning_item, dict):
+                reasoning_details.append(reasoning_item)
 
     if not content_parts:
         _append_part(content_parts, "content", data.get("output_text"))
@@ -110,7 +135,7 @@ def map_openai_response_to_snapshot(
         finish_reason=str(data.get("status") or "stop"),
         content_parts=content_parts,
         tool_calls=tool_calls,
-        thinking_details=thinking_details,
+        reasoning_details=reasoning_details,
         usage=usage,
         reasoning_tokens=(int(reasoning_tokens) if isinstance(reasoning_tokens, (int, float)) else None),
         final_source="native",
@@ -135,7 +160,7 @@ def map_chat_completion_to_snapshot(
 
     content_parts: List[Dict[str, str]] = []
     tool_calls: List[FinalToolCall] = []
-    thinking_details: List[Dict[str, Any]] = []
+    reasoning_details: List[Dict[str, Any]] = []
 
     content = message.get("content")
     if isinstance(content, str):
@@ -148,14 +173,14 @@ def map_chat_completion_to_snapshot(
     reasoning_text = message.get("reasoning")
     if isinstance(reasoning_text, str) and reasoning_text:
         _append_part(content_parts, "thinking", reasoning_text)
-        thinking_details.append({"type": "reasoning.text", "text": reasoning_text})
+        reasoning_details.append({"type": "reasoning.text", "text": reasoning_text})
 
-    reasoning_details = message.get("reasoning_details")
-    if isinstance(reasoning_details, list):
-        for detail in reasoning_details:
+    message_reasoning_details = message.get("reasoning_details")
+    if isinstance(message_reasoning_details, list):
+        for detail in message_reasoning_details:
             if not isinstance(detail, dict):
                 continue
-            thinking_details.append(detail)
+            reasoning_details.append(detail)
             text_value = detail.get("text")
             if isinstance(text_value, str) and text_value:
                 _append_part(content_parts, "thinking", text_value)
@@ -185,7 +210,7 @@ def map_chat_completion_to_snapshot(
         finish_reason=finish_reason,
         content_parts=content_parts,
         tool_calls=tool_calls,
-        thinking_details=thinking_details,
+        reasoning_details=reasoning_details,
         usage=usage,
         reasoning_tokens=(int(reasoning_tokens) if isinstance(reasoning_tokens, (int, float)) else None),
         final_source="native",
@@ -200,7 +225,7 @@ def map_claude_message_to_snapshot(
     data = _to_dict(message_obj)
     content_parts: List[Dict[str, str]] = []
     tool_calls: List[FinalToolCall] = []
-    thinking_details: List[Dict[str, Any]] = []
+    reasoning_details: List[Dict[str, Any]] = []
 
     for block in data.get("content") or []:
         if not isinstance(block, dict):
@@ -210,7 +235,7 @@ def map_claude_message_to_snapshot(
             _append_part(content_parts, "content", block.get("text"))
         elif block_type == "thinking":
             _append_part(content_parts, "thinking", block.get("thinking") or block.get("text"))
-            thinking_details.append(block)
+            reasoning_details.append(block)
         elif block_type == "tool_use":
             raw_text, args, parse_error = _parse_arguments(block.get("input"))
             tool_calls.append(
@@ -241,7 +266,7 @@ def map_claude_message_to_snapshot(
         finish_reason=str(data.get("stop_reason") or "stop"),
         content_parts=content_parts,
         tool_calls=tool_calls,
-        thinking_details=thinking_details,
+        reasoning_details=reasoning_details,
         usage=usage,
         final_source="native",
     )
@@ -258,7 +283,7 @@ def map_gemini_message_to_snapshot(
     data = _to_dict(message_obj)
     content_parts: List[Dict[str, str]] = []
     tool_calls: List[FinalToolCall] = []
-    thinking_details: List[Dict[str, Any]] = []
+    reasoning_details: List[Dict[str, Any]] = []
 
     for part in data.get("parts") or []:
         part_data = _to_dict(part)
@@ -280,7 +305,7 @@ def map_gemini_message_to_snapshot(
         is_thought = bool(part_data.get("thought"))
         if is_thought:
             _append_part(content_parts, "thinking", text if isinstance(text, str) else None)
-            thinking_details.append(part_data)
+            reasoning_details.append(part_data)
         else:
             _append_part(content_parts, "content", text if isinstance(text, str) else None)
 
@@ -290,7 +315,7 @@ def map_gemini_message_to_snapshot(
         finish_reason=finish_reason or "stop",
         content_parts=content_parts,
         tool_calls=tool_calls,
-        thinking_details=thinking_details,
+        reasoning_details=reasoning_details,
         usage=normalize_usage_dict(usage),
         reasoning_tokens=(int(reasoning_tokens) if isinstance(reasoning_tokens, int) else None),
         final_source="native",

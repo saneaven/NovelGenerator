@@ -41,11 +41,14 @@ export interface ConversationBlock {
 }
 
 export interface ReasoningDetail {
-  type: string;
-  summary?: string;
-  text?: string;
-  signature?: string;
-  [key: string]: any;
+  type: 'custom' | 'openai' | 'gemini' | 'claude' | 'openrouter' | 'openai_compatible';
+  meta: {
+    provider?: 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
+    openai_compatible_thinking_format?: 'openai' | 'claude' | 'gemini';
+    openrouter_reasoning_format?: string;
+  };
+  data: Record<string, any>;
+  token_count: number;
 }
 
 export interface TokenUsage {

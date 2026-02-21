@@ -385,12 +385,12 @@ class ClaudeProvider(BaseProvider):
                         if isinstance(delta_signature, str) and delta_signature:
                             thinking_detail["signature"] = delta_signature
                         if len(thinking_detail) > 1:
-                            yield ProviderEvent(
-                                kind="delta",
-                                delta=DeltaPayload(
-                                    thinking_details_delta=[thinking_detail]
-                                ),
-                            )
+                                yield ProviderEvent(
+                                    kind="delta",
+                                    delta=DeltaPayload(
+                                        reasoning_detail_delta=[thinking_detail]
+                                    ),
+                                )
                         continue
 
                     if block_type == "tool_use":

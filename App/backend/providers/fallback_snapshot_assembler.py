@@ -21,7 +21,7 @@ class FallbackSnapshotAssembler:
         self.provider = provider
         self.model = model
         self._content_parts: List[Dict[str, str]] = []
-        self._thinking_details: List[Dict[str, Any]] = []
+        self._reasoning_details: List[Dict[str, Any]] = []
         self._tool_calls_by_key: Dict[str, _ToolCallState] = {}
         self._tool_call_order: List[str] = []
         self._usage: Optional[Dict[str, int]] = None
@@ -36,8 +36,8 @@ class FallbackSnapshotAssembler:
         if payload.thinking_delta:
             self._append_content_part("thinking", payload.thinking_delta)
 
-        if payload.thinking_details_delta:
-            self._thinking_details.extend(payload.thinking_details_delta)
+        if payload.reasoning_detail_delta:
+            self._reasoning_details.extend(payload.reasoning_detail_delta)
 
         for delta in payload.tool_call_deltas:
             self._apply_tool_call_delta(delta)
@@ -54,7 +54,7 @@ class FallbackSnapshotAssembler:
     def finalize_or_raise(self) -> FinalSnapshot:
         has_any_data = (
             bool(self._content_parts)
-            or bool(self._thinking_details)
+            or bool(self._reasoning_details)
             or bool(self._tool_call_order)
         )
         if not has_any_data:
@@ -98,7 +98,7 @@ class FallbackSnapshotAssembler:
             finish_reason=finish_reason,
             content_parts=list(self._content_parts),
             tool_calls=tool_calls,
-            thinking_details=list(self._thinking_details),
+            reasoning_details=list(self._reasoning_details),
             usage=self._usage,
             reasoning_tokens=self._reasoning_tokens,
             final_source="reducer_fallback",

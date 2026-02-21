@@ -5,7 +5,7 @@ Provides async functions to count tokens using each provider's native API.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from anthropic import AsyncAnthropic
 from google import genai
@@ -52,6 +52,29 @@ async def count_tokens_claude(
         await client.close()
 
 
+async def count_tokens_claude_messages(
+    messages: list[dict[str, Any]],
+    model: str,
+    api_key: str,
+    base_url: Optional[str] = None,
+) -> int:
+    """Count tokens for Claude models using native Anthropic message blocks."""
+    kwargs = {"api_key": api_key}
+    if base_url:
+        kwargs["base_url"] = validate_outbound_base_url(base_url)
+
+    client = AsyncAnthropic(**kwargs)
+
+    try:
+        result = await client.messages.count_tokens(
+            model=model,
+            messages=messages,
+        )
+        return int(result.input_tokens)
+    finally:
+        await client.close()
+
+
 async def count_tokens_gemini(
     text: str,
     model: str,
@@ -83,4 +106,28 @@ async def count_tokens_gemini(
     return result.total_tokens
 
 
-__all__ = ["count_tokens_claude", "count_tokens_gemini"]
+async def count_tokens_gemini_contents(
+    contents: Any,
+    model: str,
+    api_key: str,
+    base_url: Optional[str] = None,
+) -> int:
+    """Count tokens for Gemini models with native contents payload."""
+    http_options = None
+    if base_url:
+        http_options = types.HttpOptions(baseUrl=validate_outbound_base_url(base_url))
+
+    client = genai.Client(api_key=api_key, http_options=http_options)
+    result = client.models.count_tokens(
+        model=model,
+        contents=contents,
+    )
+    return int(result.total_tokens)
+
+
+__all__ = [
+    "count_tokens_claude",
+    "count_tokens_claude_messages",
+    "count_tokens_gemini",
+    "count_tokens_gemini_contents",
+]

@@ -81,11 +81,11 @@ class OpenRouterProvider(AsyncOpenAIProvider):
             return chunk, []
 
         delta = choices[0].get("delta") or {}
-        thinking_details = delta.get("thinking_details") or delta.get("reasoning_details")
-        if not thinking_details:
+        reasoning_details = delta.get("reasoning_details") or delta.get("thinking_details")
+        if not reasoning_details:
             return chunk, []
 
-        for detail in thinking_details:
+        for detail in reasoning_details:
             if isinstance(detail, dict):
                 detail_type = detail.get("type")
                 text = None
@@ -104,9 +104,5 @@ class OpenRouterProvider(AsyncOpenAIProvider):
                     thinking = delta.setdefault("thinking", {})
                     thinking["text"] = text
                     break
-
-        # Normalize key for downstream consumers
-        if "reasoning_details" in delta and "thinking_details" not in delta:
-            delta["thinking_details"] = delta.pop("reasoning_details")
 
         return chunk, []
