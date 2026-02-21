@@ -143,7 +143,9 @@ function fallbackDataFromStreaming(message: ThreadMessage | undefined): ThreadMe
   const preferLanguage = Object.keys(message.data ?? {}).find((key) => key !== '_final') ?? 'English';
   const entry = {
     contentParts: message.streamingData.contentParts,
-    thinkingDetails: message.streamingData.thinkingDetails ?? [],
+    ...(message.streamingData.reasoningDetail !== undefined
+      ? { reasoningDetail: message.streamingData.reasoningDetail }
+      : {}),
   };
   return {
     ...(message.data ?? {}),

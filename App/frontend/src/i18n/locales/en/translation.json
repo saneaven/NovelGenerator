@@ -430,13 +430,13 @@
       "toolCallHistory": {
         "title": "Tool Call History",
         "label": "Include tool calls in agent history",
-        "hint": "Number of recent assistant messages whose tool calls will be included in the conversation history sent to the AI. Set to 0 to disable.",
+        "hint": "Number of previous completed runs whose tool calls will be included in the conversation history sent to the AI. Set to 0 to disable.",
         "all": "All"
       },
       "thinkingHistory": {
         "title": "Thinking History",
         "label": "Include thinking in agent history",
-        "hint": "Number of recent assistant messages whose thinking content will be included in the conversation history sent to the AI. Set to 0 to disable.",
+        "hint": "Number of previous completed runs whose thinking/reasoning content will be included in the conversation history sent to the AI. Set to 0 to disable.",
         "all": "All"
       },
       "llmLogging": {

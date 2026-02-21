@@ -149,8 +149,6 @@ def build_from_runs(
     db: Session,
     thread_id: UUID,
     language: str,
-    tool_call_history_limit: int,
-    thinking_history_limit: int,
     include_run_ids: list[UUID] | None = None,
 ) -> list[dict[str, Any]]:
     q = db.query(RunMessageModel).filter(RunMessageModel.thread_id == thread_id)
@@ -179,17 +177,6 @@ def build_from_runs(
             if tool.status in TERMINAL_TOOL_STATUSES:
                 terminal_tools_by_assistant.setdefault(tool.assistant_message_id, []).append(tool)
 
-    assistant_order = [row.id for row in rows if row.role == "assistant"]
-    if tool_call_history_limit >= 0:
-        kept_assistant_for_tools = set(assistant_order[-tool_call_history_limit:]) if tool_call_history_limit > 0 else set()
-    else:
-        kept_assistant_for_tools = set(assistant_order)
-
-    if thinking_history_limit >= 0:
-        kept_assistant_for_thinking = set(assistant_order[-thinking_history_limit:]) if thinking_history_limit > 0 else set()
-    else:
-        kept_assistant_for_thinking = set(assistant_order)
-
     conversation: list[dict[str, Any]] = []
     for row in rows:
         if not isinstance(row.data, dict):
@@ -198,33 +185,41 @@ def build_from_runs(
 
         if row.role in {"system", "user", "assistant"}:
             content_parts = _normalize_content_parts(entry)
-            if row.role == "assistant" and row.id not in kept_assistant_for_thinking:
-                content_parts = [part for part in content_parts if part.get("type") != "thinking"]
 
             msg: dict[str, Any] = {
                 "role": row.role,
                 "content_parts": content_parts,
+                "run_id": str(row.run_id),
+                "seq_in_thread": int(row.seq_in_thread) if row.seq_in_thread is not None else None,
             }
+            if msg["seq_in_thread"] is None:
+                msg.pop("seq_in_thread", None)
 
-            if row.role == "assistant" and row.id in kept_assistant_for_tools:
+            if row.role == "assistant":
+                reasoning_detail = entry.get("reasoningDetail")
+                if isinstance(reasoning_detail, dict):
+                    msg["reasoning_detail"] = reasoning_detail
+
+            if row.role == "assistant":
                 tool_calls = []
                 for tool in tool_calls_by_assistant.get(row.id, []):
-                    tool_calls.append(
-                        {
-                            "id": tool.llm_call_id,
-                            "type": "function",
-                            "function": {
-                                "name": tool.tool_name,
-                                "arguments": json.dumps(tool.arguments if isinstance(tool.arguments, dict) else {}, ensure_ascii=False),
-                            },
-                        }
-                    )
+                    item = {
+                        "id": tool.llm_call_id,
+                        "type": "function",
+                        "function": {
+                            "name": tool.tool_name,
+                            "arguments": json.dumps(tool.arguments if isinstance(tool.arguments, dict) else {}, ensure_ascii=False),
+                        },
+                    }
+                    if isinstance(getattr(tool, "extra_content", None), dict):
+                        item["extra_content"] = tool.extra_content
+                    tool_calls.append(item)
                 if tool_calls:
                     msg["tool_calls"] = tool_calls
 
             conversation.append(msg)
 
-            if row.role == "assistant" and row.id in kept_assistant_for_tools:
+            if row.role == "assistant":
                 payloads = []
                 for tool in terminal_tools_by_assistant.get(row.id, []):
                     payload = _tool_result_from_tool_call(tool)
@@ -236,6 +231,8 @@ def build_from_runs(
                             "role": "tool_results",
                             "content_parts": [],
                             "tool_results": payloads,
+                            "run_id": str(row.run_id),
+                            "seq_in_thread": int(row.seq_in_thread) if row.seq_in_thread is not None else None,
                         }
                     )
             continue

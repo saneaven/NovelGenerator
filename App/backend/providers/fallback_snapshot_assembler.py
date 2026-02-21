@@ -26,6 +26,7 @@ class FallbackSnapshotAssembler:
         self._tool_call_order: List[str] = []
         self._usage: Optional[Dict[str, int]] = None
         self._finish_reason: Optional[str] = None
+        self._reasoning_tokens: Optional[int] = None
         self._anonymous_tool_counter = 0
 
     def apply_delta(self, payload: DeltaPayload) -> None:
@@ -47,6 +48,8 @@ class FallbackSnapshotAssembler:
             self._usage = usage
         if payload.finish_reason:
             self._finish_reason = payload.finish_reason
+        if isinstance(payload.reasoning_tokens, int):
+            self._reasoning_tokens = payload.reasoning_tokens
 
     def finalize_or_raise(self) -> FinalSnapshot:
         has_any_data = (
@@ -97,6 +100,7 @@ class FallbackSnapshotAssembler:
             tool_calls=tool_calls,
             thinking_details=list(self._thinking_details),
             usage=self._usage,
+            reasoning_tokens=self._reasoning_tokens,
             final_source="reducer_fallback",
         )
 

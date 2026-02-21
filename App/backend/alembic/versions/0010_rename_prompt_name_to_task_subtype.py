@@ -18,6 +18,9 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Alembic default schema may keep version_num at VARCHAR(32).
+    # This revision ID is longer than 32 chars, so widen before upgrade bookkeeping.
+    op.execute("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(255)")
     op.alter_column("prompt_versions", "prompt_name", new_column_name="task_subtype")
 
 

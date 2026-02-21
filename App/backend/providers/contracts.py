@@ -21,6 +21,7 @@ class DeltaPayload:
 class MetaPayload:
     usage: Optional[Dict[str, int]] = None
     finish_reason: Optional[str] = None
+    reasoning_tokens: Optional[int] = None
 
 
 @dataclass
@@ -42,6 +43,7 @@ class FinalSnapshot:
     tool_calls: List[FinalToolCall]
     thinking_details: List[Dict[str, Any]]
     usage: Optional[Dict[str, int]] = None
+    reasoning_tokens: Optional[int] = None
     final_source: FinalSource = "native"
 
 
@@ -80,16 +82,23 @@ def merge_meta_payload(left: Optional[MetaPayload], right: Optional[MetaPayload]
         return MetaPayload(
             usage=normalize_usage_dict(right.usage) if right else None,
             finish_reason=(right.finish_reason if right else None),
+            reasoning_tokens=(right.reasoning_tokens if right else None),
         )
     if right is None:
         return MetaPayload(
             usage=normalize_usage_dict(left.usage),
             finish_reason=left.finish_reason,
+            reasoning_tokens=left.reasoning_tokens,
         )
 
     return MetaPayload(
         usage=normalize_usage_dict(right.usage) or normalize_usage_dict(left.usage),
         finish_reason=right.finish_reason or left.finish_reason,
+        reasoning_tokens=(
+            right.reasoning_tokens
+            if isinstance(right.reasoning_tokens, int)
+            else left.reasoning_tokens
+        ),
     )
 
 
@@ -100,6 +109,8 @@ def patch_snapshot_with_meta(snapshot: FinalSnapshot, meta: Optional[MetaPayload
         snapshot.usage = normalize_usage_dict(meta.usage)
     if (not snapshot.finish_reason) and meta.finish_reason:
         snapshot.finish_reason = meta.finish_reason
+    if snapshot.reasoning_tokens is None and isinstance(meta.reasoning_tokens, int):
+        snapshot.reasoning_tokens = meta.reasoning_tokens
     return snapshot
 
 
@@ -109,7 +120,7 @@ def delta_payload_to_wire(seq: int, payload: DeltaPayload) -> Dict[str, Any]:
         "contentDelta": payload.content_delta,
         "thinkingDelta": payload.thinking_delta,
         "toolCallDeltas": payload.tool_call_deltas,
-        "thinkingDetailsDelta": payload.thinking_details_delta,
+        "reasoningDetailDelta": payload.thinking_details_delta,
     }
 
 
@@ -220,6 +231,7 @@ def extract_native_tool_calls_from_snapshot(snapshot: FinalSnapshot) -> FinalSna
         tool_calls=new_tool_calls,
         thinking_details=snapshot.thinking_details,
         usage=snapshot.usage,
+        reasoning_tokens=snapshot.reasoning_tokens,
         final_source=snapshot.final_source,
     )
 
@@ -231,7 +243,8 @@ def final_snapshot_to_wire(snapshot: FinalSnapshot) -> Dict[str, Any]:
         "finishReason": snapshot.finish_reason,
         "contentParts": snapshot.content_parts,
         "toolCalls": [final_tool_call_to_wire(tc) for tc in snapshot.tool_calls],
-        "thinkingDetails": snapshot.thinking_details,
+        "reasoningDetail": snapshot.thinking_details,
         "usage": normalize_usage_dict(snapshot.usage),
+        "reasoningTokens": snapshot.reasoning_tokens,
         "finalSource": snapshot.final_source,
     }

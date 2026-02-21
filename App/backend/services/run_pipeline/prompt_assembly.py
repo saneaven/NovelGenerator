@@ -63,9 +63,6 @@ async def assemble_create(
         user_texts=raw_user_texts,
     )
 
-    tool_call_limit = int(getattr(settings, "tool_call_history_limit", 5))
-    thinking_limit = int(getattr(settings, "thinking_history_limit", 5))
-
     conversation: list[dict[str, Any]] = []
     for i, r in enumerate(all_runs):
         if i < len(rendered_users) and rendered_users[i]:
@@ -78,8 +75,6 @@ async def assemble_create(
             db,
             thread_id=thread.id,
             language=run.language,
-            tool_call_history_limit=tool_call_limit,
-            thinking_history_limit=thinking_limit,
             include_run_ids=[r.id],
         )
         conversation.extend(m for m in non_user if m.get("role") != "user")
@@ -103,15 +98,10 @@ def assemble_resume(
     conversation = list(thread.captured_history_conversation_json or [])
     prefill = thread.captured_history_prefill if isinstance(thread.captured_history_prefill, str) and thread.captured_history_prefill else None
 
-    tool_call_limit = int(getattr(settings, "tool_call_history_limit", 5))
-    thinking_limit = int(getattr(settings, "thinking_history_limit", 5))
-
     recent = build_from_runs(
         db,
         thread_id=thread.id,
         language=run.language,
-        tool_call_history_limit=tool_call_limit,
-        thinking_history_limit=thinking_limit,
         include_run_ids=[run.id],
     )
     conversation.extend(m for m in recent if m.get("role") != "user")

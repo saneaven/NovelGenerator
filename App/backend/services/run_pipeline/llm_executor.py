@@ -21,7 +21,11 @@ from ..memory_builder import build_memory_prompt
 from ..prompt_runtime.output_mode import resolve_output_mode
 from ..prompt_runtime.prompt_manager import PromptBundle, PromptManager
 from ..prompt_runtime.prompt_renderer import PromptRenderer
+from ..reasoning.history_filter import filter_history_by_run
+from ..reasoning.mode_policy import apply_thinking_mode
+from ..reasoning.normalize import normalize_reasoning_detail
 from ..settings_service import settings_service
+from ..token_count_service import count_message_tokens
 from ..tool_engine import tool_engine
 from ..tool_engine.contracts import ToolOffer
 from ..context_manager import fit_to_context_window
@@ -32,6 +36,196 @@ from . import raw_output as _raw
 
 EmitFn = Callable[..., Awaitable[None]]
 PersistToolCallsFn = Callable[..., Awaitable[list[RunToolCallModel]]]
+
+
+def _strip_internal_message_keys(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for message in messages:
+        item = dict(message)
+        item.pop("run_id", None)
+        item.pop("seq_in_thread", None)
+        out.append(item)
+    return out
+
+
+def _first_openrouter_format(details: list[dict[str, Any]]) -> str | None:
+    for detail in details:
+        if not isinstance(detail, dict):
+            continue
+        fmt = detail.get("format")
+        if isinstance(fmt, str) and fmt.strip():
+            return fmt
+    return None
+
+
+def _reasoning_text_from_parts(content_parts: list[dict[str, Any]]) -> str:
+    chunks: list[str] = []
+    for part in content_parts:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") != "thinking":
+            continue
+        text = part.get("text")
+        if isinstance(text, str) and text:
+            chunks.append(text)
+    return "".join(chunks)
+
+
+def _build_reasoning_detail(
+    *,
+    provider: str,
+    thinking_mode: str,
+    advanced: dict[str, Any],
+    content_parts: list[dict[str, Any]],
+    thinking_details: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if thinking_mode == "off":
+        return None
+
+    thinking_text = _reasoning_text_from_parts(content_parts)
+    has_reasoning = bool(thinking_text.strip()) or bool(thinking_details)
+    if not has_reasoning:
+        return None
+
+    provider_name = str(provider or "").strip().lower()
+    if thinking_mode == "custom":
+        return normalize_reasoning_detail(
+            {
+                "type": "custom",
+                "meta": {"provider": "custom"},
+                "data": {"text": thinking_text},
+                "token_count": 0,
+            }
+        )
+
+    if provider_name == "openai":
+        payload = {
+            "type": "openai",
+            "meta": {"provider": "openai"},
+            "data": {"items": list(thinking_details)},
+            "token_count": 0,
+        }
+        return normalize_reasoning_detail(payload)
+
+    if provider_name == "gemini":
+        payload = {
+            "type": "gemini",
+            "meta": {"provider": "gemini"},
+            "data": {"parts": list(thinking_details)},
+            "token_count": 0,
+        }
+        return normalize_reasoning_detail(payload)
+
+    if provider_name == "claude":
+        payload = {
+            "type": "claude",
+            "meta": {"provider": "claude"},
+            "data": {"details": list(thinking_details)},
+            "token_count": 0,
+        }
+        return normalize_reasoning_detail(payload)
+
+    if provider_name == "openrouter":
+        details = [d for d in thinking_details if isinstance(d, dict)]
+        fmt = _first_openrouter_format(details)
+        meta: dict[str, Any] = {"provider": "openrouter"}
+        if fmt is not None:
+            meta["openrouter_reasoning_format"] = fmt
+        payload = {
+            "type": "openrouter",
+            "meta": meta,
+            "data": {
+                "reasoning": thinking_text,
+                "reasoning_details": details,
+            },
+            "token_count": 0,
+        }
+        return normalize_reasoning_detail(payload)
+
+    if provider_name == "custom":
+        thinking_format = str(advanced.get("thinking_format") or "openai").strip().lower()
+        payload = {
+            "type": "openai_compatible",
+            "meta": {
+                "provider": "custom",
+                "openai_compatible_thinking_format": thinking_format,
+            },
+            "data": {"details": list(thinking_details), "text": thinking_text},
+            "token_count": 0,
+        }
+        return normalize_reasoning_detail(payload)
+
+    payload = {
+        "type": "custom",
+        "meta": {"provider": "custom"},
+        "data": {"details": list(thinking_details), "text": thinking_text},
+        "token_count": 0,
+    }
+    return normalize_reasoning_detail(payload)
+
+
+def _reasoning_tokens_from_snapshot(final_snapshot: Any) -> int | None:
+    value = getattr(final_snapshot, "reasoning_tokens", None)
+    if isinstance(value, bool):
+        value = int(value)
+    if isinstance(value, int):
+        return max(0, value)
+    return None
+
+
+async def _fill_reasoning_token_count(
+    db: Session,
+    *,
+    run: RunModel,
+    task_config: Any,
+    final_snapshot: Any,
+) -> int:
+    direct = _reasoning_tokens_from_snapshot(final_snapshot)
+    if isinstance(direct, int):
+        return max(0, int(direct))
+
+    usage = final_snapshot.usage if isinstance(final_snapshot.usage, dict) else {}
+    total_output = int(usage.get("completion_tokens", 0) or 0)
+
+    assistant_output_message = {
+        "role": "assistant",
+        "content_parts": [
+            part
+            for part in (final_snapshot.content_parts or [])
+            if isinstance(part, dict) and part.get("type") == "content"
+        ],
+        "tool_calls": [
+            {
+                "id": str(tc.id),
+                "type": "function",
+                "function": {
+                    "name": str(tc.tool_name),
+                    "arguments": tc.raw_arguments,
+                },
+                **({"extra_content": tc.extra_content} if isinstance(tc.extra_content, dict) else {}),
+            }
+            for tc in (final_snapshot.tool_calls or [])
+        ],
+    }
+
+    tokenizer_override = (
+        task_config.advanced.get("tokenizer_override")
+        if isinstance(getattr(task_config, "advanced", None), dict)
+        else None
+    )
+    non_reasoning_tokens = await count_message_tokens(
+        db,
+        user_id=run.user_id,
+        provider=task_config.provider,
+        model=task_config.model,
+        message=assistant_output_message,
+        tokenizer_override=tokenizer_override,
+    )
+
+    estimated = total_output - int(non_reasoning_tokens)
+    if estimated < 0:
+        estimated = 0
+    return int(estimated)
 
 
 async def run_llm(
@@ -226,7 +420,21 @@ async def run_llm(
     else:
         tools_wire = tool_offer.provider_tools
 
+    advanced = task_config.advanced if isinstance(task_config.advanced, dict) else {}
+    thinking_mode = str(advanced.get("thinking_mode") or "off")
+    tool_history_limit = int(getattr(settings, "tool_call_history_limit", 5) or 0)
+    thinking_history_limit = int(getattr(settings, "thinking_history_limit", 5) or 0)
+
     messages = [{"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]}] + conversation
+    messages = filter_history_by_run(
+        messages,
+        current_run_id=str(run.id),
+        tool_limit=tool_history_limit,
+        thinking_limit=thinking_history_limit,
+    )
+    messages = apply_thinking_mode(messages, thinking_mode)
+    provider_messages = _strip_internal_message_keys(messages)
+    effective_thinking_config = advanced.get("thinking_config") if thinking_mode == "model" else None
 
     await emit_fn(
         project_id=run.project_id,
@@ -240,26 +448,26 @@ async def run_llm(
             "temperature": float(task_config.temperature),
             "max_tokens": task_config.max_output_tokens,
             "tool_choice": "auto" if tools_wire else None,
-            "thinking_config": task_config.advanced.get("thinking_config") if isinstance(task_config.advanced, dict) else None,
-            "thinking_mode": task_config.advanced.get("thinking_mode") if isinstance(task_config.advanced, dict) else "off",
+            "thinking_config": effective_thinking_config,
+            "thinking_mode": thinking_mode,
             "native_tool_call": native_tool_call_mode,
-            "messages": messages,
+            "messages": provider_messages,
             "tools": tools_wire,
         },
     )
 
     stream = provider.stream_chat(
-        messages=messages,
+        messages=provider_messages,
         model=task_config.model,
         temperature=float(task_config.temperature),
         tools=tools_wire,
         tool_choice="auto" if tools_wire else None,
         max_tokens=task_config.max_output_tokens,
-        provider_preference=task_config.advanced.get("provider_preference") if isinstance(task_config.advanced, dict) else None,
-        thinking_config=task_config.advanced.get("thinking_config") if isinstance(task_config.advanced, dict) else None,
-        thinking_mode=task_config.advanced.get("thinking_mode") if isinstance(task_config.advanced, dict) else "off",
-        thinking_format=task_config.advanced.get("thinking_format") if isinstance(task_config.advanced, dict) else None,
-        request_format=task_config.advanced.get("request_format") if isinstance(task_config.advanced, dict) else None,
+        provider_preference=advanced.get("provider_preference"),
+        thinking_config=effective_thinking_config,
+        thinking_mode=thinking_mode,
+        thinking_format=advanced.get("thinking_format"),
+        request_format=advanced.get("request_format"),
         retry_config=settings_service.get_retry_config(db, run.user_id),
         native_tool_call=native_tool_call_mode,
     )
@@ -369,21 +577,35 @@ async def run_llm(
     if output_mode == "raw_output" and final_snapshot.tool_calls:
         raise RuntimeError("Raw output mode cannot include tool calls")
 
+    reasoning_detail = _build_reasoning_detail(
+        provider=task_config.provider,
+        thinking_mode=thinking_mode,
+        advanced=advanced,
+        content_parts=final_snapshot.content_parts,
+        thinking_details=final_snapshot.thinking_details,
+    )
+    if reasoning_detail is not None:
+        reasoning_detail["token_count"] = await _fill_reasoning_token_count(
+            db,
+            run=run,
+            task_config=task_config,
+            final_snapshot=final_snapshot,
+        )
+
     db.refresh(run)
     db.refresh(thread)
     assistant_message = db.query(RunMessageModel).filter(RunMessageModel.id == assistant_message.id).first()
     if assistant_message is None:
         raise RuntimeError("Assistant message row missing")
 
+    language_entry: dict[str, Any] = {"contentParts": final_snapshot.content_parts}
+    final_entry: dict[str, Any] = {"contentParts": final_snapshot.content_parts}
+    if reasoning_detail is not None:
+        language_entry["reasoningDetail"] = reasoning_detail
+        final_entry["reasoningDetail"] = reasoning_detail
     assistant_message.data = {
-        run.language: {
-            "contentParts": final_snapshot.content_parts,
-            "thinkingDetails": final_snapshot.thinking_details,
-        },
-        "_final": {
-            "contentParts": final_snapshot.content_parts,
-            "thinkingDetails": final_snapshot.thinking_details,
-        },
+        run.language: language_entry,
+        "_final": final_entry,
     }
 
     persisted_tools: list[RunToolCallModel] = []

@@ -103,6 +103,7 @@ class ClaudeProvider(BaseProvider):
             role = msg.get("role", "user")
             text = self._extract_text_content(msg)
             tool_calls = msg.get("tool_calls")
+            reasoning_detail = msg.get("reasoning_detail") if isinstance(msg.get("reasoning_detail"), dict) else None
 
             if role == "system":
                 if text:
@@ -127,8 +128,28 @@ class ClaudeProvider(BaseProvider):
                 continue
 
             # Handle assistant messages with tool_calls
+            reasoning_blocks: List[Dict[str, Any]] = []
+            if role == "assistant" and isinstance(reasoning_detail, dict):
+                reasoning_data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
+                blocks = reasoning_data.get("blocks")
+                if isinstance(blocks, list):
+                    for block in blocks:
+                        if (
+                            isinstance(block, dict)
+                            and block.get("type") == "thinking"
+                            and isinstance(block.get("thinking") or block.get("text"), str)
+                        ):
+                            reasoning_blocks.append(block)
+                details = reasoning_data.get("details")
+                if isinstance(details, list):
+                    for detail in details:
+                        if isinstance(detail, dict) and detail.get("type") == "thinking":
+                            reasoning_blocks.append(detail)
+
             if role == "assistant" and tool_calls:
                 content_blocks = []
+                if reasoning_blocks:
+                    content_blocks.extend(reasoning_blocks)
                 if text:
                     content_blocks.append({"type": "text", "text": text})
                 for tc in tool_calls:
@@ -146,7 +167,13 @@ class ClaudeProvider(BaseProvider):
                     })
                 anthropic_messages.append({"role": mapped_role, "content": content_blocks})
             else:
-                anthropic_messages.append({"role": mapped_role, "content": text})
+                if role == "assistant" and reasoning_blocks:
+                    content_blocks = list(reasoning_blocks)
+                    if text:
+                        content_blocks.append({"type": "text", "text": text})
+                    anthropic_messages.append({"role": mapped_role, "content": content_blocks})
+                else:
+                    anthropic_messages.append({"role": mapped_role, "content": text})
 
         system_prompt = "\n\n".join(system_parts) if system_parts else None
         return system_prompt, anthropic_messages
@@ -352,13 +379,16 @@ class ClaudeProvider(BaseProvider):
                                 delta=DeltaPayload(thinking_delta=thinking_text),
                             )
 
+                        thinking_detail: Dict[str, Any] = {"type": "thinking"}
+                        if isinstance(thinking_text, str) and thinking_text:
+                            thinking_detail["thinking"] = thinking_text
                         if isinstance(delta_signature, str) and delta_signature:
+                            thinking_detail["signature"] = delta_signature
+                        if len(thinking_detail) > 1:
                             yield ProviderEvent(
                                 kind="delta",
                                 delta=DeltaPayload(
-                                    thinking_details_delta=[
-                                        {"type": "signature", "signature": delta_signature}
-                                    ]
+                                    thinking_details_delta=[thinking_detail]
                                 ),
                             )
                         continue

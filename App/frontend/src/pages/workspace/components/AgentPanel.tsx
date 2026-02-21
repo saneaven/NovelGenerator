@@ -126,6 +126,7 @@ function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
     id: toolCall.id,
     tool_name: toolCall.toolName,
     arguments: toolCall.arguments,
+    extra_content: toolCall.extraContent ?? undefined,
     status: toolCall.status as any,
     reason: toolCall.reason ?? undefined,
     failureType: toolCall.status === 'failed'
@@ -152,9 +153,9 @@ function hasNonEmptyPartText(message: ThreadMessage, partType: 'content' | 'thin
   ));
 }
 
-function hasThinkingDetails(message: ThreadMessage): boolean {
+function hasReasoningDetail(message: ThreadMessage): boolean {
   return Object.values(message.data).some((entry) => (
-    Array.isArray(entry.thinkingDetails) && entry.thinkingDetails.length > 0
+    typeof entry.reasoningDetail === 'object' && entry.reasoningDetail !== null
   ));
 }
 
@@ -162,7 +163,7 @@ function shouldDeleteAssistantMessageAfterToolCallCleanup(message: ThreadMessage
   if (message.role !== 'assistant') return false;
   const hasContent = hasNonEmptyPartText(message, 'content');
   if (hasContent) return false;
-  const hasThinking = hasNonEmptyPartText(message, 'thinking') || hasThinkingDetails(message);
+  const hasThinking = hasNonEmptyPartText(message, 'thinking') || hasReasoningDetail(message);
   return !hasThinking;
 }
 
@@ -353,7 +354,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         const resolved = msg.isStreaming
           ? {
               contentParts: msg.streamingData?.contentParts ?? [],
-              thinkingDetails: msg.streamingData?.thinkingDetails,
+              reasoningDetail: msg.streamingData?.reasoningDetail,
               displayLanguage: requestedLanguage,
               isFallback: false,
             }
@@ -363,7 +364,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
           id: msg.id,
           role: msg.role === 'assistant' ? 'assistant' : 'user',
           contentParts: resolved.contentParts as any,
-          thinking_details: resolved.thinkingDetails as any,
+          reasoning_detail: (resolved.reasoningDetail as any),
           timestamp: new Date(msg.createdAt),
         };
 
@@ -704,9 +705,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     setEditingSaving(true);
     const state = useThreadStore.getState();
     const existing = state.getMessages(threadId).find((m) => m.id === message.id);
+    const existingEntry = existing?.data?.[primaryLanguage] ?? existing?.data?._final;
+    const existingParts = Array.isArray(existingEntry?.contentParts) ? existingEntry.contentParts : [];
+    const keptThinkingParts = existingParts
+      .filter((part) => part?.type === 'thinking' && typeof part?.text === 'string')
+      .map((part) => ({ type: 'thinking' as const, text: part.text }));
     const entry = {
-      contentParts: [{ type: 'content' as const, text: content }],
-      thinkingDetails: [],
+      contentParts: [
+        ...keptThinkingParts,
+        { type: 'content' as const, text: content },
+      ],
+      reasoningDetail: existingEntry?.reasoningDetail,
     };
 
     if (existing) {
@@ -722,7 +731,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       await threadService.updateMessage(threadId, message.id, {
         language: primaryLanguage,
         content_parts: entry.contentParts,
-        thinking_details: entry.thinkingDetails,
+        reasoning_detail: entry.reasoningDetail as any,
         set_final: true,
       });
       setEditingMessageId(null);

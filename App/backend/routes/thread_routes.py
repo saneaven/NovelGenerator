@@ -38,6 +38,7 @@ from ..services.notification_service import (
 )
 from ..services.run_pipeline import run_pipeline
 from ..services.tool_engine import tool_engine
+from ..services.reasoning.normalize import normalize_reasoning_detail
 
 
 router = APIRouter(prefix="/api/v1", tags=["threads"])
@@ -67,6 +68,7 @@ def _serialize_tool_call(row: RunToolCallModel) -> dict:
         "llm_call_id": row.llm_call_id,
         "tool_name": row.tool_name,
         "arguments": row.arguments if isinstance(row.arguments, dict) else {},
+        "extra_content": row.extra_content if isinstance(row.extra_content, dict) else None,
         "status": row.status,
         "reason": row.reason,
         "result": row.result if isinstance(row.result, dict) else None,
@@ -119,8 +121,8 @@ def _assistant_has_content_or_thinking(data: Any) -> bool:
             return True
         if _has_non_empty_part_text(parts, part_type="thinking"):
             return True
-        thinking_details = entry.get("thinkingDetails")
-        if isinstance(thinking_details, list) and len(thinking_details) > 0:
+        reasoning_detail = entry.get("reasoningDetail")
+        if isinstance(reasoning_detail, dict):
             return True
     return False
 
@@ -652,15 +654,19 @@ async def patch_thread_message(
     if not language:
         raise HTTPException(status_code=422, detail="language is required")
 
+    current = row.data if isinstance(row.data, dict) else {}
+    old_entry = current.get(language) if isinstance(current.get(language), dict) else {}
     entry: dict[str, Any] = {
         "contentParts": _normalize_content_parts(payload.content_parts),
     }
-    if payload.thinking_details is not None:
-        if not isinstance(payload.thinking_details, list):
-            raise HTTPException(status_code=422, detail="thinking_details must be a list when provided")
-        entry["thinkingDetails"] = payload.thinking_details
+    if payload.reasoning_detail is not None:
+        normalized_reasoning = normalize_reasoning_detail(payload.reasoning_detail)
+        if normalized_reasoning is None:
+            raise HTTPException(status_code=422, detail="reasoning_detail is invalid")
+        entry["reasoningDetail"] = normalized_reasoning
+    elif isinstance(old_entry.get("reasoningDetail"), dict):
+        entry["reasoningDetail"] = old_entry["reasoningDetail"]
 
-    current = row.data if isinstance(row.data, dict) else {}
     updated = dict(current)
     updated[language] = entry
     if bool(payload.set_final):

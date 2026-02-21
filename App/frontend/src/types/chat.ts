@@ -40,11 +40,12 @@ export interface ConversationBlock {
   tool_results?: ToolResultBlock[];
 }
 
-export interface ThinkingDetail {
-  type: 'summary' | 'text' | 'encrypted';
+export interface ReasoningDetail {
+  type: string;
   summary?: string;
   text?: string;
   signature?: string;
+  [key: string]: any;
 }
 
 export interface TokenUsage {
@@ -125,5 +126,5 @@ export interface ChatMessage extends ConversationBlock {
   seq?: number;
   timestamp: Date;
   toolCalls?: ToolCallMetadata[];
-  thinking_details?: ThinkingDetail[];
+  reasoning_detail?: ReasoningDetail;
 }

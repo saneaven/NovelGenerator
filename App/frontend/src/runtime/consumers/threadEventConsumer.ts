@@ -114,7 +114,6 @@ export class ThreadEventConsumer {
       data: {},
       streamingData: {
         contentParts: [],
-        thinkingDetails: [],
       },
       isStreaming: true,
       createdAt: nowIso(),
@@ -163,7 +162,7 @@ export class ThreadEventConsumer {
       runId: params.runId,
     });
     if (!message.isStreaming) return; // Already finalized (e.g. hydrated from API); skip replayed deltas
-    const streaming = message.streamingData ?? { contentParts: [], thinkingDetails: [] };
+    const streaming = message.streamingData ?? { contentParts: [] };
     const parts = [...(streaming.contentParts ?? [])];
     const last = parts[parts.length - 1];
     if (last && last.type === params.partType) {
@@ -174,7 +173,7 @@ export class ThreadEventConsumer {
     store.patchMessage(params.threadId, params.messageId, {
       streamingData: {
         contentParts: parts,
-        thinkingDetails: streaming.thinkingDetails ?? [],
+        reasoningDetail: streaming.reasoningDetail,
       },
       isStreaming: true,
     });
@@ -299,6 +298,7 @@ export class ThreadEventConsumer {
       llmCallId: toolCallId,
       toolName: String(payload.name ?? ''),
       arguments: (payload.arguments ?? {}) as Record<string, unknown>,
+      extraContent: (payload.extra_content ?? null) as Record<string, unknown> | null,
       status: toToolCallStatus(payload.status ?? 'validating'),
       reason: null,
       result: null,

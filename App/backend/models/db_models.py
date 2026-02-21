@@ -122,10 +122,10 @@ class UserSettings(Base):
     # LLM logging enabled - enable LLM request logging for debugging
     llm_logging_enabled = Column(Boolean, default=False, nullable=False)
 
-    # Tool call history limit - number of recent assistant messages to include tool calls for
+    # Tool call history limit - number of previous completed runs to include tool calls for
     tool_call_history_limit = Column(Integer, default=5, nullable=False)
 
-    # Thinking history limit - number of recent assistant messages to include thinking for
+    # Thinking history limit - number of previous completed runs to include reasoning/thinking for
     thinking_history_limit = Column(Integer, default=5, nullable=False)
 
     # Tool call auto-approve settings (all-or-none per assistant response)
@@ -807,7 +807,7 @@ class RunMessageModel(Base):
     seq = Column(BigInteger, nullable=False)  # per-run sequence
     seq_in_thread = Column(BigInteger, nullable=True)  # cross-run ordering within thread
     role = Column(String(16), nullable=False)
-    # Multilingual content: { "English": { "contentParts": [...], "thinkingDetails": [...] }, ... }
+    # Multilingual content: { "English": { "contentParts": [...], "reasoningDetail": {...} }, ... }
     data = Column(JSONB, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -855,6 +855,7 @@ class RunToolCallModel(Base):
     llm_call_id = Column(String(255), nullable=False)
     tool_name = Column(String(120), nullable=False)
     arguments = Column(JSONB, nullable=False, default=dict)
+    extra_content = Column(JSONB, nullable=True)
     status = Column(String(20), nullable=False)
     reason = Column(Text, nullable=True)
     result = Column(JSONB, nullable=True)

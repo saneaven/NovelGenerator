@@ -63,7 +63,7 @@ export interface ToolCallBatchDecisionResponse {
 export interface PatchMessageRequest {
   language: string;
   content_parts: Array<{ type: 'content' | 'thinking'; text: string }>;
-  thinking_details?: Array<Record<string, unknown>>;
+  reasoning_detail?: Record<string, unknown>;
   set_final?: boolean;
 }
 
@@ -145,6 +145,7 @@ function toToolCall(raw: Record<string, unknown>): ThreadToolCall {
     llmCallId: String(raw.llm_call_id ?? ''),
     toolName: String(raw.tool_name ?? ''),
     arguments: (raw.arguments ?? {}) as Record<string, unknown>,
+    extraContent: (raw.extra_content ?? null) as Record<string, unknown> | null,
     status: String(raw.status) as ThreadToolCall['status'],
     reason: (raw.reason ?? null) as string | null,
     result: (raw.result ?? null) as Record<string, unknown> | null,

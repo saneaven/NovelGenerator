@@ -95,6 +95,7 @@ class OpenAIResponsesProvider(BaseProvider):
             role = msg.get("role", "user")
             text_content = self._extract_text_content(msg)
             tool_calls = msg.get("tool_calls")
+            reasoning_detail = msg.get("reasoning_detail") if isinstance(msg.get("reasoning_detail"), dict) else None
 
             # Map roles (Chat Completions -> Responses)
             # system -> developer in Responses API
@@ -128,9 +129,23 @@ class OpenAIResponsesProvider(BaseProvider):
                         "arguments": tc_function.get("arguments", "{}")  # Already JSON string
                     })
                 result.append({"role": role, "content": content_items})
+                if isinstance(reasoning_detail, dict):
+                    reasoning_data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
+                    items = reasoning_data.get("items")
+                    if isinstance(items, list):
+                        for item in items:
+                            if isinstance(item, dict):
+                                result.append(item)
                 continue
 
             if not text_content:
+                if role == "assistant" and isinstance(reasoning_detail, dict):
+                    reasoning_data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
+                    items = reasoning_data.get("items")
+                    if isinstance(items, list):
+                        for item in items:
+                            if isinstance(item, dict):
+                                result.append(item)
                 continue
 
             # Convert text content to Responses content array format.
@@ -138,6 +153,13 @@ class OpenAIResponsesProvider(BaseProvider):
             content_items = [{"type": item_type, "text": text_content}]
 
             result.append({"role": role, "content": content_items})
+            if role == "assistant" and isinstance(reasoning_detail, dict):
+                reasoning_data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
+                items = reasoning_data.get("items")
+                if isinstance(items, list):
+                    for item in items:
+                        if isinstance(item, dict):
+                            result.append(item)
 
         return result
 
@@ -225,6 +247,7 @@ class OpenAIResponsesProvider(BaseProvider):
         tool_call_indices: Dict[str, int] = {}
         native_response = None
         tool_finish_emitted = False
+        captured_reasoning_tokens: Optional[int] = None
 
         try:
             stream = await client.responses.create(**request)
@@ -330,6 +353,11 @@ class OpenAIResponsesProvider(BaseProvider):
                         native_response = response_obj
                         usage = getattr(response_obj, "usage", None)
                         if usage:
+                            output_tokens_details = getattr(usage, "output_tokens_details", None)
+                            if output_tokens_details is not None:
+                                rt = getattr(output_tokens_details, "reasoning_tokens", None)
+                                if isinstance(rt, (int, float)):
+                                    captured_reasoning_tokens = int(rt)
                             captured_usage = {
                                 "prompt_tokens": getattr(usage, "input_tokens", 0),
                                 "completion_tokens": getattr(usage, "output_tokens", 0),
@@ -338,7 +366,10 @@ class OpenAIResponsesProvider(BaseProvider):
                                     getattr(usage, "output_tokens", 0)
                                 )
                             }
-                    yield ProviderEvent(kind="meta", meta=MetaPayload(finish_reason="stop"))
+                    yield ProviderEvent(
+                        kind="meta",
+                        meta=MetaPayload(finish_reason="stop", reasoning_tokens=captured_reasoning_tokens),
+                    )
 
                 # Handle errors in stream
                 elif event_type == "error":
@@ -397,7 +428,7 @@ class OpenAIResponsesProvider(BaseProvider):
 
         # Emit usage metadata (used to patch missing snapshot fields).
         if captured_usage:
-            yield ProviderEvent(kind="meta", meta=MetaPayload(usage=captured_usage))
+            yield ProviderEvent(kind="meta", meta=MetaPayload(usage=captured_usage, reasoning_tokens=captured_reasoning_tokens))
 
     async def get_models(self) -> Dict:
         """Fetch available OpenAI models, filtered to text/chat models only."""

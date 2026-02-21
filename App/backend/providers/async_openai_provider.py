@@ -127,6 +127,7 @@ class AsyncOpenAIProvider(BaseProvider):
         converted: List[Dict] = []
         for msg in messages:
             role = msg.get("role", "user")
+            reasoning_detail = msg.get("reasoning_detail") if isinstance(msg.get("reasoning_detail"), dict) else None
 
             if role == "tool_results":
                 # OpenAI: separate message per tool result with role "tool"
@@ -150,6 +151,26 @@ class AsyncOpenAIProvider(BaseProvider):
             tool_calls = msg.get("tool_calls")
             if role == "assistant" and isinstance(tool_calls, list) and tool_calls:
                 converted_msg["tool_calls"] = tool_calls
+
+            if role == "assistant" and isinstance(reasoning_detail, dict):
+                reasoning_data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
+                reasoning_meta = reasoning_detail.get("meta") if isinstance(reasoning_detail.get("meta"), dict) else {}
+                if isinstance(reasoning_data.get("reasoning"), str):
+                    converted_msg["reasoning"] = reasoning_data["reasoning"]
+
+                details = None
+                if isinstance(reasoning_data.get("reasoning_details"), list):
+                    details = reasoning_data["reasoning_details"]
+                elif isinstance(reasoning_data.get("details"), list):
+                    details = reasoning_data["details"]
+                if isinstance(details, list) and details:
+                    expected_format = reasoning_meta.get("openrouter_reasoning_format")
+                    if isinstance(expected_format, str) and expected_format.strip():
+                        details = [
+                            detail for detail in details
+                            if not isinstance(detail, dict) or detail.get("format") == expected_format
+                        ]
+                    converted_msg["reasoning_details"] = details
 
             converted.append(converted_msg)
 
@@ -404,11 +425,18 @@ class AsyncOpenAIProvider(BaseProvider):
         native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
         last_finish_reason = None
         captured_usage: Optional[Dict] = None
+        captured_reasoning_tokens: Optional[int] = None
 
         def _update_meta_from_chunk(chunk_dict: Dict) -> None:
-            nonlocal captured_usage, last_finish_reason
+            nonlocal captured_usage, captured_reasoning_tokens, last_finish_reason
             if "usage" in chunk_dict and chunk_dict["usage"]:
                 captured_usage = chunk_dict["usage"]
+                usage_details = chunk_dict["usage"] if isinstance(chunk_dict["usage"], dict) else {}
+                completion_details = usage_details.get("completion_tokens_details")
+                if isinstance(completion_details, dict):
+                    rt = completion_details.get("reasoning_tokens")
+                    if isinstance(rt, (int, float)):
+                        captured_reasoning_tokens = int(rt)
             for choice in chunk_dict.get("choices", []):
                 if choice.get("finish_reason"):
                     last_finish_reason = choice.get("finish_reason")
@@ -518,6 +546,9 @@ class AsyncOpenAIProvider(BaseProvider):
                         "completion_tokens": int(captured_usage.get("completion_tokens", 0) or 0),
                         "total_tokens": int(captured_usage.get("total_tokens", 0) or 0),
                     }
+                    if isinstance(captured_usage, dict)
+                    else None,
+                    reasoning_tokens=captured_reasoning_tokens,
                 ),
             )
 

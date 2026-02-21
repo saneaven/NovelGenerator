@@ -52,6 +52,8 @@ def map_openai_response_to_snapshot(
 ) -> FinalSnapshot:
     data = _to_dict(response_obj)
     usage_raw = data.get("usage") or {}
+    output_tokens_details = usage_raw.get("output_tokens_details") if isinstance(usage_raw.get("output_tokens_details"), dict) else {}
+    reasoning_tokens = output_tokens_details.get("reasoning_tokens") if isinstance(output_tokens_details.get("reasoning_tokens"), (int, float)) else None
     usage = normalize_usage_dict(
         {
             "prompt_tokens": usage_raw.get("input_tokens", 0),
@@ -110,6 +112,7 @@ def map_openai_response_to_snapshot(
         tool_calls=tool_calls,
         thinking_details=thinking_details,
         usage=usage,
+        reasoning_tokens=(int(reasoning_tokens) if isinstance(reasoning_tokens, (int, float)) else None),
         final_source="native",
     )
 
@@ -126,9 +129,13 @@ def map_chat_completion_to_snapshot(
     finish_reason = str(first_choice.get("finish_reason") or "stop")
 
     usage = normalize_usage_dict(data.get("usage"))
+    usage_raw = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+    completion_tokens_details = usage_raw.get("completion_tokens_details") if isinstance(usage_raw.get("completion_tokens_details"), dict) else {}
+    reasoning_tokens = completion_tokens_details.get("reasoning_tokens") if isinstance(completion_tokens_details.get("reasoning_tokens"), (int, float)) else None
 
     content_parts: List[Dict[str, str]] = []
     tool_calls: List[FinalToolCall] = []
+    thinking_details: List[Dict[str, Any]] = []
 
     content = message.get("content")
     if isinstance(content, str):
@@ -137,6 +144,24 @@ def map_chat_completion_to_snapshot(
         for part in content:
             if isinstance(part, dict):
                 _append_part(content_parts, "content", part.get("text"))
+
+    reasoning_text = message.get("reasoning")
+    if isinstance(reasoning_text, str) and reasoning_text:
+        _append_part(content_parts, "thinking", reasoning_text)
+        thinking_details.append({"type": "reasoning.text", "text": reasoning_text})
+
+    reasoning_details = message.get("reasoning_details")
+    if isinstance(reasoning_details, list):
+        for detail in reasoning_details:
+            if not isinstance(detail, dict):
+                continue
+            thinking_details.append(detail)
+            text_value = detail.get("text")
+            if isinstance(text_value, str) and text_value:
+                _append_part(content_parts, "thinking", text_value)
+            summary_value = detail.get("summary")
+            if isinstance(summary_value, str) and summary_value:
+                _append_part(content_parts, "thinking", summary_value)
 
     for tc in message.get("tool_calls") or []:
         if not isinstance(tc, dict):
@@ -160,8 +185,9 @@ def map_chat_completion_to_snapshot(
         finish_reason=finish_reason,
         content_parts=content_parts,
         tool_calls=tool_calls,
-        thinking_details=[],
+        thinking_details=thinking_details,
         usage=usage,
+        reasoning_tokens=(int(reasoning_tokens) if isinstance(reasoning_tokens, (int, float)) else None),
         final_source="native",
     )
 
@@ -226,6 +252,7 @@ def map_gemini_message_to_snapshot(
     provider: str,
     model: str,
     usage: Optional[Dict[str, int]] = None,
+    reasoning_tokens: Optional[int] = None,
     finish_reason: Optional[str] = None,
 ) -> FinalSnapshot:
     data = _to_dict(message_obj)
@@ -265,5 +292,6 @@ def map_gemini_message_to_snapshot(
         tool_calls=tool_calls,
         thinking_details=thinking_details,
         usage=normalize_usage_dict(usage),
+        reasoning_tokens=(int(reasoning_tokens) if isinstance(reasoning_tokens, int) else None),
         final_source="native",
     )

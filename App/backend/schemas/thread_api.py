@@ -67,7 +67,7 @@ class MessageResponse(BaseModel):
 class PatchMessageRequest(BaseModel):
     language: str
     content_parts: list[dict[str, Any]]
-    thinking_details: list[dict[str, Any]] | None = None
+    reasoning_detail: dict[str, Any] | None = None
     set_final: bool = False
 
 
@@ -81,6 +81,7 @@ class ToolCallResponse(BaseModel):
     llm_call_id: str
     tool_name: str
     arguments: dict[str, Any]
+    extra_content: dict[str, Any] | None = None
     status: str
     reason: str | None
     result: dict[str, Any] | None

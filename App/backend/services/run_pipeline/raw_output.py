@@ -63,9 +63,11 @@ async def apply_raw_output(
 
         entry: dict[str, Any] = {
             "contentParts": [{"type": "content", "text": text}],
-            "thinkingDetails": [],
         }
         current = source_message.data if isinstance(source_message.data, dict) else {}
+        existing_target = current.get(target_language) if isinstance(current.get(target_language), dict) else {}
+        if isinstance(existing_target.get("reasoningDetail"), dict):
+            entry["reasoningDetail"] = existing_target["reasoningDetail"]
         updated = dict(current)
         updated[target_language] = entry
         source_message.data = updated

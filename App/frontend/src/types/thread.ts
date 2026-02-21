@@ -43,6 +43,7 @@ export interface ThreadToolCall {
   llmCallId: string;
   toolName: string;
   arguments: Record<string, unknown>;
+  extraContent?: Record<string, unknown> | null;
   status: ToolCallStatus;
   reason?: string | null;
   result?: Record<string, unknown> | null;
@@ -52,14 +53,25 @@ export interface ThreadToolCall {
   updatedAt: string;
 }
 
+export interface ReasoningDetail {
+  type: 'custom' | 'openai' | 'gemini' | 'claude' | 'openrouter' | 'openai_compatible';
+  meta: {
+    provider?: 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
+    openai_compatible_thinking_format?: 'openai' | 'claude' | 'gemini';
+    openrouter_reasoning_format?: string;
+  };
+  data: Record<string, unknown>;
+  token_count: number;
+}
+
 export interface LangEntry {
   contentParts: Array<{ type: string; text: string }>;
-  thinkingDetails?: Array<Record<string, unknown>>;
+  reasoningDetail?: ReasoningDetail;
 }
 
 export interface DisplayMessageResult {
   contentParts: Array<{ type: string; text: string }>;
-  thinkingDetails?: Array<Record<string, unknown>>;
+  reasoningDetail?: ReasoningDetail;
   displayLanguage: string;
   isFallback: boolean;
 }
@@ -79,7 +91,7 @@ export function resolveRunMessageDisplay(
   if (exact) {
     return {
       contentParts: exact.contentParts ?? [],
-      thinkingDetails: exact.thinkingDetails,
+      reasoningDetail: exact.reasoningDetail,
       displayLanguage: language,
       isFallback: false,
     };
@@ -90,7 +102,7 @@ export function resolveRunMessageDisplay(
     if (fallback) {
       return {
         contentParts: fallback.contentParts ?? [],
-        thinkingDetails: fallback.thinkingDetails,
+        reasoningDetail: fallback.reasoningDetail,
         displayLanguage: fallbackLanguage,
         isFallback: true,
       };
@@ -102,7 +114,7 @@ export function resolveRunMessageDisplay(
     const first = data[languages[0]];
     return {
       contentParts: first.contentParts ?? [],
-      thinkingDetails: first.thinkingDetails,
+      reasoningDetail: first.reasoningDetail,
       displayLanguage: languages[0],
       isFallback: true,
     };
@@ -110,7 +122,7 @@ export function resolveRunMessageDisplay(
 
   return {
     contentParts: [],
-    thinkingDetails: undefined,
+    reasoningDetail: undefined,
     displayLanguage: language,
     isFallback: false,
   };
@@ -130,11 +142,11 @@ export function getRunMessageText(
 
 export function buildLangEntry(
   contentParts: Array<{ type: string; text: string }>,
-  thinkingDetails?: Array<Record<string, unknown>>,
+  reasoningDetail?: ReasoningDetail,
 ): LangEntry {
   return {
     contentParts,
-    ...(thinkingDetails !== undefined ? { thinkingDetails } : {}),
+    ...(reasoningDetail !== undefined ? { reasoningDetail } : {}),
   };
 }
 

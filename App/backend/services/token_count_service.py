@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID
@@ -193,4 +194,58 @@ async def count_text_tokens(
                 f"tiktoken fallback failed: {fallback_exc}"
             ) from fallback_exc
         raise RuntimeError(f"Token counting failed with unknown error; tiktoken fallback failed: {fallback_exc}") from fallback_exc
+
+
+def _message_to_count_text(message: dict[str, Any]) -> str:
+    role = str(message.get("role") or "")
+
+    parts = message.get("content_parts")
+    content_parts: list[dict[str, Any]] = parts if isinstance(parts, list) else []
+    content = "".join(
+        str(part.get("text") or "")
+        for part in content_parts
+        if isinstance(part, dict) and part.get("type") == "content"
+    )
+
+    tool_calls = message.get("tool_calls")
+    tool_calls_text = ""
+    if isinstance(tool_calls, list) and tool_calls:
+        compact = []
+        for call in tool_calls:
+            if not isinstance(call, dict):
+                continue
+            compact.append(
+                {
+                    "id": call.get("id"),
+                    "type": call.get("type"),
+                    "function": call.get("function"),
+                    "extra_content": call.get("extra_content"),
+                }
+            )
+        tool_calls_text = json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
+
+    return f"{role}\n{content}\n{tool_calls_text}"
+
+
+async def count_message_tokens(
+    db: Session,
+    *,
+    user_id: UUID,
+    provider: str,
+    model: str,
+    message: dict[str, Any],
+    tokenizer_override: str | None = None,
+    allow_custom_base_url: bool = True,
+) -> int:
+    text = _message_to_count_text(message)
+    result = await count_text_tokens(
+        db,
+        user_id=user_id,
+        provider=provider,
+        model=model,
+        text=text,
+        tokenizer_override=tokenizer_override,
+        allow_custom_base_url=allow_custom_base_url,
+    )
+    return int(result.token_count)
 

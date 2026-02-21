@@ -406,6 +406,7 @@ class RunPipeline:
                 llm_call_id=llm_call_id,
                 tool_name=tool_name,
                 arguments=arguments,
+                extra_content=(tc.extra_content if isinstance(getattr(tc, "extra_content", None), dict) else None),
                 status="validating",
             )
             db.add(row)
@@ -447,6 +448,7 @@ class RunPipeline:
                     "index": idx,
                     "name": tool_name,
                     "arguments": arguments,
+                    "extra_content": row.extra_content if isinstance(row.extra_content, dict) else None,
                     "status": row.status,
                     "seq_in_thread": int(tool_msg.seq_in_thread),
                 },

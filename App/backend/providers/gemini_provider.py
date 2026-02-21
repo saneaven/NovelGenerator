@@ -158,6 +158,7 @@ class GeminiProvider(BaseProvider):
             role = msg.get("role", "user")
             text = self._extract_text_content(msg)
             tool_calls = msg.get("tool_calls")
+            reasoning_detail = msg.get("reasoning_detail") if isinstance(msg.get("reasoning_detail"), dict) else None
 
             if role == "system":
                 if system_instruction is None and text:
@@ -181,8 +182,31 @@ class GeminiProvider(BaseProvider):
 
             mapped_role = "user" if role == "user" else "model"
 
+            reasoning_parts: List[types.Part] = []
+            if role == "assistant" and isinstance(reasoning_detail, dict):
+                reasoning_data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
+                raw_parts = reasoning_data.get("parts")
+                if isinstance(raw_parts, list):
+                    for part in raw_parts:
+                        if not isinstance(part, dict):
+                            continue
+                        text_value = part.get("text")
+                        if not isinstance(text_value, str) or not text_value:
+                            continue
+                        thought = bool(part.get("thought"))
+                        thought_signature = part.get("thought_signature")
+                        kwargs: Dict[str, Any] = {"text": text_value, "thought": thought}
+                        if isinstance(thought_signature, str) and thought_signature:
+                            kwargs["thought_signature"] = thought_signature
+                        try:
+                            reasoning_parts.append(types.Part.model_validate(kwargs))
+                        except Exception:
+                            continue
+
             if role == "assistant" and tool_calls:
                 parts = []
+                if reasoning_parts:
+                    parts.extend(reasoning_parts)
                 if text:
                     parts.append(types.Part.from_text(text=text))
                 for tc in tool_calls:
@@ -198,9 +222,12 @@ class GeminiProvider(BaseProvider):
                 if text:
                     parser_messages.append({"role": "assistant", "content": text})
             else:
-                if text:
-                    contents.append(types.Content(role=mapped_role, parts=[types.Part.from_text(text=text)]))
-                    if mapped_role == "model":
+                if text or reasoning_parts:
+                    parts = list(reasoning_parts)
+                    if text:
+                        parts.append(types.Part.from_text(text=text))
+                    contents.append(types.Content(role=mapped_role, parts=parts))
+                    if mapped_role == "model" and text:
                         parser_messages.append({"role": "assistant", "content": text})
 
         return {
@@ -295,6 +322,7 @@ class GeminiProvider(BaseProvider):
         stream = None
         chat = None
         captured_usage: Optional[Dict[str, int]] = None
+        captured_reasoning_tokens: Optional[int] = None
         last_finish_reason: Any = None
         tool_finish_emitted = False
 
@@ -336,6 +364,9 @@ class GeminiProvider(BaseProvider):
                         "completion_tokens": int(getattr(usage_meta, "candidates_token_count", 0) or 0),
                         "total_tokens": int(getattr(usage_meta, "total_token_count", 0) or 0),
                     }
+                    thought_tokens = getattr(usage_meta, "thoughts_token_count", None)
+                    if isinstance(thought_tokens, (int, float)):
+                        captured_reasoning_tokens = int(thought_tokens)
 
                 candidates = getattr(chunk, "candidates", None) or []
                 for cand in candidates:
@@ -366,12 +397,16 @@ class GeminiProvider(BaseProvider):
                                     import base64
 
                                     signature = base64.b64encode(signature).decode("utf-8")
+                            thought_detail: Dict[str, Any] = {"thought": True}
+                            if thought_text:
+                                thought_detail["text"] = thought_text
+                            if isinstance(signature, str) and signature:
+                                thought_detail["thought_signature"] = signature
+                            if thought_detail.get("text") or thought_detail.get("thought_signature"):
                                 yield ProviderEvent(
                                     kind="delta",
                                     delta=DeltaPayload(
-                                        thinking_details_delta=[
-                                            {"type": "signature", "signature": signature}
-                                        ]
+                                        thinking_details_delta=[thought_detail]
                                     ),
                                 )
                             continue
@@ -482,6 +517,7 @@ class GeminiProvider(BaseProvider):
                     meta=MetaPayload(
                         usage=captured_usage,
                         finish_reason=finish_reason,
+                        reasoning_tokens=captured_reasoning_tokens,
                     ),
                 )
 

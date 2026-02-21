@@ -381,13 +381,13 @@ export interface AppendRunMessageResponse {
 export interface PatchRunMessageRequest {
   language: string;
   content_parts?: Array<Record<string, any>>;
-  thinking_details?: Array<Record<string, any>>;
+  reasoning_detail?: Record<string, any>;
 }
 
 export interface TranslateRunMessageRequest {
   language: string;
   content_parts: Array<Record<string, any>>;
-  thinking_details?: Array<Record<string, any>>;
+  reasoning_detail?: Record<string, any>;
 }
 
 export interface PatchRunMessageResponse {
