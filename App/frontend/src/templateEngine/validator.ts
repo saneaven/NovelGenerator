@@ -34,7 +34,6 @@ export function mapTaskTypeToSchemaType(
       return 'subAgent';
     case 'imagePrompt':
       if (taskSubtype === 'scene') return 'sceneImagePrompt';
-      if (taskSubtype === 'coverImage') return 'coverImagePrompt';
       return 'objectImagePrompt';
     default:
       return null;

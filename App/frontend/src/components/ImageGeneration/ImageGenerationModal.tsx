@@ -1102,32 +1102,19 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 </button>
             </div>
 
-            {/* AI Prompt Builder Modal - supports object, cover_image, and scene contexts */}
+            {/* AI Prompt Builder Modal - supports object and scene contexts */}
             {showPromptBuilder && (objectType && objectId ? (
-                objectType === 'basic_info' ? (
-                    <UnifiedImagePromptModal
-                        isOpen={showPromptBuilder}
-                        onClose={() => setShowPromptBuilder(false)}
-                        onPromptGenerated={handlePromptBuilderGenerated}
-                        onStreamingStart={handleStreamingStart}
-                        onStreamingError={handleStreamingError}
-                        contextType="cover_image"
-                        basicInfoId={objectId}
-                        promptMode={isTagBased ? activePromptTab : 'natural'}
-                    />
-                ) : (
-                    <UnifiedImagePromptModal
-                        isOpen={showPromptBuilder}
-                        onClose={() => setShowPromptBuilder(false)}
-                        onPromptGenerated={handlePromptBuilderGenerated}
-                        onStreamingStart={handleStreamingStart}
-                        onStreamingError={handleStreamingError}
-                        contextType="object"
-                        objectType={objectType as 'character' | 'location' | 'organization' | 'lorebook'}
-                        objectId={objectId}
-                        promptMode={isTagBased ? activePromptTab : 'natural'}
-                    />
-                )
+                <UnifiedImagePromptModal
+                    isOpen={showPromptBuilder}
+                    onClose={() => setShowPromptBuilder(false)}
+                    onPromptGenerated={handlePromptBuilderGenerated}
+                    onStreamingStart={handleStreamingStart}
+                    onStreamingError={handleStreamingError}
+                    contextType="object"
+                    objectType={objectType as 'basic_info' | 'character' | 'location' | 'organization' | 'lorebook'}
+                    objectId={objectId}
+                    promptMode={isTagBased ? activePromptTab : 'natural'}
+                />
             ) : sceneContext ? (
                 <UnifiedImagePromptModal
                     isOpen={showPromptBuilder}

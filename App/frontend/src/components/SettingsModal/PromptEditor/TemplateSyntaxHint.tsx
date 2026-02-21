@@ -73,7 +73,6 @@ function getSchemaKey(taskType: string, name?: string): PromptType | null {
         case 'imagePrompt':
             if (name === 'object') return 'objectImagePrompt';
             if (name === 'scene') return 'sceneImagePrompt';
-            if (name === 'coverImage') return 'coverImagePrompt';
             return null;
         default: return null;
     }

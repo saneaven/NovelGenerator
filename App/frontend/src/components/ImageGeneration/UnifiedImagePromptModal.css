@@ -77,7 +77,7 @@
   color: var(--color-brand-primary);
 }
 
-/* Context Indicator (for object and cover_image) */
+/* Context Indicator */
 .unified-image-prompt-modal .context-indicator {
   display: flex;
   align-items: center;
@@ -99,15 +99,6 @@
   font-size: 0.9rem;
   font-weight: 500;
   color: var(--color-text-primary);
-}
-
-.unified-image-prompt-modal .context-indicator.cover-image {
-  background: var(--color-success-light);
-  border-color: var(--color-success);
-}
-
-.unified-image-prompt-modal .context-indicator.cover-image .context-type {
-  color: var(--color-success);
 }
 
 /* Scene Context Preview */

@@ -127,6 +127,17 @@ async def build_project_data(
 
     # story objects
     story_objects: list[dict[str, Any]] = []
+    if basic is not None:
+        story_objects.append({
+            "type": "basic_info",
+            "id": str(basic.id),
+            "name": str(basic_data.get("title") or ""),
+            "description": str(basic_data.get("logline") or ""),
+            "content": str(basic_data.get("genre") or ""),
+            "imagePrompt": getattr(basic, "image_prompt", None),
+            "imagePromptPositive": getattr(basic, "image_prompt_positive", None),
+            "imagePromptNegative": getattr(basic, "image_prompt_negative", None),
+        })
     for object_type, rows in [
         ("character", characters),
         ("organization", organizations),
@@ -271,6 +282,17 @@ async def build_project_data(
             lang_basic_info = {"id": "", "title": "", "logline": "", "genre": ""}
 
         lang_objects: list[dict[str, Any]] = []
+        if basic is not None:
+            lang_objects.append({
+                "type": "basic_info",
+                "id": str(basic.id),
+                "name": str(lang_basic.get("title") or ""),
+                "description": str(lang_basic.get("logline") or ""),
+                "content": str(lang_basic.get("genre") or ""),
+                "imagePrompt": getattr(basic, "image_prompt", None),
+                "imagePromptPositive": getattr(basic, "image_prompt_positive", None),
+                "imagePromptNegative": getattr(basic, "image_prompt_negative", None),
+            })
         for object_type, rows in [
             ("character", characters),
             ("organization", organizations),

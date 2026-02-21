@@ -272,11 +272,6 @@ def build_memory_summary_template_data(
             "scenePreContext": "",
             "scenePostContext": "",
             "selectedObjectIds": [],
-            "coverImage": {
-                "title": "",
-                "logline": "",
-                "genre": "",
-            },
         },
         "feedback": {
             "editingObjectIds": [],

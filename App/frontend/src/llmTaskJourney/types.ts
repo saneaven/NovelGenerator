@@ -18,11 +18,10 @@ export type EditingTargets =
   | {
       kind: 'imagePrompt';
       projectId: string;
-      contextType: 'object' | 'cover_image' | 'scene';
+      contextType: 'object' | 'scene';
       promptMode: string;
       objectType?: string;
       objectId?: string;
-      basicInfoId?: string;
       sceneContext?: { preContext: string; postContext: string };
       selectedObjectIds?: string[];
     }

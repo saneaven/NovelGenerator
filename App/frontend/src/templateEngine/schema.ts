@@ -41,7 +41,7 @@ export const UNIFIED_SCHEMA = {
     objects: {
       desc: "Main language objects array",
       example: [{
-        type: "character" as "character" | "location" | "organization" | "lorebook",
+        type: "character" as "basic_info" | "character" | "location" | "organization" | "lorebook",
         id: "char-1",
         name: "Uhtred",
         description: "A Saxon warrior",
@@ -49,7 +49,7 @@ export const UNIFIED_SCHEMA = {
         imagePrompt: "A tall warrior with long hair...",
         imagePromptPositive: "warrior, medieval, armor",
         imagePromptNegative: "modern, futuristic"
-      }] as Array<{ type: "character" | "location" | "organization" | "lorebook"; id: string; name: string; description: string; content: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>
+      }] as Array<{ type: "basic_info" | "character" | "location" | "organization" | "lorebook"; id: string; name: string; description: string; content: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>
     },
     outline: {
       desc: "Story outline with acts and chapters",
@@ -95,7 +95,7 @@ export const UNIFIED_SCHEMA = {
         }
       } as Record<string, {
         basicInfo: { id: string; title: string; logline: string; genre: string };
-        objects: Array<{ type: "character" | "location" | "organization" | "lorebook"; id: string; name: string; description: string; content: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>;
+        objects: Array<{ type: "basic_info" | "character" | "location" | "organization" | "lorebook"; id: string; name: string; description: string; content: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>;
         outline: { acts: Array<{ id: string; name: string; description: string; content: string; chapters: Array<{ id: string; name: string; description: string; content: string }> }> } | null;
         manuscripts: Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>;
       }>
@@ -251,14 +251,6 @@ export const UNIFIED_SCHEMA = {
     scenePreContext: { desc: "Scene pre-context (for scene mode)", example: "The hero enters the dark cave..." },
     scenePostContext: { desc: "Scene post-context (for scene mode)", example: "He finds the treasure chest." },
     selectedObjectIds: { desc: "IDs of selected reference objects", example: ["char-1", "loc-1"] as string[] },
-    coverImage: {
-      desc: "Cover image context (title, logline, genre)",
-      example: {
-        title: "The Last Kingdom",
-        logline: "A warrior's journey to reclaim his homeland",
-        genre: "Fantasy"
-      } as { title: string; logline: string; genre: string }
-    },
   },
 
   // User-defined variables (dynamic, fields determined by user configuration)
@@ -273,7 +265,7 @@ export const UNIFIED_SCHEMA = {
 /**
  * Prompt types
  */
-export type PromptType = 'agent' | 'memory' | 'editAssistant' | 'translation' | 'objectImagePrompt' | 'sceneImagePrompt' | 'coverImagePrompt' | 'subAgent';
+export type PromptType = 'agent' | 'memory' | 'editAssistant' | 'translation' | 'objectImagePrompt' | 'sceneImagePrompt' | 'subAgent';
 
 /**
  * Maps which variable groups are available for each prompt type.
@@ -285,7 +277,6 @@ export const PROMPT_TYPE_VARIABLES: Record<PromptType, string[]> = {
   translation: ['config', 'project', 'input', 'translation', 'feedback', 'variables'],
   objectImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
   sceneImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
-  coverImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
   subAgent: ['config', 'project', 'input', 'variables'],
 };
 

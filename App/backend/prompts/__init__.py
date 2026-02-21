@@ -92,13 +92,6 @@ _SCENE_IMAGE_PROMPT_INITIAL_USER_PROMPT = _load_prompt_file('imagePrompt/scene/i
 _SCENE_IMAGE_PROMPT_FIRST_USER_PROMPT = _load_prompt_file('imagePrompt/scene/firstUserPrompt.md')
 _SCENE_IMAGE_PROMPT_LAST_USER_PROMPT = _load_prompt_file('imagePrompt/scene/lastUserPrompt.md')
 _SCENE_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/scene/prefill.md')
-# Image Prompt - Cover Image
-_COVER_IMAGE_PROMPT_SYSTEM_PROMPT = _load_prompt_file('imagePrompt/coverImage/systemPrompt.md')
-_COVER_IMAGE_PROMPT_USER_PROMPT = _load_prompt_file('imagePrompt/coverImage/userPrompt.md')
-_COVER_IMAGE_PROMPT_INITIAL_USER_PROMPT = _load_prompt_file('imagePrompt/coverImage/initialUserPrompt.md')
-_COVER_IMAGE_PROMPT_FIRST_USER_PROMPT = _load_prompt_file('imagePrompt/coverImage/firstUserPrompt.md')
-_COVER_IMAGE_PROMPT_LAST_USER_PROMPT = _load_prompt_file('imagePrompt/coverImage/lastUserPrompt.md')
-_COVER_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/coverImage/prefill.md')
 
 # Default prompts structure
 # Format: {task_type: {task_subtype: {prompt_category: content}}}
@@ -176,14 +169,6 @@ DEFAULT_PROMPTS = {
             'firstUserPrompt': _SCENE_IMAGE_PROMPT_FIRST_USER_PROMPT,
             'lastUserPrompt': _SCENE_IMAGE_PROMPT_LAST_USER_PROMPT,
             'prefill': _SCENE_IMAGE_PROMPT_PREFILL,
-        },
-        'coverImage': {
-            'systemPrompt': _COVER_IMAGE_PROMPT_SYSTEM_PROMPT,
-            'userPrompt': _COVER_IMAGE_PROMPT_USER_PROMPT,
-            'initialUserPrompt': _COVER_IMAGE_PROMPT_INITIAL_USER_PROMPT,
-            'firstUserPrompt': _COVER_IMAGE_PROMPT_FIRST_USER_PROMPT,
-            'lastUserPrompt': _COVER_IMAGE_PROMPT_LAST_USER_PROMPT,
-            'prefill': _COVER_IMAGE_PROMPT_PREFILL,
         },
     },
 }

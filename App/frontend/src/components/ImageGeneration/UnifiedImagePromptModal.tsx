@@ -1,6 +1,6 @@
 /**
  * UnifiedImagePromptModal - Unified modal for AI-assisted image prompt generation
- * Handles three context types: object, cover_image, and scene
+ * Handles two context types: object and scene
  */
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
@@ -18,7 +18,7 @@ import { ObjectPicker } from '../ObjectPicker';
 import './UnifiedImagePromptModal.css';
 
 export type PromptMode = 'natural' | 'positive' | 'negative';
-export type ContextType = 'object' | 'cover_image' | 'scene';
+export type ContextType = 'object' | 'scene';
 
 export interface PromptResult {
   prompt: string;
@@ -42,11 +42,8 @@ interface UnifiedImagePromptModalProps {
   contextType: ContextType;
 
   // For 'object' context
-  objectType?: 'character' | 'location' | 'organization' | 'lorebook';
+  objectType?: 'basic_info' | 'character' | 'location' | 'organization' | 'lorebook';
   objectId?: string;
-
-  // For 'cover_image' context (saved as basic_info's image)
-  basicInfoId?: string;
 
   // For 'scene' context
   sceneContext?: SceneContext;
@@ -66,7 +63,6 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   contextType,
   objectType,
   objectId,
-  basicInfoId,
   sceneContext,
   defaultUserRequest,
   defaultSelectedObjectIds,
@@ -105,24 +101,10 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   const targetObject = useMemo(() => {
     if (contextType !== 'object' || !objectId || !objectData) return null;
     const data = objectData.data[settings.mainLanguage] || Object.values(objectData.data)[0] || {};
-    return { id: objectData.id, name: data.name || '', description: data.description || '' };
-  }, [contextType, objectId, objectData, settings.mainLanguage]);
-
-  // Get basic info data for 'cover_image' context
-  const basicInfoData = useMemo(() => {
-    if (contextType !== 'cover_image') return null;
-    // Find basic_info object from the objects map
-    const basicInfoObj = Object.values(unifiedStore.objects).find(obj => obj.type === 'basic_info');
-    if (!basicInfoObj) return null;
-    const data = basicInfoObj.data[settings.mainLanguage] || Object.values(basicInfoObj.data)[0] || {};
-    return {
-      id: basicInfoObj.id,
-      title: data.title || '',
-      logline: data.logline || '',
-      genre: data.genre || '',
-      metadata: basicInfoObj.metadata,
-    };
-  }, [contextType, unifiedStore.objects, settings.mainLanguage]);
+    // BasicInfo uses title, other objects use name
+    const displayName = objectType === 'basic_info' ? data.title : data.name;
+    return { id: objectData.id, name: displayName || '' };
+  }, [contextType, objectId, objectData, objectType, settings.mainLanguage]);
 
   // Reset form when modal closes
   useEffect(() => {
@@ -192,7 +174,6 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   const getModalTitle = (): string => {
     switch (contextType) {
       case 'object': return 'AI-Assisted Image Prompt Generator';
-      case 'cover_image': return 'AI Cover Image Prompt Generator';
       case 'scene': return 'AI Scene Prompt Assistant';
     }
   };
@@ -200,6 +181,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   const getContextLabel = (): string => {
     if (contextType === 'object' && objectType) {
       const labels: Record<string, string> = {
+        basic_info: 'Basic Info',
         character: 'Character',
         location: 'Location',
         organization: 'Organization',
@@ -234,7 +216,6 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       userRequest: userRequest.trim(),
       objectType,
       objectId,
-      basicInfoId,
       sceneContext,
       selectedObjectIds,
       rawMode: true,
@@ -297,7 +278,6 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     userRequest,
     objectType,
     objectId,
-    basicInfoId,
     sceneContext,
     selectedObjectIds,
     onStreamingStart,
@@ -306,7 +286,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     promptMode,
   ]);
 
-  const showObjectPicker = contextType === 'cover_image' || contextType === 'scene';
+  const showObjectPicker = contextType === 'scene';
 
   return (
     <BaseModal
@@ -324,8 +304,8 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       }
     >
       <div className="modal-body">
-        {/* Prompt mode indicator (for cover_image and scene) */}
-        {(contextType === 'cover_image' || contextType === 'scene') && (
+        {/* Prompt mode indicator (for scene) */}
+        {contextType === 'scene' && (
           <div className="prompt-mode-indicator">
             <span className="mode-label">Generating:</span>
             <span className="mode-value">{getPromptModeLabel()}</span>
@@ -337,13 +317,6 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
           <div className="context-indicator">
             <span className="context-type">{getContextLabel()}:</span>
             <span className="context-name">{targetObject?.name || 'Loading...'}</span>
-          </div>
-        )}
-
-        {contextType === 'cover_image' && (
-          <div className="context-indicator cover-image">
-            <span className="context-type">Cover Image for:</span>
-            <span className="context-name">{basicInfoData?.title || 'Your Novel'}</span>
           </div>
         )}
 
@@ -363,14 +336,12 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
           </div>
         )}
 
-        {/* Object picker for cover_image and scene - uses mode="story-objects" to auto-fetch */}
+        {/* Object picker for scene - uses mode="story-objects" to auto-fetch */}
         {showObjectPicker && (
           <div className="form-group object-context-section">
             <label>Include Story Objects</label>
             <span className="section-hint">
-              {contextType === 'cover_image'
-                ? 'Select objects to inform the cover design'
-                : 'Uncheck objects you don\'t want to include'}
+              Uncheck objects you don&apos;t want to include
             </span>
             <ObjectPicker
               mode="story-objects"
@@ -399,8 +370,6 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
             placeholder={
               contextType === 'object'
                 ? 'e.g., "A dramatic portrait looking determined"'
-                : contextType === 'cover_image'
-                ? 'e.g., "An epic fantasy cover with magical elements"'
                 : 'e.g., "A dramatic moment showing the characters facing each other"'
             }
             rows={3}

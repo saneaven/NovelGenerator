@@ -558,67 +558,6 @@ export const PROMPT_TREE: PromptNode[] = [
           }
         ]
       },
-      {
-        id: 'imageprompt-coverimage',
-        label: 'Cover Image Prompt',
-        type: 'category',
-        children: [
-          {
-            id: 'imageprompt-coverimage-system',
-            label: 'System Prompt',
-            type: 'prompt',
-            taskType: 'imagePrompt',
-            taskSubtype: 'coverImage',
-            category: 'systemPrompt',
-            description: 'Instructions for generating cover image prompts from story context'
-          },
-          {
-            id: 'imageprompt-coverimage-user',
-            label: 'User Prompt',
-            type: 'prompt',
-            taskType: 'imagePrompt',
-            taskSubtype: 'coverImage',
-            category: 'userPrompt',
-            description: 'Template for cover image prompt requests with title, logline, and selected objects'
-          },
-          {
-            id: 'imageprompt-coverimage-initial',
-            label: 'Initial User Prompt',
-            type: 'prompt',
-            taskType: 'imagePrompt',
-            taskSubtype: 'coverImage',
-            category: 'initialUserPrompt',
-            description: 'Template for single-message cover image prompt requests (rich context)'
-          },
-          {
-            id: 'imageprompt-coverimage-first',
-            label: 'First User Prompt',
-            type: 'prompt',
-            taskType: 'imagePrompt',
-            taskSubtype: 'coverImage',
-            category: 'firstUserPrompt',
-            description: 'Template for first feedback in multi-turn cover image prompt sessions'
-          },
-          {
-            id: 'imageprompt-coverimage-last',
-            label: 'Last User Prompt',
-            type: 'prompt',
-            taskType: 'imagePrompt',
-            taskSubtype: 'coverImage',
-            category: 'lastUserPrompt',
-            description: 'Template for last feedback in multi-turn cover image prompt sessions'
-          },
-          {
-            id: 'imageprompt-coverimage-prefill',
-            label: 'Prefill Template',
-            type: 'prompt',
-            taskType: 'imagePrompt',
-            taskSubtype: 'coverImage',
-            category: 'prefill',
-            description: 'Template for cover image prompt responses'
-          }
-        ]
-      }
     ]
   },
 ];

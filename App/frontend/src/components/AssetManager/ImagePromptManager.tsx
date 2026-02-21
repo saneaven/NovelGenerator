@@ -57,9 +57,6 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
         return (objectType === 'basic_info' ? data.title : data.name) || 'Unnamed';
     }, [object, objectType, settings.mainLanguage]);
 
-    // Determine if this is cover image mode (basic_info)
-    const isCoverImage = objectType === 'basic_info';
-
     // Load initial values from object metadata
     useEffect(() => {
         if (object?.metadata) {
@@ -430,10 +427,9 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                 onPromptGenerated={handlePromptGenerated}
                 onStreamingStart={handleStreamingStart}
                 onStreamingError={handleStreamingError}
-                contextType={isCoverImage ? 'cover_image' : 'object'}
-                objectType={isCoverImage ? undefined : objectType as 'character' | 'location' | 'organization' | 'lorebook'}
-                objectId={isCoverImage ? undefined : objectId}
-                basicInfoId={isCoverImage ? objectId : undefined}
+                contextType="object"
+                objectType={objectType as 'basic_info' | 'character' | 'location' | 'organization' | 'lorebook'}
+                objectId={objectId}
                 promptMode={activeTab}
             />
         </div>

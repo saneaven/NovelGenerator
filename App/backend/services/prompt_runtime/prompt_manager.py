@@ -97,9 +97,7 @@ class PromptManager:
 
             if journey_kind in {"imagePrompt", "sceneImagePrompt"}:
                 context_type = str(payload.get("contextType") or "").strip()
-                if context_type == "cover_image":
-                    task_subtype = "coverImage"
-                elif context_type == "scene":
+                if context_type == "scene":
                     task_subtype = "scene"
                 else:
                     task_subtype = "object"
@@ -313,7 +311,6 @@ class PromptManager:
         selected_object_ids = _as_str_list(payload.get("selectedObjectIds")) or context_object_ids
         object_id = str(payload.get("objectId") or "").strip()
         object_row = _find_story_object(project_data, object_id)
-        basic_info = _as_dict(project_data.get("basicInfo"))
         scene_context = _as_dict(payload.get("sceneContext"))
 
         return {
@@ -330,11 +327,6 @@ class PromptManager:
             "scenePreContext": str(scene_context.get("preContext") or ""),
             "scenePostContext": str(scene_context.get("postContext") or ""),
             "selectedObjectIds": selected_object_ids,
-            "coverImage": {
-                "title": str(basic_info.get("title") or ""),
-                "logline": str(basic_info.get("logline") or ""),
-                "genre": str(basic_info.get("genre") or ""),
-            },
         }
 
     @staticmethod

@@ -36,16 +36,15 @@ export interface MessageTranslationInput {
 }
 
 export type PromptMode = 'natural' | 'positive' | 'negative';
-export type ContextType = 'object' | 'cover_image' | 'scene';
+export type ContextType = 'object' | 'scene';
 
 export interface ImagePromptInput {
   projectId: string;
   promptMode: PromptMode;
   contextType: ContextType;
   userRequest: string;
-  objectType?: 'character' | 'location' | 'organization' | 'lorebook';
+  objectType?: 'basic_info' | 'character' | 'location' | 'organization' | 'lorebook';
   objectId?: string;
-  basicInfoId?: string;
   sceneContext?: { preContext: string; postContext: string };
   selectedObjectIds?: string[];
 }
@@ -166,7 +165,7 @@ const messageTranslationSpec: JourneySpec<MessageTranslationInput> = {
 const imagePromptSpec: JourneySpec<ImagePromptInput> = {
   kind: 'imagePrompt',
 
-  label: (input) => (input.contextType === 'cover_image' ? 'Cover Image Prompt' : 'Image Prompt'),
+  label: () => 'Image Prompt',
 
   buildEditingTargets: (input) =>
     ({
@@ -176,7 +175,6 @@ const imagePromptSpec: JourneySpec<ImagePromptInput> = {
       promptMode: input.promptMode,
       objectType: input.objectType,
       objectId: input.objectId,
-      basicInfoId: input.basicInfoId,
       sceneContext: input.sceneContext,
       selectedObjectIds: input.selectedObjectIds,
     }) as EditingTargets,

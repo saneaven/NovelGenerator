@@ -49,7 +49,6 @@ export function getPromptTypeFromTask(taskType: TaskType, taskSubtype: string): 
       return 'translation';
     case 'imagePrompt':
       if (taskSubtype === 'scene') return 'sceneImagePrompt';
-      if (taskSubtype === 'coverImage') return 'coverImagePrompt';
       return 'objectImagePrompt';
     default:
       return 'agent';
@@ -262,11 +261,6 @@ export function buildModeSpecificData(
           scenePreContext: '[ Placeholder for scene pre-context ]',
           scenePostContext: '[ Placeholder for scene post-context ]',
           selectedObjectIds: filteredIds.selectedObjectIds,
-          coverImage: {
-            title: '[ Placeholder for cover title ]',
-            logline: '[ Placeholder for cover logline ]',
-            genre: '[ Placeholder for cover genre ]',
-          },
         },
       };
       break;
