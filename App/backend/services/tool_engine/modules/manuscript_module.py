@@ -73,7 +73,17 @@ async def _execute_read_manuscript(args: dict[str, Any], ctx: ToolExecutionConte
     object_id = to_uuid(args.get("id"), "id")
     obj = read_object(ctx.db, ctx.project_id, "manuscript", object_id, ctx.language)
     lang_data = extract_lang_data(obj, ctx.language)
-    return make_result("Read successful", object_id=str(object_id), object_type="manuscript", data={"object": lang_data})
+
+    doc = lang_data.get("doc")
+    content = ""
+    if isinstance(doc, dict) and ctx.sidecar is not None:
+        try:
+            content = await ctx.sidecar.doc_to_markdown(doc)
+        except (SidecarUnavailableError, SidecarConversionError):
+            content = ""
+
+    result_obj: dict[str, Any] = {"content": content}
+    return make_result("Read successful", object_id=str(object_id), object_type="manuscript", data={"object": result_obj})
 
 
 async def _execute_replace_manuscript(args: dict[str, Any], ctx: ToolExecutionContext) -> dict[str, Any]:
