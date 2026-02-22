@@ -143,7 +143,6 @@ class CustomProvider(AsyncOpenAIProvider):
         max_tokens: Optional[int],
         provider_preference: Optional[Dict],
         thinking_config: Optional[Dict],
-        thinking_format: Optional[str] = None,
     ) -> Dict[str, object]:
         request = super()._prepare_request_kwargs(
             messages=messages,
@@ -154,7 +153,6 @@ class CustomProvider(AsyncOpenAIProvider):
             max_tokens=max_tokens,
             provider_preference=provider_preference,
             thinking_config=thinking_config,
-            thinking_format=thinking_format,
         )
 
         if self._current_thinking_template:
@@ -230,7 +228,6 @@ class CustomProvider(AsyncOpenAIProvider):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
-        thinking_format: Optional[str] = None,
         request_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
@@ -256,7 +253,6 @@ class CustomProvider(AsyncOpenAIProvider):
                 provider_preference=provider_preference,
                 thinking_config=thinking_config,
                 thinking_mode=thinking_mode,
-                thinking_format=thinking_format,
                 request_format=effective_request_format,
                 retry_config=retry_config,
                 native_tool_call=native_tool_call,
@@ -277,7 +273,6 @@ class CustomProvider(AsyncOpenAIProvider):
             provider_preference=provider_preference,
             thinking_config=effective_thinking_config,
             thinking_mode=thinking_mode,
-            thinking_format=thinking_format,
             request_format=effective_request_format,
             retry_config=retry_config,
             native_tool_call=native_tool_call,

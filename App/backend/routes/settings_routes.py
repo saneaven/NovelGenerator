@@ -30,6 +30,26 @@ def _assign_template_ids(templates: list) -> list:
     return templates
 
 
+def _cascade_clear_deleted_templates(settings: UserSettings, new_template_ids: set[str]) -> None:
+    """Clear custom_thinking_template_id from task_configs that reference deleted templates."""
+    task_configs = settings.task_configs
+    if not isinstance(task_configs, dict):
+        return
+    changed = False
+    for cfg in task_configs.values():
+        if not isinstance(cfg, dict):
+            continue
+        advanced = cfg.get("advanced")
+        if not isinstance(advanced, dict):
+            continue
+        tid = advanced.get("custom_thinking_template_id")
+        if tid and tid not in new_template_ids:
+            advanced.pop("custom_thinking_template_id", None)
+            changed = True
+    if changed:
+        settings.task_configs = task_configs  # type: ignore
+
+
 @router.get("", response_model=UserSettingsResponse)
 async def get_user_settings(
     current_user: User = Depends(get_current_user),
@@ -246,6 +266,7 @@ async def update_user_settings(
                 d["id"] = str(uuid.uuid4())
             templates.append(d)
         settings.custom_thinking_templates = templates  # type: ignore
+        _cascade_clear_deleted_templates(settings, {t["id"] for t in templates if t.get("id")})
 
     if update_data.nativeOutputMode is not None:
         settings.native_output_mode = update_data.nativeOutputMode  # type: ignore
@@ -563,6 +584,10 @@ async def sync_settings_from_client(
         settings.retry_config = client_settings.get('retryConfig', settings.retry_config or default_retry_config)  # type: ignore
         settings.image_gen_config = client_settings.get('imageGenConfig', settings.image_gen_config or default_image_gen_config)  # type: ignore
         settings.custom_thinking_templates = _assign_template_ids(client_settings.get('customThinkingTemplates', getattr(settings, 'custom_thinking_templates', [])))  # type: ignore
+        _cascade_clear_deleted_templates(
+            settings,
+            {t["id"] for t in (settings.custom_thinking_templates or []) if isinstance(t, dict) and t.get("id")},
+        )
         settings.native_output_mode = client_settings.get('nativeOutputMode', settings.native_output_mode)  # type: ignore
         settings.rag_search_enabled = client_settings.get('ragSearchEnabled', getattr(settings, 'rag_search_enabled', False))  # type: ignore
         settings.rag_search_top_k_per_query = client_settings.get('ragSearchTopKPerQuery', getattr(settings, 'rag_search_top_k_per_query', 20))  # type: ignore

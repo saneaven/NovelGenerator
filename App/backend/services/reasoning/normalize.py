@@ -22,10 +22,6 @@ def normalize_reasoning_detail(raw: Any) -> dict[str, Any] | None:
     if provider in REASONING_PROVIDERS:
         meta["provider"] = provider
 
-    thinking_format = str(meta_raw.get("openai_compatible_thinking_format") or "").strip()
-    if thinking_format:
-        meta["openai_compatible_thinking_format"] = thinking_format
-
     custom_template_id = meta_raw.get("custom_thinking_template_id")
     if isinstance(custom_template_id, str) and custom_template_id.strip():
         meta["custom_thinking_template_id"] = custom_template_id.strip()

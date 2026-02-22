@@ -341,7 +341,6 @@ async def stream_chat(
                 provider_preference=provider_pref,
                 thinking_config=thinking_cfg,
                 thinking_mode=request.thinking_mode,
-                thinking_format=request.thinking_format,
                 request_format=request.request_format,
                 retry_config=retry_cfg,
                 native_tool_call=request.native_tool_call,

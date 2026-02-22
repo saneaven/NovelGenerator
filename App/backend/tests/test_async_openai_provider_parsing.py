@@ -45,7 +45,7 @@ def test_chunk_to_events_falls_back_to_choice_thoughts_and_marks_thought_signatu
     assert delta.reasoning_detail_delta == [{"thought_signature": "sig-1", "thought": True}]
 
 
-def test_custom_openai_compat_reasoning_detail_contains_gemini_thought_details() -> None:
+def test_custom_openai_compat_reasoning_detail_extracts_thought_details() -> None:
     assembler = FallbackSnapshotAssembler(provider="custom", model="gemini-3-flash-preview")
     events = AsyncOpenAIProvider._chunk_to_events(
         {
@@ -68,12 +68,12 @@ def test_custom_openai_compat_reasoning_detail_contains_gemini_thought_details()
     snapshot = assembler.finalize_or_raise()
     reasoning_detail = CustomOpenAICompatIO().read_reasoning_detail(
         snapshot,
-        {"thinking_format": "gemini", "request_format": "openai_sdk"},
+        {"request_format": "openai_sdk"},
     )
 
     assert reasoning_detail is not None
     assert reasoning_detail["type"] == "openai_compatible"
-    assert reasoning_detail["meta"]["openai_compatible_thinking_format"] == "gemini"
+    assert reasoning_detail["meta"]["provider"] == "custom"
     details = reasoning_detail["data"]["details"]
     assert isinstance(details, list)
     assert details

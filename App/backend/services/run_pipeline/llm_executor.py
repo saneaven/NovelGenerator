@@ -402,7 +402,6 @@ async def run_llm(
         provider_preference=advanced.get("provider_preference"),
         thinking_config=effective_thinking_config,
         thinking_mode=thinking_mode,
-        thinking_format=advanced.get("thinking_format"),
         request_format=advanced.get("request_format"),
         retry_config=settings_service.get_retry_config(db, run.user_id),
         native_tool_call=native_tool_call_mode,

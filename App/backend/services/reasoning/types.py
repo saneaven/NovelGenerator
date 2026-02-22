@@ -9,8 +9,8 @@ ReasoningProvider = Literal["openai", "gemini", "claude", "openrouter", "custom"
 
 class ReasoningMeta(TypedDict, total=False):
     provider: ReasoningProvider
-    openai_compatible_thinking_format: Literal["openai", "claude", "gemini"]
     openrouter_reasoning_format: str
+    custom_thinking_template_id: str
 
 
 class ReasoningDetail(TypedDict):

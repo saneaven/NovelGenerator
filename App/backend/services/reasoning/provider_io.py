@@ -278,11 +278,8 @@ class CustomOpenAICompatIO(BaseProviderIO):
                         message["_template_history_inject"] = inject
                     message.pop("reasoning_detail", None)
             else:
-                # No template selected — legacy format-based matching
-                detail_format = str(meta.get("openai_compatible_thinking_format") or "").strip().lower()
-                current_format = str(advanced.get("thinking_format") or "").strip().lower()
-                if detail_format and current_format and detail_format != current_format:
-                    message.pop("reasoning_detail", None)
+                # No template selected — can't inject reasoning back, drop it
+                message.pop("reasoning_detail", None)
 
         return out
 

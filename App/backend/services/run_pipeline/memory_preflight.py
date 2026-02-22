@@ -59,7 +59,6 @@ async def run_summary_model(
         provider_preference=summary_cfg.advanced.get("provider_preference") if isinstance(summary_cfg.advanced, dict) else None,
         thinking_config=summary_cfg.advanced.get("thinking_config") if isinstance(summary_cfg.advanced, dict) else None,
         thinking_mode=summary_cfg.advanced.get("thinking_mode") if isinstance(summary_cfg.advanced, dict) else "off",
-        thinking_format=summary_cfg.advanced.get("thinking_format") if isinstance(summary_cfg.advanced, dict) else None,
         request_format=summary_cfg.advanced.get("request_format") if isinstance(summary_cfg.advanced, dict) else None,
         retry_config=settings_service.get_retry_config(db, user_id),
         native_tool_call=False,
