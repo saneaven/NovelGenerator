@@ -116,8 +116,7 @@
 
 .editor-wrapper__header {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: var(--spacing-lg);
     padding: var(--spacing-md) var(--spacing-lg);
     border-bottom: 1px solid var(--color-border-subtle);
@@ -125,7 +124,6 @@
 }
 
 .editor-wrapper__title-group {
-    flex: 1;
     min-width: 0;
 }
 
@@ -227,8 +225,12 @@
 .editor-wrapper__actions {
     display: flex;
     gap: var(--spacing-sm);
+    flex: 1;
+    justify-content: flex-start;
+}
+
+.editor-wrapper__sidebar-toggle {
     flex-shrink: 0;
-    margin-left: auto; /* Keep actions on the right when title-group is absent */
 }
 
 .editor-wrapper__body {

@@ -108,18 +108,6 @@
     text-overflow: ellipsis;
 }
 
-.tree-node__bullet {
-    display: flex;
-    color: var(--color-text-muted);
-    opacity: 0;
-    transition: opacity var(--transition-fast);
-}
-
-.tree-node__content:hover .tree-node__bullet,
-.tree-node__content--selected .tree-node__bullet {
-    opacity: 1;
-}
-
 .tree-node__children {
     /* Nested children container */
 }

@@ -107,6 +107,7 @@ export function buildMinimalProjectData(): TemplateData['project'] {
       wordCount: 0,
     }],
     languages: {},
+    contentByLang: {},
     guidelines: {
       id: '[ placeholder-guidelines-id ]',
       authorNote: '[ Placeholder for author note / guidelines ]',

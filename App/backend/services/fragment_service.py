@@ -60,7 +60,6 @@ class FragmentService:
             content=fragment.content,
             description=fragment.description,
             version_number=fragment.version_number,
-            is_system_default=fragment.is_system_default,
             created_at=fragment.created_at,
             updated_at=fragment.updated_at,
         )
@@ -118,7 +117,6 @@ class FragmentService:
                 folder_path=_folder_path_str(f.folder_id, path_cache),
                 fragment_name=f.fragment_name,
                 description=f.description,
-                is_system_default=f.is_system_default,
                 version_number=f.version_number,
                 updated_at=f.updated_at,
             )
@@ -145,7 +143,6 @@ class FragmentService:
                 fragment_name=f.fragment_name,
                 content=f.content,
                 description=f.description,
-                is_system_default=f.is_system_default,
             )
             for f in fragments
         ]
@@ -243,7 +240,6 @@ class FragmentService:
             fragment_name=fragment_name,
             content=content,
             description=description,
-            is_system_default=False,
             version_number=new_version_number,
             note=note,
             created_at=now,
@@ -263,7 +259,6 @@ class FragmentService:
             content=new_fragment.content,
             description=new_fragment.description,
             version_number=new_fragment.version_number,
-            is_system_default=new_fragment.is_system_default,
             created_at=new_fragment.created_at,
             updated_at=new_fragment.updated_at,
             note=new_fragment.note,
@@ -292,7 +287,6 @@ class FragmentService:
                 version_number=v.version_number,
                 created_at=v.created_at,
                 note=v.note,
-                is_system_default=v.is_system_default,
                 preview=v.content[:200] + ("..." if len(v.content) > 200 else ""),
             )
             for v in versions

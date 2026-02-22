@@ -1704,18 +1704,20 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                         )}
                       </>
                     )}
-
-                    <IconButton
-                      icon={isSidebarCollapsed ? <ChevronLeft size="sm" /> : <ChevronRight size="sm" />}
-                      onClick={toggleSidebar}
-                      title={
-                        isSidebarCollapsed
-                          ? t('settings.promptEditor.expandSidebar')
-                          : t('settings.promptEditor.collapseSidebar')
-                      }
-                      size="sm"
-                    />
                   </div>
+
+                  <IconButton
+                    icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
+                    onClick={toggleSidebar}
+                    title={
+                      isSidebarCollapsed
+                        ? t('settings.promptEditor.expandSidebar')
+                        : t('settings.promptEditor.collapseSidebar')
+                    }
+                    size="lg"
+                    variant="ghost"
+                    className="editor-wrapper__sidebar-toggle"
+                  />
                 </header>
               )}
 

@@ -341,9 +341,6 @@ class PromptFragment(Base):
     content = Column(Text, nullable=False)
     description = Column(Text, nullable=True)
 
-    # Flags
-    is_system_default = Column(Boolean, default=False, nullable=False)
-
     # Version control (same pattern as PromptVersion)
     version_number = Column(Integer, nullable=False)
     note = Column(Text, nullable=True)

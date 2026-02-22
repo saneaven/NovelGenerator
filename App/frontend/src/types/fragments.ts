@@ -13,7 +13,7 @@ export interface FragmentContent {
   content: string;
   description: string | null;
   version_number: number;
-  is_system_default: boolean;
+
   created_at: string;
   updated_at: string;
 }
@@ -29,7 +29,7 @@ export interface FragmentVersion {
   content: string;
   description: string | null;
   version_number: number;
-  is_system_default: boolean;
+
   created_at: string;
   updated_at: string;
   note: string | null;
@@ -42,7 +42,7 @@ export interface FragmentVersionHistoryItem {
   version_number: number;
   created_at: string;
   note: string | null;
-  is_system_default: boolean;
+
   preview: string;
 }
 
@@ -55,7 +55,7 @@ export interface FragmentListItem {
   folder_path: string | null;
   fragment_name: string;
   description: string | null;
-  is_system_default: boolean;
+
   version_number: number;
   updated_at: string;
 }
@@ -70,7 +70,7 @@ export interface FragmentWithContent {
   fragment_name: string;
   content: string;
   description: string | null;
-  is_system_default: boolean;
+
 }
 
 /**

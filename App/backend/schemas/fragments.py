@@ -20,7 +20,7 @@ class FragmentContentResponse(BaseModel):
     content: str
     description: Optional[str]
     version_number: int
-    is_system_default: bool
+
     created_at: datetime
     updated_at: datetime
 
@@ -56,7 +56,7 @@ class FragmentVersionResponse(BaseModel):
     content: str
     description: Optional[str]
     version_number: int
-    is_system_default: bool
+
     created_at: datetime
     updated_at: datetime
     note: Optional[str]
@@ -67,7 +67,7 @@ class FragmentVersionHistoryItem(BaseModel):
     version_number: int
     created_at: datetime
     note: Optional[str]
-    is_system_default: bool
+
     preview: str  # First 200 characters
 
     class Config:
@@ -86,7 +86,7 @@ class FragmentListItem(BaseModel):
     folder_path: Optional[str]  # Computed path for display
     fragment_name: str
     description: Optional[str]
-    is_system_default: bool
+
     version_number: int
     updated_at: datetime
 
@@ -99,7 +99,7 @@ class FragmentWithContent(BaseModel):
     fragment_name: str
     content: str
     description: Optional[str]
-    is_system_default: bool
+
 
 
 class FolderTreeNode(BaseModel):

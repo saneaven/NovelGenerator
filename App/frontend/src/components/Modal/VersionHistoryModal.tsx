@@ -14,7 +14,6 @@ export interface TextVersionHistoryItem {
   version_number: number;
   created_at: string;
   note: string | null;
-  is_system_default: boolean;
   preview: string;
 }
 
@@ -258,7 +257,6 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                   <span className="history-item__number">v{version.version_number}</span>
                   <div className="history-item__badges">
                     {index === 0 && <span className="badge badge--active">Active</span>}
-                    {version.is_system_default && <span className="badge badge--default">Default</span>}
                   </div>
                 </div>
                 <div className="history-item__date">{formatDate(version.created_at)}</div>

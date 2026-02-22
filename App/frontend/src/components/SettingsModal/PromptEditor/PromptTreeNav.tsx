@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PromptNode } from './promptTree';
-import { Expand, Collapse, Bullet, Close } from '../../icons';
+import { Expand, Collapse, Close } from '../../icons';
 import './PromptTreeNav.css';
 
 interface PromptTreeNavProps {
@@ -59,10 +59,6 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         )}
 
         <span className="tree-node__label">{node.label}</span>
-
-        {!isCategory && (
-          <span className="tree-node__bullet"><Bullet size="xs" /></span>
-        )}
       </div>
 
       {isCategory && hasChildren && isExpanded && (

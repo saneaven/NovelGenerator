@@ -1,9 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { fragmentService } from '../../../api/fragmentService';
 import type { FragmentTreeResponse, FragmentListItem, FolderTreeNode } from '../../../types/fragments';
-import { Expand, Collapse, Bullet, Plus, Folder, Close } from '../../icons';
+import { Expand, Collapse, Plus, Folder, Close, GripVertical } from '../../icons';
 import { TextButton } from '../../TextButton';
 import './FragmentTreeNav.css';
+
+interface DraggedFragment {
+  folderId: string | null;
+  fragmentName: string;
+}
 
 interface FragmentTreeNavProps {
   selectedPath: string | null;
@@ -21,6 +26,9 @@ interface FolderNodeProps {
   onFragmentSelect: (folderId: string | null, fragmentName: string, fullPath: string) => void;
   onToggleExpand: (id: string) => void;
   onCreateFragment: (folderPath: string | null) => void;
+  onDragStart: (e: React.DragEvent, fragment: FragmentListItem) => void;
+  onFolderDragOver: (e: React.DragEvent) => void;
+  onFolderDrop: (e: React.DragEvent, targetFolderId: string) => void;
 }
 
 const FragmentItem: React.FC<{
@@ -28,18 +36,20 @@ const FragmentItem: React.FC<{
   level: number;
   isSelected: boolean;
   onSelect: () => void;
-}> = ({ fragment, level, isSelected, onSelect }) => {
+  onDragStart: (e: React.DragEvent, fragment: FragmentListItem) => void;
+}> = ({ fragment, level, isSelected, onSelect, onDragStart }) => {
   return (
     <div
       className={`tree-node__content tree-node__content--fragment ${isSelected ? 'tree-node__content--selected' : ''}`}
       style={{ paddingLeft: `${level * 16 + 24}px` }}
       onClick={onSelect}
+      draggable
+      onDragStart={(e) => onDragStart(e, fragment)}
     >
-      <span className="tree-node__bullet"><Bullet size="xs" /></span>
+      <span className="tree-node__grip">
+        <GripVertical size="xs" />
+      </span>
       <span className="tree-node__label">{fragment.fragment_name}</span>
-      {fragment.is_system_default && (
-        <span className="tree-node__badge">Default</span>
-      )}
     </div>
   );
 };
@@ -52,7 +62,11 @@ const FolderNode: React.FC<FolderNodeProps> = ({
   onFragmentSelect,
   onToggleExpand,
   onCreateFragment,
+  onDragStart,
+  onFolderDragOver,
+  onFolderDrop,
 }) => {
+  const [isDragOver, setIsDragOver] = useState(false);
   const isExpanded = expandedNodes.has(node.id);
   const hasChildren = (node.children && node.children.length > 0) || (node.fragments && node.fragments.length > 0);
 
@@ -65,12 +79,29 @@ const FolderNode: React.FC<FolderNodeProps> = ({
     onCreateFragment(node.path);
   };
 
+  const handleDragOver = (e: React.DragEvent) => {
+    onFolderDragOver(e);
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    setIsDragOver(false);
+    onFolderDrop(e, node.id);
+  };
+
   return (
     <div className="tree-node">
       <div
-        className="tree-node__content tree-node__content--folder"
+        className={`tree-node__content tree-node__content--folder ${isDragOver ? 'tree-node__content--drag-over' : ''}`}
         style={{ paddingLeft: `${level * 16 + 8}px` }}
         onClick={handleClick}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         <span className="tree-node__expand-icon">
           {hasChildren ? (isExpanded ? <Collapse size="xs" /> : <Expand size="xs" />) : <span style={{ width: 12 }} />}
@@ -98,6 +129,9 @@ const FolderNode: React.FC<FolderNodeProps> = ({
               onFragmentSelect={onFragmentSelect}
               onToggleExpand={onToggleExpand}
               onCreateFragment={onCreateFragment}
+              onDragStart={onDragStart}
+              onFolderDragOver={onFolderDragOver}
+              onFolderDrop={onFolderDrop}
             />
           ))}
 
@@ -112,6 +146,7 @@ const FolderNode: React.FC<FolderNodeProps> = ({
                 level={level + 1}
                 isSelected={selectedPath === fragmentPath}
                 onSelect={() => onFragmentSelect(fragment.folder_id, fragment.fragment_name, fragmentPath)}
+                onDragStart={onDragStart}
               />
             );
           })}
@@ -131,6 +166,8 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
   const [treeData, setTreeData] = useState<FragmentTreeResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [isRootDragOver, setIsRootDragOver] = useState(false);
+  const draggedRef = useRef<DraggedFragment | null>(null);
 
   useEffect(() => {
     loadTree();
@@ -172,6 +209,63 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
     });
   };
 
+  const handleDragStart = (e: React.DragEvent, fragment: FragmentListItem) => {
+    draggedRef.current = {
+      folderId: fragment.folder_id,
+      fragmentName: fragment.fragment_name,
+    };
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleFolderDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleFolderDrop = async (e: React.DragEvent, targetFolderId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const dragged = draggedRef.current;
+    if (!dragged) return;
+    draggedRef.current = null;
+
+    if (dragged.folderId === targetFolderId) return;
+
+    try {
+      await fragmentService.moveFragment(dragged.folderId, dragged.fragmentName, targetFolderId);
+      await loadTree();
+    } catch (error) {
+      console.error('Failed to move fragment:', error);
+    }
+  };
+
+  const handleRootDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setIsRootDragOver(true);
+  };
+
+  const handleRootDragLeave = () => {
+    setIsRootDragOver(false);
+  };
+
+  const handleRootDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsRootDragOver(false);
+    const dragged = draggedRef.current;
+    if (!dragged) return;
+    draggedRef.current = null;
+
+    if (dragged.folderId === null) return;
+
+    try {
+      await fragmentService.moveFragment(dragged.folderId, dragged.fragmentName, null);
+      await loadTree();
+    } catch (error) {
+      console.error('Failed to move fragment to root:', error);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="tree-nav tree-nav--loading">
@@ -204,7 +298,12 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
         )}
       </header>
 
-      <div className="tree-nav__content">
+      <div
+        className={`tree-nav__content ${isRootDragOver ? 'tree-nav__content--drag-over' : ''}`}
+        onDragOver={handleRootDragOver}
+        onDragLeave={handleRootDragLeave}
+        onDrop={handleRootDrop}
+      >
         {!hasFragments ? (
           <div className="tree-nav__empty">
             <p>No fragments yet</p>
@@ -227,6 +326,7 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
                   level={0}
                   isSelected={selectedPath === fragmentPath}
                   onSelect={() => onFragmentSelect(null, fragment.fragment_name, fragment.fragment_name)}
+                  onDragStart={handleDragStart}
                 />
               );
             })}
@@ -241,6 +341,9 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
                 onFragmentSelect={onFragmentSelect}
                 onToggleExpand={handleToggleExpand}
                 onCreateFragment={onCreateFragment}
+                onDragStart={handleDragStart}
+                onFolderDragOver={handleFolderDragOver}
+                onFolderDrop={handleFolderDrop}
               />
             ))}
           </>

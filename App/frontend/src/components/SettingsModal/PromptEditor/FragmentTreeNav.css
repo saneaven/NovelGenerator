@@ -1,31 +1,30 @@
-/* Fragment Tree Nav */
+/* Fragment Tree Nav - Drag grip handle */
+.tree-node__grip {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
 
+.tree-node__content--fragment:hover .tree-node__grip {
+  opacity: 1;
+}
 
+.tree-node__grip:active {
+  cursor: grabbing;
+}
 
+/* Drag-and-drop visual feedback */
+.tree-node__content--fragment[draggable="true"]:active {
+  opacity: 0.5;
+}
 
+.tree-node__content--drag-over {
+  background-color: var(--color-brand-primary-soft);
+}
 
-
-
-
-/* Fragment Tree Node */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* Empty State */
-
-
-
-/* Responsive */
-@media (max-width: 768px) {
+.tree-nav__content--drag-over {
+  background-color: var(--color-surface-subtle);
 }
