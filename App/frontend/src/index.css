@@ -5,6 +5,7 @@
 
 /* Import theme variables first */
 @import './styles/theme.css';
+@import './styles/theme.prompt.css';
 
 /* Import global styles and resets */
 @import './styles/globals.css';

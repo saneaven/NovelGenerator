@@ -1,0 +1,54 @@
+/* ========================================
+   PROMPT EDITOR - SYNTAX HIGHLIGHTING THEME
+   Dedicated color tokens for CodeMirror
+   ======================================== */
+
+/* ========================================
+   LIGHT MODE (Default)
+   ======================================== */
+
+:root {
+    /* Template syntax */
+    --prompt-color-text:            oklch(0.253 0.010 271.4);
+    --prompt-color-variable:        oklch(0.617 0.138 230.0);   /* {{ variable }} - blue */
+    --prompt-color-context:         oklch(0.672 0.030 180.8);   /* context vars - teal */
+    --prompt-color-prompt-fn:       oklch(52.603% 0.08891 189.329);    /* {{ prompt() }} - orange */
+    --prompt-color-comment:         oklch(0.500 0.155 149.0);   /* {# comment #} - green */
+    --prompt-color-keyword:         oklch(0.610 0.248 26.0);    /* {% if/for %} - red */
+    --prompt-color-tag:             oklch(0.608 0.119 30.2);    /* <xml> tags - orange */
+
+    /* Markdown */
+    --prompt-color-heading:         oklch(0.704 0.099 56.7);    /* # headings - gold */
+    --prompt-color-code:            oklch(0.413 0.021 271.4);   /* inline/block code - gray */
+    --prompt-color-code-bg:         oklch(0.733 0.021 271.4);   /* code background */
+
+    /* Errors */
+    --prompt-color-error:           oklch(0.440 0.179 26.0);    /* error text - deep red */
+    --prompt-color-error-bg:        oklch(0.950 0.025 26.0);    /* error background - light red */
+    --prompt-color-error-underline: oklch(0.610 0.248 26.0);    /* error wavy underline */
+}
+
+/* ========================================
+   DARK MODE
+   ======================================== */
+
+[data-theme="dark"] {
+    /* Template syntax */
+    --prompt-color-text:            oklch(0.950 0.001 55.0);
+    --prompt-color-variable:        oklch(0.740 0.120 230.0);   /* brighter blue */
+    --prompt-color-context:         oklch(0.740 0.040 117.0);   /* brighter teal-green */
+    --prompt-color-prompt-fn:       oklch(75.45% 0.12298 188.232);    /* brighter orange */
+    --prompt-color-comment:         oklch(0.540 0.144 146.8);   /* brighter green */
+    --prompt-color-keyword:         oklch(0.740 0.160 26.0);    /* brighter red */
+    --prompt-color-tag:             oklch(0.740 0.100 23.0);    /* brighter accent orange */
+
+    /* Markdown */
+    --prompt-color-heading:         oklch(0.800 0.080 240.3);   /* brighter brand blue */
+    --prompt-color-code:            oklch(0.660 0.012 55.0);    /* lighter gray */
+    --prompt-color-code-bg:         oklch(0.150 0.005 55.0);    /* dark code background */
+
+    /* Errors */
+    --prompt-color-error:           oklch(0.780 0.128 26.0);    /* lighter red */
+    --prompt-color-error-bg:        oklch(0.270 0.110 26.0);    /* dark red background */
+    --prompt-color-error-underline: oklch(0.610 0.248 26.0);    /* same wavy underline */
+}

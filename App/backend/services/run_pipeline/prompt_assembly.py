@@ -95,8 +95,23 @@ def assemble_resume(
     settings: UserSettings,
 ) -> tuple[str, list[dict[str, Any]], str | None, PromptBundle | None]:
     system_prompt = str(thread.captured_history_system_prompt or "")
-    conversation = list(thread.captured_history_conversation_json or [])
     prefill = thread.captured_history_prefill if isinstance(thread.captured_history_prefill, str) and thread.captured_history_prefill else None
+
+    if thread.captured_history_conversation_json is not None:
+        conversation = list(thread.captured_history_conversation_json)
+    else:
+        # Cache invalidated (e.g. message deleted) — rebuild from DB
+        prior_run_ids = [
+            r.id
+            for r in db.query(RunModel.id)
+            .filter(RunModel.thread_id == thread.id, RunModel.id != run.id)
+            .order_by(RunModel.run_seq.asc())
+            .all()
+        ]
+        conversation = build_from_runs(
+            db, thread_id=thread.id, language=run.language,
+            include_run_ids=prior_run_ids,
+        ) if prior_run_ids else []
 
     recent = build_from_runs(
         db,

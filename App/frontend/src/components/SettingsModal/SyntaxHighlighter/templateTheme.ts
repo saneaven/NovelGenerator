@@ -100,58 +100,65 @@ export const templateEditorTheme = EditorView.theme({
  */
 export const templateHighlightStyle = HighlightStyle.define([
   // Plain text - default color
-  { tag: tags.content, color: 'var(--color-text-primary)' },
+  { tag: tags.content, color: 'var(--prompt-color-text)' },
 
   // Template syntax
   {
     tag: tags.variableName,
-    color: 'var(--color-info)',
+    color: 'var(--prompt-color-variable)',
     fontWeight: 'var(--font-weight-medium)',
   },
 
   {
     tag: tags.special(tags.variableName),
-    color: 'var(--color-brand-secondary)',
+    color: 'var(--prompt-color-context)',
     fontWeight: 'var(--font-weight-medium)',
   },
 
   // Fragment inclusion {{ prompt("...") }}
   {
     tag: tags.atom,
-    color: 'var(--color-success)',
+    color: 'var(--prompt-color-prompt-fn)',
     fontWeight: 'var(--font-weight-medium)',
+    fontStyle: 'italic',
+  },
+
+  // Jinja2 comments {# ... #}
+  {
+    tag: tags.comment,
+    color: 'var(--prompt-color-comment)',
     fontStyle: 'italic',
   },
 
   {
     tag: tags.keyword,
-    color: 'var(--color-feedback-error-base)',
+    color: 'var(--prompt-color-keyword)',
     fontWeight: 'var(--font-weight-semibold)',
   },
 
   // XML tags
   {
     tag: tags.tagName,
-    color: 'var(--color-brand-accent)',
+    color: 'var(--prompt-color-tag)',
     fontWeight: 'var(--font-weight-medium)',
   },
 
   {
     tag: tags.angleBracket,
-    color: 'var(--color-brand-accent)',
+    color: 'var(--prompt-color-tag)',
   },
 
   // Markdown
   {
     tag: tags.heading,
-    color: 'var(--color-text-brand)',
+    color: 'var(--prompt-color-heading)',
     fontWeight: 'var(--font-weight-bold)',
   },
 
   {
     tag: tags.monospace,
-    backgroundColor: 'var(--color-surface-muted)',
-    color: 'var(--color-text-secondary)',
+    backgroundColor: 'var(--prompt-color-code-bg)',
+    color: 'var(--prompt-color-code)',
     fontFamily: 'var(--font-family-mono)',
     padding: '2px 4px',
     borderRadius: 'var(--border-radius-sm)',
@@ -160,27 +167,27 @@ export const templateHighlightStyle = HighlightStyle.define([
   {
     tag: tags.strong,
     fontWeight: 'var(--font-weight-bold)',
-    color: 'var(--color-text-primary)',
+    color: 'var(--prompt-color-text)',
   },
 
   {
     tag: tags.emphasis,
     fontStyle: 'italic',
-    color: 'var(--color-text-secondary)',
+    color: 'var(--prompt-color-code)',
   },
 
   {
     tag: tags.list,
-    color: 'var(--color-text-brand)',
+    color: 'var(--prompt-color-heading)',
     fontWeight: 'var(--font-weight-medium)',
   },
 
   // Errors
   {
     tag: tags.invalid,
-    color: 'var(--color-feedback-error-strong)',
-    backgroundColor: 'var(--color-feedback-error-soft)',
-    textDecoration: 'underline wavy var(--color-feedback-error-base)',
+    color: 'var(--prompt-color-error)',
+    backgroundColor: 'var(--prompt-color-error-bg)',
+    textDecoration: 'underline wavy var(--prompt-color-error-underline)',
   },
 ]);
 

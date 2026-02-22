@@ -268,7 +268,7 @@ async def build_project_data(
     if not all_languages:
         all_languages.add(language)
 
-    languages: dict[str, Any] = {}
+    content_by_lang: dict[str, Any] = {}
     for lang in sorted(all_languages):
         if basic is not None:
             lang_basic = _lang_data(get_latest("basic_info", basic.id), lang)
@@ -338,7 +338,7 @@ async def build_project_data(
                 }
             )
 
-        languages[lang] = {
+        content_by_lang[lang] = {
             "basicInfo": lang_basic_info,
             "objects": lang_objects,
             "outline": build_outline_payload(lang),
@@ -351,5 +351,5 @@ async def build_project_data(
         "outline": outline_payload,
         "manuscripts": manuscripts_payload,
         "guidelines": guideline_payload,
-        "languages": languages,
+        "contentByLang": content_by_lang,
     }

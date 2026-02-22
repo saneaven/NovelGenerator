@@ -1,4 +1,4 @@
-{% with this = (project.languages.get(translation.targetLanguage)) %}
+{% with this = (project.contentByLang.get(translation.targetLanguage)) %}
 ## Reference Context (Already Translated to {{ translation.targetLanguage }})
 
 Use the following already-translated content as reference to maintain consistent terminology, naming, and style:

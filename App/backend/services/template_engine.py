@@ -94,7 +94,7 @@ def _get_objects_of_language(project: dict[str, Any], lang: str, ids: Any = None
     if not isinstance(project, dict):
         return []
     lang_objects: list[dict[str, Any]] = []
-    languages = project.get("languages")
+    languages = project.get("contentByLang")
     if isinstance(languages, dict):
         lang_bucket = languages.get(lang)
         if isinstance(lang_bucket, dict) and isinstance(lang_bucket.get("objects"), list):
@@ -114,7 +114,7 @@ def _get_manuscripts_of_language(project: dict[str, Any], lang: str, ids: Any = 
     if not isinstance(project, dict):
         return []
     manuscripts: list[dict[str, Any]] = []
-    languages = project.get("languages")
+    languages = project.get("contentByLang")
     if isinstance(languages, dict):
         lang_bucket = languages.get(lang)
         if isinstance(lang_bucket, dict) and isinstance(lang_bucket.get("manuscripts"), list):

@@ -741,7 +741,7 @@ async def delete_thread_message(
       which CASCADE deletes their tool_call messages via parent_tool_call_id FK.
     - tool_call message: SET NULL on the tool call's message_id.
     """
-    _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
+    thread = _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
     row = (
         db.query(RunMessageModel)
         .filter(RunMessageModel.id == message_id, RunMessageModel.thread_id == thread_id)
@@ -750,6 +750,7 @@ async def delete_thread_message(
     if row is None:
         raise HTTPException(status_code=404, detail="Message not found")
     db.delete(row)
+    thread.captured_history_conversation_json = None
     db.commit()
     return Response(status_code=204)
 
@@ -763,7 +764,7 @@ async def delete_thread_tool_call(
 ):
     """Delete a tool call. FK CASCADE via parent_tool_call_id on run_messages
     automatically deletes the associated tool_call messages."""
-    _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
+    thread = _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
     row = (
         db.query(RunToolCallModel)
         .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread_id)
@@ -798,6 +799,7 @@ async def delete_thread_tool_call(
             if assistant_row is not None and not _assistant_has_content_or_reasoning(assistant_row.data):
                 db.delete(assistant_row)
 
+    thread.captured_history_conversation_json = None
     db.commit()
     return Response(status_code=204)
 
