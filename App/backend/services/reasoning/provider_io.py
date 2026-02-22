@@ -248,42 +248,83 @@ class OpenAICompatibleIO(BaseProviderIO):
 
 class CustomOpenAICompatIO(BaseProviderIO):
     def to_provider_messages(self, messages: list[dict[str, Any]], model: str, advanced: dict[str, Any]) -> list[dict[str, Any]]:
+        from .custom_template_runtime import build_history_inject
+
         out = _copy_messages(messages)
-        current_format = str(advanced.get("thinking_format") or "openai").strip().lower()
+        template_id = advanced.get("custom_thinking_template_id")
+        template = advanced.get("_resolved_template")
+
         for message in out:
             if message.get("role") != "assistant":
                 continue
             reasoning_detail = message.get("reasoning_detail")
             if not isinstance(reasoning_detail, dict):
                 continue
+
             meta = reasoning_detail.get("meta") if isinstance(reasoning_detail.get("meta"), dict) else {}
-            detail_format = str(meta.get("openai_compatible_thinking_format") or "").strip().lower()
-            if detail_format and detail_format != current_format:
-                message.pop("reasoning_detail", None)
+
+            if template_id:
+                detail_tid = meta.get("custom_thinking_template_id")
+                # Template mismatch → drop reasoning
+                if detail_tid != template_id:
+                    message.pop("reasoning_detail", None)
+                    continue
+
+                # Build history injection map for matching template reasoning
+                if template and reasoning_detail.get("type") == "openai_compatible":
+                    data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
+                    inject = build_history_inject(data, template.get("history_fields") or [])
+                    if inject:
+                        message["_template_history_inject"] = inject
+                    message.pop("reasoning_detail", None)
+            else:
+                # No template selected — legacy format-based matching
+                detail_format = str(meta.get("openai_compatible_thinking_format") or "").strip().lower()
+                current_format = str(advanced.get("thinking_format") or "").strip().lower()
+                if detail_format and current_format and detail_format != current_format:
+                    message.pop("reasoning_detail", None)
+
         return out
 
     def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
-        thinking_format = str(advanced.get("thinking_format") or "openai").strip().lower()
-        request_format = str(advanced.get("request_format") or "openai_sdk").strip().lower()
+        template_id = advanced.get("custom_thinking_template_id")
 
         details = _snapshot_reasoning_details(final_snapshot)
         thinking_text = _reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
 
-        if thinking_format == "claude" and request_format != "claude_sdk":
-            payload: dict[str, Any] = {"text": thinking_text}
-        else:
-            payload = {"details": details, "text": thinking_text}
+        if template_id:
+            # Template mode: group by _template_var, concatenate string values
+            var_data: dict[str, Any] = {}
+            for item in details:
+                var_name = item.get("_template_var")
+                value = item.get("value")
+                if var_name and isinstance(value, str):
+                    var_data[var_name] = var_data.get(var_name, "") + value
+                elif var_name and value is not None:
+                    var_data[var_name] = value
 
+            if not var_data and not thinking_text:
+                return None
+
+            if thinking_text:
+                var_data["_thinking_text"] = thinking_text
+
+            return {
+                "type": "openai_compatible",
+                "meta": {"provider": "custom", "custom_thinking_template_id": template_id},
+                "data": var_data,
+                "token_count": 0,
+            }
+
+        # Legacy non-template mode
+        payload: dict[str, Any] = {"details": details, "text": thinking_text}
         has_payload = bool(payload.get("details")) or bool(str(payload.get("text") or "").strip())
         if not has_payload:
             return None
 
         return {
             "type": "openai_compatible",
-            "meta": {
-                "provider": "custom",
-                "openai_compatible_thinking_format": thinking_format,
-            },
+            "meta": {"provider": "custom"},
             "data": payload,
             "token_count": 0,
         }

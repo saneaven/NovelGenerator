@@ -48,12 +48,40 @@ class ThinkingConfig(BaseModel):
     gemini_budget_tokens: Optional[int] = None
 
 
+class CustomThinkingEffortField(BaseModel):
+    """A single effort field: a dot-path into the request body and the value to inject."""
+    path: str
+    value: str
+
+
+class CustomThinkingResponseField(BaseModel):
+    """A single response field: a dot-path in the SSE delta to extract."""
+    path: str
+    as_var: str
+    is_stream_delta: bool = False
+
+
+class CustomThinkingHistoryField(BaseModel):
+    """A single history field: how to inject a stored variable back into assistant messages."""
+    path: str
+    in_var: str
+
+
+class CustomThinkingTemplate(BaseModel):
+    """User-defined thinking template for custom providers."""
+    id: Optional[str] = None
+    name: str
+    effort_fields: List[CustomThinkingEffortField] = []
+    response_fields: List[CustomThinkingResponseField] = []
+    history_fields: List[CustomThinkingHistoryField] = []
+
+
 class AdvancedTaskSettings(BaseModel):
     """Advanced settings for AI tasks"""
     enable_prefill: bool = False
     thinking_mode: Literal["off", "model", "custom"] = "off"
     thinking_config: Optional[ThinkingConfig] = Field(default_factory=lambda: ThinkingConfig())
-    thinking_format: Literal["openai", "claude", "gemini"] = "openai"
+    custom_thinking_template_id: Optional[str] = None
     tokenizer_override: Optional[Literal["openai", "claude", "gemini"]] = None
     request_format: Literal["openai_sdk", "claude_sdk"] = "openai_sdk"
 
@@ -229,6 +257,7 @@ class UserSettingsResponse(BaseModel):
     theme: str = "system"
     retryConfig: RetryConfig = Field(default_factory=RetryConfig)
     imageGenConfig: ImageGenConfig = Field(default_factory=ImageGenConfig)
+    customThinkingTemplates: List[CustomThinkingTemplate] = []
     nativeOutputMode: bool = False
     ragSearchEnabled: bool = False
     embeddingConfigs: EmbeddingConfigs = Field(default_factory=EmbeddingConfigs)
@@ -261,6 +290,7 @@ class UserSettingsUpdate(BaseModel):
     theme: Optional[str] = None
     retryConfig: Optional[RetryConfig] = None
     imageGenConfig: Optional[ImageGenConfig] = None
+    customThinkingTemplates: Optional[List[CustomThinkingTemplate]] = None
     nativeOutputMode: Optional[bool] = None
     ragSearchEnabled: Optional[bool] = None
     embeddingConfigs: Optional[EmbeddingConfigs] = None

@@ -1,13 +1,13 @@
 """Custom endpoint provider with explicit request format routing.
 
 Supported request formats:
-- openai_sdk: OpenAI-compatible Chat Completions transport + thinking_format mapping.
+- openai_sdk: OpenAI-compatible Chat Completions transport + template-based thinking.
 - claude_sdk: Anthropic Messages transport + Claude-native request shape.
 """
 
 from __future__ import annotations
 
-from typing import AsyncGenerator, Dict, List, Optional, Literal, cast
+from typing import AsyncGenerator, Dict, List, Optional, Literal, Tuple, cast
 
 from anthropic import AsyncAnthropic
 
@@ -15,6 +15,11 @@ from .async_openai_provider import AsyncOpenAIProvider
 from .claude_provider import ClaudeProvider
 from .contracts import ProviderEvent
 from .registry import ProviderRegistry
+from ..services.reasoning.custom_template_runtime import (
+    apply_effort_fields,
+    extract_response_fields,
+    set_nested_path,
+)
 from ..utils.outbound_http import (
     filter_additional_body,
     filter_additional_headers,
@@ -24,7 +29,6 @@ from ..utils.outbound_http import (
 
 
 RequestFormat = Literal["openai_sdk", "claude_sdk"]
-ThinkingFormat = Literal["openai", "claude", "gemini"]
 
 
 class _CustomClaudeSDKProvider(ClaudeProvider):
@@ -79,7 +83,12 @@ class CustomProvider(AsyncOpenAIProvider):
         self._additional_headers = filter_additional_headers(config.get("additional_headers"))
         self._additional_body = filter_additional_body(config.get("additional_body"))
         self._request_format = self._normalize_request_format(config.get("request_format"))
+        self._current_thinking_template: Optional[Dict] = None
         super().__init__(config)
+
+    def set_thinking_template(self, template: Optional[Dict]) -> None:
+        """Set the compiled thinking template for the next stream_chat call."""
+        self._current_thinking_template = template
 
     @property
     def name(self) -> str:
@@ -113,13 +122,6 @@ class CustomProvider(AsyncOpenAIProvider):
         return cast(RequestFormat, value)
 
     @staticmethod
-    def _normalize_thinking_format(thinking_format: Optional[str]) -> ThinkingFormat:
-        fmt = (thinking_format or "openai").strip().lower()
-        if fmt not in {"openai", "claude", "gemini"}:
-            raise ValueError("thinking_format must be one of: openai, claude, gemini")
-        return cast(ThinkingFormat, fmt)
-
-    @staticmethod
     def _coerce_extra_body(request: Dict[str, object]) -> Dict[str, object]:
         existing = request.get("extra_body")
         return dict(existing) if isinstance(existing, dict) else {}
@@ -143,7 +145,6 @@ class CustomProvider(AsyncOpenAIProvider):
         thinking_config: Optional[Dict],
         thinking_format: Optional[str] = None,
     ) -> Dict[str, object]:
-        fmt = self._normalize_thinking_format(thinking_format)
         request = super()._prepare_request_kwargs(
             messages=messages,
             model=model,
@@ -156,68 +157,67 @@ class CustomProvider(AsyncOpenAIProvider):
             thinking_format=thinking_format,
         )
 
-        cfg = thinking_config or {}
-        effort = cfg.get("effort")
-        gemini_level = cfg.get("gemini_thinking_level")
-        gemini_budget = cfg.get("gemini_budget_tokens")
-
-        if fmt == "openai":
-            if effort is not None:
-                request["reasoning_effort"] = effort
-            return self._apply_additional_body(request)
-
-        if fmt == "claude":
-            extra_body = self._coerce_extra_body(request)
-            normalized_effort = "high"
-            if isinstance(effort, str) and effort.strip():
-                normalized_effort = effort.strip().lower()
-            if normalized_effort not in {"low", "medium", "high", "max"}:
-                raise ValueError(
-                    "thinking_format=claude supports effort values: low, medium, high, max."
-                )
-
-            thinking_payload: Dict[str, object] = {"type": "adaptive"}
-            output_config = dict(extra_body.get("output_config") or {})
-            output_config["effort"] = normalized_effort
-            extra_body["thinking"] = thinking_payload
-            extra_body["output_config"] = output_config
-            request["extra_body"] = extra_body
-            return self._apply_additional_body(request)
-
-        # fmt == "gemini"
-        has_reasoning_effort = effort is not None
-        has_gemini_thinking_config = gemini_level is not None or gemini_budget is not None
-
-        if has_reasoning_effort and has_gemini_thinking_config:
-            raise ValueError(
-                "thinking_format=gemini requires choosing either reasoning_effort "
-                "or google.thinking_config (thinking_level/thinking_budget), not both."
-            )
-
-        if has_reasoning_effort:
-            if effort not in {"none", "low", "medium", "high"}:
-                raise ValueError(
-                    "thinking_format=gemini supports reasoning_effort values: none, low, medium, high."
-                )
-            request["reasoning_effort"] = effort
-            return self._apply_additional_body(request)
-
-        if has_gemini_thinking_config:
-            extra_body = self._coerce_extra_body(request)
-            wrapped_extra_body = dict(extra_body.get("extra_body") or {})
-            google_body = dict(wrapped_extra_body.get("google") or {})
-            thinking_payload: Dict[str, object] = {"include_thoughts": True}
-            if gemini_level is not None:
-                thinking_payload["thinking_level"] = gemini_level
-            if gemini_budget is not None:
-                thinking_payload["thinking_budget"] = gemini_budget
-            google_body["thinking_config"] = thinking_payload
-            wrapped_extra_body["google"] = google_body
-            extra_body["extra_body"] = wrapped_extra_body
-            request["extra_body"] = extra_body
-            return self._apply_additional_body(request)
+        if self._current_thinking_template:
+            apply_effort_fields(request, self._current_thinking_template.get("effort_fields") or [])
 
         return self._apply_additional_body(request)
+
+    # ----- Streaming: template response field extraction -----
+
+    def _mutate_chunk(
+        self,
+        chunk: Dict,
+        thinking_mode: Optional[str],
+    ) -> Tuple[Optional[Dict], List[Dict]]:
+        if not self._current_thinking_template:
+            return chunk, []
+
+        choices = chunk.get("choices")
+        if not choices or not isinstance(choices, list):
+            return chunk, []
+
+        first_choice = choices[0] if isinstance(choices[0], dict) else {}
+        delta = first_choice.get("delta")
+        if not isinstance(delta, dict):
+            return chunk, []
+
+        response_fields = self._current_thinking_template.get("response_fields") or []
+        items, thinking_text = extract_response_fields(delta, response_fields)
+
+        if thinking_text:
+            delta.setdefault("thinking", {})["text"] = thinking_text
+
+        if items:
+            existing = delta.get("reasoning_details")
+            if isinstance(existing, list):
+                existing.extend(items)
+            else:
+                delta["reasoning_details"] = items
+
+        return chunk, []
+
+    # ----- History: template history field injection -----
+
+    def _convert_messages(self, messages: List[Dict]) -> List[Dict]:
+        converted = super()._convert_messages(messages)
+        if not self._current_thinking_template:
+            return converted
+
+        # Map original messages to converted messages (tool_results expand 1:N).
+        conv_idx = 0
+        for orig in messages:
+            if orig.get("role") == "tool_results":
+                conv_idx += len(orig.get("tool_results") or [])
+                continue
+            inject = orig.get("_template_history_inject")
+            if isinstance(inject, dict) and inject and conv_idx < len(converted):
+                for path, value in inject.items():
+                    set_nested_path(converted[conv_idx], path, value)
+                converted[conv_idx].pop("reasoning", None)
+                converted[conv_idx].pop("reasoning_details", None)
+            conv_idx += 1
+
+        return converted
 
     async def stream_chat(
         self,
@@ -238,11 +238,6 @@ class CustomProvider(AsyncOpenAIProvider):
         effective_request_format = self._normalize_request_format(request_format or self._request_format)
 
         if effective_request_format == "claude_sdk":
-            if thinking_format and thinking_format != "claude":
-                raise ValueError(
-                    "request_format=claude_sdk does not support thinking_format values other than 'claude'."
-                )
-
             claude_provider = _CustomClaudeSDKProvider(
                 {
                     "api_key": self._api_key,

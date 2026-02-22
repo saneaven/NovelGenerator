@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { RetryConfig, ToolCallAutoApproveConfig } from '../../store/settingsStore';
+import type { RetryConfig, ToolCallAutoApproveConfig, CustomThinkingTemplate } from '../../store/settingsStore';
 
 import ToggleSwitch from '../common/ToggleSwitch';
 import { TextButton } from '../TextButton';
 import { Refresh, Document } from '../icons';
+import CustomThinkingTemplateManager from './CustomThinkingTemplateManager';
 import './AdvancedPanel.css';
 
 interface AdvancedPanelProps {
@@ -18,6 +19,8 @@ interface AdvancedPanelProps {
     onThinkingHistoryLimitChange: (limit: number) => void;
     toolCallAutoApprove: ToolCallAutoApproveConfig;
     onToolCallAutoApproveChange: (config: ToolCallAutoApproveConfig) => void;
+    customThinkingTemplates: CustomThinkingTemplate[];
+    onCustomThinkingTemplatesChange: (templates: CustomThinkingTemplate[]) => void;
 }
 
 const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
@@ -31,6 +34,8 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     onThinkingHistoryLimitChange,
     toolCallAutoApprove,
     onToolCallAutoApproveChange,
+    customThinkingTemplates,
+    onCustomThinkingTemplatesChange,
 }) => {
     const [newErrorCode, setNewErrorCode] = useState('');
 
@@ -324,6 +329,14 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                     </div>
                     <p className="field-hint">{t('settings.advanced.thinkingHistory.hint')}</p>
                 </div>
+            </div>
+
+            {/* Custom Thinking Templates */}
+            <div className="settings-panel-card">
+                <CustomThinkingTemplateManager
+                    templates={customThinkingTemplates}
+                    onChange={onCustomThinkingTemplatesChange}
+                />
             </div>
         </div>
     );

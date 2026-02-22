@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AITaskType, TaskAIConfig } from '../../store/settingsStore';
+import type { AITaskType, TaskAIConfig, CustomThinkingTemplate } from '../../store/settingsStore';
 import TaskConfigForm from './TaskConfigForm';
 import { SpeechBubble, Globe, Edit, Palette, Document, People } from '../icons';
 import './GeneralPanel.css';
@@ -10,6 +10,7 @@ interface GeneralPanelProps {
   activeTask: AITaskType;
   onTaskChange: (taskType: AITaskType) => void;
   onConfigChange: (taskType: AITaskType, config: TaskAIConfig) => void;
+  customThinkingTemplates?: CustomThinkingTemplate[];
 }
 
 const TASK_ICONS: Record<AITaskType, React.ReactNode> = {
@@ -26,6 +27,7 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
   activeTask,
   onTaskChange,
   onConfigChange,
+  customThinkingTemplates,
 }) => {
   const { t } = useTranslation();
   const currentConfig = task_configs[activeTask];
@@ -71,6 +73,7 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
         taskType={activeTask}
         config={currentConfig}
         onChange={(config) => onConfigChange(activeTask, config)}
+        customThinkingTemplates={customThinkingTemplates}
       />
     </div>
   );

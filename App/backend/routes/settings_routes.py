@@ -1,4 +1,5 @@
 """API routes for user settings"""
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Dict, Any
@@ -19,6 +20,14 @@ from ..services.embedding_config_service import merge_embedding_configs
 from ..services.rag_index_service import wipe_user_index
 
 router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
+
+
+def _assign_template_ids(templates: list) -> list:
+    """Ensure every thinking template dict has an id assigned."""
+    for t in templates:
+        if isinstance(t, dict) and not t.get("id"):
+            t["id"] = str(uuid.uuid4())
+    return templates
 
 
 @router.get("", response_model=UserSettingsResponse)
@@ -47,7 +56,6 @@ async def get_user_settings(
                         'thinking_mode': 'off',
                         'thinking_config': {'effort': 'medium'},
                         'request_format': 'openai_sdk',
-                        'thinking_format': 'openai',
                     },
                 },
                 'subAgent': {
@@ -59,7 +67,6 @@ async def get_user_settings(
                         'thinking_mode': 'off',
                         'thinking_config': {'effort': 'medium'},
                         'request_format': 'openai_sdk',
-                        'thinking_format': 'openai',
                     },
                 },
                 'translation': {
@@ -71,7 +78,6 @@ async def get_user_settings(
                         'thinking_mode': 'off',
                         'thinking_config': {'effort': 'medium'},
                         'request_format': 'openai_sdk',
-                        'thinking_format': 'openai',
                     },
                 },
                 'editAssistant': {
@@ -83,7 +89,6 @@ async def get_user_settings(
                         'thinking_mode': 'off',
                         'thinking_config': {'effort': 'medium'},
                         'request_format': 'openai_sdk',
-                        'thinking_format': 'openai',
                     },
                 },
                 'imagePrompt': {
@@ -95,7 +100,6 @@ async def get_user_settings(
                         'thinking_mode': 'off',
                         'thinking_config': {'effort': 'medium'},
                         'request_format': 'openai_sdk',
-                        'thinking_format': 'openai',
                     },
                 },
                 'summary': {
@@ -107,7 +111,6 @@ async def get_user_settings(
                         'thinking_mode': 'off',
                         'thinking_config': {'effort': 'medium'},
                         'request_format': 'openai_sdk',
-                        'thinking_format': 'openai',
                     },
                 },
             },
@@ -161,6 +164,7 @@ async def get_user_settings(
         theme=settings.theme,
         retryConfig=retry_config_dict,  # type: ignore
         imageGenConfig=image_gen_config_dict,  # type: ignore
+        customThinkingTemplates=getattr(settings, 'custom_thinking_templates', []) or [],
         nativeOutputMode=settings.native_output_mode,
         ragSearchEnabled=getattr(settings, "rag_search_enabled", False),
         embeddingConfigs=embedding_configs_dict,
@@ -233,6 +237,15 @@ async def update_user_settings(
 
     if update_data.imageGenConfig is not None:
         settings.image_gen_config = update_data.imageGenConfig.model_dump()  # type: ignore
+
+    if update_data.customThinkingTemplates is not None:
+        templates = []
+        for t in update_data.customThinkingTemplates:
+            d = t.model_dump()
+            if not d.get("id"):
+                d["id"] = str(uuid.uuid4())
+            templates.append(d)
+        settings.custom_thinking_templates = templates  # type: ignore
 
     if update_data.nativeOutputMode is not None:
         settings.native_output_mode = update_data.nativeOutputMode  # type: ignore
@@ -348,6 +361,7 @@ async def update_user_settings(
         theme=settings.theme,
         retryConfig=retry_config_dict,  # type: ignore
         imageGenConfig=image_gen_config_dict,  # type: ignore
+        customThinkingTemplates=getattr(settings, 'custom_thinking_templates', []) or [],
         nativeOutputMode=settings.native_output_mode,
         ragSearchEnabled=getattr(settings, "rag_search_enabled", False),
         embeddingConfigs=embedding_configs_dict,
@@ -438,6 +452,7 @@ async def update_task_config(
         theme=settings.theme,
         retryConfig=retry_config_dict,  # type: ignore
         imageGenConfig=image_gen_config_dict,  # type: ignore
+        customThinkingTemplates=getattr(settings, 'custom_thinking_templates', []) or [],
         nativeOutputMode=settings.native_output_mode,
         ragSearchEnabled=getattr(settings, "rag_search_enabled", False),
         embeddingConfigs=embedding_configs_dict,
@@ -509,6 +524,7 @@ async def sync_settings_from_client(
             theme=client_settings.get('theme', 'system'),
             retry_config=client_settings.get('retryConfig', default_retry_config),
             image_gen_config=client_settings.get('imageGenConfig', default_image_gen_config),
+            custom_thinking_templates=_assign_template_ids(client_settings.get('customThinkingTemplates', [])),
             native_output_mode=client_settings.get('nativeOutputMode', False),
             rag_search_enabled=client_settings.get('ragSearchEnabled', False),
             embedding_configs=embedding_configs,
@@ -546,6 +562,7 @@ async def sync_settings_from_client(
         settings.theme = client_settings.get('theme', settings.theme)  # type: ignore
         settings.retry_config = client_settings.get('retryConfig', settings.retry_config or default_retry_config)  # type: ignore
         settings.image_gen_config = client_settings.get('imageGenConfig', settings.image_gen_config or default_image_gen_config)  # type: ignore
+        settings.custom_thinking_templates = _assign_template_ids(client_settings.get('customThinkingTemplates', getattr(settings, 'custom_thinking_templates', [])))  # type: ignore
         settings.native_output_mode = client_settings.get('nativeOutputMode', settings.native_output_mode)  # type: ignore
         settings.rag_search_enabled = client_settings.get('ragSearchEnabled', getattr(settings, 'rag_search_enabled', False))  # type: ignore
         settings.rag_search_top_k_per_query = client_settings.get('ragSearchTopKPerQuery', getattr(settings, 'rag_search_top_k_per_query', 20))  # type: ignore

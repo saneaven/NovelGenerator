@@ -21,7 +21,6 @@ DEFAULT_TASK_CONFIGS: dict[str, dict[str, Any]] = {
             "thinking_mode": "off",
             "thinking_config": {"effort": "medium"},
             "request_format": "openai_sdk",
-            "thinking_format": "openai",
         },
     },
     "subAgent": {
@@ -35,7 +34,6 @@ DEFAULT_TASK_CONFIGS: dict[str, dict[str, Any]] = {
             "thinking_mode": "off",
             "thinking_config": {"effort": "medium"},
             "request_format": "openai_sdk",
-            "thinking_format": "openai",
         },
     },
     "translation": {
@@ -49,7 +47,6 @@ DEFAULT_TASK_CONFIGS: dict[str, dict[str, Any]] = {
             "thinking_mode": "off",
             "thinking_config": {"effort": "medium"},
             "request_format": "openai_sdk",
-            "thinking_format": "openai",
         },
     },
     "editAssistant": {
@@ -63,7 +60,6 @@ DEFAULT_TASK_CONFIGS: dict[str, dict[str, Any]] = {
             "thinking_mode": "off",
             "thinking_config": {"effort": "medium"},
             "request_format": "openai_sdk",
-            "thinking_format": "openai",
         },
     },
     "imagePrompt": {
@@ -77,7 +73,6 @@ DEFAULT_TASK_CONFIGS: dict[str, dict[str, Any]] = {
             "thinking_mode": "off",
             "thinking_config": {"effort": "medium"},
             "request_format": "openai_sdk",
-            "thinking_format": "openai",
         },
     },
     "summary": {
@@ -91,7 +86,6 @@ DEFAULT_TASK_CONFIGS: dict[str, dict[str, Any]] = {
             "thinking_mode": "off",
             "thinking_config": {"effort": "medium"},
             "request_format": "openai_sdk",
-            "thinking_format": "openai",
         },
     },
 }

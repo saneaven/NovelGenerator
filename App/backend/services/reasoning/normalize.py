@@ -5,7 +5,6 @@ from typing import Any
 
 REASONING_TYPES = {"custom", "openai", "gemini", "claude", "openrouter", "openai_compatible"}
 REASONING_PROVIDERS = {"openai", "gemini", "claude", "openrouter", "custom", "xai"}
-OPENAI_COMPATIBLE_FORMATS = {"openai", "claude", "gemini"}
 
 
 def normalize_reasoning_detail(raw: Any) -> dict[str, Any] | None:
@@ -24,8 +23,12 @@ def normalize_reasoning_detail(raw: Any) -> dict[str, Any] | None:
         meta["provider"] = provider
 
     thinking_format = str(meta_raw.get("openai_compatible_thinking_format") or "").strip()
-    if thinking_format in OPENAI_COMPATIBLE_FORMATS:
+    if thinking_format:
         meta["openai_compatible_thinking_format"] = thinking_format
+
+    custom_template_id = meta_raw.get("custom_thinking_template_id")
+    if isinstance(custom_template_id, str) and custom_template_id.strip():
+        meta["custom_thinking_template_id"] = custom_template_id.strip()
 
     openrouter_format = meta_raw.get("openrouter_reasoning_format")
     if isinstance(openrouter_format, str) and openrouter_format.strip():

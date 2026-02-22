@@ -654,6 +654,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
                     current: { ...cur.current, llm_config_override: cfg },
                   }))
                 }
+                customThinkingTemplates={settings.customThinkingTemplates}
               />
             )}
           </section>

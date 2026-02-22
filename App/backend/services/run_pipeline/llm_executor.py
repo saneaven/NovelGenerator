@@ -355,6 +355,19 @@ async def run_llm(
             }
         )
 
+    # Resolve custom thinking template (custom provider only)
+    if task_config.provider == "custom" and thinking_mode == "model":
+        from ..reasoning.custom_template_runtime import compile_template
+        template_id = advanced.get("custom_thinking_template_id")
+        if template_id:
+            templates = getattr(settings, "custom_thinking_templates", []) or []
+            tpl_match = next((t for t in templates if isinstance(t, dict) and t.get("id") == template_id), None)
+            if tpl_match:
+                thinking_template = compile_template(tpl_match)
+                if thinking_template:
+                    provider.set_thinking_template(thinking_template)
+                    advanced["_resolved_template"] = thinking_template
+
     messages = provider_io.to_provider_messages(messages, task_config.model, advanced)
     provider_messages = _strip_internal_message_keys(messages)
     effective_thinking_config = advanced.get("thinking_config") if thinking_mode == "model" else None

@@ -5,9 +5,9 @@ import type {
   ProviderType,
   AITaskType,
   ThinkingConfig,
-  ThinkingFormat,
   RequestFormat,
   TokenizerOverride,
+  CustomThinkingTemplate,
 } from '../../store/settingsStore';
 import ModelBrowser from './ModelBrowser';
 import { TextButton } from '../TextButton';
@@ -18,12 +18,14 @@ interface TaskConfigFormProps {
   taskType: AITaskType;
   config: TaskAIConfig;
   onChange: (config: TaskAIConfig) => void;
+  customThinkingTemplates?: CustomThinkingTemplate[];
 }
 
 const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   taskType,
   config,
   onChange,
+  customThinkingTemplates = [],
 }) => {
   const { t } = useTranslation();
   const [showModelBrowser, setShowModelBrowser] = useState(false);
@@ -35,24 +37,16 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   const isCustomProvider = config.provider === 'custom';
   const customRequestFormat: RequestFormat = config.advanced.request_format ?? 'openai_sdk';
   const isCustomClaudeSdk = isCustomProvider && customRequestFormat === 'claude_sdk';
-  const effectiveThinkingFormat: ThinkingFormat =
-    isCustomClaudeSdk ? 'claude' : (config.advanced.thinking_format ?? 'openai');
+  const hasThinkingTemplate = isCustomProvider && customRequestFormat === 'openai_sdk' && !!config.advanced.custom_thinking_template_id;
 
   const getDefaultThinkingConfig = (
     provider: ProviderType,
-    thinkingFormat: ThinkingFormat
   ): ThinkingConfig | undefined => {
-    if (provider === 'custom') {
-      switch (thinkingFormat) {
-        case 'openai': return { effort: 'medium' };
-        case 'claude': return { effort: 'high' };
-        case 'gemini': return undefined;
-      }
-    }
     switch (provider) {
       case 'openrouter':
       case 'openai':
       case 'xai':
+      case 'custom':
         return { effort: 'medium' };
       case 'claude':
         return { effort: 'high' };
@@ -74,11 +68,6 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
     // Close model browser when provider changes
     setShowModelBrowser(false);
 
-    const effectiveFormat: ThinkingFormat =
-      provider === 'custom'
-        ? (config.advanced.thinking_format ?? 'openai')
-        : 'openai';
-
     onChange({
       ...config,
       provider,
@@ -87,7 +76,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
       advanced: {
         ...config.advanced,
         thinking_mode: newThinkingMode,
-        thinking_config: getDefaultThinkingConfig(provider, effectiveFormat),
+        thinking_config: getDefaultThinkingConfig(provider),
       },
     });
   };
@@ -144,14 +133,12 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
     });
   };
 
-  const handleThinkingFormatChange = (format: ThinkingFormat | undefined) => {
-    const effectiveFormat = format ?? 'openai';
+  const handleThinkingTemplateChange = (templateId: string | undefined) => {
     onChange({
       ...config,
       advanced: {
         ...config.advanced,
-        thinking_format: format,
-        thinking_config: getDefaultThinkingConfig(config.provider, effectiveFormat),
+        custom_thinking_template_id: templateId,
       },
     });
   };
@@ -162,9 +149,6 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
       advanced: {
         ...config.advanced,
         request_format: format,
-        thinking_format: format === 'claude_sdk'
-          ? 'claude'
-          : (config.advanced.thinking_format ?? 'openai'),
       },
     });
   };
@@ -354,22 +338,26 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
         <h4 className="section-title"><Advenced size="lg" />{t('settings.taskConfig.advancedSettings')}</h4>
 
         <div className="advanced-options">
-          {/* Custom endpoint - thinking format selector (OpenAI SDK transport only) */}
-          {isCustomProvider && customRequestFormat === 'openai_sdk' && (
+          {/* Custom endpoint - thinking template selector (OpenAI SDK transport only) */}
+          {isCustomProvider && customRequestFormat === 'openai_sdk' && customThinkingTemplates.length > 0 && (
             <div className="form-field">
-              <label>{t('settings.taskConfig.apiFormat')}</label>
+              <label>{t('settings.taskConfig.thinkingTemplate')}</label>
               <CustomSelect
-                value={config.advanced.thinking_format || 'openai'}
+                value={config.advanced.custom_thinking_template_id || ''}
                 onChange={(value) =>
-                  handleThinkingFormatChange(value as ThinkingFormat)
+                  handleThinkingTemplateChange(value || undefined)
                 }
                 options={[
-                  { value: 'openai', label: 'OpenAI' },
-                  { value: 'claude', label: 'Claude' },
-                  { value: 'gemini', label: 'Gemini' },
+                  { value: '', label: t('common.none') },
+                  ...customThinkingTemplates
+                    .filter((tpl) => tpl.id)
+                    .map((tpl) => ({
+                      value: tpl.id!,
+                      label: tpl.name,
+                    })),
                 ]}
               />
-              <p className="field-hint">{t('settings.taskConfig.apiFormatHint')}</p>
+              <p className="field-hint">{t('settings.taskConfig.thinkingTemplateHint')}</p>
             </div>
           )}
 
@@ -521,87 +509,38 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                   </>
                 )}
 
-                {/* Custom endpoint - format-specific thinking options */}
-                {config.provider === 'custom' && (
-                  <>
-                    {/* OpenAI format options */}
-                    {effectiveThinkingFormat === 'openai' && (
-                      <>
-                        <div className="form-field">
-                          <label>{t('settings.taskConfig.thinking_config.reasoningEffort')}</label>
-                          <CustomSelect
-                            value={config.advanced.thinking_config?.effort || 'medium'}
-                            onChange={(value) => handleThinkingConfigChange('effort', value)}
-                            options={[
-                              { value: 'none', label: t('settings.taskConfig.thinking_config.effortOptions.none') },
-                              { value: 'minimal', label: t('settings.taskConfig.thinking_config.effortOptions.minimal') },
-                              { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.lowPercent') },
-                              { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.mediumPercent') },
-                              { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.highPercent') },
-                              { value: 'xhigh', label: t('settings.taskConfig.thinking_config.effortOptions.xhigh') },
-                            ]}
-                          />
-                          <p className="field-hint">{t('settings.taskConfig.thinking_config.effortHint')}</p>
-                        </div>
-                        <div className="form-field">
-                          <label>{t('settings.taskConfig.thinking_config.verbosity')}</label>
-                          <CustomSelect
-                            value={config.advanced.thinking_config?.verbosity || 'medium'}
-                            onChange={(value) => handleThinkingConfigChange('verbosity', value)}
-                            options={[
-                              { value: 'low', label: t('settings.taskConfig.thinking_config.verbosityOptions.low') },
-                              { value: 'medium', label: t('settings.taskConfig.thinking_config.verbosityOptions.medium') },
-                              { value: 'high', label: t('settings.taskConfig.thinking_config.verbosityOptions.high') },
-                            ]}
-                          />
-                          <p className="field-hint">{t('settings.taskConfig.thinking_config.verbosityHint')}</p>
-                        </div>
-                      </>
-                    )}
-
-                    {/* Claude format options */}
-                    {effectiveThinkingFormat === 'claude' && (
-                      <div className="form-field">
-                        <label>{t('settings.taskConfig.thinking_config.effortLevel')}</label>
-                        <CustomSelect
-                          value={config.advanced.thinking_config?.effort || 'high'}
-                          onChange={(value) => handleThinkingConfigChange('effort', value)}
-                          options={[
-                            { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
-                            { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
-                            { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
-                            { value: 'max', label: t('settings.taskConfig.thinking_config.effortOptions.max') },
-                          ]}
-                        />
-                        <p className="field-hint">{t('settings.taskConfig.thinking_config.effortHintGeneric')}</p>
-                      </div>
-                    )}
-
-                    {/* Gemini format options (Gemini 3+ only — uses thinking_level) */}
-                    {effectiveThinkingFormat === 'gemini' && (
-                      <div className="form-field">
-                        <label>{t('settings.taskConfig.thinking_config.thinkingLevel')}</label>
-                        <CustomSelect
-                          value={config.advanced.thinking_config?.gemini_thinking_level || ''}
-                          onChange={(value) =>
-                            handleThinkingConfigChange(
-                              'gemini_thinking_level',
-                              value === '' ? undefined : value
-                            )
-                          }
-                          options={[
-                            { value: '', label: t('common.auto') },
-                            { value: 'minimal', label: t('settings.taskConfig.thinking_config.effortOptions.minimal') },
-                            { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
-                            { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
-                            { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
-                          ]}
-                        />
-                        <p className="field-hint">{t('settings.taskConfig.thinking_config.thinkingLevelHint')}</p>
-                      </div>
-                    )}
-
-                  </>
+                {/* Custom endpoint - thinking config (hidden when template is selected) */}
+                {config.provider === 'custom' && !hasThinkingTemplate && !isCustomClaudeSdk && (
+                  <div className="form-field">
+                    <label>{t('settings.taskConfig.thinking_config.reasoningEffort')}</label>
+                    <CustomSelect
+                      value={config.advanced.thinking_config?.effort || 'medium'}
+                      onChange={(value) => handleThinkingConfigChange('effort', value)}
+                      options={[
+                        { value: 'none', label: t('settings.taskConfig.thinking_config.effortOptions.none') },
+                        { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
+                        { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
+                        { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
+                      ]}
+                    />
+                    <p className="field-hint">{t('settings.taskConfig.thinking_config.effortHint')}</p>
+                  </div>
+                )}
+                {config.provider === 'custom' && !hasThinkingTemplate && isCustomClaudeSdk && (
+                  <div className="form-field">
+                    <label>{t('settings.taskConfig.thinking_config.effortLevel')}</label>
+                    <CustomSelect
+                      value={config.advanced.thinking_config?.effort || 'high'}
+                      onChange={(value) => handleThinkingConfigChange('effort', value)}
+                      options={[
+                        { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
+                        { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
+                        { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
+                        { value: 'max', label: t('settings.taskConfig.thinking_config.effortOptions.max') },
+                      ]}
+                    />
+                    <p className="field-hint">{t('settings.taskConfig.thinking_config.effortHintGeneric')}</p>
+                  </div>
                 )}
 
                 {/* Claude-specific */}

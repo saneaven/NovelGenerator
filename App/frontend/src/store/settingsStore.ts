@@ -53,9 +53,32 @@ export interface ProviderPreference {
     ignore?: string[];
 }
 
-// Thinking format for custom OpenAI-SDK compatible endpoints
-export type ThinkingFormat = 'openai' | 'claude' | 'gemini';
 export type RequestFormat = 'openai_sdk' | 'claude_sdk';
+
+// Custom thinking template types
+export interface CustomThinkingEffortField {
+    path: string;
+    value: string;
+}
+
+export interface CustomThinkingResponseField {
+    path: string;
+    as_var: string;
+    is_stream_delta?: boolean;
+}
+
+export interface CustomThinkingHistoryField {
+    path: string;
+    in_var: string;
+}
+
+export interface CustomThinkingTemplate {
+    id?: string;
+    name: string;
+    effort_fields: CustomThinkingEffortField[];
+    response_fields: CustomThinkingResponseField[];
+    history_fields: CustomThinkingHistoryField[];
+}
 
 // Thinking configuration for model-native thinking
 export interface ThinkingConfig {
@@ -93,7 +116,7 @@ export interface AdvancedTaskSettings {
     enable_prefill: boolean;
     thinking_mode: 'off' | 'model' | 'custom';
     thinking_config?: ThinkingConfig;
-    thinking_format?: ThinkingFormat;  // OpenAI-compatible dialect for custom endpoints
+    custom_thinking_template_id?: string;
     tokenizer_override?: TokenizerOverride;  // For openrouter/custom providers: which tokenizer to use for token counting
     request_format?: RequestFormat;
 }
@@ -191,6 +214,9 @@ export interface Settings {
 
     // Image generation configuration
     imageGenConfig: ImageGenConfig;
+
+    // Custom thinking templates (for custom provider openai_sdk)
+    customThinkingTemplates: CustomThinkingTemplate[];
 
     // Language settings
     mainLanguage: string;
@@ -290,6 +316,9 @@ export interface SettingsStore {
 
     // Image generation config setters
     setImageGenConfig: (config: Partial<ImageGenConfig>) => void;
+
+    // Custom thinking templates setter
+    setCustomThinkingTemplates: (templates: CustomThinkingTemplate[]) => void;
 
     // Language setters
     setMainLanguage: (language: string) => void;
@@ -521,6 +550,15 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
                         ...config,
                     },
                 },
+            };
+        });
+    },
+
+    setCustomThinkingTemplates: (templates) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: { ...settings, customThinkingTemplates: templates },
             };
         });
     },

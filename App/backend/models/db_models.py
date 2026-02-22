@@ -52,12 +52,12 @@ class UserSettings(Base):
 
     # Task-based configuration (provider, model, temperature, advanced settings per task)
     task_configs = Column(JSONB, nullable=False, server_default="""{
-        "agent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk", "thinking_format": "openai"}},
-        "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk", "thinking_format": "openai"}},
-        "editAssistant": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": true, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk", "thinking_format": "openai"}},
-        "imagePrompt": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk", "thinking_format": "openai"}},
-        "summary": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.2, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk", "thinking_format": "openai"}},
-        "subAgent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk", "thinking_format": "openai"}}
+        "agent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
+        "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
+        "editAssistant": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": true, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
+        "imagePrompt": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
+        "summary": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.2, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
+        "subAgent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}}
     }""")
 
     # Language settings
@@ -142,6 +142,9 @@ class UserSettings(Base):
             "subAgent": False,
         },
     )
+
+    # Custom thinking templates for custom provider (openai_sdk) thinking format
+    custom_thinking_templates = Column(JSONB, nullable=False, server_default='[]')
 
     # UI Language for interface localization (i18next)
     ui_language = Column(String(10), default='en', nullable=False)

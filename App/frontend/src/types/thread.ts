@@ -57,8 +57,9 @@ export interface ReasoningDetail {
   type: 'custom' | 'openai' | 'gemini' | 'claude' | 'openrouter' | 'openai_compatible';
   meta: {
     provider?: 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
-    openai_compatible_thinking_format?: 'openai' | 'claude' | 'gemini';
+    openai_compatible_thinking_format?: string;
     openrouter_reasoning_format?: string;
+    custom_thinking_template_id?: string;
   };
   data: Record<string, unknown>;
   token_count: number;

@@ -731,6 +731,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 },
               })
             }
+            customThinkingTemplates={localSettings.customThinkingTemplates}
           />
         )}
 
@@ -809,6 +810,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             toolCallAutoApprove={localSettings.toolCallAutoApprove}
             onToolCallAutoApproveChange={(config) =>
               setLocalSettings(prev => ({ ...prev, toolCallAutoApprove: config }))
+            }
+            customThinkingTemplates={localSettings.customThinkingTemplates}
+            onCustomThinkingTemplatesChange={(templates) =>
+              setLocalSettings(prev => ({ ...prev, customThinkingTemplates: templates }))
             }
           />
         )}
