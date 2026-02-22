@@ -13,7 +13,7 @@ import {
 } from '../../runtime/threadCommands';
 import { resolveRunMessageDisplay } from '../../types/thread';
 import type { ThreadMessage, ThreadToolCall } from '../../types/thread';
-import type { ContentPart, ToolCallMetadata } from '../../types/chat';
+import type { ToolCallMetadata } from '../../types/chat';
 import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { FunctionCallsThread } from '../../toolCall/ui';
@@ -62,18 +62,12 @@ function getMessageText(message: ThreadMessage, language: string): string {
     .trim();
 }
 
-function getDisplayParts(message: ThreadMessage, language: string): ContentPart[] {
+function getDisplayReasoningDetail(message: ThreadMessage, language: string) {
   if (message.isStreaming && message.streamingData) {
-    return message.streamingData.contentParts.map((p) => ({
-      type: p.type === 'thinking' ? 'thinking' : 'content',
-      text: String(p.text ?? ''),
-    })) as ContentPart[];
+    return message.streamingData.reasoningDetail;
   }
   const resolved = resolveRunMessageDisplay(message, language);
-  return (resolved.contentParts ?? []).map((p) => ({
-    type: p.type === 'thinking' ? 'thinking' : 'content',
-    text: String(p.text ?? ''),
-  })) as ContentPart[];
+  return resolved.reasoningDetail;
 }
 
 type DisplayStatus = 'idle' | 'running' | 'pending_confirmation' | 'success' | 'error';
@@ -292,8 +286,8 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const renderStickyText = stickyMessage ? getMessageText(stickyMessage, mainLanguage) : '';
 
   const renderAssistantMessage = (message: ThreadMessage, isLast: boolean) => {
-    const contentParts = getDisplayParts(message, mainLanguage);
-    const text = contentParts.filter((p) => p.type === 'content').map((p) => p.text).join('').trim();
+    const text = getMessageText(message, mainLanguage);
+    const reasoningDetail = getDisplayReasoningDetail(message, mainLanguage);
 
     const storedToolCalls = !message.isStreaming
       ? (toolCallIdsByAssistantMessageId[message.id] ?? [])
@@ -310,7 +304,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
 
         <ThinkingDisplay
           messageId={message.id}
-          contentParts={contentParts}
+          reasoningDetail={reasoningDetail}
           isStreaming={message.isStreaming === true}
         />
 

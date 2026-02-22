@@ -6,12 +6,14 @@ import { getAutoApproveCategory } from '../../toolCall/registry/autoApprove';
 import {
   toThreadType,
   nowIso,
+  type ReasoningDetail,
   type ThreadInfo,
   type ThreadMessage,
   type ThreadStatus,
   type ThreadToolCall,
   type ToolCallStatus,
 } from '../../types/thread';
+import { getByDotPath, setByDotPath } from '../../utils/dotPath';
 
 type AutoApproveConfig = {
   create: boolean;
@@ -43,6 +45,26 @@ function toToolCallStatus(value: unknown): ToolCallStatus {
     return text;
   }
   return 'pending';
+}
+
+function isReasoningDetailType(value: unknown): value is ReasoningDetail['type'] {
+  return value === 'custom'
+    || value === 'openai'
+    || value === 'gemini'
+    || value === 'claude'
+    || value === 'openrouter'
+    || value === 'openai_compatible_template'
+    || value === 'xai';
+}
+
+function pickExistingReasoningDetail(message: ThreadMessage): ReasoningDetail | undefined {
+  if (message.streamingData?.reasoningDetail) return message.streamingData.reasoningDetail;
+  for (const entry of Object.values(message.data ?? {})) {
+    if (!entry || typeof entry !== 'object') continue;
+    const detail = (entry as { reasoningDetail?: ReasoningDetail }).reasoningDetail;
+    if (detail && typeof detail === 'object') return detail;
+  }
+  return undefined;
 }
 
 export class ThreadEventConsumer {
@@ -152,7 +174,6 @@ export class ThreadEventConsumer {
     threadId: string;
     messageId: string;
     runId: string;
-    partType: 'content' | 'thinking';
     text: string;
   }): void {
     const store = useThreadStore.getState();
@@ -165,15 +186,60 @@ export class ThreadEventConsumer {
     const streaming = message.streamingData ?? { contentParts: [] };
     const parts = [...(streaming.contentParts ?? [])];
     const last = parts[parts.length - 1];
-    if (last && last.type === params.partType) {
-      parts[parts.length - 1] = { type: params.partType, text: last.text + params.text };
+    if (last && last.type === 'content') {
+      parts[parts.length - 1] = { type: 'content', text: last.text + params.text };
     } else {
-      parts.push({ type: params.partType, text: params.text });
+      parts.push({ type: 'content', text: params.text });
     }
     store.patchMessage(params.threadId, params.messageId, {
       streamingData: {
         contentParts: parts,
         reasoningDetail: streaming.reasoningDetail,
+      },
+      isStreaming: true,
+    });
+    store.setThreadStreamActive(params.threadId, true);
+  }
+
+  private appendThinkingDelta(params: {
+    threadId: string;
+    messageId: string;
+    runId: string;
+    text: string;
+    thinkingDisplay: string;
+  }): void {
+    const store = useThreadStore.getState();
+    const message = this.ensureAssistantMessage({
+      threadId: params.threadId,
+      messageId: params.messageId,
+      runId: params.runId,
+    });
+    if (!message.isStreaming) return;
+
+    const streaming = message.streamingData ?? { contentParts: [] };
+    const existing = pickExistingReasoningDetail(message);
+    const type = isReasoningDetailType(existing?.type) ? existing.type : 'custom';
+    const previousData = existing?.data && typeof existing.data === 'object'
+      ? existing.data as Record<string, unknown>
+      : {};
+    const currentText = getByDotPath(previousData, params.thinkingDisplay);
+    const nextText = `${typeof currentText === 'string' ? currentText : ''}${params.text}`;
+    const data = setByDotPath(previousData, params.thinkingDisplay, nextText);
+
+    const reasoningDetail: ReasoningDetail = {
+      type,
+      meta: {
+        ...(existing?.meta ?? {}),
+        thinking_display: params.thinkingDisplay,
+      },
+      data,
+      token_count: typeof existing?.token_count === 'number' ? existing.token_count : 0,
+    };
+
+    store.patchMessage(params.threadId, params.messageId, {
+      streamingData: {
+        contentParts: streaming.contentParts ?? [],
+        reasoningDetail,
       },
       isStreaming: true,
     });
@@ -527,7 +593,7 @@ export class ThreadEventConsumer {
       const runId = payload.run_id ? String(payload.run_id) : '';
       const text = String(payload.text ?? '');
       if (!messageId || !runId || !text) return;
-      this.appendDelta({ threadId, messageId, runId, partType: 'content', text });
+      this.appendDelta({ threadId, messageId, runId, text });
       return;
     }
 
@@ -535,8 +601,9 @@ export class ThreadEventConsumer {
       const messageId = String(payload.message_id ?? '');
       const runId = payload.run_id ? String(payload.run_id) : '';
       const text = String(payload.text ?? '');
-      if (!messageId || !runId || !text) return;
-      this.appendDelta({ threadId, messageId, runId, partType: 'thinking', text });
+      const thinkingDisplay = String(payload.thinking_display ?? '').trim();
+      if (!messageId || !runId || !text || !thinkingDisplay) return;
+      this.appendThinkingDelta({ threadId, messageId, runId, text, thinkingDisplay });
       return;
     }
 

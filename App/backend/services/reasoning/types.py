@@ -3,12 +3,21 @@ from __future__ import annotations
 from typing import Any, Literal, TypedDict
 
 
-ReasoningType = Literal["custom", "openai", "gemini", "claude", "openrouter", "openai_compatible"]
+ReasoningType = Literal[
+    "custom",
+    "openai",
+    "gemini",
+    "claude",
+    "openrouter",
+    "openai_compatible_template",
+    "xai",
+]
 ReasoningProvider = Literal["openai", "gemini", "claude", "openrouter", "custom", "xai"]
 
 
 class ReasoningMeta(TypedDict, total=False):
     provider: ReasoningProvider
+    thinking_display: str
     openrouter_reasoning_format: str
     custom_thinking_template_id: str
 
@@ -21,7 +30,7 @@ class ReasoningDetail(TypedDict):
 
 
 class ContentPart(TypedDict):
-    type: Literal["content", "thinking"]
+    type: Literal["content"]
     text: str
 
 

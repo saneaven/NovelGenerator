@@ -259,7 +259,7 @@ export interface AgentResponse extends BaseMetadata {
 }
 
 export interface ContentPart {
-  type: 'content' | 'thinking';
+  type: 'content';
   text: string;
 }
 
@@ -380,13 +380,13 @@ export interface AppendRunMessageResponse {
 
 export interface PatchRunMessageRequest {
   language: string;
-  content_parts?: Array<Record<string, any>>;
+  content_parts?: Array<{ type: 'content'; text: string }>;
   reasoning_detail?: Record<string, any>;
 }
 
 export interface TranslateRunMessageRequest {
   language: string;
-  content_parts: Array<Record<string, any>>;
+  content_parts: Array<{ type: 'content'; text: string }>;
   reasoning_detail?: Record<string, any>;
 }
 

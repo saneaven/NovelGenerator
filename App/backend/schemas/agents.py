@@ -46,8 +46,8 @@ class ToolCallSchema(BaseModel):
 
 
 class ContentPart(BaseModel):
-    """A part of message content (content or thinking)"""
-    type: Literal["content", "thinking"]
+    """A part of message content"""
+    type: Literal["content"]
     text: str
 
 

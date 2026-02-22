@@ -54,9 +54,10 @@ export interface ThreadToolCall {
 }
 
 export interface ReasoningDetail {
-  type: 'custom' | 'openai' | 'gemini' | 'claude' | 'openrouter' | 'openai_compatible';
+  type: 'custom' | 'openai' | 'gemini' | 'claude' | 'openrouter' | 'openai_compatible_template' | 'xai';
   meta: {
     provider?: 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
+    thinking_display?: string;
     openrouter_reasoning_format?: string;
     custom_thinking_template_id?: string;
   };
@@ -65,12 +66,12 @@ export interface ReasoningDetail {
 }
 
 export interface LangEntry {
-  contentParts: Array<{ type: string; text: string }>;
+  contentParts: Array<{ type: 'content'; text: string }>;
   reasoningDetail?: ReasoningDetail;
 }
 
 export interface DisplayMessageResult {
-  contentParts: Array<{ type: string; text: string }>;
+  contentParts: Array<{ type: 'content'; text: string }>;
   reasoningDetail?: ReasoningDetail;
   displayLanguage: string;
   isFallback: boolean;
@@ -141,7 +142,7 @@ export function getRunMessageText(
 }
 
 export function buildLangEntry(
-  contentParts: Array<{ type: string; text: string }>,
+  contentParts: Array<{ type: 'content'; text: string }>,
   reasoningDetail?: ReasoningDetail,
 ): LangEntry {
   return {

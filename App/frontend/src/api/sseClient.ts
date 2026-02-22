@@ -34,7 +34,7 @@ export type ThreadRuntimeEvent =
   | { event: 'message:user'; data: RuntimeEventBase & { message_id: string; role: 'user'; seq: number; seq_in_thread: number; data: Record<string, unknown> } }
   | { event: 'message:start'; data: RuntimeEventBase & { message_id: string; role: 'assistant'; seq: number; seq_in_thread: number } }
   | { event: 'content:delta'; data: RuntimeEventBase & { message_id: string; text: string } }
-  | { event: 'thinking:delta'; data: RuntimeEventBase & { message_id: string; text: string } }
+  | { event: 'thinking:delta'; data: RuntimeEventBase & { message_id: string; text: string; thinking_display: string } }
   | { event: 'tool_call:start'; data: RuntimeEventBase & { tool_call_id: string; message_id: string; assistant_message_id: string; index: number; name: string } }
   | { event: 'tool_call:delta'; data: RuntimeEventBase & { tool_call_id: string; index: number; arguments_delta: string; name?: string } }
   | { event: 'tool_call:end'; data: RuntimeEventBase & { tool_call_id: string; message_id: string; assistant_message_id: string; index: number; name: string; arguments: Record<string, unknown>; extra_content?: Record<string, unknown> | null; status?: ToolCallStatus } }

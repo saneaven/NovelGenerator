@@ -34,6 +34,7 @@ import AgentRunModeToggle from '../../../components/ui/AgentRunModeToggle';
 import { buildEditCardsFromToolCallMetadata } from '../../../toolCall';
 import type { ToolCallDecisionMap } from '../../../toolCall/types';
 import { Settings, Edit, Trash, Globe, CircularArrow, ChevronDown, Send, Stop } from '../../../components/icons';
+import { getByDotPath } from '../../../utils/dotPath';
 import '../../../pages/workspace/styles/AgentPanel.css';
 import '../../../pages/workspace/styles/AgentHeader.css';
 import '../../../pages/workspace/styles/AgentMessages.css';
@@ -145,7 +146,7 @@ function collapseContent(parts: Array<{ type: string; text: string }>): string {
     .trim();
 }
 
-function hasNonEmptyPartText(message: ThreadMessage, partType: 'content' | 'thinking'): boolean {
+function hasNonEmptyPartText(message: ThreadMessage, partType: 'content'): boolean {
   return Object.values(message.data).some((entry) => (
     entry.contentParts.some((part) => (
       part.type === partType && typeof part.text === 'string' && part.text.trim().length > 0
@@ -153,18 +154,22 @@ function hasNonEmptyPartText(message: ThreadMessage, partType: 'content' | 'thin
   ));
 }
 
-function hasReasoningDetail(message: ThreadMessage): boolean {
-  return Object.values(message.data).some((entry) => (
-    typeof entry.reasoningDetail === 'object' && entry.reasoningDetail !== null
-  ));
+function hasReasoningText(message: ThreadMessage): boolean {
+  return Object.values(message.data).some((entry) => {
+    const detail = entry.reasoningDetail;
+    if (!detail || typeof detail !== 'object') return false;
+    const path = detail.meta?.thinking_display?.trim();
+    if (!path) return false;
+    const value = getByDotPath(detail.data ?? {}, path);
+    return typeof value === 'string' && value.trim().length > 0;
+  });
 }
 
 function shouldDeleteAssistantMessageAfterToolCallCleanup(message: ThreadMessage): boolean {
   if (message.role !== 'assistant') return false;
   const hasContent = hasNonEmptyPartText(message, 'content');
   if (hasContent) return false;
-  const hasThinking = hasNonEmptyPartText(message, 'thinking') || hasReasoningDetail(message);
-  return !hasThinking;
+  return !hasReasoningText(message);
 }
 
 const AgentContextTrigger: React.FC<AgentContextTriggerProps> = React.memo(({
@@ -706,13 +711,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     const state = useThreadStore.getState();
     const existing = state.getMessages(threadId).find((m) => m.id === message.id);
     const existingEntry = existing?.data?.[primaryLanguage] ?? existing?.data?._final;
-    const existingParts = Array.isArray(existingEntry?.contentParts) ? existingEntry.contentParts : [];
-    const keptThinkingParts = existingParts
-      .filter((part) => part?.type === 'thinking' && typeof part?.text === 'string')
-      .map((part) => ({ type: 'thinking' as const, text: part.text }));
     const entry = {
       contentParts: [
-        ...keptThinkingParts,
         { type: 'content' as const, text: content },
       ],
       reasoningDetail: existingEntry?.reasoningDetail,
@@ -783,7 +783,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     state.removeToolCall(toolCallId);
 
     // Remove the assistant message when its last tool call is removed and
-    // it has neither content nor thinking.
+    // it has neither content nor reasoning display text.
     if (assistantMessageId) {
       const nextState = useThreadStore.getState();
       const remainingToolCalls = nextState
@@ -974,10 +974,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
           );
 
           if (isSameRoleAsPrevious && !isStreamingMessage && !primaryPlainContent) {
-            const hasThinking = (message.chatMessage.contentParts ?? []).some(
-              (p: any) => p.type === 'thinking' && typeof p.text === 'string' && p.text.trim().length > 0
-            );
-            if (!hasThinking) {
+            const detail = message.chatMessage.reasoning_detail as { meta?: { thinking_display?: string }; data?: Record<string, unknown> } | undefined;
+            const path = detail?.meta?.thinking_display?.trim();
+            const thinkingValue = path && detail?.data ? getByDotPath(detail.data, path) : undefined;
+            if (!(typeof thinkingValue === 'string' && thinkingValue.trim().length > 0)) {
               return null;
             }
           }
@@ -996,7 +996,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                   {message.chatMessage.role === 'assistant' && !isEditing && (
                     <ThinkingDisplay
                       messageId={message.chatMessage.id}
-                      contentParts={message.chatMessage.contentParts}
+                      reasoningDetail={message.chatMessage.reasoning_detail as any}
                       isStreaming={isStreamingMessage}
                     />
                   )}

@@ -611,7 +611,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                         {isStreamingNatural && streamingSession && (
                             <ThinkingDisplay
                                 messageId={streamingSessionId!}
-                                contentParts={streamingSession.contentParts}
+                                reasoningDetail={streamingSession.reasoningDetail}
                                 isStreaming={streamingSession.status === 'running'}
                             />
                         )}
@@ -645,7 +645,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                         {(isStreamingPositive || isStreamingNegative) && streamingSession && (
                             <ThinkingDisplay
                                 messageId={streamingSessionId!}
-                                contentParts={streamingSession.contentParts}
+                                reasoningDetail={streamingSession.reasoningDetail}
                                 isStreaming={streamingSession.status === 'running'}
                             />
                         )}

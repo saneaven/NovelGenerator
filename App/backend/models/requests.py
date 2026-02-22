@@ -33,8 +33,8 @@ class RetryConfig(BaseModel):
     retry_delay_ms: int = Field(default=1000, ge=100, le=30000, alias="retry_delay_ms")
 
 class ContentPart(BaseModel):
-    """A part of message content (content or thinking)"""
-    type: Literal["content", "thinking"]
+    """A part of message content"""
+    type: Literal["content"]
     text: str
 
 class ToolCallFunction(BaseModel):

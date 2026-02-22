@@ -64,9 +64,14 @@ class MessageResponse(BaseModel):
     created_at: datetime
 
 
+class PatchContentPart(BaseModel):
+    type: Literal["content"]
+    text: str
+
+
 class PatchMessageRequest(BaseModel):
     language: str
-    content_parts: list[dict[str, Any]]
+    content_parts: list[PatchContentPart]
     reasoning_detail: dict[str, Any] | None = None
     set_final: bool = False
 

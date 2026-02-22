@@ -10,7 +10,7 @@ import type { ToolCallStatus, ToolCallFailureType, ApplicationResult } from '../
 
 export type Role = 'system' | 'user' | 'assistant' | 'tool_results';
 
-export type ContentPartType = 'content' | 'thinking';
+export type ContentPartType = 'content';
 
 export interface ContentPart {
   type: ContentPartType;
@@ -41,13 +41,14 @@ export interface ConversationBlock {
 }
 
 export interface ReasoningDetail {
-  type: 'custom' | 'openai' | 'gemini' | 'claude' | 'openrouter' | 'openai_compatible';
+  type: 'custom' | 'openai' | 'gemini' | 'claude' | 'openrouter' | 'openai_compatible_template' | 'xai';
   meta: {
     provider?: 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
+    thinking_display?: string;
     openrouter_reasoning_format?: string;
     custom_thinking_template_id?: string;
   };
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   token_count: number;
 }
 

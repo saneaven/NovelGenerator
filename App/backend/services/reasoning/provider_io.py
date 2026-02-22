@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Protocol
+
+from .custom_template_runtime import get_nested_path, set_nested_path
 
 
 def _copy_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -83,6 +84,31 @@ def _filter_openai_reasoning_items(items: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _append_string_path(target: dict[str, Any], path: str, value: str) -> None:
+    existing = get_nested_path(target, path)
+    if isinstance(existing, str):
+        set_nested_path(target, path, existing + value)
+    else:
+        set_nested_path(target, path, value)
+
+
+def _first_stream_template_var(template: dict[str, Any] | None) -> str | None:
+    if not isinstance(template, dict):
+        return None
+    response_fields = template.get("response_fields")
+    if not isinstance(response_fields, list):
+        return None
+    for field in response_fields:
+        if not isinstance(field, dict):
+            continue
+        if not bool(field.get("is_stream_delta")):
+            continue
+        as_var = field.get("as_var")
+        if isinstance(as_var, str) and as_var.strip():
+            return as_var.strip()
+    return None
+
+
 class ProviderIO(Protocol):
     def to_provider_messages(self, messages: list[dict[str, Any]], model: str, advanced: dict[str, Any]) -> list[dict[str, Any]]:
         ...
@@ -91,6 +117,9 @@ class ProviderIO(Protocol):
         ...
 
     def read_reasoning_tokens(self, final_snapshot: Any) -> int | None:
+        ...
+
+    def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
         ...
 
 
@@ -103,6 +132,9 @@ class BaseProviderIO:
 
     def read_reasoning_tokens(self, final_snapshot: Any) -> int | None:
         return _snapshot_reasoning_tokens(final_snapshot)
+
+    def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
+        return None
 
 
 class OpenAIResponsesIO(BaseProviderIO):
@@ -125,14 +157,23 @@ class OpenAIResponsesIO(BaseProviderIO):
 
     def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
         items = _filter_openai_reasoning_items(_snapshot_reasoning_details(final_snapshot))
-        if not items:
+        reasoning_text = _reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
+        if not items and not reasoning_text:
             return None
+        data: dict[str, Any] = {"items": items}
+        meta: dict[str, Any] = {"provider": "openai"}
+        if reasoning_text:
+            data["reasoning_text"] = reasoning_text
+            meta["thinking_display"] = "reasoning_text"
         return {
             "type": "openai",
-            "meta": {"provider": "openai"},
-            "data": {"items": items},
+            "meta": meta,
+            "data": data,
             "token_count": 0,
         }
+
+    def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
+        return "reasoning_text"
 
 
 class GeminiIO(BaseProviderIO):
@@ -146,14 +187,26 @@ class GeminiIO(BaseProviderIO):
                 continue
             if isinstance(detail.get("thought_signature"), str) and detail.get("thought_signature"):
                 parts.append(detail)
-        if not parts:
+
+        reasoning_text = _reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
+        if not parts and not reasoning_text:
             return None
+
+        data: dict[str, Any] = {"parts": parts}
+        meta: dict[str, Any] = {"provider": "gemini"}
+        if reasoning_text:
+            data["reasoning_text"] = reasoning_text
+            meta["thinking_display"] = "reasoning_text"
+
         return {
             "type": "gemini",
-            "meta": {"provider": "gemini"},
-            "data": {"parts": parts},
+            "meta": meta,
+            "data": data,
             "token_count": 0,
         }
+
+    def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
+        return "reasoning_text"
 
 
 class ClaudeIO(BaseProviderIO):
@@ -171,17 +224,29 @@ class ClaudeIO(BaseProviderIO):
                 continue
             if isinstance(thinking_text, str) and thinking_text:
                 blocks.append(block)
-        if not blocks:
+
+        reasoning_text = _reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
+        if not blocks and not reasoning_text:
             return None
+
+        data: dict[str, Any] = {"blocks": blocks}
+        meta: dict[str, Any] = {"provider": "claude"}
+        if reasoning_text:
+            data["reasoning_text"] = reasoning_text
+            meta["thinking_display"] = "reasoning_text"
+
         return {
             "type": "claude",
-            "meta": {"provider": "claude"},
-            "data": {"blocks": blocks},
+            "meta": meta,
+            "data": data,
             "token_count": 0,
         }
 
     def read_reasoning_tokens(self, final_snapshot: Any) -> int | None:
         return None
+
+    def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
+        return "reasoning_text"
 
 
 class OpenRouterIO(BaseProviderIO):
@@ -210,40 +275,54 @@ class OpenRouterIO(BaseProviderIO):
 
     def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
         details = _snapshot_reasoning_details(final_snapshot)
-        thinking_text = _reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
-        if not details and not thinking_text:
+        reasoning_text = _reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
+        if not details and not reasoning_text:
             return None
         meta: dict[str, Any] = {"provider": "openrouter"}
         fmt = _read_openrouter_format(details)
         if isinstance(fmt, str):
             meta["openrouter_reasoning_format"] = fmt
+        data: dict[str, Any] = {
+            "reasoning_details": details,
+        }
+        if reasoning_text:
+            data["reasoning"] = reasoning_text
+            meta["thinking_display"] = "reasoning"
         return {
             "type": "openrouter",
             "meta": meta,
-            "data": {
-                "reasoning": thinking_text,
-                "reasoning_details": details,
-            },
+            "data": data,
             "token_count": 0,
         }
 
+    def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
+        return "reasoning"
 
-@dataclass
-class OpenAICompatibleIO(BaseProviderIO):
-    provider_name: str
 
+class XaiIO(BaseProviderIO):
     def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
         details = _snapshot_reasoning_details(final_snapshot)
-        thinking_text = _reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
-        if not details and not thinking_text:
+        reasoning_text = _reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
+        if not details and not reasoning_text:
             return None
-        meta: dict[str, Any] = {"provider": self.provider_name}
+        data: dict[str, Any] = {
+            "details": details,
+        }
+        meta: dict[str, Any] = {
+            "provider": "xai",
+        }
+        if reasoning_text:
+            data["reasoning_text"] = reasoning_text
+            meta["thinking_display"] = "reasoning_text"
         return {
-            "type": "openai_compatible",
+            "type": "xai",
             "meta": meta,
-            "data": {"details": details, "text": thinking_text},
+            "data": data,
             "token_count": 0,
         }
+
+    def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
+        return "reasoning_text"
 
 
 class CustomOpenAICompatIO(BaseProviderIO):
@@ -265,66 +344,80 @@ class CustomOpenAICompatIO(BaseProviderIO):
 
             if template_id:
                 detail_tid = meta.get("custom_thinking_template_id")
-                # Template mismatch → drop reasoning
+                # Template mismatch -> drop reasoning
                 if detail_tid != template_id:
                     message.pop("reasoning_detail", None)
                     continue
 
                 # Build history injection map for matching template reasoning
-                if template and reasoning_detail.get("type") == "openai_compatible":
+                if template and reasoning_detail.get("type") == "openai_compatible_template":
                     data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
                     inject = build_history_inject(data, template.get("history_fields") or [])
                     if inject:
                         message["_template_history_inject"] = inject
                     message.pop("reasoning_detail", None)
             else:
-                # No template selected — can't inject reasoning back, drop it
+                # No template selected -> cannot inject reasoning back, drop it.
                 message.pop("reasoning_detail", None)
 
         return out
 
     def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
         template_id = advanced.get("custom_thinking_template_id")
-
         details = _snapshot_reasoning_details(final_snapshot)
         thinking_text = _reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
 
         if template_id:
-            # Template mode: group by _template_var, concatenate string values
             var_data: dict[str, Any] = {}
             for item in details:
                 var_name = item.get("_template_var")
                 value = item.get("value")
-                if var_name and isinstance(value, str):
-                    var_data[var_name] = var_data.get(var_name, "") + value
-                elif var_name and value is not None:
-                    var_data[var_name] = value
+                if not isinstance(var_name, str) or not var_name.strip():
+                    continue
+                path = var_name.strip()
+                if isinstance(value, str):
+                    _append_string_path(var_data, path, value)
+                elif value is not None:
+                    set_nested_path(var_data, path, value)
 
-            if not var_data and not thinking_text:
+            if not var_data:
                 return None
 
-            if thinking_text:
-                var_data["_thinking_text"] = thinking_text
+            meta: dict[str, Any] = {
+                "provider": "custom",
+                "custom_thinking_template_id": template_id,
+            }
+            stream_path = self.get_stream_thinking_display_path(advanced)
+            if stream_path:
+                meta["thinking_display"] = stream_path
 
             return {
-                "type": "openai_compatible",
-                "meta": {"provider": "custom", "custom_thinking_template_id": template_id},
+                "type": "openai_compatible_template",
+                "meta": meta,
                 "data": var_data,
                 "token_count": 0,
             }
 
-        # Legacy non-template mode
-        payload: dict[str, Any] = {"details": details, "text": thinking_text}
-        has_payload = bool(payload.get("details")) or bool(str(payload.get("text") or "").strip())
-        if not has_payload:
+        # Non-template custom mode stores only text.
+        if not thinking_text.strip():
             return None
-
         return {
-            "type": "openai_compatible",
-            "meta": {"provider": "custom"},
-            "data": payload,
+            "type": "custom",
+            "meta": {
+                "provider": "custom",
+                "thinking_display": "text",
+            },
+            "data": {"text": thinking_text},
             "token_count": 0,
         }
+
+    def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
+        template_id = advanced.get("custom_thinking_template_id")
+        if template_id:
+            return _first_stream_template_var(
+                advanced.get("_resolved_template") if isinstance(advanced.get("_resolved_template"), dict) else None
+            )
+        return "text"
 
 
 def get_provider_io(provider: str, advanced: dict[str, Any]) -> ProviderIO:
@@ -340,7 +433,7 @@ def get_provider_io(provider: str, advanced: dict[str, Any]) -> ProviderIO:
     if provider_name == "custom":
         return CustomOpenAICompatIO()
     if provider_name == "xai":
-        return OpenAICompatibleIO(provider_name="xai")
+        return XaiIO()
     return BaseProviderIO()
 
 
@@ -352,5 +445,5 @@ __all__ = [
     "ClaudeIO",
     "OpenRouterIO",
     "CustomOpenAICompatIO",
-    "OpenAICompatibleIO",
+    "XaiIO",
 ]

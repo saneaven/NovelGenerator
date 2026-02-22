@@ -1,26 +1,30 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import type { ContentPart } from '../../types/chat';
+import type { ReasoningDetail } from '../../types/thread';
 import { ChevronRight } from '../icons/navigation/ChevronRight';
 import { Loading } from './Loading';
+import { getByDotPath } from '../../utils/dotPath';
 import './ThinkingDisplay.css';
 
 interface ThinkingDisplayProps {
   messageId: string;
-  contentParts?: ContentPart[];
+  reasoningDetail?: ReasoningDetail;
   isStreaming?: boolean;
 }
 
 const ThinkingDisplay: React.FC<ThinkingDisplayProps> = ({
   messageId,
-  contentParts,
+  reasoningDetail,
   isStreaming = false,
 }) => {
   const [expandedStates, setExpandedStates] = useState<Record<string, boolean>>({});
   const contentRef = useRef<HTMLDivElement>(null);
   const userScrolledRef = useRef(false);
-
-  const thinkingParts = contentParts?.filter((p) => p.type === 'thinking') ?? [];
-  const lastText = thinkingParts[thinkingParts.length - 1]?.text;
+  const displayPath = reasoningDetail?.meta?.thinking_display?.trim() ?? '';
+  const thinkingValue = displayPath && reasoningDetail?.data
+    ? getByDotPath(reasoningDetail.data, displayPath)
+    : undefined;
+  const thinkingText = typeof thinkingValue === 'string' ? thinkingValue : '';
+  const lastText = thinkingText;
 
   // Check if user has scrolled away from bottom
   const handleScroll = useCallback(() => {
@@ -42,49 +46,39 @@ const ThinkingDisplay: React.FC<ThinkingDisplayProps> = ({
     container.scrollTop = container.scrollHeight;
   }, [isStreaming, lastText]);
 
-  if (!contentParts || contentParts.length === 0) return null;
-  if (thinkingParts.length === 0) return null;
+  if (!displayPath) return null;
+  if (!thinkingText.trim()) return null;
 
-  const getStableKey = (index: number): string => `${messageId}-thinking-${index}`;
+  const key = `${messageId}-thinking`;
+  const isExpanded = expandedStates[key] ?? false;
 
   const toggleExpanded = (key: string) => {
     setExpandedStates((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   return (
-    <>
-      {thinkingParts.map((part, index) => {
-        const key = getStableKey(index);
-        const isExpanded = expandedStates[key] ?? false;
-        const isLast = index === thinkingParts.length - 1;
-        const streaming = isStreaming && isLast;
+    <div className={`thinking-card ${isExpanded ? 'expanded' : ''}`}>
+      <button
+        className="thinking-card-toggle"
+        onClick={() => toggleExpanded(key)}
+      >
+        <span className="toggle-icon">
+          <ChevronRight size="sm"/>
+        </span>
+        <span className="toggle-label">Thinking</span>
+        {isStreaming && <Loading variant="pulse" size="xs" className="streaming-indicator" />}
+      </button>
 
-        return (
-          <div key={key} className={`thinking-card ${isExpanded ? 'expanded' : ''}`}>
-            <button
-              className="thinking-card-toggle"
-              onClick={() => toggleExpanded(key)}
-            >
-              <span className="toggle-icon">
-                <ChevronRight size="sm"/>
-              </span>
-              <span className="toggle-label">Thinking</span>
-              {streaming && <Loading variant="pulse" size="xs" className="streaming-indicator" />}
-            </button>
-
-            <div className="thinking-card-content">
-              <div
-                ref={isLast ? contentRef : undefined}
-                className="thinking-card-content-inner"
-                onScroll={isLast ? handleScroll : undefined}
-              >
-                {part.text}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </>
+      <div className="thinking-card-content">
+        <div
+          ref={contentRef}
+          className="thinking-card-content-inner"
+          onScroll={handleScroll}
+        >
+          {thinkingText}
+        </div>
+      </div>
+    </div>
   );
 };
 

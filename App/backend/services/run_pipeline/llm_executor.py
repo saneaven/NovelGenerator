@@ -69,11 +69,27 @@ def _build_custom_reasoning_detail(content_parts: list[dict[str, Any]]) -> dict[
     return normalize_reasoning_detail(
         {
             "type": "custom",
-            "meta": {"provider": "custom"},
+            "meta": {"provider": "custom", "thinking_display": "text"},
             "data": {"text": thinking_text},
             "token_count": 0,
         }
     )
+
+
+def _content_only_parts(parts: Any) -> list[dict[str, str]]:
+    if not isinstance(parts, list):
+        return []
+    out: list[dict[str, str]] = []
+    for part in parts:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") != "content":
+            continue
+        text = part.get("text")
+        if not isinstance(text, str):
+            continue
+        out.append({"type": "content", "text": text})
+    return out
 
 
 async def _fill_reasoning_token_count(
@@ -371,6 +387,11 @@ async def run_llm(
     messages = provider_io.to_provider_messages(messages, task_config.model, advanced)
     provider_messages = _strip_internal_message_keys(messages)
     effective_thinking_config = advanced.get("thinking_config") if thinking_mode == "model" else None
+    stream_thinking_display = provider_io.get_stream_thinking_display_path(advanced)
+    if isinstance(stream_thinking_display, str):
+        stream_thinking_display = stream_thinking_display.strip() or None
+    else:
+        stream_thinking_display = None
 
     stream = provider.stream_chat(
         messages=provider_messages,
@@ -392,7 +413,6 @@ async def run_llm(
     merged_meta: MetaPayload | None = None
     raw_response: dict[str, Any] | None = None
 
-    collected_parts: list[dict[str, str]] = []
     delta_state_by_index: dict[int, ToolDeltaState] = {}
 
     async for event in stream:
@@ -417,7 +437,6 @@ async def run_llm(
             assembler.apply_delta(delta)
 
             if delta.content_delta:
-                collected_parts.append({"type": "content", "text": delta.content_delta})
                 await emit_fn(
                     project_id=run.project_id,
                     thread_id=thread.id,
@@ -429,8 +448,7 @@ async def run_llm(
                     },
                 )
 
-            if delta.thinking_delta:
-                collected_parts.append({"type": "thinking", "text": delta.thinking_delta})
+            if thinking_mode != "off" and delta.thinking_delta and stream_thinking_display:
                 await emit_fn(
                     project_id=run.project_id,
                     thread_id=thread.id,
@@ -439,6 +457,7 @@ async def run_llm(
                         "run_id": str(run.id),
                         "message_id": str(assistant_message.id),
                         "text": delta.thinking_delta,
+                        "thinking_display": stream_thinking_display,
                     },
                 )
 
@@ -533,8 +552,9 @@ async def run_llm(
     if assistant_message is None:
         raise RuntimeError("Assistant message row missing")
 
-    language_entry: dict[str, Any] = {"contentParts": final_snapshot.content_parts}
-    final_entry: dict[str, Any] = {"contentParts": final_snapshot.content_parts}
+    content_only_parts = _content_only_parts(final_snapshot.content_parts)
+    language_entry: dict[str, Any] = {"contentParts": content_only_parts}
+    final_entry: dict[str, Any] = {"contentParts": content_only_parts}
     if reasoning_detail is not None:
         language_entry["reasoningDetail"] = reasoning_detail
         final_entry["reasoningDetail"] = reasoning_detail
@@ -550,7 +570,7 @@ async def run_llm(
             thread=thread,
             run=run,
             input_payload=input_payload if isinstance(input_payload, dict) else {},
-            content_parts=final_snapshot.content_parts,
+            content_parts=content_only_parts,
             emit_fn=emit_fn,
         )
     else:

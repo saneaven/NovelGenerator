@@ -84,12 +84,14 @@ def _normalize_content_parts(parts: Any) -> list[dict[str, str]]:
         raise HTTPException(status_code=422, detail="content_parts must be a list")
     out: list[dict[str, str]] = []
     for item in parts:
+        if hasattr(item, "model_dump"):
+            item = item.model_dump()
         if not isinstance(item, dict):
             raise HTTPException(status_code=422, detail="content_parts items must be objects")
         ptype = str(item.get("type") or "")
         text = item.get("text")
-        if ptype not in {"content", "thinking"}:
-            raise HTTPException(status_code=422, detail="content_parts.type must be content|thinking")
+        if ptype != "content":
+            raise HTTPException(status_code=422, detail="content_parts.type must be content")
         if not isinstance(text, str):
             raise HTTPException(status_code=422, detail="content_parts.text must be string")
         out.append({"type": ptype, "text": text})
@@ -110,7 +112,7 @@ def _has_non_empty_part_text(parts: Any, *, part_type: str) -> bool:
     return False
 
 
-def _assistant_has_content_or_thinking(data: Any) -> bool:
+def _assistant_has_content_or_reasoning(data: Any) -> bool:
     if not isinstance(data, dict):
         return False
     for entry in data.values():
@@ -118,8 +120,6 @@ def _assistant_has_content_or_thinking(data: Any) -> bool:
             continue
         parts = entry.get("contentParts")
         if _has_non_empty_part_text(parts, part_type="content"):
-            return True
-        if _has_non_empty_part_text(parts, part_type="thinking"):
             return True
         reasoning_detail = entry.get("reasoningDetail")
         if isinstance(reasoning_detail, dict):
@@ -795,7 +795,7 @@ async def delete_thread_tool_call(
                 )
                 .first()
             )
-            if assistant_row is not None and not _assistant_has_content_or_thinking(assistant_row.data):
+            if assistant_row is not None and not _assistant_has_content_or_reasoning(assistant_row.data):
                 db.delete(assistant_row)
 
     db.commit()

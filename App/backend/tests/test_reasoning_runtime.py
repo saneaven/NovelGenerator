@@ -8,8 +8,12 @@ from App.backend.services.reasoning.normalize import normalize_reasoning_detail
 def test_normalize_reasoning_detail_clamps_token_count() -> None:
     out = normalize_reasoning_detail(
         {
-            "type": "openrouter",
-            "meta": {"provider": "openrouter", "openrouter_reasoning_format": "foo"},
+            "type": "openai_compatible_template",
+            "meta": {
+                "provider": "custom",
+                "thinking_display": "reasoning_info.reasoning_text",
+                "openrouter_reasoning_format": "foo",
+            },
             "data": {"reasoning": "abc"},
             "token_count": -5,
             "ignored": True,
@@ -17,8 +21,9 @@ def test_normalize_reasoning_detail_clamps_token_count() -> None:
     )
 
     assert out is not None
-    assert out["type"] == "openrouter"
-    assert out["meta"]["provider"] == "openrouter"
+    assert out["type"] == "openai_compatible_template"
+    assert out["meta"]["provider"] == "custom"
+    assert out["meta"]["thinking_display"] == "reasoning_info.reasoning_text"
     assert out["token_count"] == 0
     assert "ignored" not in out
 
@@ -61,11 +66,11 @@ def test_apply_thinking_mode_custom_serializes_assistant() -> None:
     messages = [
         {
             "role": "assistant",
-            "content_parts": [
-                {"type": "thinking", "text": "thought"},
-                {"type": "content", "text": "answer"},
-            ],
-            "reasoning_detail": {"x": 1},
+            "content_parts": [{"type": "content", "text": "answer"}],
+            "reasoning_detail": {
+                "meta": {"thinking_display": "reasoning_text"},
+                "data": {"reasoning_text": "thought"},
+            },
         }
     ]
 

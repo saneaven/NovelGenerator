@@ -181,7 +181,7 @@ def build_history_inject(
         in_var = field.get("in_var")
         if not isinstance(path, str) or not isinstance(in_var, str):
             continue
-        value = reasoning_data.get(in_var)
+        value = get_nested_path(reasoning_data, in_var)
         if value is not None:
             inject[path] = value
     return inject

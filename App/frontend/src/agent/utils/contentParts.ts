@@ -2,18 +2,15 @@ import type { ContentPart } from '../../types/chat';
 
 export interface CollapseContentPartsOptions {
   contentSeparator?: string;
-  thinkingSeparator?: string;
   trim?: boolean;
 }
 
 export interface CollapsedContentParts {
   content: string;
-  thinking: string;
 }
 
 const defaultOptions: Required<CollapseContentPartsOptions> = {
   contentSeparator: '',
-  thinkingSeparator: '\n\n',
   trim: false,
 };
 
@@ -21,20 +18,16 @@ export function collapseContentParts(
   parts: ContentPart[] | undefined,
   options?: CollapseContentPartsOptions
 ): CollapsedContentParts {
-  const { contentSeparator, thinkingSeparator, trim } = {
+  const { contentSeparator, trim } = {
     ...defaultOptions,
     ...options,
   };
 
-  const buckets: Record<'content' | 'thinking', string[]> = {
-    content: [],
-    thinking: [],
-  };
+  const contentChunks: string[] = [];
 
   (parts ?? []).forEach((part) => {
     if (!part || !part.type) return;
-    if (part.type === 'content') buckets.content.push(part.text ?? '');
-    if (part.type === 'thinking') buckets.thinking.push(part.text ?? '');
+    if (part.type === 'content') contentChunks.push(part.text ?? '');
   });
 
   const joinAndMaybeTrim = (values: string[], separator: string) => {
@@ -43,7 +36,6 @@ export function collapseContentParts(
   };
 
   return {
-    content: joinAndMaybeTrim(buckets.content, contentSeparator),
-    thinking: joinAndMaybeTrim(buckets.thinking, thinkingSeparator),
+    content: joinAndMaybeTrim(contentChunks, contentSeparator),
   };
 }

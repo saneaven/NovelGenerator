@@ -139,12 +139,16 @@ function hasMessageData(data: ThreadMessage['data'] | undefined): boolean {
 }
 
 function fallbackDataFromStreaming(message: ThreadMessage | undefined): ThreadMessage['data'] | undefined {
-  if (!message?.streamingData?.contentParts || message.streamingData.contentParts.length === 0) return undefined;
+  const streaming = message?.streamingData;
+  if (!streaming) return undefined;
+  const hasContentParts = Array.isArray(streaming.contentParts) && streaming.contentParts.length > 0;
+  const hasReasoning = streaming.reasoningDetail !== undefined;
+  if (!hasContentParts && !hasReasoning) return undefined;
   const preferLanguage = Object.keys(message.data ?? {}).find((key) => key !== '_final') ?? 'English';
   const entry = {
-    contentParts: message.streamingData.contentParts,
-    ...(message.streamingData.reasoningDetail !== undefined
-      ? { reasoningDetail: message.streamingData.reasoningDetail }
+    contentParts: streaming.contentParts ?? [],
+    ...(streaming.reasoningDetail !== undefined
+      ? { reasoningDetail: streaming.reasoningDetail }
       : {}),
   };
   return {

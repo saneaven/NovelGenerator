@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import type { ContentPart, ToolCallMetadata } from '../../types/chat';
+import type { ToolCallMetadata } from '../../types/chat';
 import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
-import { collapseContentParts } from '../../agent/utils/contentParts';
 import { threadService } from '../../api/threadService';
 import { useThreadStore } from '../../store/threadStore';
 import type { ThreadMessage, ThreadToolCall } from '../../types/thread';
@@ -33,12 +32,11 @@ function hasPendingStatus(status: string | undefined): boolean {
   return status === 'pending' || status === 'streaming' || status === 'validating' || status === 'processing';
 }
 
-
-function toContentParts(parts: Array<{ type: string; text: string }>): ContentPart[] {
-  return parts.map((part) => ({
-    type: part.type === 'thinking' ? 'thinking' : 'content',
-    text: String(part.text ?? ''),
-  }));
+function collapseContent(parts: Array<{ type: 'content'; text: string }>): string {
+  return parts
+    .filter((part) => part.type === 'content')
+    .map((part) => part.text)
+    .join('');
 }
 
 function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
@@ -144,14 +142,12 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     const display = message.isStreaming
       ? { contentParts: message.streamingData?.contentParts ?? [] }
       : resolveRunMessageDisplay(message, 'English');
-    return collapseContentParts(display.contentParts as any).content.trim();
+    return collapseContent(display.contentParts as Array<{ type: 'content'; text: string }>).trim();
   }, []);
 
-  const getMessageContentParts = useCallback((message: ThreadMessage): ContentPart[] => {
-    const display = message.isStreaming
-      ? { contentParts: message.streamingData?.contentParts ?? [] }
-      : resolveRunMessageDisplay(message, 'English');
-    return toContentParts(display.contentParts);
+  const getMessageReasoningDetail = useCallback((message: ThreadMessage) => {
+    if (message.isStreaming) return message.streamingData?.reasoningDetail;
+    return resolveRunMessageDisplay(message, 'English').reasoningDetail;
   }, []);
 
   const handleConfirm = useCallback(async (_messageId: string, decisions: ToolCallDecisionMap) => {
@@ -186,18 +182,10 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     });
   }, [childThreadId]);
 
-  // Streaming content from actively streaming assistant message
-  const streamingContentParts = useMemo<ContentPart[] | null>(() => {
-    if (!streamingMessage) return null;
-    const entry = streamingMessage.streamingData;
-    if (!entry?.contentParts) return null;
-    return toContentParts(entry.contentParts);
-  }, [streamingMessage]);
-
   const streamingText = useMemo(() => {
-    if (!streamingContentParts) return '';
-    return collapseContentParts(streamingContentParts as any).content.trim();
-  }, [streamingContentParts]);
+    if (!streamingMessage?.streamingData?.contentParts) return '';
+    return collapseContent(streamingMessage.streamingData.contentParts).trim();
+  }, [streamingMessage]);
 
   return (
     <div className="sub-agent-peek-timeline">
@@ -208,8 +196,8 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
       )}
 
       {messages.map((message, index) => {
-        const contentParts = getMessageContentParts(message);
         const text = getMessageText(message);
+        const reasoningDetail = getMessageReasoningDetail(message);
         const tcIds = toolCallIdsByAssistantMessageId[message.id] ?? [];
         const toolCalls = tcIds
           .map((id) => toolCallsById[id])
@@ -238,7 +226,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
               {message.role === 'assistant' && (
                 <ThinkingDisplay
                   messageId={String(message.id)}
-                  contentParts={contentParts}
+                  reasoningDetail={reasoningDetail}
                   isStreaming={message.isStreaming === true}
                 />
               )}
@@ -276,7 +264,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
         );
       })}
 
-      {streamingMessage && streamingContentParts && (
+      {streamingMessage && (
         <div className={`agent-message assistant${messages.length > 0 && messages[messages.length - 1].role === 'assistant' ? ' same-role-as-previous' : ''}`}>
           <div className="message-wrapper">
             {!(messages.length > 0 && messages[messages.length - 1].role === 'assistant') && (
@@ -287,7 +275,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
             )}
             <ThinkingDisplay
               messageId={`stream:${childThreadId}`}
-              contentParts={streamingContentParts}
+              reasoningDetail={streamingMessage.streamingData?.reasoningDetail}
               isStreaming={true}
             />
             {streamingText && (

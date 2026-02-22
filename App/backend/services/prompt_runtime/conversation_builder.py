@@ -33,11 +33,13 @@ def _normalize_content_parts(entry: dict[str, Any]) -> list[dict[str, str]]:
     for part in parts:
         if not isinstance(part, dict):
             continue
-        ptype = str(part.get("type") or "content")
+        ptype = str(part.get("type") or "")
+        if ptype != "content":
+            continue
         text = part.get("text")
         if not isinstance(text, str):
             continue
-        out.append({"type": ptype, "text": text})
+        out.append({"type": "content", "text": text})
     return out
 
 

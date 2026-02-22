@@ -3,7 +3,15 @@ from __future__ import annotations
 from typing import Any
 
 
-REASONING_TYPES = {"custom", "openai", "gemini", "claude", "openrouter", "openai_compatible"}
+REASONING_TYPES = {
+    "custom",
+    "openai",
+    "gemini",
+    "claude",
+    "openrouter",
+    "openai_compatible_template",
+    "xai",
+}
 REASONING_PROVIDERS = {"openai", "gemini", "claude", "openrouter", "custom", "xai"}
 
 
@@ -21,6 +29,10 @@ def normalize_reasoning_detail(raw: Any) -> dict[str, Any] | None:
     provider = str(meta_raw.get("provider") or "").strip()
     if provider in REASONING_PROVIDERS:
         meta["provider"] = provider
+
+    thinking_display = meta_raw.get("thinking_display")
+    if isinstance(thinking_display, str) and thinking_display.strip():
+        meta["thinking_display"] = thinking_display.strip()
 
     custom_template_id = meta_raw.get("custom_thinking_template_id")
     if isinstance(custom_template_id, str) and custom_template_id.strip():
