@@ -1,3 +1,4 @@
+import copy
 import inspect
 import json
 from typing import Any, AsyncGenerator, Dict, List, Optional
@@ -7,6 +8,7 @@ from google.genai import errors, types
 
 from .base import BaseProvider
 from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
+from .final_mappers import _to_raw_dict
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
@@ -364,7 +366,33 @@ class GeminiProvider(BaseProvider):
             stream_result = chat.send_message_stream(self._to_chat_message_input(current_input))
             stream = await stream_result if inspect.isawaitable(stream_result) else stream_result
 
+            raw_accumulated: Dict[str, Any] = {}
+
             async for chunk in stream:
+                # Accumulate full raw chunk for raw response
+                raw_full = _to_raw_dict(chunk)
+                if isinstance(raw_full, dict):
+                    for key, value in raw_full.items():
+                        if key == "candidates":
+                            continue
+                        if value is not None:
+                            raw_accumulated[key] = value
+                    for i, cand in enumerate(raw_full.get("candidates", [])):
+                        candidates = raw_accumulated.setdefault("candidates", [])
+                        if i >= len(candidates):
+                            candidates.append(copy.deepcopy(cand))
+                        else:
+                            new_parts = (cand.get("content") or {}).get("parts", [])
+                            if new_parts:
+                                acc_content = candidates[i].setdefault("content", {})
+                                acc_content.setdefault("parts", []).extend(copy.deepcopy(new_parts))
+                            for k, v in cand.items():
+                                if k != "content" and v is not None:
+                                    candidates[i][k] = v
+                            role = (cand.get("content") or {}).get("role")
+                            if role is not None:
+                                candidates[i].setdefault("content", {})["role"] = role
+
                 usage_meta = getattr(chunk, "usage_metadata", None)
                 if usage_meta:
                     captured_usage = {
@@ -527,6 +555,7 @@ class GeminiProvider(BaseProvider):
                         finish_reason=finish_reason,
                         reasoning_tokens=captured_reasoning_tokens,
                     ),
+                    raw_response=raw_accumulated if raw_accumulated else None,
                 )
 
         except Exception as exc:  # pragma: no cover - stream errors surfaced via provider error event

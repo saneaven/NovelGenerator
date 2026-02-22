@@ -398,11 +398,14 @@ async def run_llm(
     assembler = FallbackSnapshotAssembler(provider=task_config.provider, model=task_config.model)
     native_final = None
     merged_meta: MetaPayload | None = None
+    raw_response: dict[str, Any] | None = None
 
     collected_parts: list[dict[str, str]] = []
     delta_state_by_index: dict[int, ToolDeltaState] = {}
 
     async for event in stream:
+        if event.raw_response is not None:
+            raw_response = event.raw_response
         if event.kind == "delta" and event.delta is not None:
             delta: DeltaPayload = event.delta
             assembler.apply_delta(delta)
@@ -494,6 +497,9 @@ async def run_llm(
     else:
         final_snapshot = assembler.finalize_or_raise()
 
+    if raw_response is not None and final_snapshot.raw_native_response is None:
+        final_snapshot.raw_native_response = raw_response
+
     if native_tool_call_mode:
         final_snapshot = extract_native_tool_calls_from_snapshot(final_snapshot)
 
@@ -563,6 +569,19 @@ async def run_llm(
         thread.status = "done"
 
     db.commit()
+
+    await emit_fn(
+        project_id=run.project_id,
+        thread_id=thread.id,
+        event_name="llm:response",
+        data={
+            "run_id": str(run.id),
+            "message_id": str(assistant_message.id),
+            "provider": task_config.provider,
+            "model": task_config.model,
+            "raw_response": final_snapshot.raw_native_response,
+        },
+    )
 
     await emit_fn(
         project_id=run.project_id,

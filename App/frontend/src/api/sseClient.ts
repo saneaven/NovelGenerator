@@ -57,6 +57,12 @@ export type ThreadRuntimeEvent =
       messages: Array<{ role: string; content_parts: Array<{ type: string; text: string }> }>;
       tools: Array<{ name: string; description: string; parameters: Record<string, unknown> }> | null;
     }}
+  | { event: 'llm:response'; data: RuntimeEventBase & {
+      message_id: string;
+      provider: string;
+      model: string;
+      raw_response: Record<string, unknown> | null;
+    }}
   | { event: string; data: Record<string, unknown> };
 
 export type NotificationUpsertEvent = {

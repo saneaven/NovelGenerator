@@ -204,14 +204,16 @@ class CustomProvider(AsyncOpenAIProvider):
 
         if has_gemini_thinking_config:
             extra_body = self._coerce_extra_body(request)
-            google_body = dict(extra_body.get("google") or {})
+            wrapped_extra_body = dict(extra_body.get("extra_body") or {})
+            google_body = dict(wrapped_extra_body.get("google") or {})
             thinking_payload: Dict[str, object] = {"include_thoughts": True}
             if gemini_level is not None:
                 thinking_payload["thinking_level"] = gemini_level
             if gemini_budget is not None:
                 thinking_payload["thinking_budget"] = gemini_budget
             google_body["thinking_config"] = thinking_payload
-            extra_body["google"] = google_body
+            wrapped_extra_body["google"] = google_body
+            extra_body["extra_body"] = wrapped_extra_body
             request["extra_body"] = extra_body
             return self._apply_additional_body(request)
 

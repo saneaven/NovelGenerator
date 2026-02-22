@@ -20,6 +20,21 @@ def _to_dict(value: Any) -> Dict[str, Any]:
     return {}
 
 
+def _to_raw_dict(value: Any) -> Dict[str, Any]:
+    """Like _to_dict but without exclude_none — preserves all fields."""
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "model_dump"):
+        dumped = value.model_dump()
+        if isinstance(dumped, dict):
+            return dumped
+    if hasattr(value, "to_dict"):
+        dumped = value.to_dict()
+        if isinstance(dumped, dict):
+            return dumped
+    return {}
+
+
 def _parse_arguments(raw: Any) -> tuple[str, Dict[str, Any], Optional[str]]:
     if isinstance(raw, dict):
         raw_text = json.dumps(raw, ensure_ascii=False, separators=(",", ":"))
@@ -70,6 +85,7 @@ def map_openai_response_to_snapshot(
     model: str,
 ) -> FinalSnapshot:
     data = _to_dict(response_obj)
+    raw_native_response = _to_raw_dict(response_obj)
     usage_raw = data.get("usage") or {}
     output_tokens_details = usage_raw.get("output_tokens_details") if isinstance(usage_raw.get("output_tokens_details"), dict) else {}
     reasoning_tokens = output_tokens_details.get("reasoning_tokens") if isinstance(output_tokens_details.get("reasoning_tokens"), (int, float)) else None
@@ -139,6 +155,7 @@ def map_openai_response_to_snapshot(
         usage=usage,
         reasoning_tokens=(int(reasoning_tokens) if isinstance(reasoning_tokens, (int, float)) else None),
         final_source="native",
+        raw_native_response=raw_native_response,
     )
 
 
@@ -148,6 +165,7 @@ def map_chat_completion_to_snapshot(
     model: str,
 ) -> FinalSnapshot:
     data = _to_dict(completion_obj)
+    raw_native_response = _to_raw_dict(completion_obj)
     choices = data.get("choices") or []
     first_choice = choices[0] if choices else {}
     message = first_choice.get("message") or {}
@@ -214,6 +232,7 @@ def map_chat_completion_to_snapshot(
         usage=usage,
         reasoning_tokens=(int(reasoning_tokens) if isinstance(reasoning_tokens, (int, float)) else None),
         final_source="native",
+        raw_native_response=raw_native_response,
     )
 
 
@@ -223,6 +242,7 @@ def map_claude_message_to_snapshot(
     model: str,
 ) -> FinalSnapshot:
     data = _to_dict(message_obj)
+    raw_native_response = _to_raw_dict(message_obj)
     content_parts: List[Dict[str, str]] = []
     tool_calls: List[FinalToolCall] = []
     reasoning_details: List[Dict[str, Any]] = []
@@ -269,6 +289,7 @@ def map_claude_message_to_snapshot(
         reasoning_details=reasoning_details,
         usage=usage,
         final_source="native",
+        raw_native_response=raw_native_response,
     )
 
 
@@ -281,6 +302,7 @@ def map_gemini_message_to_snapshot(
     finish_reason: Optional[str] = None,
 ) -> FinalSnapshot:
     data = _to_dict(message_obj)
+    raw_native_response = _to_raw_dict(message_obj)
     content_parts: List[Dict[str, str]] = []
     tool_calls: List[FinalToolCall] = []
     reasoning_details: List[Dict[str, Any]] = []
@@ -319,4 +341,5 @@ def map_gemini_message_to_snapshot(
         usage=normalize_usage_dict(usage),
         reasoning_tokens=(int(reasoning_tokens) if isinstance(reasoning_tokens, int) else None),
         final_source="native",
+        raw_native_response=raw_native_response,
     )

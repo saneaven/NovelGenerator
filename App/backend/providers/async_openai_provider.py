@@ -1,5 +1,5 @@
 import copy
-from typing import AsyncGenerator, Dict, List, Optional, Tuple
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from openai import (
     APIConnectionError,
@@ -12,7 +12,7 @@ from openai import (
 )
 
 from .base import BaseProvider
-from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
+from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent, deep_merge_concat
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 from ..utils.outbound_http import validate_outbound_base_url
@@ -237,11 +237,7 @@ class AsyncOpenAIProvider(BaseProvider):
             thinking_delta = thinking_obj.get("text")
 
         tool_call_deltas = delta.get("tool_calls") if isinstance(delta.get("tool_calls"), list) else []
-        reasoning_details = []
-        if isinstance(delta.get("reasoning_details"), list):
-            reasoning_details = delta.get("reasoning_details")
-        elif isinstance(delta.get("thinking_details"), list):
-            reasoning_details = delta.get("thinking_details")
+        reasoning_details = AsyncOpenAIProvider._extract_reasoning_details(choice, delta)
 
         if content_delta or thinking_delta or tool_call_deltas or reasoning_details:
             events.append(
@@ -257,6 +253,43 @@ class AsyncOpenAIProvider(BaseProvider):
             )
 
         return events
+
+    @staticmethod
+    def _extract_reasoning_details(choice: Dict[str, Any], delta: Dict[str, Any]) -> List[Dict[str, Any]]:
+        for raw_items in (
+            delta.get("reasoning_details"),
+            delta.get("thinking_details"),
+            delta.get("thoughts"),
+            choice.get("thoughts"),
+        ):
+            if isinstance(raw_items, list):
+                return AsyncOpenAIProvider._normalize_reasoning_details(raw_items)
+        return []
+
+    @staticmethod
+    def _normalize_reasoning_details(raw_items: List[Any]) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+
+            normalized = dict(item)
+            thought = normalized.get("thought")
+
+            # Gemini OpenAI-compat may emit {"thought":"..."}; normalize for downstream storage.
+            if isinstance(thought, str):
+                if thought:
+                    text = normalized.get("text")
+                    if not isinstance(text, str) or not text:
+                        normalized["text"] = thought
+                normalized["thought"] = True
+
+            thought_signature = normalized.get("thought_signature")
+            if isinstance(thought_signature, str) and thought_signature:
+                normalized["thought"] = True
+
+            out.append(normalized)
+        return out
 
     @staticmethod
     def _has_meaningful_payload(chunk: Dict) -> bool:
@@ -481,6 +514,8 @@ class AsyncOpenAIProvider(BaseProvider):
 
             return events, should_stop
 
+        raw_accumulated: Dict[str, Any] = {}
+
         try:
             # Chat Completions stream API does not provide a native final completion object.
             raw_stream = await client.chat.completions.create(**request_kwargs)
@@ -489,6 +524,26 @@ class AsyncOpenAIProvider(BaseProvider):
                     chunk_dict = chunk.model_dump(exclude_none=True)
                     if not isinstance(chunk_dict, dict):
                         continue
+
+                    # Accumulate full raw chunk (no filtering) for raw response
+                    raw_full = chunk.model_dump()
+                    if isinstance(raw_full, dict):
+                        for key, value in raw_full.items():
+                            if key == "choices":
+                                continue
+                            if value is not None:
+                                raw_accumulated[key] = value
+                        for i, choice in enumerate(raw_full.get("choices", [])):
+                            choices = raw_accumulated.setdefault("choices", [])
+                            if i >= len(choices):
+                                choices.append(copy.deepcopy(choice))
+                            else:
+                                delta = choice.get("delta")
+                                if isinstance(delta, dict):
+                                    deep_merge_concat(choices[i].setdefault("delta", {}), delta)
+                                for k, v in choice.items():
+                                    if k != "delta" and v is not None:
+                                        choices[i][k] = v
 
                     _update_meta_from_chunk(chunk_dict)
                     stream_events, should_stop = _collect_events_from_chunk(chunk_dict)
@@ -554,6 +609,7 @@ class AsyncOpenAIProvider(BaseProvider):
                     else None,
                     reasoning_tokens=captured_reasoning_tokens,
                 ),
+                raw_response=raw_accumulated if raw_accumulated else None,
             )
 
     async def get_models(self) -> Dict:

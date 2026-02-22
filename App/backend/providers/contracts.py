@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional
@@ -7,6 +8,28 @@ from typing import Any, Dict, List, Literal, Optional
 
 ProviderEventKind = Literal["delta", "meta", "final_native", "error"]
 FinalSource = Literal["native", "reducer_fallback"]
+
+
+def deep_merge_concat(target: Dict[str, Any], source: Dict[str, Any]) -> None:
+    """Generic deep merge for streaming chunks. Strings concatenate, lists merge by index, dicts recurse."""
+    for key, value in source.items():
+        if value is None:
+            continue
+        if key not in target or target[key] is None:
+            target[key] = copy.deepcopy(value)
+        elif isinstance(value, str) and isinstance(target[key], str):
+            if value != target[key]:
+                target[key] += value
+        elif isinstance(value, dict) and isinstance(target[key], dict):
+            deep_merge_concat(target[key], value)
+        elif isinstance(value, list) and isinstance(target[key], list):
+            for i, item in enumerate(value):
+                if i < len(target[key]) and isinstance(item, dict) and isinstance(target[key][i], dict):
+                    deep_merge_concat(target[key][i], item)
+                elif i >= len(target[key]):
+                    target[key].append(copy.deepcopy(item))
+        else:
+            target[key] = copy.deepcopy(value)
 
 
 @dataclass
@@ -45,6 +68,7 @@ class FinalSnapshot:
     usage: Optional[Dict[str, int]] = None
     reasoning_tokens: Optional[int] = None
     final_source: FinalSource = "native"
+    raw_native_response: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -60,6 +84,7 @@ class ProviderEvent:
     meta: Optional[MetaPayload] = None
     final_native: Optional[FinalSnapshot] = None
     error: Optional[ProviderErrorPayload] = None
+    raw_response: Optional[Dict[str, Any]] = None
 
 
 def normalize_usage_dict(raw: Optional[Dict[str, Any]]) -> Optional[Dict[str, int]]:

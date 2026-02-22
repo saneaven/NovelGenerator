@@ -466,6 +466,19 @@ export class ThreadEventConsumer {
       return;
     }
 
+    if (event.event === 'llm:response') {
+      const d = event.data as Record<string, unknown>;
+      const runId = d.run_id ? String(d.run_id) : 'n/a';
+      console.groupCollapsed(
+        `%c[LLM Response]%c run=${runId} · ${d.provider}/${d.model}`,
+        'color: #10b981; font-weight: bold',
+        'color: inherit',
+      );
+      console.log('Raw Response:', d.raw_response);
+      console.groupEnd();
+      return;
+    }
+
     if (event.event === 'run:status') {
       const status = String(payload.status ?? 'running') as ThreadStatus;
       const error = payload.error ? String(payload.error) : null;
