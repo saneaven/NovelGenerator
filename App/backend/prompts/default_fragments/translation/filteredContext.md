@@ -1,7 +1,7 @@
 ## Content ({{ lang }})
 
 {% with langProject = (project.contentByLang.get(lang)) %}
-{% if (langProject.basicInfo and (langProject.basicInfo.id in ids)) %}
+{% if (langProject and langProject.basicInfo and (langProject.basicInfo.id in ids)) %}
 <basic_info id="{{ langProject.basicInfo.id }}">
 <title>{{ langProject.basicInfo.title }}</title>
 <logline>{{ langProject.basicInfo.logline }}</logline>
