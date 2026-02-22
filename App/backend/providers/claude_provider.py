@@ -268,6 +268,8 @@ class ClaudeProvider(BaseProvider):
         if additional_body:
             request = merge_user_overrides(request, additional_body)
 
+        yield ProviderEvent(kind="meta", raw_request=request)
+
         prefill_has_thinking = (
             has_unclosed_thinking_tag(anthropic_messages) if thinking_mode == "custom" else False
         )

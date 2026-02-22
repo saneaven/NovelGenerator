@@ -48,14 +48,7 @@ export type ThreadRuntimeEvent =
       message_id: string;
       provider: string;
       model: string;
-      temperature: number;
-      max_tokens: number | null;
-      tool_choice: string | null;
-      thinking_config: Record<string, unknown> | null;
-      thinking_mode: string;
-      native_tool_call: boolean;
-      messages: Array<{ role: string; content_parts: Array<{ type: string; text: string }> }>;
-      tools: Array<{ name: string; description: string; parameters: Record<string, unknown> }> | null;
+      raw_request: Record<string, unknown>;
     }}
   | { event: 'llm:response'; data: RuntimeEventBase & {
       message_id: string;

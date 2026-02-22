@@ -511,6 +511,8 @@ class AsyncOpenAIProvider(BaseProvider):
 
             return events, should_stop
 
+        yield ProviderEvent(kind="meta", raw_request=request_kwargs)
+
         raw_accumulated: Dict[str, Any] = {}
 
         try:

@@ -322,6 +322,14 @@ class GeminiProvider(BaseProvider):
 
         config = types.GenerateContentConfig.model_validate(config_dict)
 
+        raw_req = {
+            "model": model,
+            "config": _to_raw_dict(config),
+            "history": [_to_raw_dict(c) for c in contents[:-1]] if len(contents) > 1 else [],
+            "current_input": _to_raw_dict(contents[-1]) if contents else {},
+        }
+        yield ProviderEvent(kind="meta", raw_request=raw_req)
+
         prefill_source = parser_messages if isinstance(parser_messages, list) else []
         prefill_has_thinking = has_unclosed_thinking_tag(prefill_source) if thinking_mode == "custom" else False
         parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)

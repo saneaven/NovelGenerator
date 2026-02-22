@@ -372,26 +372,6 @@ async def run_llm(
     provider_messages = _strip_internal_message_keys(messages)
     effective_thinking_config = advanced.get("thinking_config") if thinking_mode == "model" else None
 
-    await emit_fn(
-        project_id=run.project_id,
-        thread_id=thread.id,
-        event_name="llm:request",
-        data={
-            "run_id": str(run.id),
-            "message_id": str(assistant_message.id),
-            "provider": task_config.provider,
-            "model": task_config.model,
-            "temperature": float(task_config.temperature),
-            "max_tokens": task_config.max_output_tokens,
-            "tool_choice": "auto" if tools_wire else None,
-            "thinking_config": effective_thinking_config,
-            "thinking_mode": thinking_mode,
-            "native_tool_call": native_tool_call_mode,
-            "messages": provider_messages,
-            "tools": tools_wire,
-        },
-    )
-
     stream = provider.stream_chat(
         messages=provider_messages,
         model=task_config.model,
@@ -416,6 +396,20 @@ async def run_llm(
     delta_state_by_index: dict[int, ToolDeltaState] = {}
 
     async for event in stream:
+        if event.raw_request is not None:
+            await emit_fn(
+                project_id=run.project_id,
+                thread_id=thread.id,
+                event_name="llm:request",
+                data={
+                    "run_id": str(run.id),
+                    "message_id": str(assistant_message.id),
+                    "provider": task_config.provider,
+                    "model": task_config.model,
+                    "raw_request": event.raw_request,
+                },
+            )
+            continue
         if event.raw_response is not None:
             raw_response = event.raw_response
         if event.kind == "delta" and event.delta is not None:

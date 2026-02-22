@@ -239,6 +239,8 @@ class OpenAIResponsesProvider(BaseProvider):
             if tool_choice:
                 request["tool_choice"] = tool_choice
 
+        yield ProviderEvent(kind="meta", raw_request=request)
+
         # Track state for SSE conversion
         captured_usage: Optional[Dict] = None
         stream = None

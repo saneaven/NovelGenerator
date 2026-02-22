@@ -85,6 +85,7 @@ class ProviderEvent:
     final_native: Optional[FinalSnapshot] = None
     error: Optional[ProviderErrorPayload] = None
     raw_response: Optional[Dict[str, Any]] = None
+    raw_request: Optional[Dict[str, Any]] = None
 
 
 def normalize_usage_dict(raw: Optional[Dict[str, Any]]) -> Optional[Dict[str, int]]:

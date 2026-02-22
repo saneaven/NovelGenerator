@@ -445,23 +445,13 @@ export class ThreadEventConsumer {
 
     if (event.event === 'llm:request') {
       const d = event.data as Record<string, unknown>;
-      const msgs = d.messages as Array<{ role: string }> | null;
       const runId = d.run_id ? String(d.run_id) : 'n/a';
       console.groupCollapsed(
-        `%c[LLM Request]%c run=${runId} · ${d.provider}/${d.model} · temp=${d.temperature} · ${msgs?.length ?? 0} msgs`,
+        `%c[LLM Request]%c run=${runId} · ${d.provider}/${d.model}`,
         'color: #6366f1; font-weight: bold',
         'color: inherit',
       );
-      console.log('Run ID:', runId);
-      console.log('Provider:', d.provider);
-      console.log('Model:', d.model);
-      console.log('Temperature:', d.temperature);
-      console.log('Max Tokens:', d.max_tokens);
-      console.log('Tool Choice:', d.tool_choice);
-      console.log('Thinking:', d.thinking_mode, d.thinking_config);
-      console.log('Native Tool Call:', d.native_tool_call);
-      console.log('Messages:', d.messages);
-      if (d.tools) console.log('Full tool schemas:', d.tools);
+      console.log('Raw Request:', d.raw_request);
       console.groupEnd();
       return;
     }
