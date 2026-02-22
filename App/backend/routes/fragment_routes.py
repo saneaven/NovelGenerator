@@ -101,8 +101,8 @@ async def validate_fragment(
     warnings = []
     referenced_fragments = []
 
-    # Extract {% include "fragment:path" %} references
-    pattern = r'\{%\s*include\s+"fragment:([^"]+)"\s*%\}'
+    # Extract {{ prompt("path") }} references
+    pattern = r'\{\{\s*prompt\s*\(\s*"([^"]+)"'
     matches = re.findall(pattern, data.content)
     referenced_fragments = list(set(matches))
 

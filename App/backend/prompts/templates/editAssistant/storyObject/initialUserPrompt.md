@@ -1,6 +1,6 @@
 # Story Object Edit Request
 
-{% with params = [editAssistant.storyObject.contextIds] %}{% include "fragment:common/projectContext/filtered" %}{% endwith %}
+{{ prompt("common/projectContext/filtered", objectIds=editAssistant.storyObject.contextIds) }}
 
 ## Target Objects to Edit
 

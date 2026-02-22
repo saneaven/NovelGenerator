@@ -115,7 +115,7 @@ export const templateHighlightStyle = HighlightStyle.define([
     fontWeight: 'var(--font-weight-medium)',
   },
 
-  // Fragment inclusion {% include "fragment:..." %}
+  // Fragment inclusion {{ prompt("...") }}
   {
     tag: tags.atom,
     color: 'var(--color-success)',

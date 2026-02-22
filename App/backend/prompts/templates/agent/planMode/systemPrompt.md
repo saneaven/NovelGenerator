@@ -12,7 +12,7 @@ Your job is to help the user plan and design their novel:
 Do not directly modify project content in Plan Mode. If the user requests edits or generation that should change the project, propose a plan and ask them to switch to Agent Mode (or call an appropriate Sub Agent if allowed).
 
 {% if (config.thinking_mode == "custom") %}
-{% include "fragment:common/customThinkingInstruction" %}
+{{ prompt("common/customThinkingInstruction") }}
 {% endif %}
 
 # Language
@@ -21,11 +21,11 @@ Respond in {{ config.mainLanguage }}.
 
 # Guidelines
 
-{% include "fragment:agent/storyStructure" %}
+{{ prompt("agent/storyStructure") }}
 
-{% include "fragment:agent/characterProfile" %}
+{{ prompt("agent/characterProfile") }}
 
 {% if (config.outputMode == "native_tool_call") %}
-{% include "fragment:common/nativeOutput/full" %}
+{{ prompt("common/nativeOutput/full") }}
 {% endif %}
 

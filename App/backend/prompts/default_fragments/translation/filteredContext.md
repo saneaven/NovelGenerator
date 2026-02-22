@@ -1,16 +1,7 @@
-## Content ({{ params[0] }})
+## Content ({{ lang }})
 
-{# This fragment shows content in a specific language, filtered by IDs.
-  Handles both story objects and manuscripts.
-
-  Usage: {% with params = [language, ids] %}{% include "fragment:translation/filteredContext" %}{% endwith %}
-
-  Parameters:
-    - params.[0]: Language name (e.g., "English", "Korean")
-    - params.[1]: Array of IDs to filter (object IDs or manuscript IDs) #}
-
-{% with langProject = (project.languages.get(params[0])) %}
-{% if (langProject.basicInfo and (langProject.basicInfo.id in params[1])) %}
+{% with langProject = (project.languages.get(lang)) %}
+{% if (langProject.basicInfo and (langProject.basicInfo.id in ids)) %}
 <basic_info id="{{ langProject.basicInfo.id }}">
 <title>{{ langProject.basicInfo.title }}</title>
 <logline>{{ langProject.basicInfo.logline }}</logline>
@@ -19,13 +10,13 @@
 {% endif %}
 {% endwith %}
 
-{% if (project.guidelines.id and (project.guidelines.id in params[1])) %}
+{% if (project.guidelines.id and (project.guidelines.id in ids)) %}
 <guidelines id="{{ project.guidelines.id }}">
 <authorNote>{{ project.guidelines.authorNote }}</authorNote>
 </guidelines>
 {% endif %}
 
-{% with filteredObjects = get_objects_of_language(project, params[0], params[1]) %}
+{% with filteredObjects = get_objects_of_language(project, lang, ids) %}
 {% if (((filteredObjects|filter_by_type("character")))|length > 0) %}
 <characters>
 {% for this in (filteredObjects|filter_by_type("character")) %}
@@ -111,7 +102,7 @@
 {% endif %}
 {% endwith %}
 
-{% with filteredManuscripts = get_manuscripts_of_language(project, params[0], params[1]) %}
+{% with filteredManuscripts = get_manuscripts_of_language(project, lang, ids) %}
 {% if ((filteredManuscripts)|length > 0) %}
 <manuscripts>
 {% for this in filteredManuscripts %}

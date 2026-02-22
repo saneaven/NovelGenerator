@@ -19,7 +19,7 @@ Review these existing translations to decide whether to use `replace_*` (full re
 
 ## Content to Translate
 
-{% with params = [translation.sourceLanguage, translation.objectIds] %}{% include "fragment:translation/filteredContext" %}{% endwith %}
+{{ prompt("translation/filteredContext", lang=translation.sourceLanguage, ids=translation.objectIds) }}
 
 {% if input.userMessage %}
 ## Additional Instructions

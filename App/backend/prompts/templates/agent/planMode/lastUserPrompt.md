@@ -1,8 +1,8 @@
 # Current Project Status
 
-{% with params = [agent.contextObjectIds] %}{% include "fragment:common/projectContext/filtered" %}{% endwith %}
+{{ prompt("common/projectContext/filtered", objectIds=agent.contextObjectIds) }}
 
-{% include "fragment:common/objectIndex" %}
+{{ prompt("common/objectIndex") }}
 
 # Language Instruction
 You must use {{ config.mainLanguage }} only.

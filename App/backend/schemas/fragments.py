@@ -132,4 +132,4 @@ class FragmentValidationResponse(BaseModel):
     is_valid: bool
     syntax_errors: List[str]
     warnings: List[str]
-    referenced_fragments: List[str]  # Paths of fragments referenced via {% include "fragment:..." %}
+    referenced_fragments: List[str]  # Paths of fragments referenced via {{ prompt("...") }}

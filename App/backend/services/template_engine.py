@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from jinja2 import BaseLoader, Environment, StrictUndefined, TemplateNotFound, nodes
+from jinja2 import BaseLoader, Environment, StrictUndefined, TemplateNotFound, pass_context
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -130,6 +130,20 @@ def _get_manuscripts_of_language(project: dict[str, Any], lang: str, ids: Any = 
     return [x for x in manuscripts if str(x.get("id")) in wanted]
 
 
+@pass_context
+def _prompt(context: Any, fragment_name: str, **kwargs: Any) -> str:
+    depth = context.parent.get("_prompt_depth", 0) + 1
+    if depth > MAX_INCLUDE_DEPTH:
+        raise TemplateIncludeDepthExceededError()
+    env = context.environment
+    template = env.get_template(f"fragment:{fragment_name}")
+    data = dict(context.parent)
+    data.update(context.vars)
+    data.update(kwargs)
+    data["_prompt_depth"] = depth
+    return template.render(**data)
+
+
 def create_environment(fragment_map: dict[str, str] | None = None) -> Environment:
     env = Environment(
         loader=FragmentLoader(fragment_map=fragment_map),
@@ -146,49 +160,13 @@ def create_environment(fragment_map: dict[str, str] | None = None) -> Environmen
 
     env.globals["get_objects_of_language"] = _get_objects_of_language
     env.globals["get_manuscripts_of_language"] = _get_manuscripts_of_language
+    env.globals["prompt"] = _prompt
 
     return env
 
 
-def _extract_static_includes(env: Environment, template_text: str) -> list[str]:
-    parsed = env.parse(template_text)
-    includes: list[str] = []
-
-    for include_node in parsed.find_all(nodes.Include):
-        template_expr = include_node.template
-        if isinstance(template_expr, nodes.Const) and isinstance(template_expr.value, str):
-            includes.append(template_expr.value)
-            continue
-        if isinstance(template_expr, (nodes.List, nodes.Tuple)):
-            for item in template_expr.items:
-                if isinstance(item, nodes.Const) and isinstance(item.value, str):
-                    includes.append(item.value)
-
-    return includes
-
-
-def _validate_include_depth(env: Environment, template_text: str, depth: int = 0, seen: set[str] | None = None) -> None:
-    if depth > MAX_INCLUDE_DEPTH:
-        raise TemplateIncludeDepthExceededError()
-    if seen is None:
-        seen = set()
-
-    includes = _extract_static_includes(env, template_text)
-    if not includes:
-        return
-
-    for include_name in includes:
-        key = f"{include_name}@{depth}"
-        if key in seen:
-            continue
-        seen.add(key)
-        source, _, _ = env.loader.get_source(env, include_name)
-        _validate_include_depth(env, source, depth + 1, seen)
-
-
 def render_template(env: Environment, template_text: str, data: dict[str, Any]) -> str:
     try:
-        _validate_include_depth(env, template_text)
         template = env.from_string(template_text)
         return template.render(**data)
     except TemplateNotFound as exc:
@@ -213,7 +191,7 @@ _RE_VAR = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_\.\[\]-]*)\s*\}\}")
 def convert_handlebars_to_jinja(text: str) -> str:
     out = text
 
-    out = _RE_PROMPT_HELPER.sub(lambda m: '{% include "fragment:' + m.group(1).strip() + '" %}', out)
+    out = _RE_PROMPT_HELPER.sub(lambda m: '{{ prompt("' + m.group(1).strip() + '") }}', out)
 
     def each_repl(match: re.Match[str]) -> str:
         items = match.group(1).strip()

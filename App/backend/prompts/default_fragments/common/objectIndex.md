@@ -1,5 +1,4 @@
 {# This fragment provides a list of all project objects with their IDs for use with read functions #}
-{# Usage: {% include "fragment:common/objectIndex" %} #}
 
 ## Available Objects Reference
 

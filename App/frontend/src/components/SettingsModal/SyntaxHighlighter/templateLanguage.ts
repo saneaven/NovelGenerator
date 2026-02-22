@@ -55,17 +55,6 @@ const templateParser: StreamParser<TemplateState> = {
       return 'comment';
     }
 
-    // Jinja2 fragment include: {% include "fragment:..." %} (check BEFORE general {% %})
-    if (stream.match(/^\{%[-\s]*include\s+"/)) {
-      while (!stream.eol()) {
-        if (stream.match(/^%\}/)) {
-          return 'atom';
-        }
-        stream.next();
-      }
-      return 'atom';
-    }
-
     // Jinja2 tags: {% if %}, {% for %}, {% endif %}, {% set %}, etc.
     if (stream.match(/^\{%/)) {
       while (!stream.eol()) {
@@ -75,6 +64,17 @@ const templateParser: StreamParser<TemplateState> = {
         stream.next();
       }
       return 'keyword';
+    }
+
+    // Jinja2 prompt() function call: {{ prompt("...") }} (check BEFORE general {{ }})
+    if (stream.match(/^\{\{\s*prompt\s*\(/)) {
+      while (!stream.eol()) {
+        if (stream.match(/^\}\}/)) {
+          return 'atom';
+        }
+        stream.next();
+      }
+      return 'atom';
     }
 
     // Jinja2 variable output: {{ ... }}

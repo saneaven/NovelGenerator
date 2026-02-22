@@ -1,16 +1,13 @@
 ## Project Context
 
-{# This fragment expects objectIds to be passed as the first positional parameter #}
-{# Usage: {% with params = [someContext.objectIds] %}{% include "fragment:common/projectContext/filtered" %}{% endwith %} #}
-
 ### Basic Information
 
 - **Title**: {{ project.basicInfo.title }}
 - **Logline**: {{ project.basicInfo.logline }}
 - **Genre**: {{ project.basicInfo.genre }}
 
-{% if ((params[0])|length > 0) %}
-{% with selectedObjects = (project.objects|filter_by_ids(params[0])) %}
+{% if ((objectIds)|length > 0) %}
+{% with selectedObjects = (project.objects|filter_by_ids(objectIds)) %}
 
 {% if (((selectedObjects|filter_by_type("character")))|length > 0) %}
 ### Characters
@@ -59,20 +56,20 @@
 {% endwith %}
 
 {% if project.outline %}
-{% with selectedOutlines = (project.outline.outlines|filter_by_ids(params[0])) %}
+{% with selectedOutlines = (project.outline.outlines|filter_by_ids(objectIds)) %}
 {% for this in selectedOutlines %}
 ### Story Outline - {{ this.name }} (id: {{ this.id }})
 
 {{ this.content }}
 
-{% with selectedActs = (this.acts|filter_by_ids(params[0])) %}
+{% with selectedActs = (this.acts|filter_by_ids(objectIds)) %}
 {% if ((selectedActs)|length > 0) %}
 {% for this in selectedActs %}
 #### Act: {{ this.name }} (id: {{ this.id }})
 
 {{ this.content }}
 
-{% with selectedChapters = (this.chapters|filter_by_ids(params[0])) %}
+{% with selectedChapters = (this.chapters|filter_by_ids(objectIds)) %}
 {% if ((selectedChapters)|length > 0) %}
 **Chapters:**
 {% for this in selectedChapters %}
@@ -88,7 +85,7 @@
 {% endwith %}
 {% endif %}
 
-{% with selectedManuscripts = (project.manuscripts|filter_by_ids(params[0])) %}
+{% with selectedManuscripts = (project.manuscripts|filter_by_ids(objectIds)) %}
 {% if ((selectedManuscripts)|length > 0) %}
 ### Reference Novel Content
 

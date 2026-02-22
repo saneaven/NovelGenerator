@@ -3,7 +3,7 @@
 Manuscript ID: `{{ editAssistant.manuscript.currentId }}`
 Chapter: **{{ editAssistant.manuscript.currentChapterName }}**
 
-{% with params = [editAssistant.manuscript.objectIds] %}{% include "fragment:common/projectContext/filtered" %}{% endwith %}
+{{ prompt("common/projectContext/filtered", objectIds=editAssistant.manuscript.objectIds) }}
 
 ## Current Chapter Content
 

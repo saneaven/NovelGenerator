@@ -1396,7 +1396,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   const handleCopyFragmentPath = async () => {
     if (!selectedPath) return;
-    const pathToCopy = `{% include "fragment:${selectedPath}" %}`;
+    const pathToCopy = `{{ prompt("${selectedPath}") }}`;
     try {
       await navigator.clipboard.writeText(pathToCopy);
       toast.success(t('common.copied', { value: pathToCopy }));

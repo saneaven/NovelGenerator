@@ -255,16 +255,16 @@ def update_template_references(
 ) -> int:
     """Update all template references when a folder/fragment path changes.
 
-    Replaces 'fragment:old_path' with 'fragment:new_path' in all
+    Replaces '"old_path"' with '"new_path"' in all
     PromptVersion and PromptFragment content for the given user+preset.
     Returns total number of rows updated.
     """
     if old_path == new_path:
         return 0
 
-    search_term = f"fragment:{old_path}"
-    replacement_from = f"fragment:{old_path}"
-    replacement_to = f"fragment:{new_path}"
+    search_term = f'"{old_path}"'
+    replacement_from = f'"{old_path}"'
+    replacement_to = f'"{new_path}"'
     updated = 0
 
     # Update in prompt templates

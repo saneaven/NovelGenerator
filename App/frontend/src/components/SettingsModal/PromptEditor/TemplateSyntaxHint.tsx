@@ -26,7 +26,7 @@ const GROUP_LABELS: Record<string, string> = {
 // Jinja2 syntax documentation
 const JINJA_SYNTAX = {
     'Fragment Inclusion': [
-        { name: 'include', syntax: '{% include "fragment:folder/name" %}', desc: 'Include a reusable prompt fragment' },
+        { name: 'prompt', syntax: '{{ prompt("folder/name") }}', desc: 'Include a fragment (supports keyword args)' },
     ],
     'Filters': [
         { name: 'filter_by_type', syntax: '{% for item in arr|filter_by_type("type") %}', desc: 'Filter objects by type field' },

@@ -1,5 +1,5 @@
 # Context (targets)
-{% with params = [feedback.editingObjectIds] %}{% include "fragment:common/projectContext/filtered" %}{% endwith %}
+{{ prompt("common/projectContext/filtered", objectIds=feedback.editingObjectIds) }}
 
 # User Feedback
 
