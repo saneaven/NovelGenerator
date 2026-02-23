@@ -12,8 +12,9 @@ from ...providers.registry import ProviderRegistry
 from ..credential_service import credential_service
 from ..memory_builder import render_memory_summary_prompt
 from ..memory_service import archive_thread_until, get_thread_memory_status
-from ..prompt_runtime.prompt_manager import PromptBundle
-from ..prompt_runtime.prompt_renderer import PromptRenderer
+from ..prompt_runtime.contracts import ScenarioBundle
+from ..prompt_runtime.scenario_manager import ScenarioManager
+from ..prompt_runtime.template_renderer import TemplateRenderer
 from ..settings_service import settings_service
 from .text_utils import (
     build_archive_payload_for_message,
@@ -105,8 +106,9 @@ async def prepare_thread_memory_preflight(
     thread: Thread,
     task_config: Any,
     tokenizer_override: str | None,
-    prompt_bundle: PromptBundle,
-    renderer: PromptRenderer,
+    scenario_bundle: ScenarioBundle,
+    template_renderer: TemplateRenderer,
+    preset_id: UUID,
 ) -> None:
     context_window_tokens = int(task_config.context_window_tokens or 32000)
     reserved_completion = (
@@ -234,15 +236,23 @@ async def prepare_thread_memory_preflight(
                 }
             )
 
-        project_data = prompt_bundle.template_data.get("project")
+        project_data = scenario_bundle.template_data.get("project")
         if not isinstance(project_data, dict):
             project_data = {}
-        variables = prompt_bundle.template_data.get("variables")
+        variables = scenario_bundle.template_data.get("variables")
         if not isinstance(variables, dict):
             variables = {}
 
+        summary_scenario = ScenarioManager.load_active_scenario(
+            db,
+            user_id=run.user_id,
+            preset_id=preset_id,
+            task_type="memory",
+            task_subtype="summary",
+        )
         summary_system_prompt, summary_user_prompt = render_memory_summary_prompt(
-            renderer,
+            template_renderer,
+            summary_scenario=summary_scenario,
             project_data=project_data,
             language=run.language,
             previous_summary=str(status.get("lastSummaryText") or ""),

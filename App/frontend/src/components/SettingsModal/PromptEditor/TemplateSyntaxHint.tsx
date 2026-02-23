@@ -64,15 +64,15 @@ function buildTooltip(desc: string, example: any): string {
     return `${desc}\nExample: ${exampleStr}`;
 }
 
-function getSchemaKey(taskType: string, name?: string): PromptType | null {
+function getSchemaKey(taskType: string, taskSubtype?: string): PromptType | null {
     switch (taskType) {
         case 'agent': return 'agent';
         case 'memory': return 'memory';
         case 'translation': return 'translation';
         case 'editAssistant': return 'editAssistant';
         case 'imagePrompt':
-            if (name === 'object') return 'objectImagePrompt';
-            if (name === 'scene') return 'sceneImagePrompt';
+            if (taskSubtype === 'object') return 'objectImagePrompt';
+            if (taskSubtype === 'scene') return 'sceneImagePrompt';
             return null;
         default: return null;
     }
@@ -125,7 +125,7 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
         if (!selectedNode || selectedNode.type !== 'prompt') {
             return [];
         }
-        const key = getSchemaKey(selectedNode.taskType || '', selectedNode.name);
+        const key = getSchemaKey(selectedNode.taskType || '', selectedNode.taskSubtype);
         return key ? PROMPT_TYPE_VARIABLES[key] : [];
     }, [selectedNode]);
 

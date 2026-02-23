@@ -1,0 +1,216 @@
+.scenario-blocks-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scenario-blocks-editor__toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.scenario-blocks-editor__toolbar-left {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.scenario-blocks-editor__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scenario-block-card {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 10px;
+  padding: 10px 10px 10px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.scenario-block-card.is-pinned {
+  border-color: rgba(255, 176, 32, 0.25);
+}
+
+.scenario-block-card__drag-handle {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  cursor: grab;
+  padding-top: 4px;
+  opacity: 0.7;
+}
+
+.scenario-block-card.is-pinned .scenario-block-card__drag-handle {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.scenario-block-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scenario-block-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.scenario-block-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.scenario-block-card__index {
+  font-weight: 700;
+  opacity: 0.65;
+}
+
+.scenario-block-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scenario-block-card__preview {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.scenario-block-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scenario-block-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.scenario-block-field-row input,
+.scenario-block-field-row select {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.35);
+  color: inherit;
+}
+
+.scenario-block-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.scenario-blocks-editor__simulation {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.scenario-blocks-editor__simulation-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.scenario-blocks-editor__simulation-hint {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.scenario-blocks-editor__simulation-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.scenario-blocks-editor__simulation-controls select {
+  margin-left: 6px;
+}
+
+.scenario-blocks-editor__simulation-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.scenario-blocks-editor__simulation-run {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+}
+
+.scenario-blocks-editor__simulation-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #ff6b6b;
+}
+
+.scenario-blocks-editor__simulation-result {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scenario-blocks-editor__simulation-result pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  opacity: 0.9;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.scenario-blocks-editor__simulation-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.scenario-sim-msg {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.scenario-sim-msg__role {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  opacity: 0.85;
+}
+
+.scenario-sim-msg__content {
+  margin: 0;
+  padding: 8px 10px;
+}
+

@@ -12,8 +12,7 @@ import ToggleSwitch from '../../common/ToggleSwitch';
 import { usePromptPreview } from '../hooks/usePromptPreview';
 import { useProjectStore } from '../../../store/projectStore';
 import { getPromptTypeFields, type PromptTypeField } from './promptTypeFields';
-import type { PromptNode } from './promptTree';
-import type { TaskType } from '../../../types/prompts';
+import type { TaskType } from '../../../types/scenarios';
 import type { ConfigData } from '../../../templateEngine/schema';
 import './PromptPreviewModal.css';
 
@@ -21,22 +20,26 @@ interface PromptPreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   templateContent: string;
-  promptNode: PromptNode;
+  taskType: TaskType;
+  taskSubtype: string;
+  injectedInputKey?: 'userMessage' | 'agentMessage' | 'subAgentMessage' | null;
+  isMemoryPrompt?: boolean;
 }
 
 const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
   isOpen,
   onClose,
   templateContent,
-  promptNode,
+  taskType,
+  taskSubtype,
+  injectedInputKey,
+  isMemoryPrompt,
 }) => {
   const { t } = useTranslation();
   const currentProjectId = useProjectStore(state => state.currentProjectId);
   const [promptTypeExpanded, setPromptTypeExpanded] = useState(false);
   const [configExpanded, setConfigExpanded] = useState(false);
   const [variablesExpanded, setVariablesExpanded] = useState(false);
-
-  const taskType = promptNode.taskType as TaskType;
 
   const {
     renderedPreview,
@@ -62,8 +65,9 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
   } = usePromptPreview({
     templateContent,
     taskType,
-    taskSubtype: promptNode.taskSubtype || '',
-    promptCategory: promptNode.category || 'userPrompt',
+    taskSubtype: taskSubtype || '',
+    injectedInputKey,
+    isMemoryPrompt,
   });
 
   // Get fields for the current prompt type

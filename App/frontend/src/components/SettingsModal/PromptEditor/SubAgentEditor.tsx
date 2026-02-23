@@ -12,7 +12,7 @@ import { ChevronLeft, ChevronRight, Trash, Sliders, Clock, Eye } from '../../ico
 // TODO: Tool schema list should come from backend API
 import TemplateEditor from './TemplateEditor';
 import VersionHistoryModal from '../../Modal/VersionHistoryModal';
-import { promptService } from '../../../api/promptService';
+import { scenarioService } from '../../../api/scenarioService';
 import { validateTemplate } from '../../../templateEngine/engine';
 import { mapTaskTypeToSchemaType } from '../../../templateEngine/validator';
 import {
@@ -21,7 +21,7 @@ import {
   toCallToolName,
 } from '../../../subAgent/tools/SubAgentCallTools';
 import PromptPreviewModal from './PromptPreviewModal';
-import type { PromptNode } from './promptTree';
+import type { ScenarioDocument } from '../../../types/scenarios';
 
 import './SubAgentEditor.css';
 
@@ -94,20 +94,13 @@ function computeSubAgentDraft(next: SubAgentDefinitionDraft): SubAgentDefinition
   return { ...next, dirty, error };
 }
 
-type SubAgentPromptDraftView = {
-  content: string;
-  isLoading: boolean;
-};
-
-type SubAgentPromptDrafts = Record<PromptTab, SubAgentPromptDraftView | null>;
-
 const SubAgentPromptEditors: React.FC<{
   agentNameForHistory: string;
   agentNameForPreview: string;
-  promptDrafts: SubAgentPromptDrafts;
-  onContentChange: (tab: PromptTab, content: string) => void;
-  onReload: (tab: PromptTab) => Promise<void>;
-}> = ({ agentNameForHistory, agentNameForPreview, promptDrafts, onContentChange, onReload }) => {
+  scenarioDraft: { scenario: ScenarioDocument; isLoading: boolean; loadError?: string } | null;
+  onScenarioChange: (scenario: ScenarioDocument) => void;
+  onReloadScenario: () => Promise<void>;
+}> = ({ agentNameForHistory, agentNameForPreview, scenarioDraft, onScenarioChange, onReloadScenario }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<PromptTab>('systemPrompt');
   const [showVersions, setShowVersions] = useState(false);
@@ -126,11 +119,30 @@ const SubAgentPromptEditors: React.FC<{
     });
   }, [agentNameForHistory]);
 
-  const activeDraft = promptDrafts[activeTab];
-  const activeContent = activeDraft?.content ?? '';
+  const activeContent = useMemo(() => {
+    const scenario = scenarioDraft?.scenario;
+    if (!scenario) return '';
+    if (activeTab === 'systemPrompt') return scenario.system_template || '';
+
+    if (activeTab === 'userPrompt') {
+      const idx =
+        scenario.blocks.findIndex(
+          (b) => b.type === 'rangeMapping' && b.rangeMapping?.start_index === 0 && b.rangeMapping?.end_index === -1
+        ) ?? -1;
+      const fallbackIdx = idx >= 0 ? idx : scenario.blocks.findIndex((b) => b.type === 'rangeMapping');
+      const block = fallbackIdx >= 0 ? scenario.blocks[fallbackIdx] : null;
+      return block?.type === 'rangeMapping' ? block.rangeMapping?.user_template || '' : '';
+    }
+
+    // prefill
+    const prefillBlock = scenario.blocks.find(
+      (b) => b.type === 'staticPrompt' && b.staticPrompt?.subtype === 'prefill'
+    );
+    return prefillBlock?.type === 'staticPrompt' ? prefillBlock.staticPrompt?.template || '' : '';
+  }, [activeTab, scenarioDraft?.scenario]);
 
   useEffect(() => {
-    if (!activeDraft || activeDraft.isLoading) return;
+    if (!scenarioDraft || scenarioDraft.isLoading) return;
 
     const timer = window.setTimeout(async () => {
       const schemaType = mapTaskTypeToSchemaType('subAgent', agentNameForPreview || agentNameForHistory);
@@ -165,30 +177,104 @@ const SubAgentPromptEditors: React.FC<{
     }, 500);
 
     return () => window.clearTimeout(timer);
-  }, [activeContent, activeDraft?.isLoading, activeTab, agentNameForHistory, agentNameForPreview]);
-
-  const previewNode: PromptNode = useMemo(
-    () => ({
-      id: `subAgent-${agentNameForPreview}-${activeTab}`,
-      label: `${toCallToolName(agentNameForPreview)}/${activeTab}`,
-      type: 'prompt',
-      taskType: 'subAgent',
-      category: activeTab,
-      name: agentNameForPreview,
-    }),
-    [activeTab, agentNameForPreview]
-  );
+  }, [activeContent, activeTab, agentNameForHistory, agentNameForPreview, scenarioDraft?.isLoading, scenarioDraft]);
 
   const currentVersionHistoryProps = useMemo(() => {
     return {
-      title: 'Prompt Version History',
-      loadVersions: () => promptService.getVersionHistory('subAgent', activeTab, agentNameForHistory),
+      title: 'Scenario Version History',
+      loadVersions: () => scenarioService.getScenarioVersions('subAgent', agentNameForHistory),
       restoreVersion: async (vn: number) => {
-        await promptService.restoreVersion('subAgent', activeTab, vn, agentNameForHistory);
-        await onReload(activeTab);
+        await scenarioService.restoreScenarioVersion('subAgent', agentNameForHistory, vn);
+        await onReloadScenario();
       },
     };
-  }, [activeTab, agentNameForHistory, onReload]);
+  }, [agentNameForHistory, onReloadScenario]);
+
+  const applyActiveTabChange = (text: string) => {
+    if (!scenarioDraft) return;
+    const scenario = scenarioDraft.scenario;
+
+    const normalizeOrders = (s: ScenarioDocument): ScenarioDocument => ({
+      ...s,
+      blocks: (s.blocks || []).map((b, i) => ({ ...b, block_order: i })),
+    });
+
+    const safeUUID = (): string => {
+      try {
+        return crypto.randomUUID();
+      } catch {
+        return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+    };
+
+    if (activeTab === 'systemPrompt') {
+      onScenarioChange({ ...scenario, system_template: text });
+      return;
+    }
+
+    if (activeTab === 'userPrompt') {
+      const blocks = [...(scenario.blocks || [])];
+      let idx = blocks.findIndex(
+        (b) => b.type === 'rangeMapping' && b.rangeMapping?.start_index === 0 && b.rangeMapping?.end_index === -1
+      );
+      if (idx < 0) idx = blocks.findIndex((b) => b.type === 'rangeMapping');
+      if (idx < 0) {
+        blocks.push({
+          id: safeUUID(),
+          block_order: blocks.length,
+          enabled: true,
+          type: 'rangeMapping',
+          rangeMapping: {
+            start_index: 0,
+            end_index: -1,
+            user_template: '',
+            assistant_template: '{{input.subAgentMessage}}',
+          },
+        });
+        idx = blocks.length - 1;
+      }
+      const cur = blocks[idx];
+      const range = cur.type === 'rangeMapping' && cur.rangeMapping
+        ? cur.rangeMapping
+        : { start_index: 0, end_index: -1, user_template: '', assistant_template: '{{input.subAgentMessage}}' };
+      blocks[idx] = {
+        ...cur,
+        type: 'rangeMapping',
+        rangeMapping: {
+          ...range,
+          start_index: range.start_index ?? 0,
+          end_index: range.end_index ?? -1,
+          user_template: text,
+          assistant_template: range.assistant_template || '{{input.subAgentMessage}}',
+        },
+      };
+      onScenarioChange(normalizeOrders({ ...scenario, blocks }));
+      return;
+    }
+
+    // prefill
+    {
+      const blocks = [...(scenario.blocks || [])];
+      let idx = blocks.findIndex((b) => b.type === 'staticPrompt' && b.staticPrompt?.subtype === 'prefill');
+      if (idx < 0) {
+        blocks.push({
+          id: safeUUID(),
+          block_order: blocks.length,
+          enabled: true,
+          type: 'staticPrompt',
+          staticPrompt: { subtype: 'prefill', role: 'assistant', template: '' },
+        });
+        idx = blocks.length - 1;
+      }
+      const cur = blocks[idx];
+      blocks[idx] = {
+        ...cur,
+        type: 'staticPrompt',
+        staticPrompt: { subtype: 'prefill', role: 'assistant', template: text },
+      };
+      onScenarioChange(normalizeOrders({ ...scenario, blocks }));
+    }
+  };
 
   return (
     <section className="sub-agent-editor__section sub-agent-editor__section--fill">
@@ -222,7 +308,7 @@ const SubAgentPromptEditors: React.FC<{
           onClick={() => setShowPreview(true)}
           title={t('settings.promptEditor.preview.title')}
           size="sm"
-          disabled={!activeDraft || activeDraft.isLoading}
+          disabled={!scenarioDraft || scenarioDraft.isLoading}
         />
 
         <IconButton
@@ -230,15 +316,15 @@ const SubAgentPromptEditors: React.FC<{
           onClick={() => setShowVersions(true)}
           title={t('settings.promptEditor.versionHistory')}
           size="sm"
-          disabled={!activeDraft || activeDraft.isLoading}
+          disabled={!scenarioDraft || scenarioDraft.isLoading}
         />
       </div>
 
       <TemplateEditor
-        content={activeDraft?.content || ''}
-        onContentChange={(text) => onContentChange(activeTab, text)}
+        content={activeContent || ''}
+        onContentChange={(text) => applyActiveTabChange(text)}
         validation={validationByTab[activeTab]}
-        isLoading={!activeDraft || activeDraft.isLoading}
+        isLoading={!scenarioDraft || scenarioDraft.isLoading}
         placeholder={t('settings.promptEditor.enterPromptTemplate')}
       />
 
@@ -246,7 +332,7 @@ const SubAgentPromptEditors: React.FC<{
         <VersionHistoryModal
           isOpen={showVersions}
           onClose={() => setShowVersions(false)}
-          onRestoreVersion={() => onReload(activeTab)}
+          onRestoreVersion={() => onReloadScenario()}
           textVersionProps={currentVersionHistoryProps}
         />
       )}
@@ -255,8 +341,11 @@ const SubAgentPromptEditors: React.FC<{
         <PromptPreviewModal
           isOpen={showPreview}
           onClose={() => setShowPreview(false)}
-          templateContent={activeDraft?.content || ''}
-          promptNode={previewNode}
+          templateContent={activeContent || ''}
+          taskType="subAgent"
+          taskSubtype={agentNameForPreview || agentNameForHistory}
+          injectedInputKey={activeTab === 'userPrompt' ? 'agentMessage' : null}
+          isMemoryPrompt={false}
         />
       )}
     </section>
@@ -268,9 +357,9 @@ interface SubAgentEditorProps {
   draft: SubAgentDefinitionDraft | null;
   onDraftChange: (draft: SubAgentDefinitionDraft) => void;
   promptIdentityName: string | null;
-  promptDrafts: SubAgentPromptDrafts;
-  onPromptContentChange: (tab: PromptTab, content: string) => void;
-  onReloadPrompt: (tab: PromptTab) => Promise<void>;
+  scenarioDraft: { scenario: ScenarioDocument; isLoading: boolean; loadError?: string } | null;
+  onScenarioChange: (scenario: ScenarioDocument) => void;
+  onReloadScenario: () => Promise<void>;
   onDeleted?: (subAgentId: string) => void;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
@@ -281,9 +370,9 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   draft,
   onDraftChange,
   promptIdentityName,
-  promptDrafts,
-  onPromptContentChange,
-  onReloadPrompt,
+  scenarioDraft,
+  onScenarioChange,
+  onReloadScenario,
   onDeleted,
   isSidebarCollapsed,
   onToggleSidebar,
@@ -671,9 +760,9 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
             <SubAgentPromptEditors
               agentNameForHistory={promptIdentityName}
               agentNameForPreview={agentNameForPreview}
-              promptDrafts={promptDrafts}
-              onContentChange={onPromptContentChange}
-              onReload={onReloadPrompt}
+              scenarioDraft={scenarioDraft}
+              onScenarioChange={onScenarioChange}
+              onReloadScenario={onReloadScenario}
             />
           ) : (
             <section className="sub-agent-editor__section">

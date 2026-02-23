@@ -9,7 +9,7 @@ import { useProjectStore } from '../../../store/projectStore';
 import { useVariableStore } from '../../../store/variableStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { type PromptType, type ConfigData, type VariablesData } from '../../../templateEngine/schema';
-import type { PromptCategory, TaskType } from '../../../types/prompts';
+import type { TaskType } from '../../../types/scenarios';
 import { setNestedValue } from './promptTypeFields';
 
 type TemplateData = any;
@@ -17,7 +17,8 @@ type TemplateData = any;
 export interface PreviewDataOptions {
   taskType: TaskType;
   taskSubtype: string;
-  promptCategory: PromptCategory;
+  injectedInputKey?: 'userMessage' | 'agentMessage' | 'subAgentMessage' | null;
+  isMemoryPrompt?: boolean;
   showProjectContext: boolean;
   includeAllFilteredIds: boolean;
   projectId: string | null;
@@ -280,7 +281,7 @@ export function buildModeSpecificData(
 }
 
 /**
- * Build config data similar to PromptManager.buildConfigData().
+ * Build config data aligned with the backend ScenarioManager.build_template_data().
  */
 function buildConfigData(overrides?: Partial<ConfigData>): ConfigData {
   const store = useSettingsStore.getState();
@@ -311,7 +312,8 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
   const {
     taskType,
     taskSubtype,
-    promptCategory,
+    injectedInputKey,
+    isMemoryPrompt,
     showProjectContext,
     includeAllFilteredIds,
     projectId,
@@ -339,16 +341,18 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
   }
 
   // Build input data with placeholders (match runtime injection model)
-  const messageCategories: PromptCategory[] = ['userPrompt', 'initialUserPrompt', 'firstUserPrompt', 'lastUserPrompt'];
-  const shouldInjectMessage = messageCategories.includes(promptCategory);
-
-  const input: Record<string, any> = { toolResults: [] };
-  if (shouldInjectMessage) {
-    if (taskType === 'subAgent') {
-      input.agentMessage = '[ Placeholder for agent message ]';
-    } else {
-      input.userMessage = '[ Placeholder for user message ]';
-    }
+  const input: Record<string, any> = {
+    userMessage: '',
+    agentMessage: '',
+    subAgentMessage: '',
+    toolResults: [],
+  };
+  if (injectedInputKey === 'userMessage') {
+    input.userMessage = '[ Placeholder for user message ]';
+  } else if (injectedInputKey === 'agentMessage') {
+    input.agentMessage = '[ Placeholder for agent message ]';
+  } else if (injectedInputKey === 'subAgentMessage') {
+    input.subAgentMessage = '[ Placeholder for sub agent message ]';
   }
 
   // Build variables from store with overrides
@@ -366,16 +370,40 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
     config,
     project,
     input,
+    agent: {
+      runMode: taskSubtype === 'planMode' ? 'planMode' : 'agentMode',
+      surface: 'story-object',
+      contextObjectIds: filteredIds.contextObjectIds,
+    },
+    journey: {
+      kind: '',
+      payload: {},
+      targetIds: filteredIds.targetIds,
+    },
+    feedback: {
+      editingObjectIds: filteredIds.objectIds,
+    },
     memory: {
       summaries: [],
       historyChats: [],
+    },
+    memorySummary: {
+      previousSummary: '[ Placeholder for previous summary ]',
+      messages: [{
+        role: 'user',
+        content: '[ Placeholder for archived message content ]',
+        messageId: '[ placeholder-message-id ]',
+        createdAt: new Date().toISOString(),
+      }],
+      language: '[ Placeholder language ]',
+      archiveUntilMessageId: '[ placeholder-archive-boundary-id ]',
     },
     variables,
     ...modeData,
   };
 
   // Provide richer agent-memory preview data for Memory Prompt templates
-  if (taskType === 'agent' && promptCategory === 'memoryPrompt' && templateData.memory) {
+  if (taskType === 'agent' && isMemoryPrompt && templateData.memory) {
     templateData.memory.summaries = [
       [
         '- Project: [Placeholder Project]',

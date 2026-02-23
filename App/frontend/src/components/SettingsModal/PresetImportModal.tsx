@@ -33,14 +33,9 @@ const PresetImportModal: React.FC<PresetImportModalProps> = ({
   // Count items
   const stats = useMemo(() => {
     let promptCount = 0;
-    for (const categories of Object.values(importData.prompts || {})) {
-      for (const value of Object.values(categories)) {
-        if (typeof value === 'object' && value !== null && 'content' in value) {
-          promptCount++;
-        } else if (typeof value === 'object' && value !== null) {
-          promptCount += Object.keys(value).length;
-        }
-      }
+    for (const subtypes of Object.values(importData.prompts || {})) {
+      if (typeof subtypes !== 'object' || subtypes === null) continue;
+      promptCount += Object.keys(subtypes).length;
     }
 
     let fragmentCount = 0;

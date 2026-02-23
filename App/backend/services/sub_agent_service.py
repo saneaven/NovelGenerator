@@ -1,8 +1,8 @@
 """Sub Agent service (per prompt preset).
 
 No legacy compatibility / fallback branches:
-- Sub Agents always have 3 prompt templates (systemPrompt/userPrompt/prefill)
-- Deleting a Sub Agent also deletes its prompt versions
+- Sub Agents are stored as a ScenarioDocument (task_type='subAgent', task_subtype=agent_name)
+- Deleting a Sub Agent also deletes its scenario versions
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from ..models.db_models import PromptVersion, SubAgentDefinitionModel
+from ..models.db_models import PromptScenarioVersion, SubAgentDefinitionModel
 from ..schemas.sub_agents import SubAgentCreate, SubAgentDefinition, SubAgentUpdate
 
 
@@ -34,6 +34,7 @@ Do not summarize unless explicitly requested."""
 
 DEFAULT_SUB_AGENT_USER_PROMPT = "{{input.agentMessage}}"
 DEFAULT_SUB_AGENT_PREFILL = ""
+DEFAULT_SUB_AGENT_ASSISTANT_TEMPLATE = "{{input.subAgentMessage}}"
 
 
 class SubAgentService:
@@ -168,48 +169,49 @@ class SubAgentService:
         )
         db.add(model)
 
-        # Create the 3 required prompt templates (defaults or overrides).
-        db.add_all([
-            PromptVersion(
+        scenario_doc = {
+            "system_template": system_content,
+            "blocks": [
+                {
+                    "id": str(uuid.uuid4()),
+                    "block_order": 0,
+                    "enabled": True,
+                    "type": "rangeMapping",
+                    "rangeMapping": {
+                        "start_index": 0,
+                        "end_index": -1,
+                        "user_template": user_content,
+                        "assistant_template": DEFAULT_SUB_AGENT_ASSISTANT_TEMPLATE,
+                    },
+                },
+                {
+                    "id": str(uuid.uuid4()),
+                    "block_order": 1,
+                    "enabled": True,
+                    "type": "staticPrompt",
+                    "staticPrompt": {
+                        "subtype": "prefill",
+                        "role": "assistant",
+                        "template": prefill_content,
+                    },
+                },
+            ],
+        }
+
+        db.add(
+            PromptScenarioVersion(
                 id=uuid.uuid4(),
                 user_id=user_id,
                 preset_id=preset_id,
                 task_type="subAgent",
                 task_subtype=agent_name,
-                prompt_category="systemPrompt",
-                content=system_content,
+                scenario=scenario_doc,
                 version_number=1,
                 is_default=prompt_is_default,
                 note=prompt_note,
                 created_at=now,
-            ),
-            PromptVersion(
-                id=uuid.uuid4(),
-                user_id=user_id,
-                preset_id=preset_id,
-                task_type="subAgent",
-                task_subtype=agent_name,
-                prompt_category="userPrompt",
-                content=user_content,
-                version_number=1,
-                is_default=prompt_is_default,
-                note=prompt_note,
-                created_at=now,
-            ),
-            PromptVersion(
-                id=uuid.uuid4(),
-                user_id=user_id,
-                preset_id=preset_id,
-                task_type="subAgent",
-                task_subtype=agent_name,
-                prompt_category="prefill",
-                content=prefill_content,
-                version_number=1,
-                is_default=prompt_is_default,
-                note=prompt_note,
-                created_at=now,
-            ),
-        ])
+            )
+        )
 
         if commit:
             db.commit()
@@ -260,16 +262,16 @@ class SubAgentService:
                 old_agent_name = model.agent_name
                 model.agent_name = agent_name
 
-                # Rename prompt versions tied to this Sub Agent (no fallback).
-                db.query(PromptVersion).filter(
+                # Rename scenario versions tied to this Sub Agent.
+                db.query(PromptScenarioVersion).filter(
                     and_(
-                        PromptVersion.user_id == user_id,
-                        PromptVersion.preset_id == preset_id,
-                        PromptVersion.task_type == "subAgent",
-                        PromptVersion.task_subtype == old_agent_name,
+                        PromptScenarioVersion.user_id == user_id,
+                        PromptScenarioVersion.preset_id == preset_id,
+                        PromptScenarioVersion.task_type == "subAgent",
+                        PromptScenarioVersion.task_subtype == old_agent_name,
                     )
                 ).update(
-                    {PromptVersion.task_subtype: agent_name},
+                    {PromptScenarioVersion.task_subtype: agent_name},
                     synchronize_session=False,
                 )
 
@@ -322,13 +324,13 @@ class SubAgentService:
 
         agent_name = model.agent_name
 
-        # Delete prompts for this Sub Agent.
-        db.query(PromptVersion).filter(
+        # Delete scenarios for this Sub Agent.
+        db.query(PromptScenarioVersion).filter(
             and_(
-                PromptVersion.user_id == user_id,
-                PromptVersion.preset_id == preset_id,
-                PromptVersion.task_type == "subAgent",
-                PromptVersion.task_subtype == agent_name,
+                PromptScenarioVersion.user_id == user_id,
+                PromptScenarioVersion.preset_id == preset_id,
+                PromptScenarioVersion.task_type == "subAgent",
+                PromptScenarioVersion.task_subtype == agent_name,
             )
         ).delete(synchronize_session=False)
 

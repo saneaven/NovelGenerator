@@ -115,6 +115,10 @@ export const UNIFIED_SCHEMA = {
       desc: "Agent message passed into a Sub Agent (call_{agent_name} args.input)",
       example: "Collect character setting details for character char-1." as string
     },
+    subAgentMessage: {
+      desc: "Sub Agent's response message (used when rendering subAgent scenario assistant templates)",
+      example: "Here are the character setting details for char-1..." as string,
+    },
     toolResults: {
       desc: "Previous tool call results",
       example: [{

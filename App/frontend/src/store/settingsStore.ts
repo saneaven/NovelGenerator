@@ -1,8 +1,7 @@
 ﻿import { create } from 'zustand';
 import { settingsService } from '../api/settingsService';
-import { promptService } from '../api/promptService';
-import type { TaskType, PromptCategory } from '../types/prompts';
-import { getPromptKey } from '../types/prompts';
+import { scenarioService } from '../api/scenarioService';
+import type { ScenarioDocument, TaskType } from '../types/scenarios';
 
 // Types
 export type ProviderType = 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
@@ -292,8 +291,8 @@ export interface SettingsStore {
     error: string | null;
     lastSyncedAt: string | null;
 
-    // Prompt cache
-    promptCache: Map<string, string>;
+    // Scenario cache
+    scenarioCache: Map<string, ScenarioDocument>;
 
     // Helpers
     getSettings: () => Settings;
@@ -337,10 +336,10 @@ export interface SettingsStore {
     // LLM logging setter
     setLLMLoggingEnabled: (enabled: boolean) => void;
 
-    // Prompt methods
-    loadPrompt: (functionType: TaskType, taskSubtype: string, category: PromptCategory) => Promise<string>;
-    getPromptFromCache: (functionType: TaskType, taskSubtype: string, category: PromptCategory) => string | null;
-    invalidatePromptCache: (functionType?: TaskType, taskSubtype?: string, category?: PromptCategory) => void;
+    // Scenario methods
+    loadScenario: (taskType: TaskType, taskSubtype: string) => Promise<ScenarioDocument>;
+    getScenarioFromCache: (taskType: TaskType, taskSubtype: string) => ScenarioDocument | null;
+    invalidateScenarioCache: (taskType?: TaskType, taskSubtype?: string) => void;
 
     // Other methods
     updateSettings: (updates: Partial<Settings>) => void;
@@ -353,7 +352,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
     status: 'idle',
     error: null,
     lastSyncedAt: null,
-    promptCache: new Map<string, string>(),
+    scenarioCache: new Map<string, ScenarioDocument>(),
 
     getSettings: () => requireSettings(get().settings),
     clearSettings: () => {
@@ -362,7 +361,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
             status: 'idle',
             error: null,
             lastSyncedAt: null,
-            promptCache: new Map<string, string>(),
+            scenarioCache: new Map<string, ScenarioDocument>(),
         });
     },
 
@@ -689,46 +688,38 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
         });
     },
 
-    // Prompt methods
-    loadPrompt: async (functionType, taskSubtype, category) => {
-        const key = getPromptKey(functionType, taskSubtype, category);
-
+    // Scenario methods
+    loadScenario: async (taskType, taskSubtype) => {
+        const key = `${taskType}:${taskSubtype}`;
         try {
-            // Try to load from backend
-            const promptData = await promptService.getPrompt(functionType, taskSubtype, category);
-
-            // Cache the content
-            const cache = get().promptCache;
-            cache.set(key, promptData.content);
-            set({ promptCache: new Map(cache) });
-
-            return promptData.content;
+            const scenarioData = await scenarioService.getScenario(taskType, taskSubtype);
+            const cache = get().scenarioCache;
+            cache.set(key, scenarioData.scenario);
+            set({ scenarioCache: new Map(cache) });
+            return scenarioData.scenario;
         } catch (error) {
-            console.error(`Failed to load prompt from backend: ${key}`, error);
+            console.error(`Failed to load scenario from backend: ${key}`, error);
             throw error;
         }
     },
 
-    getPromptFromCache: (functionType, taskSubtype, category) => {
-        const key = getPromptKey(functionType, taskSubtype, category);
-        return get().promptCache.get(key) || null;
+    getScenarioFromCache: (taskType, taskSubtype) => {
+        const key = `${taskType}:${taskSubtype}`;
+        return get().scenarioCache.get(key) || null;
     },
 
-    invalidatePromptCache: (functionType?, taskSubtype?, category?) => {
-        if (!functionType) {
-            // Clear all cache
-            set({ promptCache: new Map() });
+    invalidateScenarioCache: (taskType?, taskSubtype?) => {
+        if (!taskType) {
+            set({ scenarioCache: new Map() });
             return;
         }
-
-        if (!taskSubtype || !category) {
-            throw new Error('invalidatePromptCache requires functionType, taskSubtype, and category (or no args to clear all)');
+        if (!taskSubtype) {
+            throw new Error('invalidateScenarioCache requires taskType and taskSubtype (or no args to clear all)');
         }
-
-        const key = getPromptKey(functionType, taskSubtype, category);
-        const cache = get().promptCache;
+        const key = `${taskType}:${taskSubtype}`;
+        const cache = get().scenarioCache;
         cache.delete(key);
-        set({ promptCache: new Map(cache) });
+        set({ scenarioCache: new Map(cache) });
     },
 }));
 

@@ -13,7 +13,7 @@ from ..schemas.templates import (
     TemplateValidateRequest,
     TemplateValidateResponse,
 )
-from ..services.prompt_runtime.prompt_renderer import load_user_fragment_map
+from ..services.prompt_runtime.template_renderer import load_user_fragment_map
 from ..services.template_engine import create_environment, render_template
 
 router = APIRouter(prefix="/api/v1/templates", tags=["templates"])

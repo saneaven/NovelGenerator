@@ -1,7 +1,8 @@
 /**
  * Template variable validation logic
  */
-import type { TaskType } from '../types/prompts';
+import type { TaskType } from '../types/scenarios';
+
 import type { PromptType } from './schema';
 import { UNIFIED_SCHEMA, PROMPT_TYPE_VARIABLES, isGroupAvailableForType } from './schema';
 import type { VariableReference } from './engine';

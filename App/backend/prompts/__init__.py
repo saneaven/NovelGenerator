@@ -1,15 +1,17 @@
 """
 Default prompt content for the Novel Buds application.
 
-This module contains all default prompts that are initialized for new users.
-The structure mirrors the frontend prompts structure defined in:
-- App/frontend/src/prompts/defaults.ts
-- App/frontend/src/agent/
+This module contains default ScenarioDocument prompts and default fragments that are seeded
+when creating a new prompt preset.
 
-Format: {task_type: {task_subtype: {prompt_category: content}}}
+Templates are loaded from:
+- App/backend/prompts/templates/
+
+Format: {task_type: {task_subtype: ScenarioDocument}}
 """
 
 from pathlib import Path
+import uuid
 
 # Get the current directory (App/backend/prompts/)
 CURRENT_DIR = Path(__file__).parent
@@ -93,95 +95,257 @@ _SCENE_IMAGE_PROMPT_FIRST_USER_PROMPT = _load_prompt_file('imagePrompt/scene/fir
 _SCENE_IMAGE_PROMPT_LAST_USER_PROMPT = _load_prompt_file('imagePrompt/scene/lastUserPrompt.md')
 _SCENE_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/scene/prefill.md')
 
-# Default prompts structure
-# Format: {task_type: {task_subtype: {prompt_category: content}}}
-DEFAULT_PROMPTS = {
-    'agent': {
-        'planMode': {
-            'systemPrompt': _PLAN_MODE_SYSTEM_PROMPT,
-            'memoryPrompt': _PLAN_MODE_MEMORY_PROMPT,
-            'userPrompt': _PLAN_MODE_USER_PROMPT,
-            'firstUserPrompt': _PLAN_MODE_FIRST_USER_PROMPT,
-            'lastUserPrompt': _PLAN_MODE_LAST_USER_PROMPT,
-            'prefill': _PLAN_MODE_PREFILL,
-        },
-        'agentMode': {
-            'systemPrompt': _AGENT_MODE_SYSTEM_PROMPT,
-            'memoryPrompt': _AGENT_MODE_MEMORY_PROMPT,
-            'userPrompt': _AGENT_MODE_USER_PROMPT,
-            'firstUserPrompt': _AGENT_MODE_FIRST_USER_PROMPT,
-            'lastUserPrompt': _AGENT_MODE_LAST_USER_PROMPT,
-            'prefill': _AGENT_MODE_PREFILL,
-        },
-    },
-    'memory': {
-        'summary': {
-            'systemPrompt': _MEMORY_SUMMARY_SYSTEM_PROMPT,
-            'userPrompt': _MEMORY_SUMMARY_USER_PROMPT,
-        },
-    },
-    'translation': {
-        'object': {
-            'systemPrompt': _TRANSLATION_SYSTEM_PROMPT_OBJECT,
-            'userPrompt': _TRANSLATION_USER_PROMPT_OBJECT,
-            'initialUserPrompt': _TRANSLATION_INITIAL_USER_PROMPT_OBJECT,
-            'firstUserPrompt': _TRANSLATION_FIRST_USER_PROMPT_OBJECT,
-            'lastUserPrompt': _TRANSLATION_LAST_USER_PROMPT_OBJECT,
-            'prefill': _TRANSLATION_PREFILL_OBJECT,
-        },
-        'message': {
-            'systemPrompt': _TRANSLATION_SYSTEM_PROMPT_MESSAGE,
-            'userPrompt': _TRANSLATION_USER_PROMPT_MESSAGE,
-            'prefill': _TRANSLATION_PREFILL_MESSAGE,
-        },
-    },
-    'editAssistant': {
-        'manuscript': {
-            'systemPrompt': _EDIT_ASSISTANT_MANUSCRIPT_SYSTEM_PROMPT,
-            'userPrompt': _EDIT_ASSISTANT_MANUSCRIPT_USER_PROMPT,
-            'initialUserPrompt': _EDIT_ASSISTANT_MANUSCRIPT_INITIAL_USER_PROMPT,
-            'firstUserPrompt': _EDIT_ASSISTANT_MANUSCRIPT_FIRST_USER_PROMPT,
-            'lastUserPrompt': _EDIT_ASSISTANT_MANUSCRIPT_LAST_USER_PROMPT,
-            'prefill': _EDIT_ASSISTANT_MANUSCRIPT_PREFILL,
-        },
-        'storyObject': {
-            'systemPrompt': _EDIT_ASSISTANT_STORY_OBJECT_SYSTEM_PROMPT,
-            'userPrompt': _EDIT_ASSISTANT_STORY_OBJECT_USER_PROMPT,
-            'initialUserPrompt': _EDIT_ASSISTANT_STORY_OBJECT_INITIAL_USER_PROMPT,
-            'firstUserPrompt': _EDIT_ASSISTANT_STORY_OBJECT_FIRST_USER_PROMPT,
-            'lastUserPrompt': _EDIT_ASSISTANT_STORY_OBJECT_LAST_USER_PROMPT,
-            'prefill': _EDIT_ASSISTANT_STORY_OBJECT_PREFILL,
-        },
-    },
-    'imagePrompt': {
-        'object': {
-            'systemPrompt': _OBJECT_IMAGE_PROMPT_SYSTEM_PROMPT,
-            'userPrompt': _OBJECT_IMAGE_PROMPT_USER_PROMPT,
-            'initialUserPrompt': _OBJECT_IMAGE_PROMPT_INITIAL_USER_PROMPT,
-            'firstUserPrompt': _OBJECT_IMAGE_PROMPT_FIRST_USER_PROMPT,
-            'lastUserPrompt': _OBJECT_IMAGE_PROMPT_LAST_USER_PROMPT,
-            'prefill': _OBJECT_IMAGE_PROMPT_PREFILL,
-        },
-        'scene': {
-            'systemPrompt': _SCENE_IMAGE_PROMPT_SYSTEM_PROMPT,
-            'userPrompt': _SCENE_IMAGE_PROMPT_USER_PROMPT,
-            'initialUserPrompt': _SCENE_IMAGE_PROMPT_INITIAL_USER_PROMPT,
-            'firstUserPrompt': _SCENE_IMAGE_PROMPT_FIRST_USER_PROMPT,
-            'lastUserPrompt': _SCENE_IMAGE_PROMPT_LAST_USER_PROMPT,
-            'prefill': _SCENE_IMAGE_PROMPT_PREFILL,
-        },
-    },
-}
+def _make_static_block(*, order: int, subtype: str, role: str, template: str) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "block_order": int(order),
+        "enabled": True,
+        "type": "staticPrompt",
+        "staticPrompt": {"subtype": subtype, "role": role, "template": template},
+    }
 
 
-def get_default_prompts():
-    """
-    Get the default prompts dictionary.
+def _make_range_block(*, order: int, start_index: int, end_index: int, user_template: str, assistant_template: str) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "block_order": int(order),
+        "enabled": True,
+        "type": "rangeMapping",
+        "rangeMapping": {
+            "start_index": int(start_index),
+            "end_index": int(end_index),
+            "user_template": user_template,
+            "assistant_template": assistant_template,
+        },
+    }
 
-    Returns:
-        dict: Default prompts in the format {task_type: {task_subtype: {prompt_category: content}}}
-    """
-    return DEFAULT_PROMPTS
+
+def get_default_scenarios() -> dict:
+    """Get the default ScenarioDocument templates for seeding new presets."""
+    identity_assistant = "{{input.agentMessage}}"
+
+    return {
+        "agent": {
+            "planMode": {
+                "system_template": _PLAN_MODE_SYSTEM_PROMPT,
+                "blocks": [
+                    _make_static_block(order=0, subtype="memory", role="user", template=_PLAN_MODE_MEMORY_PROMPT),
+                    _make_range_block(
+                        order=1,
+                        start_index=0,
+                        end_index=-2,
+                        user_template=_PLAN_MODE_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_range_block(
+                        order=2,
+                        start_index=0,
+                        end_index=0,
+                        user_template=_PLAN_MODE_FIRST_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_range_block(
+                        order=3,
+                        start_index=-1,
+                        end_index=-1,
+                        user_template=_PLAN_MODE_LAST_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_static_block(order=4, subtype="prefill", role="assistant", template=_PLAN_MODE_PREFILL),
+                ],
+            },
+            "agentMode": {
+                "system_template": _AGENT_MODE_SYSTEM_PROMPT,
+                "blocks": [
+                    _make_static_block(order=0, subtype="memory", role="user", template=_AGENT_MODE_MEMORY_PROMPT),
+                    _make_range_block(
+                        order=1,
+                        start_index=0,
+                        end_index=-2,
+                        user_template=_AGENT_MODE_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_range_block(
+                        order=2,
+                        start_index=0,
+                        end_index=0,
+                        user_template=_AGENT_MODE_FIRST_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_range_block(
+                        order=3,
+                        start_index=-1,
+                        end_index=-1,
+                        user_template=_AGENT_MODE_LAST_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_static_block(order=4, subtype="prefill", role="assistant", template=_AGENT_MODE_PREFILL),
+                ],
+            },
+        },
+        "memory": {
+            "summary": {
+                "system_template": _MEMORY_SUMMARY_SYSTEM_PROMPT,
+                "blocks": [
+                    _make_static_block(order=0, subtype="normal", role="user", template=_MEMORY_SUMMARY_USER_PROMPT),
+                ],
+            },
+        },
+        "translation": {
+            "object": {
+                "system_template": _TRANSLATION_SYSTEM_PROMPT_OBJECT,
+                "blocks": [
+                    _make_range_block(
+                        order=0,
+                        start_index=0,
+                        end_index=-2,
+                        user_template=_TRANSLATION_USER_PROMPT_OBJECT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_range_block(
+                        order=1,
+                        start_index=0,
+                        end_index=0,
+                        user_template=_TRANSLATION_INITIAL_USER_PROMPT_OBJECT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_range_block(
+                        order=2,
+                        start_index=1,
+                        end_index=-1,
+                        user_template=_TRANSLATION_LAST_USER_PROMPT_OBJECT or _TRANSLATION_USER_PROMPT_OBJECT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_static_block(order=3, subtype="prefill", role="assistant", template=_TRANSLATION_PREFILL_OBJECT),
+                ],
+            },
+            "message": {
+                "system_template": _TRANSLATION_SYSTEM_PROMPT_MESSAGE,
+                "blocks": [
+                    _make_range_block(
+                        order=0,
+                        start_index=0,
+                        end_index=-1,
+                        user_template=_TRANSLATION_USER_PROMPT_MESSAGE,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_static_block(order=1, subtype="prefill", role="assistant", template=_TRANSLATION_PREFILL_MESSAGE),
+                ],
+            },
+        },
+        "editAssistant": {
+            "manuscript": {
+                "system_template": _EDIT_ASSISTANT_MANUSCRIPT_SYSTEM_PROMPT,
+                "blocks": [
+                    _make_range_block(
+                        order=0,
+                        start_index=0,
+                        end_index=-2,
+                        user_template=_EDIT_ASSISTANT_MANUSCRIPT_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_range_block(
+                        order=1,
+                        start_index=0,
+                        end_index=0,
+                        user_template=_EDIT_ASSISTANT_MANUSCRIPT_INITIAL_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_range_block(
+                        order=2,
+                        start_index=1,
+                        end_index=-1,
+                        user_template=_EDIT_ASSISTANT_MANUSCRIPT_LAST_USER_PROMPT or _EDIT_ASSISTANT_MANUSCRIPT_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_static_block(order=3, subtype="prefill", role="assistant", template=_EDIT_ASSISTANT_MANUSCRIPT_PREFILL),
+                ],
+            },
+            "storyObject": {
+                "system_template": _EDIT_ASSISTANT_STORY_OBJECT_SYSTEM_PROMPT,
+                "blocks": [
+                    _make_range_block(
+                        order=0,
+                        start_index=0,
+                        end_index=-2,
+                        user_template=_EDIT_ASSISTANT_STORY_OBJECT_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_range_block(
+                        order=1,
+                        start_index=0,
+                        end_index=0,
+                        user_template=_EDIT_ASSISTANT_STORY_OBJECT_INITIAL_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_range_block(
+                        order=2,
+                        start_index=1,
+                        end_index=-1,
+                        user_template=_EDIT_ASSISTANT_STORY_OBJECT_LAST_USER_PROMPT or _EDIT_ASSISTANT_STORY_OBJECT_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_static_block(order=3, subtype="prefill", role="assistant", template=_EDIT_ASSISTANT_STORY_OBJECT_PREFILL),
+                ],
+            },
+        },
+        "imagePrompt": {
+            "object": {
+                "system_template": _OBJECT_IMAGE_PROMPT_SYSTEM_PROMPT,
+                "blocks": [
+                    _make_range_block(
+                        order=0,
+                        start_index=0,
+                        end_index=-2,
+                        user_template=_OBJECT_IMAGE_PROMPT_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_range_block(
+                        order=1,
+                        start_index=0,
+                        end_index=0,
+                        user_template=_OBJECT_IMAGE_PROMPT_INITIAL_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_range_block(
+                        order=2,
+                        start_index=1,
+                        end_index=-1,
+                        user_template=_OBJECT_IMAGE_PROMPT_LAST_USER_PROMPT or _OBJECT_IMAGE_PROMPT_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_static_block(order=3, subtype="prefill", role="assistant", template=_OBJECT_IMAGE_PROMPT_PREFILL),
+                ],
+            },
+            "scene": {
+                "system_template": _SCENE_IMAGE_PROMPT_SYSTEM_PROMPT,
+                "blocks": [
+                    _make_range_block(
+                        order=0,
+                        start_index=0,
+                        end_index=-2,
+                        user_template=_SCENE_IMAGE_PROMPT_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_range_block(
+                        order=1,
+                        start_index=0,
+                        end_index=0,
+                        user_template=_SCENE_IMAGE_PROMPT_INITIAL_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_range_block(
+                        order=2,
+                        start_index=1,
+                        end_index=-1,
+                        user_template=_SCENE_IMAGE_PROMPT_LAST_USER_PROMPT or _SCENE_IMAGE_PROMPT_USER_PROMPT,
+                        assistant_template=identity_assistant,
+                    ),
+                    _make_static_block(order=3, subtype="prefill", role="assistant", template=_SCENE_IMAGE_PROMPT_PREFILL),
+                ],
+            },
+        },
+    }
 
 
 # ============================================================================

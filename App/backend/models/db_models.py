@@ -203,7 +203,7 @@ class PromptPreset(Base):
 
     # Relationships
     user = relationship("User")
-    prompts = relationship("PromptVersion", back_populates="preset", cascade="all, delete-orphan")
+    scenarios = relationship("PromptScenarioVersion", back_populates="preset", cascade="all, delete-orphan")
     folders = relationship("PromptFolder", back_populates="preset", cascade="all, delete-orphan")
     fragments = relationship("PromptFragment", back_populates="preset", cascade="all, delete-orphan")
     variables = relationship("PromptVariable", back_populates="preset", cascade="all, delete-orphan")
@@ -216,24 +216,23 @@ class PromptPreset(Base):
 
 
 # ============================================================================
-# PROMPT VERSIONS
+# PROMPT SCENARIO VERSIONS
 # ============================================================================
 
-class PromptVersion(Base):
-    """Version-controlled user-editable prompts"""
-    __tablename__ = 'prompt_versions'
+class PromptScenarioVersion(Base):
+    """Version-controlled scenario documents (system_template + blocks)."""
+    __tablename__ = "prompt_scenario_versions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     preset_id = Column(UUID(as_uuid=True), ForeignKey('prompt_presets.id', ondelete='CASCADE'), nullable=False, index=True)
 
-    # Prompt identification (hierarchy: task_type → task_subtype → prompt_category)
+    # Scenario identification (hierarchy: task_type → task_subtype)
     task_type = Column(String(50), nullable=False)  # 'agent', 'translation', 'editAssistant', 'imagePrompt'
     task_subtype = Column(String(50), nullable=False)  # 'planMode', 'agentMode', 'object', 'manuscript', etc.
-    prompt_category = Column(String(50), nullable=False)  # 'systemPrompt', 'userPrompt', 'prefill', etc.
 
     # Version data
-    content = Column(Text, nullable=False)
+    scenario = Column(JSONB, nullable=False)
     version_number = Column(Integer, nullable=False)
     is_default = Column(Boolean, default=False, nullable=False)
 
@@ -243,7 +242,12 @@ class PromptVersion(Base):
 
     # Relationships
     user = relationship("User")
-    preset = relationship("PromptPreset", back_populates="prompts")
+    preset = relationship("PromptPreset", back_populates="scenarios")
+
+    __table_args__ = (
+        UniqueConstraint("preset_id", "task_type", "task_subtype", "version_number", name="uq_scenario_preset_task_version"),
+        Index("idx_scenario_preset_task", "preset_id", "task_type", "task_subtype", "version_number"),
+    )
 
 
 # ============================================================================
@@ -258,7 +262,7 @@ class SubAgentDefinitionModel(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     preset_id = Column(UUID(as_uuid=True), ForeignKey("prompt_presets.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    # Stable key used as PromptVersion.task_subtype (agent_name). Also the suffix for call_{agent_name}.
+    # Stable key used as PromptScenarioVersion.task_subtype (agent_name). Also the suffix for call_{agent_name}.
     agent_name = Column(String(50), nullable=False)
 
     display_name = Column(String(200), nullable=False)
@@ -341,7 +345,7 @@ class PromptFragment(Base):
     content = Column(Text, nullable=False)
     description = Column(Text, nullable=True)
 
-    # Version control (same pattern as PromptVersion)
+    # Version control (same pattern as PromptScenarioVersion)
     version_number = Column(Integer, nullable=False)
     note = Column(Text, nullable=True)
 

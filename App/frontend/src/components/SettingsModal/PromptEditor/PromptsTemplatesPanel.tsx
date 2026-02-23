@@ -17,6 +17,7 @@ import SubAgentListNav from './SubAgentListNav';
 import SubAgentEditor, { type SubAgentDefinitionDraft } from './SubAgentEditor';
 import CreateSubAgentModal from './CreateSubAgentModal';
 import TemplateEditor from './TemplateEditor';
+import ScenarioEditor from './ScenarioEditor';
 import VersionHistoryModal from '../../Modal/VersionHistoryModal';
 import PresetSelector from '../PresetSelector';
 import PresetModal from '../PresetModal';
@@ -25,23 +26,21 @@ import { usePresetStore } from '../../../store/presetStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
 import { useVariableStore } from '../../../store/variableStore';
-import { promptService } from '../../../api/promptService';
+import { scenarioService } from '../../../api/scenarioService';
 import { fragmentService } from '../../../api/fragmentService';
 import { PROMPT_TREE, getFirstPromptNode, type PromptNode } from './promptTree';
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
-import { ChevronLeft, ChevronRight, Document, Copy, Clock, Trash, Edit, Eye } from '../../icons';
+import { ChevronLeft, ChevronRight, Document, Copy, Clock, Trash, Edit } from '../../icons';
 import './PromptsTemplatesPanel.css';
 import TemplateSyntaxHint from './TemplateSyntaxHint';
-import PromptPreviewModal from './PromptPreviewModal';
 import type { PresetListItem } from '../../../types/presets';
-import type { PromptCategory, TaskType } from '../../../types/prompts';
-import { mapTaskTypeToSchemaType } from '../../../templateEngine/validator';
+import type { ScenarioDocument, TaskType } from '../../../types/scenarios';
 import { extractFragmentReferences, validateTemplate } from '../../../templateEngine/engine';
 import { useSettingsToast } from '../SettingsToastContext';
 import {
   makeFragmentDraftKey,
-  makePromptDraftKey,
+  makeScenarioDraftKey,
   makeSubAgentDraftKey,
   makeVariableDraftKey,
   type DirtyItem,
@@ -63,19 +62,18 @@ interface TemplateValidationResult {
   warnings: Array<{ message: string; line?: number; column?: number; severity: string }>;
 }
 
-type PromptDraft = {
+type ScenarioDraft = {
   key: string;
   label: string;
   nodeId?: string;
   taskType: TaskType;
-  category: PromptCategory;
   taskSubtype: string;
   isLoading: boolean;
   loadError?: string;
-  originalContent: string;
-  content: string;
+  originalScenario: ScenarioDocument;
+  scenario: ScenarioDocument;
   dirty: boolean;
-  validation: TemplateValidationResult | null;
+  saveWarnings: string[];
 };
 
 type FragmentDraft = {
@@ -99,36 +97,6 @@ function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
   return 'Unknown error';
-}
-
-async function validatePromptContent(taskType: TaskType, taskSubtype: string, content: string): Promise<TemplateValidationResult> {
-  const schemaType = mapTaskTypeToSchemaType(taskType, taskSubtype);
-  const result = await validateTemplate(content, schemaType || undefined);
-
-  if (!result.isValid) {
-    return {
-      valid: false,
-      errors: [
-        {
-          message: result.error || 'Unknown syntax error',
-          severity: 'error',
-        },
-      ],
-      warnings: [],
-    };
-  }
-
-  return {
-    valid: true,
-    errors: [],
-    warnings:
-      result.warnings?.map((w) => ({
-        message: w.message,
-        line: w.line,
-        column: w.column,
-        severity: w.severity,
-      })) || [],
-  };
 }
 
 function detectCircularFragmentReferences(startPath: string, contentByPath: Map<string, string>): string[] | null {
@@ -363,8 +331,8 @@ interface PromptsTemplatesPanelProps {
 const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTemplatesPanelProps>(({ onUnsavedCountChange }, ref) => {
   const { t } = useTranslation();
   const toast = useSettingsToast();
-  const loadPrompt = useSettingsStore((s) => s.loadPrompt);
-  const invalidatePromptCache = useSettingsStore((s) => s.invalidatePromptCache);
+  const loadScenario = useSettingsStore((s) => s.loadScenario);
+  const invalidateScenarioCache = useSettingsStore((s) => s.invalidateScenarioCache);
   const activePresetId = usePresetStore((s) => s.activePresetId);
   const { getPresetById } = usePresetStore();
   const variables = useVariableStore((s) => s.variables);
@@ -401,19 +369,19 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     } catch { /* ignore */ }
   }, []);
 
-  const [promptDrafts, setPromptDrafts] = useState<Record<string, PromptDraft>>({});
+  const [scenarioDrafts, setScenarioDrafts] = useState<Record<string, ScenarioDraft>>({});
   const [fragmentDrafts, setFragmentDrafts] = useState<Record<string, FragmentDraft>>({});
   const [variableDrafts, setVariableDrafts] = useState<Record<string, VariableDefinitionDraft>>({});
   const [subAgentDrafts, setSubAgentDrafts] = useState<Record<string, SubAgentDefinitionDraft>>({});
-  const promptDraftsRef = useRef(promptDrafts);
+  const scenarioDraftsRef = useRef(scenarioDrafts);
   const fragmentDraftsRef = useRef(fragmentDrafts);
   const variableDraftsRef = useRef(variableDrafts);
   const subAgentDraftsRef = useRef(subAgentDrafts);
   const variablesRef = useRef(variables);
   const subAgentsRef = useRef(subAgents);
   useEffect(() => {
-    promptDraftsRef.current = promptDrafts;
-  }, [promptDrafts]);
+    scenarioDraftsRef.current = scenarioDrafts;
+  }, [scenarioDrafts]);
   useEffect(() => {
     fragmentDraftsRef.current = fragmentDrafts;
   }, [fragmentDrafts]);
@@ -435,9 +403,6 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   // Version history modal
   const [showVersionHistory, setShowVersionHistory] = useState(false);
 
-  // Prompt preview modal
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
-
   // Inline description editing (fragments)
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [editedDescription, setEditedDescription] = useState('');
@@ -455,7 +420,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   // Clear drafts on preset switch, and refresh fragment tree + contents.
   useEffect(() => {
-    setPromptDrafts({});
+    setScenarioDrafts({});
     setFragmentDrafts({});
     setVariableDrafts({});
     setSubAgentDrafts({});
@@ -464,7 +429,6 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     setSelectedSubAgentId(null);
     setIsEditingDescription(false);
     setShowVersionHistory(false);
-    setShowPreviewModal(false);
     setRefreshTrigger((prev) => prev + 1);
     loadFragmentContents().catch(() => undefined);
     loadVariables().catch(() => undefined);
@@ -478,8 +442,8 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   const selectedPromptKey = useMemo(() => {
     if (!selectedPrompt || selectedPrompt.type !== 'prompt') return null;
-    if (!selectedPrompt.taskType || !selectedPrompt.taskSubtype || !selectedPrompt.category) return null;
-    return makePromptDraftKey(selectedPrompt.taskType, selectedPrompt.taskSubtype, selectedPrompt.category);
+    if (!selectedPrompt.taskType || !selectedPrompt.taskSubtype) return null;
+    return makeScenarioDraftKey(selectedPrompt.taskType, selectedPrompt.taskSubtype);
   }, [selectedPrompt]);
 
   const selectedFragmentKey = useMemo(() => {
@@ -497,7 +461,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     return makeSubAgentDraftKey(selectedSubAgentId);
   }, [selectedSubAgentId]);
 
-  const currentPromptDraft = selectedPromptKey ? promptDrafts[selectedPromptKey] : null;
+  const currentScenarioDraft = selectedPromptKey ? scenarioDrafts[selectedPromptKey] : null;
   const currentFragmentDraft = selectedFragmentKey ? fragmentDrafts[selectedFragmentKey] : null;
   const currentVariableDraft = selectedVariableKey ? variableDrafts[selectedVariableKey] : null;
   const currentSubAgentDraft = selectedSubAgentKey ? subAgentDrafts[selectedSubAgentKey] : null;
@@ -507,30 +471,9 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     return subAgents.find((s) => s.id === selectedSubAgentId) || null;
   }, [selectedSubAgentId, subAgents]);
 
-  const subAgentPromptIdentityName = useMemo(() => {
+  const subAgentIdentityName = useMemo(() => {
     return currentSubAgentDraft?.original.agent_name || selectedSubAgent?.agent_name || null;
   }, [currentSubAgentDraft, selectedSubAgent]);
-
-  const subAgentPromptDraftViews = useMemo(() => {
-    const empty: Record<'systemPrompt' | 'userPrompt' | 'prefill', { content: string; isLoading: boolean } | null> = {
-      systemPrompt: null,
-      userPrompt: null,
-      prefill: null,
-    };
-    if (!subAgentPromptIdentityName) return empty;
-
-    const pick = (category: PromptCategory): { content: string; isLoading: boolean } | null => {
-      const key = makePromptDraftKey('subAgent', subAgentPromptIdentityName, category);
-      const d = promptDrafts[key];
-      return d ? { content: d.content, isLoading: d.isLoading } : null;
-    };
-
-    return {
-      systemPrompt: pick('systemPrompt'),
-      userPrompt: pick('userPrompt'),
-      prefill: pick('prefill'),
-    };
-  }, [promptDrafts, subAgentPromptIdentityName]);
 
   const handleSubAgentDraftChange = useCallback((draft: SubAgentDefinitionDraft) => {
     setSubAgentDrafts((prev) => ({
@@ -539,83 +482,13 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     }));
   }, []);
 
-  const subAgentPromptDisplayName = useMemo(() => {
-    if (!subAgentPromptIdentityName) return '';
-    return currentSubAgentDraft?.current.display_name || selectedSubAgent?.display_name || subAgentPromptIdentityName;
-  }, [currentSubAgentDraft, selectedSubAgent?.display_name, subAgentPromptIdentityName]);
-
-  const handleSubAgentPromptContentChange = useCallback(
-    (tab: 'systemPrompt' | 'userPrompt' | 'prefill', content: string) => {
-      if (!subAgentPromptIdentityName) return;
-      const key = makePromptDraftKey('subAgent', subAgentPromptIdentityName, tab);
-      const nodeId = selectedSubAgentId ? `subAgent-${selectedSubAgentId}-${tab}` : undefined;
-      const label = `Sub Agent: ${subAgentPromptDisplayName} / call_${subAgentPromptIdentityName} / ${tab}`;
-      setPromptDrafts((prev) => {
-        const cur = prev[key];
-        if (!cur) {
-          return {
-            ...prev,
-            [key]: {
-              key,
-              label,
-              nodeId,
-              taskType: 'subAgent',
-              category: tab,
-              taskSubtype: subAgentPromptIdentityName,
-              isLoading: false,
-              originalContent: '',
-              content,
-              dirty: content !== '',
-              validation: null,
-            },
-          };
-        }
-        return {
-          ...prev,
-          [key]: {
-            ...cur,
-            label,
-            nodeId: cur.nodeId ?? nodeId,
-            taskSubtype: subAgentPromptIdentityName,
-            content,
-            dirty: content !== cur.originalContent,
-          },
-        };
-      });
-    },
-    [selectedSubAgentId, subAgentPromptDisplayName, subAgentPromptIdentityName]
-  );
-
-  const reloadSubAgentPrompt = useCallback(
-    async (tab: 'systemPrompt' | 'userPrompt' | 'prefill') => {
-      if (!subAgentPromptIdentityName) return;
-      const key = makePromptDraftKey('subAgent', subAgentPromptIdentityName, tab);
-      const content = await loadPrompt('subAgent', subAgentPromptIdentityName, tab);
-      setPromptDrafts((prev) => {
-        const cur = prev[key];
-        if (!cur) return prev;
-        return {
-          ...prev,
-          [key]: {
-            ...cur,
-            originalContent: content,
-            content,
-            dirty: false,
-            loadError: undefined,
-          },
-        };
-      });
-    },
-    [loadPrompt, subAgentPromptIdentityName]
-  );
-
   const unsavedCount = useMemo(() => {
-    const promptCount = Object.values(promptDrafts).filter((d) => d.dirty).length;
+    const promptCount = Object.values(scenarioDrafts).filter((d) => d.dirty).length;
     const fragmentCount = Object.values(fragmentDrafts).filter((d) => d.dirty).length;
     const variableCount = Object.values(variableDrafts).filter((d) => d.dirty).length;
     const subAgentCount = Object.values(subAgentDrafts).filter((d) => d.dirty).length;
     return promptCount + fragmentCount + variableCount + subAgentCount;
-  }, [promptDrafts, fragmentDrafts, subAgentDrafts, variableDrafts]);
+  }, [scenarioDrafts, fragmentDrafts, subAgentDrafts, variableDrafts]);
 
   useEffect(() => {
     onUnsavedCountChange?.(unsavedCount);
@@ -623,14 +496,13 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   const getDirtyItems = useCallback((): DirtyItem[] => {
     const dirty: DirtyItem[] = [];
-    for (const d of Object.values(promptDraftsRef.current)) {
+    for (const d of Object.values(scenarioDraftsRef.current)) {
       if (!d.dirty) continue;
       dirty.push({
-        kind: 'prompt',
+        kind: 'scenario',
         key: d.key,
         label: d.label,
         taskType: d.taskType,
-        category: d.category,
         taskSubtype: d.taskSubtype,
         nodeId: d.nodeId,
       });
@@ -668,11 +540,11 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   }, []);
 
   const discardAllDrafts = useCallback(() => {
-    setPromptDrafts((prev) => {
-      const next: Record<string, PromptDraft> = { ...prev };
+    setScenarioDrafts((prev) => {
+      const next: Record<string, ScenarioDraft> = { ...prev };
       for (const [k, d] of Object.entries(next)) {
         if (!d.dirty) continue;
-        next[k] = { ...d, content: d.originalContent, dirty: false };
+        next[k] = { ...d, scenario: d.originalScenario, dirty: false, saveWarnings: [] };
       }
       return next;
     });
@@ -733,35 +605,42 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       let attempted = 0;
       let saved = 0;
 
-      const remapSubAgentPromptDraftKeys = (oldName: string, newName: string) => {
-        if (!oldName || !newName || oldName === newName) return;
-
-        const prev = promptDraftsRef.current;
-        let next: Record<string, PromptDraft> | null = null;
-        const categories: Array<PromptCategory> = ['systemPrompt', 'userPrompt', 'prefill'];
-
-        for (const category of categories) {
-          const oldKey = makePromptDraftKey('subAgent', oldName, category);
-          const oldDraft = prev[oldKey];
-          if (!oldDraft) continue;
-
-          if (!next) next = { ...prev };
-
-          const newKey = makePromptDraftKey('subAgent', newName, category);
-          delete next[oldKey];
-          next[newKey] = {
-            ...oldDraft,
-            key: newKey,
-            taskSubtype: newName,
-            label: `Sub Agent: call_${newName} / ${category}`,
-          };
+      // Save scenarios first so sub-agent renames don't invalidate scenario keys mid-save.
+      const dirtyScenarios = Object.values(scenarioDraftsRef.current).filter((d) => d.dirty);
+      for (const d of dirtyScenarios) {
+        attempted += 1;
+        try {
+          const result = await scenarioService.saveScenario(d.taskType, d.taskSubtype, d.scenario);
+          invalidateScenarioCache(d.taskType, d.taskSubtype);
+          saved += 1;
+          setScenarioDrafts((prev) => {
+            const cur = prev[d.key];
+            if (!cur) return prev;
+            return {
+              ...prev,
+              [d.key]: {
+                ...cur,
+                originalScenario: result.scenario,
+                scenario: result.scenario,
+                dirty: false,
+                saveWarnings: result.warnings || [],
+              },
+            };
+          });
+        } catch (error) {
+          failures.push({
+            item: {
+              kind: 'scenario',
+              key: d.key,
+              label: d.label,
+              taskType: d.taskType,
+              taskSubtype: d.taskSubtype,
+              nodeId: d.nodeId,
+            },
+            error: toErrorMessage(error),
+          });
         }
-
-        if (next) {
-          promptDraftsRef.current = next;
-          setPromptDrafts(next);
-        }
-      };
+      }
 
       const dirtySubAgents = Object.values(subAgentDraftsRef.current).filter((d) => d.dirty);
       for (const d of dirtySubAgents) {
@@ -792,19 +671,11 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
             description: d.current.description.trim(),
             enabled: d.current.enabled,
             allowed_invocation_modes: d.current.allowed_invocation_modes,
-            allowed_tool_names: d.current.allowed_tool_names.filter(
-              (n) => !n.startsWith('call_')
-            ),
+            allowed_tool_names: d.current.allowed_tool_names.filter((n) => !n.startsWith('call_')),
             allowed_sub_agent_ids: d.current.allowed_sub_agent_ids,
             use_custom_llm_config: d.current.use_custom_llm_config,
             llm_config_override: d.current.llm_config_override,
           });
-
-          const previousName = d.original.agent_name;
-          const nextName = updated.agent_name;
-          if (previousName !== nextName) {
-            remapSubAgentPromptDraftKeys(previousName, nextName);
-          }
 
           saved += 1;
           setSubAgentDrafts((prev) => {
@@ -847,64 +718,6 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
               key: makeSubAgentDraftKey(d.subAgentId),
               label: d.current.display_name || d.original.display_name || d.subAgentId,
               subAgentId: d.subAgentId,
-            },
-            error: toErrorMessage(error),
-          });
-        }
-      }
-
-      const dirtyPrompts = Object.values(promptDraftsRef.current).filter((d) => d.dirty);
-      for (const d of dirtyPrompts) {
-        attempted += 1;
-        const validation = await validatePromptContent(d.taskType, d.taskSubtype, d.content);
-        if (!validation.valid) {
-          failures.push({
-            item: {
-              kind: 'prompt',
-              key: d.key,
-              label: d.label,
-              taskType: d.taskType,
-              category: d.category,
-              taskSubtype: d.taskSubtype,
-              nodeId: d.nodeId,
-            },
-            error: validation.errors[0]?.message || t('settings.promptEditor.toast.templateSyntaxError'),
-          });
-          setPromptDrafts((prev) => {
-            const cur = prev[d.key];
-            if (!cur) return prev;
-            return { ...prev, [d.key]: { ...cur, validation } };
-          });
-          continue;
-        }
-
-        try {
-          await promptService.savePrompt(d.taskType, d.taskSubtype, d.category, d.content);
-          invalidatePromptCache(d.taskType, d.taskSubtype, d.category);
-          saved += 1;
-          setPromptDrafts((prev) => {
-            const cur = prev[d.key];
-            if (!cur) return prev;
-            return {
-              ...prev,
-              [d.key]: {
-                ...cur,
-                originalContent: cur.content,
-                dirty: false,
-                validation,
-              },
-            };
-          });
-        } catch (error) {
-          failures.push({
-            item: {
-              kind: 'prompt',
-              key: d.key,
-              label: d.label,
-              taskType: d.taskType,
-              category: d.category,
-              taskSubtype: d.taskSubtype,
-              nodeId: d.nodeId,
             },
             error: toErrorMessage(error),
           });
@@ -1059,7 +872,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     } finally {
       savingRef.current = false;
     }
-  }, [invalidatePromptCache, t, updateSubAgent, updateVariableDefinition]);
+  }, [invalidateScenarioCache, t, updateSubAgent, updateVariableDefinition]);
 
   useImperativeHandle(
     ref,
@@ -1073,60 +886,58 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     [discardAllDrafts, getDirtyItems, saveAllDrafts, unsavedCount]
   );
 
-  const ensurePromptDraftLoaded = useCallback(
-    async (node: PromptNode) => {
-      if (node.type !== 'prompt' || !node.taskType || !node.taskSubtype || !node.category) return;
+  const ensureScenarioDraftLoaded = useCallback(
+    async (taskType: TaskType, taskSubtype: string, label: string, nodeId?: string) => {
+      const key = makeScenarioDraftKey(taskType, taskSubtype);
+      if (scenarioDraftsRef.current[key]) return;
 
-      const key = makePromptDraftKey(node.taskType, node.taskSubtype, node.category);
-      if (promptDraftsRef.current[key]?.originalContent !== undefined) return;
-
-      setPromptDrafts((prev) => ({
+      const emptyScenario: ScenarioDocument = { system_template: '', blocks: [] };
+      setScenarioDrafts((prev) => ({
         ...prev,
         [key]: {
           key,
-          label: node.label,
-          nodeId: node.id,
-          taskType: node.taskType!,
-          category: node.category!,
-          taskSubtype: node.taskSubtype!,
+          label,
+          nodeId,
+          taskType,
+          taskSubtype,
           isLoading: true,
-          originalContent: '',
-          content: '',
+          originalScenario: emptyScenario,
+          scenario: emptyScenario,
           dirty: false,
-          validation: null,
+          saveWarnings: [],
         },
       }));
 
       try {
-        const content = await loadPrompt(node.taskType!, node.taskSubtype!, node.category!);
-        setPromptDrafts((prev) => ({
+        const loaded = await loadScenario(taskType, taskSubtype);
+        setScenarioDrafts((prev) => ({
           ...prev,
           [key]: {
-            ...(prev[key] as PromptDraft),
-            label: node.label,
-            nodeId: node.id,
-            taskType: node.taskType!,
-            category: node.category!,
-            taskSubtype: node.taskSubtype!,
+            ...(prev[key] as ScenarioDraft),
+            label,
+            nodeId,
+            taskType,
+            taskSubtype,
             isLoading: false,
             loadError: undefined,
-            originalContent: content,
-            content,
+            originalScenario: loaded,
+            scenario: loaded,
             dirty: false,
+            saveWarnings: [],
           },
         }));
       } catch (error) {
-        setPromptDrafts((prev) => ({
+        setScenarioDrafts((prev) => ({
           ...prev,
           [key]: {
-            ...(prev[key] as PromptDraft),
+            ...(prev[key] as ScenarioDraft),
             isLoading: false,
             loadError: toErrorMessage(error),
           },
         }));
       }
     },
-    [loadPrompt]
+    [loadScenario]
   );
 
   const ensureFragmentDraftLoaded = useCallback(async (folderId: string | null, fragmentName: string, fullPath: string) => {
@@ -1275,8 +1086,15 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   // Load drafts as selection changes.
   useEffect(() => {
-    if (selectedPrompt) ensurePromptDraftLoaded(selectedPrompt);
-  }, [selectedPrompt?.id, ensurePromptDraftLoaded]);
+    if (!selectedPrompt || selectedPrompt.type !== 'prompt') return;
+    if (!selectedPrompt.taskType || !selectedPrompt.taskSubtype) return;
+    ensureScenarioDraftLoaded(
+      selectedPrompt.taskType,
+      selectedPrompt.taskSubtype,
+      selectedPrompt.label,
+      selectedPrompt.id
+    );
+  }, [ensureScenarioDraftLoaded, selectedPrompt?.id, selectedPrompt?.label, selectedPrompt?.taskSubtype, selectedPrompt?.taskType, selectedPrompt?.type]);
   useEffect(() => {
     if (!selectedFragment) return;
     ensureFragmentDraftLoaded(selectedFragment.folderId, selectedFragment.fragmentName, selectedFragment.fullPath);
@@ -1291,41 +1109,18 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   }, [ensureSubAgentDraftLoaded, selectedSubAgentId]);
   useEffect(() => {
     if (!selectedSubAgentId) return;
-
-    const draft = subAgentDraftsRef.current[makeSubAgentDraftKey(selectedSubAgentId)];
-    const agent = subAgentsRef.current.find((s) => s.id === selectedSubAgentId);
-    const agentName = draft?.original.agent_name || agent?.agent_name;
-    if (!agentName) return;
-
-    const displayName = draft?.current.display_name || agent?.display_name || agentName;
-    const makeNode = (category: PromptCategory): PromptNode => ({
-      id: `subAgent-${selectedSubAgentId}-${category}`,
-      label: `Sub Agent: ${displayName} / call_${agentName} / ${category}`,
-      type: 'prompt',
-      taskType: 'subAgent',
-      category,
-      taskSubtype: agentName,
-    });
-
-    ensurePromptDraftLoaded(makeNode('systemPrompt'));
-    ensurePromptDraftLoaded(makeNode('userPrompt'));
-    ensurePromptDraftLoaded(makeNode('prefill'));
-  }, [ensurePromptDraftLoaded, selectedSubAgentId]);
-
-  // Debounced validation for the currently-selected prompt/fragment.
-  useEffect(() => {
-    if (!currentPromptDraft || currentPromptDraft.isLoading) return;
-    const key = currentPromptDraft.key;
-    const timer = window.setTimeout(async () => {
-      const validation = await validatePromptContent(currentPromptDraft.taskType, currentPromptDraft.taskSubtype, currentPromptDraft.content);
-      setPromptDrafts((prev) => {
-        const cur = prev[key];
-        if (!cur) return prev;
-        return { ...prev, [key]: { ...cur, validation } };
-      });
-    }, 500);
-    return () => window.clearTimeout(timer);
-  }, [currentPromptDraft?.content, currentPromptDraft?.isLoading, currentPromptDraft?.key, currentPromptDraft?.taskSubtype, currentPromptDraft?.taskType]);
+    if (!subAgentIdentityName) return;
+    const displayName =
+      currentSubAgentDraft?.current.display_name
+      || selectedSubAgent?.display_name
+      || subAgentIdentityName;
+    ensureScenarioDraftLoaded(
+      'subAgent',
+      subAgentIdentityName,
+      `Sub Agent: ${displayName} / call_${subAgentIdentityName}`,
+      `subAgent-${selectedSubAgentId}`
+    );
+  }, [currentSubAgentDraft?.current.display_name, ensureScenarioDraftLoaded, selectedSubAgent?.display_name, selectedSubAgentId, subAgentIdentityName]);
 
   useEffect(() => {
     if (!currentFragmentDraft || currentFragmentDraft.isLoading) return;
@@ -1424,31 +1219,46 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   const canShowHeader = subTab !== 'variables' && subTab !== 'subAgents';
 
-  const currentEditorContentLength = subTab === 'prompts' ? currentPromptDraft?.content.length : currentFragmentDraft?.content.length;
-  const currentEditorDirty = subTab === 'prompts' ? currentPromptDraft?.dirty : currentFragmentDraft?.dirty;
+  const currentEditorContentLength = subTab === 'prompts'
+    ? (() => {
+        if (!currentScenarioDraft) return 0;
+        const scenario = currentScenarioDraft.scenario;
+        let count = scenario.system_template?.length ?? 0;
+        for (const b of scenario.blocks || []) {
+          if (b.type === 'staticPrompt') count += b.staticPrompt?.template?.length ?? 0;
+          if (b.type === 'rangeMapping') {
+            count += b.rangeMapping?.user_template?.length ?? 0;
+            count += b.rangeMapping?.assistant_template?.length ?? 0;
+          }
+        }
+        return count;
+      })()
+    : currentFragmentDraft?.content.length;
+  const currentEditorDirty = subTab === 'prompts' ? currentScenarioDraft?.dirty : currentFragmentDraft?.dirty;
 
   const currentVersionHistoryProps = useMemo(() => {
-    if (subTab === 'prompts' && selectedPrompt && selectedPrompt.type === 'prompt' && selectedPrompt.taskType && selectedPrompt.taskSubtype && selectedPrompt.category) {
+    if (subTab === 'prompts' && selectedPrompt && selectedPrompt.type === 'prompt' && selectedPrompt.taskType && selectedPrompt.taskSubtype) {
       const taskType = selectedPrompt.taskType;
       const taskSubtype = selectedPrompt.taskSubtype;
-      const category = selectedPrompt.category;
-      const key = makePromptDraftKey(taskType, taskSubtype, category);
+      const key = makeScenarioDraftKey(taskType, taskSubtype);
       return {
-        title: 'Prompt Version History',
-        loadVersions: () => promptService.getVersionHistory(taskType, taskSubtype, category),
+        title: 'Scenario Version History',
+        loadVersions: () => scenarioService.getScenarioVersions(taskType, taskSubtype),
         restoreVersion: async (vn: number) => {
-          await promptService.restoreVersion(taskType, taskSubtype, category, vn);
-          const content = await loadPrompt(taskType, taskSubtype, category);
-          setPromptDrafts((prev) => {
+          await scenarioService.restoreScenarioVersion(taskType, taskSubtype, vn);
+          invalidateScenarioCache(taskType, taskSubtype);
+          const loaded = await loadScenario(taskType, taskSubtype);
+          setScenarioDrafts((prev) => {
             const cur = prev[key];
             if (!cur) return prev;
             return {
               ...prev,
               [key]: {
                 ...cur,
-                originalContent: content,
-                content,
+                originalScenario: loaded,
+                scenario: loaded,
                 dirty: false,
+                saveWarnings: [],
               },
             };
           });
@@ -1486,7 +1296,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     }
 
     return null;
-  }, [subTab, selectedPrompt, selectedFragment, loadPrompt]);
+  }, [invalidateScenarioCache, loadScenario, selectedFragment, selectedPrompt, subTab]);
 
   const handleRestoreComplete = () => {
     setShowVersionHistory(false);
@@ -1659,7 +1469,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                         getEditorDescription() && <p className="editor-wrapper__description">{getEditorDescription()}</p>
                       )}
 
-                      {(currentPromptDraft || currentFragmentDraft) && (
+                      {(currentScenarioDraft || currentFragmentDraft) && (
                         <div className="editor-wrapper__meta">
                           <span>{t('settings.promptEditor.chars', { count: currentEditorContentLength || 0 })}</span>
                           {currentEditorDirty && <span className="editor-wrapper__unsaved"> • {t('settings.promptEditor.unsavedChanges')}</span>}
@@ -1672,15 +1482,6 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                     {hasSelection && (
                       <>
                         <TemplateSyntaxHint selectedNode={subTab === 'prompts' ? selectedPrompt : null} />
-
-                        {subTab === 'prompts' && selectedPrompt && currentPromptDraft && (
-                          <IconButton
-                            icon={<Eye size="sm" />}
-                            onClick={() => setShowPreviewModal(true)}
-                            title={t('settings.promptEditor.previewPrompt')}
-                            size="sm"
-                          />
-                        )}
 
                         {currentVersionHistoryProps && (
                           <IconButton
@@ -1722,49 +1523,36 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
               )}
 
               <div className="editor-wrapper__body">
-                {subTab === 'prompts' && selectedPrompt && selectedPrompt.type === 'prompt' && (
-                  <TemplateEditor
-                    content={currentPromptDraft?.content || ''}
-                    onContentChange={(text) => {
+                {subTab === 'prompts' && selectedPrompt && selectedPrompt.type === 'prompt' && currentScenarioDraft && (
+                  <ScenarioEditor
+                    taskType={selectedPrompt.taskType!}
+                    taskSubtype={selectedPrompt.taskSubtype!}
+                    scenario={currentScenarioDraft.scenario}
+                    isLoading={currentScenarioDraft.isLoading}
+                    loadError={currentScenarioDraft.loadError}
+                    dirty={currentScenarioDraft.dirty}
+                    saveWarnings={currentScenarioDraft.saveWarnings}
+                    onScenarioChange={(nextScenario) => {
                       const taskType = selectedPrompt.taskType;
                       const taskSubtype = selectedPrompt.taskSubtype;
-                      const category = selectedPrompt.category;
-                      if (!taskType || !taskSubtype || !category) return;
+                      if (!taskType || !taskSubtype) return;
 
-                      const draftKey = makePromptDraftKey(taskType, taskSubtype, category);
-                      setPromptDrafts((prev) => {
+                      const draftKey = makeScenarioDraftKey(taskType, taskSubtype);
+                      setScenarioDrafts((prev) => {
                         const cur = prev[draftKey];
-                        if (!cur) {
-                          return {
-                            ...prev,
-                            [draftKey]: {
-                              key: draftKey,
-                              label: selectedPrompt.label,
-                              nodeId: selectedPrompt.id,
-                              taskType,
-                              category,
-                              taskSubtype,
-                              isLoading: false,
-                              originalContent: '',
-                              content: text,
-                              dirty: text !== '',
-                              validation: null,
-                            },
-                          };
-                        }
+                        if (!cur) return prev;
+                        const dirty = JSON.stringify(nextScenario) !== JSON.stringify(cur.originalScenario);
                         return {
                           ...prev,
                           [draftKey]: {
                             ...cur,
-                            content: text,
-                            dirty: text !== cur.originalContent,
+                            scenario: nextScenario,
+                            dirty,
+                            saveWarnings: [],
                           },
                         };
                       });
                     }}
-                    validation={currentPromptDraft?.validation ?? null}
-                    isLoading={!currentPromptDraft || currentPromptDraft.isLoading}
-                    placeholder={t('settings.promptEditor.enterPromptTemplate')}
                   />
                 )}
 
@@ -1822,10 +1610,46 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                     selectedId={selectedSubAgentId}
                     draft={currentSubAgentDraft}
                     onDraftChange={handleSubAgentDraftChange}
-                    promptIdentityName={subAgentPromptIdentityName}
-                    promptDrafts={subAgentPromptDraftViews}
-                    onPromptContentChange={handleSubAgentPromptContentChange}
-                    onReloadPrompt={reloadSubAgentPrompt}
+                    promptIdentityName={subAgentIdentityName}
+                    scenarioDraft={subAgentIdentityName ? scenarioDrafts[makeScenarioDraftKey('subAgent', subAgentIdentityName)] : null}
+                    onScenarioChange={(nextScenario) => {
+                      if (!subAgentIdentityName) return;
+                      const draftKey = makeScenarioDraftKey('subAgent', subAgentIdentityName);
+                      setScenarioDrafts((prev) => {
+                        const cur = prev[draftKey];
+                        if (!cur) return prev;
+                        const dirty = JSON.stringify(nextScenario) !== JSON.stringify(cur.originalScenario);
+                        return {
+                          ...prev,
+                          [draftKey]: {
+                            ...cur,
+                            scenario: nextScenario,
+                            dirty,
+                            saveWarnings: [],
+                          },
+                        };
+                      });
+                    }}
+                    onReloadScenario={async () => {
+                      if (!subAgentIdentityName) return;
+                      invalidateScenarioCache('subAgent', subAgentIdentityName);
+                      const loaded = await loadScenario('subAgent', subAgentIdentityName);
+                      const draftKey = makeScenarioDraftKey('subAgent', subAgentIdentityName);
+                      setScenarioDrafts((prev) => {
+                        const cur = prev[draftKey];
+                        if (!cur) return prev;
+                        return {
+                          ...prev,
+                          [draftKey]: {
+                            ...cur,
+                            originalScenario: loaded,
+                            scenario: loaded,
+                            dirty: false,
+                            saveWarnings: [],
+                          },
+                        };
+                      });
+                    }}
                     onDeleted={(subAgentId) => {
                       setSelectedSubAgentId(null);
                       setSubAgentDrafts((prev) => {
@@ -1836,11 +1660,9 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                       const draft = subAgentDraftsRef.current[makeSubAgentDraftKey(subAgentId)];
                       const name = draft?.original.agent_name;
                       if (name) {
-                        setPromptDrafts((prev) => {
+                        setScenarioDrafts((prev) => {
                           const next = { ...prev };
-                          delete next[makePromptDraftKey('subAgent', name, 'systemPrompt')];
-                          delete next[makePromptDraftKey('subAgent', name, 'userPrompt')];
-                          delete next[makePromptDraftKey('subAgent', name, 'prefill')];
+                          delete next[makeScenarioDraftKey('subAgent', name)];
                           return next;
                         });
                       }
@@ -1967,15 +1789,6 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
           onClose={() => setShowVersionHistory(false)}
           onRestoreVersion={handleRestoreComplete}
           textVersionProps={currentVersionHistoryProps}
-        />
-      )}
-
-      {showPreviewModal && selectedPrompt && currentPromptDraft && (
-        <PromptPreviewModal
-          isOpen={showPreviewModal}
-          onClose={() => setShowPreviewModal(false)}
-          templateContent={currentPromptDraft.content}
-          promptNode={selectedPrompt}
         />
       )}
 

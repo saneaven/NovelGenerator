@@ -6,7 +6,7 @@ from datetime import datetime
 from uuid import UUID
 import uuid
 
-from ..models.db_models import PromptFolder, PromptFragment, PromptVersion
+from ..models.db_models import PromptFolder, PromptFragment, PromptScenarioVersion
 
 
 class FolderService:
@@ -256,27 +256,75 @@ def update_template_references(
     """Update all template references when a folder/fragment path changes.
 
     Replaces '"old_path"' with '"new_path"' in all
-    PromptVersion and PromptFragment content for the given user+preset.
+    ScenarioDocument templates and PromptFragment content for the given user+preset.
     Returns total number of rows updated.
     """
     if old_path == new_path:
         return 0
 
-    search_term = f'"{old_path}"'
     replacement_from = f'"{old_path}"'
     replacement_to = f'"{new_path}"'
     updated = 0
 
-    # Update in prompt templates
-    prompt_versions = db.query(PromptVersion).filter(
+    def _replace_in_scenario(scenario: dict) -> tuple[dict, bool]:
+        changed = False
+        next_scenario = dict(scenario) if isinstance(scenario, dict) else {}
+
+        system_template = next_scenario.get("system_template")
+        if isinstance(system_template, str) and replacement_from in system_template:
+            next_scenario["system_template"] = system_template.replace(replacement_from, replacement_to)
+            changed = True
+
+        blocks = next_scenario.get("blocks")
+        if isinstance(blocks, list):
+            next_blocks = []
+            for blk in blocks:
+                if not isinstance(blk, dict):
+                    next_blocks.append(blk)
+                    continue
+                next_blk = dict(blk)
+
+                sp = next_blk.get("staticPrompt")
+                if isinstance(sp, dict):
+                    next_sp = dict(sp)
+                    tpl = next_sp.get("template")
+                    if isinstance(tpl, str) and replacement_from in tpl:
+                        next_sp["template"] = tpl.replace(replacement_from, replacement_to)
+                        next_blk["staticPrompt"] = next_sp
+                        changed = True
+
+                rm = next_blk.get("rangeMapping")
+                if isinstance(rm, dict):
+                    next_rm = dict(rm)
+                    ut = next_rm.get("user_template")
+                    at = next_rm.get("assistant_template")
+                    if isinstance(ut, str) and replacement_from in ut:
+                        next_rm["user_template"] = ut.replace(replacement_from, replacement_to)
+                        next_blk["rangeMapping"] = next_rm
+                        changed = True
+                    if isinstance(at, str) and replacement_from in at:
+                        next_rm["assistant_template"] = at.replace(replacement_from, replacement_to)
+                        next_blk["rangeMapping"] = next_rm
+                        changed = True
+
+                next_blocks.append(next_blk)
+            next_scenario["blocks"] = next_blocks
+
+        return next_scenario, changed
+
+    # Update in scenario templates
+    scenario_versions = db.query(PromptScenarioVersion).filter(
         and_(
-            PromptVersion.user_id == user_id,
-            PromptVersion.preset_id == preset_id,
-            PromptVersion.content.contains(search_term),
+            PromptScenarioVersion.user_id == user_id,
+            PromptScenarioVersion.preset_id == preset_id,
         )
     ).all()
-    for pv in prompt_versions:
-        pv.content = pv.content.replace(replacement_from, replacement_to)
+    for row in scenario_versions:
+        scenario = row.scenario if isinstance(row.scenario, dict) else {}
+        next_scenario, changed = _replace_in_scenario(scenario)
+        if not changed:
+            continue
+        row.scenario = next_scenario
         updated += 1
 
     # Update in fragment content (fragments can include other fragments)
@@ -284,7 +332,7 @@ def update_template_references(
         and_(
             PromptFragment.user_id == user_id,
             PromptFragment.preset_id == preset_id,
-            PromptFragment.content.contains(search_term),
+            PromptFragment.content.contains(replacement_from),
         )
     ).all()
     for f in fragments:

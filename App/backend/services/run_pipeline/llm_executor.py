@@ -18,8 +18,9 @@ from ...providers.registry import ProviderRegistry
 from ..credential_service import credential_service
 from ..memory_builder import build_memory_prompt
 from ..prompt_runtime.output_mode import resolve_output_mode
-from ..prompt_runtime.prompt_manager import PromptBundle, PromptManager
-from ..prompt_runtime.prompt_renderer import PromptRenderer
+from ..prompt_runtime.contracts import ScenarioBundle
+from ..prompt_runtime.scenario_manager import ScenarioManager
+from ..prompt_runtime.template_renderer import TemplateRenderer, load_user_fragment_map
 from ..reasoning.history_filter import filter_history_by_run
 from ..reasoning.mode_policy import apply_thinking_mode
 from ..reasoning.normalize import normalize_reasoning_detail
@@ -160,7 +161,7 @@ async def run_llm(
     system_prompt: str,
     conversation: list[dict[str, Any]],
     prefill: str | None,
-    prompt_bundle: PromptBundle | None,
+    scenario_bundle: ScenarioBundle | None,
     input_payload: dict[str, Any],
     assistant_message_ref_out: list[RunMessageModel | None],
     emit_fn: EmitFn,
@@ -170,17 +171,16 @@ async def run_llm(
     if preset_id is None:
         raise RuntimeError("No active preset selected")
 
-    renderer: PromptRenderer | None = None
-    prompt_manager: PromptManager | None = None
-    if prompt_bundle is not None:
-        renderer = PromptRenderer(db, user_id=run.user_id, preset_id=preset_id)
-        prompt_manager = PromptManager(renderer)
+    template_renderer: TemplateRenderer | None = None
+    if scenario_bundle is not None and isinstance(scenario_bundle.memory_template, str) and scenario_bundle.memory_template.strip():
+        fragment_map = load_user_fragment_map(db, run.user_id, preset_id)
+        template_renderer = TemplateRenderer(fragment_map=fragment_map)
 
-    task_type = prompt_bundle.target.task_type if prompt_bundle else PromptManager.resolve_task_type(thread=thread, run=run)
+    task_type = scenario_bundle.task_type if scenario_bundle else ScenarioManager.resolve_task_type(thread=thread, run=run)
     task_config = settings_service.get_task_config(db, run.user_id, task_type)
     tokenizer_override = task_config.advanced.get("tokenizer_override") if isinstance(task_config.advanced, dict) else None
 
-    if prompt_bundle is not None and renderer is not None and prompt_bundle.has_memory_prompt:
+    if scenario_bundle is not None and template_renderer is not None:
         try:
             await _mem.prepare_thread_memory_preflight(
                 db,
@@ -188,8 +188,9 @@ async def run_llm(
                 thread=thread,
                 task_config=task_config,
                 tokenizer_override=tokenizer_override,
-                prompt_bundle=prompt_bundle,
-                renderer=renderer,
+                scenario_bundle=scenario_bundle,
+                template_renderer=template_renderer,
+                preset_id=preset_id,
             )
         except Exception:
             # Fail-open: memory preflight failure must not fail the run.
@@ -197,11 +198,12 @@ async def run_llm(
 
     last_user_text, last_assistant_text = extract_last_texts(conversation)
     memory_prompt: str | None = None
-    if prompt_bundle is not None and prompt_manager is not None:
+    if scenario_bundle is not None and template_renderer is not None and scenario_bundle.memory_template is not None:
         memory_prompt = await build_memory_prompt(
             db,
-            prompt_manager=prompt_manager,
-            prompt_bundle=prompt_bundle,
+            template_renderer=template_renderer,
+            memory_template=scenario_bundle.memory_template,
+            template_data=scenario_bundle.template_data,
             user_id=run.user_id,
             project_id=run.project_id,
             thread_id=thread.id,
@@ -230,15 +232,16 @@ async def run_llm(
 
     async def _rebuild_memory(current_conversation: list[dict]) -> tuple[list[dict], str | None]:
         nonlocal memory_message_ref
-        if prompt_bundle is None or prompt_manager is None:
+        if scenario_bundle is None or template_renderer is None or not scenario_bundle.memory_template:
             return current_conversation, None
         cleaned = list(current_conversation)
         cleaned = [m for m in cleaned if not (isinstance(m, dict) and m.get("is_memory_prompt") is True)]
         new_user, new_asst = extract_last_texts(cleaned)
         new_mem = await build_memory_prompt(
             db,
-            prompt_manager=prompt_manager,
-            prompt_bundle=prompt_bundle,
+            template_renderer=template_renderer,
+            memory_template=scenario_bundle.memory_template,
+            template_data=scenario_bundle.template_data,
             user_id=run.user_id,
             project_id=run.project_id,
             thread_id=thread.id,

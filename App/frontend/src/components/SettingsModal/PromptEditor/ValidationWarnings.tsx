@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
-import type { ValidationError } from '../../../api/promptService';
 import { Warning, ChevronUp } from '../../icons';
+
+export interface ValidationError {
+    message: string;
+    line?: number;
+    column?: number;
+    severity?: string;
+}
 
 interface ValidationWarningsProps {
     errors: ValidationError[];

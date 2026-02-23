@@ -1,14 +1,14 @@
-import type { PromptCategory, TaskType } from '../../../types/prompts';
+import type { TaskType } from '../../../types/scenarios';
 
 export type DraftKey = string;
 
-export type PromptDraftKey = DraftKey;
+export type ScenarioDraftKey = DraftKey;
 export type FragmentDraftKey = DraftKey;
 export type VariableDraftKey = DraftKey;
 export type SubAgentDraftKey = DraftKey;
 
-export function makePromptDraftKey(taskType: TaskType, taskSubtype: string, category: PromptCategory): PromptDraftKey {
-  return `prompt:${taskType}:${taskSubtype}:${category}`;
+export function makeScenarioDraftKey(taskType: TaskType, taskSubtype: string): ScenarioDraftKey {
+  return `scenario:${taskType}:${taskSubtype}`;
 }
 
 export function makeFragmentDraftKey(folderId: string | null, fragmentName: string): FragmentDraftKey {
@@ -25,12 +25,11 @@ export function makeSubAgentDraftKey(subAgentId: string): SubAgentDraftKey {
 
 export type DirtyItem =
   | {
-      kind: 'prompt';
-      key: PromptDraftKey;
+      kind: 'scenario';
+      key: ScenarioDraftKey;
       label: string;
       taskType: TaskType;
       taskSubtype: string;
-      category: PromptCategory;
       nodeId?: string;
     }
   | {
@@ -62,4 +61,3 @@ export type SaveSummary = {
   failed: number;
   failures: SaveFailure[];
 };
-

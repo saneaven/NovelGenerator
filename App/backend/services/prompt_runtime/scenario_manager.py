@@ -8,33 +8,16 @@ from uuid import UUID
 from sqlalchemy import and_, desc
 from sqlalchemy.orm import Session
 
-from ...models.db_models import PromptVersion, RunModel, SubAgentDefinitionModel, Thread
+from ...models.db_models import PromptScenarioVersion, RunModel, SubAgentDefinitionModel, Thread
 from ..settings_service import settings_service
 from ..variable_service import variable_service
 from .output_mode import resolve_output_mode
-from .prompt_renderer import PromptRenderer
 
 
 @dataclass(frozen=True)
-class PromptTarget:
+class ScenarioTarget:
     task_type: str
     task_subtype: str
-    required_categories: tuple[str, ...]
-    supports_memory_prompt: bool = False
-
-
-@dataclass(frozen=True)
-class PromptBundle:
-    target: PromptTarget
-    prompt_map: dict[str, str]
-    template_data: dict[str, Any]
-    system_prompt: str
-    prefill: str | None
-    has_memory_prompt: bool
-
-
-class PromptCategoryMissingError(RuntimeError):
-    pass
 
 
 def _as_str_list(value: Any) -> list[str]:
@@ -73,49 +56,26 @@ def _find_manuscript_by_chapter(project_data: dict[str, Any], chapter_id: str | 
     return {}
 
 
-class PromptManager:
-    def __init__(self, renderer: PromptRenderer):
-        self._renderer = renderer
-
-    def resolve_target(self, db: Session, *, thread: Thread, run: RunModel, payload: dict[str, Any]) -> PromptTarget:
+class ScenarioManager:
+    def resolve_target(self, db: Session, *, thread: Thread, run: RunModel, payload: dict[str, Any]) -> ScenarioTarget:
         if thread.thread_type == "journey":
             journey_kind = str(thread.journey_kind or "").strip()
 
             if journey_kind == "objectTranslation":
-                return PromptTarget(
-                    task_type="translation",
-                    task_subtype="object",
-                    required_categories=("systemPrompt", "userPrompt", "initialUserPrompt", "firstUserPrompt", "lastUserPrompt"),
-                )
+                return ScenarioTarget(task_type="translation", task_subtype="object")
 
             if journey_kind == "messageTranslation":
-                return PromptTarget(
-                    task_type="translation",
-                    task_subtype="message",
-                    required_categories=("systemPrompt", "userPrompt"),
-                )
+                return ScenarioTarget(task_type="translation", task_subtype="message")
 
             if journey_kind in {"imagePrompt", "sceneImagePrompt"}:
                 context_type = str(payload.get("contextType") or "").strip()
-                if context_type == "scene":
-                    task_subtype = "scene"
-                else:
-                    task_subtype = "object"
-
-                return PromptTarget(
-                    task_type="imagePrompt",
-                    task_subtype=task_subtype,
-                    required_categories=("systemPrompt", "userPrompt", "initialUserPrompt", "firstUserPrompt", "lastUserPrompt"),
-                )
+                task_subtype = "scene" if context_type == "scene" else "object"
+                return ScenarioTarget(task_type="imagePrompt", task_subtype=task_subtype)
 
             if journey_kind == "objectEdit":
                 mode = str(payload.get("category") or "").strip()
                 task_subtype = "manuscript" if mode == "manuscript" else "storyObject"
-                return PromptTarget(
-                    task_type="editAssistant",
-                    task_subtype=task_subtype,
-                    required_categories=("systemPrompt", "userPrompt", "initialUserPrompt", "firstUserPrompt", "lastUserPrompt"),
-                )
+                return ScenarioTarget(task_type="editAssistant", task_subtype=task_subtype)
 
             raise RuntimeError(f"Unsupported journey kind: {journey_kind}")
 
@@ -125,19 +85,10 @@ class PromptManager:
                 defn = db.query(SubAgentDefinitionModel).filter(SubAgentDefinitionModel.id == thread.owner_id).first()
                 if defn is not None and str(defn.agent_name or "").strip():
                     task_subtype = str(defn.agent_name).strip()
-            return PromptTarget(
-                task_type="subAgent",
-                task_subtype=task_subtype,
-                required_categories=("systemPrompt", "userPrompt"),
-            )
+            return ScenarioTarget(task_type="subAgent", task_subtype=task_subtype)
 
         task_subtype = "planMode" if run.run_mode == "planMode" else "agentMode"
-        return PromptTarget(
-            task_type="agent",
-            task_subtype=task_subtype,
-            required_categories=("systemPrompt", "memoryPrompt", "userPrompt", "firstUserPrompt", "lastUserPrompt"),
-            supports_memory_prompt=True,
-        )
+        return ScenarioTarget(task_type="agent", task_subtype=task_subtype)
 
     @staticmethod
     def resolve_task_type(*, thread: Thread, run: RunModel) -> str:
@@ -154,74 +105,31 @@ class PromptManager:
             return "subAgent"
         return "agent"
 
-    def _load_latest_prompt_map(
-        self,
+    @staticmethod
+    def load_active_scenario(
         db: Session,
         *,
         user_id: UUID,
         preset_id: UUID,
         task_type: str,
         task_subtype: str,
-    ) -> dict[str, str]:
-        rows = (
-            db.query(PromptVersion)
+    ) -> dict[str, Any]:
+        row = (
+            db.query(PromptScenarioVersion)
             .filter(
                 and_(
-                    PromptVersion.user_id == user_id,
-                    PromptVersion.preset_id == preset_id,
-                    PromptVersion.task_type == task_type,
-                    PromptVersion.task_subtype == task_subtype,
+                    PromptScenarioVersion.user_id == user_id,
+                    PromptScenarioVersion.preset_id == preset_id,
+                    PromptScenarioVersion.task_type == task_type,
+                    PromptScenarioVersion.task_subtype == task_subtype,
                 )
             )
-            .order_by(PromptVersion.prompt_category.asc(), desc(PromptVersion.version_number))
-            .all()
+            .order_by(desc(PromptScenarioVersion.version_number))
+            .first()
         )
-
-        out: dict[str, str] = {}
-        for row in rows:
-            category = str(row.prompt_category or "").strip()
-            if not category or category in out:
-                continue
-            out[category] = row.content
-        return out
-
-    @staticmethod
-    def _resolve_user_category(
-        *,
-        prompt_map: dict[str, str],
-        run_index: int,
-        total_runs: int,
-    ) -> str:
-        if total_runs == 1 and "initialUserPrompt" in prompt_map:
-            return "initialUserPrompt"
-        if run_index == total_runs - 1 and "lastUserPrompt" in prompt_map:
-            return "lastUserPrompt"
-        if run_index == 0 and "firstUserPrompt" in prompt_map:
-            return "firstUserPrompt"
-        return "userPrompt"
-
-    def render_conversation_user_prompts(
-        self,
-        *,
-        prompt_map: dict[str, str],
-        target: PromptTarget,
-        template_data: dict[str, Any],
-        user_texts: list[str],
-    ) -> list[str]:
-        total = len(user_texts)
-        rendered: list[str] = []
-        for i, text in enumerate(user_texts):
-            category = self._resolve_user_category(prompt_map=prompt_map, run_index=i, total_runs=total)
-            patched = {**template_data, "input": {**template_data.get("input", {}), "userMessage": text}}
-            rendered.append(
-                self._renderer.render_prompt(
-                    task_type=target.task_type,
-                    task_subtype=target.task_subtype,
-                    prompt_category=category,
-                    template_data=patched,
-                )
-            )
-        return rendered
+        if row is None:
+            raise RuntimeError(f"Scenario not found: {task_type}/{task_subtype}")
+        return row.scenario if isinstance(row.scenario, dict) else {}
 
     @staticmethod
     def _build_edit_assistant_data(
@@ -343,27 +251,27 @@ class PromptManager:
         fallback_ids = _as_str_list(payload.get("objectIds")) or journey_target_ids
         return {"editingObjectIds": fallback_ids}
 
-    def _build_template_data(
+    def build_template_data(
         self,
         db: Session,
         *,
         user_id: UUID,
         preset_id: UUID,
-        target: PromptTarget,
+        task_type: str,
         thread: Thread,
         run: RunModel,
         project_data: dict[str, Any],
         input_text: str,
         input_payload: dict[str, Any],
     ) -> tuple[dict[str, Any], bool]:
-        task_cfg = settings_service.get_task_config(db, user_id, target.task_type)
+        task_cfg = settings_service.get_task_config(db, user_id, task_type)
         prefill_enabled = bool(task_cfg.advanced.get("enable_prefill", False))
 
         payload = input_payload
         language = str(run.language or "English")
         context_object_ids = _as_str_list(run.context_object_ids)
         journey_target_ids = _as_str_list(run.journey_target_ids)
-        native_output_mode = bool(getattr(settings_service._get_settings(db, user_id), "native_output_mode", False))
+        native_output_mode = bool(getattr(settings_service._get_settings(db, user_id), "native_output_mode", False))  # pylint: disable=protected-access
         output_mode = resolve_output_mode(
             journey_kind=thread.journey_kind,
             payload=payload,
@@ -389,6 +297,7 @@ class PromptManager:
             "input": {
                 "userMessage": input_text,
                 "agentMessage": input_text,
+                "subAgentMessage": "",
                 "toolResults": [],
             },
             "agent": {
@@ -428,103 +337,3 @@ class PromptManager:
 
         return template_data, prefill_enabled
 
-    @staticmethod
-    def _validate_required_categories(
-        *,
-        prompt_map: dict[str, str],
-        target: PromptTarget,
-        prefill_enabled: bool,
-    ) -> None:
-        required = list(target.required_categories)
-        if prefill_enabled:
-            required.append("prefill")
-
-        missing = [category for category in required if category not in prompt_map]
-        if missing:
-            joined = ", ".join(missing)
-            raise PromptCategoryMissingError(
-                f"Missing prompt categories for {target.task_type}/{target.task_subtype}: {joined}"
-            )
-
-    def build_prompt_bundle(
-        self,
-        db: Session,
-        *,
-        user_id: UUID,
-        preset_id: UUID,
-        thread: Thread,
-        run: RunModel,
-        project_data: dict[str, Any],
-        input_text: str,
-        input_payload: dict[str, Any],
-    ) -> PromptBundle:
-        target = self.resolve_target(db, thread=thread, run=run, payload=input_payload)
-        prompt_map = self._load_latest_prompt_map(
-            db,
-            user_id=user_id,
-            preset_id=preset_id,
-            task_type=target.task_type,
-            task_subtype=target.task_subtype,
-        )
-
-        template_data, prefill_enabled = self._build_template_data(
-            db,
-            user_id=user_id,
-            preset_id=preset_id,
-            target=target,
-            thread=thread,
-            run=run,
-            project_data=project_data,
-            input_text=input_text,
-            input_payload=input_payload,
-        )
-        self._validate_required_categories(
-            prompt_map=prompt_map,
-            target=target,
-            prefill_enabled=prefill_enabled,
-        )
-
-        system_prompt = self._renderer.render_prompt(
-            task_type=target.task_type,
-            task_subtype=target.task_subtype,
-            prompt_category="systemPrompt",
-            template_data=template_data,
-        )
-        prefill = (
-            self._renderer.render_prefill(
-                task_type=target.task_type,
-                task_subtype=target.task_subtype,
-                template_data=template_data,
-            )
-            if prefill_enabled
-            else None
-        )
-
-        return PromptBundle(
-            target=target,
-            prompt_map=prompt_map,
-            template_data=template_data,
-            system_prompt=system_prompt,
-            prefill=prefill,
-            has_memory_prompt=target.supports_memory_prompt and "memoryPrompt" in prompt_map,
-        )
-
-    def render_memory_prompt(
-        self,
-        *,
-        bundle: PromptBundle,
-        memory: dict[str, Any],
-    ) -> str | None:
-        if not bundle.has_memory_prompt:
-            return None
-
-        template_data = {
-            **bundle.template_data,
-            "memory": memory if isinstance(memory, dict) else {"summaries": [], "historyChats": []},
-        }
-        rendered = self._renderer.render_memory_prompt(
-            task_type=bundle.target.task_type,
-            task_subtype=bundle.target.task_subtype,
-            template_data=template_data,
-        ).strip()
-        return rendered or None

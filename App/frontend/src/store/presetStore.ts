@@ -95,7 +95,7 @@ export const usePresetStore = create<PresetStore>()((set, get) => ({
       }));
 
       // 3. Invalidate all caches (CRITICAL for preset switching!)
-      useSettingsStore.getState().invalidatePromptCache();
+      useSettingsStore.getState().invalidateScenarioCache();
       useVariableStore.getState().reset();
 
       // 5. Reload variables for new preset

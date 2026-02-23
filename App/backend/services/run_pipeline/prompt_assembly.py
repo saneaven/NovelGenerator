@@ -4,11 +4,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ...models.db_models import RunMessageModel, RunModel, Thread, UserSettings
+from ...models.db_models import RunModel, Thread, UserSettings
 from ..prompt_runtime.conversation_builder import build_from_runs
-from ..prompt_runtime.prompt_manager import PromptBundle, PromptManager, PromptTarget
-from ..prompt_runtime.prompt_renderer import PromptRenderer
 from ..prompt_runtime.project_data_builder import build_project_data
+from ..prompt_runtime.scenario_manager import ScenarioManager
+from ..prompt_runtime.scenario_runtime import assemble_scenario
+from ..prompt_runtime.template_renderer import TemplateRenderer, load_user_fragment_map
+from ..prompt_runtime.contracts import ScenarioBundle
 from ..settings_service import settings_service
 from ..sidecar_client import sidecar_client
 from .contracts import CreateContext
@@ -21,19 +23,20 @@ async def assemble_create(
     thread: Thread,
     settings: UserSettings,
     create_ctx: CreateContext,
-) -> tuple[str, list[dict[str, Any]], str | None, PromptBundle]:
+) -> tuple[str, list[dict[str, Any]], str | None, ScenarioBundle]:
     preset_id = settings_service.get_active_preset_id(db, run.user_id)
     if preset_id is None:
         raise RuntimeError("No active preset selected")
 
-    renderer = PromptRenderer(db, user_id=run.user_id, preset_id=preset_id)
-    prompt_manager = PromptManager(renderer)
+    scenario_manager = ScenarioManager()
     project_data = await build_project_data(db, run.project_id, run.language, sidecar_client)
 
-    prompt_bundle = prompt_manager.build_prompt_bundle(
+    target = scenario_manager.resolve_target(db, thread=thread, run=run, payload=create_ctx.input_payload)
+    template_data, _prefill_enabled = scenario_manager.build_template_data(
         db,
         user_id=run.user_id,
         preset_id=preset_id,
+        task_type=target.task_type,
         thread=thread,
         run=run,
         project_data=project_data,
@@ -41,59 +44,53 @@ async def assemble_create(
         input_payload=create_ctx.input_payload,
     )
 
-    all_runs = (
-        db.query(RunModel)
-        .filter(RunModel.thread_id == thread.id)
-        .order_by(RunModel.run_seq.asc())
-        .all()
+    scenario = scenario_manager.load_active_scenario(
+        db,
+        user_id=run.user_id,
+        preset_id=preset_id,
+        task_type=target.task_type,
+        task_subtype=target.task_subtype,
+    )
+    system_template = str(scenario.get("system_template") or "")
+    blocks = scenario.get("blocks") if isinstance(scenario.get("blocks"), list) else []
+
+    fragment_map = load_user_fragment_map(db, run.user_id, preset_id)
+    template_renderer = TemplateRenderer(fragment_map=fragment_map)
+
+    canonical = build_from_runs(db, thread_id=thread.id, language=run.language)
+    system_prompt, conversation, prefill, memory_template = assemble_scenario(
+        template_renderer=template_renderer,
+        task_type=target.task_type,
+        system_template=system_template,
+        blocks=blocks,
+        source_conversation=canonical,
+        template_data=template_data,
     )
 
-    user_msgs = (
-        db.query(RunMessageModel)
-        .filter(RunMessageModel.thread_id == thread.id, RunMessageModel.role == "user")
-        .order_by(RunMessageModel.seq_in_thread.asc())
-        .all()
-    )
-    raw_user_texts = [m.data["_final"]["contentParts"][0]["text"] for m in user_msgs]
-
-    rendered_users = prompt_manager.render_conversation_user_prompts(
-        prompt_map=prompt_bundle.prompt_map,
-        target=prompt_bundle.target,
-        template_data=prompt_bundle.template_data,
-        user_texts=raw_user_texts,
-    )
-
-    conversation: list[dict[str, Any]] = []
-    for i, r in enumerate(all_runs):
-        if i < len(rendered_users) and rendered_users[i]:
-            conversation.append({
-                "role": "user",
-                "content_parts": [{"type": "content", "text": rendered_users[i]}],
-            })
-
-        non_user = build_from_runs(
-            db,
-            thread_id=thread.id,
-            language=run.language,
-            include_run_ids=[r.id],
-        )
-        conversation.extend(m for m in non_user if m.get("role") != "user")
-
-    thread.captured_history_system_prompt = prompt_bundle.system_prompt
+    thread.captured_history_system_prompt = system_prompt
     thread.captured_history_conversation_json = conversation
-    thread.captured_history_prefill = prompt_bundle.prefill
+    thread.captured_history_prefill = prefill
     db.flush()
 
-    return prompt_bundle.system_prompt, conversation, prompt_bundle.prefill, prompt_bundle
+    bundle = ScenarioBundle(
+        task_type=target.task_type,
+        task_subtype=target.task_subtype,
+        template_data=template_data,
+        system_prompt=system_prompt,
+        prefill=prefill,
+        memory_template=memory_template,
+    )
+
+    return system_prompt, conversation, prefill, bundle
 
 
-def assemble_resume(
+async def assemble_resume(
     db: Session,
     *,
     run: RunModel,
     thread: Thread,
     settings: UserSettings,
-) -> tuple[str, list[dict[str, Any]], str | None, PromptBundle | None]:
+) -> tuple[str, list[dict[str, Any]], str | None, ScenarioBundle | None]:
     system_prompt = str(thread.captured_history_system_prompt or "")
     prefill = thread.captured_history_prefill if isinstance(thread.captured_history_prefill, str) and thread.captured_history_prefill else None
 
@@ -121,37 +118,57 @@ def assemble_resume(
     )
     conversation.extend(m for m in recent if m.get("role") != "user")
 
-    prompt_bundle: PromptBundle | None = None
-    task_type = PromptManager.resolve_task_type(thread=thread, run=run)
+    bundle: ScenarioBundle | None = None
+    task_type = ScenarioManager.resolve_task_type(thread=thread, run=run)
     if task_type == "agent":
         preset_id = settings_service.get_active_preset_id(db, run.user_id)
         if preset_id is not None:
-            renderer = PromptRenderer(db, user_id=run.user_id, preset_id=preset_id)
-            pm = PromptManager(renderer)
+            scenario_manager = ScenarioManager()
             task_subtype = "planMode" if run.run_mode == "planMode" else "agentMode"
-            prompt_map = pm._load_latest_prompt_map(
-                db, user_id=run.user_id, preset_id=preset_id,
-                task_type=task_type, task_subtype=task_subtype,
+            scenario = scenario_manager.load_active_scenario(
+                db,
+                user_id=run.user_id,
+                preset_id=preset_id,
+                task_type=task_type,
+                task_subtype=task_subtype,
             )
-            if "memoryPrompt" in prompt_map:
-                target = PromptTarget(
+            blocks = scenario.get("blocks") if isinstance(scenario.get("blocks"), list) else []
+            memory_template: str | None = None
+            for blk in blocks:
+                if not isinstance(blk, dict) or not bool(blk.get("enabled", True)):
+                    continue
+                if blk.get("type") != "staticPrompt":
+                    continue
+                sp = blk.get("staticPrompt")
+                if not isinstance(sp, dict):
+                    continue
+                if str(sp.get("subtype") or "") != "memory":
+                    continue
+                tpl = sp.get("template")
+                if isinstance(tpl, str) and tpl.strip():
+                    memory_template = tpl
+                    break
+
+            if memory_template is not None:
+                project_data = await build_project_data(db, run.project_id, run.language, sidecar_client)
+                template_data, _prefill_enabled = scenario_manager.build_template_data(
+                    db,
+                    user_id=run.user_id,
+                    preset_id=preset_id,
+                    task_type=task_type,
+                    thread=thread,
+                    run=run,
+                    project_data=project_data,
+                    input_text="",
+                    input_payload={},
+                )
+                bundle = ScenarioBundle(
                     task_type=task_type,
                     task_subtype=task_subtype,
-                    required_categories=("systemPrompt", "memoryPrompt", "userPrompt", "firstUserPrompt", "lastUserPrompt"),
-                    supports_memory_prompt=True,
-                )
-                prompt_bundle = PromptBundle(
-                    target=target,
-                    prompt_map=prompt_map,
-                    template_data={
-                        "config": {"mainLanguage": run.language, "displayLanguage": run.language},
-                        "project": {},
-                        "input": {"userMessage": "", "agentMessage": "", "toolResults": []},
-                        "memory": {"summaries": [], "historyChats": []},
-                    },
+                    template_data=template_data,
                     system_prompt=system_prompt,
                     prefill=prefill,
-                    has_memory_prompt=True,
+                    memory_template=memory_template,
                 )
 
-    return system_prompt, conversation, prefill, prompt_bundle
+    return system_prompt, conversation, prefill, bundle

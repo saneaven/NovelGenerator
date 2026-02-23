@@ -3,7 +3,7 @@
  * Defines which fields to show for each prompt type in the preview modal.
  */
 
-import type { TaskType } from '../../../types/prompts';
+import type { TaskType } from '../../../types/scenarios';
 
 export interface PromptTypeField {
   path: string;           // e.g., 'agent.runMode', 'editAssistant.targetParagraphs'

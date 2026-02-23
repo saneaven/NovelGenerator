@@ -10,7 +10,7 @@ import { useVariableStore } from '../../../store/variableStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useTokenCount } from '../../../hooks/useTokenCount';
 import type { ConfigData } from '../../../templateEngine/schema';
-import type { PromptCategory, TaskType } from '../../../types/prompts';
+import type { TaskType } from '../../../types/scenarios';
 import type { PromptVariable } from '../../../types/variables';
 import { buildPreviewData } from '../PromptEditor/previewDataBuilder';
 
@@ -18,7 +18,8 @@ export interface UsePromptPreviewOptions {
   templateContent: string;
   taskType: TaskType;
   taskSubtype: string;
-  promptCategory: PromptCategory;
+  injectedInputKey?: 'userMessage' | 'agentMessage' | 'subAgentMessage' | null;
+  isMemoryPrompt?: boolean;
 }
 
 export interface UsePromptPreviewResult {
@@ -65,7 +66,7 @@ export interface UsePromptPreviewResult {
 const DEBOUNCE_DELAY = 300;
 
 export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPreviewResult {
-  const { templateContent, taskType, taskSubtype, promptCategory } = options;
+  const { templateContent, taskType, taskSubtype, injectedInputKey, isMemoryPrompt } = options;
 
   // Store access
   const currentProjectId = useProjectStore(state => state.currentProjectId);
@@ -98,7 +99,8 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
       const previewData = buildPreviewData({
         taskType,
         taskSubtype,
-        promptCategory,
+        injectedInputKey,
+        isMemoryPrompt,
         showProjectContext,
         includeAllFilteredIds,
         projectId: currentProjectId,
@@ -124,7 +126,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
     } finally {
       setIsLoading(false);
     }
-  }, [templateContent, taskType, taskSubtype, promptCategory, showProjectContext, includeAllFilteredIds, currentProjectId, configOverrides, promptTypeOverrides, variableOverrides]);
+  }, [templateContent, taskType, taskSubtype, injectedInputKey, isMemoryPrompt, showProjectContext, includeAllFilteredIds, currentProjectId, configOverrides, promptTypeOverrides, variableOverrides]);
 
   // Debounced render effect
   useEffect(() => {

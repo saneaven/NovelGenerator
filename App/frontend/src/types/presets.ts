@@ -3,6 +3,7 @@
  */
 
 import type { SubAgentDefinition } from './subAgents';
+import type { ScenarioDocument } from './scenarios';
 
 /**
  * Preset list item (minimal info for list display)
@@ -82,13 +83,6 @@ export interface PresetDuplicateRequest {
 // --- Export/Import Types ---
 
 /**
- * Exported prompt data structure
- */
-export interface ExportPromptData {
-  content: string;
-}
-
-/**
  * Exported fragment data structure
  */
 export interface ExportFragmentData {
@@ -123,7 +117,8 @@ export interface PresetExportData {
     name: string;
     description: string | null;
   };
-  prompts: Record<string, Record<string, ExportPromptData | Record<string, ExportPromptData>>>;
+  // Scenario v1: prompts payload is scenario documents per (task_type, task_subtype)
+  prompts: Record<string, Record<string, ScenarioDocument>>;
   fragments: Record<string, Record<string, ExportFragmentData>>;
   variables: ExportVariableData[];
   sub_agents: SubAgentDefinition[];

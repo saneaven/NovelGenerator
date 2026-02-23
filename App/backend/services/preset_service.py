@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from ..models.db_models import (
     PromptPreset,
-    PromptVersion,
+    PromptScenarioVersion,
     PromptFragment,
     PromptFolder,
     PromptVariable,
@@ -23,8 +23,9 @@ from ..schemas.presets import (
     PresetDetailResponse,
     ActivePresetResponse
 )
-from ..prompts import get_default_prompts, get_default_fragments
+from ..prompts import get_default_scenarios, get_default_fragments
 from .folder_service import FolderService
+from .prompt_runtime.scenario_validation import normalize_and_validate_scenario
 from .sub_agent_seed_service import seed_default_sub_agents
 
 
@@ -116,13 +117,12 @@ class PresetService:
 
     @staticmethod
     def _count_unique_prompts(db: Session, preset_id: uuid.UUID) -> int:
-        """Count unique prompts (by task_type, task_subtype, category combination)"""
+        """Count unique scenarios (by task_type, task_subtype combination)."""
         return db.query(
-            PromptVersion.task_type,
-            PromptVersion.task_subtype,
-            PromptVersion.prompt_category,
+            PromptScenarioVersion.task_type,
+            PromptScenarioVersion.task_subtype,
         ).filter(
-            PromptVersion.preset_id == preset_id
+            PromptScenarioVersion.preset_id == preset_id
         ).distinct().count()
 
     @staticmethod
@@ -172,10 +172,10 @@ class PresetService:
         fragment_count = 0
 
         if initialize_with_defaults:
-            # Initialize default prompts
-            default_prompts = get_default_prompts()
-            prompt_count = PresetService._initialize_prompts_for_preset(
-                db, user_id, preset.id, default_prompts
+            # Initialize default scenarios
+            default_scenarios = get_default_scenarios()
+            prompt_count = PresetService._initialize_scenarios_for_preset(
+                db, user_id, preset.id, default_scenarios
             )
 
             # Initialize default fragments
@@ -202,37 +202,35 @@ class PresetService:
         )
 
     @staticmethod
-    def _initialize_prompts_for_preset(
+    def _initialize_scenarios_for_preset(
         db: Session,
         user_id: uuid.UUID,
         preset_id: uuid.UUID,
-        default_prompts: dict
+        default_scenarios: dict
     ) -> int:
-        """Initialize default prompts for a preset. Returns count of prompts created."""
+        """Initialize default scenarios for a preset. Returns count of scenarios created."""
         now = datetime.utcnow()
         count = 0
 
-        for task_type, subtypes in default_prompts.items():
+        for task_type, subtypes in default_scenarios.items():
             for task_subtype, categories in subtypes.items():
-                if not isinstance(categories, dict):
-                    raise ValueError("Default prompts must be nested as {task_type: {task_subtype: {category: content}}}.")
+                if not isinstance(categories, dict) or "system_template" not in categories or "blocks" not in categories:
+                    raise ValueError("Default scenarios must be nested as {task_type: {task_subtype: ScenarioDocument}}.")
 
-                for category, content in categories.items():
-                    prompt = PromptVersion(
-                        id=uuid.uuid4(),
-                        user_id=user_id,
-                        preset_id=preset_id,
-                        task_type=task_type,
-                        task_subtype=task_subtype,
-                        prompt_category=category,
-                        content=content,
-                        version_number=1,
-                        is_default=True,
-                        note="System default",
-                        created_at=now
-                    )
-                    db.add(prompt)
-                    count += 1
+                row = PromptScenarioVersion(
+                    id=uuid.uuid4(),
+                    user_id=user_id,
+                    preset_id=preset_id,
+                    task_type=str(task_type),
+                    task_subtype=str(task_subtype),
+                    scenario=categories,
+                    version_number=1,
+                    is_default=True,
+                    note="System default",
+                    created_at=now,
+                )
+                db.add(row)
+                count += 1
 
         return count
 
@@ -328,8 +326,8 @@ class PresetService:
         db.add(new_preset)
         db.flush()
 
-        # Copy prompts (latest version of each unique prompt)
-        prompt_count = PresetService._copy_prompts(db, user_id, source_preset_id, new_preset.id)
+        # Copy scenarios (latest version of each unique scenario)
+        prompt_count = PresetService._copy_scenarios(db, user_id, source_preset_id, new_preset.id)
 
         # Copy fragments (latest version of each unique fragment)
         fragment_count = PresetService._copy_fragments(db, user_id, source_preset_id, new_preset.id)
@@ -355,51 +353,46 @@ class PresetService:
         )
 
     @staticmethod
-    def _copy_prompts(
+    def _copy_scenarios(
         db: Session,
         user_id: uuid.UUID,
         source_preset_id: uuid.UUID,
         target_preset_id: uuid.UUID
     ) -> int:
-        """Copy latest version of each prompt to target preset."""
-        # Get all unique prompt identifiers
-        unique_prompts = db.query(
-            PromptVersion.task_type,
-            PromptVersion.task_subtype,
-            PromptVersion.prompt_category,
+        """Copy latest version of each scenario to target preset."""
+        unique_scenarios = db.query(
+            PromptScenarioVersion.task_type,
+            PromptScenarioVersion.task_subtype,
         ).filter(
-            PromptVersion.preset_id == source_preset_id
+            PromptScenarioVersion.preset_id == source_preset_id
         ).distinct().all()
 
         count = 0
         now = datetime.utcnow()
 
-        for task_type, task_subtype, prompt_category in unique_prompts:
-            # Get latest version
-            latest = db.query(PromptVersion).filter(
+        for task_type, task_subtype in unique_scenarios:
+            latest = db.query(PromptScenarioVersion).filter(
                 and_(
-                    PromptVersion.preset_id == source_preset_id,
-                    PromptVersion.task_type == task_type,
-                    PromptVersion.task_subtype == task_subtype,
-                    PromptVersion.prompt_category == prompt_category,
+                    PromptScenarioVersion.preset_id == source_preset_id,
+                    PromptScenarioVersion.task_type == task_type,
+                    PromptScenarioVersion.task_subtype == task_subtype,
                 )
-            ).order_by(PromptVersion.version_number.desc()).first()
+            ).order_by(PromptScenarioVersion.version_number.desc()).first()
 
             if latest:
-                new_prompt = PromptVersion(
+                new_row = PromptScenarioVersion(
                     id=uuid.uuid4(),
                     user_id=user_id,
                     preset_id=target_preset_id,
                     task_type=latest.task_type,
                     task_subtype=latest.task_subtype,
-                    prompt_category=latest.prompt_category,
-                    content=latest.content,
+                    scenario=latest.scenario if isinstance(latest.scenario, dict) else {},
                     version_number=1,
                     is_default=False,
                     note=f"Copied from preset",
                     created_at=now
                 )
-                db.add(new_prompt)
+                db.add(new_row)
                 count += 1
 
         return count
@@ -768,9 +761,9 @@ class PresetService:
         db.add(preset)
         db.flush()
 
-        # Initialize default prompts
-        default_prompts = get_default_prompts()
-        PresetService._initialize_prompts_for_preset(db, user_id, preset.id, default_prompts)
+        # Initialize default scenarios
+        default_scenarios = get_default_scenarios()
+        PresetService._initialize_scenarios_for_preset(db, user_id, preset.id, default_scenarios)
 
         # Initialize default fragments
         default_fragments = get_default_fragments()
@@ -800,26 +793,24 @@ class PresetService:
 
         # 2. Get unique prompts (latest version of each)
         prompts_dict = {}
-        unique_prompts = db.query(
-            PromptVersion.task_type,
-            PromptVersion.task_subtype,
-            PromptVersion.prompt_category,
-        ).filter(PromptVersion.preset_id == preset_id).distinct().all()
+        unique_scenarios = db.query(
+            PromptScenarioVersion.task_type,
+            PromptScenarioVersion.task_subtype,
+        ).filter(PromptScenarioVersion.preset_id == preset_id).distinct().all()
 
-        for task_type, task_subtype, category in unique_prompts:
-            latest = db.query(PromptVersion).filter(
+        for task_type, task_subtype in unique_scenarios:
+            latest = db.query(PromptScenarioVersion).filter(
                 and_(
-                    PromptVersion.preset_id == preset_id,
-                    PromptVersion.task_type == task_type,
-                    PromptVersion.task_subtype == task_subtype,
-                    PromptVersion.prompt_category == category,
+                    PromptScenarioVersion.preset_id == preset_id,
+                    PromptScenarioVersion.task_type == task_type,
+                    PromptScenarioVersion.task_subtype == task_subtype,
                 )
-            ).order_by(PromptVersion.version_number.desc()).first()
+            ).order_by(PromptScenarioVersion.version_number.desc()).first()
 
             if latest:
-                prompts_dict.setdefault(task_type, {}).setdefault(task_subtype, {})[category] = {
-                    "content": latest.content
-                }
+                prompts_dict.setdefault(task_type, {})[task_subtype] = (
+                    latest.scenario if isinstance(latest.scenario, dict) else {}
+                )
 
         # 3. Get unique fragments (latest version of each)
         fragments_dict = {}
@@ -942,7 +933,7 @@ class PresetService:
         fragment_count = 0
         variable_count = 0
 
-        # 3. Create prompts from nested structure (named prompts only, no legacy backfill)
+        # 3. Create scenarios from nested structure (single structure only)
         prompts_data = data.get("prompts", {})
         if not isinstance(prompts_data, dict):
             raise ValueError("Invalid preset file: prompts must be an object")
@@ -951,28 +942,24 @@ class PresetService:
             if not isinstance(subtypes, dict):
                 raise ValueError("Invalid preset file: prompts subtypes must be an object")
 
-            for task_subtype, categories in subtypes.items():
-                if not isinstance(categories, dict):
-                    raise ValueError("Invalid preset file: prompts categories must be an object")
+            for task_subtype, scenario_doc in subtypes.items():
+                normalized, _warnings = normalize_and_validate_scenario(scenario_doc)
 
-                for category, prompt_data in categories.items():
-                    if not isinstance(prompt_data, dict) or "content" not in prompt_data:
-                        raise ValueError("Invalid preset file: prompt must have content")
-
-                    db.add(PromptVersion(
+                db.add(
+                    PromptScenarioVersion(
                         id=uuid.uuid4(),
                         user_id=user_id,
                         preset_id=preset.id,
                         task_type=str(task_type),
                         task_subtype=str(task_subtype),
-                        prompt_category=str(category),
-                        content=str(prompt_data["content"]),
+                        scenario=normalized,
                         version_number=1,
                         is_default=False,
                         note="Imported",
                         created_at=now,
-                    ))
-                    prompt_count += 1
+                    )
+                )
+                prompt_count += 1
 
         # 4. Create fragments from nested structure
         fragments_data = data.get("fragments", {})

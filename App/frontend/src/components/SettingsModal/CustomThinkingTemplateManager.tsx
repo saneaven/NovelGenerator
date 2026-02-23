@@ -126,10 +126,10 @@ const CustomThinkingTemplateManager: React.FC<Props> = ({ templates, onChange })
           <div key={tpl.id ?? tpl.name} className="template-row">
             <span className="template-name">{tpl.name}</span>
             <div className="template-actions">
-              <TextButton size="small" onClick={() => handleEdit(tpl)}>
+              <TextButton size="sm" onClick={() => handleEdit(tpl)}>
                 {t(`${tp}.editTemplate`)}
               </TextButton>
-              <TextButton size="small" variant="danger" onClick={() => handleDelete(tpl.id!)} disabled={!tpl.id}>
+              <TextButton size="sm" variant="danger" onClick={() => handleDelete(tpl.id!)} disabled={!tpl.id}>
                 <Trash size="sm" />
               </TextButton>
             </div>
@@ -173,7 +173,7 @@ const CustomThinkingTemplateManager: React.FC<Props> = ({ templates, onChange })
                 </button>
               </div>
             ))}
-            <TextButton size="small" onClick={addEffortField}>+ {t(`${tp}.addRow`)}</TextButton>
+            <TextButton size="sm" onClick={addEffortField}>+ {t(`${tp}.addRow`)}</TextButton>
           </div>
 
           {/* Response fields */}
@@ -207,7 +207,7 @@ const CustomThinkingTemplateManager: React.FC<Props> = ({ templates, onChange })
                 </button>
               </div>
             ))}
-            <TextButton size="small" onClick={addResponseField}>+ {t(`${tp}.addRow`)}</TextButton>
+            <TextButton size="sm" onClick={addResponseField}>+ {t(`${tp}.addRow`)}</TextButton>
           </div>
 
           {/* History fields */}
@@ -233,13 +233,13 @@ const CustomThinkingTemplateManager: React.FC<Props> = ({ templates, onChange })
                 </button>
               </div>
             ))}
-            <TextButton size="small" onClick={addHistoryField}>+ {t(`${tp}.addRow`)}</TextButton>
+            <TextButton size="sm" onClick={addHistoryField}>+ {t(`${tp}.addRow`)}</TextButton>
           </div>
 
           {/* Actions */}
           <div className="editor-actions">
-            <TextButton size="small" onClick={handleCancel}>{t(`${tp}.cancel`)}</TextButton>
-            <TextButton size="small" variant="primary" onClick={handleSave} disabled={!draft.name.trim()}>
+            <TextButton size="sm" onClick={handleCancel}>{t(`${tp}.cancel`)}</TextButton>
+            <TextButton size="sm" variant="primary" onClick={handleSave} disabled={!draft.name.trim()}>
               {t(`${tp}.saveTemplate`)}
             </TextButton>
           </div>
@@ -247,7 +247,7 @@ const CustomThinkingTemplateManager: React.FC<Props> = ({ templates, onChange })
       )}
 
       {!draft && (
-        <TextButton size="small" onClick={handleAdd}>+ {t(`${tp}.addTemplate`)}</TextButton>
+        <TextButton size="sm" onClick={handleAdd}>+ {t(`${tp}.addTemplate`)}</TextButton>
       )}
     </div>
   );

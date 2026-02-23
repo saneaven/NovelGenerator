@@ -82,12 +82,6 @@ class ActivePresetResponse(BaseModel):
 
 # --- Export/Import Schemas ---
 
-class ExportPromptData(BaseModel):
-    """Single prompt content for export"""
-    model_config = ConfigDict(extra="forbid")
-    content: str
-
-
 class ExportFragmentData(BaseModel):
     """Single fragment data for export"""
     model_config = ConfigDict(extra="forbid")

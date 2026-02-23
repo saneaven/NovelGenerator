@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from ..models.memory_models import MessageMemorySummary
 from .memory_service import search_thread_memory
-from .prompt_runtime.prompt_manager import PromptBundle, PromptManager
-from .prompt_runtime.prompt_renderer import PromptRenderer
+from .prompt_runtime.scenario_runtime import assemble_scenario
+from .prompt_runtime.template_renderer import TemplateRenderer
 from .settings_service import settings_service
 
 
@@ -173,8 +173,9 @@ async def build_memory_data(
 async def build_memory_prompt(
     db: Session,
     *,
-    prompt_manager: PromptManager,
-    prompt_bundle: PromptBundle,
+    template_renderer: TemplateRenderer,
+    memory_template: str,
+    template_data: dict[str, Any],
     user_id: UUID,
     project_id: UUID,
     thread_id: UUID,
@@ -182,7 +183,7 @@ async def build_memory_prompt(
     last_user_text: str,
     last_assistant_text: str,
 ) -> str | None:
-    if not prompt_bundle.has_memory_prompt:
+    if not isinstance(memory_template, str) or not memory_template.strip():
         return None
 
     memory = await build_memory_data(
@@ -197,7 +198,12 @@ async def build_memory_prompt(
     if memory is None:
         return None
 
-    return prompt_manager.render_memory_prompt(bundle=prompt_bundle, memory=memory)
+    patched = {
+        **(template_data if isinstance(template_data, dict) else {}),
+        "memory": memory,
+    }
+    rendered = template_renderer.render_text(memory_template, patched).strip()
+    return rendered or None
 
 
 def build_memory_summary_template_data(
@@ -222,6 +228,7 @@ def build_memory_summary_template_data(
         "input": {
             "userMessage": "",
             "agentMessage": "",
+            "subAgentMessage": "",
             "toolResults": [],
         },
         "agent": {
@@ -291,8 +298,9 @@ def build_memory_summary_template_data(
 
 
 def render_memory_summary_prompt(
-    renderer: PromptRenderer,
+    template_renderer: TemplateRenderer,
     *,
+    summary_scenario: dict[str, Any],
     project_data: dict[str, Any],
     language: str,
     previous_summary: str,
@@ -308,16 +316,32 @@ def render_memory_summary_prompt(
         messages=messages,
         variables=variables,
     )
-    system_prompt = renderer.render_prompt(
+
+    system_template = str(summary_scenario.get("system_template") or "")
+    blocks = summary_scenario.get("blocks") if isinstance(summary_scenario.get("blocks"), list) else []
+
+    system_prompt, conv, _prefill, _mem = assemble_scenario(
+        template_renderer=template_renderer,
         task_type="memory",
-        task_subtype="summary",
-        prompt_category="systemPrompt",
+        system_template=system_template,
+        blocks=blocks,
+        source_conversation=[],
         template_data=template_data,
     )
-    user_prompt = renderer.render_prompt(
-        task_type="memory",
-        task_subtype="summary",
-        prompt_category="userPrompt",
-        template_data=template_data,
-    )
+
+    def _collapse(parts: Any) -> str:
+        if not isinstance(parts, list):
+            return ""
+        return "".join(
+            str(p.get("text") or "")
+            for p in parts
+            if isinstance(p, dict) and str(p.get("type") or "") == "content"
+        ).strip()
+
+    user_prompt = ""
+    for msg in conv:
+        if isinstance(msg, dict) and msg.get("role") == "user":
+            user_prompt = _collapse(msg.get("content_parts"))
+            break
+
     return system_prompt, user_prompt
