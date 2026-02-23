@@ -28,27 +28,34 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   onNodeSelect,
   onToggleExpand,
 }) => {
-  const isCategory = node.type === 'category';
+  const isExpandable = node.type === 'category' || node.type === 'prompt';
+  const isLeaf = node.type === 'promptView';
   const isExpanded = expandedNodes.has(node.id);
   const isSelected = node.id === selectedNodeId;
   const hasChildren = node.children && node.children.length > 0;
 
   const handleClick = () => {
-    if (isCategory) {
+    if (isExpandable) {
       onToggleExpand(node.id);
-    } else {
+    } else if (isLeaf) {
       onNodeSelect(node);
     }
   };
 
+  const typeClass = node.type === 'category'
+    ? 'tree-node__content--category'
+    : node.type === 'prompt'
+      ? 'tree-node__content--prompt'
+      : 'tree-node__content--prompt-view';
+
   return (
     <div className="tree-node">
       <div
-        className={`tree-node__content ${isCategory ? 'tree-node__content--category' : 'tree-node__content--prompt'} ${isSelected ? 'tree-node__content--selected' : ''}`}
+        className={`tree-node__content ${typeClass} ${isSelected ? 'tree-node__content--selected' : ''}`}
         style={{ paddingLeft: `${level * 16 + 12}px` }}
         onClick={handleClick}
       >
-        {isCategory && (
+        {isExpandable && (
           <span className="tree-node__expand-icon">
              {hasChildren ? (isExpanded ? <Collapse size="xs" /> : <Expand size="xs" />) : <span style={{ width: 12 }} />}
           </span>
@@ -61,7 +68,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         <span className="tree-node__label">{node.label}</span>
       </div>
 
-      {isCategory && hasChildren && isExpanded && (
+      {isExpandable && hasChildren && isExpanded && (
         <div className="tree-node__children">
           {node.children!.map((child) => (
             <TreeNode

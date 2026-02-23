@@ -18,6 +18,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { ChevronDown, ChevronUp, Collapse, Copy, Expand, Eye, HamburgerMenu, Plus, Trash } from '../../icons';
 import { IconButton } from '../../IconButton';
+import { DropdownMenu, DropdownItem } from '../../ui/DropdownMenu';
 import ToggleSwitch from '../../common/ToggleSwitch';
 import TemplateEditor from './TemplateEditor';
 import PromptPreviewModal from './PromptPreviewModal';
@@ -306,34 +307,15 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
   return (
     <div className="scenario-blocks-editor">
       <div className="scenario-blocks-editor__toolbar">
-        <div className="scenario-blocks-editor__toolbar-left">
-          <IconButton
-            icon={<Plus size="sm" />}
-            onClick={() => addBlock('static')}
-            title="Add static block"
-            size="sm"
-          />
-          <IconButton
-            icon={<Plus size="sm" />}
-            onClick={() => addBlock('range')}
-            title="Add range-mapping block"
-            size="sm"
-          />
-          <IconButton
-            icon={<Plus size="sm" />}
-            onClick={() => addBlock('memory')}
-            title={hasMemory ? 'Memory block exists' : 'Add memory block'}
-            size="sm"
-            disabled={hasMemory}
-          />
-          <IconButton
-            icon={<Plus size="sm" />}
-            onClick={() => addBlock('prefill')}
-            title={hasPrefill ? 'Prefill block exists' : 'Add prefill block'}
-            size="sm"
-            disabled={hasPrefill}
-          />
-        </div>
+        <DropdownMenu
+          trigger={<IconButton icon={<Plus size="sm" />} title="Add block" size="sm" />}
+          align="left"
+        >
+          <DropdownItem label="Static Block" onClick={() => addBlock('static')} />
+          <DropdownItem label="Range Mapping" onClick={() => addBlock('range')} />
+          <DropdownItem label="Memory Block" onClick={() => addBlock('memory')} disabled={hasMemory} />
+          <DropdownItem label="Prefill Block" onClick={() => addBlock('prefill')} disabled={hasPrefill} />
+        </DropdownMenu>
       </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>

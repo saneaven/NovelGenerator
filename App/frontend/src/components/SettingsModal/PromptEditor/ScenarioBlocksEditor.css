@@ -93,6 +93,11 @@
   gap: 10px;
 }
 
+.scenario-block-card__body .template-editor {
+  height: 200px;
+  flex: none;
+}
+
 .scenario-block-field-row {
   display: flex;
   align-items: center;

@@ -17,7 +17,8 @@ import SubAgentListNav from './SubAgentListNav';
 import SubAgentEditor, { type SubAgentDefinitionDraft } from './SubAgentEditor';
 import CreateSubAgentModal from './CreateSubAgentModal';
 import TemplateEditor from './TemplateEditor';
-import ScenarioEditor from './ScenarioEditor';
+import ScenarioBlocksEditor from './ScenarioBlocksEditor';
+import PromptPreviewModal from './PromptPreviewModal';
 import VersionHistoryModal from '../../Modal/VersionHistoryModal';
 import PresetSelector from '../PresetSelector';
 import PresetModal from '../PresetModal';
@@ -28,10 +29,10 @@ import { useSubAgentStore } from '../../../store/subAgentStore';
 import { useVariableStore } from '../../../store/variableStore';
 import { scenarioService } from '../../../api/scenarioService';
 import { fragmentService } from '../../../api/fragmentService';
-import { PROMPT_TREE, getFirstPromptNode, type PromptNode } from './promptTree';
+import { PROMPT_TREE, getFirstPromptNode, findPromptNode, type PromptNode } from './promptTree';
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
-import { ChevronLeft, ChevronRight, Document, Copy, Clock, Trash, Edit } from '../../icons';
+import { ChevronLeft, ChevronRight, Document, Copy, Clock, Trash, Edit, Eye } from '../../icons';
 import './PromptsTemplatesPanel.css';
 import TemplateSyntaxHint from './TemplateSyntaxHint';
 import type { PresetListItem } from '../../../types/presets';
@@ -407,6 +408,9 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [editedDescription, setEditedDescription] = useState('');
 
+  // System prompt preview modal
+  const [showSystemPreview, setShowSystemPreview] = useState(false);
+
   // Preset modal state
   const [showPresetModal, setShowPresetModal] = useState(false);
   const [presetModalMode, setPresetModalMode] = useState<'create' | 'duplicate' | 'edit'>('create');
@@ -441,7 +445,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   }, [selectedFragment]);
 
   const selectedPromptKey = useMemo(() => {
-    if (!selectedPrompt || selectedPrompt.type !== 'prompt') return null;
+    if (!selectedPrompt || selectedPrompt.type !== 'promptView') return null;
     if (!selectedPrompt.taskType || !selectedPrompt.taskSubtype) return null;
     return makeScenarioDraftKey(selectedPrompt.taskType, selectedPrompt.taskSubtype);
   }, [selectedPrompt]);
@@ -1086,7 +1090,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   // Load drafts as selection changes.
   useEffect(() => {
-    if (!selectedPrompt || selectedPrompt.type !== 'prompt') return;
+    if (!selectedPrompt || selectedPrompt.type !== 'promptView') return;
     if (!selectedPrompt.taskType || !selectedPrompt.taskSubtype) return;
     ensureScenarioDraftLoaded(
       selectedPrompt.taskType,
@@ -1137,7 +1141,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   }, [currentFragmentDraft?.content, currentFragmentDraft?.fullPath, currentFragmentDraft?.isLoading, currentFragmentDraft?.key]);
 
   const handlePromptSelect = (node: PromptNode) => {
-    if (node.type !== 'prompt') return;
+    if (node.type !== 'promptView') return;
     setSelectedPrompt(node);
     if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
   };
@@ -1201,13 +1205,23 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   };
 
   const getEditorTitle = () => {
-    if (subTab === 'prompts' && selectedPrompt) return selectedPrompt.label;
+    if (subTab === 'prompts' && selectedPrompt) {
+      // Derive parent label from the prompt tree for context
+      const parentId = selectedPrompt.id.replace(/-system$|-blocks$/, '');
+      const parentNode = findPromptNode(parentId);
+      const parentLabel = parentNode?.label || '';
+      return `${parentLabel} — ${selectedPrompt.label}`;
+    }
     if (subTab === 'fragments' && selectedPath) return selectedPath;
     return '';
   };
 
   const getEditorDescription = () => {
-    if (subTab === 'prompts' && selectedPrompt?.description) return selectedPrompt.description;
+    if (subTab === 'prompts' && selectedPrompt) {
+      const parentId = selectedPrompt.id.replace(/-system$|-blocks$/, '');
+      const parentNode = findPromptNode(parentId);
+      return parentNode?.description || null;
+    }
     return null;
   };
 
@@ -1237,7 +1251,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   const currentEditorDirty = subTab === 'prompts' ? currentScenarioDraft?.dirty : currentFragmentDraft?.dirty;
 
   const currentVersionHistoryProps = useMemo(() => {
-    if (subTab === 'prompts' && selectedPrompt && selectedPrompt.type === 'prompt' && selectedPrompt.taskType && selectedPrompt.taskSubtype) {
+    if (subTab === 'prompts' && selectedPrompt && selectedPrompt.type === 'promptView' && selectedPrompt.taskType && selectedPrompt.taskSubtype) {
       const taskType = selectedPrompt.taskType;
       const taskSubtype = selectedPrompt.taskSubtype;
       const key = makeScenarioDraftKey(taskType, taskSubtype);
@@ -1483,6 +1497,16 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                       <>
                         <TemplateSyntaxHint selectedNode={subTab === 'prompts' ? selectedPrompt : null} />
 
+                        {subTab === 'prompts' && selectedPrompt?.viewKind === 'system' && currentScenarioDraft && (
+                          <IconButton
+                            icon={<Eye size="sm" />}
+                            onClick={() => setShowSystemPreview(true)}
+                            title="Preview system template"
+                            size="sm"
+                            variant="ghost"
+                          />
+                        )}
+
                         {currentVersionHistoryProps && (
                           <IconButton
                             icon={<Clock size="sm" />}
@@ -1523,37 +1547,76 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
               )}
 
               <div className="editor-wrapper__body">
-                {subTab === 'prompts' && selectedPrompt && selectedPrompt.type === 'prompt' && currentScenarioDraft && (
-                  <ScenarioEditor
-                    taskType={selectedPrompt.taskType!}
-                    taskSubtype={selectedPrompt.taskSubtype!}
-                    scenario={currentScenarioDraft.scenario}
-                    isLoading={currentScenarioDraft.isLoading}
-                    loadError={currentScenarioDraft.loadError}
-                    dirty={currentScenarioDraft.dirty}
-                    saveWarnings={currentScenarioDraft.saveWarnings}
-                    onScenarioChange={(nextScenario) => {
-                      const taskType = selectedPrompt.taskType;
-                      const taskSubtype = selectedPrompt.taskSubtype;
-                      if (!taskType || !taskSubtype) return;
+                {subTab === 'prompts' && selectedPrompt && selectedPrompt.type === 'promptView' && currentScenarioDraft && (
+                  <>
+                    {selectedPrompt.viewKind === 'system' && (
+                      <TemplateEditor
+                        content={currentScenarioDraft.scenario.system_template || ''}
+                        onContentChange={(text) => {
+                          const taskType = selectedPrompt.taskType;
+                          const taskSubtype = selectedPrompt.taskSubtype;
+                          if (!taskType || !taskSubtype) return;
+                          const nextScenario = { ...currentScenarioDraft.scenario, system_template: text };
+                          const draftKey = makeScenarioDraftKey(taskType, taskSubtype);
+                          setScenarioDrafts((prev) => {
+                            const cur = prev[draftKey];
+                            if (!cur) return prev;
+                            const dirty = JSON.stringify(nextScenario) !== JSON.stringify(cur.originalScenario);
+                            return {
+                              ...prev,
+                              [draftKey]: { ...cur, scenario: nextScenario, dirty, saveWarnings: [] },
+                            };
+                          });
+                        }}
+                        validation={null}
+                        isLoading={currentScenarioDraft.isLoading}
+                        placeholder="Enter system prompt template..."
+                      />
+                    )}
 
-                      const draftKey = makeScenarioDraftKey(taskType, taskSubtype);
-                      setScenarioDrafts((prev) => {
-                        const cur = prev[draftKey];
-                        if (!cur) return prev;
-                        const dirty = JSON.stringify(nextScenario) !== JSON.stringify(cur.originalScenario);
-                        return {
-                          ...prev,
-                          [draftKey]: {
-                            ...cur,
-                            scenario: nextScenario,
-                            dirty,
-                            saveWarnings: [],
-                          },
-                        };
-                      });
-                    }}
-                  />
+                    {selectedPrompt.viewKind === 'blocks' && (
+                      <div className="scenario-blocks-view">
+                        <ScenarioBlocksEditor
+                          taskType={selectedPrompt.taskType!}
+                          taskSubtype={selectedPrompt.taskSubtype!}
+                          systemTemplate={currentScenarioDraft.scenario.system_template || ''}
+                          blocks={currentScenarioDraft.scenario.blocks || []}
+                          onBlocksChange={(blocks) => {
+                            const taskType = selectedPrompt.taskType;
+                            const taskSubtype = selectedPrompt.taskSubtype;
+                            if (!taskType || !taskSubtype) return;
+                            const nextScenario = { ...currentScenarioDraft.scenario, blocks };
+                            const draftKey = makeScenarioDraftKey(taskType, taskSubtype);
+                            setScenarioDrafts((prev) => {
+                              const cur = prev[draftKey];
+                              if (!cur) return prev;
+                              const dirty = JSON.stringify(nextScenario) !== JSON.stringify(cur.originalScenario);
+                              return {
+                                ...prev,
+                                [draftKey]: { ...cur, scenario: nextScenario, dirty, saveWarnings: [] },
+                              };
+                            });
+                          }}
+                          onToast={(kind, message) => {
+                            if (kind === 'success') toast.success(message);
+                            else toast.error(message);
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {showSystemPreview && selectedPrompt.viewKind === 'system' && (
+                      <PromptPreviewModal
+                        isOpen={showSystemPreview}
+                        onClose={() => setShowSystemPreview(false)}
+                        templateContent={currentScenarioDraft.scenario.system_template || ''}
+                        taskType={selectedPrompt.taskType!}
+                        taskSubtype={selectedPrompt.taskSubtype!}
+                        injectedInputKey={null}
+                        isMemoryPrompt={false}
+                      />
+                    )}
+                  </>
                 )}
 
                 {subTab === 'fragments' && selectedFragment && (

@@ -122,14 +122,14 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
     }, [copyFeedback]);
 
     const availableGroups = useMemo(() => {
-        if (!selectedNode || selectedNode.type !== 'prompt') {
+        if (!selectedNode || (selectedNode.type !== 'prompt' && selectedNode.type !== 'promptView')) {
             return [];
         }
         const key = getSchemaKey(selectedNode.taskType || '', selectedNode.taskSubtype);
         return key ? PROMPT_TYPE_VARIABLES[key] : [];
     }, [selectedNode]);
 
-    const hasPromptSelection = Boolean(selectedNode && selectedNode.type === 'prompt');
+    const hasPromptSelection = Boolean(selectedNode && (selectedNode.type === 'prompt' || selectedNode.type === 'promptView'));
 
     if (!hasPromptSelection) {
         return null;

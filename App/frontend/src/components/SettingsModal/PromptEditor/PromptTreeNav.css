@@ -86,6 +86,15 @@
     color: var(--color-brand-primary);
 }
 
+.tree-node__content--prompt-view {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
+}
+
+.tree-node__content--prompt-view.tree-node__content--selected {
+    color: var(--color-brand-primary);
+}
+
 .tree-node__expand-icon {
     display: flex;
     align-items: center;

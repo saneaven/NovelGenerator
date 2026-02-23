@@ -1,26 +1,56 @@
 /**
  * Scenario tree structure for navigation in Prompts & Templates panel.
- * Leaf nodes represent a single ScenarioDocument for (task_type, task_subtype).
+ *
+ * category  → top-level groupings (Agent, Memory, …)
+ * prompt    → expandable subtype node carrying taskType / taskSubtype
+ * promptView → selectable leaf: either 'system' or 'blocks' view of the scenario
  */
 
 import React from 'react';
 import type { TaskType } from '../../../types/scenarios';
 import { SpeechBubble, Globe, Edit, Palette } from '../../icons';
 
+export type PromptViewKind = 'system' | 'blocks';
+
 export interface PromptNode {
   id: string;
   label: string;
   icon?: React.ReactNode;
-  type: 'category' | 'prompt';
+  type: 'category' | 'prompt' | 'promptView';
 
-  // For scenario nodes
+  // For scenario nodes (prompt + promptView)
   taskType?: TaskType;
   taskSubtype?: string;
   description?: string;
 
-  // For category nodes
+  // For promptView nodes
+  viewKind?: PromptViewKind;
+
+  // For expandable nodes (category + prompt)
   children?: PromptNode[];
   defaultExpanded?: boolean;
+}
+
+/** Build the two promptView children for a prompt node. */
+function makeViewChildren(parentId: string, taskType: TaskType, taskSubtype: string): PromptNode[] {
+  return [
+    {
+      id: `${parentId}-system`,
+      label: 'System Prompt',
+      type: 'promptView',
+      taskType,
+      taskSubtype,
+      viewKind: 'system',
+    },
+    {
+      id: `${parentId}-blocks`,
+      label: 'Conversation Blocks',
+      type: 'promptView',
+      taskType,
+      taskSubtype,
+      viewKind: 'blocks',
+    },
+  ];
 }
 
 export const PROMPT_TREE: PromptNode[] = [
@@ -38,6 +68,8 @@ export const PROMPT_TREE: PromptNode[] = [
         taskType: 'agent',
         taskSubtype: 'planMode',
         description: 'Scenario for Agent Plan mode',
+        defaultExpanded: true,
+        children: makeViewChildren('agent-planMode', 'agent', 'planMode'),
       },
       {
         id: 'agent-agentMode',
@@ -46,6 +78,8 @@ export const PROMPT_TREE: PromptNode[] = [
         taskType: 'agent',
         taskSubtype: 'agentMode',
         description: 'Scenario for Agent mode',
+        defaultExpanded: true,
+        children: makeViewChildren('agent-agentMode', 'agent', 'agentMode'),
       },
     ],
   },
@@ -63,6 +97,8 @@ export const PROMPT_TREE: PromptNode[] = [
         taskType: 'memory',
         taskSubtype: 'summary',
         description: 'Scenario for rolling memory summarization prompt',
+        defaultExpanded: true,
+        children: makeViewChildren('memory-summary', 'memory', 'summary'),
       },
     ],
   },
@@ -80,6 +116,8 @@ export const PROMPT_TREE: PromptNode[] = [
         taskType: 'translation',
         taskSubtype: 'object',
         description: 'Scenario for translating story objects',
+        defaultExpanded: true,
+        children: makeViewChildren('translation-object', 'translation', 'object'),
       },
       {
         id: 'translation-message',
@@ -88,6 +126,8 @@ export const PROMPT_TREE: PromptNode[] = [
         taskType: 'translation',
         taskSubtype: 'message',
         description: 'Scenario for translating conversation messages',
+        defaultExpanded: true,
+        children: makeViewChildren('translation-message', 'translation', 'message'),
       },
     ],
   },
@@ -105,6 +145,8 @@ export const PROMPT_TREE: PromptNode[] = [
         taskType: 'editAssistant',
         taskSubtype: 'manuscript',
         description: 'Scenario for editing manuscripts',
+        defaultExpanded: true,
+        children: makeViewChildren('editAssistant-manuscript', 'editAssistant', 'manuscript'),
       },
       {
         id: 'editAssistant-storyObject',
@@ -113,6 +155,8 @@ export const PROMPT_TREE: PromptNode[] = [
         taskType: 'editAssistant',
         taskSubtype: 'storyObject',
         description: 'Scenario for editing story objects',
+        defaultExpanded: true,
+        children: makeViewChildren('editAssistant-storyObject', 'editAssistant', 'storyObject'),
       },
     ],
   },
@@ -130,6 +174,8 @@ export const PROMPT_TREE: PromptNode[] = [
         taskType: 'imagePrompt',
         taskSubtype: 'object',
         description: 'Scenario for object image prompts',
+        defaultExpanded: true,
+        children: makeViewChildren('imagePrompt-object', 'imagePrompt', 'object'),
       },
       {
         id: 'imagePrompt-scene',
@@ -138,6 +184,8 @@ export const PROMPT_TREE: PromptNode[] = [
         taskType: 'imagePrompt',
         taskSubtype: 'scene',
         description: 'Scenario for scene image prompts',
+        defaultExpanded: true,
+        children: makeViewChildren('imagePrompt-scene', 'imagePrompt', 'scene'),
       },
     ],
   },
@@ -156,10 +204,11 @@ export function findPromptNode(nodeId: string, tree: PromptNode[] = PROMPT_TREE)
   return null;
 }
 
+/** Collect all selectable leaf nodes (promptView). */
 export function getAllPromptNodes(tree: PromptNode[] = PROMPT_TREE): PromptNode[] {
   const prompts: PromptNode[] = [];
   for (const node of tree) {
-    if (node.type === 'prompt') {
+    if (node.type === 'promptView') {
       prompts.push(node);
     }
     if (node.children) {
@@ -173,4 +222,3 @@ export function getFirstPromptNode(tree: PromptNode[] = PROMPT_TREE): PromptNode
   const allPrompts = getAllPromptNodes(tree);
   return allPrompts.length > 0 ? allPrompts[0] : null;
 }
-
