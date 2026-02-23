@@ -380,7 +380,12 @@ async def run_llm(
 
     messages = provider_io.to_provider_messages(messages, task_config.model, advanced)
     provider_messages = _strip_internal_message_keys(messages)
-    effective_thinking_config = advanced.get("thinking_config") if thinking_mode == "model" else None
+    # When a custom thinking template is resolved, the template's effort_fields handle
+    # request body injection — don't pass the generic thinking_config alongside it.
+    if advanced.get("_resolved_template"):
+        effective_thinking_config = None
+    else:
+        effective_thinking_config = advanced.get("thinking_config") if thinking_mode == "model" else None
     stream_thinking_display = provider_io.get_stream_thinking_display_path(advanced)
     if isinstance(stream_thinking_display, str):
         stream_thinking_display = stream_thinking_display.strip() or None

@@ -1,148 +1,167 @@
-.thinking-template-manager {
-  margin-top: 12px;
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--bg-secondary);
-}
-
-.thinking-template-manager h4 {
-  margin: 0 0 8px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.thinking-template-manager .no-templates {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin: 4px 0 8px;
-}
-
-.template-row {
+/* Single Template Editor */
+.thinking-template-editor {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 8px;
-  border-radius: 4px;
-  margin-bottom: 4px;
-  background: var(--bg-primary);
+  flex-direction: column;
+  gap: var(--spacing-md);
 }
 
-.template-row .template-name {
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.template-row .template-actions {
+/* Template Name Field */
+.template-name-field {
   display: flex;
-  gap: 4px;
+  flex-direction: column;
+  gap: var(--spacing-xs);
 }
 
-.template-editor {
-  margin-top: 8px;
-  padding: 12px;
-  border: 1px solid var(--accent-color);
-  border-radius: 6px;
-  background: var(--bg-primary);
+.template-name-field > label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
 }
 
-.template-editor .editor-field {
-  margin-bottom: 10px;
+.template-name-input {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  background-color: var(--color-surface-base);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
 }
 
-.template-editor .editor-field label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 4px;
+.template-name-input:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
 }
 
-.template-editor .editor-field input[type="text"] {
-  width: 100%;
-  padding: 6px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  font-size: 13px;
-  background: var(--input-bg);
-  color: var(--text-primary);
-}
-
-.template-editor .editor-section {
-  margin-bottom: 12px;
-}
-
-.template-editor .editor-section > label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 2px;
-}
-
-.template-editor .section-hint {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin: 0 0 6px;
-}
-
-.template-editor .field-row {
+/* Field Sections (Effort / Response / History) */
+.template-field-section {
   display: flex;
-  gap: 4px;
-  align-items: center;
-  margin-bottom: 4px;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-subtle);
 }
 
-.template-editor .field-row input[type="text"] {
-  flex: 1;
-  min-width: 0;
-  padding: 4px 6px;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  font-size: 12px;
-  font-family: monospace;
-  background: var(--input-bg);
-  color: var(--text-primary);
+.template-field-section + .template-field-section {
+  margin-top: var(--spacing-sm);
 }
 
-.template-editor .field-row .stream-toggle {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  font-size: 11px;
-  white-space: nowrap;
-  cursor: pointer;
+.field-section-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
 }
 
-.template-editor .field-row .stream-toggle input[type="checkbox"] {
+.field-section-hint {
   margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
 }
 
-.template-editor .field-row .stream-label {
-  font-size: 11px;
-  color: var(--text-secondary);
+/* Field Row: grid of inputs + remove button */
+.template-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: var(--spacing-sm);
+  align-items: end;
 }
 
-.template-editor .field-row .remove-btn {
+.template-field-row.arrow-row {
+  grid-template-columns: 1fr auto 1fr auto;
+}
+
+.template-field-row.response-row {
+  grid-template-columns: 1fr auto 1fr auto auto;
+}
+
+/* Arrow label between fields */
+.field-arrow {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  align-self: end;
+  padding-bottom: var(--spacing-sm);
+}
+
+/* Individual field (label + input) */
+.template-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.template-field > label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.template-field-input {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  background-color: var(--color-surface-base);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.template-field-input.mono {
+  font-family: var(--font-family-mono, monospace);
+}
+
+.template-field-input:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
+}
+
+/* Stream toggle field */
+.stream-toggle-field {
+  justify-content: flex-end;
+}
+
+.stream-toggle-field .toggle-switch {
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+/* Remove field button */
+.remove-field-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: none;
-  background: none;
-  color: var(--text-secondary);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-lg);
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: var(--border-radius-sm);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+  align-self: end;
+  margin-bottom: var(--spacing-xs);
 }
 
-.template-editor .field-row .remove-btn:hover {
-  color: var(--danger-color);
-  background: var(--bg-secondary);
+.remove-field-button:hover {
+  color: var(--color-error);
+  background-color: var(--color-surface-base);
 }
 
-.template-editor .editor-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 12px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-color);
+/* Responsive */
+@media (max-width: 480px) {
+  .template-field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .template-field-row.response-row {
+    grid-template-columns: 1fr;
+  }
+
+  .remove-field-button {
+    align-self: flex-end;
+  }
 }

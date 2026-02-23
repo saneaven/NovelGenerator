@@ -15,33 +15,58 @@ from typing import Any
 # Dot-path utilities
 # ---------------------------------------------------------------------------
 
+def _resolve_segment(current: Any, key: str) -> Any | None:
+    """Resolve a single path segment against a dict or list."""
+    if isinstance(current, dict):
+        return current.get(key)
+    if isinstance(current, list):
+        try:
+            return current[int(key)]
+        except (ValueError, IndexError):
+            return None
+    return None
+
+
 def get_nested_path(obj: dict[str, Any], path: str) -> Any | None:
     """Retrieve a value from *obj* following a dot-separated *path*.
 
+    Numeric segments are used as list indices when the current value is a list.
     Returns ``None`` when any segment is missing or the traversal fails.
     """
-    keys = path.split(".")
     current: Any = obj
-    for key in keys:
-        if not isinstance(current, dict):
+    for key in path.split("."):
+        current = _resolve_segment(current, key)
+        if current is None:
             return None
-        current = current.get(key)
     return current
 
 
 def set_nested_path(obj: dict[str, Any], path: str, value: Any) -> None:
     """Set *value* inside *obj* at the given dot-separated *path*.
 
-    Intermediate dicts are created as needed.
+    Numeric segments index into existing lists. Intermediate dicts are
+    created as needed when the current value is a dict.
     """
     keys = path.split(".")
     current: Any = obj
     for key in keys[:-1]:
-        if not isinstance(current, dict):
+        if isinstance(current, dict):
+            current = current.setdefault(key, {})
+        elif isinstance(current, list):
+            try:
+                current = current[int(key)]
+            except (ValueError, IndexError):
+                return
+        else:
             return
-        current = current.setdefault(key, {})
-    if isinstance(current, dict) and keys:
-        current[keys[-1]] = value
+    last = keys[-1]
+    if isinstance(current, dict):
+        current[last] = value
+    elif isinstance(current, list):
+        try:
+            current[int(last)] = value
+        except (ValueError, IndexError):
+            pass
 
 
 def delete_nested_path(obj: dict[str, Any], path: str) -> None:
@@ -49,11 +74,19 @@ def delete_nested_path(obj: dict[str, Any], path: str) -> None:
     keys = path.split(".")
     current: Any = obj
     for key in keys[:-1]:
-        if not isinstance(current, dict):
+        current = _resolve_segment(current, key)
+        if current is None:
             return
-        current = current.get(key)
-    if isinstance(current, dict) and keys:
-        current.pop(keys[-1], None)
+    last = keys[-1]
+    if isinstance(current, dict):
+        current.pop(last, None)
+    elif isinstance(current, list):
+        try:
+            idx = int(last)
+            if 0 <= idx < len(current):
+                current.pop(idx)
+        except (ValueError, IndexError):
+            pass
 
 
 # ---------------------------------------------------------------------------

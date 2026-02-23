@@ -11,6 +11,7 @@ interface GeneralPanelProps {
   onTaskChange: (taskType: AITaskType) => void;
   onConfigChange: (taskType: AITaskType, config: TaskAIConfig) => void;
   customThinkingTemplates?: CustomThinkingTemplate[];
+  onTemplatesChange?: (templates: CustomThinkingTemplate[]) => void;
 }
 
 const TASK_ICONS: Record<AITaskType, React.ReactNode> = {
@@ -28,6 +29,7 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
   onTaskChange,
   onConfigChange,
   customThinkingTemplates,
+  onTemplatesChange,
 }) => {
   const { t } = useTranslation();
   const currentConfig = task_configs[activeTask];
@@ -74,6 +76,7 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
         config={currentConfig}
         onChange={(config) => onConfigChange(activeTask, config)}
         customThinkingTemplates={customThinkingTemplates}
+        onTemplatesChange={onTemplatesChange}
       />
     </div>
   );

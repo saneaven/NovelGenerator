@@ -80,12 +80,14 @@ textarea {
 }
 
 /* Model Input Row */
-.model-input-row {
+.model-input-row,
+.template-selector-row {
     display: flex;
     gap: var(--spacing-sm);
 }
 
-.model-input-row input {
+.model-input-row input,
+.template-selector-row .custom-select {
     flex: 1;
 }
 

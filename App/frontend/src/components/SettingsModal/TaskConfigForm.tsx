@@ -10,6 +10,7 @@ import type {
   CustomThinkingTemplate,
 } from '../../store/settingsStore';
 import ModelBrowser from './ModelBrowser';
+import ThinkingTemplateEditorModal from './ThinkingTemplateEditorModal';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import { Warning, Settings, Advenced } from '../icons';
@@ -19,6 +20,7 @@ interface TaskConfigFormProps {
   config: TaskAIConfig;
   onChange: (config: TaskAIConfig) => void;
   customThinkingTemplates?: CustomThinkingTemplate[];
+  onTemplatesChange?: (templates: CustomThinkingTemplate[]) => void;
 }
 
 const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
@@ -26,9 +28,11 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   config,
   onChange,
   customThinkingTemplates = [],
+  onTemplatesChange,
 }) => {
   const { t } = useTranslation();
   const [showModelBrowser, setShowModelBrowser] = useState(false);
+  const [showTemplateEditor, setShowTemplateEditor] = useState(false);
 
   // Detect if model is GPT-5 family (gpt-5, gpt-5-mini, gpt-5.1, etc.)
   const isGpt5 = config.provider === 'openai' && /gpt-?5/i.test(config.model);
@@ -36,8 +40,8 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   const isGpt52Plus = config.provider === 'openai' && /gpt-?5\.[2-9]/i.test(config.model);
   const isCustomProvider = config.provider === 'custom';
   const customRequestFormat: RequestFormat = config.advanced.request_format ?? 'openai_sdk';
+  const isCustomOpenaiSdk = isCustomProvider && customRequestFormat === 'openai_sdk';
   const isCustomClaudeSdk = isCustomProvider && customRequestFormat === 'claude_sdk';
-  const hasThinkingTemplate = isCustomProvider && customRequestFormat === 'openai_sdk' && !!config.advanced.custom_thinking_template_id;
 
   const getDefaultThinkingConfig = (
     provider: ProviderType,
@@ -139,6 +143,8 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
       advanced: {
         ...config.advanced,
         request_format: format,
+        // Clear template when switching away from openai_sdk
+        ...(format !== 'openai_sdk' ? { custom_thinking_template_id: undefined } : {}),
       },
     });
   };
@@ -328,29 +334,6 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
         <h4 className="section-title"><Advenced size="lg" />{t('settings.taskConfig.advancedSettings')}</h4>
 
         <div className="advanced-options">
-          {/* Custom endpoint - thinking template selector (OpenAI SDK transport only) */}
-          {isCustomProvider && customRequestFormat === 'openai_sdk' && customThinkingTemplates.length > 0 && (
-            <div className="form-field">
-              <label>{t('settings.taskConfig.thinkingTemplate')}</label>
-              <CustomSelect
-                value={config.advanced.custom_thinking_template_id || ''}
-                onChange={(value) =>
-                  handleThinkingTemplateChange(value || undefined)
-                }
-                options={[
-                  { value: '', label: t('common.none') },
-                  ...customThinkingTemplates
-                    .filter((tpl) => tpl.id)
-                    .map((tpl) => ({
-                      value: tpl.id!,
-                      label: tpl.name,
-                    })),
-                ]}
-              />
-              <p className="field-hint">{t('settings.taskConfig.thinkingTemplateHint')}</p>
-            </div>
-          )}
-
           <div className="thinking-mode-field">
             <label className="field-label">{t('settings.taskConfig.thinking_mode')}</label>
             <div className="radio-group">
@@ -480,24 +463,53 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                   </>
                 )}
 
-                {/* Custom endpoint - thinking config (hidden when template is selected) */}
-                {config.provider === 'custom' && !hasThinkingTemplate && !isCustomClaudeSdk && (
-                  <div className="form-field">
-                    <label>{t('settings.taskConfig.thinking_config.reasoningEffort')}</label>
-                    <CustomSelect
-                      value={config.advanced.thinking_config?.effort || 'medium'}
-                      onChange={(value) => handleThinkingConfigChange('effort', value)}
-                      options={[
-                        { value: 'none', label: t('settings.taskConfig.thinking_config.effortOptions.none') },
-                        { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
-                        { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
-                        { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
-                      ]}
-                    />
-                    <p className="field-hint">{t('settings.taskConfig.thinking_config.effortHint')}</p>
-                  </div>
+                {/* Custom endpoint + OpenAI SDK: template selector + inline manager */}
+                {isCustomOpenaiSdk && (
+                  <>
+                    <div className="form-field">
+                      <label>{t('settings.taskConfig.thinkingTemplate')}</label>
+                      <div className="template-selector-row">
+                        <CustomSelect
+                          value={config.advanced.custom_thinking_template_id || ''}
+                          onChange={(value) =>
+                            handleThinkingTemplateChange(value || undefined)
+                          }
+                          options={[
+                            { value: '', label: t('common.none') },
+                            ...customThinkingTemplates
+                              .filter((tpl) => tpl.id)
+                              .map((tpl) => ({
+                                value: tpl.id!,
+                                label: tpl.name,
+                              })),
+                          ]}
+                        />
+                        {onTemplatesChange && (
+                          <TextButton
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setShowTemplateEditor(true)}
+                          >
+                            {t('settings.taskConfig.manageTemplates')}
+                          </TextButton>
+                        )}
+                      </div>
+                      <p className="field-hint">{t('settings.taskConfig.thinkingTemplateHint')}</p>
+                    </div>
+
+                    {onTemplatesChange && (
+                      <ThinkingTemplateEditorModal
+                        isOpen={showTemplateEditor}
+                        onClose={() => setShowTemplateEditor(false)}
+                        templates={customThinkingTemplates}
+                        onChange={onTemplatesChange}
+                      />
+                    )}
+                  </>
                 )}
-                {config.provider === 'custom' && !hasThinkingTemplate && isCustomClaudeSdk && (
+
+                {/* Custom endpoint + Claude SDK: effort dropdown */}
+                {isCustomClaudeSdk && (
                   <div className="form-field">
                     <label>{t('settings.taskConfig.thinking_config.effortLevel')}</label>
                     <CustomSelect
