@@ -5,7 +5,7 @@ from typing import Any
 
 ALLOWED_BLOCK_TYPES = {"staticPrompt", "rangeMapping"}
 ALLOWED_STATIC_ROLES = {"user", "assistant"}
-ALLOWED_STATIC_SUBTYPES = {"normal", "memory", "prefill"}
+ALLOWED_STATIC_SUBTYPES = {"normal", "memory"}
 
 
 def _coerce_int_strict(value: Any, *, field_name: str) -> int:
@@ -47,7 +47,6 @@ def normalize_and_validate_scenario(scenario: Any) -> tuple[dict[str, Any], list
 
     warnings: list[str] = []
     memory_blocks = 0
-    prefill_blocks = 0
 
     normalized_blocks: list[dict[str, Any]] = []
     for order, block in enumerate(blocks):
@@ -89,13 +88,6 @@ def normalize_and_validate_scenario(scenario: Any) -> tuple[dict[str, Any], list
                     raise ValueError("INVALID_SCENARIO::multiple_memory_blocks")
                 if role != "user":
                     raise ValueError("INVALID_SCENARIO::memory_role_must_be_user")
-
-            if subtype == "prefill":
-                prefill_blocks += 1
-                if prefill_blocks > 1:
-                    raise ValueError("INVALID_SCENARIO::multiple_prefill_blocks")
-                if role != "assistant":
-                    raise ValueError("INVALID_SCENARIO::prefill_role_must_be_assistant")
 
             normalized_blocks.append(
                 {

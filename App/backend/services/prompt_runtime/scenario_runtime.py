@@ -59,13 +59,13 @@ def assemble_scenario(
     blocks: list[dict[str, Any]],
     source_conversation: list[dict[str, Any]],
     template_data: dict[str, Any],
-) -> tuple[str, list[dict[str, Any]], str | None, str | None]:
-    """Assemble a scenario into (system_prompt, conversation, prefill, memory_template).
+) -> tuple[str, list[dict[str, Any]], str | None]:
+    """Assemble a scenario into (system_prompt, conversation, memory_template).
 
     - Indexing targets only role=user|assistant from source_conversation.
     - tool_results are attached to the preceding assistant turn and are appended only when that assistant is emitted.
     - Overlapping rangeMapping blocks resolve by owner overwrite (later blocks win).
-    - prefill is returned as rendered text; memory_template is returned as the raw template text (rendered later with memory data).
+    - memory_template is returned as the raw template text (rendered later with memory data).
     """
     blocks_in_order = _iter_blocks_in_order(blocks)
 
@@ -129,7 +129,6 @@ def assemble_scenario(
     rendered_system_prompt = template_renderer.render_text(system_template or "", template_data).strip()
 
     rendered_conversation: list[dict[str, Any]] = []
-    prefill: str | None = None
     memory_template: str | None = None
 
     # Patch rules differ for subAgent.
@@ -157,10 +156,6 @@ def assemble_scenario(
 
             if subtype == "memory":
                 memory_template = template_text.strip() or None
-                continue
-            if subtype == "prefill":
-                rendered = template_renderer.render_text(template_text, template_data).strip()
-                prefill = rendered or None
                 continue
             rendered = template_renderer.render_text(template_text, template_data).strip()
             if not rendered:
@@ -273,4 +268,4 @@ def assemble_scenario(
                     if isinstance(tool_msg, dict):
                         rendered_conversation.append(dict(tool_msg))
 
-    return rendered_system_prompt, rendered_conversation, prefill, memory_template
+    return rendered_system_prompt, rendered_conversation, memory_template

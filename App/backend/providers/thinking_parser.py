@@ -6,7 +6,7 @@ from typing import List, Dict
 def has_unclosed_thinking_tag(messages: List[Dict]) -> bool:
     """
     Check if the last assistant message has an unclosed <thinking> tag.
-    Used to determine if parser should start inside a thinking block (e.g., when prefill contains <thinking>).
+    Used to determine if parser should start inside a thinking block.
     """
     for msg in reversed(messages):
         if msg.get("role") == "assistant":
@@ -37,12 +37,12 @@ class ThinkingStreamParser:
     - Multiple thinking blocks in sequence
     - Partial tags at chunk edges
     - Preserves order of content and thinking blocks
-    - Can start inside a thinking block (for prefill with <thinking>)
+    - Can start inside a thinking block
     """
 
     def __init__(self, inside_thinking: bool = False):
         self.buffer = ""
-        self.inside_thinking = inside_thinking  # Can start inside thinking block (e.g., prefill has <thinking>)
+        self.inside_thinking = inside_thinking
         self.thinking_accumulator = ""  # Accumulate to find </thinking> tag
 
     def process_chunk(self, content_chunk: str) -> tuple[str, str]:

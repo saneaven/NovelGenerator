@@ -221,7 +221,6 @@ def build_memory_summary_template_data(
             "displayLanguage": language,
             "today": datetime.now(timezone.utc).date().isoformat(),
             "thinking_mode": "off",
-            "isPrefillEnabled": False,
             "outputMode": "tool_call",
         },
         "project": project_data,
@@ -320,7 +319,7 @@ def render_memory_summary_prompt(
     system_template = str(summary_scenario.get("system_template") or "")
     blocks = summary_scenario.get("blocks") if isinstance(summary_scenario.get("blocks"), list) else []
 
-    system_prompt, conv, _prefill, _mem = assemble_scenario(
+    system_prompt, conv, _mem = assemble_scenario(
         template_renderer=template_renderer,
         task_type="memory",
         system_template=system_template,

@@ -17,7 +17,6 @@ DEFAULT_TASK_CONFIGS: dict[str, dict[str, Any]] = {
         "max_output_tokens": None,
         "context_window_tokens": 32000,
         "advanced": {
-            "enable_prefill": False,
             "thinking_mode": "off",
             "thinking_config": {"effort": "medium"},
             "request_format": "openai_sdk",
@@ -30,7 +29,6 @@ DEFAULT_TASK_CONFIGS: dict[str, dict[str, Any]] = {
         "max_output_tokens": None,
         "context_window_tokens": 32000,
         "advanced": {
-            "enable_prefill": False,
             "thinking_mode": "off",
             "thinking_config": {"effort": "medium"},
             "request_format": "openai_sdk",
@@ -43,7 +41,6 @@ DEFAULT_TASK_CONFIGS: dict[str, dict[str, Any]] = {
         "max_output_tokens": None,
         "context_window_tokens": 32000,
         "advanced": {
-            "enable_prefill": False,
             "thinking_mode": "off",
             "thinking_config": {"effort": "medium"},
             "request_format": "openai_sdk",
@@ -56,7 +53,6 @@ DEFAULT_TASK_CONFIGS: dict[str, dict[str, Any]] = {
         "max_output_tokens": None,
         "context_window_tokens": 32000,
         "advanced": {
-            "enable_prefill": True,
             "thinking_mode": "off",
             "thinking_config": {"effort": "medium"},
             "request_format": "openai_sdk",
@@ -69,7 +65,6 @@ DEFAULT_TASK_CONFIGS: dict[str, dict[str, Any]] = {
         "max_output_tokens": None,
         "context_window_tokens": 32000,
         "advanced": {
-            "enable_prefill": False,
             "thinking_mode": "off",
             "thinking_config": {"effort": "medium"},
             "request_format": "openai_sdk",
@@ -82,7 +77,6 @@ DEFAULT_TASK_CONFIGS: dict[str, dict[str, Any]] = {
         "max_output_tokens": 2048,
         "context_window_tokens": 32000,
         "advanced": {
-            "enable_prefill": False,
             "thinking_mode": "off",
             "thinking_config": {"effort": "medium"},
             "request_format": "openai_sdk",

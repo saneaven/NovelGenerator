@@ -203,22 +203,6 @@ input[type="range"]:disabled,
     color: var(--color-text-tertiary);
 }
 
-/* Prefill option should stay visually low-emphasis */
-.prefill-field .checkbox-label input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    accent-color: var(--color-border-medium);
-}
-
-.prefill-field .checkbox-title {
-    font-weight: var(--font-weight-normal);
-    color: var(--color-text-secondary);
-}
-
-.prefill-field .checkbox-description {
-    color: var(--color-text-tertiary);
-}
-
 /* Radio Group */
 .radio-group {
     display: flex;

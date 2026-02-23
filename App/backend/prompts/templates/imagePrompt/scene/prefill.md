@@ -1,1 +1,0 @@
-I'll analyze the scene and generate an image prompt with relevant story objects.

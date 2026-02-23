@@ -45,7 +45,6 @@ export interface ScenarioSimulatePayload {
 export interface ScenarioSimulateResult {
   rendered_system_prompt: string;
   rendered_conversation: Array<Record<string, any>>;
-  prefill: string | null;
   memory_template: string | null;
 }
 

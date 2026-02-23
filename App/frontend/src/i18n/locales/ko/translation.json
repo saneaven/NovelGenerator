@@ -558,9 +558,6 @@
       "temperatureHint": "낮은 값은 더 집중되고 결정적인 출력을 생성합니다. 높은 값은 창의성과 무작위성을 증가시킵니다.",
       "temperatureGpt5Hint": "GPT-5 모델에서는 온도가 지원되지 않습니다. 대신 추론 노력을 사용하세요.",
       "advancedSettings": "고급 설정",
-      "enable_prefill": "어시스턴트 프리필 활성화",
-      "prefillDisabled": "OpenAI는 어시스턴트 프리필을 지원하지 않습니다",
-      "prefillHint": "출력 형식을 안내하기 위해 어시스턴트의 응답을 미리 채웁니다",
       "thinking_mode": "사고 모드",
       "thinking_modes": {
         "off": "끄기",
@@ -782,8 +779,7 @@
       },
       "subAgentPrompts": {
         "system": "시스템",
-        "user": "유저",
-        "prefill": "프리필"
+        "user": "유저"
       },
       "subAgentEditorTabs": {
         "ariaLabel": "서브 에이전트 편집 탭",

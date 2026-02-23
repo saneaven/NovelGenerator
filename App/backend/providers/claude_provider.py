@@ -270,10 +270,10 @@ class ClaudeProvider(BaseProvider):
 
         yield ProviderEvent(kind="meta", raw_request=request)
 
-        prefill_has_thinking = (
+        has_open_thinking = (
             has_unclosed_thinking_tag(anthropic_messages) if thinking_mode == "custom" else False
         )
-        parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
+        parser = ThinkingStreamParser(inside_thinking=has_open_thinking)
         native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
 
         block_meta: Dict[int, Dict[str, Optional[str]]] = {}

@@ -10,6 +10,5 @@ class ScenarioBundle:
     task_subtype: str
     template_data: dict[str, Any]
     system_prompt: str
-    prefill: str | None
     memory_template: str | None
 

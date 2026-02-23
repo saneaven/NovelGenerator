@@ -1,7 +1,7 @@
 export type TaskType = 'agent' | 'memory' | 'translation' | 'editAssistant' | 'imagePrompt' | 'subAgent';
 
 export type ScenarioBlockType = 'staticPrompt' | 'rangeMapping';
-export type StaticPromptSubtype = 'normal' | 'memory' | 'prefill';
+export type StaticPromptSubtype = 'normal' | 'memory';
 export type StaticRole = 'user' | 'assistant';
 
 export interface ScenarioStaticPrompt {

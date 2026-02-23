@@ -558,9 +558,6 @@
       "temperatureHint": "Lower values produce more focused and deterministic outputs. Higher values increase creativity and randomness.",
       "temperatureGpt5Hint": "Temperature is not supported for GPT-5 models. Use Reasoning Effort instead.",
       "advancedSettings": "Advanced Settings",
-      "enable_prefill": "Enable Assistant Prefill",
-      "prefillDisabled": "OpenAI does not support assistant prefill",
-      "prefillHint": "Pre-fill the assistant's response to guide output format",
       "thinking_mode": "Thinking Mode",
       "thinking_modes": {
         "off": "Off",
@@ -782,8 +779,7 @@
       },
       "subAgentPrompts": {
         "system": "System",
-        "user": "User",
-        "prefill": "Prefill"
+        "user": "User"
       },
       "subAgentEditorTabs": {
         "ariaLabel": "Sub agent editor tabs",

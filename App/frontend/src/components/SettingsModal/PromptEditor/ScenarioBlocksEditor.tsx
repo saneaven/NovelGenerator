@@ -45,12 +45,11 @@ function safeUUID(): string {
 function isPinned(block: ScenarioBlock): boolean {
   if (block.type !== 'staticPrompt') return false;
   const subtype = block.staticPrompt?.subtype;
-  return subtype === 'memory' || subtype === 'prefill';
+  return subtype === 'memory';
 }
 
 function getStaticSubtypeLabel(subtype: StaticPromptSubtype): string {
   if (subtype === 'memory') return 'Memory';
-  if (subtype === 'prefill') return 'Prefill';
   return 'Static';
 }
 
@@ -152,11 +151,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
     () => orderedBlocks.some((b) => b.type === 'staticPrompt' && b.staticPrompt?.subtype === 'memory'),
     [orderedBlocks]
   );
-  const hasPrefill = useMemo(
-    () => orderedBlocks.some((b) => b.type === 'staticPrompt' && b.staticPrompt?.subtype === 'prefill'),
-    [orderedBlocks]
-  );
-
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [preview, setPreview] = useState<{
     open: boolean;
@@ -198,13 +192,9 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
     setBlocks(next);
   };
 
-  const addBlock = (kind: 'range' | 'static' | 'memory' | 'prefill') => {
+  const addBlock = (kind: 'range' | 'static' | 'memory') => {
     if (kind === 'memory' && hasMemory) {
       onToast?.('warning', 'Memory block already exists.');
-      return;
-    }
-    if (kind === 'prefill' && hasPrefill) {
-      onToast?.('warning', 'Prefill block already exists.');
       return;
     }
 
@@ -227,8 +217,8 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
             ...base,
             type: 'staticPrompt',
             staticPrompt: {
-              subtype: kind === 'memory' ? 'memory' : kind === 'prefill' ? 'prefill' : 'normal',
-              role: kind === 'prefill' ? 'assistant' : 'user',
+              subtype: kind === 'memory' ? 'memory' : 'normal',
+              role: 'user',
               template: '',
             },
           };
@@ -314,7 +304,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
           <DropdownItem label="Static Block" onClick={() => addBlock('static')} />
           <DropdownItem label="Range Mapping" onClick={() => addBlock('range')} />
           <DropdownItem label="Memory Block" onClick={() => addBlock('memory')} disabled={hasMemory} />
-          <DropdownItem label="Prefill Block" onClick={() => addBlock('prefill')} disabled={hasPrefill} />
         </DropdownMenu>
       </div>
 
@@ -418,7 +407,7 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                                   staticPrompt: { ...b.staticPrompt!, role },
                                 }));
                               }}
-                              disabled={block.staticPrompt.subtype === 'memory' || block.staticPrompt.subtype === 'prefill'}
+                              disabled={block.staticPrompt.subtype === 'memory'}
                             >
                               <option value="user">user</option>
                               <option value="assistant">assistant</option>
@@ -603,11 +592,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                   </div>
                 ))}
               </div>
-            </details>
-
-            <details>
-              <summary>Prefill</summary>
-              <pre>{simResult.prefill ?? '(null)'}</pre>
             </details>
 
             <details>

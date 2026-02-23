@@ -112,7 +112,6 @@ export type TokenizerOverride = 'openai' | 'claude' | 'gemini';
 
 // Advanced settings for AI functions
 export interface AdvancedTaskSettings {
-    enable_prefill: boolean;
     thinking_mode: 'off' | 'model' | 'custom';
     thinking_config?: ThinkingConfig;
     custom_thinking_template_id?: string;

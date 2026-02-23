@@ -78,7 +78,6 @@ class CustomThinkingTemplate(BaseModel):
 
 class AdvancedTaskSettings(BaseModel):
     """Advanced settings for AI tasks"""
-    enable_prefill: bool = False
     thinking_mode: Literal["off", "model", "custom"] = "off"
     thinking_config: Optional[ThinkingConfig] = Field(default_factory=lambda: ThinkingConfig())
     custom_thinking_template_id: Optional[str] = None

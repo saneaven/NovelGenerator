@@ -97,16 +97,6 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
     onChange({ ...config, context_window_tokens: value });
   };
 
-  const handleAdvancedChange = (key: 'enable_prefill', value: boolean) => {
-    onChange({
-      ...config,
-      advanced: {
-        ...config.advanced,
-        [key]: value,
-      },
-    });
-  };
-
   const handleThinkingModeChange = (mode: 'off' | 'model' | 'custom') => {
     onChange({
       ...config,
@@ -360,25 +350,6 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
               <p className="field-hint">{t('settings.taskConfig.thinkingTemplateHint')}</p>
             </div>
           )}
-
-          <div className={`checkbox-field prefill-field ${config.provider === 'openai' ? 'disabled' : ''}`}>
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={config.advanced.enable_prefill}
-                onChange={(e) => handleAdvancedChange('enable_prefill', e.target.checked)}
-                disabled={config.provider === 'openai'}
-              />
-              <div className="checkbox-content">
-                <span className="checkbox-title">{t('settings.taskConfig.enable_prefill')}</span>
-                <span className="checkbox-description">
-                  {config.provider === 'openai'
-                    ? t('settings.taskConfig.prefillDisabled')
-                    : t('settings.taskConfig.prefillHint')}
-                </span>
-              </div>
-            </label>
-          </div>
 
           <div className="thinking-mode-field">
             <label className="field-label">{t('settings.taskConfig.thinking_mode')}</label>

@@ -52,12 +52,12 @@ class UserSettings(Base):
 
     # Task-based configuration (provider, model, temperature, advanced settings per task)
     task_configs = Column(JSONB, nullable=False, server_default="""{
-        "agent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
-        "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
-        "editAssistant": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": true, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
-        "imagePrompt": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
-        "summary": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.2, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
-        "subAgent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"enable_prefill": false, "thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}}
+        "agent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
+        "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
+        "editAssistant": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
+        "imagePrompt": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
+        "summary": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.2, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
+        "subAgent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}}
     }""")
 
     # Language settings
@@ -695,7 +695,6 @@ class Thread(Base):
     # Rendered conversation snapshot — re-captured on every create, reused on resume.
     captured_history_system_prompt = Column(Text, nullable=True)
     captured_history_conversation_json = Column(JSONB, nullable=True)
-    captured_history_prefill = Column(Text, nullable=True)
 
     # Stable per-thread run ordering (1-based)
     next_run_seq = Column(BigInteger, default=1, nullable=False)

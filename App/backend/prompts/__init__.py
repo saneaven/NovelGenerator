@@ -44,14 +44,12 @@ _PLAN_MODE_MEMORY_PROMPT = _load_prompt_file('agent/planMode/memoryPrompt.md')
 _PLAN_MODE_USER_PROMPT = _load_prompt_file('agent/planMode/userPrompt.md')
 _PLAN_MODE_FIRST_USER_PROMPT = _load_prompt_file('agent/planMode/firstUserPrompt.md')
 _PLAN_MODE_LAST_USER_PROMPT = _load_prompt_file('agent/planMode/lastUserPrompt.md')
-_PLAN_MODE_PREFILL = _load_prompt_file('agent/planMode/prefill.md')
 # Agent - Agent Mode
 _AGENT_MODE_SYSTEM_PROMPT = _load_prompt_file('agent/agentMode/systemPrompt.md')
 _AGENT_MODE_MEMORY_PROMPT = _load_prompt_file('agent/agentMode/memoryPrompt.md')
 _AGENT_MODE_USER_PROMPT = _load_prompt_file('agent/agentMode/userPrompt.md')
 _AGENT_MODE_FIRST_USER_PROMPT = _load_prompt_file('agent/agentMode/firstUserPrompt.md')
 _AGENT_MODE_LAST_USER_PROMPT = _load_prompt_file('agent/agentMode/lastUserPrompt.md')
-_AGENT_MODE_PREFILL = _load_prompt_file('agent/agentMode/prefill.md')
 # Memory - Summary
 _MEMORY_SUMMARY_SYSTEM_PROMPT = _load_prompt_file('memory/summary/systemPrompt.md')
 _MEMORY_SUMMARY_USER_PROMPT = _load_prompt_file('memory/summary/userPrompt.md')
@@ -61,39 +59,33 @@ _TRANSLATION_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/userProm
 _TRANSLATION_INITIAL_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/initialUserPrompt.md')
 _TRANSLATION_FIRST_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/firstUserPrompt.md')
 _TRANSLATION_LAST_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/lastUserPrompt.md')
-_TRANSLATION_PREFILL_OBJECT = _load_prompt_file('translation/object/prefill.md')
 # Translation - Message
 _TRANSLATION_SYSTEM_PROMPT_MESSAGE = _load_prompt_file('translation/message/systemPrompt.md')
 _TRANSLATION_USER_PROMPT_MESSAGE = _load_prompt_file('translation/message/userPrompt.md')
-_TRANSLATION_PREFILL_MESSAGE = _load_prompt_file('translation/message/prefill.md')
 # Edit Assistant - Manuscript
 _EDIT_ASSISTANT_MANUSCRIPT_SYSTEM_PROMPT = _load_prompt_file('editAssistant/manuscript/systemPrompt.md')
 _EDIT_ASSISTANT_MANUSCRIPT_USER_PROMPT = _load_prompt_file('editAssistant/manuscript/userPrompt.md')
 _EDIT_ASSISTANT_MANUSCRIPT_INITIAL_USER_PROMPT = _load_prompt_file('editAssistant/manuscript/initialUserPrompt.md')
 _EDIT_ASSISTANT_MANUSCRIPT_FIRST_USER_PROMPT = _load_prompt_file('editAssistant/manuscript/firstUserPrompt.md')
 _EDIT_ASSISTANT_MANUSCRIPT_LAST_USER_PROMPT = _load_prompt_file('editAssistant/manuscript/lastUserPrompt.md')
-_EDIT_ASSISTANT_MANUSCRIPT_PREFILL = _load_prompt_file('editAssistant/manuscript/prefill.md')
 # Edit Assistant - Story Object
 _EDIT_ASSISTANT_STORY_OBJECT_SYSTEM_PROMPT = _load_prompt_file('editAssistant/storyObject/systemPrompt.md')
 _EDIT_ASSISTANT_STORY_OBJECT_USER_PROMPT = _load_prompt_file('editAssistant/storyObject/userPrompt.md')
 _EDIT_ASSISTANT_STORY_OBJECT_INITIAL_USER_PROMPT = _load_prompt_file('editAssistant/storyObject/initialUserPrompt.md')
 _EDIT_ASSISTANT_STORY_OBJECT_FIRST_USER_PROMPT = _load_prompt_file('editAssistant/storyObject/firstUserPrompt.md')
 _EDIT_ASSISTANT_STORY_OBJECT_LAST_USER_PROMPT = _load_prompt_file('editAssistant/storyObject/lastUserPrompt.md')
-_EDIT_ASSISTANT_STORY_OBJECT_PREFILL = _load_prompt_file('editAssistant/storyObject/prefill.md')
 # Image Prompt - Object
 _OBJECT_IMAGE_PROMPT_SYSTEM_PROMPT = _load_prompt_file('imagePrompt/object/systemPrompt.md')
 _OBJECT_IMAGE_PROMPT_USER_PROMPT = _load_prompt_file('imagePrompt/object/userPrompt.md')
 _OBJECT_IMAGE_PROMPT_INITIAL_USER_PROMPT = _load_prompt_file('imagePrompt/object/initialUserPrompt.md')
 _OBJECT_IMAGE_PROMPT_FIRST_USER_PROMPT = _load_prompt_file('imagePrompt/object/firstUserPrompt.md')
 _OBJECT_IMAGE_PROMPT_LAST_USER_PROMPT = _load_prompt_file('imagePrompt/object/lastUserPrompt.md')
-_OBJECT_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/object/prefill.md')
 # Image Prompt - Scene
 _SCENE_IMAGE_PROMPT_SYSTEM_PROMPT = _load_prompt_file('imagePrompt/scene/systemPrompt.md')
 _SCENE_IMAGE_PROMPT_USER_PROMPT = _load_prompt_file('imagePrompt/scene/userPrompt.md')
 _SCENE_IMAGE_PROMPT_INITIAL_USER_PROMPT = _load_prompt_file('imagePrompt/scene/initialUserPrompt.md')
 _SCENE_IMAGE_PROMPT_FIRST_USER_PROMPT = _load_prompt_file('imagePrompt/scene/firstUserPrompt.md')
 _SCENE_IMAGE_PROMPT_LAST_USER_PROMPT = _load_prompt_file('imagePrompt/scene/lastUserPrompt.md')
-_SCENE_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/scene/prefill.md')
 
 def _make_static_block(*, order: int, subtype: str, role: str, template: str) -> dict:
     return {
@@ -151,7 +143,6 @@ def get_default_scenarios() -> dict:
                         user_template=_PLAN_MODE_LAST_USER_PROMPT,
                         assistant_template=identity_assistant,
                     ),
-                    _make_static_block(order=4, subtype="prefill", role="assistant", template=_PLAN_MODE_PREFILL),
                 ],
             },
             "agentMode": {
@@ -179,7 +170,6 @@ def get_default_scenarios() -> dict:
                         user_template=_AGENT_MODE_LAST_USER_PROMPT,
                         assistant_template=identity_assistant,
                     ),
-                    _make_static_block(order=4, subtype="prefill", role="assistant", template=_AGENT_MODE_PREFILL),
                 ],
             },
         },
@@ -216,7 +206,6 @@ def get_default_scenarios() -> dict:
                         user_template=_TRANSLATION_LAST_USER_PROMPT_OBJECT or _TRANSLATION_USER_PROMPT_OBJECT,
                         assistant_template=identity_assistant,
                     ),
-                    _make_static_block(order=3, subtype="prefill", role="assistant", template=_TRANSLATION_PREFILL_OBJECT),
                 ],
             },
             "message": {
@@ -229,7 +218,6 @@ def get_default_scenarios() -> dict:
                         user_template=_TRANSLATION_USER_PROMPT_MESSAGE,
                         assistant_template=identity_assistant,
                     ),
-                    _make_static_block(order=1, subtype="prefill", role="assistant", template=_TRANSLATION_PREFILL_MESSAGE),
                 ],
             },
         },
@@ -258,7 +246,6 @@ def get_default_scenarios() -> dict:
                         user_template=_EDIT_ASSISTANT_MANUSCRIPT_LAST_USER_PROMPT or _EDIT_ASSISTANT_MANUSCRIPT_USER_PROMPT,
                         assistant_template=identity_assistant,
                     ),
-                    _make_static_block(order=3, subtype="prefill", role="assistant", template=_EDIT_ASSISTANT_MANUSCRIPT_PREFILL),
                 ],
             },
             "storyObject": {
@@ -285,7 +272,6 @@ def get_default_scenarios() -> dict:
                         user_template=_EDIT_ASSISTANT_STORY_OBJECT_LAST_USER_PROMPT or _EDIT_ASSISTANT_STORY_OBJECT_USER_PROMPT,
                         assistant_template=identity_assistant,
                     ),
-                    _make_static_block(order=3, subtype="prefill", role="assistant", template=_EDIT_ASSISTANT_STORY_OBJECT_PREFILL),
                 ],
             },
         },
@@ -314,7 +300,6 @@ def get_default_scenarios() -> dict:
                         user_template=_OBJECT_IMAGE_PROMPT_LAST_USER_PROMPT or _OBJECT_IMAGE_PROMPT_USER_PROMPT,
                         assistant_template=identity_assistant,
                     ),
-                    _make_static_block(order=3, subtype="prefill", role="assistant", template=_OBJECT_IMAGE_PROMPT_PREFILL),
                 ],
             },
             "scene": {
@@ -341,7 +326,6 @@ def get_default_scenarios() -> dict:
                         user_template=_SCENE_IMAGE_PROMPT_LAST_USER_PROMPT or _SCENE_IMAGE_PROMPT_USER_PROMPT,
                         assistant_template=identity_assistant,
                     ),
-                    _make_static_block(order=3, subtype="prefill", role="assistant", template=_SCENE_IMAGE_PROMPT_PREFILL),
                 ],
             },
         },

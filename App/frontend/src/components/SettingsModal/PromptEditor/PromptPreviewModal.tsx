@@ -295,19 +295,6 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
                   />
                 </div>
 
-                {/* Prefill Enabled */}
-                <div className="prompt-preview-override-item">
-                  <label>isPrefillEnabled</label>
-                  <label className="prompt-preview-checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={configOverrides.isPrefillEnabled ?? false}
-                      onChange={(e) => setConfigOverride('isPrefillEnabled', e.target.checked)}
-                    />
-                    <span>{t('common.enabled')}</span>
-                  </label>
-                </div>
-
                 {/* Main Language */}
                 <div className="prompt-preview-override-item">
                   <label>mainLanguage</label>

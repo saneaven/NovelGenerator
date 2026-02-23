@@ -263,9 +263,8 @@ class ScenarioManager:
         project_data: dict[str, Any],
         input_text: str,
         input_payload: dict[str, Any],
-    ) -> tuple[dict[str, Any], bool]:
+    ) -> dict[str, Any]:
         task_cfg = settings_service.get_task_config(db, user_id, task_type)
-        prefill_enabled = bool(task_cfg.advanced.get("enable_prefill", False))
 
         payload = input_payload
         language = str(run.language or "English")
@@ -290,7 +289,6 @@ class ScenarioManager:
                 "displayLanguage": language,
                 "today": datetime.now(timezone.utc).date().isoformat(),
                 "thinking_mode": str(task_cfg.advanced.get("thinking_mode") or "off"),
-                "isPrefillEnabled": prefill_enabled,
                 "outputMode": output_mode,
             },
             "project": project_data,
@@ -335,5 +333,5 @@ class ScenarioManager:
             "variables": variables if isinstance(variables, dict) else {},
         }
 
-        return template_data, prefill_enabled
+        return template_data
 

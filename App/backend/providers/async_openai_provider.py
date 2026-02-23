@@ -450,12 +450,12 @@ class AsyncOpenAIProvider(BaseProvider):
             thinking_config,
         )
 
-        # Check if prefill has unclosed <thinking> tag - parser should start inside thinking block
+        # Check if last assistant message has unclosed <thinking> tag
         # Always parse <thinking> tags from text content to prevent leakage into regular content
-        prefill_has_thinking = (
+        has_open_thinking = (
             has_unclosed_thinking_tag(converted_messages) if thinking_mode == "custom" else False
         )
-        parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
+        parser = ThinkingStreamParser(inside_thinking=has_open_thinking)
         native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
         last_finish_reason = None
         captured_usage: Optional[Dict] = None

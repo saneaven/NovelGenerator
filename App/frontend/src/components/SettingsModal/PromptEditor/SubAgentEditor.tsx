@@ -25,7 +25,7 @@ import type { ScenarioDocument } from '../../../types/scenarios';
 
 import './SubAgentEditor.css';
 
-type PromptTab = 'systemPrompt' | 'userPrompt' | 'prefill';
+type PromptTab = 'systemPrompt' | 'userPrompt';
 type SubAgentEditorTab = 'general' | 'toolCalls' | 'provider' | 'prompts';
 
 interface TemplateValidationResult {
@@ -108,14 +108,12 @@ const SubAgentPromptEditors: React.FC<{
   const [validationByTab, setValidationByTab] = useState<Record<PromptTab, TemplateValidationResult | null>>({
     systemPrompt: null,
     userPrompt: null,
-    prefill: null,
   });
 
   useEffect(() => {
     setValidationByTab({
       systemPrompt: null,
       userPrompt: null,
-      prefill: null,
     });
   }, [agentNameForHistory]);
 
@@ -134,11 +132,7 @@ const SubAgentPromptEditors: React.FC<{
       return block?.type === 'rangeMapping' ? block.rangeMapping?.user_template || '' : '';
     }
 
-    // prefill
-    const prefillBlock = scenario.blocks.find(
-      (b) => b.type === 'staticPrompt' && b.staticPrompt?.subtype === 'prefill'
-    );
-    return prefillBlock?.type === 'staticPrompt' ? prefillBlock.staticPrompt?.template || '' : '';
+    return '';
   }, [activeTab, scenarioDraft?.scenario]);
 
   useEffect(() => {
@@ -249,30 +243,6 @@ const SubAgentPromptEditors: React.FC<{
         },
       };
       onScenarioChange(normalizeOrders({ ...scenario, blocks }));
-      return;
-    }
-
-    // prefill
-    {
-      const blocks = [...(scenario.blocks || [])];
-      let idx = blocks.findIndex((b) => b.type === 'staticPrompt' && b.staticPrompt?.subtype === 'prefill');
-      if (idx < 0) {
-        blocks.push({
-          id: safeUUID(),
-          block_order: blocks.length,
-          enabled: true,
-          type: 'staticPrompt',
-          staticPrompt: { subtype: 'prefill', role: 'assistant', template: '' },
-        });
-        idx = blocks.length - 1;
-      }
-      const cur = blocks[idx];
-      blocks[idx] = {
-        ...cur,
-        type: 'staticPrompt',
-        staticPrompt: { subtype: 'prefill', role: 'assistant', template: text },
-      };
-      onScenarioChange(normalizeOrders({ ...scenario, blocks }));
     }
   };
 
@@ -293,13 +263,6 @@ const SubAgentPromptEditors: React.FC<{
             onClick={() => setActiveTab('userPrompt')}
           >
             {t('settings.promptEditor.subAgentPrompts.user')}
-          </button>
-          <button
-            type="button"
-            className={`sub-agent-editor__tab ${activeTab === 'prefill' ? 'is-active' : ''}`}
-            onClick={() => setActiveTab('prefill')}
-          >
-            {t('settings.promptEditor.subAgentPrompts.prefill')}
           </button>
         </div>
 

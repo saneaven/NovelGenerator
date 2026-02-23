@@ -12,7 +12,7 @@ async def _count_tokens_fallback(text: str) -> int:
     return max(1, len(text) // 4)
 
 
-def _conversation_to_text(system_prompt: str, conversation: list[dict], prefill: str | None) -> str:
+def _conversation_to_text(system_prompt: str, conversation: list[dict]) -> str:
     chunks: list[str] = []
     if system_prompt:
         chunks.append(system_prompt)
@@ -23,15 +23,12 @@ def _conversation_to_text(system_prompt: str, conversation: list[dict], prefill:
         tool_results = msg.get("tool_results") if isinstance(msg, dict) else None
         if isinstance(tool_results, list):
             chunks.extend(str(tr.get("content") or "") for tr in tool_results if isinstance(tr, dict))
-    if prefill:
-        chunks.append(prefill)
     return "\n".join(chunks)
 
 
 async def fit_to_context_window(
     system_prompt: str,
     conversation: list[dict],
-    prefill: str | None,
     context_window_tokens: int,
     rebuild_memory_cb: Callable[[list[dict]], Awaitable[tuple[list[dict], str | None]]] | None = None,
     count_tokens_cb: Callable[[str], Awaitable[int]] | None = None,
@@ -44,7 +41,7 @@ async def fit_to_context_window(
     current = list(conversation)
 
     for _ in range(8):
-        serialized = _conversation_to_text(system_prompt, current, prefill)
+        serialized = _conversation_to_text(system_prompt, current)
         total_tokens = await counter(serialized)
         if total_tokens <= context_window_tokens:
             return current, memory_prompt

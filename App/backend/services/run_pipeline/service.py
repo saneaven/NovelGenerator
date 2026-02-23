@@ -493,11 +493,11 @@ class RunPipeline:
             settings: UserSettings = settings_service._get_settings(db, run.user_id)  # pylint: disable=protected-access
 
             if create_ctx is not None:
-                system_prompt, conversation, prefill, scenario_bundle = await prompt_assembly.assemble_create(
+                system_prompt, conversation, scenario_bundle = await prompt_assembly.assemble_create(
                     db, run=run, thread=thread, settings=settings, create_ctx=create_ctx,
                 )
             else:
-                system_prompt, conversation, prefill, scenario_bundle = await prompt_assembly.assemble_resume(
+                system_prompt, conversation, scenario_bundle = await prompt_assembly.assemble_resume(
                     db, run=run, thread=thread, settings=settings,
                 )
 
@@ -508,7 +508,6 @@ class RunPipeline:
                 settings=settings,
                 system_prompt=system_prompt,
                 conversation=conversation,
-                prefill=prefill,
                 scenario_bundle=scenario_bundle,
                 input_payload=create_ctx.input_payload if create_ctx is not None else {},
                 assistant_message_ref_out=assistant_message_ref,

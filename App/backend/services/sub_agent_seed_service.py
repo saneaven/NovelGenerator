@@ -101,7 +101,6 @@ def seed_default_sub_agents(db: Session, *, user_id: uuid.UUID, preset_id: uuid.
         prompt_templates = {
             "systemPrompt": _read_required(agent_name, "systemPrompt.md"),
             "userPrompt": _read_required(agent_name, "userPrompt.md"),
-            "prefill": _read_required(agent_name, "prefill.md"),
         }
         sub_agent_service.create_sub_agent(
             db=db,

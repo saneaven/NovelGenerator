@@ -298,7 +298,6 @@ function buildConfigData(overrides?: Partial<ConfigData>): ConfigData {
     displayLanguage,
     today: new Date().toISOString().split('T')[0],
     thinking_mode: 'off',
-    isPrefillEnabled: false,
     outputMode: 'tool_call',
   };
 

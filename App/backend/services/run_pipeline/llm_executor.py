@@ -160,7 +160,6 @@ async def run_llm(
     settings: UserSettings,
     system_prompt: str,
     conversation: list[dict[str, Any]],
-    prefill: str | None,
     scenario_bundle: ScenarioBundle | None,
     input_payload: dict[str, Any],
     assistant_message_ref_out: list[RunMessageModel | None],
@@ -359,20 +358,12 @@ async def run_llm(
     fit_conversation, memory_prompt = await fit_to_context_window(
         fit_system_prompt,
         fit_conversation,
-        prefill,
         int(task_config.context_window_tokens or 32000),
         rebuild_memory_cb=_rebuild_memory,
         count_tokens_cb=_token_counter,
     )
 
     messages = [{"role": "system", "content_parts": [{"type": "content", "text": fit_system_prompt}]}] + fit_conversation
-    if prefill and bool(task_config.advanced.get("enable_prefill", False)):
-        messages.append(
-            {
-                "role": "assistant",
-                "content_parts": [{"type": "content", "text": prefill}],
-            }
-        )
 
     # Resolve custom thinking template (custom provider only)
     if task_config.provider == "custom" and thinking_mode == "model":

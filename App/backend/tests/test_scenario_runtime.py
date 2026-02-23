@@ -28,7 +28,7 @@ def test_normalize_index_handles_negative_and_bounds() -> None:
 
 def test_empty_range_is_skipped() -> None:
     renderer = TemplateRenderer(fragment_map={})
-    system, convo, prefill, memory = assemble_scenario(
+    system, convo, memory = assemble_scenario(
         template_renderer=renderer,
         task_type="agent",
         system_template="sys",
@@ -51,13 +51,12 @@ def test_empty_range_is_skipped() -> None:
     )
     assert system == "sys"
     assert convo == []
-    assert prefill is None
     assert memory is None
 
 
 def test_owner_overwrite_prefers_later_block() -> None:
     renderer = TemplateRenderer(fragment_map={})
-    _, convo, _, _ = assemble_scenario(
+    _, convo, _ = assemble_scenario(
         template_renderer=renderer,
         task_type="agent",
         system_template="",
@@ -122,7 +121,7 @@ def test_tool_results_attached_only_when_assistant_emitted() -> None:
         }
     ]
 
-    _, convo, _, _ = assemble_scenario(
+    _, convo, _ = assemble_scenario(
         template_renderer=renderer,
         task_type="agent",
         system_template="",
@@ -149,7 +148,7 @@ def test_tool_results_attached_only_when_assistant_emitted() -> None:
             },
         }
     ]
-    _, convo2, _, _ = assemble_scenario(
+    _, convo2, _ = assemble_scenario(
         template_renderer=renderer,
         task_type="agent",
         system_template="",
@@ -178,7 +177,7 @@ def test_subagent_range_mapping_patches_input_keys() -> None:
         }
     ]
 
-    _, convo, _, _ = assemble_scenario(
+    _, convo, _ = assemble_scenario(
         template_renderer=renderer,
         task_type="subAgent",
         system_template="",

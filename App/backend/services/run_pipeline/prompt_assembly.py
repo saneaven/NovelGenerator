@@ -23,7 +23,7 @@ async def assemble_create(
     thread: Thread,
     settings: UserSettings,
     create_ctx: CreateContext,
-) -> tuple[str, list[dict[str, Any]], str | None, ScenarioBundle]:
+) -> tuple[str, list[dict[str, Any]], ScenarioBundle]:
     preset_id = settings_service.get_active_preset_id(db, run.user_id)
     if preset_id is None:
         raise RuntimeError("No active preset selected")
@@ -32,7 +32,7 @@ async def assemble_create(
     project_data = await build_project_data(db, run.project_id, run.language, sidecar_client)
 
     target = scenario_manager.resolve_target(db, thread=thread, run=run, payload=create_ctx.input_payload)
-    template_data, _prefill_enabled = scenario_manager.build_template_data(
+    template_data = scenario_manager.build_template_data(
         db,
         user_id=run.user_id,
         preset_id=preset_id,
@@ -58,7 +58,7 @@ async def assemble_create(
     template_renderer = TemplateRenderer(fragment_map=fragment_map)
 
     canonical = build_from_runs(db, thread_id=thread.id, language=run.language)
-    system_prompt, conversation, prefill, memory_template = assemble_scenario(
+    system_prompt, conversation, memory_template = assemble_scenario(
         template_renderer=template_renderer,
         task_type=target.task_type,
         system_template=system_template,
@@ -69,7 +69,6 @@ async def assemble_create(
 
     thread.captured_history_system_prompt = system_prompt
     thread.captured_history_conversation_json = conversation
-    thread.captured_history_prefill = prefill
     db.flush()
 
     bundle = ScenarioBundle(
@@ -77,11 +76,10 @@ async def assemble_create(
         task_subtype=target.task_subtype,
         template_data=template_data,
         system_prompt=system_prompt,
-        prefill=prefill,
         memory_template=memory_template,
     )
 
-    return system_prompt, conversation, prefill, bundle
+    return system_prompt, conversation, bundle
 
 
 async def assemble_resume(
@@ -90,9 +88,8 @@ async def assemble_resume(
     run: RunModel,
     thread: Thread,
     settings: UserSettings,
-) -> tuple[str, list[dict[str, Any]], str | None, ScenarioBundle | None]:
+) -> tuple[str, list[dict[str, Any]], ScenarioBundle | None]:
     system_prompt = str(thread.captured_history_system_prompt or "")
-    prefill = thread.captured_history_prefill if isinstance(thread.captured_history_prefill, str) and thread.captured_history_prefill else None
 
     if thread.captured_history_conversation_json is not None:
         conversation = list(thread.captured_history_conversation_json)
@@ -151,7 +148,7 @@ async def assemble_resume(
 
             if memory_template is not None:
                 project_data = await build_project_data(db, run.project_id, run.language, sidecar_client)
-                template_data, _prefill_enabled = scenario_manager.build_template_data(
+                template_data = scenario_manager.build_template_data(
                     db,
                     user_id=run.user_id,
                     preset_id=preset_id,
@@ -167,8 +164,7 @@ async def assemble_resume(
                     task_subtype=task_subtype,
                     template_data=template_data,
                     system_prompt=system_prompt,
-                    prefill=prefill,
                     memory_template=memory_template,
                 )
 
-    return system_prompt, conversation, prefill, bundle
+    return system_prompt, conversation, bundle

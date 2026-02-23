@@ -330,9 +330,9 @@ class GeminiProvider(BaseProvider):
         }
         yield ProviderEvent(kind="meta", raw_request=raw_req)
 
-        prefill_source = parser_messages if isinstance(parser_messages, list) else []
-        prefill_has_thinking = has_unclosed_thinking_tag(prefill_source) if thinking_mode == "custom" else False
-        parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
+        thinking_source = parser_messages if isinstance(parser_messages, list) else []
+        has_open_thinking = has_unclosed_thinking_tag(thinking_source) if thinking_mode == "custom" else False
+        parser = ThinkingStreamParser(inside_thinking=has_open_thinking)
         native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
 
         tool_call_counter = 0

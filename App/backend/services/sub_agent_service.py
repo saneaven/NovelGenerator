@@ -33,7 +33,6 @@ Use tools when helpful.
 Do not summarize unless explicitly requested."""
 
 DEFAULT_SUB_AGENT_USER_PROMPT = "{{input.agentMessage}}"
-DEFAULT_SUB_AGENT_PREFILL = ""
 DEFAULT_SUB_AGENT_ASSISTANT_TEMPLATE = "{{input.subAgentMessage}}"
 
 
@@ -141,11 +140,6 @@ class SubAgentService:
         else:
             user_content = DEFAULT_SUB_AGENT_USER_PROMPT
 
-        if "prefill" in prompt_templates:
-            prefill_content = prompt_templates["prefill"]
-        else:
-            prefill_content = DEFAULT_SUB_AGENT_PREFILL
-
         if not system_content.strip():
             raise ValueError("systemPrompt is required")
         if not user_content.strip():
@@ -182,17 +176,6 @@ class SubAgentService:
                         "end_index": -1,
                         "user_template": user_content,
                         "assistant_template": DEFAULT_SUB_AGENT_ASSISTANT_TEMPLATE,
-                    },
-                },
-                {
-                    "id": str(uuid.uuid4()),
-                    "block_order": 1,
-                    "enabled": True,
-                    "type": "staticPrompt",
-                    "staticPrompt": {
-                        "subtype": "prefill",
-                        "role": "assistant",
-                        "template": prefill_content,
                     },
                 },
             ],

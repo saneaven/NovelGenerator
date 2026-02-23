@@ -72,7 +72,6 @@ async def get_user_settings(
                     'model': 'gpt-5-mini',
                     'temperature': 0.7,
                     'advanced': {
-                        'enable_prefill': False,
                         'thinking_mode': 'off',
                         'thinking_config': {'effort': 'medium'},
                         'request_format': 'openai_sdk',
@@ -83,7 +82,6 @@ async def get_user_settings(
                     'model': 'gpt-5-mini',
                     'temperature': 0.7,
                     'advanced': {
-                        'enable_prefill': False,
                         'thinking_mode': 'off',
                         'thinking_config': {'effort': 'medium'},
                         'request_format': 'openai_sdk',
@@ -94,7 +92,6 @@ async def get_user_settings(
                     'model': 'gpt-5',
                     'temperature': 0.2,
                     'advanced': {
-                        'enable_prefill': False,
                         'thinking_mode': 'off',
                         'thinking_config': {'effort': 'medium'},
                         'request_format': 'openai_sdk',
@@ -105,7 +102,6 @@ async def get_user_settings(
                     'model': 'gpt-5',
                     'temperature': 0.7,
                     'advanced': {
-                        'enable_prefill': True,
                         'thinking_mode': 'off',
                         'thinking_config': {'effort': 'medium'},
                         'request_format': 'openai_sdk',
@@ -116,7 +112,6 @@ async def get_user_settings(
                     'model': 'gpt-5',
                     'temperature': 0.7,
                     'advanced': {
-                        'enable_prefill': False,
                         'thinking_mode': 'off',
                         'thinking_config': {'effort': 'medium'},
                         'request_format': 'openai_sdk',
@@ -127,7 +122,6 @@ async def get_user_settings(
                     'model': 'gpt-5-mini',
                     'temperature': 0.2,
                     'advanced': {
-                        'enable_prefill': False,
                         'thinking_mode': 'off',
                         'thinking_config': {'effort': 'medium'},
                         'request_format': 'openai_sdk',

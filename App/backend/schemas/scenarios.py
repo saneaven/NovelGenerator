@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 ScenarioBlockType = Literal["staticPrompt", "rangeMapping"]
-StaticPromptSubtype = Literal["normal", "memory", "prefill"]
+StaticPromptSubtype = Literal["normal", "memory"]
 StaticRole = Literal["user", "assistant"]
 
 
@@ -105,6 +105,5 @@ class ScenarioSimulateRequest(BaseModel):
 class ScenarioSimulateResponse(BaseModel):
     rendered_system_prompt: str
     rendered_conversation: list[dict[str, Any]]
-    prefill: Optional[str] = None
     memory_template: Optional[str] = None
 
