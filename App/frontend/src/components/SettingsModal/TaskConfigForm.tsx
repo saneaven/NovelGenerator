@@ -42,6 +42,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   const customRequestFormat: RequestFormat = config.advanced.request_format ?? 'openai_sdk';
   const isCustomOpenaiSdk = isCustomProvider && customRequestFormat === 'openai_sdk';
   const isCustomClaudeSdk = isCustomProvider && customRequestFormat === 'claude_sdk';
+  const isCustomOpenaiResponses = isCustomProvider && customRequestFormat === 'openai_responses';
 
   const getDefaultThinkingConfig = (
     provider: ProviderType,
@@ -200,6 +201,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
               options={[
                 { value: 'openai_sdk', label: 'OpenAI SDK' },
                 { value: 'claude_sdk', label: 'Claude SDK' },
+                { value: 'openai_responses', label: 'OpenAI Responses API' },
               ]}
             />
             <p className="field-hint">{t('settings.taskConfig.requestFormatHint')}</p>
@@ -522,6 +524,23 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                         { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
                         { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
                         { value: 'max', label: t('settings.taskConfig.thinking_config.effortOptions.max') },
+                      ]}
+                    />
+                    <p className="field-hint">{t('settings.taskConfig.thinking_config.effortHintGeneric')}</p>
+                  </div>
+                )}
+
+                {/* Custom endpoint + OpenAI Responses API: effort dropdown (native reasoning) */}
+                {isCustomOpenaiResponses && (
+                  <div className="form-field">
+                    <label>{t('settings.taskConfig.thinking_config.effortLevel')}</label>
+                    <CustomSelect
+                      value={config.advanced.thinking_config?.effort || 'medium'}
+                      onChange={(value) => handleThinkingConfigChange('effort', value)}
+                      options={[
+                        { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
+                        { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
+                        { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
                       ]}
                     />
                     <p className="field-hint">{t('settings.taskConfig.thinking_config.effortHintGeneric')}</p>

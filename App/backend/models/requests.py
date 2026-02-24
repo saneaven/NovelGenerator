@@ -68,11 +68,11 @@ class ChatCompletionRequest(BaseModel):
     provider_preference: Optional[ProviderPreference] = None
     thinking_mode: Optional[Literal["off", "custom", "model"]] = "off"
     thinking_config: Optional[ThinkingConfig] = None
-    request_format: Optional[Literal["openai_sdk", "claude_sdk"]] = "openai_sdk"
+    request_format: Optional[Literal["openai_sdk", "claude_sdk", "openai_responses"]] = "openai_sdk"
     retry_config: Optional[RetryConfig] = None
     native_tool_call: bool = False
     verbosity: Optional[Literal["low", "medium", "high"]] = None  # GPT-5 output verbosity
 
 
 class ProviderModelsRequest(BaseModel):
-    request_format: Optional[Literal["openai_sdk", "claude_sdk"]] = "openai_sdk"
+    request_format: Optional[Literal["openai_sdk", "claude_sdk", "openai_responses"]] = "openai_sdk"

@@ -23,6 +23,8 @@ import { useImageTaskStore } from '../../imageTask/store';
 import { UnifiedImageModal } from '../AssetManager';
 import UnifiedImagePromptModal, { type PromptResult, type PromptMode } from './UnifiedImagePromptModal';
 import ThinkingDisplay from '../common/ThinkingDisplay';
+import { useJourneyStreamingSession } from '../../hooks/useJourneyStreamingSession';
+import { useThreadStore } from '../../store/threadStore';
 import { AIAssistMini, Close } from '../icons';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
@@ -364,8 +366,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         }
     }, [provider]);
 
-    // Streaming session subscription will be restored once image runtime is migrated.
-    const streamingSession = undefined as any;
+    const streamingSession = useJourneyStreamingSession(streamingSessionId);
 
     // Effect to extract and update prompt during streaming
     useEffect(() => {
@@ -393,12 +394,42 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         // Use whichever has content
         const streamingPrompt = toolPrompt || textContent;
 
-        // Update the appropriate prompt field
+        // Update the appropriate prompt field during streaming
         if (streamingPrompt) {
             switch (streamingMode) {
                 case 'natural': setPrompt(streamingPrompt); break;
                 case 'positive': setPositivePrompt(streamingPrompt); break;
                 case 'negative': setNegativePrompt(streamingPrompt); break;
+            }
+        }
+
+        // On completion, extract final prompt from finalized thread messages
+        if (streamingSession.status === 'done' && streamingSession.threadId) {
+            const messages = useThreadStore.getState().getMessages(streamingSession.threadId);
+            const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
+            if (lastAssistantMsg) {
+                const data = lastAssistantMsg.data;
+                const entry = data[Object.keys(data)[0]];
+                const finalText = entry?.contentParts
+                    ?.filter((p) => p.type === 'content')
+                    .map((p) => p.text)
+                    .join('') || '';
+
+                let finalPrompt = finalText;
+                if (!finalPrompt) {
+                    const toolCalls = useThreadStore.getState().getToolCallsForAssistantMessage(lastAssistantMsg.id);
+                    finalPrompt = (toolCalls
+                        .map(tc => (tc.arguments as Record<string, unknown>)?.prompt || (tc.result as Record<string, unknown> | null)?.prompt)
+                        .find(Boolean) as string) || '';
+                }
+
+                if (finalPrompt) {
+                    switch (streamingMode) {
+                        case 'natural': setPrompt(finalPrompt); break;
+                        case 'positive': setPositivePrompt(finalPrompt); break;
+                        case 'negative': setNegativePrompt(finalPrompt); break;
+                    }
+                }
             }
         }
 

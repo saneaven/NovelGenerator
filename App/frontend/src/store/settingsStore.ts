@@ -52,7 +52,7 @@ export interface ProviderPreference {
     ignore?: string[];
 }
 
-export type RequestFormat = 'openai_sdk' | 'claude_sdk';
+export type RequestFormat = 'openai_sdk' | 'claude_sdk' | 'openai_responses';
 
 // Custom thinking template types
 export interface CustomThinkingEffortField {

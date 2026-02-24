@@ -81,7 +81,7 @@ class AdvancedTaskSettings(BaseModel):
     thinking_config: Optional[ThinkingConfig] = Field(default_factory=lambda: ThinkingConfig())
     custom_thinking_template_id: Optional[str] = None
     tokenizer_override: Optional[Literal["openai", "claude", "gemini"]] = None
-    request_format: Literal["openai_sdk", "claude_sdk"] = "openai_sdk"
+    request_format: Literal["openai_sdk", "claude_sdk", "openai_responses"] = "openai_sdk"
     verbosity: Optional[Literal["low", "medium", "high"]] = None  # GPT-5 output verbosity (text.verbosity in Responses API)
 
 

@@ -3,6 +3,8 @@ import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
 import UnifiedImagePromptModal, { type PromptMode } from '../ImageGeneration/UnifiedImagePromptModal';
 import ThinkingDisplay from '../common/ThinkingDisplay';
+import { useJourneyStreamingSession } from '../../hooks/useJourneyStreamingSession';
+import { useThreadStore } from '../../store/threadStore';
 import type { ObjectType } from '../../types/unifiedObject';
 import { TextButton } from '../TextButton';
 import './ImagePromptManager.css';
@@ -42,8 +44,7 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
     const [streamingMode, setStreamingMode] = useState<PromptMode | null>(null);
     const [streamingError, setStreamingError] = useState<string | null>(null);
 
-    // Streaming session subscription will be restored once image runtime is migrated.
-    const streamingSession = undefined as any;
+    const streamingSession = useJourneyStreamingSession(streamingSessionId);
 
     // Get object from store
     const object = useMemo(() => {
@@ -113,12 +114,42 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
         // Use whichever has content
         const streamingPrompt = toolPrompt || textContent;
 
-        // Update the appropriate prompt field
+        // Update the appropriate prompt field during streaming
         if (streamingPrompt) {
             switch (streamingMode) {
                 case 'natural': setNaturalPrompt(streamingPrompt); break;
                 case 'positive': setPositivePrompt(streamingPrompt); break;
                 case 'negative': setNegativePrompt(streamingPrompt); break;
+            }
+        }
+
+        // On completion, extract final prompt from finalized thread messages
+        if (streamingSession.status === 'done' && streamingSession.threadId) {
+            const messages = useThreadStore.getState().getMessages(streamingSession.threadId);
+            const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
+            if (lastAssistantMsg) {
+                const data = lastAssistantMsg.data;
+                const entry = data[Object.keys(data)[0]];
+                const finalText = entry?.contentParts
+                    ?.filter((p) => p.type === 'content')
+                    .map((p) => p.text)
+                    .join('') || '';
+
+                let finalPrompt = finalText;
+                if (!finalPrompt) {
+                    const toolCalls = useThreadStore.getState().getToolCallsForAssistantMessage(lastAssistantMsg.id);
+                    finalPrompt = (toolCalls
+                        .map(tc => (tc.arguments as Record<string, unknown>)?.prompt || (tc.result as Record<string, unknown> | null)?.prompt)
+                        .find(Boolean) as string) || '';
+                }
+
+                if (finalPrompt) {
+                    switch (streamingMode) {
+                        case 'natural': setNaturalPrompt(finalPrompt); break;
+                        case 'positive': setPositivePrompt(finalPrompt); break;
+                        case 'negative': setNegativePrompt(finalPrompt); break;
+                    }
+                }
             }
         }
 

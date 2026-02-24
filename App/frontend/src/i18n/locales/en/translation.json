@@ -349,7 +349,7 @@
         "additionalHeadersHint": "Optional HTTP headers added to custom provider requests. Must be a JSON object with string values.",
         "additionalBody": "Custom Body (JSON)",
         "additionalBodyPlaceholder": "{\"reasoning\":{\"effort\":\"high\"}}",
-        "additionalBodyHint": "Optional JSON body merged into custom LLM requests (openai_sdk and claude_sdk)."
+        "additionalBodyHint": "Optional JSON body merged into custom LLM requests (openai_sdk, claude_sdk, and openai_responses)."
       },
       "validation": {
         "invalidJson": "{{field}} must be valid JSON.",

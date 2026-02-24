@@ -191,37 +191,22 @@ class OpenAIResponsesProvider(BaseProvider):
             error=ProviderErrorPayload(message=message, status=status),
         )
 
-    async def stream_chat(
+    def _prepare_responses_request(
         self,
-        messages: List[Dict],
+        *,
         model: str,
-        temperature: float = 0.7,
-        tools: Optional[List[Dict]] = None,
-        tool_choice: Optional[str] = None,
-        max_tokens: Optional[int] = None,
-        provider_preference: Optional[Dict] = None,
-        thinking_config: Optional[Dict] = None,
-        thinking_mode: Optional[str] = None,
-        request_format: Optional[str] = None,
-        native_tool_call: bool = False,
-        verbosity: Optional[str] = None,
-    ) -> AsyncGenerator[ProviderEvent, None]:
+        input_items: List[Dict],
+        temperature: float,
+        tools: Optional[List[Dict]],
+        tool_choice: Optional[str],
+        max_tokens: Optional[int],
+        thinking_config: Optional[Dict],
+        verbosity: Optional[str],
+    ) -> Dict:
+        """Build the request dict for responses.create().
+
+        Subclasses can override to inject extra_body or modify parameters.
         """
-        Stream chat using OpenAI Responses API.
-
-        Converts Responses API events to Chat Completions SSE format for
-        frontend compatibility.
-        """
-        if not self.validate_config():
-            yield self._error_event("Invalid provider configuration")
-            return
-
-        client = self._ensure_client()
-
-        # Convert messages to Responses API format
-        input_items = self._convert_messages(messages)
-
-        # Build request
         request: Dict = {
             "model": model,
             "input": input_items,
@@ -262,6 +247,50 @@ class OpenAIResponsesProvider(BaseProvider):
             ]
             if tool_choice:
                 request["tool_choice"] = tool_choice
+
+        return request
+
+    async def stream_chat(
+        self,
+        messages: List[Dict],
+        model: str,
+        temperature: float = 0.7,
+        tools: Optional[List[Dict]] = None,
+        tool_choice: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        provider_preference: Optional[Dict] = None,
+        thinking_config: Optional[Dict] = None,
+        thinking_mode: Optional[str] = None,
+        request_format: Optional[str] = None,
+        native_tool_call: bool = False,
+        verbosity: Optional[str] = None,
+    ) -> AsyncGenerator[ProviderEvent, None]:
+        """
+        Stream chat using OpenAI Responses API.
+
+        Converts Responses API events to Chat Completions SSE format for
+        frontend compatibility.
+        """
+        if not self.validate_config():
+            yield self._error_event("Invalid provider configuration")
+            return
+
+        client = self._ensure_client()
+
+        # Convert messages to Responses API format
+        input_items = self._convert_messages(messages)
+
+        # Build request via overridable hook
+        request = self._prepare_responses_request(
+            model=model,
+            input_items=input_items,
+            temperature=temperature,
+            tools=tools,
+            tool_choice=tool_choice,
+            max_tokens=max_tokens,
+            thinking_config=thinking_config,
+            verbosity=verbosity,
+        )
 
         yield ProviderEvent(kind="meta", raw_request=request)
 

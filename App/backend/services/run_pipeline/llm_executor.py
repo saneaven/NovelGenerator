@@ -366,8 +366,13 @@ async def run_llm(
 
     messages = [{"role": "system", "content_parts": [{"type": "content", "text": fit_system_prompt}]}] + fit_conversation
 
-    # Resolve custom thinking template (custom provider only)
-    if task_config.provider == "custom" and thinking_mode == "model":
+    # Resolve custom thinking template (custom provider + openai_sdk only).
+    # openai_responses uses native reasoning support — templates don't apply.
+    if (
+        task_config.provider == "custom"
+        and thinking_mode == "model"
+        and advanced.get("request_format") != "openai_responses"
+    ):
         from ..reasoning.custom_template_runtime import compile_template
         template_id = advanced.get("custom_thinking_template_id")
         if template_id:

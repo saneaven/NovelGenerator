@@ -3,6 +3,7 @@
 Supported request formats:
 - openai_sdk: OpenAI-compatible Chat Completions transport + template-based thinking.
 - claude_sdk: Anthropic Messages transport + Claude-native request shape.
+- openai_responses: OpenAI Responses API transport + native reasoning support.
 """
 
 from __future__ import annotations
@@ -10,10 +11,12 @@ from __future__ import annotations
 from typing import AsyncGenerator, Dict, List, Optional, Literal, Tuple, cast
 
 from anthropic import AsyncAnthropic
+from openai import AsyncOpenAI, OpenAIError
 
 from .async_openai_provider import AsyncOpenAIProvider
 from .claude_provider import ClaudeProvider
 from .contracts import ProviderEvent
+from .openai_responses_provider import OpenAIResponsesProvider
 from .registry import ProviderRegistry
 from ..services.reasoning.custom_template_runtime import (
     apply_effort_fields,
@@ -28,7 +31,7 @@ from ..utils.outbound_http import (
 )
 
 
-RequestFormat = Literal["openai_sdk", "claude_sdk"]
+RequestFormat = Literal["openai_sdk", "claude_sdk", "openai_responses"]
 
 
 class _CustomClaudeSDKProvider(ClaudeProvider):
@@ -70,6 +73,60 @@ class _CustomClaudeSDKProvider(ClaudeProvider):
 
     def _additional_request_body(self) -> Dict[str, object]:
         return dict(self._additional_body)
+
+
+class _CustomOpenAIResponsesProvider(OpenAIResponsesProvider):
+    """Internal OpenAI Responses API transport for custom endpoints."""
+
+    def __init__(self, config: Dict):
+        self._api_key = config.get("api_key")
+        raw_base_url = (config.get("base_url") or "").strip()
+        self._base_url = validate_outbound_base_url(raw_base_url) if raw_base_url else ""
+        self._additional_headers = filter_additional_headers(config.get("additional_headers"))
+        self._additional_body = filter_additional_body(config.get("additional_body"))
+        super().__init__(config)
+
+    @property
+    def name(self) -> str:
+        return "custom_openai_responses"
+
+    @property
+    def display_name(self) -> str:
+        return "Custom OpenAI Responses"
+
+    @property
+    def api_key(self) -> Optional[str]:
+        return self._api_key
+
+    def validate_config(self) -> bool:
+        # Base URL is required. API key can be optional for self-hosted gateways.
+        return bool(self._base_url)
+
+    def _build_client(self) -> AsyncOpenAI:
+        kwargs: Dict[str, object] = {
+            "api_key": (self._api_key or "custom-endpoint-key"),
+            "base_url": self._base_url.rstrip("/"),
+        }
+        if self._additional_headers:
+            kwargs["default_headers"] = self._additional_headers
+        return AsyncOpenAI(**kwargs)
+
+    def _prepare_responses_request(self, **kwargs) -> Dict:
+        request = super()._prepare_responses_request(**kwargs)
+        if self._additional_body:
+            existing = request.get("extra_body")
+            base = dict(existing) if isinstance(existing, dict) else {}
+            request["extra_body"] = merge_user_overrides(base, self._additional_body)
+        return request
+
+    async def get_models(self) -> Dict:
+        """No regex filtering — custom endpoint may serve any model."""
+        client = self._ensure_client()
+        try:
+            models = await client.models.list()
+            return {"data": [m.model_dump() for m in models.data]}
+        except OpenAIError as exc:
+            raise Exception(f"Error fetching models: {exc}") from exc
 
 
 @ProviderRegistry.register
@@ -117,8 +174,8 @@ class CustomProvider(AsyncOpenAIProvider):
     @staticmethod
     def _normalize_request_format(request_format: Optional[str]) -> RequestFormat:
         value = (request_format or "openai_sdk").strip().lower()
-        if value not in {"openai_sdk", "claude_sdk"}:
-            raise ValueError("request_format must be one of: openai_sdk, claude_sdk")
+        if value not in {"openai_sdk", "claude_sdk", "openai_responses"}:
+            raise ValueError("request_format must be one of: openai_sdk, claude_sdk, openai_responses")
         return cast(RequestFormat, value)
 
     @staticmethod
@@ -259,6 +316,32 @@ class CustomProvider(AsyncOpenAIProvider):
                 yield event
             return
 
+        if effective_request_format == "openai_responses":
+            responses_provider = _CustomOpenAIResponsesProvider(
+                {
+                    "api_key": self._api_key,
+                    "base_url": self._base_url,
+                    "additional_headers": self._additional_headers,
+                    "additional_body": self._additional_body,
+                }
+            )
+            async for event in responses_provider.stream_chat(
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                tools=tools,
+                tool_choice=tool_choice,
+                max_tokens=max_tokens,
+                provider_preference=provider_preference,
+                thinking_config=thinking_config if thinking_mode == "model" else None,
+                thinking_mode=thinking_mode,
+                request_format=effective_request_format,
+                native_tool_call=native_tool_call,
+                verbosity=verbosity,
+            ):
+                yield event
+            return
+
         # openai_sdk path
         # Custom dialect-specific thinking fields are only sent in model thinking mode.
         effective_thinking_config = thinking_config if thinking_mode == "model" else None
@@ -289,5 +372,16 @@ class CustomProvider(AsyncOpenAIProvider):
                 }
             )
             return await claude_provider.get_models()
+
+        if effective_request_format == "openai_responses":
+            responses_provider = _CustomOpenAIResponsesProvider(
+                {
+                    "api_key": self._api_key,
+                    "base_url": self._base_url,
+                    "additional_headers": self._additional_headers,
+                    "additional_body": self._additional_body,
+                }
+            )
+            return await responses_provider.get_models()
 
         return await super().get_models()
