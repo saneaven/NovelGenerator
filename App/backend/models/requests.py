@@ -17,9 +17,6 @@ class ThinkingConfig(BaseModel):
     effort: Optional[Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]] = None
     max_tokens: Optional[int] = None
 
-    # GPT-5 specific - output verbosity
-    verbosity: Optional[Literal["low", "medium", "high"]] = None
-
     # Gemini - now supports 'minimal' and 'medium' for Gemini 3 Flash
     gemini_thinking_level: Optional[Literal["minimal", "low", "medium", "high"]] = None
     gemini_budget_tokens: Optional[int] = None
@@ -74,6 +71,7 @@ class ChatCompletionRequest(BaseModel):
     request_format: Optional[Literal["openai_sdk", "claude_sdk"]] = "openai_sdk"
     retry_config: Optional[RetryConfig] = None
     native_tool_call: bool = False
+    verbosity: Optional[Literal["low", "medium", "high"]] = None  # GPT-5 output verbosity
 
 
 class ProviderModelsRequest(BaseModel):

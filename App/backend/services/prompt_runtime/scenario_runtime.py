@@ -39,6 +39,37 @@ def _iter_blocks_in_order(blocks: Iterable[dict[str, Any]]) -> list[dict[str, An
     return items
 
 
+def _group_by_run(source_items: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """Group source_items by run_id into run-level units.
+
+    Consecutive items sharing the same non-None run_id form a single group.
+    Items with run_id=None each become a standalone group.
+    """
+    runs: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    current_run_id: str | None = None
+
+    for item in source_items:
+        rid = item.get("message", {}).get("run_id")
+        if rid is None:
+            if current:
+                runs.append(current)
+                current = []
+                current_run_id = None
+            runs.append([item])
+        elif rid != current_run_id:
+            if current:
+                runs.append(current)
+            current = [item]
+            current_run_id = rid
+        else:
+            current.append(item)
+
+    if current:
+        runs.append(current)
+    return runs
+
+
 def _shallow_copy_dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
@@ -62,7 +93,9 @@ def assemble_scenario(
 ) -> tuple[str, list[dict[str, Any]], str | None]:
     """Assemble a scenario into (system_prompt, conversation, memory_template).
 
-    - Indexing targets only role=user|assistant from source_conversation.
+    - source_conversation messages are grouped into runs by run_id.
+    - rangeMapping start_index/end_index refer to run positions (not individual messages).
+    - Within each run, user_template / assistant_template are applied per message.
     - tool_results are attached to the preceding assistant turn and are appended only when that assistant is emitted.
     - Overlapping rangeMapping blocks resolve by owner overwrite (later blocks win).
     - memory_template is returned as the raw template text (rendered later with memory data).
@@ -96,9 +129,11 @@ def assemble_scenario(
 
         source_items.append(entry)
 
-    n_sources = len(source_items)
+    # 1.5) Group source_items by run_id into run-level units.
+    source_runs = _group_by_run(source_items)
+    n_sources = len(source_runs)
 
-    # 2) Compute owner map (later range blocks win).
+    # 2) Compute owner map — indices now refer to runs (later range blocks win).
     owner: dict[int, int] = {}
     for block in blocks_in_order:
         if not bool(block.get("enabled", True)):
@@ -195,77 +230,77 @@ def assemble_scenario(
             mapping.get("assistant_template") if isinstance(mapping.get("assistant_template"), str) else ""
         )
 
-        for source_index in range(start_norm, end_norm + 1):
-            if owner.get(source_index) != block_order:
+        for run_index in range(start_norm, end_norm + 1):
+            if owner.get(run_index) != block_order:
                 continue
 
-            src_entry = source_items[source_index]
-            src_msg = src_entry.get("message")
-            if not isinstance(src_msg, dict):
-                continue
-            src_role = src_msg.get("role")
-            if src_role not in {"user", "assistant"}:
-                continue
+            for src_entry in source_runs[run_index]:
+                src_msg = src_entry.get("message")
+                if not isinstance(src_msg, dict):
+                    continue
+                src_role = src_msg.get("role")
+                if src_role not in {"user", "assistant"}:
+                    continue
 
-            src_text = _collapse_content_text(src_msg.get("content_parts"))
+                src_text = _collapse_content_text(src_msg.get("content_parts"))
 
-            if src_role == "user":
+                if src_role == "user":
+                    patched = _patched_template_data(
+                        template_data=template_data,
+                        input_key=user_input_key,
+                        source_text=src_text,
+                    )
+                    rendered = template_renderer.render_text(user_template, patched).strip()
+                    if not rendered:
+                        continue
+                    out_msg: dict[str, Any] = {
+                        "role": "user",
+                        "content_parts": [{"type": "content", "text": rendered}],
+                    }
+                    run_id = src_msg.get("run_id")
+                    if isinstance(run_id, str) and run_id:
+                        out_msg["run_id"] = run_id
+                    seq_in_thread = src_msg.get("seq_in_thread")
+                    if isinstance(seq_in_thread, int):
+                        out_msg["seq_in_thread"] = seq_in_thread
+                    rendered_conversation.append(out_msg)
+                    continue
+
                 patched = _patched_template_data(
                     template_data=template_data,
-                    input_key=user_input_key,
+                    input_key=assistant_input_key,
                     source_text=src_text,
                 )
-                rendered = template_renderer.render_text(user_template, patched).strip()
+                rendered = template_renderer.render_text(assistant_template, patched).strip()
                 if not rendered:
                     continue
-                out_msg: dict[str, Any] = {
-                    "role": "user",
+
+                out_msg = {
+                    "role": "assistant",
                     "content_parts": [{"type": "content", "text": rendered}],
                 }
+
                 run_id = src_msg.get("run_id")
                 if isinstance(run_id, str) and run_id:
                     out_msg["run_id"] = run_id
                 seq_in_thread = src_msg.get("seq_in_thread")
                 if isinstance(seq_in_thread, int):
                     out_msg["seq_in_thread"] = seq_in_thread
+
+                tool_calls = src_msg.get("tool_calls")
+                if isinstance(tool_calls, list) and tool_calls:
+                    out_msg["tool_calls"] = tool_calls
+
+                reasoning_detail = src_msg.get("reasoning_detail")
+                if isinstance(reasoning_detail, dict) and reasoning_detail:
+                    out_msg["reasoning_detail"] = reasoning_detail
+
                 rendered_conversation.append(out_msg)
-                continue
 
-            patched = _patched_template_data(
-                template_data=template_data,
-                input_key=assistant_input_key,
-                source_text=src_text,
-            )
-            rendered = template_renderer.render_text(assistant_template, patched).strip()
-            if not rendered:
-                continue
-
-            out_msg = {
-                "role": "assistant",
-                "content_parts": [{"type": "content", "text": rendered}],
-            }
-
-            run_id = src_msg.get("run_id")
-            if isinstance(run_id, str) and run_id:
-                out_msg["run_id"] = run_id
-            seq_in_thread = src_msg.get("seq_in_thread")
-            if isinstance(seq_in_thread, int):
-                out_msg["seq_in_thread"] = seq_in_thread
-
-            tool_calls = src_msg.get("tool_calls")
-            if isinstance(tool_calls, list) and tool_calls:
-                out_msg["tool_calls"] = tool_calls
-
-            reasoning_detail = src_msg.get("reasoning_detail")
-            if isinstance(reasoning_detail, dict) and reasoning_detail:
-                out_msg["reasoning_detail"] = reasoning_detail
-
-            rendered_conversation.append(out_msg)
-
-            attached = src_entry.get("tool_results")
-            if isinstance(attached, list) and attached:
-                for tool_msg in attached:
-                    if isinstance(tool_msg, dict):
-                        rendered_conversation.append(dict(tool_msg))
+                attached = src_entry.get("tool_results")
+                if isinstance(attached, list) and attached:
+                    for tool_msg in attached:
+                        if isinstance(tool_msg, dict):
+                            rendered_conversation.append(dict(tool_msg))
 
     return rendered_system_prompt, rendered_conversation, memory_template

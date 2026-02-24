@@ -231,6 +231,7 @@ class CustomProvider(AsyncOpenAIProvider):
         request_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
+        verbosity: Optional[str] = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         effective_request_format = self._normalize_request_format(request_format or self._request_format)
 

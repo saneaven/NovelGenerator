@@ -78,8 +78,10 @@ def _filter_openai_reasoning_items(items: Any) -> list[dict[str, Any]]:
         if isinstance(encrypted, str) and encrypted:
             compact["encrypted_content"] = encrypted
         summary = item.get("summary")
-        if isinstance(summary, (str, list, dict)) and summary:
+        if isinstance(summary, (str, list, dict)):
             compact["summary"] = summary
+        else:
+            compact["summary"] = []
         out.append(compact)
     return out
 
@@ -149,7 +151,14 @@ class OpenAIResponsesIO(BaseProviderIO):
             data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
             items = _filter_openai_reasoning_items(data.get("items"))
             if items:
-                reasoning_detail["data"] = {"items": items}
+                new_data: dict[str, Any] = {"items": items}
+                output_msg_id = data.get("output_msg_id")
+                if isinstance(output_msg_id, str) and output_msg_id:
+                    new_data["output_msg_id"] = output_msg_id
+                fc_item_ids = data.get("function_call_item_ids")
+                if isinstance(fc_item_ids, dict) and fc_item_ids:
+                    new_data["function_call_item_ids"] = fc_item_ids
+                reasoning_detail["data"] = new_data
                 message["reasoning_detail"] = reasoning_detail
             else:
                 message.pop("reasoning_detail", None)
@@ -161,6 +170,23 @@ class OpenAIResponsesIO(BaseProviderIO):
         if not items and not reasoning_text:
             return None
         data: dict[str, Any] = {"items": items}
+        # Extract output message ID from raw native response so that multi-turn
+        # input can pair reasoning items with their following output message.
+        raw = getattr(final_snapshot, "raw_native_response", None)
+        if isinstance(raw, dict):
+            for output_item in raw.get("output") or []:
+                if not isinstance(output_item, dict):
+                    continue
+                if output_item.get("type") == "message":
+                    msg_id = output_item.get("id")
+                    if isinstance(msg_id, str) and msg_id:
+                        data["output_msg_id"] = msg_id
+                elif output_item.get("type") == "function_call":
+                    call_id = output_item.get("call_id")
+                    item_id = output_item.get("id")
+                    if isinstance(call_id, str) and call_id and isinstance(item_id, str) and item_id:
+                        fc_ids = data.setdefault("function_call_item_ids", {})
+                        fc_ids[call_id] = item_id
         meta: dict[str, Any] = {"provider": "openai"}
         if reasoning_text:
             data["reasoning_text"] = reasoning_text

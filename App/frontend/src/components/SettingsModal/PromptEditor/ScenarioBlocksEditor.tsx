@@ -59,19 +59,22 @@ function oneLinePreview(text: string, maxLen = 120): string {
   return s.length > maxLen ? `${s.slice(0, maxLen)}…` : s;
 }
 
-function buildSampleConversation(userCount: number, includeToolResults: boolean): Array<Record<string, any>> {
+function buildSampleConversation(runCount: number, includeToolResults: boolean): Array<Record<string, any>> {
   const messages: Array<Record<string, any>> = [];
-  for (let i = 1; i <= userCount; i += 1) {
+  for (let i = 1; i <= runCount; i += 1) {
+    const runId = `run_${i}`;
     messages.push({
       role: 'user',
       content_parts: [{ type: 'content', text: `User message ${i}` }],
+      run_id: runId,
     });
-    if (i === userCount) break;
+    if (i === runCount) break;
 
     const callId = `call_${i}`;
     const assistant: Record<string, any> = {
       role: 'assistant',
       content_parts: [{ type: 'content', text: `Assistant message ${i}` }],
+      run_id: runId,
     };
     if (includeToolResults) {
       assistant.tool_calls = [
@@ -89,6 +92,7 @@ function buildSampleConversation(userCount: number, includeToolResults: boolean)
         role: 'tool_results',
         tool_call_id: callId,
         content_parts: [{ type: 'content', text: `{"result":"ok ${i}"}` }],
+        run_id: runId,
       });
     }
   }
@@ -322,7 +326,7 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                 }
                 const s = block.rangeMapping?.start_index ?? 0;
                 const e = block.rangeMapping?.end_index ?? -1;
-                return `Range Mapping (${s}..${e})`;
+                return `Range Mapping (runs ${s}..${e})`;
               })();
 
               return (
@@ -548,7 +552,7 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
       <div className="scenario-blocks-editor__simulation">
         <div className="scenario-blocks-editor__simulation-header">
           <strong>Mini Simulation</strong>
-          <span className="scenario-blocks-editor__simulation-hint">N = number of user messages</span>
+          <span className="scenario-blocks-editor__simulation-hint">N = number of runs</span>
         </div>
         <div className="scenario-blocks-editor__simulation-controls">
           <label>

@@ -43,7 +43,6 @@ class ThinkingConfig(BaseModel):
     """Thinking configuration for model-native thinking"""
     effort: Optional[Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]] = None
     max_tokens: Optional[int] = None
-    verbosity: Optional[str] = None  # GPT-5 output verbosity: 'low' | 'medium' | 'high'
     gemini_thinking_level: Optional[str] = None  # 'minimal' | 'low' | 'medium' | 'high'
     gemini_budget_tokens: Optional[int] = None
 
@@ -83,6 +82,7 @@ class AdvancedTaskSettings(BaseModel):
     custom_thinking_template_id: Optional[str] = None
     tokenizer_override: Optional[Literal["openai", "claude", "gemini"]] = None
     request_format: Literal["openai_sdk", "claude_sdk"] = "openai_sdk"
+    verbosity: Optional[Literal["low", "medium", "high"]] = None  # GPT-5 output verbosity (text.verbosity in Responses API)
 
 
 class TaskAIConfig(BaseModel):

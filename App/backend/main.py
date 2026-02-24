@@ -344,6 +344,7 @@ async def stream_chat(
                 request_format=request.request_format,
                 retry_config=retry_cfg,
                 native_tool_call=request.native_tool_call,
+                verbosity=request.verbosity,
             )
 
             seq = 0

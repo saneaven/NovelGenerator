@@ -227,6 +227,7 @@ class ClaudeProvider(BaseProvider):
         request_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
+        verbosity: Optional[str] = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         if not self.validate_config():
             yield self._error_event("Claude API key is required")

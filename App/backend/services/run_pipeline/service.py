@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import Any, Callable
 from uuid import UUID
 
@@ -16,6 +17,8 @@ from ..tool_engine.contracts import ToolOffer
 from .contracts import CreateContext
 from . import llm_executor
 from . import prompt_assembly
+
+logger = logging.getLogger(__name__)
 
 
 class RunPipeline:
@@ -554,6 +557,7 @@ class RunPipeline:
             finally:
                 raise
         except Exception as exc:  # noqa: BLE001
+            logger.error("Run %s failed: %s", run_id, exc, exc_info=True)
             db.rollback()
             run = db.query(RunModel).filter(RunModel.id == run_id).first()
             if run is not None:

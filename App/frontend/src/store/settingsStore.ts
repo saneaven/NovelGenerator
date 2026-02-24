@@ -83,7 +83,6 @@ export interface CustomThinkingTemplate {
 export interface ThinkingConfig {
     effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';  // Claude adaptive uses low|medium|high|max
     max_tokens?: number;
-    verbosity?: 'low' | 'medium' | 'high';  // GPT-5 output verbosity
     gemini_thinking_level?: 'minimal' | 'low' | 'medium' | 'high';  // Gemini 3 Flash supports all, Pro only low/high
     gemini_budget_tokens?: number;
 }
@@ -117,6 +116,7 @@ export interface AdvancedTaskSettings {
     custom_thinking_template_id?: string;
     tokenizer_override?: TokenizerOverride;  // For openrouter/custom providers: which tokenizer to use for token counting
     request_format?: RequestFormat;
+    verbosity?: 'low' | 'medium' | 'high';  // GPT-5 output verbosity (text.verbosity in Responses API)
 }
 
 // Complete configuration for a single AI function

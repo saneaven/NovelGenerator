@@ -265,31 +265,52 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
           )}
         </div>
 
-        <div className={`form-field ${isGpt5 ? 'disabled' : ''}`}>
-          <label>
-            {t('settings.taskConfig.temperature')}: <span className="temperature-value">{config.temperature.toFixed(1)}</span>
-          </label>
-          <input
-            type="range"
-            min="0"
-            max="2"
-            step="0.1"
-            value={config.temperature}
-            onChange={(e) => handleTemperatureChange(parseFloat(e.target.value))}
-            className="temperature-slider"
-            disabled={isGpt5}
-          />
-          <div className="temperature-labels">
-            <small>{t('settings.taskConfig.temperatureLabels.precise')}</small>
-            <small>{t('settings.taskConfig.temperatureLabels.balanced')}</small>
-            <small>{t('settings.taskConfig.temperatureLabels.creative')}</small>
+        {isGpt5 ? (
+          <div className="form-field">
+            <label>{t('settings.taskConfig.thinking_config.verbosity')}</label>
+            <CustomSelect
+              value={config.advanced.verbosity || 'medium'}
+              onChange={(value) => onChange({
+                ...config,
+                advanced: {
+                  ...config.advanced,
+                  verbosity: value as 'low' | 'medium' | 'high',
+                },
+              })}
+              options={[
+                { value: 'low', label: t('settings.taskConfig.thinking_config.verbosityOptions.low') },
+                { value: 'medium', label: t('settings.taskConfig.thinking_config.verbosityOptions.medium') },
+                { value: 'high', label: t('settings.taskConfig.thinking_config.verbosityOptions.high') },
+              ]}
+            />
+            <p className="field-hint">
+              {t('settings.taskConfig.thinking_config.verbosityHint')}
+            </p>
           </div>
-          <p className="field-hint">
-            {isGpt5
-              ? t('settings.taskConfig.temperatureGpt5Hint')
-              : t('settings.taskConfig.temperatureHint')}
-          </p>
-        </div>
+        ) : (
+          <div className="form-field">
+            <label>
+              {t('settings.taskConfig.temperature')}: <span className="temperature-value">{config.temperature.toFixed(1)}</span>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="2"
+              step="0.1"
+              value={config.temperature}
+              onChange={(e) => handleTemperatureChange(parseFloat(e.target.value))}
+              className="temperature-slider"
+            />
+            <div className="temperature-labels">
+              <small>{t('settings.taskConfig.temperatureLabels.precise')}</small>
+              <small>{t('settings.taskConfig.temperatureLabels.balanced')}</small>
+              <small>{t('settings.taskConfig.temperatureLabels.creative')}</small>
+            </div>
+            <p className="field-hint">
+              {t('settings.taskConfig.temperatureHint')}
+            </p>
+          </div>
+        )}
 
         <div className="form-field">
           <label>{t('settings.taskConfig.tokenLimits.context_window_tokens')}</label>
@@ -417,25 +438,6 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                           : t('settings.taskConfig.thinking_config.effortHintGeneric')}
                       </p>
                     </div>
-
-                    {/* Verbosity dropdown - GPT-5 only */}
-                    {isGpt5 && (
-                      <div className="form-field">
-                        <label>{t('settings.taskConfig.thinking_config.verbosity')}</label>
-                        <CustomSelect
-                          value={config.advanced.thinking_config?.verbosity || 'medium'}
-                          onChange={(value) => handleThinkingConfigChange('verbosity', value)}
-                          options={[
-                            { value: 'low', label: t('settings.taskConfig.thinking_config.verbosityOptions.low') },
-                            { value: 'medium', label: t('settings.taskConfig.thinking_config.verbosityOptions.medium') },
-                            { value: 'high', label: t('settings.taskConfig.thinking_config.verbosityOptions.high') },
-                          ]}
-                        />
-                        <p className="field-hint">
-                          {t('settings.taskConfig.thinking_config.verbosityHint')}
-                        </p>
-                      </div>
-                    )}
 
                     {/* Max tokens - not for GPT-5 (uses max_output_tokens automatically) */}
                     {!isGpt5 && (

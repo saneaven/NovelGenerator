@@ -42,6 +42,7 @@ class BaseProvider(ABC):
         request_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
+        verbosity: Optional[str] = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         """
         Stream chat completions from the provider
@@ -59,6 +60,7 @@ class BaseProvider(ABC):
             request_format: Custom endpoint request format ('openai_sdk', 'claude_sdk')
             retry_config: Retry configuration for error handling
             native_tool_call: If true, provider should parse <tool_calls> tags from text and emit tool_calls deltas.
+            verbosity: GPT-5 output verbosity ('low', 'medium', 'high'). Maps to text.verbosity in Responses API.
 
         Yields:
             ProviderEvent objects. SSE formatting is handled by the API endpoint.

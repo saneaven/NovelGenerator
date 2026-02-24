@@ -405,6 +405,7 @@ async def run_llm(
         request_format=advanced.get("request_format"),
         retry_config=settings_service.get_retry_config(db, run.user_id),
         native_tool_call=native_tool_call_mode,
+        verbosity=advanced.get("verbosity"),
     )
 
     assembler = FallbackSnapshotAssembler(provider=task_config.provider, model=task_config.model)

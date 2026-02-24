@@ -113,53 +113,74 @@ class OpenAIResponsesProvider(BaseProvider):
                     })
                 continue
 
+            # Helpers: collect reasoning items and output message ID
+            def _reasoning_data() -> Dict:
+                if not isinstance(reasoning_detail, dict):
+                    return {}
+                return reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
+
+            def _reasoning_items() -> List[Dict]:
+                items = _reasoning_data().get("items")
+                if not isinstance(items, list):
+                    return []
+                return [item for item in items if isinstance(item, dict)]
+
+            def _apply_output_id(msg_dict: Dict, ri: List[Dict]) -> None:
+                """Mark assistant message as a proper output item when reasoning items are present."""
+                if not ri:
+                    return
+                msg_dict["type"] = "message"
+                msg_dict["status"] = "completed"
+                output_msg_id = _reasoning_data().get("output_msg_id")
+                if isinstance(output_msg_id, str) and output_msg_id:
+                    msg_dict["id"] = output_msg_id
+
             # Handle assistant messages with tool_calls
             if role == "assistant" and tool_calls:
-                content_items = []
-                # Add text content if present (use output_text for assistant)
+                # Reasoning items must precede the output they produced
+                ri = _reasoning_items()
+                for item in ri:
+                    result.append(item)
+                # Add message only if there's text content
                 if text_content:
-                    content_items.append({"type": "output_text", "text": text_content})
-                # Convert tool_calls to Responses API function_call format
+                    content_items = [{"type": "output_text", "text": text_content}]
+                    msg_dict: Dict = {"role": role, "content": content_items}
+                    _apply_output_id(msg_dict, ri)
+                    result.append(msg_dict)
+                # Function calls are top-level input items in the Responses API
+                fc_item_ids = _reasoning_data().get("function_call_item_ids", {})
                 for tc in tool_calls:
                     tc_function = tc.get("function", {})
-                    content_items.append({
+                    call_id = tc.get("id", "")
+                    fc_item: Dict = {
                         "type": "function_call",
-                        "call_id": tc.get("id", ""),
+                        "call_id": call_id,
                         "name": tc_function.get("name", ""),
-                        "arguments": tc_function.get("arguments", "{}")  # Already JSON string
-                    })
-                result.append({"role": role, "content": content_items})
-                if isinstance(reasoning_detail, dict):
-                    reasoning_data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
-                    items = reasoning_data.get("items")
-                    if isinstance(items, list):
-                        for item in items:
-                            if isinstance(item, dict):
-                                result.append(item)
+                        "arguments": tc_function.get("arguments", "{}")
+                    }
+                    original_id = fc_item_ids.get(call_id)
+                    if original_id:
+                        fc_item["id"] = original_id
+                        fc_item["status"] = "completed"
+                    result.append(fc_item)
                 continue
 
+            # Skip empty assistant messages — reasoning items without a
+            # following output item would cause a 400 error from the API.
             if not text_content:
-                if role == "assistant" and isinstance(reasoning_detail, dict):
-                    reasoning_data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
-                    items = reasoning_data.get("items")
-                    if isinstance(items, list):
-                        for item in items:
-                            if isinstance(item, dict):
-                                result.append(item)
                 continue
 
             # Convert text content to Responses content array format.
             item_type = "output_text" if role == "assistant" else "input_text"
             content_items = [{"type": item_type, "text": text_content}]
 
-            result.append({"role": role, "content": content_items})
-            if role == "assistant" and isinstance(reasoning_detail, dict):
-                reasoning_data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
-                items = reasoning_data.get("items")
-                if isinstance(items, list):
-                    for item in items:
-                        if isinstance(item, dict):
-                            result.append(item)
+            # Reasoning items must precede the output they produced
+            ri = _reasoning_items() if role == "assistant" else []
+            for item in ri:
+                result.append(item)
+            msg_dict: Dict = {"role": role, "content": content_items}
+            _apply_output_id(msg_dict, ri)
+            result.append(msg_dict)
 
         return result
 
@@ -184,6 +205,7 @@ class OpenAIResponsesProvider(BaseProvider):
         request_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
+        verbosity: Optional[str] = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         """
         Stream chat using OpenAI Responses API.
@@ -214,10 +236,13 @@ class OpenAIResponsesProvider(BaseProvider):
                 "effort": effort,
                 "summary": "auto",  # Enable reasoning summary streaming
             }
+            # Request encrypted reasoning content so items can be passed back
+            # in subsequent turns for reasoning continuity.
+            request["include"] = ["reasoning.encrypted_content"]
 
-            # Add verbosity if specified
-            if thinking_config.get("verbosity"):
-                request["reasoning"]["verbosity"] = thinking_config["verbosity"]
+        # Add output verbosity (GPT-5: text.verbosity in Responses API)
+        if verbosity:
+            request["text"] = {"verbosity": verbosity}
 
         # Add max tokens (Responses API uses max_output_tokens)
         if max_tokens is not None:
@@ -380,13 +405,16 @@ class OpenAIResponsesProvider(BaseProvider):
                     return
 
         except (APIConnectionError, RateLimitError, AuthenticationError, BadRequestError, APIStatusError) as exc:
+            logger.error("OpenAI Responses API error (model=%s): %s", model, exc, exc_info=True)
             status = getattr(exc, "status_code", None)
             yield self._error_event(str(exc), status)
             return
         except OpenAIError as exc:
+            logger.error("OpenAI SDK error (model=%s): %s", model, exc, exc_info=True)
             yield self._error_event(str(exc), getattr(exc, "status_code", None))
             return
         except Exception as exc:
+            logger.error("Unexpected error in OpenAI Responses stream (model=%s): %s", model, exc, exc_info=True)
             yield self._error_event(str(exc))
             return
         finally:
