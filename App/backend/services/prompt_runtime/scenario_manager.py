@@ -237,20 +237,6 @@ class ScenarioManager:
             "selectedObjectIds": selected_object_ids,
         }
 
-    @staticmethod
-    def _build_feedback_data(
-        *,
-        payload: dict[str, Any],
-        journey_target_ids: list[str],
-    ) -> dict[str, Any]:
-        feedback_payload = _as_dict(payload.get("feedback"))
-        editing_ids = _as_str_list(feedback_payload.get("editingObjectIds"))
-        if editing_ids:
-            return {"editingObjectIds": editing_ids}
-
-        fallback_ids = _as_str_list(payload.get("objectIds")) or journey_target_ids
-        return {"editingObjectIds": fallback_ids}
-
     def build_template_data(
         self,
         db: Session,
@@ -325,7 +311,6 @@ class ScenarioManager:
                 project_data=project_data,
                 context_object_ids=context_object_ids,
             ),
-            "feedback": self._build_feedback_data(payload=payload, journey_target_ids=journey_target_ids),
             "memory": {
                 "summaries": [],
                 "historyChats": [],

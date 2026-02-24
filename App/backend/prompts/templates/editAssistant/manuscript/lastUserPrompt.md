@@ -1,5 +1,5 @@
 # Context (targets)
-{{ prompt("common/projectContext/filtered", objectIds=feedback.editingObjectIds) }}
+{{ prompt("common/projectContext/filtered", objectIds=editAssistant.manuscript.objectIds) }}
 
 # User Feedback
 

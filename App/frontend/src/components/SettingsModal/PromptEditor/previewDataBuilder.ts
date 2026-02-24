@@ -379,9 +379,6 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
       payload: {},
       targetIds: filteredIds.targetIds,
     },
-    feedback: {
-      editingObjectIds: filteredIds.objectIds,
-    },
     memory: {
       summaries: [],
       historyChats: [],

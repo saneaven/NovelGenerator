@@ -279,9 +279,6 @@ def build_memory_summary_template_data(
             "scenePostContext": "",
             "selectedObjectIds": [],
         },
-        "feedback": {
-            "editingObjectIds": [],
-        },
         "memory": {
             "summaries": [],
             "historyChats": [],

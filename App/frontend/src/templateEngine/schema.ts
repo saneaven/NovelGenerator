@@ -131,13 +131,6 @@ export const UNIFIED_SCHEMA = {
     },
   },
 
-  feedback: {
-    editingObjectIds: {
-      desc: "IDs of target objects for the current operation (used by common/feedback templates)",
-      example: ["char-1", "ms-1"] as string[],
-    },
-  },
-
   agent: {
     runMode: { desc: "Agent run mode", example: "planMode" as "planMode" | "agentMode" },
     surface: {
@@ -276,8 +269,8 @@ export type PromptType = 'agent' | 'memory' | 'editAssistant' | 'translation' | 
 export const PROMPT_TYPE_VARIABLES: Record<PromptType, string[]> = {
   agent: ['config', 'project', 'input', 'agent', 'memory', 'variables'],
   memory: ['config', 'project', 'input', 'memorySummary', 'variables'],
-  editAssistant: ['config', 'project', 'input', 'editAssistant', 'feedback', 'variables'],
-  translation: ['config', 'project', 'input', 'translation', 'feedback', 'variables'],
+  editAssistant: ['config', 'project', 'input', 'editAssistant', 'variables'],
+  translation: ['config', 'project', 'input', 'translation', 'variables'],
   objectImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
   sceneImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
   subAgent: ['config', 'project', 'input', 'variables'],
