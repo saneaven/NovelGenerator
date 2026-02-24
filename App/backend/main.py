@@ -27,6 +27,7 @@ from .providers.contracts import (
 )
 from .providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from .providers.sse_encoder import encode_sse
+from .providers.stream_retry import normalize_retry_config, stream_with_retry
 from .auth import get_current_user
 from .database import get_db
 from .models.db_models import User
@@ -329,23 +330,27 @@ async def stream_chat(
             thinking_cfg = request.thinking_config.model_dump(exclude_none=True) if request.thinking_config else None
 
             # Retry config for error handling
-            retry_cfg = request.retry_config.model_dump() if request.retry_config else None
-
-            stream = provider_instance.stream_chat(
-                messages=messages,
-                model=request.model,
-                temperature=request.temperature,
-                tools=request.tools,
-                tool_choice=request.tool_choice,
-                max_tokens=request.max_tokens,
-                provider_preference=provider_pref,
-                thinking_config=thinking_cfg,
-                thinking_mode=request.thinking_mode,
-                request_format=request.request_format,
-                retry_config=retry_cfg,
-                native_tool_call=request.native_tool_call,
-                verbosity=request.verbosity,
+            retry_cfg = normalize_retry_config(
+                request.retry_config.model_dump() if request.retry_config else None
             )
+
+            def _create_stream():
+                return provider_instance.stream_chat(
+                    messages=messages,
+                    model=request.model,
+                    temperature=request.temperature,
+                    tools=request.tools,
+                    tool_choice=request.tool_choice,
+                    max_tokens=request.max_tokens,
+                    provider_preference=provider_pref,
+                    thinking_config=thinking_cfg,
+                    thinking_mode=request.thinking_mode,
+                    request_format=request.request_format,
+                    native_tool_call=request.native_tool_call,
+                    verbosity=request.verbosity,
+                )
+
+            stream = stream_with_retry(_create_stream, retry_cfg)
 
             seq = 0
             native_final = None

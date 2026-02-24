@@ -229,7 +229,6 @@ class CustomProvider(AsyncOpenAIProvider):
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
         request_format: Optional[str] = None,
-        retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
@@ -255,7 +254,6 @@ class CustomProvider(AsyncOpenAIProvider):
                 thinking_config=thinking_config,
                 thinking_mode=thinking_mode,
                 request_format=effective_request_format,
-                retry_config=retry_config,
                 native_tool_call=native_tool_call,
             ):
                 yield event
@@ -275,7 +273,6 @@ class CustomProvider(AsyncOpenAIProvider):
             thinking_config=effective_thinking_config,
             thinking_mode=thinking_mode,
             request_format=effective_request_format,
-            retry_config=retry_config,
             native_tool_call=native_tool_call,
         ):
             yield event

@@ -26,6 +26,7 @@ from ..reasoning.mode_policy import apply_thinking_mode
 from ..reasoning.normalize import normalize_reasoning_detail
 from ..reasoning.provider_io import get_provider_io
 from ..settings_service import settings_service
+from ...providers.stream_retry import normalize_retry_config, stream_with_retry
 from ..token_count_service import count_message_tokens
 from ..tool_engine import tool_engine
 from ..tool_engine.contracts import ToolOffer
@@ -392,21 +393,25 @@ async def run_llm(
     else:
         stream_thinking_display = None
 
-    stream = provider.stream_chat(
-        messages=provider_messages,
-        model=task_config.model,
-        temperature=float(task_config.temperature),
-        tools=tools_wire,
-        tool_choice="auto" if tools_wire else None,
-        max_tokens=task_config.max_output_tokens,
-        provider_preference=advanced.get("provider_preference"),
-        thinking_config=effective_thinking_config,
-        thinking_mode=thinking_mode,
-        request_format=advanced.get("request_format"),
-        retry_config=settings_service.get_retry_config(db, run.user_id),
-        native_tool_call=native_tool_call_mode,
-        verbosity=advanced.get("verbosity"),
-    )
+    retry_cfg = normalize_retry_config(settings_service.get_retry_config(db, run.user_id))
+
+    def _create_stream():
+        return provider.stream_chat(
+            messages=provider_messages,
+            model=task_config.model,
+            temperature=float(task_config.temperature),
+            tools=tools_wire,
+            tool_choice="auto" if tools_wire else None,
+            max_tokens=task_config.max_output_tokens,
+            provider_preference=advanced.get("provider_preference"),
+            thinking_config=effective_thinking_config,
+            thinking_mode=thinking_mode,
+            request_format=advanced.get("request_format"),
+            native_tool_call=native_tool_call_mode,
+            verbosity=advanced.get("verbosity"),
+        )
+
+    stream = stream_with_retry(_create_stream, retry_cfg)
 
     assembler = FallbackSnapshotAssembler(provider=task_config.provider, model=task_config.model)
     native_final = None

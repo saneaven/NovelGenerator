@@ -16,6 +16,7 @@ from ..prompt_runtime.contracts import ScenarioBundle
 from ..prompt_runtime.scenario_manager import ScenarioManager
 from ..prompt_runtime.template_renderer import TemplateRenderer
 from ..settings_service import settings_service
+from ...providers.stream_retry import normalize_retry_config, stream_with_retry
 from .text_utils import (
     build_archive_payload_for_message,
     count_tokens,
@@ -47,23 +48,27 @@ async def run_summary_model(
     if not provider.validate_config():
         raise RuntimeError(f"Invalid summary provider configuration: {summary_cfg.provider}")
 
-    stream = provider.stream_chat(
-        messages=[
-            {"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]},
-            {"role": "user", "content_parts": [{"type": "content", "text": user_prompt}]},
-        ],
-        model=summary_cfg.model,
-        temperature=float(summary_cfg.temperature),
-        tools=None,
-        tool_choice=None,
-        max_tokens=summary_cfg.max_output_tokens,
-        provider_preference=summary_cfg.advanced.get("provider_preference") if isinstance(summary_cfg.advanced, dict) else None,
-        thinking_config=summary_cfg.advanced.get("thinking_config") if isinstance(summary_cfg.advanced, dict) else None,
-        thinking_mode=summary_cfg.advanced.get("thinking_mode") if isinstance(summary_cfg.advanced, dict) else "off",
-        request_format=summary_cfg.advanced.get("request_format") if isinstance(summary_cfg.advanced, dict) else None,
-        retry_config=settings_service.get_retry_config(db, user_id),
-        native_tool_call=False,
-    )
+    retry_cfg = normalize_retry_config(settings_service.get_retry_config(db, user_id))
+
+    def _create_stream():
+        return provider.stream_chat(
+            messages=[
+                {"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]},
+                {"role": "user", "content_parts": [{"type": "content", "text": user_prompt}]},
+            ],
+            model=summary_cfg.model,
+            temperature=float(summary_cfg.temperature),
+            tools=None,
+            tool_choice=None,
+            max_tokens=summary_cfg.max_output_tokens,
+            provider_preference=summary_cfg.advanced.get("provider_preference") if isinstance(summary_cfg.advanced, dict) else None,
+            thinking_config=summary_cfg.advanced.get("thinking_config") if isinstance(summary_cfg.advanced, dict) else None,
+            thinking_mode=summary_cfg.advanced.get("thinking_mode") if isinstance(summary_cfg.advanced, dict) else "off",
+            request_format=summary_cfg.advanced.get("request_format") if isinstance(summary_cfg.advanced, dict) else None,
+            native_tool_call=False,
+        )
+
+    stream = stream_with_retry(_create_stream, retry_cfg)
 
     assembler = FallbackSnapshotAssembler(provider=summary_cfg.provider, model=summary_cfg.model)
     native_final = None
