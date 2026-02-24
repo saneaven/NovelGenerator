@@ -729,7 +729,7 @@ class ObjectService:
         )
 
         # manuscript side effects: image index rebuild + delete removed manuscript assets
-        if t == "manuscript" and create_new_version:
+        if t == "manuscript":
             doc = data.get("doc")
             if isinstance(doc, dict):
                 chapter = getattr(obj, "chapter", None)

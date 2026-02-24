@@ -18,6 +18,7 @@ from ....models.db_models import (
     Outline,
 )
 from ....models.translation_models import ObjectVersion
+from ..contexts import ToolExecutionContext
 from ...object_service import object_service
 from ...patch_utils import apply_single_replacement
 
@@ -214,6 +215,10 @@ def latest_version_data(db: Session, *, object_type: str, object_id: UUID, langu
         if isinstance(v, dict):
             return v
     return {}
+
+
+def is_translation_context(ctx: ToolExecutionContext) -> bool:
+    return getattr(ctx.thread, "journey_kind", None) == "objectTranslation"
 
 
 def patch_object_data(current: dict[str, Any], args: dict[str, Any]) -> dict[str, Any]:

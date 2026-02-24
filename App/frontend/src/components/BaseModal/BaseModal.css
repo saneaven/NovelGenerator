@@ -54,7 +54,7 @@
 
 .base-modal--large {
   width: 50dvw;
-  max-height: 90dvh;
+  height: 90dvh;
 }
 
 .base-modal--xlarge {

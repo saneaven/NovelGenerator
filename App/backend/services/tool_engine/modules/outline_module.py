@@ -8,6 +8,7 @@ from ..registry import ToolRegistry
 from ..result_utils import invalid_result, make_result, valid_result
 from .common_object_helpers import (
     extract_lang_data,
+    is_translation_context,
     latest_version_data,
     obj_schema,
     patch_object_data,
@@ -300,6 +301,7 @@ async def _execute_replace_outline(tool_name: str, args: dict[str, Any], ctx: To
         metadata=metadata or None,
         user_request=f"tool:{tool_name}",
         created_by=ctx.user_id,
+        create_new_version=not is_translation_context(ctx),
     )
     return make_result(f"Replaced {object_type}", object_id=str(object_id), object_type=object_type)
 
@@ -323,6 +325,7 @@ async def _execute_patch_outline(tool_name: str, args: dict[str, Any], ctx: Tool
         metadata=metadata or None,
         user_request=f"tool:{tool_name}",
         created_by=ctx.user_id,
+        create_new_version=not is_translation_context(ctx),
     )
     return make_result(f"Patched {object_type}", object_id=str(object_id), object_type=object_type)
 

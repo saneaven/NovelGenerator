@@ -230,7 +230,16 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
         };
       }
 
-      const merged = existing.map((m) => (m.id === message.id ? { ...m, ...message } : m));
+      const merged = existing.map((m) => {
+        if (m.id !== message.id) return m;
+        const next = { ...m, ...message };
+        // Preserve streaming state — API hydration must not kill an active stream.
+        if (m.isStreaming && !message.isStreaming) {
+          next.isStreaming = true;
+          next.streamingData = m.streamingData;
+        }
+        return next;
+      });
       return {
         messagesByThreadId: {
           ...s.messagesByThreadId,

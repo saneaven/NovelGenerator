@@ -212,6 +212,7 @@ async def apply_raw_output(
             language=target_language,
             user_request="raw:objectTranslation",
             created_by=run.user_id,
+            create_new_version=False,
         )
         return
 

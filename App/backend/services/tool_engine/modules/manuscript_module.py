@@ -6,7 +6,7 @@ from ..contexts import ToolExecutionContext, ToolValidationContext
 from ..contracts import ToolSpec
 from ..registry import ToolRegistry
 from ..result_utils import invalid_result, make_result, valid_result
-from .common_object_helpers import extract_lang_data, obj_schema, read_object, to_uuid
+from .common_object_helpers import extract_lang_data, is_translation_context, obj_schema, read_object, to_uuid
 from ....services.object_service import object_service
 from ....services.patch_utils import apply_single_replacement
 from ....services.sidecar_client import SidecarConversionError, SidecarUnavailableError
@@ -103,6 +103,7 @@ async def _execute_replace_manuscript(args: dict[str, Any], ctx: ToolExecutionCo
         language=ctx.language,
         user_request="tool:replace_manuscript",
         created_by=ctx.user_id,
+        create_new_version=not is_translation_context(ctx),
     )
     return make_result("Replaced manuscript", object_id=str(object_id), object_type="manuscript")
 
@@ -148,6 +149,7 @@ async def _execute_patch_manuscript(args: dict[str, Any], ctx: ToolExecutionCont
         language=ctx.language,
         user_request="tool:patch_manuscript",
         created_by=ctx.user_id,
+        create_new_version=not is_translation_context(ctx),
     )
     return make_result("Patched manuscript", object_id=str(object_id), object_type="manuscript")
 

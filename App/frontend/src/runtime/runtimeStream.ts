@@ -9,6 +9,7 @@ class ProjectRuntimeConnection {
   private abortController: AbortController | null = null;
   private streamTask: Promise<void> | null = null;
   private readonly router: EventRouter;
+  private eventChain: Promise<void> = Promise.resolve();
   private disposed = false;
 
   constructor(projectId: string) {
@@ -33,6 +34,7 @@ class ProjectRuntimeConnection {
     this.abortController?.abort();
     this.abortController = null;
     this.streamTask = null;
+    this.eventChain = Promise.resolve();
     this.router.dispose();
   }
 
@@ -47,7 +49,9 @@ class ProjectRuntimeConnection {
     this.streamTask = connectProjectStream(
       this.projectId,
       (event: ProjectSSEEvent) => {
-        this.router.handleEvent(event).catch((err) => {
+        this.eventChain = this.eventChain.then(
+          () => this.router.handleEvent(event),
+        ).catch((err) => {
           console.error('[RuntimeStream] Event handler error', { event: event.event, error: err });
         });
       },

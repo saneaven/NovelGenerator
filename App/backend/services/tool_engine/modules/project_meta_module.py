@@ -9,6 +9,7 @@ from ..result_utils import invalid_result, make_result, valid_result
 from .common_object_helpers import (
     extract_lang_data,
     get_primary_object_id,
+    is_translation_context,
     obj_schema,
     patch_object_data,
     read_object,
@@ -130,6 +131,7 @@ async def _execute_replace_basic_info(args: dict[str, Any], ctx: ToolExecutionCo
         language=ctx.language,
         user_request="tool:replace_basic_info",
         created_by=ctx.user_id,
+        create_new_version=not is_translation_context(ctx),
     )
     return make_result("Replaced basic_info", object_id=str(object_id), object_type="basic_info")
 
@@ -150,6 +152,7 @@ async def _execute_patch_basic_info(args: dict[str, Any], ctx: ToolExecutionCont
         language=ctx.language,
         user_request="tool:patch_basic_info",
         created_by=ctx.user_id,
+        create_new_version=not is_translation_context(ctx),
     )
     return make_result("Patched basic_info", object_id=str(object_id), object_type="basic_info")
 
@@ -172,6 +175,7 @@ async def _execute_replace_guidelines(args: dict[str, Any], ctx: ToolExecutionCo
         language=ctx.language,
         user_request="tool:replace_guidelines",
         created_by=ctx.user_id,
+        create_new_version=not is_translation_context(ctx),
     )
     return make_result("Replaced guidelines", object_id=str(object_id), object_type="guidelines")
 
@@ -192,6 +196,7 @@ async def _execute_patch_guidelines(args: dict[str, Any], ctx: ToolExecutionCont
         language=ctx.language,
         user_request="tool:patch_guidelines",
         created_by=ctx.user_id,
+        create_new_version=not is_translation_context(ctx),
     )
     return make_result("Patched guidelines", object_id=str(object_id), object_type="guidelines")
 

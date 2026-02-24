@@ -131,6 +131,15 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
 
   // Fetch messages on mount & hydrate ThreadStore
   useEffect(() => {
+    // Skip hydration if SSE has already populated messages for this thread
+    // (same guard as AgentPanel — avoids overwriting streaming state).
+    const store = useThreadStore.getState();
+    const existingMessages = store.getMessages(threadId);
+    if (existingMessages.length > 0) {
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
     setFetchError(null);
@@ -139,14 +148,14 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
       .listMessages(threadId)
       .then((response) => {
         if (cancelled) return;
-        const store = useThreadStore.getState();
-        store.upsertThread(response.thread);
+        const nextStore = useThreadStore.getState();
+        nextStore.upsertThread(response.thread);
         for (const msg of response.messages) {
-          store.upsertMessage(msg);
+          nextStore.upsertMessage(msg);
         }
         if (response.toolCalls.length > 0) {
           for (const tc of response.toolCalls) {
-            store.upsertToolCall(tc);
+            nextStore.upsertToolCall(tc);
           }
         }
       })
@@ -237,7 +246,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     const el = bodyRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [displayMessages.length, threadStatus, isStreamActive]);
+  }, [displayMessages, threadStatus, isStreamActive]);
 
   // Handlers
   const handleCancel = useCallback(() => {

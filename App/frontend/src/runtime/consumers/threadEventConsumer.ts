@@ -446,7 +446,10 @@ export class ThreadEventConsumer {
   }
 
   private async checkAutoContinue(threadId: string): Promise<void> {
-    if (this.autoContinueLockByThread.has(threadId)) return;
+    if (this.autoContinueLockByThread.has(threadId)) {
+      console.debug('[AutoContinue] Skipped: lock held', { threadId });
+      return;
+    }
     this.autoContinueLockByThread.add(threadId);
     try {
       const store = useThreadStore.getState();
@@ -456,27 +459,49 @@ export class ThreadEventConsumer {
       const latestAssistant = [...messages]
         .sort((a, b) => b.seqInThread - a.seqInThread)
         .find((m) => m.role === 'assistant');
-      if (!latestAssistant) return;
+      if (!latestAssistant) {
+        console.debug('[AutoContinue] Skipped: no assistant message', { threadId });
+        return;
+      }
 
       // Ignore stale assistants from older runs.
-      if (latestRunId && latestAssistant.runId && latestAssistant.runId !== latestRunId) return;
+      if (latestRunId && latestAssistant.runId && latestAssistant.runId !== latestRunId) {
+        console.debug('[AutoContinue] Skipped: stale assistant from older run', { threadId, latestRunId, assistantRunId: latestAssistant.runId });
+        return;
+      }
 
       // Prevent repeated auto-continue on the same assistant message.
-      if (this.autoContinuedAssistantByThread.get(threadId) === latestAssistant.id) return;
+      if (this.autoContinuedAssistantByThread.get(threadId) === latestAssistant.id) {
+        console.debug('[AutoContinue] Skipped: already continued for this assistant', { threadId, assistantId: latestAssistant.id });
+        return;
+      }
 
       const toolCalls = store.getToolCallsForAssistantMessage(latestAssistant.id);
-      if (toolCalls.length === 0) return;
+      if (toolCalls.length === 0) {
+        console.debug('[AutoContinue] Skipped: no tool calls for assistant', { threadId, assistantId: latestAssistant.id });
+        return;
+      }
 
-      if (!toolCalls.every((tc) => tc.status === 'applied' || tc.status === 'failed')) return;
+      if (!toolCalls.every((tc) => tc.status === 'applied' || tc.status === 'failed')) {
+        console.debug('[AutoContinue] Skipped: unresolved tool calls', { threadId, statuses: toolCalls.map((tc) => tc.status) });
+        return;
+      }
 
       const allowedForContinue =
         thread?.status === 'waiting'
         || thread?.status === 'done';
-      if (!allowedForContinue) return;
+      if (!allowedForContinue) {
+        console.debug('[AutoContinue] Skipped: thread status not allowed', { threadId, status: thread?.status });
+        return;
+      }
 
-      if (this.inFlightResumeByThread.has(threadId)) return;
+      if (this.inFlightResumeByThread.has(threadId)) {
+        console.debug('[AutoContinue] Skipped: resume already in-flight', { threadId });
+        return;
+      }
       this.inFlightResumeByThread.add(threadId);
       try {
+        console.debug('[AutoContinue] Resuming parent thread', { threadId, assistantId: latestAssistant.id, toolCallCount: toolCalls.length });
         const response = await threadService.chat(threadId, { input_text: '' });
         this.autoContinuedAssistantByThread.set(threadId, latestAssistant.id);
         store.setThreadRuntime(threadId, {
