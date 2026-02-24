@@ -173,7 +173,7 @@ export function threadPriority(status: ThreadStatus): number {
 }
 
 export function isBlockingThreadStatus(status: ThreadStatus): boolean {
-  return status === 'running' || status === 'waiting' || status === 'processing' || status === 'paused';
+  return status !== 'done' && status !== 'canceled';
 }
 
 export function toThreadType(raw: string | null | undefined): ThreadType {

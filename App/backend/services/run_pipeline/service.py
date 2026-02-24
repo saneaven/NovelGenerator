@@ -354,6 +354,28 @@ class RunPipeline:
                 data={"run_id": str(run_id), "status": "canceled"},
             )
 
+            # Propagate cancellation to parent if this is a sub-agent child thread
+            db2 = self._db_factory()
+            try:
+                canceled_run = db2.query(RunModel).filter(RunModel.id == run_id).first()
+                if canceled_run is not None:
+                    canceled_thread = canceled_run.thread
+                    if canceled_thread is not None:
+                        await tool_engine.complete_parent_tool_call(
+                            db2,
+                            thread=canceled_thread,
+                            run=canceled_run,
+                            emit=self._emit,
+                        )
+            except Exception:
+                logger.warning(
+                    "Failed to propagate cancel to parent for run %s",
+                    run_id,
+                    exc_info=True,
+                )
+            finally:
+                db2.close()
+
     # ------------------------------------------------------------------
     # Tool call persistence
     # ------------------------------------------------------------------

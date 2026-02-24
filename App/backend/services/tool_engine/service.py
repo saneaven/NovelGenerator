@@ -352,7 +352,9 @@ class ToolEngineService:
         run: RunModel,
         emit: Callable[..., Awaitable[None]],
     ) -> None:
-        if thread.thread_type != "subAgent" or run.status != "done":
+        if thread.thread_type != "subAgent":
+            return
+        if run.status not in ("done", "canceled"):
             return
 
         parent_tc = (
@@ -363,21 +365,27 @@ class ToolEngineService:
         if parent_tc is None or parent_tc.status != "processing":
             return
 
-        final_msg = (
-            db.query(RunMessageModel)
-            .filter(RunMessageModel.run_id == run.id, RunMessageModel.role == "assistant")
-            .order_by(RunMessageModel.seq.desc())
-            .first()
-        )
+        if run.status == "done":
+            final_msg = (
+                db.query(RunMessageModel)
+                .filter(RunMessageModel.run_id == run.id, RunMessageModel.role == "assistant")
+                .order_by(RunMessageModel.seq.desc())
+                .first()
+            )
 
-        result_text = ""
-        if final_msg and isinstance(final_msg.data, dict):
-            final_data = final_msg.data.get("_final", {})
-            parts = final_data.get("contentParts", [])
-            result_text = "\n".join(p.get("text", "") for p in parts if isinstance(p, dict) and p.get("type") == "content")
+            result_text = ""
+            if final_msg and isinstance(final_msg.data, dict):
+                final_data = final_msg.data.get("_final", {})
+                parts = final_data.get("contentParts", [])
+                result_text = "\n".join(p.get("text", "") for p in parts if isinstance(p, dict) and p.get("type") == "content")
 
-        parent_tc.status = "applied"
-        parent_tc.result = {"success": True, "content": result_text}
+            parent_tc.status = "applied"
+            parent_tc.result = {"success": True, "content": result_text}
+        else:
+            error_message = run.error or "Sub-agent canceled"
+            parent_tc.status = "failed"
+            parent_tc.reason = error_message
+            parent_tc.result = {"success": False, "message": error_message}
         parent_tc.updated_at = datetime.utcnow()
 
         parent_thread = db.query(Thread).filter(Thread.id == parent_tc.thread_id).first()
