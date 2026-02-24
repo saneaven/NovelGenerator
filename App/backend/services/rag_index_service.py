@@ -100,7 +100,7 @@ def chunk_fields(text_by_field: Dict[str, str]) -> List[Dict[str, Any]]:
     chunks: List[Dict[str, Any]] = []
     chunk_index = 0
 
-    for field_path in ["content", "doc"]:
+    for field_path in ["description", "content", "doc"]:
         raw = (text_by_field.get(field_path) or "").strip()
         if not raw:
             continue
@@ -331,14 +331,16 @@ async def index_object(
         return {"rebuilt": False, "skipped": True, "missing_main_language": False}
 
     text_by_field = extract_index_text(object_type, latest.data, language)
-    if not text_by_field or not any(v.strip() for v in text_by_field.values()):
-        source.index_state = "missing_main_language"
+    lang_blob_missing = not text_by_field
+    has_no_content = lang_blob_missing or not any(v.strip() for v in text_by_field.values())
+    if has_no_content:
+        source.index_state = "missing_main_language" if lang_blob_missing else "ready"
         source.version_number = latest.version_number
         source.content_hash = None
         source.indexed_at = datetime.utcnow()
         db.query(RagChunk).filter(RagChunk.source_id == source.id).delete(synchronize_session=False)
         db.commit()
-        return {"rebuilt": False, "skipped": True, "missing_main_language": True}
+        return {"rebuilt": False, "skipped": True, "missing_main_language": lang_blob_missing}
 
     chunks = chunk_fields(text_by_field)
     if not chunks:
@@ -358,7 +360,7 @@ async def index_object(
     hash_chunks: List[Dict[str, Any]] = []
     for c in chunks:
         embed_text = c["text"]
-        if name_prefix and c["field_path"] == "content":
+        if name_prefix and c["field_path"] in ("content", "description"):
             embed_text = f"{name_prefix}\n\n{embed_text}"
         embedding_texts.append(embed_text)
         hash_chunks.append({"field_path": c["field_path"], "chunk_index": c["chunk_index"], "text": embed_text})
@@ -464,6 +466,18 @@ async def reindex_project(
         raise ValueError("RAG embedding profile is not configured")
 
     refs = _project_object_refs(db, project_id=project_id)
+
+    # Clean up orphaned sources for objects that no longer exist
+    current_ref_set = {(ot, oid) for ot, oid in refs}
+    existing_sources = (
+        db.query(RagSource)
+        .filter(RagSource.user_id == user_id, RagSource.project_id == project_id)
+        .all()
+    )
+    for source in existing_sources:
+        if (source.object_type, source.object_id) not in current_ref_set:
+            db.delete(source)
+    db.flush()
 
     indexed_sources = 0
     rebuilt_sources = 0

@@ -27,7 +27,7 @@ def _validate_keyword_search(args: dict[str, Any], ctx: ToolValidationContext):
 
 def _validate_rag_search(args: dict[str, Any], ctx: ToolValidationContext):
     queries = args.get("queries")
-    if not isinstance(queries, list) or not all(isinstance(q, str) and q.strip() for q in queries):
+    if not isinstance(queries, list) or len(queries) == 0 or not all(isinstance(q, str) and q.strip() for q in queries):
         return invalid_result("validate_rag_search", "queries must be non-empty string[]")
 
     rag_cfg = settings_service.get_rag_settings(ctx.db, ctx.user_id)

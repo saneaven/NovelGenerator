@@ -47,7 +47,9 @@ class ProjectRuntimeConnection {
     this.streamTask = connectProjectStream(
       this.projectId,
       (event: ProjectSSEEvent) => {
-        void this.router.handleEvent(event);
+        this.router.handleEvent(event).catch((err) => {
+          console.error('[RuntimeStream] Event handler error', { event: event.event, error: err });
+        });
       },
       this.abortController.signal,
       {

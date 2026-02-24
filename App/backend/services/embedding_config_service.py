@@ -36,8 +36,8 @@ def get_embedding_profile(
     feature: EmbeddingFeature,
 ) -> Optional[Dict[str, Any]]:
     settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
-    # Global embeddings toggle (historically `rag_search_enabled`).
-    if settings and not bool(getattr(settings, "rag_search_enabled", False)):
+    # rag_search_enabled only gates the ragSearch feature, not agentMemory.
+    if feature == "ragSearch" and settings and not bool(getattr(settings, "rag_search_enabled", False)):
         return None
     cfg = merge_embedding_configs(getattr(settings, "embedding_configs", None) if settings else None)
 

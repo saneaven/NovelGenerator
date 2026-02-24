@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useRef } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView, keymap } from '@codemirror/view';
 import { EditorSelection } from '@codemirror/state';
@@ -24,11 +24,6 @@ const SyntaxHighlightedTextarea: React.FC<SyntaxHighlightedTextareaProps> = ({
 {
     const editorRef = useRef<any>(null);
     const lastEmittedValueRef = useRef(value);
-
-    useEffect(() =>
-    {
-        lastEmittedValueRef.current = value;
-    }, [value]);
 
     const emitChangeIfNeeded = useCallback((nextValue: string) =>
     {
@@ -71,11 +66,6 @@ const SyntaxHighlightedTextarea: React.FC<SyntaxHighlightedTextareaProps> = ({
             height="100%"
             className="syntax-highlighted-textarea"
             onChange={(nextValue) => emitChangeIfNeeded(nextValue)}
-            onUpdate={(update) =>
-            {
-                if (!update.docChanged) return;
-                emitChangeIfNeeded(update.state.doc.toString());
-            }}
             placeholder={placeholder}
             extensions={[
                 templateLanguage,

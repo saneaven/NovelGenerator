@@ -1556,11 +1556,11 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                           const taskType = selectedPrompt.taskType;
                           const taskSubtype = selectedPrompt.taskSubtype;
                           if (!taskType || !taskSubtype) return;
-                          const nextScenario = { ...currentScenarioDraft.scenario, system_template: text };
                           const draftKey = makeScenarioDraftKey(taskType, taskSubtype);
                           setScenarioDrafts((prev) => {
                             const cur = prev[draftKey];
                             if (!cur) return prev;
+                            const nextScenario = { ...cur.scenario, system_template: text };
                             const dirty = JSON.stringify(nextScenario) !== JSON.stringify(cur.originalScenario);
                             return {
                               ...prev,
@@ -1585,11 +1585,11 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                             const taskType = selectedPrompt.taskType;
                             const taskSubtype = selectedPrompt.taskSubtype;
                             if (!taskType || !taskSubtype) return;
-                            const nextScenario = { ...currentScenarioDraft.scenario, blocks };
                             const draftKey = makeScenarioDraftKey(taskType, taskSubtype);
                             setScenarioDrafts((prev) => {
                               const cur = prev[draftKey];
                               if (!cur) return prev;
+                              const nextScenario = { ...cur.scenario, blocks };
                               const dirty = JSON.stringify(nextScenario) !== JSON.stringify(cur.originalScenario);
                               return {
                                 ...prev,

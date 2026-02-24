@@ -262,6 +262,7 @@ async def rag_keyword_search(
     db: Session = Depends(get_db),
 ):
     _get_project_or_404(db, user_id=current_user.id, project_id=project_id)
+    _require_rag_enabled(db, user_id=current_user.id)
 
     kw = (keyword or "").strip()
     if not kw:

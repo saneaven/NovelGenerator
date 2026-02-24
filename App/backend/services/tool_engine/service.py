@@ -427,6 +427,7 @@ class ToolEngineService:
                 "reason": parent_tc.reason,
                 "result": parent_tc.result if isinstance(parent_tc.result, dict) else None,
                 "child_thread_id": str(parent_tc.child_thread_id) if parent_tc.child_thread_id else None,
+                "assistant_message_id": str(parent_tc.assistant_message_id) if parent_tc.assistant_message_id else None,
             },
         )
         await emit(

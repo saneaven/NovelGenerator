@@ -476,15 +476,17 @@ export class ThreadEventConsumer {
 
       if (this.inFlightResumeByThread.has(threadId)) return;
       this.inFlightResumeByThread.add(threadId);
-      this.autoContinuedAssistantByThread.set(threadId, latestAssistant.id);
       try {
         const response = await threadService.chat(threadId, { input_text: '' });
+        this.autoContinuedAssistantByThread.set(threadId, latestAssistant.id);
         store.setThreadRuntime(threadId, {
           status: response.threadStatus,
           latestRunId: response.runId,
           latestRunStatus: response.status,
           updatedAt: nowIso(),
         });
+      } catch (err) {
+        console.error('[AutoContinue] Resume failed, will retry on next event', { threadId, error: err });
       } finally {
         this.inFlightResumeByThread.delete(threadId);
       }
@@ -629,13 +631,14 @@ export class ThreadEventConsumer {
       const store = useThreadStore.getState();
       const existing = store.toolCallsById[toolCallId];
       const childThreadId = payload.child_thread_id ? String(payload.child_thread_id) : null;
+      const assistantMsgId = payload.assistant_message_id ? String(payload.assistant_message_id) : null;
       if (!existing) {
         store.upsertToolCall({
           id: toolCallId,
           threadId,
           runId: payload.run_id ? String(payload.run_id) : '',
           messageId: '',
-          assistantMessageId: null,
+          assistantMessageId: assistantMsgId,
           callSeq: 0,
           llmCallId: toolCallId,
           toolName: '',
@@ -646,6 +649,17 @@ export class ThreadEventConsumer {
           childThreadId,
           acceptedAt: null,
           createdAt: nowIso(),
+          updatedAt: nowIso(),
+        });
+      } else if (assistantMsgId && !existing.assistantMessageId) {
+        // Re-index via upsertToolCall when recovering a missing assistantMessageId
+        store.upsertToolCall({
+          ...existing,
+          status: toToolCallStatus(payload.status),
+          reason: payload.reason ? String(payload.reason) : null,
+          result: (payload.result ?? null) as Record<string, unknown> | null,
+          assistantMessageId: assistantMsgId,
+          childThreadId: childThreadId ?? existing.childThreadId,
           updatedAt: nowIso(),
         });
       } else {

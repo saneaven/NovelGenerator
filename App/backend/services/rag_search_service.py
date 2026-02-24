@@ -215,16 +215,26 @@ async def search_project(
 
     for qv in query_vectors:
         qv_str = _vec_to_pg(qv)
-        rows = db.execute(
-            stmt,
-            {
-                "qv": qv_str,
-                "user_id": user_id,
-                "project_id": project_id,
-                "language": language,
-                "k": int(top_k_per_query),
-            },
-        ).fetchall()
+        try:
+            rows = db.execute(
+                stmt,
+                {
+                    "qv": qv_str,
+                    "user_id": user_id,
+                    "project_id": project_id,
+                    "language": language,
+                    "k": int(top_k_per_query),
+                },
+            ).fetchall()
+        except Exception as exc:
+            db.rollback()
+            msg = str(exc)
+            if "different vector dimensions" in msg or "expected" in msg.lower() and "dimension" in msg.lower():
+                raise ValueError(
+                    "Vector dimension mismatch — the embedding model may have changed. "
+                    "Please run a full reindex (force=true) to fix this."
+                ) from exc
+            raise
 
         for r in rows:
             chunk_id = r.chunk_id
@@ -343,30 +353,58 @@ def _batch_resolve_display_names(
     if not object_refs:
         return {}
 
-    result_map: Dict[Tuple[str, str], str] = {}
-
+    # Validate UUIDs and build filter conditions
+    valid_refs: List[Tuple[str, UUID]] = []
     for object_type, object_id_str in object_refs:
         try:
-            oid = UUID(object_id_str)
+            valid_refs.append((object_type, UUID(object_id_str)))
         except (ValueError, AttributeError):
             continue
 
-        latest: Optional[ObjectVersion] = (
-            db.query(ObjectVersion)
-            .filter(
-                ObjectVersion.object_type == object_type,
-                ObjectVersion.object_id == oid,
-            )
-            .order_by(ObjectVersion.version_number.desc())
-            .first()
-        )
-        if latest is None:
-            continue
+    if not valid_refs:
+        return {}
 
-        data = latest.data if isinstance(latest.data, dict) else {}
+    # Single query: fetch latest version per (object_type, object_id) using OR conditions
+    from sqlalchemy import or_, and_, tuple_
+
+    conditions = or_(
+        *[
+            and_(ObjectVersion.object_type == ot, ObjectVersion.object_id == oid)
+            for ot, oid in valid_refs
+        ]
+    )
+
+    from sqlalchemy import func
+
+    latest_subq = (
+        db.query(
+            ObjectVersion.object_type,
+            ObjectVersion.object_id,
+            func.max(ObjectVersion.version_number).label("max_ver"),
+        )
+        .filter(conditions)
+        .group_by(ObjectVersion.object_type, ObjectVersion.object_id)
+        .subquery()
+    )
+
+    rows = (
+        db.query(ObjectVersion)
+        .join(
+            latest_subq,
+            and_(
+                ObjectVersion.object_type == latest_subq.c.object_type,
+                ObjectVersion.object_id == latest_subq.c.object_id,
+                ObjectVersion.version_number == latest_subq.c.max_ver,
+            ),
+        )
+        .all()
+    )
+
+    result_map: Dict[Tuple[str, str], str] = {}
+    for row in rows:
+        data = row.data if isinstance(row.data, dict) else {}
         lang_data = data.get(language)
         if not isinstance(lang_data, dict):
-            # Fallback: try any available language
             for v in data.values():
                 if isinstance(v, dict):
                     lang_data = v
@@ -374,7 +412,7 @@ def _batch_resolve_display_names(
             else:
                 continue
 
-        key = (object_type, object_id_str)
+        key = (row.object_type, str(row.object_id))
         name = lang_data.get("name") or lang_data.get("title")
         if isinstance(name, str) and name.strip():
             result_map[key] = name.strip()
