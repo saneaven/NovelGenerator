@@ -36,9 +36,7 @@ from ..services.deletion_service import (
     delete_assets_with_files,
     delete_object_versions_bulk,
     delete_rag_sources_bulk,
-    delete_removed_manuscript_assets,
     delete_story_object_assets_with_files,
-    get_manuscript_indexed_asset_ids,
 )
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.rag_index_service import index_object
@@ -728,7 +726,7 @@ class ObjectService:
             create_new=create_new_version,
         )
 
-        # manuscript side effects: image index rebuild + delete removed manuscript assets
+        # manuscript side effects: rebuild image index (metadata only, no file deletion)
         if t == "manuscript":
             doc = data.get("doc")
             if isinstance(doc, dict):
@@ -737,21 +735,12 @@ class ObjectService:
                 outline = getattr(act, "outline", None) if act else None
                 resolved_project_id = getattr(outline, "project_id", None) if outline else None
                 if resolved_project_id:
-                    before_asset_ids = get_manuscript_indexed_asset_ids(db, manuscript_id=object_id)
                     rebuild_manuscript_images_for_language(
                         db=db,
                         project_id=resolved_project_id,
                         manuscript_id=object_id,
                         language=language,
                         doc=doc,
-                    )
-                    after_asset_ids = get_manuscript_indexed_asset_ids(db, manuscript_id=object_id)
-                    removed_asset_ids = before_asset_ids - after_asset_ids
-                    delete_removed_manuscript_assets(
-                        db,
-                        project_id=resolved_project_id,
-                        manuscript_id=object_id,
-                        removed_asset_ids=removed_asset_ids,
                     )
 
         # reload with required relationships

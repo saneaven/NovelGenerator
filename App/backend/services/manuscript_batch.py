@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from ..models.translation_models import ObjectVersion
+from .manuscript_image_index_service import restore_image_asset_ids
 from .object_service import ObjectService
 from .patch_utils import apply_single_replacement
 from .sidecar_client import SidecarClient, SidecarConversionError, SidecarUnavailableError
@@ -21,6 +22,7 @@ class BatchState:
     create_new_version: bool
     user_request: str
     markdown: str
+    original_doc: dict | None = None
     touched_call_ids: set[str] = field(default_factory=set)
 
 
@@ -95,6 +97,7 @@ class ManuscriptBatch:
             create_new_version=create_new_version,
             user_request=user_request,
             markdown=markdown,
+            original_doc=doc,
         )
         return key, markdown
 
@@ -185,7 +188,25 @@ class ManuscriptBatch:
         for key, state in list(self._states.items()):
             key_to_call_ids[key] = set(state.touched_call_ids)
             try:
+                # Lazy-load original doc for apply_replace paths that skipped get_or_load_markdown
+                if state.original_doc is None:
+                    latest = (
+                        db.query(ObjectVersion)
+                        .filter(
+                            ObjectVersion.object_type == "manuscript",
+                            ObjectVersion.object_id == state.manuscript_id,
+                        )
+                        .order_by(ObjectVersion.version_number.desc())
+                        .first()
+                    )
+                    if latest and isinstance(latest.data, dict):
+                        lang_data = latest.data.get(state.language)
+                        if isinstance(lang_data, dict):
+                            state.original_doc = lang_data.get("doc")
+
                 doc = await sidecar.markdown_to_doc(state.markdown)
+                if isinstance(state.original_doc, dict):
+                    restore_image_asset_ids(doc, state.original_doc)
                 object_service.update_object(
                     db=db,
                     project_id=state.project_id,

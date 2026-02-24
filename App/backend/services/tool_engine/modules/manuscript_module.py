@@ -7,6 +7,7 @@ from ..contracts import ToolSpec
 from ..registry import ToolRegistry
 from ..result_utils import invalid_result, make_result, valid_result
 from .common_object_helpers import extract_lang_data, is_translation_context, obj_schema, read_object, to_uuid
+from ....services.manuscript_image_index_service import restore_image_asset_ids
 from ....services.object_service import object_service
 from ....services.patch_utils import apply_single_replacement
 from ....services.sidecar_client import SidecarConversionError, SidecarUnavailableError
@@ -92,7 +93,15 @@ async def _execute_replace_manuscript(args: dict[str, Any], ctx: ToolExecutionCo
 
     if ctx.sidecar is None:
         raise ValueError("SIDECAR_ERROR: sidecar client unavailable")
+
+    # Read current doc so we can restore data-asset-id after markdown roundtrip
+    obj = read_object(ctx.db, ctx.project_id, "manuscript", object_id, ctx.language)
+    lang_data = extract_lang_data(obj, ctx.language)
+    original_doc = lang_data.get("doc")
+
     doc = await ctx.sidecar.markdown_to_doc(content)
+    if isinstance(original_doc, dict):
+        restore_image_asset_ids(doc, original_doc)
 
     object_service.update_object(
         ctx.db,
@@ -139,6 +148,8 @@ async def _execute_patch_manuscript(args: dict[str, Any], ctx: ToolExecutionCont
         raise ValueError("SIDECAR_ERROR: unavailable") from exc
     except SidecarConversionError as exc:
         raise ValueError(f"SIDECAR_ERROR: {exc}") from exc
+
+    restore_image_asset_ids(next_doc, doc)
 
     object_service.update_object(
         ctx.db,

@@ -127,6 +127,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef<ManuscriptEditorRef>(null);
+  const docRef = useRef<TipTapDoc>(doc);
+  docRef.current = doc;
 
   // AI edit session tracking is handled by journey thread state.
   const aiEditSession = undefined as any;
@@ -378,20 +380,21 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
    * Called on every keystroke after debounce delay
    */
   const handleAutoSave = useCallback(() => {
-    if (!manuscriptId || !hasUnsavedChanges) return;
+    if (!manuscriptId || !(editorRef.current?.hasChanges())) return;
 
     // Save to localStorage only - NO backend API call
+    // Read from ref to avoid stale closure (doc state may lag behind by one render)
     const cacheKey = getCacheKey(manuscriptId, effectiveLanguage);
     try {
       localStorage.setItem(cacheKey, JSON.stringify({
-        doc,
-        wordCount,
+        doc: docRef.current,
+        wordCount: docWordCount(docRef.current),
         savedAt: Date.now(),
       }));
     } catch (err) {
       console.error('localStorage save failed:', err);
     }
-  }, [manuscriptId, doc, wordCount, hasUnsavedChanges, effectiveLanguage]);
+  }, [manuscriptId, effectiveLanguage]);
 
   /**
    * Manual save: Creates version snapshot

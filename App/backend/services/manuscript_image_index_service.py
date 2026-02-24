@@ -120,3 +120,55 @@ def rebuild_manuscript_images_for_language(
         inserted += 1
 
     return {"deleted": int(deleted), "inserted": int(inserted), "unresolved": int(unresolved)}
+
+
+def restore_image_asset_ids(new_doc: Any, original_doc: Any) -> Any:
+    """
+    Restore ``data-asset-id`` attributes lost during a markdown roundtrip.
+
+    Standard markdown ``![alt](url)`` cannot represent custom HTML attributes,
+    so converting doc → markdown → doc strips ``data-asset-id``.  This function
+    re-attaches them by matching image ``src`` URLs between the original and new docs.
+
+    Mutates *new_doc* in place and returns it.
+    """
+    if not isinstance(new_doc, dict) or not isinstance(original_doc, dict):
+        return new_doc
+
+    src_to_asset_id: dict[str, str] = {}
+
+    def _extract(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        if node.get("type") == "image":
+            attrs = node.get("attrs") or {}
+            src = attrs.get("src")
+            asset_id = attrs.get("data-asset-id") or attrs.get("assetId")
+            if src and asset_id:
+                src_to_asset_id[src] = str(asset_id)
+            return
+        for child in node.get("content") or []:
+            _extract(child)
+
+    _extract(original_doc)
+
+    if not src_to_asset_id:
+        return new_doc
+
+    def _restore(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        if node.get("type") == "image":
+            attrs = node.get("attrs")
+            if isinstance(attrs, dict):
+                src = attrs.get("src")
+                if src and not (attrs.get("data-asset-id") or attrs.get("assetId")):
+                    aid = src_to_asset_id.get(src)
+                    if aid:
+                        attrs["data-asset-id"] = aid
+            return
+        for child in node.get("content") or []:
+            _restore(child)
+
+    _restore(new_doc)
+    return new_doc
