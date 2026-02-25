@@ -489,6 +489,7 @@ export class ThreadEventConsumer {
 
       const allowedForContinue =
         thread?.status === 'waiting'
+        || thread?.status === 'processing'
         || thread?.status === 'done';
       if (!allowedForContinue) {
         console.debug('[AutoContinue] Skipped: thread status not allowed', { threadId, status: thread?.status });
