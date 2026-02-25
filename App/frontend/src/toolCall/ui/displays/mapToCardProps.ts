@@ -16,19 +16,6 @@ function mapStoryObjectData(values: Record<string, unknown>): CardDisplayData {
   };
 }
 
-function mapBasicInfoData(values: Record<string, unknown>): CardDisplayData {
-  const parts: string[] = [];
-  const logline = str(values.logline);
-  const genre = str(values.genre);
-  if (logline) parts.push(`**Logline:** ${logline}`);
-  if (genre) parts.push(`**Genre:** ${genre}`);
-
-  return {
-    name: str(values.title) ?? 'Basic Info',
-    content: parts.length > 0 ? parts.join('\n\n') : undefined,
-  };
-}
-
 function mapGuidelinesData(values: Record<string, unknown>): CardDisplayData {
   return {
     name: 'Guidelines',
@@ -41,8 +28,6 @@ export function mapObjectData(
   values: Record<string, unknown>,
 ): CardDisplayData {
   switch (objectType) {
-    case 'basic_info':
-      return mapBasicInfoData(values);
     case 'guidelines':
       return mapGuidelinesData(values);
     default:

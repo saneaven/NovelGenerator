@@ -3,11 +3,14 @@ import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
 import { OutlineItemCard, toOutlineItemVariant } from '../../../components/OutlineItemCard';
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
+import { ReadOnlyBasicInfoDisplay } from '../displays/ReadOnlyBasicInfoDisplay';
 import type { ObjectCardProps } from './types';
 import { pickExistingKeys, pickValues } from './helpers';
 
 function createFieldKeysForObjectType(objectType: ObjectCardProps['operation']['objectType']): string[] {
   switch (objectType) {
+    case 'basic_info':
+      return ['title', 'logline', 'genre'];
     case 'story_object':
       return ['name', 'description', 'content'];
     case 'outline':
@@ -57,6 +60,17 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
 
     if (operation.objectType === 'manuscript') {
       return <ReadOnlyManuscriptDisplay title={titleValue} content={typeof fields.content === 'string' ? fields.content : ''} />;
+    }
+
+    if (operation.objectType === 'basic_info') {
+      return (
+        <ReadOnlyBasicInfoDisplay
+          title={typeof fields.title === 'string' ? fields.title : undefined}
+          logline={typeof fields.logline === 'string' ? fields.logline : undefined}
+          genre={typeof fields.genre === 'string' ? fields.genre : undefined}
+          mode="create"
+        />
+      );
     }
 
     return (

@@ -6,6 +6,7 @@ import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
 import { OutlineItemCard, toOutlineItemVariant } from '../../../components/OutlineItemCard';
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
+import { ReadOnlyBasicInfoDisplay } from '../displays/ReadOnlyBasicInfoDisplay';
 import type { ObjectCardProps } from './types';
 import { getObjectSnapshot } from './helpers';
 
@@ -103,6 +104,18 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
         <ReadOnlyManuscriptDisplay
           title={targetLabel || 'Manuscript'}
           content={typeof changedValues.content === 'string' ? changedValues.content : ''}
+        />
+      );
+    }
+
+    if (operation.objectType === 'basic_info') {
+      return (
+        <ReadOnlyBasicInfoDisplay
+          title={typeof changedValues.title === 'string' ? changedValues.title : undefined}
+          logline={typeof changedValues.logline === 'string' ? changedValues.logline : undefined}
+          genre={typeof changedValues.genre === 'string' ? changedValues.genre : undefined}
+          mode="replace"
+          changedFields={changedFields}
         />
       );
     }

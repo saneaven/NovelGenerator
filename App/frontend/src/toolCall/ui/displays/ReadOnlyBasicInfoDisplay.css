@@ -1,0 +1,95 @@
+/* ReadOnlyBasicInfoDisplay - Tool call card display for basic_info */
+
+.ro-basic-info {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-surface-base);
+  box-shadow: var(--shadow-xs);
+  padding: var(--spacing-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+/* Genre badge — pill shape, uppercase */
+.ro-basic-info__badge-row {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.ro-basic-info__genre-badge {
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text-secondary);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--border-radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--color-border-subtle);
+  display: inline-block;
+}
+
+/* Title — large bold heading */
+.ro-basic-info__title {
+  font-family: var(--font-family-heading);
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-text-primary);
+  line-height: var(--line-height-tight);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+/* Divider */
+.ro-basic-info__divider {
+  border: none;
+  border-top: 1px solid var(--color-border-subtle);
+  margin: 0;
+}
+
+/* Logline section */
+.ro-basic-info__logline-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.ro-basic-info__logline-label {
+  text-transform: uppercase;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-tertiary);
+  letter-spacing: 0.1em;
+}
+
+.ro-basic-info__logline-text {
+  font-family: var(--font-family-content);
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  margin: 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.ro-basic-info__empty {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* Changed field indicator for replace mode */
+.ro-basic-info--changed {
+  position: relative;
+  padding-left: var(--spacing-md);
+  border-left: 3px solid var(--color-brand-secondary);
+}
+
+/* Genre badge uses background tint instead of left border */
+.ro-basic-info__genre-badge.ro-basic-info--changed {
+  border-left: none;
+  padding-left: var(--spacing-md);
+  border-color: var(--color-brand-secondary-border, var(--color-border-default));
+}
