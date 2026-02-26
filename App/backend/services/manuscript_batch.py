@@ -39,6 +39,10 @@ class ManuscriptBatch:
         self._states: dict[str, BatchState] = {}
         self._locks: dict[str, asyncio.Lock] = {}
 
+    @property
+    def has_pending(self) -> bool:
+        return bool(self._states)
+
     @staticmethod
     def make_key(manuscript_id: UUID, language: str, create_new_version: bool) -> str:
         return f"{manuscript_id}:{language}:{'new' if create_new_version else 'in_place'}"

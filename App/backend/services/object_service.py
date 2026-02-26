@@ -83,7 +83,15 @@ def _queue_rag_index(
         pending.append(op)
 
 
+_RAG_SEMAPHORE = asyncio.Semaphore(3)
+
+
 async def _process_pending_rag_op(op: _PendingRagOp) -> None:
+    async with _RAG_SEMAPHORE:
+        await _process_pending_rag_op_inner(op)
+
+
+async def _process_pending_rag_op_inner(op: _PendingRagOp) -> None:
     db = SessionLocal()
     try:
         rag_settings = settings_service.get_rag_settings(db, op.user_id)

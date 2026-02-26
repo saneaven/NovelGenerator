@@ -709,24 +709,352 @@ async def decide_tool_call(
     return ToolCallDecisionResponse(**result)
 
 
+def _tool_call_target_key(tc: RunToolCallModel | None) -> str:
+    """Compute a grouping key so patches on the same object are serialized."""
+    if tc is None:
+        return f"unknown:{id(tc)}"
+    args = tc.arguments if isinstance(tc.arguments, dict) else {}
+    target_id = args.get("id", "")
+    if tc.tool_name in {"patch_manuscript", "replace_manuscript"}:
+        return f"manuscript:{target_id}"
+    if tc.tool_name in {"patch_story_object", "replace_story_object"}:
+        return f"story_object:{args.get('type', '')}:{target_id}"
+    if tc.tool_name in {
+        "patch_outline", "patch_outline_act", "patch_outline_chapter",
+        "replace_outline", "replace_outline_act", "replace_outline_chapter",
+    }:
+        obj_type = args.get("type", tc.tool_name.replace("patch_", "").replace("replace_", ""))
+        return f"outline:{obj_type}:{target_id}"
+    # Everything else (sub-agents, reads, creates, deletes) gets a unique key → parallel.
+    return f"{tc.tool_name}:{tc.id}"
+
+
+def _resolve_outline_type_from_tool_name(tool_name: str, args: dict) -> str:
+    if "act" in tool_name:
+        return "act"
+    if "chapter" in tool_name:
+        return "chapter"
+    return str(args.get("type") or "outline")
+
+
+def _extract_outline_metadata(object_type: str, args: dict) -> dict | None:
+    meta: dict[str, Any] = {}
+    if object_type in {"act", "chapter"} and isinstance(args.get("order"), int):
+        meta["order"] = args["order"]
+    if object_type == "chapter" and isinstance(args.get("actId"), str) and args.get("actId"):
+        meta["act_id"] = args["actId"]
+    return meta or None
+
+
+def _mark_tc_failed_by_id(db: Session, tc_id: UUID, reason: str) -> None:
+    tc = db.query(RunToolCallModel).filter(RunToolCallModel.id == tc_id).first()
+    if tc and tc.status == "applied":
+        tc.status = "failed"
+        tc.reason = reason
+        tc.result = {"success": False, "message": reason, "error": reason}
+        tc.updated_at = datetime.utcnow()
+
+
+async def _execute_batched_patch_group(
+    *,
+    user_id: UUID,
+    thread_id: UUID,
+    decisions: list,
+) -> list[tuple[UUID, dict]]:
+    """Handle a group of batch-eligible tool calls on the same target object.
+
+    Opens ONE session. Applies all patches to in-memory batches.
+    Flushes once. Commits once. Emits events.
+    """
+    from ..services.manuscript_batch import ManuscriptBatch
+    from ..services.object_patch_batch import ObjectPatchBatch
+    from ..services.object_service import object_service
+    from ..services.sidecar_client import sidecar_client
+
+    manuscript_batch = ManuscriptBatch()
+    object_patch_batch = ObjectPatchBatch()
+    results: list[tuple[UUID, dict]] = []
+
+    db = SessionLocal()
+    try:
+        thread = _owned_thread_or_404(db, thread_id=thread_id, user_id=user_id)
+        is_translation = getattr(thread, "journey_kind", None) == "objectTranslation"
+        create_new_version = not is_translation
+        run_id: UUID | None = None
+
+        for item in decisions:
+            tc = (
+                db.query(RunToolCallModel)
+                .with_for_update()
+                .filter(RunToolCallModel.id == item.tool_call_id, RunToolCallModel.thread_id == thread.id)
+                .first()
+            )
+            if tc is None:
+                raise HTTPException(status_code=404, detail="Tool call not found")
+
+            run_id = run_id or tc.run_id
+
+            # --- Reject path ---
+            if item.decision == "reject":
+                if tc.status in {"rejected", "applied", "failed"}:
+                    results.append((item.tool_call_id, {"tool_call": _serialize_tool_call(tc)}))
+                    continue
+                if tc.status == "processing":
+                    raise HTTPException(status_code=409, detail="Cannot reject processing tool call")
+                if tc.status not in {"pending", "validating", "streaming"}:
+                    raise HTTPException(status_code=409, detail=f"Cannot reject tool call in status={tc.status}")
+                tc.status = "rejected"
+                tc.reason = item.reason
+                tc.updated_at = datetime.utcnow()
+                db.flush()
+                results.append((item.tool_call_id, {"tool_call": _serialize_tool_call(tc)}))
+                continue
+
+            # --- Accept path: skip already-terminal ---
+            if item.decision != "accept":
+                raise HTTPException(status_code=422, detail="Invalid decision")
+            if tc.status in {"applied", "failed", "processing"}:
+                results.append((item.tool_call_id, {"tool_call": _serialize_tool_call(tc)}))
+                continue
+            if tc.status not in {"pending", "validating", "streaming"}:
+                raise HTTPException(status_code=409, detail=f"Cannot accept tool call in status={tc.status}")
+
+            # Mark processing
+            tc.status = "processing"
+            tc.reason = None
+            tc.accepted_at = tc.accepted_at or datetime.utcnow()
+            tc.updated_at = datetime.utcnow()
+            db.flush()
+
+            # Apply to batch
+            tool_name = str(tc.tool_name)
+            args = tc.arguments if isinstance(tc.arguments, dict) else {}
+            run = db.query(RunModel).filter(RunModel.id == tc.run_id).first()
+            language = run.language if run and isinstance(run.language, str) and run.language.strip() else "English"
+
+            try:
+                if tool_name == "patch_manuscript":
+                    r = await manuscript_batch.apply_patch(
+                        db=db,
+                        manuscript_id=UUID(str(args.get("id"))),
+                        project_id=thread.project_id,
+                        language=language,
+                        old_text=str(args.get("old") or ""),
+                        new_text=str(args.get("new") or ""),
+                        call_id=str(tc.id),
+                        create_new_version=create_new_version,
+                        user_request="tool:patch_manuscript",
+                        sidecar=sidecar_client,
+                    )
+                    if not r.get("success"):
+                        raise ValueError(r.get("reason", "patch failed"))
+                    tc.result = {
+                        "success": True, "message": "Patched manuscript",
+                        "object_id": str(args.get("id")), "object_type": "manuscript",
+                    }
+
+                elif tool_name == "replace_manuscript":
+                    r = await manuscript_batch.apply_replace(
+                        manuscript_id=UUID(str(args.get("id"))),
+                        project_id=thread.project_id,
+                        language=language,
+                        content=str(args.get("content") or ""),
+                        call_id=str(tc.id),
+                        create_new_version=create_new_version,
+                        user_request="tool:replace_manuscript",
+                    )
+                    if not r.get("success"):
+                        raise ValueError(r.get("reason", "replace failed"))
+                    tc.result = {
+                        "success": True, "message": "Replaced manuscript",
+                        "object_id": str(args.get("id")), "object_type": "manuscript",
+                    }
+
+                elif tool_name in {
+                    "patch_story_object",
+                    "patch_outline", "patch_outline_act", "patch_outline_chapter",
+                }:
+                    obj_type = (
+                        str(args.get("type") or "")
+                        if tool_name == "patch_story_object"
+                        else _resolve_outline_type_from_tool_name(tool_name, args)
+                    )
+                    obj_id = UUID(str(args.get("id")))
+                    metadata = (
+                        _extract_outline_metadata(obj_type, args)
+                        if tool_name != "patch_story_object"
+                        else None
+                    )
+                    r = object_patch_batch.apply_patch(
+                        db=db,
+                        project_id=thread.project_id,
+                        object_type=obj_type,
+                        object_id=obj_id,
+                        language=language,
+                        field=str(args.get("field") or ""),
+                        old_text=str(args.get("old") or ""),
+                        new_text=str(args.get("new") or ""),
+                        create_new_version=create_new_version,
+                        user_id=user_id,
+                        metadata=metadata,
+                    )
+                    if not r.get("success"):
+                        raise ValueError(r.get("reason", "patch failed"))
+                    tc.result = {
+                        "success": True, "message": f"Patched {obj_type}",
+                        "object_id": str(obj_id), "object_type": obj_type,
+                    }
+
+                elif tool_name in {
+                    "replace_story_object",
+                    "replace_outline", "replace_outline_act", "replace_outline_chapter",
+                }:
+                    obj_type = (
+                        str(args.get("type") or "")
+                        if tool_name == "replace_story_object"
+                        else _resolve_outline_type_from_tool_name(tool_name, args)
+                    )
+                    obj_id = UUID(str(args.get("id")))
+                    fields = {k: args[k] for k in ("name", "description", "content") if k in args}
+                    metadata = (
+                        _extract_outline_metadata(obj_type, args)
+                        if tool_name != "replace_story_object"
+                        else None
+                    )
+                    r = object_patch_batch.apply_replace(
+                        db=db,
+                        project_id=thread.project_id,
+                        object_type=obj_type,
+                        object_id=obj_id,
+                        language=language,
+                        fields=fields,
+                        create_new_version=create_new_version,
+                        user_id=user_id,
+                        metadata=metadata,
+                    )
+                    if not r.get("success"):
+                        raise ValueError(r.get("reason", "replace failed"))
+                    tc.result = {
+                        "success": True, "message": f"Replaced {obj_type}",
+                        "object_id": str(obj_id), "object_type": obj_type,
+                    }
+
+                else:
+                    raise ValueError(f"Unsupported batch tool: {tool_name}")
+
+                tc.status = "applied"
+
+            except Exception as exc:  # noqa: BLE001
+                tc.status = "failed"
+                tc.reason = str(exc)
+                tc.result = {"success": False, "message": str(exc), "error": str(exc)}
+
+            tc.updated_at = datetime.utcnow()
+            db.flush()
+            results.append((item.tool_call_id, {"tool_call": _serialize_tool_call(tc)}))
+
+        # --- Flush batches (1 sidecar roundtrip + 1 DB write per unique object) ---
+        if manuscript_batch.has_pending:
+            flush_results, key_to_call_ids = await manuscript_batch.flush_all(
+                db=db,
+                sidecar=sidecar_client,
+                object_service=object_service,
+                created_by=user_id,
+            )
+            for key, status in flush_results.items():
+                if not status.success:
+                    for call_id_str in key_to_call_ids.get(key, set()):
+                        _mark_tc_failed_by_id(db, UUID(call_id_str), status.reason or "flush failed")
+
+        if object_patch_batch.has_pending:
+            object_patch_batch.flush_all(
+                db=db,
+                object_service=object_service,
+                created_by=user_id,
+            )
+
+        # --- Sync run/thread status + commit ---
+        if run_id is not None:
+            _sync_run_thread_status(db, run_id=run_id)
+        db.commit()
+
+        # --- Emit SSE events ---
+        for tc_id, _ in results:
+            tc = db.query(RunToolCallModel).filter(RunToolCallModel.id == tc_id).first()
+            if tc:
+                db.refresh(tc)
+                await _emit_tool_call_status(thread=thread, tool_call=tc)
+        if run_id is not None:
+            run = db.query(RunModel).filter(RunModel.id == run_id).first()
+            if run:
+                db.refresh(run)
+                await _emit_run_status(thread=thread, run=run)
+
+    finally:
+        db.close()
+
+    return results
+
+
 @router.post("/threads/{thread_id}/tool-calls/decisions", response_model=ToolCallBatchDecisionResponse)
 async def decide_tool_calls_batch(
     thread_id: UUID,
     payload: ToolCallBatchDecisionRequest,
     current_user: User = Depends(get_current_user),
 ):
-    tasks = [
-        _apply_tool_decision(
+    from collections import defaultdict
+
+    # Step 1: Group tool calls by target object.
+    db = SessionLocal()
+    try:
+        target_groups: dict[str, list] = defaultdict(list)
+        for item in payload.decisions:
+            tc = db.query(RunToolCallModel).filter(
+                RunToolCallModel.id == item.tool_call_id,
+            ).first()
+            key = _tool_call_target_key(tc)
+            target_groups[key].append(item)
+    finally:
+        db.close()
+
+    # Step 2: Build tasks — batch path vs single-call path.
+    async def run_batch_group(items: list) -> list[tuple[UUID, dict]]:
+        return await _execute_batched_patch_group(
             user_id=current_user.id,
             thread_id=thread_id,
-            tool_call_id=item.tool_call_id,
-            decision=item.decision,
-            reason=item.reason,
+            decisions=items,
         )
-        for item in payload.decisions
-    ]
-    results = await asyncio.gather(*tasks)
-    return ToolCallBatchDecisionResponse(results=[ToolCallDecisionResponse(**r) for r in results])
+
+    async def run_single_group(items: list) -> list[tuple[UUID, dict]]:
+        results: list[tuple[UUID, dict]] = []
+        for item in items:
+            r = await _apply_tool_decision(
+                user_id=current_user.id,
+                thread_id=thread_id,
+                tool_call_id=item.tool_call_id,
+                decision=item.decision,
+                reason=item.reason,
+            )
+            results.append((item.tool_call_id, r))
+        return results
+
+    tasks = []
+    for key, items in target_groups.items():
+        first_token = key.split(":")[0]
+        if first_token in {"manuscript", "story_object", "outline"}:
+            tasks.append(run_batch_group(items))
+        else:
+            tasks.append(run_single_group(items))
+
+    all_results = await asyncio.gather(*tasks)
+
+    # Step 3: Reorder results to match input order.
+    result_map: dict[UUID, dict] = {}
+    for group in all_results:
+        for tc_id, r in group:
+            result_map[tc_id] = r
+    ordered = [result_map[item.tool_call_id] for item in payload.decisions]
+    return ToolCallBatchDecisionResponse(results=[ToolCallDecisionResponse(**r) for r in ordered])
 
 
 @router.delete("/threads/{thread_id}/messages/{message_id}", status_code=204)
