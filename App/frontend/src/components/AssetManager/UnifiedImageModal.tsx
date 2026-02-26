@@ -128,7 +128,7 @@ const UnifiedImageModal: React.FC<UnifiedImageModalProps> = ({
             className="unified-image-modal"
             zIndexLayer={zIndexLayer}
             footer={
-                <div className="unified-image-modal-footer">
+                <>
                     {onSelect && (
                         <TextButton
                             variant="primary"
@@ -141,7 +141,7 @@ const UnifiedImageModal: React.FC<UnifiedImageModalProps> = ({
                     <TextButton variant="secondary" onClick={onClose}>
                         {onSelect ? t('assetManager.cancel') : t('assetManager.close')}
                     </TextButton>
-                </div>
+                </>
             }
         >
             <div className="unified-image-modal-content">

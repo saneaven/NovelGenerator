@@ -414,6 +414,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     }
   }, [closeWithoutSaving, getUnsavedCount, handleSave]);
 
+  const handleCancel = useCallback(() => {
+    const unsavedCount = getUnsavedCount();
+    if (unsavedCount === 0) {
+      closeWithoutSaving();
+      return;
+    }
+
+    const discard = window.confirm(
+      `You have unsaved changes (${unsavedCount}). Discard all changes and close?`
+    );
+    if (discard) {
+      closeWithoutSaving();
+    }
+  }, [closeWithoutSaving, getUnsavedCount]);
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -445,7 +460,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         className="settings-modal"
         footer={
           <>
-            <TextButton variant="secondary" onClick={handleRequestClose} disabled={isSaving}>
+            <TextButton variant="secondary" onClick={handleCancel} disabled={isSaving}>
               {t('common.cancel')}
             </TextButton>
             <TextButton variant="primary" onClick={handleSave} disabled={isSaving || getUnsavedCount() === 0} loading={isSaving}>

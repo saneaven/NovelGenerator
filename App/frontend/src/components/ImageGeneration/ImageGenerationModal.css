@@ -190,6 +190,16 @@
     cursor: not-allowed;
 }
 
+@media (max-width: 768px) {
+    .image-generation-modal .panel-footer {
+        padding: var(--spacing-md) var(--spacing-lg);
+    }
+
+    .image-generation-modal .generate-button {
+        width: 100%;
+    }
+}
+
 /* Style Preview Box */
 .image-generation-modal .style-preview-box {
     padding: var(--spacing-sm) var(--spacing-md);

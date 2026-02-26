@@ -70,7 +70,7 @@ export const ImageTaskModals: React.FC = () => {
           title={session.input.label ?? 'Image generation'}
           className="image-task-modal"
           footer={
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <>
               {(session.status === 'error' || session.status === 'cancelled') && (
                 <TextButton variant="secondary" onClick={handleRetry}>
                   Retry
@@ -81,7 +81,7 @@ export const ImageTaskModals: React.FC = () => {
                   Cancel
                 </TextButton>
               )}
-            </div>
+            </>
           }
         >
           {progressBar && (

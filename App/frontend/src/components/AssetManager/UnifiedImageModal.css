@@ -39,13 +39,6 @@
     z-index: calc(var(--z-modal) + 30);
 }
 
-/* Footer with action buttons */
-.unified-image-modal-footer {
-    display: flex;
-    gap: var(--spacing-sm);
-    justify-content: flex-end;
-}
-
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .unified-image-modal-content {
