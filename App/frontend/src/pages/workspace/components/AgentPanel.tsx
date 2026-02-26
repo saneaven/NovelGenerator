@@ -15,7 +15,6 @@ import { runMessageTranslation } from '../../../agent/messageTranslation';
 import { isUuid } from '../../../utils/idUtils';
 import {
   cancelThread,
-  decideToolCall,
   decideToolCallsBatch,
   sendThreadMessage,
 } from '../../../runtime/threadCommands';
@@ -678,18 +677,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       .filter(([, decision]) => decision === 'reject')
       .map(([id]) => id);
 
-    if (accepts.length > 1 && rejects.length === 0) {
-      await decideToolCallsBatch({
-        threadId,
-        decisions: accepts.map((id) => ({ toolCallId: id, decision: 'accept' })),
-      });
-      return;
-    }
-
-    await Promise.all([
-      ...accepts.map((id) => decideToolCall({ threadId, toolCallId: id, decision: 'accept' })),
-      ...rejects.map((id) => decideToolCall({ threadId, toolCallId: id, decision: 'reject' })),
-    ]);
+    await decideToolCallsBatch({
+      threadId,
+      decisions: [
+        ...accepts.map((id) => ({ toolCallId: id, decision: 'accept' as const })),
+        ...rejects.map((id) => ({ toolCallId: id, decision: 'reject' as const })),
+      ],
+    });
   }, [threadId]);
 
   const handleStartMessageEdit = useCallback((messageId: string, currentText: string) => {

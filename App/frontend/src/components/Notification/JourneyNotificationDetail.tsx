@@ -8,7 +8,6 @@ import { threadService } from '../../api/threadService';
 import {
   sendThreadMessage,
   cancelThread,
-  decideToolCall,
   decideToolCallsBatch,
 } from '../../runtime/threadCommands';
 import { resolveRunMessageDisplay } from '../../types/thread';
@@ -257,17 +256,13 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const handleConfirm = useCallback(async (decisions: ToolCallDecisionMap) => {
     const accepts = Object.entries(decisions).filter(([, d]) => d === 'accept').map(([id]) => id);
     const rejects = Object.entries(decisions).filter(([, d]) => d === 'reject').map(([id]) => id);
-    if (accepts.length > 1 && rejects.length === 0) {
-      await decideToolCallsBatch({
-        threadId,
-        decisions: accepts.map((id) => ({ toolCallId: id, decision: 'accept' })),
-      });
-      return;
-    }
-    await Promise.all([
-      ...accepts.map((id) => decideToolCall({ threadId, toolCallId: id, decision: 'accept' })),
-      ...rejects.map((id) => decideToolCall({ threadId, toolCallId: id, decision: 'reject' })),
-    ]);
+    await decideToolCallsBatch({
+      threadId,
+      decisions: [
+        ...accepts.map((id) => ({ toolCallId: id, decision: 'accept' as const })),
+        ...rejects.map((id) => ({ toolCallId: id, decision: 'reject' as const })),
+      ],
+    });
   }, [threadId]);
 
   const handleSendFeedback = useCallback(() => {

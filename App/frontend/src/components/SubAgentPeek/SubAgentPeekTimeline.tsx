@@ -13,7 +13,7 @@ import ThinkingDisplay from '../common/ThinkingDisplay';
 import { IconButton } from '../IconButton';
 import { Trash } from '../icons';
 import { MarkdownRenderer } from '../MarkdownRenderer/MarkdownRenderer';
-import { decideToolCall, decideToolCallsBatch } from '../../runtime/threadCommands';
+import { decideToolCallsBatch } from '../../runtime/threadCommands';
 
 function formatRole(role: string, t: (key: string) => string): string {
   if (role === 'user') return t('subAgent.parentAgent');
@@ -159,17 +159,13 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
       const rejects = Object.entries(decisions)
         .filter(([, d]) => d === 'reject')
         .map(([id]) => id);
-      if (accepts.length > 1 && rejects.length === 0) {
-        await decideToolCallsBatch({
-          threadId: childThreadId,
-          decisions: accepts.map((id) => ({ toolCallId: id, decision: 'accept' })),
-        });
-      } else {
-        await Promise.all([
-          ...accepts.map((id) => decideToolCall({ threadId: childThreadId, toolCallId: id, decision: 'accept' })),
-          ...rejects.map((id) => decideToolCall({ threadId: childThreadId, toolCallId: id, decision: 'reject' })),
-        ]);
-      }
+      await decideToolCallsBatch({
+        threadId: childThreadId,
+        decisions: [
+          ...accepts.map((id) => ({ toolCallId: id, decision: 'accept' as const })),
+          ...rejects.map((id) => ({ toolCallId: id, decision: 'reject' as const })),
+        ],
+      });
     } finally {
       setIsApplying(false);
     }
