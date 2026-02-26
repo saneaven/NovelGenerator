@@ -263,6 +263,7 @@ class ClaudeProvider(BaseProvider):
                 )
             request["tools"] = anthropic_tools
             request["tool_choice"] = self.TOOL_CHOICE_MAP.get(tool_choice or "auto", {"type": "auto"})
+            request["tool_choice"]["disable_parallel_tool_use"] = False
 
         additional_body = self._additional_request_body()
         if additional_body:

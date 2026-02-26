@@ -100,7 +100,11 @@ def message_from_notification_status(*, status: str, error: str | None = None) -
 
 def default_journey_label(journey_kind: str | None) -> str:
     kind = str(journey_kind or "").strip()
-    if kind == "objectEdit":
+    if kind == "manuscriptEdit":
+        return "AI Manuscript Edit"
+    if kind == "outlineEdit":
+        return "AI Outline Edit"
+    if kind == "storyObjectEdit":
         return "AI Edit"
     if kind == "objectTranslation":
         return "Object Translation"

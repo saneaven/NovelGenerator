@@ -119,12 +119,13 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const threadMessages = useThreadStore(
     useShallow((s) => s.messagesByThreadId[threadId]),
   );
-  const { toolCallsById, toolCallIdsByAssistantMessageId, threadStatus, isStreamActive } =
+  const { toolCallsById, toolCallIdsByAssistantMessageId, threadStatus, threadLastError, isStreamActive } =
     useThreadStore(
       useShallow((s) => ({
         toolCallsById: s.toolCallsById,
         toolCallIdsByAssistantMessageId: s.toolCallIdsByAssistantMessageId,
         threadStatus: s.threadsById[threadId]?.status,
+        threadLastError: s.threadsById[threadId]?.lastError,
         isStreamActive: Boolean(s.activeStreamByThread[threadId]),
       })),
     );
@@ -358,7 +359,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
           <div className="journey-detail-header-left">
             <h3 className="journey-detail-title">{label}</h3>
           </div>
-          <IconButton icon={<Close size="sm" />} onClick={onClose} title="Close" size="sm" />
+          <IconButton icon={<Close size="md" />} onClick={onClose} title="Close" size="md" variant="ghost" />
         </div>
         <div className="journey-detail-loading">
           <Loading size="md" />
@@ -376,7 +377,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
           <div className="journey-detail-header-left">
             <h3 className="journey-detail-title">{label}</h3>
           </div>
-          <IconButton icon={<Close size="sm" />} onClick={onClose} title="Close" size="sm" />
+          <IconButton icon={<Close size="md" />} onClick={onClose} title="Close" size="md" variant="ghost" />
         </div>
         <div className="journey-detail-error">
           <p>{fetchError}</p>
@@ -388,7 +389,16 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const statusText = statusLabel(displayStatus);
 
   return (
-    <BaseModal isOpen onClose={onClose} showHeader={false} size="large" className="journey-detail-modal">
+    <BaseModal
+      isOpen
+      onClose={onClose}
+      showHeader={false}
+      size="large"
+      className="journey-detail-modal"
+      footer={isRunning ? (
+        <TextButton variant="danger" onClick={handleCancel}>Cancel</TextButton>
+      ) : undefined}
+    >
       {/* Header */}
       <div className="journey-detail-header">
         <div className="journey-detail-header-left">
@@ -400,12 +410,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
           )}
         </div>
         <div className="journey-detail-header-right">
-          {isRunning && (
-            <TextButton variant="danger" onClick={handleCancel}>
-              Cancel
-            </TextButton>
-          )}
-          <IconButton icon={<Close size="sm" />} onClick={onClose} title="Close" size="sm" />
+          <IconButton icon={<Close size="md" />} onClick={onClose} title="Close" size="md" variant="ghost" />
         </div>
       </div>
 
@@ -426,9 +431,9 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Warning */}
-      {warning && (
-        <div className="journey-detail-warning">{warning}</div>
+      {/* Warning / Error details */}
+      {(warning || (displayStatus === 'error' && threadLastError)) && (
+        <div className="journey-detail-warning">{warning || threadLastError}</div>
       )}
 
       {/* Scrollable message timeline */}

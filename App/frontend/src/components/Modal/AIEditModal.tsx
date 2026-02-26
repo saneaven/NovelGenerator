@@ -3,7 +3,7 @@ import { BaseModal } from '../BaseModal';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
 import type { ObjectType, ChapterObject } from '../../types/unifiedObject';
-import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
+import { getJourneySpec, type JourneyKind } from '../../llmTaskJourney/journeySpecs';
 import { useJourneyStore } from '../../store/journeyStore';
 import { threadService } from '../../api/threadService';
 import { sendThreadMessage } from '../../runtime/threadCommands';
@@ -39,6 +39,12 @@ const getCategoryDisplayName = (cat: string): string => {
   };
   return names[cat] || cat;
 };
+
+function categoryToJourneyKind(category: string): JourneyKind {
+  if (category === 'manuscript') return 'manuscriptEdit';
+  if (['outline', 'act', 'chapter'].includes(category)) return 'outlineEdit';
+  return 'storyObjectEdit';
+}
 
 const AIEditModal: React.FC<AIEditModalProps> = ({
   isOpen,
@@ -135,7 +141,8 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       return;
     }
 
-    const spec = getJourneySpec('objectEdit');
+    const journeyKind = categoryToJourneyKind(category);
+    const spec = getJourneySpec(journeyKind);
     const journeyId = crypto.randomUUID();
     const outputMode = rawMode
       ? 'raw_output'
@@ -153,7 +160,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 
     useJourneyStore.getState().createJourney({
       id: journeyId,
-      kind: 'objectEdit',
+      kind: journeyKind,
       input: inputPayload,
       editingTargets,
       label: spec.label(inputPayload),
@@ -164,11 +171,11 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     try {
       const created = await threadService.createJourneyThread(
         projectId,
-        'objectEdit',
+        journeyKind,
         {
           notificationLabel: spec.label(inputPayload),
           notificationMeta: {
-            journey_kind: 'objectEdit',
+            journey_kind: journeyKind,
             project_id: projectId,
             entry_input: trimmedRequest,
             target_language: null,

@@ -40,7 +40,23 @@ export type ThreadRuntimeEvent =
   | { event: 'tool_call:end'; data: RuntimeEventBase & { tool_call_id: string; message_id: string; assistant_message_id: string; index: number; name: string; arguments: Record<string, unknown>; extra_content?: Record<string, unknown> | null; status?: ToolCallStatus } }
   | { event: 'tool_call:status'; data: RuntimeEventBase & { tool_call_id: string; status: ToolCallStatus; reason?: string | null; result?: Record<string, unknown> | null } }
   | { event: 'message:update'; data: RuntimeEventBase & { message_id: string; data: Record<string, unknown> } }
-  | { event: 'message:end'; data: RuntimeEventBase & { message_id: string; seq_in_thread: number; data: Record<string, unknown> } }
+  | { event: 'message:end'; data: RuntimeEventBase & {
+      message_id: string;
+      seq_in_thread: number;
+      data: Record<string, unknown>;
+      tool_calls?: Array<{
+        tool_call_id: string;
+        message_id: string;
+        assistant_message_id: string;
+        index: number;
+        name: string;
+        arguments: Record<string, unknown>;
+        extra_content?: Record<string, unknown> | null;
+        status: string;
+        reason?: string | null;
+        seq_in_thread: number;
+      }>;
+    } }
   | { event: 'run:done'; data: RuntimeEventBase & { final_status: RunStatus } }
   | { event: 'run:error'; data: RuntimeEventBase & { error: string } }
   | { event: 'run:canceled'; data: RuntimeEventBase }

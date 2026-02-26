@@ -85,34 +85,36 @@ async def apply_raw_output(
         )
         return
 
-    if journey_kind == "objectEdit":
+    if journey_kind == "manuscriptEdit":
+        target_id = UUID(str(input_payload.get("targetId") or ""))
+        user_request = str(input_payload.get("userRequest") or "").strip() or "raw:manuscriptEdit"
+        manuscript = (
+            db.query(Manuscript)
+            .filter(Manuscript.chapter_id == target_id)
+            .first()
+        )
+        if manuscript is None:
+            raise RuntimeError("manuscriptEdit target not found")
+        doc = await sidecar_client.markdown_to_doc(text)
+        object_service.update_object(
+            db,
+            project_id=run.project_id,
+            object_type="manuscript",
+            object_id=manuscript.id,
+            data={
+                "doc": doc,
+                "wordCount": len(text.split()),
+            },
+            language=run.language,
+            user_request=user_request,
+            created_by=run.user_id,
+        )
+        return
+
+    if journey_kind in {"outlineEdit", "storyObjectEdit"}:
         category = str(input_payload.get("category") or "").strip()
         target_id = UUID(str(input_payload.get("targetId") or ""))
-        user_request = str(input_payload.get("userRequest") or "").strip() or "raw:objectEdit"
-
-        if category == "manuscript":
-            manuscript = (
-                db.query(Manuscript)
-                .filter(Manuscript.chapter_id == target_id)
-                .first()
-            )
-            if manuscript is None:
-                raise RuntimeError("objectEdit manuscript target not found")
-            doc = await sidecar_client.markdown_to_doc(text)
-            object_service.update_object(
-                db,
-                project_id=run.project_id,
-                object_type="manuscript",
-                object_id=manuscript.id,
-                data={
-                    "doc": doc,
-                    "wordCount": len(text.split()),
-                },
-                language=run.language,
-                user_request=user_request,
-                created_by=run.user_id,
-            )
-            return
+        user_request = str(input_payload.get("userRequest") or "").strip() or f"raw:{journey_kind}"
 
         current = object_service.get_object(
             db,
@@ -122,7 +124,7 @@ async def apply_raw_output(
             language=run.language,
         )
         if current is None:
-            raise RuntimeError("objectEdit target object not found")
+            raise RuntimeError(f"{journey_kind} target object not found")
 
         data_by_lang = current.get("data", {}) if isinstance(current.get("data"), dict) else {}
         current_data = data_by_lang.get(run.language) if isinstance(data_by_lang.get(run.language), dict) else {}

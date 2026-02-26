@@ -10,7 +10,9 @@ import type { EditingTargets } from '../llmTaskJourney/types';
  */
 
 export type JourneyKind =
-  | 'objectEdit'
+  | 'manuscriptEdit'
+  | 'outlineEdit'
+  | 'storyObjectEdit'
   | 'objectTranslation'
   | 'imagePrompt'
   | 'sceneImagePrompt'

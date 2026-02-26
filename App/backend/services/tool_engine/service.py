@@ -25,19 +25,16 @@ class ToolEngineService:
     def tool_set_for_run(
         thread: Thread,
         run: RunModel,
-        *,
-        input_payload: dict[str, Any],
     ) -> ToolSetName:
         if thread.thread_type == "journey":
             journey_kind = (thread.journey_kind or "").strip()
             if journey_kind == "objectTranslation":
                 return "objectTranslation"
-            if journey_kind == "objectEdit":
-                category = str(input_payload.get("category") or "").strip()
-                if category == "manuscript":
-                    return "manuscript"
-                if category in {"outline", "act", "chapter"}:
-                    return "outline"
+            if journey_kind == "manuscriptEdit":
+                return "manuscript"
+            if journey_kind == "outlineEdit":
+                return "outline"
+            if journey_kind == "storyObjectEdit":
                 return "storyObject"
             return "storyObject"
 
@@ -147,7 +144,7 @@ class ToolEngineService:
         if tool_name.startswith("call_"):
             return ["agent_agent_mode", "agent_plan_mode"]
 
-        inferred = ToolEngineService.tool_set_for_run(thread, run, input_payload={})
+        inferred = ToolEngineService.tool_set_for_run(thread, run)
         candidates: list[ToolSetName] = [inferred]
         fallback: tuple[ToolSetName, ...] = (
             "agent_agent_mode",

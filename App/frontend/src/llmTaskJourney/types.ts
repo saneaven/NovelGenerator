@@ -1,6 +1,6 @@
 export type EditingTargets =
   | {
-      kind: 'objectEdit';
+      kind: 'manuscriptEdit' | 'outlineEdit' | 'storyObjectEdit';
       projectId: string;
       category: string;
       targetId: string;

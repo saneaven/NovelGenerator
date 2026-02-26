@@ -2,23 +2,19 @@
 
 You are in native tool call mode.
 
-Output a `<tool_calls>` block containing one or more `<tool_call>` entries.
+Output one or more `<tool_call>` entries directly.
 Each `<tool_call>` MUST contain exactly one JSON object (no markdown code fences).
 
 ### Example: Multiple edits
 ```xml
-<tool_calls>
-  <tool_call>{"tool":"replace_story_object","id":"char-123","type":"character","name":"Alexander the Bold"}</tool_call>
-  <tool_call>{"tool":"patch_story_object","id":"char-456","type":"character","field":"description","old":"fights alone","new":"leads a rebellion"}</tool_call>
-  <tool_call>{"tool":"create_outline_chapter","actId":"act-1","name":"The Awakening","description":"The hero discovers their power","content":"Detailed chapter content..."}</tool_call>
-</tool_calls>
+<tool_call>{"tool":"replace_story_object","id":"char-123","type":"character","name":"Alexander the Bold"}</tool_call>
+<tool_call>{"tool":"patch_story_object","id":"char-456","type":"character","field":"description","old":"fights alone","new":"leads a rebellion"}</tool_call>
+<tool_call>{"tool":"create_outline_chapter","actId":"act-1","name":"The Awakening","description":"The hero discovers their power","content":"Detailed chapter content..."}</tool_call>
 ```
 
 ### Example: Single edit
 ```xml
-<tool_calls>
-  <tool_call>{"tool":"replace_basic_info","title":"The New Title","genre":"Fantasy Adventure"}</tool_call>
-</tool_calls>
+<tool_call>{"tool":"replace_basic_info","title":"The New Title","genre":"Fantasy Adventure"}</tool_call>
 ```
 
 ### Tool Schemas
@@ -65,7 +61,6 @@ Each `<tool_call>` MUST contain exactly one JSON object (no markdown code fences
 ```
 
 **Important:**
-- Always output a `<tool_calls>` wrapper, even for a single tool call
 - Use exactly one `<tool_call>...</tool_call>` per tool call
 - Each `<tool_call>` must contain exactly one JSON object
 - Include the correct `id` for items you are editing

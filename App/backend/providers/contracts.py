@@ -162,13 +162,13 @@ def final_tool_call_to_wire(tool_call: FinalToolCall) -> Dict[str, Any]:
 
 
 def extract_native_tool_calls_from_snapshot(snapshot: FinalSnapshot) -> FinalSnapshot:
-    """Post-process a FinalSnapshot to extract <tool_calls> XML from content.
+    """Post-process a FinalSnapshot to extract <tool_call> XML from content.
 
     When native_tool_call mode is active, the final snapshot content may contain
-    raw <tool_calls> tags (e.g. from Claude's native SDK final message). This
+    raw <tool_call> tags (e.g. from Claude's native SDK final message). This
     function parses them into proper FinalToolCall entries and cleans the content.
 
-    If no <tool_calls> tags are found, the snapshot is returned unchanged.
+    If no <tool_call> tags are found, the snapshot is returned unchanged.
     """
     from .native_tool_calls_parser import NativeToolCallsStreamParser
 

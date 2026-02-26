@@ -191,7 +191,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     <div className="sub-agent-peek-timeline">
       {threadStatus === 'error' && (
         <div className="sub-agent-peek-alert sub-agent-peek-alert--error">
-          An error occurred during sub-agent execution.
+          {thread?.lastError || 'An error occurred during sub-agent execution.'}
         </div>
       )}
 

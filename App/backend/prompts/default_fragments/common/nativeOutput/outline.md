@@ -4,18 +4,14 @@ You are in native tool call mode.
 
 ### Example: Outline structure changes
 ```xml
-<tool_calls>
-  <tool_call>{"tool":"create_outline_act","outlineId":"outline-1","name":"Act II","description":"The confrontation begins","content":"Full act content..."}</tool_call>
-  <tool_call>{"tool":"replace_outline_act","id":"act-123","name":"Rising Action","order":2}</tool_call>
-</tool_calls>
+<tool_call>{"tool":"create_outline_act","outlineId":"outline-1","name":"Act II","description":"The confrontation begins","content":"Full act content..."}</tool_call>
+<tool_call>{"tool":"replace_outline_act","id":"act-123","name":"Rising Action","order":2}</tool_call>
 ```
 
 ### Example: Multiple patch edits
 ```xml
-<tool_calls>
-  <tool_call>{"tool":"patch_outline_act","id":"act-123","field":"description","old":"the hero fails","new":"the hero succeeds"}</tool_call>
-  <tool_call>{"tool":"patch_outline_chapter","id":"ch-456","field":"name","old":"Chapter One","new":"The Beginning"}</tool_call>
-</tool_calls>
+<tool_call>{"tool":"patch_outline_act","id":"act-123","field":"description","old":"the hero fails","new":"the hero succeeds"}</tool_call>
+<tool_call>{"tool":"patch_outline_chapter","id":"ch-456","field":"name","old":"Chapter One","new":"The Beginning"}</tool_call>
 ```
 
 ### Outline Operations

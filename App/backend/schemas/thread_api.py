@@ -42,7 +42,9 @@ class ToolCallBatchDecisionRequest(BaseModel):
 class CreateThreadRequest(BaseModel):
     thread_type: Literal["journey"] = "journey"
     journey_kind: Literal[
-        "objectEdit",
+        "manuscriptEdit",
+        "outlineEdit",
+        "storyObjectEdit",
         "objectTranslation",
         "imagePrompt",
         "sceneImagePrompt",

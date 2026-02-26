@@ -4,24 +4,18 @@ You are in native tool call mode.
 
 ### Example: Targeted edit (preferred for long content)
 ```xml
-<tool_calls>
-  <tool_call>{"tool":"patch_manuscript","id":"manuscript-123","old":"She walked slowly","new":"She ran desperately"}</tool_call>
-</tool_calls>
+<tool_call>{"tool":"patch_manuscript","id":"manuscript-123","old":"She walked slowly","new":"She ran desperately"}</tool_call>
 ```
 
 ### Example: Multiple targeted edits
 ```xml
-<tool_calls>
-  <tool_call>{"tool":"patch_manuscript","id":"manuscript-123","old":"She walked slowly","new":"She ran desperately"}</tool_call>
-  <tool_call>{"tool":"patch_manuscript","id":"manuscript-123","old":"The shadows deepened","new":"Darkness fell"}</tool_call>
-</tool_calls>
+<tool_call>{"tool":"patch_manuscript","id":"manuscript-123","old":"She walked slowly","new":"She ran desperately"}</tool_call>
+<tool_call>{"tool":"patch_manuscript","id":"manuscript-123","old":"The shadows deepened","new":"Darkness fell"}</tool_call>
 ```
 
 ### Example: Complete replacement
 ```xml
-<tool_calls>
-  <tool_call>{"tool":"replace_manuscript","id":"manuscript-123","content":"The full chapter content here..."}</tool_call>
-</tool_calls>
+<tool_call>{"tool":"replace_manuscript","id":"manuscript-123","content":"The full chapter content here..."}</tool_call>
 ```
 
 ### Manuscript Operations

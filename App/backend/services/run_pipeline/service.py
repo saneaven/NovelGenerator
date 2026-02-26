@@ -21,6 +21,33 @@ from . import prompt_assembly
 logger = logging.getLogger(__name__)
 
 
+def _build_tool_call_summaries(
+    db: Session,
+    assistant_message_id: Any,
+) -> list[dict[str, Any]]:
+    rows = (
+        db.query(RunToolCallModel)
+        .filter(RunToolCallModel.assistant_message_id == assistant_message_id)
+        .order_by(RunToolCallModel.call_seq)
+        .all()
+    )
+    return [
+        {
+            "tool_call_id": str(row.id),
+            "message_id": str(row.message_id),
+            "assistant_message_id": str(row.assistant_message_id),
+            "index": idx,
+            "name": row.tool_name,
+            "arguments": row.arguments,
+            "extra_content": row.extra_content if isinstance(row.extra_content, dict) else None,
+            "status": row.status,
+            "reason": row.reason,
+            "seq_in_thread": int(row.message.seq_in_thread) if row.message else 0,
+        }
+        for idx, row in enumerate(rows)
+    ]
+
+
 class RunPipeline:
 
     def __init__(self, db_factory: Callable[[], Session], event_dispatcher: RuntimeEventDispatcher):
@@ -562,6 +589,7 @@ class RunPipeline:
                                     "message_id": str(assistant_message_ref[0].id),
                                     "seq_in_thread": int(assistant_message_ref[0].seq_in_thread),
                                     "data": assistant_message_ref[0].data or {},
+                                    "tool_calls": _build_tool_call_summaries(db, assistant_message_ref[0].id),
                                 },
                             )
                         await self._emit(
@@ -603,6 +631,7 @@ class RunPipeline:
                                 "message_id": str(assistant_message_ref[0].id),
                                 "seq_in_thread": int(assistant_message_ref[0].seq_in_thread),
                                 "data": assistant_message_ref[0].data or {},
+                                "tool_calls": _build_tool_call_summaries(db, assistant_message_ref[0].id),
                             },
                         )
                     await self._emit(

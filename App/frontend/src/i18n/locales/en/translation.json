@@ -414,7 +414,7 @@
       "nativeOutput": {
         "title": "Native Output Mode",
         "enableNative": "Enable native output mode",
-        "hint": "When enabled, edit/translation tasks emit <tool_calls> blocks (converted server-side into normal tool calls). Image prompt tasks always output raw text."
+        "hint": "When enabled, edit/translation tasks emit <tool_call> tags (converted server-side into normal tool calls). Image prompt tasks always output raw text."
       },
       "toolCallAutoApprove": {
         "title": "Tool Call Auto-Approve",

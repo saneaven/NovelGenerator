@@ -240,7 +240,7 @@ export const threadService = {
 
   async createJourneyThread(
     projectId: string,
-    journeyKind: 'objectEdit' | 'objectTranslation' | 'imagePrompt' | 'sceneImagePrompt' | 'messageTranslation',
+    journeyKind: 'manuscriptEdit' | 'outlineEdit' | 'storyObjectEdit' | 'objectTranslation' | 'imagePrompt' | 'sceneImagePrompt' | 'messageTranslation',
     options?: CreateJourneyThreadOptions,
   ): Promise<{ thread_id: string; status: ThreadStatus; notification_id?: string }> {
     return apiClient.post(`/api/v1/projects/${projectId}/threads`, {

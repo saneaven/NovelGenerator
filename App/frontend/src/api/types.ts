@@ -272,7 +272,9 @@ export type RunStatus = 'running' | 'waiting' | 'processing' | 'paused' | 'done'
 export type RunMode = 'planMode' | 'agentMode';
 export type RunSurface = 'story-object' | 'outline-manager' | 'novel-editor' | 'config';
 export type JourneyKind =
-  | 'objectEdit'
+  | 'manuscriptEdit'
+  | 'outlineEdit'
+  | 'storyObjectEdit'
   | 'objectTranslation'
   | 'imagePrompt'
   | 'sceneImagePrompt'

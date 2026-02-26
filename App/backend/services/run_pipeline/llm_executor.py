@@ -293,11 +293,7 @@ async def run_llm(
         native_output_mode=bool(getattr(settings, "native_output_mode", False)),
     )
 
-    tool_set_name = tool_engine.tool_set_for_run(
-        thread,
-        run,
-        input_payload=input_payload if isinstance(input_payload, dict) else {},
-    )
+    tool_set_name = tool_engine.tool_set_for_run(thread, run)
     tool_offer = tool_engine.build_offer_for_run(
         db,
         thread=thread,
@@ -606,6 +602,22 @@ async def run_llm(
 
     db.commit()
 
+    tool_call_summaries: list[dict[str, Any]] = [
+        {
+            "tool_call_id": str(row.id),
+            "message_id": str(row.message_id),
+            "assistant_message_id": str(row.assistant_message_id),
+            "index": idx,
+            "name": row.tool_name,
+            "arguments": row.arguments,
+            "extra_content": row.extra_content if isinstance(row.extra_content, dict) else None,
+            "status": row.status,
+            "reason": row.reason,
+            "seq_in_thread": int(row.message.seq_in_thread) if row.message else 0,
+        }
+        for idx, row in enumerate(persisted_tools)
+    ]
+
     await emit_fn(
         project_id=run.project_id,
         thread_id=thread.id,
@@ -628,6 +640,7 @@ async def run_llm(
             "message_id": str(assistant_message.id),
             "seq_in_thread": int(assistant_message.seq_in_thread),
             "data": assistant_message.data,
+            "tool_calls": tool_call_summaries,
         },
     )
     await emit_fn(

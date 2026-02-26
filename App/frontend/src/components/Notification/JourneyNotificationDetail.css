@@ -80,8 +80,8 @@
 /* ===== Sticky User Message ===== */
 .journey-detail-sticky-user {
   padding: var(--spacing-md) var(--spacing-xl);
-  background: var(--color-brand-primary-soft);
-  border-bottom: 1px solid var(--color-brand-primary-border);
+  background: var(--color-surface-subtle);
+  border-bottom: 1px solid var(--color-border-default);
   flex-shrink: 0;
 }
 
@@ -181,10 +181,7 @@
 }
 
 .journey-detail-message--assistant {
-  padding: var(--spacing-md);
-  background: var(--color-surface-elevated);
-  border-radius: var(--border-radius-lg);
-  border: 1px solid var(--color-border-default);
+  padding: 0 var(--spacing-md);
 }
 
 .journey-detail-message-content {

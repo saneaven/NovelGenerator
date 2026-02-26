@@ -1,14 +1,12 @@
-"""Stateful parser for extracting native <tool_calls> tags from streaming content.
+"""Stateful parser for extracting native <tool_call> tags from streaming content.
 
 Expected format:
 
-<tool_calls>
-  <tool_call>{"tool":"name", ...args}</tool_call>
-  <tool_call>{"tool":"name2", ...args}</tool_call>
-</tool_calls>
+<tool_call>{"tool":"name", ...args}</tool_call>
+<tool_call>{"tool":"name2", ...args}</tool_call>
 
-The parser removes the entire <tool_calls> block from streamed content and emits
-OpenAI-style tool_calls deltas for each <tool_call>.
+The parser removes <tool_call> blocks from streamed content and emits
+OpenAI-style tool_calls deltas for each one.
 
 Unlike a traditional "buffer until </tool_call>" implementation, this parser
 streams tool_calls *incrementally* while the JSON inside <tool_call> is still
@@ -21,8 +19,6 @@ from __future__ import annotations
 import json
 from typing import Dict, List, Optional, Tuple
 
-OPEN_CALLS = "<tool_calls>"
-CLOSE_CALLS = "</tool_calls>"
 OPEN_CALL = "<tool_call>"
 CLOSE_CALL = "</tool_call>"
 
@@ -32,8 +28,6 @@ def _build_partials(tag: str) -> List[str]:
     return [tag[:i] for i in range(1, len(tag))]
 
 
-OPEN_CALLS_PARTIALS = _build_partials(OPEN_CALLS)
-CLOSE_CALLS_PARTIALS = _build_partials(CLOSE_CALLS)
 OPEN_CALL_PARTIALS = _build_partials(OPEN_CALL)
 CLOSE_CALL_PARTIALS = _build_partials(CLOSE_CALL)
 
@@ -43,19 +37,6 @@ def _split_partial_suffix(text: str, partials: List[str]) -> Tuple[str, str]:
     for partial in reversed(partials):
         if text.endswith(partial):
             return text[:-len(partial)], partial
-    return text, ""
-
-
-def _split_partial_suffix_any(text: str, partial_groups: List[List[str]]) -> Tuple[str, str]:
-    """Pick the longest partial suffix match across multiple tag partial lists."""
-    best: str = ""
-    for group in partial_groups:
-        for partial in reversed(group):
-            if text.endswith(partial) and len(partial) > len(best):
-                best = partial
-                break
-    if best:
-        return text[:-len(best)], best
     return text, ""
 
 
@@ -335,11 +316,10 @@ class _ToolCallArgsStreamer:
 
 
 class NativeToolCallsStreamParser:
-    """Chunk-safe parser for extracting native tool calls wrapped in <tool_calls> tags."""
+    """Chunk-safe parser for extracting native <tool_call> tags from streamed content."""
 
     def __init__(self) -> None:
         self.buffer = ""
-        self.inside_calls = False
         self.inside_call = False
         self.call_buffer = ""
         self.call_index = 0
@@ -348,7 +328,7 @@ class NativeToolCallsStreamParser:
         self._json_extractor: Optional[_JSONObjectExtractor] = None
         self._args_streamer: Optional[_ToolCallArgsStreamer] = None
         self._emitted_call_start = False
-        self.tool_calls_completed = False  # True when </tool_calls> is processed
+        self.tool_calls_completed = False  # True after first </tool_call> is processed
 
     def process_chunk(self, content_chunk: str) -> Tuple[str, List[Dict]]:
         """Process a streaming content chunk and return (clean_content, tool_calls)."""
@@ -357,44 +337,17 @@ class NativeToolCallsStreamParser:
         tool_calls: List[Dict] = []
 
         while True:
-            if not self.inside_calls:
-                start_idx = self.buffer.find(OPEN_CALLS)
-                if start_idx >= 0:
-                    clean_output += self.buffer[:start_idx]
-                    self.buffer = self.buffer[start_idx + len(OPEN_CALLS):]
-                    self.inside_calls = True
-                    continue
-
-                # Hard errors for structurally invalid sequences (no fallback).
-                if self.buffer.find(CLOSE_CALLS) >= 0:
-                    raise ValueError("Unexpected </tool_calls> without opening <tool_calls>")
-                if self.buffer.find(OPEN_CALL) >= 0 or self.buffer.find(CLOSE_CALL) >= 0:
-                    raise ValueError("Unexpected <tool_call> outside <tool_calls>")
-
-                prefix, held = _split_partial_suffix(self.buffer, OPEN_CALLS_PARTIALS)
-                clean_output += prefix
-                self.buffer = held
-                return clean_output, tool_calls
-
             if not self.inside_call:
                 open_idx = self.buffer.find(OPEN_CALL)
-                close_calls_idx = self.buffer.find(CLOSE_CALLS)
-                close_call_idx = self.buffer.find(CLOSE_CALL)
+                close_idx = self.buffer.find(CLOSE_CALL)
 
-                if self.buffer.find(OPEN_CALLS) >= 0:
-                    raise ValueError("Nested <tool_calls> blocks are not allowed")
-                if close_call_idx >= 0 and (open_idx < 0 or close_call_idx < open_idx):
+                # Hard error for orphaned </tool_call>.
+                if close_idx >= 0 and (open_idx < 0 or close_idx < open_idx):
                     raise ValueError("Unexpected </tool_call> without opening <tool_call>")
-
-                # Close the wrapper if it appears before the next call.
-                if close_calls_idx >= 0 and (open_idx < 0 or close_calls_idx < open_idx):
-                    self.buffer = self.buffer[close_calls_idx + len(CLOSE_CALLS):]
-                    self.inside_calls = False
-                    self.tool_calls_completed = True  # Signal that tool calls block is complete
-                    continue
 
                 # Enter a <tool_call> block.
                 if open_idx >= 0:
+                    clean_output += self.buffer[:open_idx]
                     self.buffer = self.buffer[open_idx + len(OPEN_CALL):]
                     self.inside_call = True
                     self.call_buffer = ""
@@ -412,8 +365,9 @@ class NativeToolCallsStreamParser:
                     )
                     continue
 
-                # No complete tag yet. Hold back partial open/close tags; discard other inner text.
-                _, held = _split_partial_suffix_any(self.buffer, [OPEN_CALL_PARTIALS, CLOSE_CALLS_PARTIALS])
+                # No complete tag yet. Hold back partial open tag at the edge.
+                prefix, held = _split_partial_suffix(self.buffer, OPEN_CALL_PARTIALS)
+                clean_output += prefix
                 self.buffer = held
                 return clean_output, tool_calls
 
@@ -478,6 +432,7 @@ class NativeToolCallsStreamParser:
                 self._json_extractor = None
                 self._args_streamer = None
                 self._emitted_call_start = False
+                self.tool_calls_completed = True
                 continue
 
             # No closing tag yet: hold back partial close tags at the edge.
@@ -510,8 +465,8 @@ class NativeToolCallsStreamParser:
 
     def finalize(self) -> Tuple[str, List[Dict]]:
         """Flush remaining buffer on stream completion."""
-        if self.inside_call or self.inside_calls:
-            raise ValueError("Unclosed <tool_calls> block")
+        if self.inside_call:
+            raise ValueError("Unclosed <tool_call> block")
         if self.buffer:
             tail = self.buffer
             self.buffer = ""

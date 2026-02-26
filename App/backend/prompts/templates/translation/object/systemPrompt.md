@@ -45,7 +45,6 @@ Just output the translated text as plain text, nothing else.
 - Keep terminology consistent with any provided context
 {% else %}
 {% if (config.outputMode == "native_tool_call") %}
-- **MUST wrap output in `<tool_calls>...</tool_calls>`**
 - **MUST use one `<tool_call>...</tool_call>` per operation**
 - **Each `<tool_call>` MUST contain exactly one JSON object** (no markdown code fences)
 - **MUST include `tool` field** to specify the operation type (`replace_*` or `patch_*`)

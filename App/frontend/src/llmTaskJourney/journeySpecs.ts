@@ -71,55 +71,74 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 // =====================================================================
-// objectEdit Spec
+// Shared helpers for object-edit specs
 // =====================================================================
 
-const objectEditSpec: JourneySpec<ObjectEditInput> = {
-  kind: 'objectEdit',
+type ObjectEditJourneyKind = 'manuscriptEdit' | 'outlineEdit' | 'storyObjectEdit';
 
-  label: (input) => {
-    const categoryLabel = CATEGORY_LABELS[input.category] ?? input.category;
-    if (!input.targetId) {
-      return `AI Edit: ${categoryLabel}`;
-    }
+function objectEditLabel(input: ObjectEditInput): string {
+  const categoryLabel = CATEGORY_LABELS[input.category] ?? input.category;
+  if (!input.targetId) {
+    return `AI Edit: ${categoryLabel}`;
+  }
 
-    const store = useUnifiedObjectStore.getState();
-    const mainLanguage = useSettingsStore.getState().getSettings().mainLanguage;
+  const store = useUnifiedObjectStore.getState();
+  const mainLanguage = useSettingsStore.getState().getSettings().mainLanguage;
 
-    if (input.category === 'manuscript') {
-      const chapter = store.getObject(input.targetId);
-      const langData = chapter?.data?.[mainLanguage] || (chapter?.data ? Object.values(chapter.data)[0] : undefined);
-      const chapterName = (langData as any)?.name ?? '';
-      return chapterName ? `AI Edit: ${categoryLabel} - ${chapterName}` : `AI Edit: ${categoryLabel}`;
-    }
+  if (input.category === 'manuscript') {
+    const chapter = store.getObject(input.targetId);
+    const langData = chapter?.data?.[mainLanguage] || (chapter?.data ? Object.values(chapter.data)[0] : undefined);
+    const chapterName = (langData as any)?.name ?? '';
+    return chapterName ? `AI Edit: ${categoryLabel} - ${chapterName}` : `AI Edit: ${categoryLabel}`;
+  }
 
-    const obj = store.getObject(input.targetId);
-    const name =
-      (obj?.data ? (obj.data as any)[mainLanguage] : undefined)?.name ??
-      (obj?.data ? (obj.data as any)[mainLanguage] : undefined)?.title ??
-      (obj?.data ? (Object.values(obj.data)[0] as any) : undefined)?.name ??
-      (obj?.data ? (Object.values(obj.data)[0] as any) : undefined)?.title ??
-      '';
+  const obj = store.getObject(input.targetId);
+  const name =
+    (obj?.data ? (obj.data as any)[mainLanguage] : undefined)?.name ??
+    (obj?.data ? (obj.data as any)[mainLanguage] : undefined)?.title ??
+    (obj?.data ? (Object.values(obj.data)[0] as any) : undefined)?.name ??
+    (obj?.data ? (Object.values(obj.data)[0] as any) : undefined)?.title ??
+    '';
 
-    return name ? `AI Edit: ${categoryLabel} - ${name}` : `AI Edit: ${categoryLabel}`;
-  },
+  return name ? `AI Edit: ${categoryLabel} - ${name}` : `AI Edit: ${categoryLabel}`;
+}
 
-  buildEditingTargets: (input) => {
-    const settingsStore = useSettingsStore.getState();
-    const mainLanguage = settingsStore.getSettings().mainLanguage;
-    const targetId = (input.targetId ?? '').trim();
-    if (!targetId) {
-      throw new Error('objectEdit requires targetId.');
-    }
-    return {
-      kind: 'objectEdit',
-      projectId: input.projectId,
-      category: input.category,
-      targetId,
-      selectedContextIds: input.selectedContextIds ?? [],
-      language: mainLanguage,
-    };
-  },
+function objectEditBuildTargets(kind: ObjectEditJourneyKind, input: ObjectEditInput): EditingTargets {
+  const mainLanguage = useSettingsStore.getState().getSettings().mainLanguage;
+  const targetId = (input.targetId ?? '').trim();
+  if (!targetId) {
+    throw new Error(`${kind} requires targetId.`);
+  }
+  return {
+    kind,
+    projectId: input.projectId,
+    category: input.category,
+    targetId,
+    selectedContextIds: input.selectedContextIds ?? [],
+    language: mainLanguage,
+  };
+}
+
+// =====================================================================
+// manuscriptEdit / outlineEdit / storyObjectEdit Specs
+// =====================================================================
+
+const manuscriptEditSpec: JourneySpec<ObjectEditInput> = {
+  kind: 'manuscriptEdit',
+  label: objectEditLabel,
+  buildEditingTargets: (input) => objectEditBuildTargets('manuscriptEdit', input),
+};
+
+const outlineEditSpec: JourneySpec<ObjectEditInput> = {
+  kind: 'outlineEdit',
+  label: objectEditLabel,
+  buildEditingTargets: (input) => objectEditBuildTargets('outlineEdit', input),
+};
+
+const storyObjectEditSpec: JourneySpec<ObjectEditInput> = {
+  kind: 'storyObjectEdit',
+  label: objectEditLabel,
+  buildEditingTargets: (input) => objectEditBuildTargets('storyObjectEdit', input),
 };
 
 // =====================================================================
@@ -195,7 +214,9 @@ const sceneImagePromptSpec: JourneySpec<ImagePromptInput> = {
 // =====================================================================
 
 export const journeySpecs = {
-  objectEdit: objectEditSpec,
+  manuscriptEdit: manuscriptEditSpec,
+  outlineEdit: outlineEditSpec,
+  storyObjectEdit: storyObjectEditSpec,
   objectTranslation: objectTranslationSpec,
   imagePrompt: imagePromptSpec,
   sceneImagePrompt: sceneImagePromptSpec,

@@ -259,30 +259,6 @@ export class ThreadEventConsumer {
     });
   }
 
-  private finalizeStreamingMessagesForThread(threadId: string): void {
-    const store = useThreadStore.getState();
-    const messages = store.getMessages(threadId);
-    for (const msg of messages) {
-      if (msg.isStreaming) {
-        store.patchMessage(threadId, msg.id, {
-          isStreaming: false,
-          streamingData: undefined,
-        });
-      }
-    }
-
-    const toolMap = this.streamingToolCallsByThread.get(threadId);
-    if (toolMap) {
-      for (const tempId of toolMap.values()) {
-        store.removeToolCall(tempId);
-        this.streamingArgBuffers.delete(tempId);
-      }
-      this.streamingToolCallsByThread.delete(threadId);
-    }
-
-    store.setThreadStreamActive(threadId, false);
-  }
-
   private handleToolCallStart(threadId: string, payload: Record<string, unknown>): void {
     const index = Number(payload.index ?? 0);
     const assistantMessageId = payload.assistant_message_id ? String(payload.assistant_message_id) : '';
@@ -568,7 +544,7 @@ export class ThreadEventConsumer {
       const error = payload.error ? String(payload.error) : null;
       this.patchThreadFromRunStatus(threadId, status, error, payload);
       if (THREAD_TERMINAL_STATUSES.has(status)) {
-        this.finalizeStreamingMessagesForThread(threadId);
+        useThreadStore.getState().setThreadStreamActive(threadId, false);
       }
       await this.checkAutoContinue(threadId);
       return;
@@ -747,6 +723,59 @@ export class ThreadEventConsumer {
         ts: payload.ts ? String(payload.ts) : nowIso(),
       });
 
+      // message:end is the authoritative final state. Wipe all existing
+      // tool calls for this assistant message and replace with the payload.
+      const toolCalls = Array.isArray(payload.tool_calls) ? payload.tool_calls as Record<string, unknown>[] : [];
+      const existingToolCalls = store.getToolCallsForAssistantMessage(messageId);
+      for (const tc of existingToolCalls) {
+        store.removeToolCall(tc.id);
+      }
+      const toolMap = this.streamingToolCallsByThread.get(threadId);
+      if (toolMap) {
+        for (const tempId of toolMap.values()) this.streamingArgBuffers.delete(tempId);
+      }
+      this.streamingToolCallsByThread.delete(threadId);
+
+      for (const tc of toolCalls) {
+        const toolCallId = String(tc.tool_call_id ?? '');
+        if (!toolCallId) continue;
+
+        store.upsertToolCall({
+          id: toolCallId,
+          threadId,
+          runId,
+          messageId: String(tc.message_id ?? ''),
+          assistantMessageId: tc.assistant_message_id ? String(tc.assistant_message_id) : messageId,
+          callSeq: Number(tc.index ?? 0),
+          llmCallId: toolCallId,
+          toolName: String(tc.name ?? ''),
+          arguments: (tc.arguments ?? {}) as Record<string, unknown>,
+          extraContent: (tc.extra_content ?? null) as Record<string, unknown> | null,
+          status: toToolCallStatus(tc.status ?? 'validating'),
+          reason: tc.reason ? String(tc.reason) : null,
+          result: null,
+          childThreadId: null,
+          acceptedAt: null,
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        });
+
+        const toolCallMessageId = String(tc.message_id ?? '');
+        if (toolCallMessageId) {
+          store.upsertMessage({
+            id: toolCallMessageId,
+            threadId,
+            runId,
+            role: 'tool_call',
+            seq: 0,
+            seqInThread: Number(tc.seq_in_thread ?? 0),
+            data: {},
+            isStreaming: false,
+            createdAt: nowIso(),
+          });
+        }
+      }
+
       store.setThreadRuntime(threadId, {
         latestMessageAt: payload.ts ? String(payload.ts) : nowIso(),
         updatedAt: payload.ts ? String(payload.ts) : nowIso(),
@@ -769,13 +798,13 @@ export class ThreadEventConsumer {
     if (event.event === 'run:error') {
       const error = String(payload.error ?? 'Unknown error');
       this.patchThreadFromRunStatus(threadId, 'error', error, payload);
-      this.finalizeStreamingMessagesForThread(threadId);
+      useThreadStore.getState().setThreadStreamActive(threadId, false);
       return;
     }
 
     if (event.event === 'run:canceled') {
       this.patchThreadFromRunStatus(threadId, 'canceled', null, payload);
-      this.finalizeStreamingMessagesForThread(threadId);
+      useThreadStore.getState().setThreadStreamActive(threadId, false);
     }
   }
 }

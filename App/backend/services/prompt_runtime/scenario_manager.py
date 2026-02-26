@@ -72,10 +72,10 @@ class ScenarioManager:
                 task_subtype = "scene" if context_type == "scene" else "object"
                 return ScenarioTarget(task_type="imagePrompt", task_subtype=task_subtype)
 
-            if journey_kind == "objectEdit":
-                mode = str(payload.get("category") or "").strip()
-                task_subtype = "manuscript" if mode == "manuscript" else "storyObject"
-                return ScenarioTarget(task_type="editAssistant", task_subtype=task_subtype)
+            if journey_kind == "manuscriptEdit":
+                return ScenarioTarget(task_type="editAssistant", task_subtype="manuscript")
+            if journey_kind in {"outlineEdit", "storyObjectEdit"}:
+                return ScenarioTarget(task_type="editAssistant", task_subtype="storyObject")
 
             raise RuntimeError(f"Unsupported journey kind: {journey_kind}")
 
@@ -98,7 +98,7 @@ class ScenarioManager:
                 return "translation"
             if kind in {"imagePrompt", "sceneImagePrompt"}:
                 return "imagePrompt"
-            if kind == "objectEdit":
+            if kind in {"manuscriptEdit", "outlineEdit", "storyObjectEdit"}:
                 return "editAssistant"
             raise RuntimeError(f"Unsupported journey kind: {kind}")
         if thread.thread_type == "subAgent":
