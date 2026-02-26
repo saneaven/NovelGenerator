@@ -28,6 +28,7 @@ import { useThreadStore } from '../../store/threadStore';
 import { AIAssistMini, Close } from '../icons';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
+import { alert as showAlert } from '../../store/dialogStore';
 import './ImageGenerationModal.css';
 
 // Reference image item
@@ -485,16 +486,17 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
     const handleGenerate = async () => {
         if (!binding) {
-            alert(
-                assetType === 'scene'
+            showAlert({
+                title: 'Validation Error',
+                message: assetType === 'scene'
                     ? 'Missing manuscriptId for scene image generation.'
-                    : 'Missing object binding (objectType/objectId) for object image generation.'
-            );
+                    : 'Missing object binding (objectType/objectId) for object image generation.',
+            });
             return;
         }
 
         if (!currentProjectId) {
-            alert('No project selected');
+            showAlert({ title: 'Validation Error', message: 'No project selected' });
             return;
         }
 
@@ -527,7 +529,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
         if (isTagBased) {
             if (!positivePrompt.trim()) {
-                alert('Please enter a positive prompt');
+                showAlert({ title: 'Missing Prompt', message: 'Please enter a positive prompt' });
                 return;
             }
 
@@ -570,7 +572,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 onClose?.();
         } else {
             if (!prompt.trim()) {
-                alert('Please enter a prompt');
+                showAlert({ title: 'Missing Prompt', message: 'Please enter a prompt' });
                 return;
             }
 

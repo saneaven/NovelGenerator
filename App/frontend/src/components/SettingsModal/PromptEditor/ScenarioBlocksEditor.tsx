@@ -26,6 +26,7 @@ import { buildPreviewData } from './previewDataBuilder';
 import { scenarioService } from '../../../api/scenarioService';
 import { useProjectStore } from '../../../store/projectStore';
 import type { ScenarioBlock, ScenarioDocument, StaticPromptSubtype, TaskType } from '../../../types/scenarios';
+import { confirm } from '../../../store/dialogStore';
 import './ScenarioBlocksEditor.css';
 
 type ToastKind = 'success' | 'warning' | 'error';
@@ -244,9 +245,14 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
     setExpanded((prev) => new Set(prev).add(id));
   };
 
-  const deleteBlock = (block: ScenarioBlock) => {
+  const deleteBlock = async (block: ScenarioBlock) => {
     if (isPinned(block)) {
-      const ok = window.confirm('Delete this pinned block?');
+      const ok = await confirm({
+        title: 'Delete Pinned Block',
+        message: 'Delete this pinned block?',
+        variant: 'danger',
+        confirmLabel: 'Delete',
+      });
       if (!ok) return;
     }
     setBlocks(orderedBlocks.filter((b) => b.id !== block.id));

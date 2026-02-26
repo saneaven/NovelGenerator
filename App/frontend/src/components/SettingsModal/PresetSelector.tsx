@@ -7,6 +7,7 @@ import { Plus, Copy, Edit, Trash, Check, Download, Upload } from '../icons';
 import PresetImportModal from './PresetImportModal';
 import type { PresetExportData } from '../../types/presets';
 import { useSettingsToast } from './SettingsToastContext';
+import { confirm } from '../../store/dialogStore';
 import './PresetSelector.css';
 
 interface PresetSelectorProps {
@@ -46,10 +47,16 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
     }
   };
 
-  const handleDeleteClick = (e: React.MouseEvent, presetId: string) => {
+  const handleDeleteClick = async (e: React.MouseEvent, presetId: string) => {
     e.stopPropagation();
     const preset = presets.find(p => p.id === presetId);
-    if (confirm(t('settings.presetSelector.deleteConfirm', { name: preset?.name || t('settings.presetSelector.thisPreset') }))) {
+    const confirmed = await confirm({
+      title: t('settings.presetSelector.deletePreset'),
+      message: t('settings.presetSelector.deleteConfirm', { name: preset?.name || t('settings.presetSelector.thisPreset') }),
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (confirmed) {
       deletePreset(presetId);
     }
   };

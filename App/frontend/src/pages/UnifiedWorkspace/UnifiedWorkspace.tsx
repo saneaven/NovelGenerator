@@ -10,14 +10,13 @@ import { useNovelEditorStore } from '../../store/novelEditorStore';
 import { useNotificationStore } from '../../store/notificationStore';
 import { useSettings } from '../../store/settingsStore';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
-import { useErrorStore } from '../../store/errorStore';
+import { alert as showAlert } from '../../store/dialogStore';
 import { useThreadStore } from '../../store/threadStore';
 import { notificationService } from '../../api/notificationService';
 import { threadService } from '../../api/threadService';
 import { translationService } from '../../api/unifiedObjectService';
 import { startProjectRuntime, stopProjectRuntime } from '../../runtime/runtimeStream';
 
-import ErrorModal from '../../components/Modal/ErrorModal';
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
 import TranslationModal from '../../components/Modal/TranslationModal';
 import AgentPanel from '../workspace/components/AgentPanel';
@@ -89,8 +88,6 @@ const UnifiedWorkspace: React.FC = () => {
   const setPreferredDisplayLanguage = useDisplayLanguageStore((state) => state.setPreferredDisplayLanguage);
   const subLanguages = settings.subLanguages;
 
-  // Error handling
-  const { currentError, showError, hideError } = useErrorStore();
 
   // UI stores - use selector to avoid re-renders when other agentUIStore properties change
   const isAgentVisibleState = useAgentUIStore(
@@ -289,13 +286,13 @@ const UnifiedWorkspace: React.FC = () => {
         console.error('Failed to load story objects:', error);
         const errorStatus = (error as any)?.status || (error as any)?.response?.status;
         if (errorStatus !== 404) {
-          showError('Data Error', 'Failed to load story objects. Please try again.');
+          showAlert({ title: 'Data Error', message: 'Failed to load story objects. Please try again.' });
         }
       }
     };
 
     populateStoreCache();
-  }, [projectId, listObjects, showError]);
+  }, [projectId, listObjects]);
 
   // Build story objects for NovelEditor (when in novel-editor mode)
   useEffect(() => {
@@ -431,9 +428,9 @@ const UnifiedWorkspace: React.FC = () => {
 
     fetchAgents(projectId).catch(error => {
       console.error('Failed to fetch agents:', error);
-      showError('Data Error', 'Failed to load agents. Please try again.');
+      showAlert({ title: 'Data Error', message: 'Failed to load agents. Please try again.' });
     });
-  }, [projectId, fetchAgents, showError]);
+  }, [projectId, fetchAgents]);
 
   const currentProject = getCurrentProject();
 
@@ -558,15 +555,6 @@ const UnifiedWorkspace: React.FC = () => {
         isOpen={showTranslateModal}
         onClose={() => setShowTranslateModal(false)}
         projectId={projectId || ''}
-      />
-
-      <ErrorModal
-        isOpen={!!currentError}
-        type={currentError?.type}
-        title={currentError?.title || ''}
-        message={currentError?.message || ''}
-        detail={currentError?.detail}
-        onClose={hideError}
       />
 
       <SettingsModal

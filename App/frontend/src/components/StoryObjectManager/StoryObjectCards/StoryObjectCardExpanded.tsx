@@ -9,6 +9,7 @@ import ImageTabContent from '../../AssetManager/ImageTabContent';
 import { RichTextEditor, type RichTextEditorRef } from '../../RichTextEditor';
 import type { Asset } from '../../../api/assetService';
 import { getAssetUrl } from '../../../utils/assetUrl';
+import { confirm } from '../../../store/dialogStore';
 import './StoryObjectCardExpanded.css';
 
 type TabType = 'edit' | 'image';
@@ -68,9 +69,15 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
     const hasUnsavedChanges = name !== itemData.name || description !== itemData.description || (editorRef.current?.hasChanges() ?? false);
     const hasImage = Boolean(mainAsset);
 
-    const handleTabSwitch = (tab: TabType) => {
+    const handleTabSwitch = async (tab: TabType) => {
         if (hasUnsavedChanges && activeTab === 'edit' && tab !== 'edit') {
-            if (!window.confirm('You have unsaved changes. Discard them?')) {
+            const confirmed = await confirm({
+                title: 'Unsaved Changes',
+                message: 'You have unsaved changes. Discard them?',
+                variant: 'warning',
+                confirmLabel: 'Discard',
+            });
+            if (!confirmed) {
                 return;
             }
             setName(itemData.name);
@@ -87,9 +94,15 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
         onSave(name.trim(), description, content);
     };
 
-    const handleCancel = () => {
+    const handleCancel = async () => {
         if (hasUnsavedChanges) {
-            if (!window.confirm('Discard unsaved changes?')) {
+            const confirmed = await confirm({
+                title: 'Unsaved Changes',
+                message: 'Discard unsaved changes?',
+                variant: 'warning',
+                confirmLabel: 'Discard',
+            });
+            if (!confirmed) {
                 return;
             }
         }

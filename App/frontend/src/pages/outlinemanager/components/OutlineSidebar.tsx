@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useSettingsStore } from '../../../store/settingsStore';
-import { useErrorStore } from '../../../store/errorStore';
+import { alert as showAlert } from '../../../store/dialogStore';
 import type { OutlineObject } from '../../../types/unifiedObject';
 import { BaseSidebar } from '../../../components/BaseSidebar';
 import { IconButton } from '../../../components/IconButton';
@@ -34,8 +34,6 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
   const store = useUnifiedObjectStore();
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
   const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
-  const { showError } = useErrorStore();
-
   // Add form state
   const [showAddForm, setShowAddForm] = useState(false);
   const [formName, setFormName] = useState('');
@@ -64,7 +62,7 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
       setShowAddForm(false);
     } catch (error) {
       console.error('Failed to create outline:', error);
-      showError('Create Error', 'Failed to create outline. Please try again.');
+      showAlert({ title: 'Create Error', message: 'Failed to create outline. Please try again.' });
     }
   };
 

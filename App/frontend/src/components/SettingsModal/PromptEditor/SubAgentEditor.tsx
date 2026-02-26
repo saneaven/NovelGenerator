@@ -23,6 +23,7 @@ import {
 import PromptPreviewModal from './PromptPreviewModal';
 import type { ScenarioDocument } from '../../../types/scenarios';
 
+import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import './SubAgentEditor.css';
 
 type PromptTab = 'systemPrompt' | 'userPrompt';
@@ -412,13 +413,22 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
 
   const handleDelete = async () => {
     if (!draft) return;
-    const ok = window.confirm(t('settings.promptEditor.subAgentDelete.confirm', { name: draft.current.display_name }));
+    const ok = await confirm({
+      title: t('common.delete'),
+      message: t('settings.promptEditor.subAgentDelete.confirm', { name: draft.current.display_name }),
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
     if (!ok) return;
     try {
       await deleteSubAgent(draft.subAgentId);
       onDeleted?.(draft.subAgentId);
     } catch (err: any) {
-      window.alert(err?.message || t('settings.promptEditor.subAgentDelete.deleteFailed'));
+      await showAlert({
+        title: 'Delete Failed',
+        message: err?.message || t('settings.promptEditor.subAgentDelete.deleteFailed'),
+        variant: 'danger',
+      });
     }
   };
 

@@ -10,7 +10,7 @@ import { useParams } from 'react-router-dom';
 import './GuidelinesManager.css';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
-import { useErrorStore } from '../../store/errorStore';
+import { alert as showAlert } from '../../store/dialogStore';
 import AIEditModal from '../Modal/AIEditModal';
 import VersionHistoryModal from '../Modal/VersionHistoryModal';
 import TranslationModal from '../Modal/TranslationModal';
@@ -34,8 +34,6 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
   const updateObject = useUnifiedObjectStore((state) => state.updateObject);
   const listObjects = useUnifiedObjectStore((state) => state.listObjects);
   const settings = useSettings();
-  const { showError } = useErrorStore();
-
   // Get guidelines from unified store
   const [guidelinesId, setGuidelinesId] = useState<string | null>(null);
   const guidelines = guidelinesId ? (objects[guidelinesId] as GuidelinesObject) : null;
@@ -141,7 +139,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
       setIsEditing(false);
     } catch (err) {
       console.error('Failed to save guidelines:', err);
-      showError('Save Error', 'Failed to save. Please try again.');
+      showAlert({ title: 'Save Error', message: 'Failed to save. Please try again.' });
     } finally {
       setIsSaving(false);
     }

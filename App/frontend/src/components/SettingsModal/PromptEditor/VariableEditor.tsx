@@ -8,6 +8,7 @@ import { TextButton } from '../../TextButton';
 import { IconButton } from '../../IconButton';
 import { CustomSelect } from '../../ui/CustomSelect';
 import { useSettingsToast } from '../SettingsToastContext';
+import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import './VariableEditor.css';
 
 export interface VariableDefinitionDraft {
@@ -235,14 +236,23 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
   };
 
   const handleDelete = async () => {
-    const confirmed = window.confirm(`Delete variable "${variable.name}"? This cannot be undone.`);
+    const confirmed = await confirm({
+      title: 'Delete Variable',
+      message: `Delete variable "${variable.name}"? This cannot be undone.`,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
     if (!confirmed) return;
 
     try {
       await deleteVariable(variable.id);
       onDeleted?.(variable.id);
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Failed to delete');
+      await showAlert({
+        title: 'Delete Failed',
+        message: err instanceof Error ? err.message : 'Failed to delete',
+        variant: 'danger',
+      });
     }
   };
 

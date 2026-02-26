@@ -10,7 +10,7 @@ import { useParams } from 'react-router-dom';
 import './BasicInfoManager.css';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
-import { useErrorStore } from '../../store/errorStore';
+import { alert as showAlert } from '../../store/dialogStore';
 import { useAssetStore } from '../../store/assetStore';
 import { getAssetUrl } from '../../utils/assetUrl';
 import AIEditModal from '../Modal/AIEditModal';
@@ -37,8 +37,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   const updateObject = useUnifiedObjectStore((state) => state.updateObject);
   const listObjects = useUnifiedObjectStore((state) => state.listObjects);
   const settings = useSettings();
-  const { showError } = useErrorStore();
-
   // Get basic info from unified store
   const [basicInfoId, setBasicInfoId] = useState<string | null>(null);
   const basicInfo = basicInfoId ? (objects[basicInfoId] as BasicInfoObject) : null;
@@ -147,7 +145,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
       setIsEditing(false);
     } catch (err) {
       console.error('Failed to save basic info:', err);
-      showError('Save Error', 'Failed to save. Please try again.');
+      showAlert({ title: 'Save Error', message: 'Failed to save. Please try again.' });
     } finally {
       setIsSaving(false);
     }

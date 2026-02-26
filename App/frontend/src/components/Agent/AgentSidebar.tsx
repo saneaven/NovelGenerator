@@ -5,12 +5,12 @@ import { useAgentStore, type Agent, getAgentLastActivityAt } from '../../store/a
 import { makeProjectAgentKey, useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import { useSettings } from '../../store/settingsStore';
-import { useErrorStore } from '../../store/errorStore';
 import { useThreadStore } from '../../store/threadStore';
 import { resolveRunMessageDisplay } from '../../types/thread';
 import { BaseSidebar } from '../BaseSidebar';
 import { IconButton } from '../IconButton';
 import { SpeechBubble, Plus, Trash, Edit, Close } from '../icons';
+import { confirm, alert as showAlert } from '../../store/dialogStore';
 import './AgentSidebar.css';
 
 interface AgentSidebarProps {
@@ -42,8 +42,6 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
     deleteAgent,
   } = useAgentStore();
   const settings = useSettings();
-  const { showError } = useErrorStore();
-
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -317,12 +315,18 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
                     />
                     <IconButton
                       icon={<Trash size="xs" />}
-                      onClick={() => {
+                      onClick={async () => {
                         if (agents.length <= 1) {
-                          showError(t('common.warning'), t('agent.sidebar.cannotDeleteLast'));
+                          showAlert({ title: t('common.warning'), message: t('agent.sidebar.cannotDeleteLast') });
                           return;
                         }
-                        if (confirm(t('agent.sidebar.deleteConfirm'))) {
+                        const confirmed = await confirm({
+                          title: 'Delete Agent',
+                          message: t('agent.sidebar.deleteConfirm'),
+                          variant: 'danger',
+                          confirmLabel: 'Delete',
+                        });
+                        if (confirmed) {
                           deleteAgent(projectId, agent.id);
                           const remainingAgents = getAgents(projectId);
                           if (remainingAgents.length > 0) {

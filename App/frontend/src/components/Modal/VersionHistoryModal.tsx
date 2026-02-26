@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { BaseModal } from '../BaseModal';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { useErrorStore } from '../../store/errorStore';
 import type { ObjectType } from '../../types/unifiedObject';
 import { docToMarkdown } from '../../editor/manuscript/convert';
 import { Scroll, Loading, Mailbox, Check, Globe, Clock, SpeechBubble, DocumentAlt } from '../icons';
 import { TextButton } from '../TextButton';
+import { confirm, alert as showAlert } from '../../store/dialogStore';
 import './VersionHistoryModal.css';
 
 // Unified type for text-based version history (prompts and fragments)
@@ -43,7 +43,6 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   textVersionProps,
 }) => {
   const store = useUnifiedObjectStore();
-  const { showError } = useErrorStore();
   const [versions, setVersions] = useState<any[]>([]);
   const [textVersions, setTextVersions] = useState<TextVersionHistoryItem[]>([]);
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
@@ -73,7 +72,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
         }
       } catch (error) {
         console.error('Failed to load versions:', error);
-        showError('Load Error', 'Failed to load version history. Please try again.');
+        showAlert({ title: 'Load Error', message: 'Failed to load version history. Please try again.' });
       } finally {
         setLoading(false);
       }
@@ -108,7 +107,13 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
   // Story mode restore
   const handleRestoreStoryVersion = async (versionId: string) => {
-    if (!confirm('Are you sure you want to restore this version? This will create a new version with the restored content.')) {
+    const confirmed = await confirm({
+      title: 'Restore Version',
+      message: 'Are you sure you want to restore this version? This will create a new version with the restored content.',
+      variant: 'warning',
+      confirmLabel: 'Restore',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -119,13 +124,19 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       onRestoreVersion?.();
     } catch (error) {
       console.error('Failed to restore version:', error);
-      showError('Restore Error', 'Failed to restore version. Please try again.');
+      showAlert({ title: 'Restore Error', message: 'Failed to restore version. Please try again.' });
     }
   };
 
   // Text mode restore
   const handleRestoreTextVersion = async (versionNumber: number) => {
-    if (!confirm(`Are you sure you want to restore version ${versionNumber}? This will create a new version with the restored content.`)) {
+    const confirmed = await confirm({
+      title: 'Restore Version',
+      message: `Are you sure you want to restore version ${versionNumber}? This will create a new version with the restored content.`,
+      variant: 'warning',
+      confirmLabel: 'Restore',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -136,7 +147,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       onClose();
     } catch (error) {
       console.error('Failed to restore version:', error);
-      showError('Restore Error', 'Failed to restore version. Please try again.');
+      showAlert({ title: 'Restore Error', message: 'Failed to restore version. Please try again.' });
     } finally {
       setIsRestoring(false);
     }

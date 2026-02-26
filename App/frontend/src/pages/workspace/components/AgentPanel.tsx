@@ -8,7 +8,6 @@ import { useSidebarStore } from '../../../store/sidebarStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useDisplayLanguageStore } from '../../../store/displayLanguageStore';
 import { useSettings } from '../../../store/settingsStore';
-import { useErrorStore } from '../../../store/errorStore';
 import { useThreadStore } from '../../../store/threadStore';
 import { threadService } from '../../../api/threadService';
 import { runMessageTranslation } from '../../../agent/messageTranslation';
@@ -38,6 +37,7 @@ import '../../../pages/workspace/styles/AgentPanel.css';
 import '../../../pages/workspace/styles/AgentHeader.css';
 import '../../../pages/workspace/styles/AgentMessages.css';
 import '../../../pages/workspace/styles/MessageEdit.css';
+import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import '../../../pages/workspace/styles/AgentInput.css';
 
 const EMPTY_MESSAGES: ThreadMessage[] = [];
@@ -267,7 +267,6 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
 export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) => {
   const { t } = useTranslation();
   const settings = useSettings();
-  const showError = useErrorStore((state) => state.showError);
   const sidebarStore = useSidebarStore();
   const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
   const preferredDisplayLanguage = useDisplayLanguageStore((state) => state.preferredDisplayLanguage);
@@ -647,7 +646,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       e.preventDefault();
       scrollToFirstBlockedMessage();
       if (sendBlockedReason) {
-        showError('Cannot Send', sendBlockedReason);
+        showAlert({ title: 'Cannot Send', message: sendBlockedReason });
       }
       return;
     }
@@ -657,7 +656,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     sendBlockingState.blocked,
     scrollToFirstBlockedMessage,
     sendBlockedReason,
-    showError,
     handleSubmit,
   ]);
 
@@ -731,11 +729,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       setEditingMessageId(null);
       setEditingText('');
     } catch (error: any) {
-      showError('Edit Failed', error?.message ?? 'Failed to update message.');
+      showAlert({ title: 'Edit Failed', message: error?.message ?? 'Failed to update message.' });
     } finally {
       setEditingSaving(false);
     }
-  }, [threadId, editingMessageId, editingSaving, editingText, primaryLanguage, showError]);
+  }, [threadId, editingMessageId, editingSaving, editingText, primaryLanguage]);
 
   const handleTranslateMessage = useCallback(async (message: ThreadMessage, sourceContent: string) => {
     if (!threadId || !secondaryLanguage) return;
@@ -754,18 +752,18 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         sourceContent: text,
       });
     } catch (error: any) {
-      showError('Translation Failed', error?.message ?? 'Failed to translate message.');
+      showAlert({ title: 'Translation Failed', message: error?.message ?? 'Failed to translate message.' });
     } finally {
       setTranslatingByMessageId((prev) => ({ ...prev, [message.id]: false }));
     }
-  }, [threadId, projectId, primaryLanguage, secondaryLanguage, showError, translatingByMessageId]);
+  }, [threadId, projectId, primaryLanguage, secondaryLanguage, translatingByMessageId]);
 
   const handleDeleteSingleToolCall = useCallback(async (toolCallId: string) => {
     if (!threadId) {
-      showError('Delete Failed', 'Could not find the thread.');
+      showAlert({ title: 'Delete Failed', message: 'Could not find the thread.' });
       return;
     }
-    if (!window.confirm('Are you sure you want to delete this tool call?')) return;
+    if (!await confirm({ title: 'Delete Tool Call', message: 'Are you sure you want to delete this tool call?', variant: 'danger', confirmLabel: 'Delete' })) return;
 
     const state = useThreadStore.getState();
     const tc = state.toolCallsById[toolCallId];
@@ -802,15 +800,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         console.error('Failed to delete tool call:', error);
       }
     }
-  }, [threadId, showError]);
+  }, [threadId]);
 
   const handleDeleteMessage = useCallback(async (messageId: string) => {
     if (!threadId) {
-      showError('Delete Failed', 'Could not find the thread.');
+      showAlert({ title: 'Delete Failed', message: 'Could not find the thread.' });
       return;
     }
 
-    if (!window.confirm('Are you sure you want to delete this message?')) return;
+    if (!await confirm({ title: 'Delete Message', message: 'Are you sure you want to delete this message?', variant: 'danger', confirmLabel: 'Delete' })) return;
 
     const state = useThreadStore.getState();
 
@@ -838,7 +836,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         console.error('Failed to delete message:', error);
       }
     }
-  }, [threadId, showError]);
+  }, [threadId]);
 
   const handleCloseAgent = useCallback(() => {
     setIsOverlayClosing(true);

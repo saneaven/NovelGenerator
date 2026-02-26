@@ -16,7 +16,7 @@ import {
   type ProjectExportPreviewAssetItem,
 } from '../../../api/projectService';
 import { ragService, type RagProjectStatusResponse } from '../../../api/ragService';
-import { useErrorStore } from '../../../store/errorStore';
+import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import { List, Trash, Refresh, Download } from '../../../components/icons';
 import './WorkspaceConfigPanel.css';
 
@@ -78,7 +78,6 @@ function formatBytes(bytes: number): string {
 
 const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }) => {
   const { t } = useTranslation();
-  const { showError } = useErrorStore();
 
   const [policy, setPolicy] = useState<ImageCleanupPolicy>(() => loadPolicy(projectId));
   const [preview, setPreview] = useState<ImageCleanupPreviewResponse | null>(null);
@@ -173,11 +172,11 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       setSelectedIds(new Set(result.candidates.map((c) => c.asset_id)));
     } catch (err: any) {
       console.error('Preview cleanup failed:', err);
-      showError('Image Cleanup', 'Failed to preview cleanup candidates.');
+      showAlert({ title: 'Image Cleanup', message: 'Failed to preview cleanup candidates.' });
     } finally {
       setIsPreviewing(false);
     }
-  }, [projectId, policy, showError]);
+  }, [projectId, policy]);
 
   const handleToggleSelected = useCallback((assetId: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -207,7 +206,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         ? t('workspaceConfig.imageCleanup.deleteConfirm', { count: assetIds.length })
         : t('workspaceConfig.imageCleanup.deleteConfirmScrub', { count: assetIds.length });
 
-      if (!window.confirm(confirmText)) return;
+      if (!await confirm({ title: 'Delete Images', message: confirmText, variant: 'danger', confirmLabel: 'Delete' })) return;
 
       setIsExecuting(true);
       setLastRebuildSummary(null);
@@ -220,16 +219,16 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         await handlePreview();
       } catch (err: any) {
         console.error('Execute cleanup failed:', err);
-        showError('Image Cleanup', 'Failed to delete selected assets.');
+        showAlert({ title: 'Image Cleanup', message: 'Failed to delete selected assets.' });
       } finally {
         setIsExecuting(false);
       }
     },
-    [projectId, policy, showError, handlePreview, t]
+    [projectId, policy, handlePreview, t]
   );
 
   const handleRebuildIndex = useCallback(async () => {
-    if (!window.confirm(t('workspaceConfig.imageCleanup.rebuildConfirm'))) return;
+    if (!await confirm({ title: 'Rebuild Index', message: t('workspaceConfig.imageCleanup.rebuildConfirm'), variant: 'warning', confirmLabel: 'Rebuild' })) return;
     setIsRebuilding(true);
     setLastExecute(null);
     try {
@@ -239,11 +238,11 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       );
     } catch (err: any) {
       console.error('Rebuild index failed:', err);
-      showError('Image Cleanup', 'Failed to rebuild manuscript image index.');
+      showAlert({ title: 'Image Cleanup', message: 'Failed to rebuild manuscript image index.' });
     } finally {
       setIsRebuilding(false);
     }
-  }, [projectId, showError, t]);
+  }, [projectId, t]);
 
   const exportAssets = exportPreview?.assets ?? [];
   const isExportManual = exportOptions.include_images && exportOptions.image_scope === 'manual';
@@ -294,11 +293,11 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       setExportSelectedIds(new Set(result.default_selected_asset_ids));
     } catch (err: any) {
       console.error('Export preview failed:', err);
-      showError('Project Export', 'Failed to preview project export.');
+      showAlert({ title: 'Project Export', message: 'Failed to preview project export.' });
     } finally {
       setIsExportPreviewing(false);
     }
-  }, [projectId, exportOptions, showError]);
+  }, [projectId, exportOptions]);
 
   const handleExportToggleSelected = useCallback((assetId: string, checked: boolean) => {
     setExportSelectedIds((prev) => {
@@ -340,7 +339,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       }
 
       if (exportOptions.include_images && exportOptions.image_scope === 'manual' && selected.size === 0) {
-        showError('Project Export', t('workspaceConfig.projectExport.selectAtLeastOne'));
+        showAlert({ title: 'Project Export', message: t('workspaceConfig.projectExport.selectAtLeastOne') });
         return;
       }
 
@@ -352,11 +351,11 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       setLastExportSummary(t('workspaceConfig.projectExport.exportStarted'));
     } catch (err: any) {
       console.error('Export failed:', err);
-      showError('Project Export', 'Failed to export project.');
+      showAlert({ title: 'Project Export', message: 'Failed to export project.' });
     } finally {
       setIsExporting(false);
     }
-  }, [exportPreview, exportSelectedIds, exportOptions, projectId, showError, t]);
+  }, [exportPreview, exportSelectedIds, exportOptions, projectId, t]);
 
   const handleRagReindex = useCallback(async () => {
     setIsRagReindexing(true);
@@ -364,13 +363,13 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
 
     try {
       if (!ragStatus?.enabled) {
-        showError('RAG', 'RAG Search is disabled. Enable it in Settings > Search & Memory.');
+        showAlert({ title: 'RAG', message: 'RAG Search is disabled. Enable it in Settings > Search & Memory.' });
         return;
       }
 
       const profile = ragStatus?.profile;
       if (!profile) {
-        showError('RAG', 'Embedding profile is not configured. Set it in Settings > Search & Memory.');
+        showAlert({ title: 'RAG', message: 'Embedding profile is not configured. Set it in Settings > Search & Memory.' });
         return;
       }
       const res = await ragService.reindex(projectId, {});
@@ -380,11 +379,11 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       await loadRagStatus();
     } catch (err: any) {
       console.error('RAG reindex failed:', err);
-      showError('RAG', 'Failed to reindex project.');
+      showAlert({ title: 'RAG', message: 'Failed to reindex project.' });
     } finally {
       setIsRagReindexing(false);
     }
-  }, [loadRagStatus, projectId, ragStatus?.profile, showError]);
+  }, [loadRagStatus, projectId, ragStatus?.profile]);
 
   return (
     <div className="workspace-config-panel">

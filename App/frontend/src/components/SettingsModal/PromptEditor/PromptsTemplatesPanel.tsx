@@ -33,6 +33,7 @@ import { PROMPT_TREE, getFirstPromptNode, findPromptNode, type PromptNode } from
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
 import { ChevronLeft, ChevronRight, Document, Copy, Clock, Trash, Edit, Eye } from '../../icons';
+import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import './PromptsTemplatesPanel.css';
 import TemplateSyntaxHint from './TemplateSyntaxHint';
 import type { PresetListItem } from '../../../types/presets';
@@ -1345,7 +1346,12 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   const handleDeleteSelectedFragment = async () => {
     if (!currentFragmentDraft) return;
-    const ok = window.confirm(`Are you sure you want to delete "${currentFragmentDraft.fullPath}"? This will delete all versions.`);
+    const ok = await confirm({
+      title: 'Delete Fragment',
+      message: `Are you sure you want to delete "${currentFragmentDraft.fullPath}"? This will delete all versions.`,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
     if (!ok) return;
 
     const key = currentFragmentDraft.key;
@@ -1378,18 +1384,33 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     async (_nextPresetId: string) => {
       if (unsavedCount === 0) return true;
 
-      const shouldSave = window.confirm(`You have unsaved changes (${unsavedCount}). Save before switching presets?`);
+      const shouldSave = await confirm({
+        title: 'Unsaved Changes',
+        message: `You have unsaved changes (${unsavedCount}). Save before switching presets?`,
+        variant: 'warning',
+        confirmLabel: 'Save',
+        cancelLabel: "Don't Save",
+      });
       if (shouldSave) {
         const summary = await saveAllDrafts();
         if (summary.failed > 0) {
           const lines = summary.failures.map((f) => `- ${f.item.label}: ${f.error}`);
-          window.alert(`Some items failed to save:\n\n${lines.join('\n')}`);
+          await showAlert({
+            title: 'Save Failed',
+            message: `Some items failed to save:\n\n${lines.join('\n')}`,
+            variant: 'warning',
+          });
           return false;
         }
         return true;
       }
 
-      const discard = window.confirm('Discard your unsaved changes and switch presets?');
+      const discard = await confirm({
+        title: 'Discard Changes',
+        message: 'Discard your unsaved changes and switch presets?',
+        variant: 'danger',
+        confirmLabel: 'Discard',
+      });
       if (discard) {
         discardAllDrafts();
         return true;

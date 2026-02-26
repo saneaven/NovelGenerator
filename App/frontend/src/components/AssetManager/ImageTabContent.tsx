@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAssetStore } from '../../store/assetStore';
-import { useErrorStore } from '../../store/errorStore';
 import { useProjectStore } from '../../store/projectStore';
 import { ImageGenerationModal } from '../ImageGeneration';
 import ImagePromptManager from './ImagePromptManager';
@@ -15,6 +14,7 @@ import type { DisplayAsset } from './ImageGridItem';
 import { ImageTaskRuntime, type GenerationRecipe } from '../../imageTask';
 import { useImageTaskStore } from '../../imageTask/store';
 import { fromAsset } from '../../imageTask/recipe/fromAsset';
+import { confirm, alert as showAlert } from '../../store/dialogStore';
 import './ImageTabContent.css';
 
 // Basic asset info needed for display
@@ -88,7 +88,6 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     initialGenerationRecipe,
 }) => {
     const { currentProjectId } = useProjectStore();
-    const showError = useErrorStore((s) => s.showError);
     const imageTaskSessions = useImageTaskStore((s) => s.sessions);
     const {
         assets,
@@ -262,11 +261,11 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                     : null);
 
         if (mode === 'scene' && !manuscriptId) {
-            showError('Import Image', 'Select a chapter first (scene assets must be linked to a manuscript).');
+            showAlert({ title: 'Import Image', message: 'Select a chapter first (scene assets must be linked to a manuscript).' });
             return;
         }
         if (mode === 'object' && (!objectType || !objectId)) {
-            showError('Import Image', 'No object is selected (object assets must be linked to a story object).');
+            showAlert({ title: 'Import Image', message: 'No object is selected (object assets must be linked to a story object).' });
             return;
         }
 
@@ -306,11 +305,11 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                             : null);
 
                 if (mode === 'scene' && !manuscriptId) {
-                    showError('Import Image', 'Select a chapter first (scene assets must be linked to a manuscript).');
+                    showAlert({ title: 'Import Image', message: 'Select a chapter first (scene assets must be linked to a manuscript).' });
                     return;
                 }
                 if (mode === 'object' && (!objectType || !objectId)) {
-                    showError('Import Image', 'No object is selected (object assets must be linked to a story object).');
+                    showAlert({ title: 'Import Image', message: 'No object is selected (object assets must be linked to a story object).' });
                     return;
                 }
 
@@ -321,7 +320,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                 });
             }
         }
-    }, [currentProjectId, uploadAsset, mode, manuscriptId, objectType, objectId, showError]);
+    }, [currentProjectId, uploadAsset, mode, manuscriptId, objectType, objectId]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -424,23 +423,29 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             ? `\n\nWarning: This image is used in ${sceneAsset.usage_count} manuscript${sceneAsset.usage_count > 1 ? 's' : ''}:\n${sceneAsset.used_in_manuscripts.map(m => `• ${m.act_name ? m.act_name + ' - ' : ''}${m.name}`).join('\n')}`
             : '';
 
-        if (window.confirm(`Are you sure you want to delete "${asset.name}"?${usageWarning}`)) {
-            try {
-                await deleteAsset(currentProjectId, asset.id);
-                // Refresh the appropriate list
-                if (mode === 'scene') {
-                    await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
-                } else if (mode === 'object' && objectType && objectId) {
-                    await fetchStoryObjectAssets(currentProjectId, objectType, objectId, true);
-                } else {
-                    await fetchAssets(currentProjectId);
-                }
-                onAssetChange?.();
-                setDetailAsset(null);
-                setMoreDropdownAssetId(null);
-            } catch (err) {
-                // Error handled in store
+        const confirmed = await confirm({
+            title: 'Delete Image',
+            message: `Are you sure you want to delete "${asset.name}"?${usageWarning}`,
+            variant: 'danger',
+            confirmLabel: 'Delete',
+        });
+        if (!confirmed) return;
+
+        try {
+            await deleteAsset(currentProjectId, asset.id);
+            // Refresh the appropriate list
+            if (mode === 'scene') {
+                await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
+            } else if (mode === 'object' && objectType && objectId) {
+                await fetchStoryObjectAssets(currentProjectId, objectType, objectId, true);
+            } else {
+                await fetchAssets(currentProjectId);
             }
+            onAssetChange?.();
+            setDetailAsset(null);
+            setMoreDropdownAssetId(null);
+        } catch (err) {
+            // Error handled in store
         }
     };
 
@@ -534,11 +539,11 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
 
         // Regeneration still needs a binding (scene -> manuscript, object -> object)
         if (mode === 'scene' && !manuscriptId) {
-            showError('Regenerate Image', 'No chapter context is selected for scene image generation.');
+            showAlert({ title: 'Regenerate Image', message: 'No chapter context is selected for scene image generation.' });
             return;
         }
         if (mode === 'object' && (!objectType || !objectId)) {
-            showError('Regenerate Image', 'No object is selected for image generation.');
+            showAlert({ title: 'Regenerate Image', message: 'No object is selected for image generation.' });
             return;
         }
 
@@ -546,15 +551,15 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             const fullAsset = await assetService.getAsset(currentProjectId, assetId);
             const recipe = fromAsset(fullAsset);
             if (!recipe) {
-                showError('Regenerate Image', 'This image has no saved generation settings.');
+                showAlert({ title: 'Regenerate Image', message: 'This image has no saved generation settings.' });
                 return;
             }
             setGenerationRecipe(recipe);
             setShowGeneratePanel(true);
         } catch (err) {
-            showError('Regenerate Image', 'Failed to load generation settings for this image.');
+            showAlert({ title: 'Regenerate Image', message: 'Failed to load generation settings for this image.' });
         }
-    }, [currentProjectId, mode, manuscriptId, objectType, objectId, showError]);
+    }, [currentProjectId, mode, manuscriptId, objectType, objectId]);
 
     const handleCancelTask = useCallback((taskId: string) => {
         ImageTaskRuntime.cancel(taskId);

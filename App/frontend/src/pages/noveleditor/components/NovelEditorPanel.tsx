@@ -28,7 +28,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettings } from '../../../store/settingsStore';
-import { useErrorStore } from '../../../store/errorStore';
+import { alert as showAlert } from '../../../store/dialogStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import AIEditModal from '../../../components/Modal/AIEditModal';
@@ -94,7 +94,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const fetchObject = useUnifiedObjectStore.getState().fetchObject;
   const updateObject = useUnifiedObjectStore.getState().updateObject;
   const settings = useSettings();
-  const { showError } = useErrorStore();
   // Get stable action references to avoid infinite loops in effects
   const setHasUnsavedChangesAction = useNovelEditorStore((state) => state.setHasUnsavedChanges);
   const setIsSavingAction = useNovelEditorStore((state) => state.setIsSaving);
@@ -426,13 +425,13 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         localStorage.removeItem(cacheKey);
       } catch (err) {
         console.error('Manual save failed:', err);
-        showError('Save Error', 'Failed to save. Please try again.');
+        showAlert({ title: 'Save Error', message: 'Failed to save. Please try again.' });
       } finally {
         setIsSaving(false);
         setSavingType(null);
       }
     },
-    [manuscript, manuscriptId, doc, wordCount, effectiveLanguage, showError]
+    [manuscript, manuscriptId, doc, wordCount, effectiveLanguage]
   );
 
   // ============================================================================
@@ -522,7 +521,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     void (async () => {
       const asset = await assetService.getAssetByUrl(projectId, currentSrc);
       if (!asset) {
-        showError('Regenerate Image', 'Could not find this image in the library. Opening Change mode.');
+        showAlert({ title: 'Regenerate Image', message: 'Could not find this image in the library. Opening Change mode.' });
         setRegenerateRecipe(null);
         setShowImageModal(true);
         return;
@@ -530,7 +529,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
       const recipe = fromAsset(asset);
       if (!recipe) {
-        showError('Regenerate Image', 'This image has no saved generation settings. Opening Change mode.');
+        showAlert({ title: 'Regenerate Image', message: 'This image has no saved generation settings. Opening Change mode.' });
         setRegenerateRecipe(null);
         setShowImageModal(true);
         return;
@@ -539,7 +538,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       setRegenerateRecipe(recipe);
       setShowImageModal(true);
     })();
-  }, [projectId, showError]);
+  }, [projectId]);
 
   // ============================================================================
   // RENDER

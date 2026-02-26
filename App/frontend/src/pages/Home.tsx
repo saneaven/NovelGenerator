@@ -10,6 +10,7 @@ import SettingsModal from '../components/SettingsModal/SettingsModal';
 import { IconButton } from '../components/IconButton';
 import { Settings, Logout, Close, Plus, Upload } from '../components/icons';
 import { Loading } from '../components/common/Loading';
+import { confirm, alert as showAlert } from '../store/dialogStore';
 
 const Home: React.FC = () => {
   const { t } = useTranslation();
@@ -56,11 +57,11 @@ const Home: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
-    if (confirm(t('home.confirmLogout'))) {
-      logout();
-      navigate('/login');
-    }
+  const handleLogout = async () => {
+    const ok = await confirm({ title: 'Log Out', message: t('home.confirmLogout'), variant: 'warning', confirmLabel: 'Log Out' });
+    if (!ok) return;
+    logout();
+    navigate('/login');
   };
 
   const handleOpenProject = (projectId: string) => {
@@ -70,12 +71,12 @@ const Home: React.FC = () => {
 
   const handleDeleteProject = async (e: React.MouseEvent, projectId: string) => {
     e.stopPropagation();
-    if (confirm(t('home.confirmDelete'))) {
-      try {
-        await deleteProject(projectId);
-      } catch (err) {
-        console.error('Failed to delete project:', err);
-      }
+    const ok = await confirm({ title: 'Delete Project', message: t('home.confirmDelete'), variant: 'danger', confirmLabel: 'Delete' });
+    if (!ok) return;
+    try {
+      await deleteProject(projectId);
+    } catch (err) {
+      console.error('Failed to delete project:', err);
     }
   };
 
@@ -89,7 +90,7 @@ const Home: React.FC = () => {
     if (!file) return;
 
     if (file.name && !file.name.toLowerCase().endsWith('.nbproj')) {
-      alert(t('home.selectNbprojFile'));
+      showAlert({ title: 'Invalid File', message: t('home.selectNbprojFile') });
       return;
     }
 

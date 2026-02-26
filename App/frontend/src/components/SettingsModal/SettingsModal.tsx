@@ -17,6 +17,7 @@ import SearchMemoryPanel from './SearchMemoryPanel';
 import { SettingsToastProvider, type SettingsToastApi, type SettingsToastKind } from './SettingsToastContext';
 import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu, People, List } from '../icons';
 import { TextButton } from '../TextButton';
+import { confirm, alert as showAlert } from '../../store/dialogStore';
 import apiClient from '../../api/client';
 import './SettingsModal.css';
 import './_shared-components.css';
@@ -363,7 +364,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       } else if (promptSummary.failed > 0) {
         showToast('error', `Saved ${promptSummary.saved}/${promptSummary.attempted} prompt items. ${promptSummary.failed} failed.`);
         const lines = promptSummary.failures.map((f) => `- ${f.item.label}: ${f.error}`);
-        window.alert(`Some prompt items failed to save:\n\n${lines.join('\n')}`);
+        showAlert({ title: 'Save Error', message: `Some prompt items failed to save:\n\n${lines.join('\n')}`, variant: 'warning' });
       }
     } finally {
       setIsSaving(false);
@@ -383,47 +384,43 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     onClose();
   }, [onClose, settings]);
 
-  const handleRequestClose = useCallback(() => {
+  const handleRequestClose = useCallback(async () => {
     const unsavedCount = getUnsavedCount();
     if (unsavedCount === 0) {
       closeWithoutSaving();
       return;
     }
 
-    const shouldSave = window.confirm(`You have unsaved changes (${unsavedCount}). Save before closing?`);
+    const shouldSave = await confirm({ title: 'Unsaved Changes', message: `You have unsaved changes (${unsavedCount}). Save before closing?`, variant: 'warning', confirmLabel: 'Save', cancelLabel: "Don't Save" });
     if (shouldSave) {
-      void (async () => {
-        await handleSave();
-        const remaining = getUnsavedCount();
-        if (remaining === 0) {
-          closeWithoutSaving();
-          return;
-        }
+      await handleSave();
+      const remaining = getUnsavedCount();
+      if (remaining === 0) {
+        closeWithoutSaving();
+        return;
+      }
 
-        const discard = window.confirm('Some changes are still unsaved. Discard them and close anyway?');
-        if (discard) {
-          closeWithoutSaving();
-        }
-      })();
+      const discard = await confirm({ title: 'Save Failed', message: 'Some changes are still unsaved. Discard them and close anyway?', variant: 'danger', confirmLabel: 'Discard' });
+      if (discard) {
+        closeWithoutSaving();
+      }
       return;
     }
 
-    const discard = window.confirm('Discard your unsaved changes and close?');
+    const discard = await confirm({ title: 'Discard Changes', message: 'Discard your unsaved changes and close?', variant: 'danger', confirmLabel: 'Discard' });
     if (discard) {
       closeWithoutSaving();
     }
   }, [closeWithoutSaving, getUnsavedCount, handleSave]);
 
-  const handleCancel = useCallback(() => {
+  const handleCancel = useCallback(async () => {
     const unsavedCount = getUnsavedCount();
     if (unsavedCount === 0) {
       closeWithoutSaving();
       return;
     }
 
-    const discard = window.confirm(
-      `You have unsaved changes (${unsavedCount}). Discard all changes and close?`
-    );
+    const discard = await confirm({ title: 'Discard Changes', message: `You have unsaved changes (${unsavedCount}). Discard all changes and close?`, variant: 'danger', confirmLabel: 'Discard' });
     if (discard) {
       closeWithoutSaving();
     }

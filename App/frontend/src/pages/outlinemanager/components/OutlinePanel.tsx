@@ -20,7 +20,6 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettings } from '../../../store/settingsStore';
-import { useErrorStore } from '../../../store/errorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import AIEditModal from '../../../components/Modal/AIEditModal';
 import VersionHistoryModal from '../../../components/Modal/VersionHistoryModal';
@@ -33,6 +32,7 @@ import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, Hambur
 import type { UnifiedObject, OutlineObject, ActObject, ChapterObject } from '../../../types/unifiedObject';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
 import { OutlineItemCard } from '../../../components/OutlineItemCard';
+import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import './OutlinePanel.css';
 
 interface OutlinePanelProps {
@@ -44,7 +44,6 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const store = useUnifiedObjectStore();
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const settings = useSettings();
-  const { showError } = useErrorStore();
   const openSidebar = useSidebarStore((state) => state.openSidebar);
 
   // Selected outline state
@@ -266,7 +265,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       setEditingOutline(null);
     } catch (error) {
       console.error('Failed to update outline:', error);
-      showError('Update Error', 'Failed to update outline. Please try again.');
+      showAlert({ title: 'Update Error', message: 'Failed to update outline. Please try again.' });
     }
   };
 
@@ -302,7 +301,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       setIsEditingDescription(false);
     } catch (error) {
       console.error('Failed to update outline description:', error);
-      showError('Update Error', 'Failed to update outline description. Please try again.');
+      showAlert({ title: 'Update Error', message: 'Failed to update outline description. Please try again.' });
     }
   };
 
@@ -322,7 +321,13 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   };
 
   const handleDeleteOutline = async (outlineId: string) => {
-    if (!confirm('Are you sure you want to delete this outline? All acts and chapters within it will also be deleted.')) {
+    const confirmed = await confirm({
+      title: 'Delete Outline',
+      message: 'Are you sure you want to delete this outline? All acts and chapters within it will also be deleted.',
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -330,7 +335,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       await store.deleteObject('outline', outlineId);
     } catch (error) {
       console.error('Failed to delete outline:', error);
-      showError('Delete Error', 'Failed to delete outline. Please try again.');
+      showAlert({ title: 'Delete Error', message: 'Failed to delete outline. Please try again.' });
     }
   };
 
@@ -354,7 +359,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       setShowAddActForm(null);
     } catch (error) {
       console.error('Failed to create act:', error);
-      showError('Create Error', 'Failed to create act. Please try again.');
+      showAlert({ title: 'Create Error', message: 'Failed to create act. Please try again.' });
     }
   };
 
@@ -385,7 +390,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       setEditingAct(null);
     } catch (error) {
       console.error('Failed to update act:', error);
-      showError('Update Error', 'Failed to update act. Please try again.');
+      showAlert({ title: 'Update Error', message: 'Failed to update act. Please try again.' });
     }
   };
 
@@ -395,7 +400,13 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   };
 
   const handleDeleteAct = async (actId: string) => {
-    if (!confirm('Are you sure you want to delete this act? All chapters within it will also be deleted.')) {
+    const confirmed = await confirm({
+      title: 'Delete Act',
+      message: 'Are you sure you want to delete this act? All chapters within it will also be deleted.',
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -403,7 +414,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       await store.deleteObject('act', actId);
     } catch (error) {
       console.error('Failed to delete act:', error);
-      showError('Delete Error', 'Failed to delete act. Please try again.');
+      showAlert({ title: 'Delete Error', message: 'Failed to delete act. Please try again.' });
     }
   };
 
@@ -427,7 +438,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       setShowAddChapterForm(null);
     } catch (error) {
       console.error('Failed to create chapter:', error);
-      showError('Create Error', 'Failed to create chapter. Please try again.');
+      showAlert({ title: 'Create Error', message: 'Failed to create chapter. Please try again.' });
     }
   };
 
@@ -458,7 +469,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       setEditingChapter(null);
     } catch (error) {
       console.error('Failed to update chapter:', error);
-      showError('Update Error', 'Failed to update chapter. Please try again.');
+      showAlert({ title: 'Update Error', message: 'Failed to update chapter. Please try again.' });
     }
   };
 
@@ -468,7 +479,13 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   };
 
   const handleDeleteChapter = async (chapterId: string) => {
-    if (!confirm('Are you sure you want to delete this chapter?')) {
+    const confirmed = await confirm({
+      title: 'Delete Chapter',
+      message: 'Are you sure you want to delete this chapter?',
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -476,7 +493,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       await store.deleteObject('chapter', chapterId);
     } catch (error) {
       console.error('Failed to delete chapter:', error);
-      showError('Delete Error', 'Failed to delete chapter. Please try again.');
+      showAlert({ title: 'Delete Error', message: 'Failed to delete chapter. Please try again.' });
     }
   };
 
@@ -551,10 +568,10 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
         await store.reorderObjects('act', projectId, newOrder);
       } catch (error) {
         console.error('Failed to reorder acts:', error);
-        showError('Reorder Error', 'Failed to reorder acts. Please try again.');
+        showAlert({ title: 'Reorder Error', message: 'Failed to reorder acts. Please try again.' });
       }
     },
-    [selectedOutlineActs, actIds, projectId, store, showError]
+    [selectedOutlineActs, actIds, projectId, store]
   );
 
   const makeChapterDragEndHandler = useCallback(
@@ -573,10 +590,10 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
         await store.reorderObjects('chapter', projectId, newOrder);
       } catch (error) {
         console.error('Failed to reorder chapters:', error);
-        showError('Reorder Error', 'Failed to reorder chapters. Please try again.');
+        showAlert({ title: 'Reorder Error', message: 'Failed to reorder chapters. Please try again.' });
       }
     },
-    [projectId, store, showError, chaptersByActId]
+    [projectId, store, chaptersByActId]
   );
 
   // Handle version history

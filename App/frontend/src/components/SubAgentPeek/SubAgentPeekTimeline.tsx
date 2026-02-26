@@ -13,6 +13,7 @@ import ThinkingDisplay from '../common/ThinkingDisplay';
 import { IconButton } from '../IconButton';
 import { Trash } from '../icons';
 import { MarkdownRenderer } from '../MarkdownRenderer/MarkdownRenderer';
+import { confirm } from '../../store/dialogStore';
 import { decideToolCallsBatch } from '../../runtime/threadCommands';
 
 function formatRole(role: string, t: (key: string) => string): string {
@@ -171,8 +172,14 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     }
   }, [childThreadId]);
 
-  const handleDeleteMessage = useCallback((messageId: string) => {
-    if (!confirm('Are you sure you want to delete this message?')) return;
+  const handleDeleteMessage = useCallback(async (messageId: string) => {
+    const confirmed = await confirm({
+      title: 'Delete Message',
+      message: 'Are you sure you want to delete this message?',
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
     void threadService.deleteMessage(childThreadId, messageId).then(() => {
       useThreadStore.getState().removeMessage(childThreadId, messageId);
     });

@@ -34,7 +34,6 @@ import {
 import { SortableStoryObjectCard } from './StoryObjectCards/SortableStoryObjectCard';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
-import { useErrorStore } from '../../store/errorStore';
 import { useAssetStore } from '../../store/assetStore';
 import AIEditModal from '../Modal/AIEditModal';
 import VersionHistoryModal from '../Modal/VersionHistoryModal';
@@ -51,6 +50,7 @@ import { useGridColumnCount } from '../../hooks/useGridColumnCount';
 import type { UnifiedObject, ObjectType } from '../../types/unifiedObject';
 import type { Asset } from '../../api/assetService';
 import { getAssetUrl } from '../../utils/assetUrl';
+import { confirm, alert as showAlert } from '../../store/dialogStore';
 
 
 interface NameDescriptionData {
@@ -80,8 +80,6 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   const store = useUnifiedObjectStore();
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const settings = useSettings();
-  const { showError } = useErrorStore();
-
   const objects = store.objects;
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
@@ -247,9 +245,9 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       await store.reorderObjects(category, projectId, newOrder);
     } catch (error) {
       console.error('Failed to reorder:', error);
-      showError('Reorder Error', 'Failed to reorder items. Please try again.');
+      showAlert({ title: 'Reorder Error', message: 'Failed to reorder items. Please try again.' });
     }
-  }, [items, projectId, category, store, showError]);
+  }, [items, projectId, category, store]);
 
   // Fetch story object assets when items change
   useEffect(() => {
@@ -279,7 +277,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       setIsCreatingNew(false);
     } catch (error) {
       console.error('Failed to add item:', error);
-      showError('Create Error', 'Failed to add item. Please try again.');
+      showAlert({ title: 'Create Error', message: 'Failed to add item. Please try again.' });
     }
   };
 
@@ -303,12 +301,18 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       });
     } catch (error) {
       console.error('Failed to update item:', error);
-      showError('Update Error', 'Failed to update. Please try again.');
+      showAlert({ title: 'Update Error', message: 'Failed to update. Please try again.' });
     }
   };
 
   const handleDelete = async (itemId: string) => {
-    if (!confirm(`Are you sure you want to delete this ${singularName}?`)) {
+    const confirmed = await confirm({
+      title: `Delete ${singularName}`,
+      message: `Are you sure you want to delete this ${singularName}?`,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -316,7 +320,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       await store.deleteObject(category, itemId);
     } catch (error) {
       console.error('Failed to delete item:', error);
-      showError('Delete Error', 'Failed to delete. Please try again.');
+      showAlert({ title: 'Delete Error', message: 'Failed to delete. Please try again.' });
     }
   };
 

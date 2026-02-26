@@ -1,0 +1,64 @@
+/* ConfirmModal - Confirm/Alert dialog styles */
+/* Base modal structure is handled by BaseModal */
+
+/* ===== Icon Styles ===== */
+.confirm-dialog-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.confirm-dialog-icon--danger {
+  color: var(--color-error);
+}
+
+.confirm-dialog-icon--warning {
+  color: var(--color-warning);
+}
+
+.confirm-dialog-icon--info {
+  color: var(--color-brand-primary);
+}
+
+/* ===== Message Content ===== */
+.confirm-dialog-message {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  font-size: var(--font-size-sm);
+  white-space: pre-line;
+}
+
+/* ===== Detail Section ===== */
+.confirm-dialog-detail {
+  margin-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-default);
+  padding-top: var(--spacing-sm);
+}
+
+.confirm-dialog-detail summary {
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  user-select: none;
+}
+
+.confirm-dialog-detail summary:hover {
+  color: var(--color-text-secondary);
+}
+
+.confirm-dialog-detail-content {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: var(--color-surface-subtle);
+  border-radius: var(--border-radius-sm);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  overflow-x: auto;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--color-text-secondary);
+}

@@ -5,6 +5,7 @@ import { CustomSelect } from '../ui/CustomSelect';
 import { TextButton } from '../TextButton';
 import CustomThinkingTemplateManager from './CustomThinkingTemplateManager';
 import type { CustomThinkingTemplate } from '../../store/settingsStore';
+import { confirm } from '../../store/dialogStore';
 import './ThinkingTemplateEditorModal.css';
 
 interface Props {
@@ -52,9 +53,15 @@ const ThinkingTemplateEditorModal: React.FC<Props> = ({
     setSelectedTemplateId(newTemplate.id!);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selectedTemplateId) return;
-    if (!window.confirm(t(`${tp}.confirmDelete`))) return;
+    const confirmed = await confirm({
+      title: t(`${tp}.deleteTemplate`),
+      message: t(`${tp}.confirmDelete`),
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
     const remaining = templates.filter((tpl) => tpl.id !== selectedTemplateId);
     onChange(remaining);
     setSelectedTemplateId(remaining.length > 0 ? (remaining[0].id ?? null) : null);

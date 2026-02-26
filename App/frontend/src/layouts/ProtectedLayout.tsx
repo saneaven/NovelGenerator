@@ -7,6 +7,7 @@ import { useTheme } from '../hooks/useTheme';
 import { Loading } from '../components/common/Loading';
 import { NotificationModals } from '../components/Notification';
 import { NotificationToastManager } from '../components/ActivityPanel/NotificationToastManager';
+import ConfirmModal from '../components/Modal/ConfirmModal';
 import '../App.css';
 
 function ProtectedAppShell() {
@@ -31,6 +32,7 @@ function ProtectedAppShell() {
       </main>
       <NotificationModals />
       <NotificationToastManager />
+      <ConfirmModal />
     </div>
   );
 }
