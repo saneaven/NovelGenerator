@@ -29,6 +29,7 @@ import { AIAssistMini, Close } from '../icons';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import { alert as showAlert } from '../../store/dialogStore';
+import { NumberInput } from '../ui/NumberInput';
 import './ImageGenerationModal.css';
 
 // Reference image item
@@ -897,12 +898,11 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                             </div>
                             <div className="form-field">
                                 <label>Steps</label>
-                                <input
-                                    type="number"
+                                <NumberInput
                                     min={1}
                                     max={50}
                                     value={novelaiSteps}
-                                    onChange={(e) => setNovelaiSteps(parseInt(e.target.value) || 28)}
+                                    onValueChange={(v) => setNovelaiSteps(v!)}
                                     className="config-input"
                                 />
                             </div>
@@ -910,13 +910,13 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                         <div className="form-row">
                             <div className="form-field">
                                 <label>CFG Scale</label>
-                                <input
-                                    type="number"
+                                <NumberInput
                                     min={1}
                                     max={20}
                                     step={0.5}
+                                    integer={false}
                                     value={novelaiScale}
-                                    onChange={(e) => setNovelaiScale(parseFloat(e.target.value) || 6)}
+                                    onValueChange={(v) => setNovelaiScale(v!)}
                                     className="config-input"
                                 />
                             </div>

@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
 
+import { NumberInput } from '../../../components/ui/NumberInput';
 import { IMAGE_OVERLAY_STORAGE_KEY, type ImageOverlayCallbacks } from '../../../components/RichTextEditor/extensions/ImageNodeView';
 import {
   Image,
@@ -398,22 +399,20 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
             >
               <div className="table-dimensions">
                 <label>{t('manuscriptEditor.tableDropdown.rows')}</label>
-                <input
-                  type="number"
+                <NumberInput
                   min={1}
                   max={20}
                   value={tableRows}
-                  onChange={(e) => setTableRows(Math.max(1, Math.min(20, parseInt(e.target.value || '1', 10))))}
+                  onValueChange={(v) => setTableRows(v!)}
                 />
               </div>
               <div className="table-dimensions">
                 <label>{t('manuscriptEditor.tableDropdown.cols')}</label>
-                <input
-                  type="number"
+                <NumberInput
                   min={1}
                   max={10}
                   value={tableCols}
-                  onChange={(e) => setTableCols(Math.max(1, Math.min(10, parseInt(e.target.value || '1', 10))))}
+                  onValueChange={(v) => setTableCols(v!)}
                 />
               </div>
               <button

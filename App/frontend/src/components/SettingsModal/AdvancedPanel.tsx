@@ -4,6 +4,7 @@ import type { RetryConfig, ToolCallAutoApproveConfig } from '../../store/setting
 
 import ToggleSwitch from '../common/ToggleSwitch';
 import { TextButton } from '../TextButton';
+import { NumberInput } from '../ui/NumberInput';
 import { Refresh, Document } from '../icons';
 import './AdvancedPanel.css';
 
@@ -41,12 +42,6 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
         });
     };
 
-    const handleDelayChange = (value: number) => {
-        onRetryConfigChange({
-            ...retryConfig,
-            retryDelayMs: Math.max(100, Math.min(30000, value)),
-        });
-    };
 
     const handleRemoveErrorCode = (code: number) => {
         onRetryConfigChange({
@@ -122,13 +117,15 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                 <div className={`form-field ${!retryConfig.enabled ? 'disabled' : ''}`}>
                     <label>{t('settings.advanced.errorRetry.retryDelay')}</label>
                     <div className="input-with-suffix">
-                        <input
-                            type="number"
-                            min="100"
-                            max="30000"
-                            step="100"
+                        <NumberInput
+                            min={100}
+                            max={30000}
+                            step={100}
                             value={retryConfig.retryDelayMs}
-                            onChange={(e) => handleDelayChange(parseInt(e.target.value, 10))}
+                            onValueChange={(v) => onRetryConfigChange({
+                                ...retryConfig,
+                                retryDelayMs: v!,
+                            })}
                             disabled={!retryConfig.enabled}
                             className="number-input"
                         />

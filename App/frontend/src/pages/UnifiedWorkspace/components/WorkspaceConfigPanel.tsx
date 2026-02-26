@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ToggleSwitch from '../../../components/common/ToggleSwitch';
+import { NumberInput } from '../../../components/ui/NumberInput';
 import TextButton from '../../../components/TextButton/TextButton';
 import { getAssetUrl } from '../../../utils/assetUrl';
 import {
@@ -616,15 +617,14 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
           <div className="workspace-config-field">
             <label>{t('workspaceConfig.imageCleanup.keepRecentDays')}</label>
             <div className="workspace-config-input-with-suffix">
-              <input
-                type="number"
-                min="0"
-                step="1"
+              <NumberInput
+                min={0}
+                step={1}
                 value={policy.keep_recent_days}
-                onChange={(e) =>
+                onValueChange={(v) =>
                   setPolicy((prev) => ({
                     ...prev,
-                    keep_recent_days: Math.max(0, parseInt(e.target.value || '0', 10)),
+                    keep_recent_days: v!,
                   }))
                 }
                 className="workspace-config-number-input"

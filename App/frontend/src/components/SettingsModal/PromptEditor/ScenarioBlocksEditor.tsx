@@ -20,6 +20,7 @@ import { ChevronDown, ChevronUp, Collapse, Copy, Expand, Eye, HamburgerMenu, Plu
 import { IconButton } from '../../IconButton';
 import { DropdownMenu, DropdownItem } from '../../ui/DropdownMenu';
 import ToggleSwitch from '../../common/ToggleSwitch';
+import { NumberInput } from '../../ui/NumberInput';
 import TemplateEditor from './TemplateEditor';
 import PromptPreviewModal from './PromptPreviewModal';
 import { buildPreviewData } from './previewDataBuilder';
@@ -456,28 +457,22 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                         <>
                           <div className="scenario-block-field-row">
                             <label>Start</label>
-                            <input
-                              type="number"
+                            <NumberInput
                               value={block.rangeMapping.start_index}
-                              onChange={(e) => {
-                                const v = parseInt(e.target.value, 10);
-                                if (Number.isNaN(v)) return;
+                              onValueChange={(v) => {
                                 updateBlock(block.id, (b) => ({
                                   ...b,
-                                  rangeMapping: { ...b.rangeMapping!, start_index: v },
+                                  rangeMapping: { ...b.rangeMapping!, start_index: v! },
                                 }));
                               }}
                             />
                             <label>End</label>
-                            <input
-                              type="number"
+                            <NumberInput
                               value={block.rangeMapping.end_index}
-                              onChange={(e) => {
-                                const v = parseInt(e.target.value, 10);
-                                if (Number.isNaN(v)) return;
+                              onValueChange={(v) => {
                                 updateBlock(block.id, (b) => ({
                                   ...b,
-                                  rangeMapping: { ...b.rangeMapping!, end_index: v },
+                                  rangeMapping: { ...b.rangeMapping!, end_index: v! },
                                 }));
                               }}
                             />

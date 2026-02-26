@@ -9,6 +9,7 @@ import { BaseModal } from '../../BaseModal';
 import { Eye, ChevronRight, Refresh, Globe, List } from '../../icons';
 import { CustomSelect } from '../../ui/CustomSelect';
 import ToggleSwitch from '../../common/ToggleSwitch';
+import { NumberInput } from '../../ui/NumberInput';
 import { usePromptPreview } from '../hooks/usePromptPreview';
 import { useProjectStore } from '../../../store/projectStore';
 import { getPromptTypeFields, type PromptTypeField } from './promptTypeFields';
@@ -351,11 +352,11 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
                           options={variable.select_options.map(opt => ({ value: opt, label: opt }))}
                         />
                       ) : variable.var_type === 'number' ? (
-                        <input
-                          type="number"
+                        <NumberInput
+                          integer={false}
                           className="prompt-preview-text-input"
                           value={(variableOverrides[variable.name] ?? variable.value ?? 0) as number}
-                          onChange={(e) => setVariableOverride(variable.name, parseFloat(e.target.value) || 0)}
+                          onValueChange={(v) => setVariableOverride(variable.name, v ?? 0)}
                         />
                       ) : (
                         <input

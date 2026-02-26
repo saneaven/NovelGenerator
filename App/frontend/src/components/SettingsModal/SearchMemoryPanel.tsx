@@ -6,6 +6,7 @@ import ModelBrowser from './ModelBrowser';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import ToggleSwitch from '../common/ToggleSwitch';
+import { NumberInput } from '../ui/NumberInput';
 import { Toggle } from '../icons';
 
 type SearchSubTab = 'keywordSearch' | 'ragSearch' | 'agentMemory';
@@ -109,10 +110,6 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
     onAgentMemoryProfileChange({ ...agentMemoryProfile, model, dimensions: null });
   };
 
-  const clampInt = (value: number, min: number, max: number): number => {
-    if (!Number.isFinite(value)) return min;
-    return Math.max(min, Math.min(max, Math.trunc(value)));
-  };
 
   const title = useMemo(() => {
     if (activeTab === 'keywordSearch') return t('settings.keywordSearch.title');
@@ -175,16 +172,11 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
         <div className="settings-panel-card">
           <div className="form-field">
             <label>{t('settings.keywordSearch.pageSize')}</label>
-            <input
-              type="number"
+            <NumberInput
               value={keywordPageSize}
               min={1}
               max={200}
-              onChange={(e) => {
-                const n = Number.parseInt(e.target.value, 10);
-                if (Number.isNaN(n)) return;
-                onKeywordPageSizeChange(clampInt(n, 1, 200));
-              }}
+              onValueChange={(v) => onKeywordPageSizeChange(v!)}
               className="config-input"
             />
             <p className="field-hint">{t('settings.keywordSearch.pageSizeHint')}</p>
@@ -274,16 +266,11 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
 
             <div className="form-field">
               <label>{t('settings.ragSearch.topKPerQuery')}</label>
-              <input
-                type="number"
+              <NumberInput
                 value={topKPerQuery}
                 min={1}
                 max={200}
-                onChange={(e) => {
-                  const n = Number.parseInt(e.target.value, 10);
-                  if (Number.isNaN(n)) return;
-                  onTopKPerQueryChange(clampInt(n, 1, 200));
-                }}
+                onValueChange={(v) => onTopKPerQueryChange(v!)}
                 className="config-input"
               />
               <p className="field-hint">{t('settings.ragSearch.topKPerQueryHint')}</p>
@@ -291,16 +278,11 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
 
             <div className="form-field">
               <label>{t('settings.ragSearch.neighborWindow')}</label>
-              <input
-                type="number"
+              <NumberInput
                 value={neighborWindow}
                 min={0}
                 max={20}
-                onChange={(e) => {
-                  const n = Number.parseInt(e.target.value, 10);
-                  if (Number.isNaN(n)) return;
-                  onNeighborWindowChange(clampInt(n, 0, 20));
-                }}
+                onValueChange={(v) => onNeighborWindowChange(v!)}
                 className="config-input"
               />
               <p className="field-hint">{t('settings.ragSearch.neighborWindowHint')}</p>
@@ -308,16 +290,11 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
 
             <div className="form-field">
               <label>{t('settings.ragSearch.maxPrimaryChunks')}</label>
-              <input
-                type="number"
+              <NumberInput
                 value={maxPrimaryChunks}
                 min={1}
                 max={200}
-                onChange={(e) => {
-                  const n = Number.parseInt(e.target.value, 10);
-                  if (Number.isNaN(n)) return;
-                  onMaxPrimaryChunksChange(clampInt(n, 1, 200));
-                }}
+                onValueChange={(v) => onMaxPrimaryChunksChange(v!)}
                 className="config-input"
               />
               <p className="field-hint">{t('settings.ragSearch.maxPrimaryChunksHint')}</p>
@@ -325,16 +302,11 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
 
             <div className="form-field">
               <label>{t('settings.ragSearch.maxTotalChunks')}</label>
-              <input
-                type="number"
+              <NumberInput
                 value={maxTotalChunks}
                 min={1}
                 max={500}
-                onChange={(e) => {
-                  const n = Number.parseInt(e.target.value, 10);
-                  if (Number.isNaN(n)) return;
-                  onMaxTotalChunksChange(clampInt(n, 1, 500));
-                }}
+                onValueChange={(v) => onMaxTotalChunksChange(v!)}
                 className="config-input"
               />
               <p className="field-hint">{t('settings.ragSearch.maxTotalChunksHint')}</p>
@@ -428,16 +400,11 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
 
           <div className="form-field">
             <label>{t('settings.agentMemory.topKPerQuery')}</label>
-            <input
-              type="number"
+            <NumberInput
               value={agentMemoryTopKPerQuery}
               min={1}
               max={200}
-              onChange={(e) => {
-                const n = Number.parseInt(e.target.value, 10);
-                if (Number.isNaN(n)) return;
-                onAgentMemoryTopKPerQueryChange(clampInt(n, 1, 200));
-              }}
+              onValueChange={(v) => onAgentMemoryTopKPerQueryChange(v!)}
               className="config-input"
             />
             <p className="field-hint">{t('settings.agentMemory.topKPerQueryHint')}</p>
@@ -445,16 +412,11 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
 
           <div className="form-field">
             <label>{t('settings.agentMemory.neighborWindow')}</label>
-            <input
-              type="number"
+            <NumberInput
               value={agentMemoryNeighborWindow}
               min={0}
               max={20}
-              onChange={(e) => {
-                const n = Number.parseInt(e.target.value, 10);
-                if (Number.isNaN(n)) return;
-                onAgentMemoryNeighborWindowChange(clampInt(n, 0, 20));
-              }}
+              onValueChange={(v) => onAgentMemoryNeighborWindowChange(v!)}
               className="config-input"
             />
             <p className="field-hint">{t('settings.agentMemory.neighborWindowHint')}</p>
@@ -462,16 +424,11 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
 
           <div className="form-field">
             <label>{t('settings.agentMemory.maxPrimaryMessages')}</label>
-            <input
-              type="number"
+            <NumberInput
               value={agentMemoryMaxPrimaryMessages}
               min={1}
               max={200}
-              onChange={(e) => {
-                const n = Number.parseInt(e.target.value, 10);
-                if (Number.isNaN(n)) return;
-                onAgentMemoryMaxPrimaryMessagesChange(clampInt(n, 1, 200));
-              }}
+              onValueChange={(v) => onAgentMemoryMaxPrimaryMessagesChange(v!)}
               className="config-input"
             />
             <p className="field-hint">{t('settings.agentMemory.maxPrimaryMessagesHint')}</p>
@@ -479,16 +436,11 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
 
           <div className="form-field">
             <label>{t('settings.agentMemory.maxTotalMessages')}</label>
-            <input
-              type="number"
+            <NumberInput
               value={agentMemoryMaxTotalMessages}
               min={1}
               max={500}
-              onChange={(e) => {
-                const n = Number.parseInt(e.target.value, 10);
-                if (Number.isNaN(n)) return;
-                onAgentMemoryMaxTotalMessagesChange(clampInt(n, 1, 500));
-              }}
+              onValueChange={(v) => onAgentMemoryMaxTotalMessagesChange(v!)}
               className="config-input"
             />
             <p className="field-hint">{t('settings.agentMemory.maxTotalMessagesHint')}</p>

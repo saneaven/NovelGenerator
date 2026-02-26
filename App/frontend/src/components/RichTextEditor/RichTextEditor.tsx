@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useCallback, useImperativeHandle, forwardRef, useRef, useState, useMemo } from 'react';
+import { NumberInput } from '../ui/NumberInput';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -446,22 +447,20 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
             <div className="table-size-inputs">
               <label>
                 <span>{t('richTextEditor.rows')}</span>
-                <input
-                  type="number"
+                <NumberInput
                   min={1}
                   max={20}
                   value={tableRows}
-                  onChange={(e) => setTableRows(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                  onValueChange={(v) => setTableRows(v!)}
                 />
               </label>
               <label>
                 <span>{t('richTextEditor.cols')}</span>
-                <input
-                  type="number"
+                <NumberInput
                   min={1}
                   max={10}
                   value={tableCols}
-                  onChange={(e) => setTableCols(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                  onValueChange={(v) => setTableCols(v!)}
                 />
               </label>
             </div>

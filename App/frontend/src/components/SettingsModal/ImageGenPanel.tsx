@@ -9,6 +9,7 @@ import type {
 import { generateTempId } from '../../utils/tempId';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
+import { NumberInput } from '../ui/NumberInput';
 import './ImageGenPanel.css';
 
 interface ImageGenPanelProps {
@@ -365,16 +366,15 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                 <span className="label-text">{t('settings.imageGen.novelaiSettings.steps')}</span>
                                 <span className="label-hint">{t('settings.imageGen.novelaiSettings.stepsHint')}</span>
                             </label>
-                            <input
-                                type="number"
+                            <NumberInput
                                 min={1}
                                 max={50}
                                 value={config.novelaiSettings.steps}
-                                onChange={(e) => onChange({
+                                onValueChange={(v) => onChange({
                                     ...config,
                                     novelaiSettings: {
                                         ...config.novelaiSettings,
-                                        steps: parseInt(e.target.value) || 28,
+                                        steps: v!,
                                     },
                                 })}
                                 className="setting-input"
@@ -385,17 +385,17 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                 <span className="label-text">{t('settings.imageGen.novelaiSettings.cfgScale')}</span>
                                 <span className="label-hint">{t('settings.imageGen.novelaiSettings.cfgScaleHint')}</span>
                             </label>
-                            <input
-                                type="number"
+                            <NumberInput
                                 min={1}
                                 max={20}
                                 step={0.5}
+                                integer={false}
                                 value={config.novelaiSettings.scale}
-                                onChange={(e) => onChange({
+                                onValueChange={(v) => onChange({
                                     ...config,
                                     novelaiSettings: {
                                         ...config.novelaiSettings,
-                                        scale: parseFloat(e.target.value) || 6,
+                                        scale: v!,
                                     },
                                 })}
                                 className="setting-input"
