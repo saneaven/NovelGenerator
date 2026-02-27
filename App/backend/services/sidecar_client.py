@@ -21,7 +21,7 @@ class SidecarConversionError(SidecarError):
 
 
 class SidecarClient:
-    def __init__(self, base_url: str | None = None, timeout: float = 10.0):
+    def __init__(self, base_url: str | None = None, timeout: float = 60.0):
         self.base_url = (base_url or os.getenv("SIDECAR_URL") or "http://localhost:3001").rstrip("/")
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout)
 
@@ -41,7 +41,10 @@ class SidecarClient:
                 return body
             except (httpx.HTTPError, ValueError, SidecarError) as exc:
                 last_exc = exc
-        raise SidecarUnavailableError(str(last_exc) if last_exc else "sidecar request failed")
+        raise SidecarUnavailableError(
+            f"sidecar {path} failed after 3 retries: {type(last_exc).__name__}: {last_exc}"
+            if last_exc else "sidecar request failed"
+        ) from last_exc
 
     async def doc_to_markdown(self, doc: dict[str, Any]) -> str:
         body = await self._post_json("/doc-to-markdown", {"doc": doc})

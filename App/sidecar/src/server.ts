@@ -65,6 +65,16 @@ app.post('/markdown-to-doc', (req, res) => {
   }
 });
 
+process.on('uncaughtException', (err) => {
+  console.error('[sidecar] uncaughtException:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[sidecar] unhandledRejection:', reason);
+  process.exit(1);
+});
+
 app.listen(PORT, () => {
   console.log(`[sidecar] listening on ${PORT}`);
 });

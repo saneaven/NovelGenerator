@@ -230,10 +230,7 @@ async def build_project_data(
             markdown = ""
             doc = manuscript_data.get("doc")
             if isinstance(doc, dict):
-                try:
-                    markdown = await sidecar_client.doc_to_markdown(doc)
-                except Exception:
-                    markdown = ""
+                markdown = await sidecar_client.doc_to_markdown(doc)
 
             payload.append(
                 {

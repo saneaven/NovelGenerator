@@ -571,6 +571,18 @@ async def run_llm(
 
     persisted_tools: list[RunToolCallModel] = []
     if output_mode == "raw_output":
+        run.status = "processing"
+        thread.status = "processing"
+        db.commit()
+        await emit_fn(
+            project_id=run.project_id,
+            thread_id=thread.id,
+            event_name="run:status",
+            data={
+                "run_id": str(run.id),
+                "status": "processing",
+            },
+        )
         await _raw.apply_raw_output(
             db,
             thread=thread,
