@@ -341,31 +341,40 @@ class RunPipeline:
         await self._spawn_task(run.id)
         return run
 
-    async def cancel_run(self, *, thread_id: UUID, run_id: UUID, user_id: UUID) -> None:
-        async with self._task_lock:
-            task = self._tasks.get(run_id)
-            if task is not None and not task.done():
-                task.cancel()
-
+    async def cancel_run(self, *, thread_id: UUID, user_id: UUID) -> None:
+        # Find the latest active run for this thread.
         db = self._db_factory()
+        run_id: UUID | None = None
         project_id: UUID | None = None
         try:
             run = (
                 db.query(RunModel)
                 .join(Thread, Thread.id == RunModel.thread_id)
-                .filter(RunModel.id == run_id, Thread.id == thread_id, Thread.user_id == user_id)
+                .filter(
+                    Thread.id == thread_id,
+                    Thread.user_id == user_id,
+                    RunModel.status.in_(["queued", "running", "waiting", "processing"]),
+                )
+                .order_by(RunModel.created_at.desc())
                 .first()
             )
             if run is None:
-                raise HTTPException(status_code=404, detail="Run not found")
-
-            thread = run.thread
+                return  # No active run to cancel
+            run_id = run.id
             project_id = run.project_id
             run.status = "canceled"
-            thread.status = "canceled"
+            thread_row = run.thread
+            if thread_row is not None:
+                thread_row.status = "canceled"
             db.commit()
         finally:
             db.close()
+
+        # Cancel the asyncio task.
+        async with self._task_lock:
+            task = self._tasks.get(run_id)
+            if task is not None and not task.done():
+                task.cancel()
 
         if project_id is not None:
             await self._emit(

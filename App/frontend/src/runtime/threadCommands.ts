@@ -19,7 +19,6 @@ export interface ResumeThreadParams extends ThreadContextParams {
 
 export interface CancelThreadParams {
   threadId: string;
-  runId?: string;
 }
 
 export interface DecideToolCallParams {
@@ -205,14 +204,7 @@ export async function resumeThread(params: ResumeThreadParams): Promise<boolean>
 }
 
 export async function cancelThread(params: CancelThreadParams): Promise<void> {
-  const target = params.runId
-    ?? useThreadStore.getState().threadsById[params.threadId]?.latestRunId
-    ?? null;
-  if (!target) {
-    console.error('cancelThread(): no run ID available to cancel');
-    return;
-  }
-  await threadService.cancelRun(params.threadId, target);
+  await threadService.cancelThread(params.threadId);
 }
 
 export async function decideToolCall(params: DecideToolCallParams): Promise<void> {

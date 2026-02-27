@@ -1132,13 +1132,12 @@ async def delete_thread_tool_call(
     return Response(status_code=204)
 
 
-@router.post("/threads/{thread_id}/runs/{run_id}/cancel", status_code=200)
-async def cancel_run(
+@router.post("/threads/{thread_id}/cancel", status_code=200)
+async def cancel_thread(
     thread_id: UUID,
-    run_id: UUID,
     current_user: User = Depends(get_current_user),
 ):
-    await run_pipeline.cancel_run(thread_id=thread_id, run_id=run_id, user_id=current_user.id)
+    await run_pipeline.cancel_run(thread_id=thread_id, user_id=current_user.id)
     return {"success": True}
 
 

@@ -234,8 +234,8 @@ export const threadService = {
     await apiClient.delete<void>(`/api/v1/threads/${threadId}/tool-calls/${toolCallId}`);
   },
 
-  async cancelRun(threadId: string, runId: string): Promise<void> {
-    await apiClient.post(`/api/v1/threads/${threadId}/runs/${runId}/cancel`);
+  async cancelThread(threadId: string): Promise<void> {
+    await apiClient.post(`/api/v1/threads/${threadId}/cancel`);
   },
 
   async createJourneyThread(
