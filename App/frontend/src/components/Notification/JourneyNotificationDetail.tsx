@@ -69,7 +69,7 @@ function getDisplayReasoningDetail(message: ThreadMessage, language: string) {
   return resolved.reasoningDetail;
 }
 
-type DisplayStatus = 'idle' | 'running' | 'pending_confirmation' | 'success' | 'error';
+type DisplayStatus = 'idle' | 'running' | 'processing' | 'pending_confirmation' | 'success' | 'error';
 
 function deriveDisplayStatus(params: {
   threadStatus: string | undefined;
@@ -78,11 +78,12 @@ function deriveDisplayStatus(params: {
 }): DisplayStatus {
   const { threadStatus, hasPendingToolCalls, isStreamActive } = params;
   if (!threadStatus) return 'idle';
+  if (threadStatus === 'processing') return 'processing';
   if (isStreamActive) return 'running';
   if (threadStatus === 'error') return 'error';
   if (hasPendingToolCalls) return 'pending_confirmation';
   if (threadStatus === 'waiting' || threadStatus === 'paused') return 'pending_confirmation';
-  if (threadStatus === 'running' || threadStatus === 'processing') return 'running';
+  if (threadStatus === 'running') return 'running';
   if (threadStatus === 'done' || threadStatus === 'canceled') return 'success';
   return 'idle';
 }
@@ -90,6 +91,7 @@ function deriveDisplayStatus(params: {
 function statusLabel(status: DisplayStatus): string {
   switch (status) {
     case 'running': return 'Running';
+    case 'processing': return 'Processing';
     case 'pending_confirmation': return 'Needs confirmation';
     case 'success': return 'Completed';
     case 'error': return 'Error';
@@ -230,7 +232,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     [threadStatus, hasPendingToolCalls, isStreamActive],
   );
 
-  const isRunning = displayStatus === 'running';
+  const isRunning = displayStatus === 'running' || displayStatus === 'processing';
   const isPending = displayStatus === 'pending_confirmation' || hasPendingToolCalls;
   const isFeedbackDisabled = isRunning || isPending;
 

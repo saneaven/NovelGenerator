@@ -87,13 +87,41 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
     return map;
   }, [eligibleIds, patchDecisions]);
 
-  const handleToggleAllApply = useCallback(() => {
+  const handleToggleAllApply = useCallback(async () => {
+    if (isCommitting) return;
     setPatchDecisionsBulk(threadId, eligibleIds, 'accept');
-  }, [setPatchDecisionsBulk, threadId, eligibleIds]);
 
-  const handleRejectAll = useCallback(() => {
+    const decisions: ToolCallDecisionMap = {};
+    for (const operationId of eligibleIds) {
+      decisions[operationId] = 'accept';
+    }
+    if (Object.keys(decisions).length === 0) return;
+
+    setIsCommitting(true);
+    try {
+      await onConfirm(decisions);
+    } finally {
+      setIsCommitting(false);
+    }
+  }, [isCommitting, setPatchDecisionsBulk, threadId, eligibleIds, onConfirm]);
+
+  const handleRejectAll = useCallback(async () => {
+    if (isCommitting) return;
     setPatchDecisionsBulk(threadId, eligibleIds, 'reject');
-  }, [setPatchDecisionsBulk, threadId, eligibleIds]);
+
+    const decisions: ToolCallDecisionMap = {};
+    for (const operationId of eligibleIds) {
+      decisions[operationId] = 'reject';
+    }
+    if (Object.keys(decisions).length === 0) return;
+
+    setIsCommitting(true);
+    try {
+      await onConfirm(decisions);
+    } finally {
+      setIsCommitting(false);
+    }
+  }, [isCommitting, setPatchDecisionsBulk, threadId, eligibleIds, onConfirm]);
 
   const handleConfirm = useCallback(async () => {
     if (isCommitting) return;

@@ -443,8 +443,7 @@
         font-size: var(--font-size-lg);
     }
 
-    .agent-message.user .message-wrapper,
-    .agent-message.assistant .message-wrapper {
+    .agent-message.user .message-wrapper {
         max-width: 90%;
     }
 
