@@ -251,23 +251,23 @@ class RunPipeline:
             finally:
                 db.close()
 
-        await self._emit(
-            project_id=run.project_id,
-            thread_id=run.thread.id,
-            event_name="message:user",
-            data={
-                "run_id": str(run.id),
-                "message_id": str(user_msg_id),
-                "role": "user",
-                "seq": int(user_msg_seq),
-                "seq_in_thread": int(user_msg_seq_in_thread),
-                "data": user_msg_data,
-            },
-        )
-        await self._spawn_task(run.id, create_ctx=CreateContext(
-            input_text=text,
-            input_payload=normalized_input_payload,
-        ))
+            await self._emit(
+                project_id=run.project_id,
+                thread_id=run.thread.id,
+                event_name="message:user",
+                data={
+                    "run_id": str(run.id),
+                    "message_id": str(user_msg_id),
+                    "role": "user",
+                    "seq": int(user_msg_seq),
+                    "seq_in_thread": int(user_msg_seq_in_thread),
+                    "data": user_msg_data,
+                },
+            )
+            await self._spawn_task(run.id, create_ctx=CreateContext(
+                input_text=text,
+                input_payload=normalized_input_payload,
+            ))
         return run
 
     async def resume_run(
@@ -338,79 +338,80 @@ class RunPipeline:
             finally:
                 db.close()
 
-        await self._spawn_task(run.id)
+            await self._spawn_task(run.id)
         return run
 
     async def cancel_run(self, *, thread_id: UUID, user_id: UUID) -> None:
-        # Find the latest active run for this thread.
-        db = self._db_factory()
-        run_id: UUID | None = None
-        project_id: UUID | None = None
-        try:
-            run = (
-                db.query(RunModel)
-                .join(Thread, Thread.id == RunModel.thread_id)
-                .filter(
-                    Thread.id == thread_id,
-                    Thread.user_id == user_id,
-                    RunModel.status.in_(["queued", "running", "waiting", "processing"]),
-                )
-                .order_by(RunModel.created_at.desc())
-                .first()
-            )
-            if run is None:
-                return  # No active run to cancel
-            run_id = run.id
-            project_id = run.project_id
-            run.status = "canceled"
-            thread_row = run.thread
-            if thread_row is not None:
-                thread_row.status = "canceled"
-            db.commit()
-        finally:
-            db.close()
-
-        # Cancel the asyncio task.
-        async with self._task_lock:
-            task = self._tasks.get(run_id)
-            if task is not None and not task.done():
-                task.cancel()
-
-        if project_id is not None:
-            await self._emit(
-                project_id=project_id,
-                thread_id=thread_id,
-                event_name="run:canceled",
-                data={"run_id": str(run_id)},
-            )
-            await self._emit(
-                project_id=project_id,
-                thread_id=thread_id,
-                event_name="run:status",
-                data={"run_id": str(run_id), "status": "canceled"},
-            )
-
-            # Propagate cancellation to parent if this is a sub-agent child thread
-            db2 = self._db_factory()
+        async with self._thread_lock(thread_id):
+            # Find the latest active run for this thread.
+            db = self._db_factory()
+            run_id: UUID | None = None
+            project_id: UUID | None = None
             try:
-                canceled_run = db2.query(RunModel).filter(RunModel.id == run_id).first()
-                if canceled_run is not None:
-                    canceled_thread = canceled_run.thread
-                    if canceled_thread is not None:
-                        await tool_engine.complete_parent_tool_call(
-                            db2,
-                            thread=canceled_thread,
-                            run=canceled_run,
-                            emit=self._emit,
-                        )
-            except Exception:
-                logger.warning(
-                    "Failed to propagate cancel to parent for run %s",
-                    run_id,
-                    exc_info=True,
+                run = (
+                    db.query(RunModel)
+                    .join(Thread, Thread.id == RunModel.thread_id)
+                    .filter(
+                        Thread.id == thread_id,
+                        Thread.user_id == user_id,
+                        RunModel.status.in_(["queued", "running", "waiting", "processing"]),
+                    )
+                    .order_by(RunModel.created_at.desc())
+                    .first()
                 )
+                if run is None:
+                    return  # No active run to cancel
+                run_id = run.id
+                project_id = run.project_id
+                run.status = "canceled"
+                thread_row = run.thread
+                if thread_row is not None:
+                    thread_row.status = "canceled"
+                db.commit()
             finally:
-                db2.close()
+                db.close()
+
+            # Cancel the asyncio task.
+            async with self._task_lock:
+                task = self._tasks.get(run_id)
+                if task is not None and not task.done():
+                    task.cancel()
+
+            if project_id is not None:
+                await self._emit(
+                    project_id=project_id,
+                    thread_id=thread_id,
+                    event_name="run:canceled",
+                    data={"run_id": str(run_id)},
+                )
+                await self._emit(
+                    project_id=project_id,
+                    thread_id=thread_id,
+                    event_name="run:status",
+                    data={"run_id": str(run_id), "status": "canceled"},
+                )
+
+                # Propagate cancellation to parent if this is a sub-agent child thread
+                db2 = self._db_factory()
+                try:
+                    canceled_run = db2.query(RunModel).filter(RunModel.id == run_id).first()
+                    if canceled_run is not None:
+                        canceled_thread = canceled_run.thread
+                        if canceled_thread is not None:
+                            await tool_engine.complete_parent_tool_call(
+                                db2,
+                                thread=canceled_thread,
+                                run=canceled_run,
+                                emit=self._emit,
+                            )
+                except Exception:
+                    logger.warning(
+                        "Failed to propagate cancel to parent for run %s",
+                        run_id,
+                        exc_info=True,
+                    )
+                finally:
+                    db2.close()
 
     # ------------------------------------------------------------------
     # Tool call persistence
@@ -544,6 +545,9 @@ class RunPipeline:
             if thread is None:
                 return
 
+            if run.status == "canceled":
+                return
+
             await self._emit(
                 project_id=run.project_id,
                 thread_id=thread.id,
@@ -577,41 +581,30 @@ class RunPipeline:
             )
         except asyncio.CancelledError:
             try:
+                db.expire_all()
                 run = db.query(RunModel).filter(RunModel.id == run_id).first()
                 if run is not None:
                     thread = run.thread
-                    run.status = "canceled"
-                    if thread is not None:
-                        thread.status = "canceled"
-                    try:
-                        db.commit()
-                    except Exception:
-                        db.rollback()
-                    if thread is not None:
-                        if assistant_message_ref[0] is not None:
-                            await self._emit(
-                                project_id=run.project_id,
-                                thread_id=thread.id,
-                                event_name="message:end",
-                                data={
-                                    "run_id": str(run.id),
-                                    "message_id": str(assistant_message_ref[0].id),
-                                    "seq_in_thread": int(assistant_message_ref[0].seq_in_thread),
-                                    "data": assistant_message_ref[0].data or {},
-                                    "tool_calls": _build_tool_call_summaries(db, assistant_message_ref[0].id),
-                                },
-                            )
+                    if run.status != "canceled":
+                        run.status = "canceled"
+                        if thread is not None:
+                            thread.status = "canceled"
+                        try:
+                            db.commit()
+                        except Exception:
+                            db.rollback()
+                    if thread is not None and assistant_message_ref[0] is not None:
                         await self._emit(
                             project_id=run.project_id,
                             thread_id=thread.id,
-                            event_name="run:canceled",
-                            data={"run_id": str(run.id)},
-                        )
-                        await self._emit(
-                            project_id=run.project_id,
-                            thread_id=thread.id,
-                            event_name="run:status",
-                            data={"run_id": str(run.id), "status": "canceled"},
+                            event_name="message:end",
+                            data={
+                                "run_id": str(run.id),
+                                "message_id": str(assistant_message_ref[0].id),
+                                "seq_in_thread": int(assistant_message_ref[0].seq_in_thread),
+                                "data": assistant_message_ref[0].data or {},
+                                "tool_calls": _build_tool_call_summaries(db, assistant_message_ref[0].id),
+                            },
                         )
             finally:
                 raise
