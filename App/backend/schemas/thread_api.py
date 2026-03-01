@@ -75,7 +75,6 @@ class PatchMessageRequest(BaseModel):
     language: str
     content_parts: list[PatchContentPart]
     reasoning_detail: dict[str, Any] | None = None
-    set_final: bool = False
 
 
 class ToolCallResponse(BaseModel):

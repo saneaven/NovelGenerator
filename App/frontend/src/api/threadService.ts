@@ -64,7 +64,6 @@ export interface PatchMessageRequest {
   language: string;
   content_parts: Array<{ type: 'content'; text: string }>;
   reasoning_detail?: Record<string, unknown>;
-  set_final?: boolean;
 }
 
 export interface ProjectThreadRuntimeItem {

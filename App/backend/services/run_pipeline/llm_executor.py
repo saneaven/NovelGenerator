@@ -265,7 +265,7 @@ async def run_llm(
         seq=run.next_message_seq,
         seq_in_thread=thread.next_message_seq,
         role="assistant",
-        data={run.language: {"contentParts": []}, "_final": {"contentParts": []}},
+        data={run.language: {"contentParts": []}},
     )
     db.add(assistant_message)
     db.flush()
@@ -560,13 +560,10 @@ async def run_llm(
 
     content_only_parts = _content_only_parts(final_snapshot.content_parts)
     language_entry: dict[str, Any] = {"contentParts": content_only_parts}
-    final_entry: dict[str, Any] = {"contentParts": content_only_parts}
     if reasoning_detail is not None:
         language_entry["reasoningDetail"] = reasoning_detail
-        final_entry["reasoningDetail"] = reasoning_detail
     assistant_message.data = {
         run.language: language_entry,
-        "_final": final_entry,
     }
 
     persisted_tools: list[RunToolCallModel] = []

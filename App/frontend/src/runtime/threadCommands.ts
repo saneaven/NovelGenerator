@@ -1,4 +1,6 @@
 import { threadService, type ChatRequest, type ToolCallDecisionResponse } from '../api/threadService';
+import { useDisplayLanguageStore } from '../store/displayLanguageStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { useThreadStore } from '../store/threadStore';
 import { nowIso, toThreadType, type ThreadInfo, type ThreadStatus } from '../types/thread';
 
@@ -113,6 +115,8 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
   }
 
   const store = useThreadStore.getState();
+  const lang = useDisplayLanguageStore.getState().preferredDisplayLanguage
+    || useSettingsStore.getState().settings.mainLanguage;
   const existingMessages = store.getMessages(params.threadId);
   const maxSeq = existingMessages.reduce((max, message) => Math.max(max, message.seqInThread), 0);
   store.appendMessage({
@@ -123,7 +127,7 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
     seq: 0,
     seqInThread: maxSeq + 1,
     data: {
-      _final: { contentParts: [{ type: 'content', text: trimmed }] },
+      [lang]: { contentParts: [{ type: 'content', text: trimmed }] },
     },
     isStreaming: false,
     createdAt: nowIso(),

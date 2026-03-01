@@ -702,7 +702,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     setEditingSaving(true);
     const state = useThreadStore.getState();
     const existing = state.getMessages(threadId).find((m) => m.id === message.id);
-    const existingEntry = existing?.data?.[primaryLanguage] ?? existing?.data?._final;
+    const existingEntry = existing?.data?.[primaryLanguage]
+      ?? Object.values(existing?.data ?? {}).find((v) => v && typeof v === 'object');
     const entry = {
       contentParts: [
         { type: 'content' as const, text: content },
@@ -724,7 +725,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         language: primaryLanguage,
         content_parts: entry.contentParts,
         reasoning_detail: entry.reasoningDetail as any,
-        set_final: true,
       });
       setEditingMessageId(null);
       setEditingText('');

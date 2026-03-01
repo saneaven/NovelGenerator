@@ -645,8 +645,6 @@ async def patch_thread_message(
 
     updated = dict(current)
     updated[language] = entry
-    if bool(payload.set_final):
-        updated["_final"] = entry
     row.data = updated
     db.commit()
     db.refresh(row)

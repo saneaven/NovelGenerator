@@ -16,8 +16,6 @@ TERMINAL_TOOL_STATUSES = {"applied", "failed", "rejected"}
 def _resolve_lang_entry(data: dict[str, Any], language: str) -> dict[str, Any]:
     if isinstance(data.get(language), dict):
         return data[language]
-    if isinstance(data.get("_final"), dict):
-        return data["_final"]
     for value in data.values():
         if isinstance(value, dict):
             return value

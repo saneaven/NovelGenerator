@@ -250,7 +250,6 @@ class RunPipeline:
                     role="user",
                     data={
                         resolved_language: {"contentParts": [{"type": "content", "text": text}]},
-                        "_final": {"contentParts": [{"type": "content", "text": text}]},
                     },
                 )
                 db.add(msg)
@@ -472,7 +471,6 @@ class RunPipeline:
                 role="tool_call",
                 data={
                     run.language: {"contentParts": [{"type": "content", "text": tool_call_text}]},
-                    "_final": {"contentParts": [{"type": "content", "text": tool_call_text}]},
                 },
             )
             db.add(tool_msg)

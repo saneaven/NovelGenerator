@@ -97,7 +97,7 @@ async def assemble_resume(
             create_ctx=CreateContext(input_text="", input_payload={}),
         )
 
-    system_prompt = str(thread.captured_history_system_prompt or "")
+    system_prompt = thread.captured_history_system_prompt
     conversation = list(thread.captured_history_conversation_json)
 
     recent = build_from_runs(

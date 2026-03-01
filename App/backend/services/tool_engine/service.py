@@ -372,7 +372,9 @@ class ToolEngineService:
 
             result_text = ""
             if final_msg and isinstance(final_msg.data, dict):
-                final_data = final_msg.data.get("_final", {})
+                final_data = final_msg.data.get(run.language) or next(
+                    (v for v in final_msg.data.values() if isinstance(v, dict)), {}
+                )
                 parts = final_data.get("contentParts", [])
                 result_text = "\n".join(p.get("text", "") for p in parts if isinstance(p, dict) and p.get("type") == "content")
 
