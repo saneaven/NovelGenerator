@@ -392,39 +392,15 @@ async def chat_thread(
             language=payload.language,
         )
     else:
-        last_msg = (
-            db.query(RunMessageModel)
-            .filter(RunMessageModel.thread_id == thread_id)
-            .order_by(RunMessageModel.seq_in_thread.desc())
-            .first()
+        run = await run_pipeline.resume_run(
+            thread_id=thread_id,
+            user_id=current_user.id,
+            run_mode=payload.run_mode,
+            surface=payload.surface,
+            context_object_ids=payload.context_object_ids,
+            journey_target_ids=payload.journey_target_ids,
+            language=payload.language,
         )
-        if last_msg is not None and last_msg.role == "user":
-            reuse_text = last_msg.data["_final"]["contentParts"][0]["text"]
-            stale_run = db.query(RunModel).filter(RunModel.id == last_msg.run_id).first()
-            if stale_run:
-                db.delete(stale_run)
-                db.commit()
-            run = await run_pipeline.start_run(
-                thread_id=thread_id,
-                user_id=current_user.id,
-                input_text=reuse_text,
-                input_payload=payload.input_payload,
-                run_mode=payload.run_mode,
-                surface=payload.surface,
-                context_object_ids=payload.context_object_ids,
-                journey_target_ids=payload.journey_target_ids,
-                language=payload.language,
-            )
-        else:
-            run = await run_pipeline.resume_run(
-                thread_id=thread_id,
-                user_id=current_user.id,
-                run_mode=payload.run_mode,
-                surface=payload.surface,
-                context_object_ids=payload.context_object_ids,
-                journey_target_ids=payload.journey_target_ids,
-                language=payload.language,
-            )
 
     return ChatResponse(
         thread_id=thread_id,

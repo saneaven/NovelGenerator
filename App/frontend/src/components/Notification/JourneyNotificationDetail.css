@@ -170,13 +170,6 @@
   gap: var(--spacing-xs);
 }
 
-.journey-detail-message-role {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium, 500);
-  color: var(--color-text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
 
 .journey-detail-message--user {
   padding: var(--spacing-md);

@@ -104,43 +104,12 @@ function applyToolDecisionResponse(response: ToolCallDecisionResponse): void {
 export async function sendThreadMessage(params: SendThreadMessageParams): Promise<boolean> {
   const trimmed = params.inputText.trim();
   if (!trimmed) {
-    // When input is empty and the last message is a user message, the backend
-    // deletes the old run (cascade-deleting the old message) and creates a new
-    // one.  Convert the existing user message to optimistic so the SSE
-    // `message:user` handler properly replaces it instead of adding a duplicate.
-    const store = useThreadStore.getState();
-    const messages = store.getMessages(params.threadId);
-    const lastMsg = messages[messages.length - 1];
-    let replacedMessage: typeof lastMsg | null = null;
-
-    if (lastMsg && lastMsg.role === 'user' && !lastMsg.id.startsWith('optimistic:')) {
-      replacedMessage = lastMsg;
-      store.removeMessage(params.threadId, lastMsg.id);
-      store.appendMessage({
-        ...lastMsg,
-        id: `optimistic:user:${Date.now()}`,
-      });
-    }
-
-    try {
-      return await resumeThread({
-        threadId: params.threadId,
-        projectId: params.projectId,
-        threadType: params.threadType,
-        request: params.request,
-      });
-    } catch (error) {
-      if (replacedMessage) {
-        const current = useThreadStore.getState().getMessages(params.threadId);
-        for (const msg of current) {
-          if (msg.id.startsWith('optimistic:user:')) {
-            useThreadStore.getState().removeMessage(params.threadId, msg.id);
-          }
-        }
-        useThreadStore.getState().appendMessage(replacedMessage);
-      }
-      throw error;
-    }
+    return await resumeThread({
+      threadId: params.threadId,
+      projectId: params.projectId,
+      threadType: params.threadType,
+      request: params.request,
+    });
   }
 
   const store = useThreadStore.getState();

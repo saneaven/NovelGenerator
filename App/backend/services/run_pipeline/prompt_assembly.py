@@ -91,7 +91,8 @@ async def assemble_resume(
 ) -> tuple[str, list[dict[str, Any]], ScenarioBundle | None]:
     system_prompt = str(thread.captured_history_system_prompt or "")
 
-    if thread.captured_history_conversation_json is not None:
+    cache_valid = thread.captured_history_conversation_json is not None
+    if cache_valid:
         conversation = list(thread.captured_history_conversation_json)
     else:
         # Cache invalidated (e.g. message deleted) — rebuild from DB
@@ -113,7 +114,12 @@ async def assemble_resume(
         language=run.language,
         include_run_ids=[run.id],
     )
-    conversation.extend(m for m in recent if m.get("role") != "user")
+    if cache_valid:
+        # Cache already contains user messages; only append non-user turns.
+        conversation.extend(m for m in recent if m.get("role") != "user")
+    else:
+        # Cache was invalidated — include all messages from the current run.
+        conversation.extend(recent)
 
     bundle: ScenarioBundle | None = None
     task_type = ScenarioManager.resolve_task_type(thread=thread, run=run)

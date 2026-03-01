@@ -377,7 +377,7 @@ class ToolEngineService:
                 result_text = "\n".join(p.get("text", "") for p in parts if isinstance(p, dict) and p.get("type") == "content")
 
             parent_tc.status = "applied"
-            parent_tc.result = {"success": True, "content": result_text}
+            parent_tc.result = {"success": True, "message": result_text}
         else:
             error_message = run.error or "Sub-agent canceled"
             parent_tc.status = "failed"

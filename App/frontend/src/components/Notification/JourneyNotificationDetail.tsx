@@ -307,8 +307,6 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
 
     return (
       <div key={message.id} className="journey-detail-message journey-detail-message--assistant">
-        <div className="journey-detail-message-role">AI</div>
-
         <ThinkingDisplay
           messageId={message.id}
           reasoningDetail={reasoningDetail}
@@ -342,7 +340,6 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     const text = getMessageText(message, mainLanguage);
     return (
       <div key={message.id} className="journey-detail-message journey-detail-message--user">
-        <div className="journey-detail-message-role">You</div>
         <div className="journey-detail-message-content">{text}</div>
       </div>
     );

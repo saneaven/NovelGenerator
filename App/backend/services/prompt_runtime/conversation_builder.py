@@ -118,7 +118,7 @@ def _format_result_content(result: dict[str, Any], tool_name: str) -> str:
         if isinstance(val, str) and val:
             attrs[key] = val
     root = ET.Element("tool_result", **attrs)
-    root.text = str(result.get("message", "OK"))
+    root.text = str(result.get("message") or "")
     return _to_xml_string(root)
 
 
