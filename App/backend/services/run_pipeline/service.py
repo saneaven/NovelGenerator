@@ -48,6 +48,27 @@ def _build_tool_call_summaries(
     ]
 
 
+def _has_message_content(data: dict | None) -> bool:
+    """Return True if *data* contains at least one language entry with real content."""
+    if not data or not isinstance(data, dict):
+        return False
+    for entry in data.values():
+        if not isinstance(entry, dict):
+            continue
+        parts = entry.get("contentParts")
+        if isinstance(parts, list) and any(
+            isinstance(p, dict)
+            and p.get("type") == "content"
+            and isinstance(p.get("text"), str)
+            and p["text"].strip()
+            for p in parts
+        ):
+            return True
+        if entry.get("reasoningDetail"):
+            return True
+    return False
+
+
 class RunPipeline:
 
     def __init__(self, db_factory: Callable[[], Session], event_dispatcher: RuntimeEventDispatcher):
@@ -594,6 +615,7 @@ class RunPipeline:
                         except Exception:
                             db.rollback()
                     if thread is not None and assistant_message_ref[0] is not None:
+                        msg_data = assistant_message_ref[0].data
                         await self._emit(
                             project_id=run.project_id,
                             thread_id=thread.id,
@@ -602,7 +624,7 @@ class RunPipeline:
                                 "run_id": str(run.id),
                                 "message_id": str(assistant_message_ref[0].id),
                                 "seq_in_thread": int(assistant_message_ref[0].seq_in_thread),
-                                "data": assistant_message_ref[0].data or {},
+                                "data": msg_data if _has_message_content(msg_data) else {},
                                 "tool_calls": _build_tool_call_summaries(db, assistant_message_ref[0].id),
                             },
                         )
@@ -624,6 +646,7 @@ class RunPipeline:
                     db.rollback()
                 if thread is not None:
                     if assistant_message_ref[0] is not None:
+                        msg_data = assistant_message_ref[0].data
                         await self._emit(
                             project_id=run.project_id,
                             thread_id=thread.id,
@@ -632,7 +655,7 @@ class RunPipeline:
                                 "run_id": str(run.id),
                                 "message_id": str(assistant_message_ref[0].id),
                                 "seq_in_thread": int(assistant_message_ref[0].seq_in_thread),
-                                "data": assistant_message_ref[0].data or {},
+                                "data": msg_data if _has_message_content(msg_data) else {},
                                 "tool_calls": _build_tool_call_summaries(db, assistant_message_ref[0].id),
                             },
                         )

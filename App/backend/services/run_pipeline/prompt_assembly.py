@@ -89,24 +89,16 @@ async def assemble_resume(
     thread: Thread,
     settings: UserSettings,
 ) -> tuple[str, list[dict[str, Any]], ScenarioBundle | None]:
-    system_prompt = str(thread.captured_history_system_prompt or "")
+    if thread.captured_history_conversation_json is None:
+        # Cache invalidated (e.g. message deleted) — full rebuild through the
+        # same rendering pipeline as create so conversation blocks are applied.
+        return await assemble_create(
+            db, run=run, thread=thread, settings=settings,
+            create_ctx=CreateContext(input_text="", input_payload={}),
+        )
 
-    cache_valid = thread.captured_history_conversation_json is not None
-    if cache_valid:
-        conversation = list(thread.captured_history_conversation_json)
-    else:
-        # Cache invalidated (e.g. message deleted) — rebuild from DB
-        prior_run_ids = [
-            r.id
-            for r in db.query(RunModel.id)
-            .filter(RunModel.thread_id == thread.id, RunModel.id != run.id)
-            .order_by(RunModel.run_seq.asc())
-            .all()
-        ]
-        conversation = build_from_runs(
-            db, thread_id=thread.id, language=run.language,
-            include_run_ids=prior_run_ids,
-        ) if prior_run_ids else []
+    system_prompt = str(thread.captured_history_system_prompt or "")
+    conversation = list(thread.captured_history_conversation_json)
 
     recent = build_from_runs(
         db,
@@ -114,12 +106,8 @@ async def assemble_resume(
         language=run.language,
         include_run_ids=[run.id],
     )
-    if cache_valid:
-        # Cache already contains user messages; only append non-user turns.
-        conversation.extend(m for m in recent if m.get("role") != "user")
-    else:
-        # Cache was invalidated — include all messages from the current run.
-        conversation.extend(recent)
+    # Cache already contains user messages; only append non-user turns.
+    conversation.extend(m for m in recent if m.get("role") != "user")
 
     bundle: ScenarioBundle | None = None
     task_type = ScenarioManager.resolve_task_type(thread=thread, run=run)

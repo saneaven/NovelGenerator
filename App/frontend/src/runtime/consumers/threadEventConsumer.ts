@@ -695,12 +695,27 @@ export class ThreadEventConsumer {
       if (!existing) return;
 
       const patchData = (payload.data ?? {}) as ThreadMessage['data'];
-      store.patchMessage(threadId, messageId, {
-        data: {
-          ...(existing.data ?? {}),
-          ...(patchData ?? {}),
-        },
-      });
+
+      // Only merge language entries that carry actual content so that empty
+      // entries coming from the backend don't blank out existing data.
+      const filtered: ThreadMessage['data'] = {};
+      for (const [lang, entry] of Object.entries(patchData)) {
+        if (!entry || typeof entry !== 'object') continue;
+        const hasParts = Array.isArray(entry.contentParts) && entry.contentParts.length > 0;
+        const hasReasoning = entry.reasoningDetail !== undefined;
+        if (hasParts || hasReasoning) {
+          filtered[lang] = entry;
+        }
+      }
+
+      if (Object.keys(filtered).length > 0) {
+        store.patchMessage(threadId, messageId, {
+          data: {
+            ...(existing.data ?? {}),
+            ...filtered,
+          },
+        });
+      }
       store.setThreadRuntime(threadId, {
         latestMessageAt: payload.ts ? String(payload.ts) : nowIso(),
         updatedAt: payload.ts ? String(payload.ts) : nowIso(),
