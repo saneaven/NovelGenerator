@@ -255,14 +255,16 @@ export const VirtualizedImageGrid: React.FC<VirtualizedImageGridProps> = ({
         scrollToTop();
     }, [scrollResetKey, scrollToTop]);
 
+    const itemsKey = useMemo(() => items.map((i) => i.id).join(','), [items]);
+
     // Keep our internal scrollTop in sync when the rendered content changes and the browser clamps scrollTop.
     useEffect(() => {
         syncScrollTop();
-    }, [items.length, syncScrollTop]);
+    }, [itemsKey, syncScrollTop]);
 
     const positioner = usePositioner(
         { width, columnWidth: 200, columnGutter: 8 },
-        [width, items.length, scrollResetKey],
+        [width, itemsKey, scrollResetKey],
     );
     const resizeObserver = useResizeObserver(positioner);
 

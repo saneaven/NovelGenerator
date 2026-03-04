@@ -28,7 +28,7 @@ import OutlineSidebar from './OutlineSidebar';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
-import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll } from '../../../components/icons';
+import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll, GripVertical } from '../../../components/icons';
 import type { UnifiedObject, OutlineObject, ActObject, ChapterObject } from '../../../types/unifiedObject';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
 import { OutlineItemCard } from '../../../components/OutlineItemCard';
@@ -1326,9 +1326,10 @@ const SortableActGroup: React.FC<SortableActGroupProps> = ({ id, disabled, isExp
       ref={setNodeRef}
       style={style}
       className={`timeline-act-group ${isExpanded ? 'is-expanded' : 'is-collapsed'} ${isDragging ? 'is-dragging' : ''}`}
-      {...attributes}
-      {...listeners}
     >
+      <div className="timeline-act-group__drag-handle" {...attributes} {...listeners}>
+        <GripVertical size="xs" />
+      </div>
       {children}
     </div>
   );
@@ -1364,9 +1365,10 @@ const SortableChapterNode: React.FC<SortableChapterNodeProps> = ({ id, disabled,
       ref={setNodeRef}
       style={style}
       className={`timeline-chapter-node ${isDragging ? 'is-dragging' : ''}`}
-      {...attributes}
-      {...listeners}
     >
+      <div className="timeline-chapter-node__drag-handle" {...attributes} {...listeners}>
+        <GripVertical size="xs" />
+      </div>
       {children}
     </div>
   );

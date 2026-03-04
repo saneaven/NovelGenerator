@@ -7,6 +7,7 @@ import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
 import { OutlineItemCard, toOutlineItemVariant } from '../../../components/OutlineItemCard';
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
+import { ReadOnlyBasicInfoDisplay } from '../displays/ReadOnlyBasicInfoDisplay';
 import type { ObjectCardProps } from './types';
 import { getObjectSnapshot } from './helpers';
 
@@ -72,6 +73,17 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
           content={resultText}
           doc={snapshot.data.doc}
           offset={offset}
+        />
+      );
+    }
+
+    if (operation.objectType === 'basic_info') {
+      return (
+        <ReadOnlyBasicInfoDisplay
+          title={typeof snapshot.data.title === 'string' ? snapshot.data.title : undefined}
+          logline={typeof snapshot.data.logline === 'string' ? snapshot.data.logline : undefined}
+          genre={typeof snapshot.data.genre === 'string' ? snapshot.data.genre : undefined}
+          mode="create"
         />
       );
     }

@@ -160,7 +160,42 @@
     border-color: var(--color-border-medium);
 }
 
+/* Error state: red border, no shimmer */
+.image-tab-content .asset-item.placeholder.placeholder--error {
+    border-color: var(--color-feedback-error-base);
+    border-style: solid;
+}
 
+.image-tab-content .asset-item.placeholder.placeholder--error:hover {
+    border-color: var(--color-feedback-error-base);
+}
+
+.image-tab-content .asset-item.placeholder.placeholder--error .placeholder-skeleton {
+    animation: none;
+    background: var(--color-feedback-error-soft);
+}
+
+/* Error/cancelled: always show overlay, info, and actions */
+.image-tab-content .asset-item.placeholder.placeholder--error::after,
+.image-tab-content .asset-item.placeholder.placeholder--cancelled::after {
+    opacity: 1;
+}
+
+.image-tab-content .asset-item.placeholder.placeholder--error .asset-info,
+.image-tab-content .asset-item.placeholder.placeholder--cancelled .asset-info {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.image-tab-content .asset-item.placeholder.placeholder--error .asset-actions,
+.image-tab-content .asset-item.placeholder.placeholder--cancelled .asset-actions {
+    opacity: 1;
+}
+
+/* Error text in red */
+.image-tab-content .asset-item.placeholder.placeholder--error .asset-name {
+    color: var(--color-feedback-error-base);
+}
 
 .image-tab-content .asset-item.placeholder .placeholder-skeleton {
     position: absolute;

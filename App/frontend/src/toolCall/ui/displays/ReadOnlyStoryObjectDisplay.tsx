@@ -21,11 +21,20 @@ export const ReadOnlyStoryObjectDisplay: React.FC<ReadOnlyStoryObjectDisplayProp
 }) => {
   const mapped = useMemo(() => mapObjectData(objectType, values), [objectType, values]);
 
+  // Normalize changedFields from raw arg names to display field names
+  const normalizedChangedFields = useMemo(() => {
+    if (!changedFields) return undefined;
+    if (objectType === 'guidelines') {
+      return changedFields.map((f) => (f === 'authorNote' ? 'content' : f));
+    }
+    return changedFields;
+  }, [changedFields, objectType]);
+
   // For replace mode: only show fields that actually changed
   const showDescription =
-    mode !== 'replace' || !changedFields || changedFields.includes('description');
+    mode !== 'replace' || !normalizedChangedFields || normalizedChangedFields.includes('description');
   const showContent =
-    mode !== 'replace' || !changedFields || changedFields.includes('content');
+    mode !== 'replace' || !normalizedChangedFields || normalizedChangedFields.includes('content');
 
   const hasImage = Boolean(imageUrl);
 

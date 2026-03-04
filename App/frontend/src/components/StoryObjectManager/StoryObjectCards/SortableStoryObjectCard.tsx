@@ -9,6 +9,7 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { HamburgerMenu } from '../../icons';
 import type { SpanType } from '../../../hooks/useCardSpanType';
 
 interface SortableStoryObjectCardProps {
@@ -44,11 +45,15 @@ export const SortableStoryObjectCard: React.FC<SortableStoryObjectCardProps> = (
     <div
       ref={setNodeRef}
       style={style}
+      className="sortable-card-wrapper"
       data-span={spanType}
-      {...attributes}
-      {...listeners}
     >
-      {children}
+      <div className="sortable-card-wrapper__drag-handle" {...attributes} {...listeners}>
+        <HamburgerMenu size="xs" />
+      </div>
+      <div className="sortable-card-wrapper__content">
+        {children}
+      </div>
     </div>
   );
 };

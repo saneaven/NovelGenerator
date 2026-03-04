@@ -704,19 +704,66 @@
   opacity: inherit;
 }
 
-/* Grab cursor on act markers and chapter items */
-.outline-manager .timeline-act-group:not(.is-dragging) .node-marker {
+/* ---- Act Group Drag Handle (left side) ---- */
+
+.outline-manager .timeline-act-group__drag-handle {
+  position: absolute;
+  left: calc(-1 * var(--spacing-lg));
+  top: 0;
+  bottom: 0;
+  width: var(--spacing-lg);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: var(--spacing-sm);
   cursor: grab;
+  color: var(--color-text-tertiary);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  z-index: var(--z-content);
 }
 
-.outline-manager .timeline-chapter-node:not(.is-dragging):not(.add-chapter-node):not(.creation-node) {
-  cursor: grab;
-}
-
-/* Grabbing cursor while dragging */
-.outline-manager .timeline-act-group.is-dragging .node-marker,
-.outline-manager .timeline-chapter-node.is-dragging {
+.outline-manager .timeline-act-group__drag-handle:active {
   cursor: grabbing;
+}
+
+.outline-manager .timeline-act-group:hover > .timeline-act-group__drag-handle {
+  opacity: 0.4;
+}
+
+.outline-manager .timeline-act-group__drag-handle:hover {
+  opacity: 1 !important;
+}
+
+/* ---- Chapter Node Drag Handle (left side) ---- */
+
+.outline-manager .timeline-chapter-node__drag-handle {
+  position: absolute;
+  left: calc(-1 * var(--spacing-lg));
+  top: 0;
+  bottom: 0;
+  width: var(--spacing-lg);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: var(--spacing-lg);
+  cursor: grab;
+  color: var(--color-text-tertiary);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  z-index: var(--z-content);
+}
+
+.outline-manager .timeline-chapter-node__drag-handle:active {
+  cursor: grabbing;
+}
+
+.outline-manager .timeline-chapter-node:hover > .timeline-chapter-node__drag-handle {
+  opacity: 0.4;
+}
+
+.outline-manager .timeline-chapter-node__drag-handle:hover {
+  opacity: 1 !important;
 }
 
 /* ============================================================================

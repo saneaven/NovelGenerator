@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
-import { computeChangedFields, pickChangedValues } from './fieldDiff';
+import { computeChangedFields, pickChangedValues, pickProvidedValues } from './fieldDiff';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
 import { OutlineItemCard, toOutlineItemVariant } from '../../../components/OutlineItemCard';
@@ -64,21 +64,28 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
 
   const replaceKeys = useMemo(() => replaceKeysForObjectType(operation.objectType), [operation.objectType]);
 
+  const isFinalized = operation.status === 'applied' || operation.status === 'rejected';
+
   const changedFields = useMemo(
     () =>
-      computeChangedFields({
-        args: operation.args,
-        currentData: snapshot.data,
-        currentMetadata: snapshot.metadata,
-        keys: replaceKeys,
-        metadataKeys: metadataMapForObjectType(operation.objectType),
-      }),
-    [operation.args, operation.objectType, snapshot.data, snapshot.metadata, replaceKeys]
+      isFinalized
+        ? replaceKeys.filter((key) => key in operation.args)
+        : computeChangedFields({
+            args: operation.args,
+            currentData: snapshot.data,
+            currentMetadata: snapshot.metadata,
+            keys: replaceKeys,
+            metadataKeys: metadataMapForObjectType(operation.objectType),
+          }),
+    [isFinalized, operation.args, operation.objectType, snapshot.data, snapshot.metadata, replaceKeys]
   );
 
   const changedValues = useMemo(
-    () => pickChangedValues(operation.args, changedFields),
-    [operation.args, changedFields]
+    () =>
+      isFinalized
+        ? pickProvidedValues(operation.args, replaceKeys)
+        : pickChangedValues(operation.args, changedFields),
+    [isFinalized, operation.args, changedFields, replaceKeys]
   );
 
   const targetLabel = snapshot.displayName || operation.targetLabel;
@@ -86,14 +93,28 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
 
   const renderBody = () => {
     if (operation.objectType === 'outline' || operation.objectType === 'outline_act' || operation.objectType === 'outline_chapter') {
+      const newName = typeof changedValues.name === 'string' && changedValues.name.trim()
+        ? changedValues.name
+        : undefined;
       const desc = typeof changedValues.description === 'string' && changedValues.description.trim() ? changedValues.description : undefined;
       const body = typeof changedValues.content === 'string' && changedValues.content.trim() ? changedValues.content : undefined;
+
+      const metaParts: string[] = [];
+      if (changedFields.includes('order') && changedValues.order != null) {
+        metaParts.push(`Order: ${changedValues.order}`);
+      }
+      if (changedFields.includes('actId') && typeof changedValues.actId === 'string') {
+        metaParts.push('Act reassigned');
+      }
+      const meta = metaParts.length > 0 ? metaParts.join(' | ') : undefined;
+
       return (
         <OutlineItemCard
           variant={toOutlineItemVariant(operation.objectType)}
-          name={targetLabel || 'Outline'}
+          name={newName || targetLabel || 'Outline'}
           description={desc}
           content={body}
+          meta={meta}
           readOnly
         />
       );
@@ -120,9 +141,14 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
       );
     }
 
+    const displayTitle =
+      (typeof changedValues.name === 'string' && changedValues.name.trim())
+        ? changedValues.name
+        : (targetLabel || 'Item');
+
     return (
       <ReadOnlyStoryObjectDisplay
-        title={targetLabel || 'Item'}
+        title={displayTitle}
         values={changedValues}
         mode="replace"
         changedFields={changedFields}
