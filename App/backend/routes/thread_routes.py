@@ -737,8 +737,9 @@ async def _execute_batched_patch_group(
 ) -> list[tuple[UUID, dict]]:
     """Handle a group of batch-eligible tool calls on the same target object.
 
-    Opens ONE session. Applies all patches to in-memory batches.
-    Flushes once. Commits once. Emits events.
+    Phase 1: triage — mark accepted as 'processing', rejected as 'rejected',
+             commit and emit SSE so the frontend sees intermediate status.
+    Phase 2: execute — apply patches, mark applied/failed, commit, emit final SSE.
     """
     from ..services.manuscript_batch import ManuscriptBatch
     from ..services.object_patch_batch import ObjectPatchBatch
@@ -755,6 +756,10 @@ async def _execute_batched_patch_group(
         is_translation = getattr(thread, "journey_kind", None) == "objectTranslation"
         create_new_version = not is_translation
         run_id: UUID | None = None
+
+        # ── Phase 1: Triage — mark processing / rejected ──
+        accepted_tcs: list[tuple[object, RunToolCallModel]] = []  # (decision_item, tc)
+        modified_tc_ids: list[UUID] = []  # IDs that changed status in this phase
 
         for item in decisions:
             tc = (
@@ -782,6 +787,7 @@ async def _execute_batched_patch_group(
                 tc.updated_at = datetime.utcnow()
                 db.flush()
                 results.append((item.tool_call_id, {"tool_call": _serialize_tool_call(tc)}))
+                modified_tc_ids.append(item.tool_call_id)
                 continue
 
             # --- Accept path: skip already-terminal ---
@@ -793,14 +799,27 @@ async def _execute_batched_patch_group(
             if tc.status not in {"pending", "validating", "streaming"}:
                 raise HTTPException(status_code=409, detail=f"Cannot accept tool call in status={tc.status}")
 
-            # Mark processing
+            # Mark processing (actual execution deferred to phase 2)
             tc.status = "processing"
             tc.reason = None
             tc.accepted_at = tc.accepted_at or datetime.utcnow()
             tc.updated_at = datetime.utcnow()
             db.flush()
+            accepted_tcs.append((item, tc))
+            modified_tc_ids.append(item.tool_call_id)
 
-            # Apply to batch
+        # Commit processing/rejected statuses and emit SSE so frontend sees them
+        if modified_tc_ids:
+            db.commit()
+            for tc_id in modified_tc_ids:
+                tc = db.query(RunToolCallModel).filter(RunToolCallModel.id == tc_id).first()
+                if tc:
+                    db.refresh(tc)
+                    await _emit_tool_call_status(thread=thread, tool_call=tc)
+
+        # ── Phase 2: Execute accepted tool calls ──
+        for item, tc in accepted_tcs:
+            db.refresh(tc)
             tool_name = str(tc.tool_name)
             args = tc.arguments if isinstance(tc.arguments, dict) else {}
             run = db.query(RunModel).filter(RunModel.id == tc.run_id).first()
@@ -952,7 +971,7 @@ async def _execute_batched_patch_group(
             _sync_run_thread_status(db, run_id=run_id)
         db.commit()
 
-        # --- Emit SSE events ---
+        # --- Emit SSE events (final statuses) ---
         for tc_id, _ in results:
             tc = db.query(RunToolCallModel).filter(RunToolCallModel.id == tc_id).first()
             if tc:
