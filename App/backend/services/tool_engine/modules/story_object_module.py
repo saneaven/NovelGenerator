@@ -9,7 +9,6 @@ from ..result_utils import invalid_result, make_result, valid_result
 from .common_object_helpers import (
     STORY_TYPE_MAP,
     extract_lang_data,
-    is_translation_context,
     obj_schema,
     patch_object_data,
     read_object,
@@ -166,7 +165,7 @@ async def _execute_replace_story_object(args: dict[str, Any], ctx: ToolExecution
         language=ctx.language,
         user_request="tool:replace_story_object",
         created_by=ctx.user_id,
-        create_new_version=not is_translation_context(ctx),
+        create_new_version=True,
     )
     return make_result(f"Replaced {object_type}", object_id=str(object_id), object_type=object_type)
 
@@ -188,7 +187,7 @@ async def _execute_patch_story_object(args: dict[str, Any], ctx: ToolExecutionCo
         language=ctx.language,
         user_request="tool:patch_story_object",
         created_by=ctx.user_id,
-        create_new_version=not is_translation_context(ctx),
+        create_new_version=True,
     )
     return make_result(f"Patched {object_type}", object_id=str(object_id), object_type=object_type)
 
@@ -253,7 +252,7 @@ def register(registry: ToolRegistry) -> None:
                 },
                 ["id", "type"],
             ),
-            tool_sets=frozenset({"agent_agent_mode", "storyObject", "objectTranslation"}),
+            tool_sets=frozenset({"agent_agent_mode", "storyObject"}),
             auto_approve_category="replace",
             validators=(_validate_story_object_exists,),
             executor=_execute_replace_story_object,
@@ -274,7 +273,7 @@ def register(registry: ToolRegistry) -> None:
                 },
                 ["id", "type", "field", "old", "new"],
             ),
-            tool_sets=frozenset({"agent_agent_mode", "storyObject", "objectTranslation"}),
+            tool_sets=frozenset({"agent_agent_mode", "storyObject"}),
             auto_approve_category="patch",
             validators=(_validate_patch_story_object,),
             executor=_execute_patch_story_object,

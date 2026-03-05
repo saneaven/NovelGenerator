@@ -47,13 +47,13 @@ Just output the translated text as plain text, nothing else.
 {% if (config.outputMode == "native_tool_call") %}
 - **MUST use one `<tool_call>...</tool_call>` per operation**
 - **Each `<tool_call>` MUST contain exactly one JSON object** (no markdown code fences)
-- **MUST include `tool` field** to specify the operation type (`replace_*` or `patch_*`)
-- **MUST use the exact object ID** in the `id` field (required for most operations; `replace_basic_info` does not require `id`)
-- **MUST include `type` field** for story object operations (`replace_story_object` / `patch_story_object`)
+- **MUST include `tool` field** to specify the operation type (`translate_*` or `translate_patch_*`)
+- **MUST use the exact object ID** in the `id` field (required for most operations; `translate_basic_info` does not require `id`)
+- **MUST include `type` field** for story object operations (`translate_story_object` / `translate_patch_story_object`)
 - Keep terminology consistent across all translations
 {% else %}
 - **MUST call the appropriate tool for EACH object** - Do not skip any objects
-- **MUST use `replace_*` for new/full translations** and **`patch_*` for minor fixes**
+- **MUST use `translate_*` for new/full translations** and **`translate_patch_*` for minor fixes**
 - **MUST use the exact objectId as the `id` parameter** (when required)
 - **MUST include all required fields** for the chosen tool
 - Keep terminology consistent across all translations

@@ -18,7 +18,6 @@ from ....models.db_models import (
     Outline,
 )
 from ....models.translation_models import ObjectVersion
-from ..contexts import ToolExecutionContext
 from ...object_service import object_service
 from ...patch_utils import apply_single_replacement
 
@@ -137,7 +136,7 @@ def resolve_object_type(args: dict[str, Any], tool_name: str) -> str | None:
         return "act"
     if "outline_chapter" in tool_name:
         return "chapter"
-    if tool_name in {"patch_outline", "replace_outline", "delete_outline"}:
+    if tool_name in {"patch_outline", "replace_outline", "delete_outline", "translate_outline", "translate_patch_outline"}:
         return "outline"
 
     if "basic_info" in tool_name:
@@ -215,10 +214,6 @@ def latest_version_data(db: Session, *, object_type: str, object_id: UUID, langu
         if isinstance(v, dict):
             return v
     return {}
-
-
-def is_translation_context(ctx: ToolExecutionContext) -> bool:
-    return getattr(ctx.thread, "journey_kind", None) == "objectTranslation"
 
 
 def patch_object_data(current: dict[str, Any], args: dict[str, Any]) -> dict[str, Any]:

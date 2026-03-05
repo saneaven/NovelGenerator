@@ -12,11 +12,23 @@ import { ReadCallCard } from '../../ui/cards/ReadCallCard';
 import { ReplaceCallCard } from '../../ui/cards/ReplaceCallCard';
 import type { ObjectOperationVM, ObjectType, OperationCategory, StoryObjectSubtype } from '../../ui/vmTypes';
 
+/** Strip translate_ prefix so existing logic can handle translate tool names. */
+function normalizeToolName(toolName: string): string {
+  if (toolName.startsWith('translate_patch_')) return toolName.replace('translate_patch_', 'patch_');
+  if (toolName.startsWith('translate_')) return toolName.replace('translate_', 'replace_');
+  return toolName;
+}
+
+function isTranslateTool(toolName: string): boolean {
+  return toolName.startsWith('translate_');
+}
+
 function parseObjectCategory(toolName: string): Exclude<OperationCategory, 'search' | 'call_agent'> {
-  if (toolName.startsWith('read_')) return 'read';
-  if (toolName.startsWith('create_')) return 'create';
-  if (toolName.startsWith('replace_')) return 'replace';
-  if (toolName.startsWith('delete_')) return 'delete';
+  const n = normalizeToolName(toolName);
+  if (n.startsWith('read_')) return 'read';
+  if (n.startsWith('create_')) return 'create';
+  if (n.startsWith('replace_')) return 'replace';
+  if (n.startsWith('delete_')) return 'delete';
   return 'read';
 }
 
@@ -28,10 +40,12 @@ export function parseStorySubtype(raw: unknown): StoryObjectSubtype | undefined 
   return undefined;
 }
 
-export function inferObjectType(toolName: string, args: Record<string, unknown>): {
+export function inferObjectType(rawToolName: string, args: Record<string, unknown>): {
   objectType: ObjectType;
   storySubtype?: StoryObjectSubtype;
 } {
+  const toolName = normalizeToolName(rawToolName);
+
   if (toolName === 'read_story_object') {
     const argType = typeof args.type === 'string' ? args.type : undefined;
     if (argType === 'basic_info') return { objectType: 'basic_info' };
@@ -142,6 +156,7 @@ function buildObjectTitle(toolName: string, args: Record<string, unknown>): stri
 
 function buildEditTitle(toolName: string, args: Record<string, unknown>): string {
   const title = buildObjectTitle(toolName, args);
+  if (isTranslateTool(toolName)) return `Translate ${title}`;
   const category = parseObjectCategory(toolName);
   if (category === 'create') return `Create ${title}`;
   if (category === 'delete') return `Delete ${title}`;
@@ -150,17 +165,19 @@ function buildEditTitle(toolName: string, args: Record<string, unknown>): string
 }
 
 function resolveEditType(toolName: string): string {
-  if (toolName.startsWith('create_')) return 'add';
-  if (toolName.startsWith('delete_')) return 'remove';
-  if (toolName.startsWith('read_')) return 'init';
+  const n = normalizeToolName(toolName);
+  if (n.startsWith('create_')) return 'add';
+  if (n.startsWith('delete_')) return 'remove';
+  if (n.startsWith('read_')) return 'init';
   return 'edit';
 }
 
 function resolveAutoApproveCategory(toolName: string): AutoApproveCategory | null {
-  if (toolName.startsWith('create_')) return 'create';
-  if (toolName.startsWith('delete_')) return 'delete';
-  if (toolName.startsWith('replace_')) return 'replace';
-  if (toolName.startsWith('read_')) return 'read';
+  const n = normalizeToolName(toolName);
+  if (n.startsWith('create_')) return 'create';
+  if (n.startsWith('delete_')) return 'delete';
+  if (n.startsWith('replace_')) return 'replace';
+  if (n.startsWith('read_')) return 'read';
   return null;
 }
 
@@ -171,6 +188,8 @@ const objectOpsSpec: ToolUiSpec = {
     if (toolName === 'rag_search' || toolName === 'keyword_search') return false;
     if (toolName.startsWith('call_')) return false;
     if (toolName.startsWith('patch_')) return false;
+    if (toolName.startsWith('translate_patch_')) return false;
+    if (toolName.startsWith('translate_')) return true;
     return (
       toolName.startsWith('read_')
       || toolName.startsWith('create_')

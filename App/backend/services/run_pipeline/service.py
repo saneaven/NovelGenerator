@@ -391,11 +391,8 @@ class RunPipeline:
             finally:
                 db.close()
 
-            # Cancel the asyncio task.
-            async with self._task_lock:
-                task = self._tasks.get(run_id)
-                if task is not None and not task.done():
-                    task.cancel()
+            # Cancel the asyncio task and wait for it to finish.
+            await self._cancel_task_and_wait(run_id, timeout_s=5.0)
 
             if project_id is not None:
                 await self._emit(
@@ -584,6 +581,11 @@ class RunPipeline:
                 system_prompt, conversation, scenario_bundle = await prompt_assembly.assemble_resume(
                     db, run=run, thread=thread, settings=settings,
                 )
+
+            # Re-check cancellation after prompt assembly committed its transaction.
+            db.refresh(run)
+            if run.status == "canceled":
+                return
 
             await llm_executor.run_llm(
                 db,

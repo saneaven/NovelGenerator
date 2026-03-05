@@ -69,7 +69,7 @@ async def assemble_create(
 
     thread.captured_history_system_prompt = system_prompt
     thread.captured_history_conversation_json = conversation
-    db.flush()
+    db.commit()
 
     bundle = ScenarioBundle(
         task_type=target.task_type,

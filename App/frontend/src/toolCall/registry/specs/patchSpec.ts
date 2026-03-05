@@ -13,7 +13,7 @@ const patchSpec: ToolUiSpec = {
   id: 'patch',
 
   match(toolName: string): boolean {
-    return toolName.startsWith('patch_');
+    return toolName.startsWith('patch_') || toolName.startsWith('translate_patch_');
   },
 
   toOperationVM(params: MapToolToVmParams): ObjectOperationVM {
@@ -36,7 +36,8 @@ const patchSpec: ToolUiSpec = {
 
   getEditTitle(toolName: string, args: Record<string, unknown>): string {
     const { objectType, storySubtype } = inferObjectType(toolName, args);
-    return `Patch ${objectTypeLabel(objectType, storySubtype)}`;
+    const prefix = toolName.startsWith('translate_') ? 'Translate Patch' : 'Patch';
+    return `${prefix} ${objectTypeLabel(objectType, storySubtype)}`;
   },
 
   getEditType(_toolName: string): string {

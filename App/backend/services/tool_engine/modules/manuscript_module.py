@@ -6,7 +6,7 @@ from ..contexts import ToolExecutionContext, ToolValidationContext
 from ..contracts import ToolSpec
 from ..registry import ToolRegistry
 from ..result_utils import invalid_result, make_result, valid_result
-from .common_object_helpers import extract_lang_data, is_translation_context, obj_schema, read_object, to_uuid
+from .common_object_helpers import extract_lang_data, obj_schema, read_object, to_uuid
 from ....services.manuscript_image_index_service import restore_image_asset_ids
 from ....services.object_service import object_service
 from ....services.patch_utils import apply_single_replacement
@@ -112,7 +112,7 @@ async def _execute_replace_manuscript(args: dict[str, Any], ctx: ToolExecutionCo
         language=ctx.language,
         user_request="tool:replace_manuscript",
         created_by=ctx.user_id,
-        create_new_version=not is_translation_context(ctx),
+        create_new_version=True,
     )
     return make_result("Replaced manuscript", object_id=str(object_id), object_type="manuscript")
 
@@ -160,7 +160,7 @@ async def _execute_patch_manuscript(args: dict[str, Any], ctx: ToolExecutionCont
         language=ctx.language,
         user_request="tool:patch_manuscript",
         created_by=ctx.user_id,
-        create_new_version=not is_translation_context(ctx),
+        create_new_version=True,
     )
     return make_result("Patched manuscript", object_id=str(object_id), object_type="manuscript")
 
@@ -193,7 +193,7 @@ def register(registry: ToolRegistry) -> None:
             name="replace_manuscript",
             description="Replace full manuscript content.",
             parameters=obj_schema({"id": _ID, "content": {"type": "string"}}, ["id", "content"]),
-            tool_sets=frozenset({"agent_agent_mode", "manuscript", "objectTranslation"}),
+            tool_sets=frozenset({"agent_agent_mode", "manuscript"}),
             auto_approve_category="replace",
             validators=(_validate_manuscript_exists,),
             executor=_execute_replace_manuscript,
@@ -208,7 +208,7 @@ def register(registry: ToolRegistry) -> None:
                 {"id": _ID, "old": {"type": "string"}, "new": {"type": "string"}},
                 ["id", "old", "new"],
             ),
-            tool_sets=frozenset({"agent_agent_mode", "manuscript", "objectTranslation"}),
+            tool_sets=frozenset({"agent_agent_mode", "manuscript"}),
             auto_approve_category="patch",
             validators=(_validate_patch_manuscript,),
             executor=_execute_patch_manuscript,

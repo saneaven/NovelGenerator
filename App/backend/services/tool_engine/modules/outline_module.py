@@ -8,7 +8,6 @@ from ..registry import ToolRegistry
 from ..result_utils import invalid_result, make_result, valid_result
 from .common_object_helpers import (
     extract_lang_data,
-    is_translation_context,
     latest_version_data,
     obj_schema,
     patch_object_data,
@@ -301,7 +300,7 @@ async def _execute_replace_outline(tool_name: str, args: dict[str, Any], ctx: To
         metadata=metadata or None,
         user_request=f"tool:{tool_name}",
         created_by=ctx.user_id,
-        create_new_version=not is_translation_context(ctx),
+        create_new_version=True,
     )
     return make_result(f"Replaced {object_type}", object_id=str(object_id), object_type=object_type)
 
@@ -325,7 +324,7 @@ async def _execute_patch_outline(tool_name: str, args: dict[str, Any], ctx: Tool
         metadata=metadata or None,
         user_request=f"tool:{tool_name}",
         created_by=ctx.user_id,
-        create_new_version=not is_translation_context(ctx),
+        create_new_version=True,
     )
     return make_result(f"Patched {object_type}", object_id=str(object_id), object_type=object_type)
 
@@ -450,7 +449,7 @@ def register(registry: ToolRegistry) -> None:
             name="replace_outline",
             description="Replace outline fields.",
             parameters=obj_schema({"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}}, ["id"]),
-            tool_sets=frozenset({"agent_agent_mode", "outline", "objectTranslation"}),
+            tool_sets=frozenset({"agent_agent_mode", "outline"}),
             auto_approve_category="replace",
             validators=(_make_exists_validator("replace_outline"),),
             executor=_execute_replace_outline_root,
@@ -465,7 +464,7 @@ def register(registry: ToolRegistry) -> None:
                 {"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}, "order": {"type": "integer"}},
                 ["id"],
             ),
-            tool_sets=frozenset({"agent_agent_mode", "outline", "objectTranslation"}),
+            tool_sets=frozenset({"agent_agent_mode", "outline"}),
             auto_approve_category="replace",
             validators=(_make_exists_validator("replace_outline_act"), lambda args, ctx: _validate_positive_order(args, "validate_replace_outline_act_order")),
             executor=_execute_replace_outline_act,
@@ -487,7 +486,7 @@ def register(registry: ToolRegistry) -> None:
                 },
                 ["id"],
             ),
-            tool_sets=frozenset({"agent_agent_mode", "outline", "objectTranslation"}),
+            tool_sets=frozenset({"agent_agent_mode", "outline"}),
             auto_approve_category="replace",
             validators=(
                 _make_exists_validator("replace_outline_chapter"),
@@ -511,7 +510,7 @@ def register(registry: ToolRegistry) -> None:
                 },
                 ["id", "field", "old", "new"],
             ),
-            tool_sets=frozenset({"agent_agent_mode", "outline", "objectTranslation"}),
+            tool_sets=frozenset({"agent_agent_mode", "outline"}),
             auto_approve_category="patch",
             validators=(_make_patch_validator("patch_outline", {"name", "description", "content"}),),
             executor=_execute_patch_outline_root,
@@ -532,7 +531,7 @@ def register(registry: ToolRegistry) -> None:
                 },
                 ["id", "field", "old", "new"],
             ),
-            tool_sets=frozenset({"agent_agent_mode", "outline", "objectTranslation"}),
+            tool_sets=frozenset({"agent_agent_mode", "outline"}),
             auto_approve_category="patch",
             validators=(_make_patch_validator("patch_outline_act", {"name", "description", "content"}),),
             executor=_execute_patch_outline_act,
@@ -554,7 +553,7 @@ def register(registry: ToolRegistry) -> None:
                 },
                 ["id", "field", "old", "new"],
             ),
-            tool_sets=frozenset({"agent_agent_mode", "outline", "objectTranslation"}),
+            tool_sets=frozenset({"agent_agent_mode", "outline"}),
             auto_approve_category="patch",
             validators=(_make_patch_validator("patch_outline_chapter", {"name", "description", "content"}),),
             executor=_execute_patch_outline_chapter,
