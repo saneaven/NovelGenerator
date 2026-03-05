@@ -36,6 +36,7 @@ interface ThreadState {
   pendingToolCallIdsByThread: Record<string, string[] | undefined>;
   pendingToolCallMessageByThread: Record<string, string | undefined>;
   activeStreamByThread: Record<string, boolean | undefined>;
+  autoContinuePausedByThread: Record<string, boolean>;
 
   upsertThread: (thread: ThreadInfo) => void;
   upsertThreadsRuntime: (threads: ThreadInfo[]) => void;
@@ -82,6 +83,9 @@ interface ThreadState {
 
   setThreadStreamActive: (threadId: string, active: boolean) => void;
   isThreadStreamActive: (threadId: string) => boolean;
+
+  setAutoContinuePaused: (threadId: string, paused: boolean) => void;
+  isAutoContinuePaused: (threadId: string) => boolean;
 
   findThreadByOwner: (projectId: string, ownerId: string) => ThreadInfo | undefined;
 
@@ -169,6 +173,7 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
   pendingToolCallIdsByThread: {},
   pendingToolCallMessageByThread: {},
   activeStreamByThread: {},
+  autoContinuePausedByThread: {},
 
   upsertThread: (thread) =>
     set((s) => {
@@ -523,6 +528,13 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
 
   isThreadStreamActive: (threadId) => Boolean(get().activeStreamByThread[threadId]),
 
+  setAutoContinuePaused: (threadId, paused) =>
+    set((s) => ({
+      autoContinuePausedByThread: { ...s.autoContinuePausedByThread, [threadId]: paused },
+    })),
+
+  isAutoContinuePaused: (threadId) => Boolean(get().autoContinuePausedByThread[threadId]),
+
   findThreadByOwner: (projectId, ownerId) => {
     for (const thread of Object.values(get().threadsById)) {
       if (!thread) continue;
@@ -542,5 +554,6 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
       pendingToolCallIdsByThread: {},
       pendingToolCallMessageByThread: {},
       activeStreamByThread: {},
+      autoContinuePausedByThread: {},
     }),
 }));

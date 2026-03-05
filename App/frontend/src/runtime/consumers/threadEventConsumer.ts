@@ -463,6 +463,11 @@ export class ThreadEventConsumer {
         return;
       }
 
+      if (store.isAutoContinuePaused(threadId)) {
+        console.debug('[AutoContinue] Skipped: paused by user (Apply & Pause)', { threadId });
+        return;
+      }
+
       const allowedForContinue =
         thread?.status === 'waiting'
         || thread?.status === 'processing'

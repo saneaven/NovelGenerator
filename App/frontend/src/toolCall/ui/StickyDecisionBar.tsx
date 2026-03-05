@@ -6,6 +6,7 @@ export interface StickyDecisionBarProps {
   disabled?: boolean;
   unresolvedCount: number;
   onAcceptAll: () => void;
+  onAcceptAllAndPause?: () => void;
   onRejectAll: () => void;
 }
 
@@ -14,6 +15,7 @@ export const StickyDecisionBar: React.FC<StickyDecisionBarProps> = ({
   disabled = false,
   unresolvedCount,
   onAcceptAll,
+  onAcceptAllAndPause,
   onRejectAll,
 }) => {
   if (!visible) return null;
@@ -25,6 +27,11 @@ export const StickyDecisionBar: React.FC<StickyDecisionBarProps> = ({
         <TextButton size="sm" variant="primary" onClick={onAcceptAll} disabled={disabled || unresolvedCount === 0}>
           Accept All
         </TextButton>
+        {onAcceptAllAndPause && (
+          <TextButton size="sm" variant="secondary" onClick={onAcceptAllAndPause} disabled={disabled || unresolvedCount === 0}>
+            Apply & Pause
+          </TextButton>
+        )}
         <TextButton size="sm" variant="danger" onClick={onRejectAll} disabled={disabled || unresolvedCount === 0}>
           Reject All
         </TextButton>

@@ -134,6 +134,31 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
     }
   }, [hasDecisionFlow, isApplyDisabled, unresolvedIds, setPatchDecisionsBulk, threadId, commitDecisions]);
 
+  const handleAcceptAllAndPause = useCallback(async () => {
+    if (!hasDecisionFlow || isApplyDisabled || unresolvedIds.length === 0 || !onCommitDecisionsAndPause) return;
+    setPatchDecisionsBulk(threadId, unresolvedIds, 'accept');
+
+    setCommittingById((prev) => {
+      const next = { ...prev };
+      for (const id of unresolvedIds) next[id] = true;
+      return next;
+    });
+
+    const decisions: ToolCallDecisionMap = {};
+    for (const operationId of unresolvedIds) {
+      decisions[operationId] = 'accept';
+    }
+    try {
+      await commitDecisions(decisions, true);
+    } finally {
+      setCommittingById((prev) => {
+        const next = { ...prev };
+        for (const id of unresolvedIds) delete next[id];
+        return next;
+      });
+    }
+  }, [hasDecisionFlow, isApplyDisabled, unresolvedIds, setPatchDecisionsBulk, threadId, onCommitDecisionsAndPause, commitDecisions]);
+
   const handleRejectAll = useCallback(async () => {
     if (!hasDecisionFlow || isApplyDisabled || unresolvedIds.length === 0) return;
     setPatchDecisionsBulk(threadId, unresolvedIds, 'reject');
@@ -231,6 +256,7 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
         disabled={isApplyDisabled || Object.keys(committingById).length > 0}
         unresolvedCount={unresolvedIds.length}
         onAcceptAll={() => void handleAcceptAll()}
+        onAcceptAllAndPause={onCommitDecisionsAndPause ? () => void handleAcceptAllAndPause() : undefined}
         onRejectAll={() => void handleRejectAll()}
       />
     </div>

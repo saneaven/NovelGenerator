@@ -684,6 +684,27 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     });
   }, [threadId]);
 
+  const handleCommitDecisionsAndPause = useCallback(async (decisions: ToolCallDecisionMap) => {
+    if (!threadId) return;
+
+    useThreadStore.getState().setAutoContinuePaused(threadId, true);
+
+    const accepts = Object.entries(decisions)
+      .filter(([, decision]) => decision === 'accept')
+      .map(([id]) => id);
+    const rejects = Object.entries(decisions)
+      .filter(([, decision]) => decision === 'reject')
+      .map(([id]) => id);
+
+    await decideToolCallsBatch({
+      threadId,
+      decisions: [
+        ...accepts.map((id) => ({ toolCallId: id, decision: 'accept' as const })),
+        ...rejects.map((id) => ({ toolCallId: id, decision: 'reject' as const })),
+      ],
+    });
+  }, [threadId]);
+
   const handleStartMessageEdit = useCallback((messageId: string, currentText: string) => {
     setEditingMessageId(messageId);
     setEditingText(currentText);
@@ -914,6 +935,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                       mode={groupMode}
                       cards={allCards}
                       onCommitDecisions={groupMode === 'pending' ? handleCommitDecisions : undefined}
+                      onCommitDecisionsAndPause={groupMode === 'pending' ? handleCommitDecisionsAndPause : undefined}
                       onDeleteCard={(cardId) => void handleDeleteSingleToolCall(cardId)}
                       projectId={projectId}
                     />
