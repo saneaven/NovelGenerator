@@ -3,7 +3,9 @@ import { BaseModal } from '../BaseModal';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
 import type { ObjectType, ChapterObject } from '../../types/unifiedObject';
-import { getJourneySpec, type JourneyKind } from '../../llmTaskJourney/journeySpecs';
+import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
+import type { ObjectEditInput } from '../../llmTaskJourney/journeySpecs';
+import type { JourneySpec } from '../../llmTaskJourney/types';
 import { useJourneyStore } from '../../store/journeyStore';
 import { threadService } from '../../api/threadService';
 import { sendThreadMessage } from '../../runtime/threadCommands';
@@ -14,6 +16,7 @@ import ToggleSwitch from '../common/ToggleSwitch';
 import './AIEditModal.css';
 
 type AIEditCategory = ObjectType | 'manuscript';
+type AIEditJourneyKind = 'manuscriptEdit' | 'outlineEdit' | 'storyObjectEdit';
 
 interface AIEditModalProps {
   isOpen: boolean;
@@ -40,7 +43,7 @@ const getCategoryDisplayName = (cat: string): string => {
   return names[cat] || cat;
 };
 
-function categoryToJourneyKind(category: string): JourneyKind {
+function categoryToJourneyKind(category: string): AIEditJourneyKind {
   if (category === 'manuscript') return 'manuscriptEdit';
   if (['outline', 'act', 'chapter'].includes(category)) return 'outlineEdit';
   return 'storyObjectEdit';
@@ -142,7 +145,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     }
 
     const journeyKind = categoryToJourneyKind(category);
-    const spec = getJourneySpec(journeyKind);
+    const spec: JourneySpec<ObjectEditInput> = getJourneySpec(journeyKind);
     const journeyId = crypto.randomUUID();
     const outputMode = rawMode
       ? 'raw_output'

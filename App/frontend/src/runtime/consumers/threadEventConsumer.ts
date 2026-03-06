@@ -889,8 +889,8 @@ export class ThreadEventConsumer {
       this.streamingToolCallsByThread.delete(threadId);
 
       const now = nowIso();
-      const newToolCalls: import('../types/thread').ThreadToolCall[] = [];
-      const newMessages: import('../types/thread').ThreadMessage[] = [];
+      const newToolCalls: ThreadToolCall[] = [];
+      const newMessages: ThreadMessage[] = [];
 
       for (const tc of toolCalls) {
         const toolCallId = String(tc.tool_call_id ?? '');
