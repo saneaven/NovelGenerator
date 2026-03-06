@@ -19,7 +19,9 @@ Review these existing translations to decide whether to use `translate_*` (full 
 
 ## Content to Translate
 
-{{ prompt("translation/filteredContext", lang=translation.sourceLanguage, ids=translation.objectIds) }}
+{% with lang = translation.sourceLanguage, ids = translation.objectIds %}
+{% include "fragment:translation/filteredContext" %}
+{% endwith %}
 
 {% if input.userMessage %}
 ## Additional Instructions

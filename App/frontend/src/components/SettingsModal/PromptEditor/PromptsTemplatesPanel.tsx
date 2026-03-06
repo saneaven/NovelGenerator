@@ -102,6 +102,14 @@ function toErrorMessage(error: unknown): string {
   return 'Unknown error';
 }
 
+function toFragmentReference(path: string): string {
+  const trimmed = path.trim();
+  if (trimmed.startsWith('fragment:')) {
+    return trimmed;
+  }
+  return `fragment:${trimmed.replace(/^\/+|\/+$/g, '')}`;
+}
+
 function detectCircularFragmentReferences(startPath: string, contentByPath: Map<string, string>): string[] | null {
   const visited = new Set<string>();
   const stack = new Set<string>();
@@ -154,14 +162,18 @@ async function validateFragmentContent(
     };
   }
 
-  const contentByPath = new Map(allFragmentContents);
+  const contentByPath = new Map<string, string>();
+  for (const [path, value] of allFragmentContents.entries()) {
+    contentByPath.set(toFragmentReference(path), value);
+  }
   for (const d of Object.values(fragmentDrafts)) {
-    contentByPath.set(d.fullPath, d.content);
+    contentByPath.set(toFragmentReference(d.fullPath), d.content);
   }
 
   const refs = extractFragmentReferences(content);
   const warnings: TemplateValidationResult['warnings'] = [];
   const errors: TemplateValidationResult['errors'] = [];
+  const currentRef = toFragmentReference(fullPath);
 
   for (const ref of refs) {
     if (!contentByPath.has(ref)) {
@@ -169,11 +181,11 @@ async function validateFragmentContent(
     }
   }
 
-  if (refs.includes(fullPath)) {
-    errors.push({ message: `Self-reference detected: fragment "${fullPath}" references itself`, severity: 'error' });
+  if (refs.includes(currentRef)) {
+    errors.push({ message: `Self-reference detected: fragment "${currentRef}" references itself`, severity: 'error' });
   }
 
-  const cycle = detectCircularFragmentReferences(fullPath, contentByPath);
+  const cycle = detectCircularFragmentReferences(currentRef, contentByPath);
   if (cycle) {
     errors.push({ message: `Circular reference detected: ${cycle.join(' -> ')}`, severity: 'error' });
   }
@@ -1198,7 +1210,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   const handleCopyFragmentPath = async () => {
     if (!selectedPath) return;
-    const pathToCopy = `{{ prompt("${selectedPath}") }}`;
+    const pathToCopy = `{% include "${toFragmentReference(selectedPath)}" %}`;
     try {
       await navigator.clipboard.writeText(pathToCopy);
       toast.success(t('common.copied', { value: pathToCopy }));

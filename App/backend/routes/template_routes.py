@@ -14,7 +14,12 @@ from ..schemas.templates import (
     TemplateValidateResponse,
 )
 from ..services.prompt_runtime.template_renderer import load_user_fragment_map
-from ..services.template_engine import create_environment, render_template
+from ..services.template_engine import (
+    create_environment,
+    format_template_error,
+    render_template,
+    validate_template_source,
+)
 
 router = APIRouter(prefix="/api/v1/templates", tags=["templates"])
 
@@ -42,19 +47,26 @@ async def render_template_preview(
     try:
         rendered = render_template(env, data.template_content, data.data)
         return TemplateRenderResponse(rendered=rendered)
-    except Exception as e:
-        return TemplateRenderResponse(error=str(e))
+    except Exception as exc:
+        return TemplateRenderResponse(error=format_template_error(exc))
 
 
 @router.post("/validate", response_model=TemplateValidateResponse)
 async def validate_template(
     data: TemplateValidateRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    """Validate Jinja2 template syntax without rendering."""
-    env = create_environment()
+    """Validate Jinja2 template syntax and literal fragment references."""
+    preset_id = get_active_preset_id(current_user)
+    fragment_map = load_user_fragment_map(db, current_user.id, preset_id)
     try:
-        env.parse(data.template_content)
+        report = validate_template_source(
+            data.template_content,
+            fragment_map=fragment_map,
+        )
+        if report.errors:
+            return TemplateValidateResponse(is_valid=False, error=report.errors[0])
         return TemplateValidateResponse(is_valid=True)
-    except Exception as e:
-        return TemplateValidateResponse(is_valid=False, error=str(e))
+    except Exception as exc:
+        return TemplateValidateResponse(is_valid=False, error=format_template_error(exc))

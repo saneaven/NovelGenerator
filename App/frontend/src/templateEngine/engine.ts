@@ -239,18 +239,24 @@ export const validateTemplate = async (
 // ============================================================================
 
 /**
- * Extract all fragment references from a Jinja2 template
+ * Extract all literal fragment references from Jinja2 include tags.
  * @param template The template content to analyze
- * @returns Array of fragment paths referenced via {{ prompt("...") }}
+ * @returns Array of fragment addresses referenced via {% include "fragment:..." %}
  */
 export function extractFragmentReferences(template: string): string[] {
   const withoutComments = template.replace(/\{#[\s\S]*?#\}/g, '');
-
-  const regex = /\{\{\s*prompt\s*\(\s*"([^"]+)"/g;
   const refs: string[] = [];
-  let match;
-  while ((match = regex.exec(withoutComments)) !== null) {
-    refs.push(match[1]);
+
+  const tagRegex = /\{%[\s\S]*?%\}/g;
+  let tagMatch;
+  while ((tagMatch = tagRegex.exec(withoutComments)) !== null) {
+    const tag = tagMatch[0];
+    const includeMatch = tag.match(/^\{%-?\s*include\s+(['"])([^'"]+)\1/);
+    if (!includeMatch) {
+      continue;
+    }
+    refs.push(includeMatch[2]);
   }
+
   return [...new Set(refs)];
 }

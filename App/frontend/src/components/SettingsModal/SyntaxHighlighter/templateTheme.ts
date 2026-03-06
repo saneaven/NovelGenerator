@@ -115,12 +115,11 @@ export const templateHighlightStyle = HighlightStyle.define([
     fontWeight: 'var(--font-weight-medium)',
   },
 
-  // Fragment inclusion {{ prompt("...") }}
+  // Include block highlighting
   {
     tag: tags.atom,
-    color: 'var(--prompt-color-prompt-fn)',
+    color: 'var(--prompt-color-include-block)',
     fontWeight: 'var(--font-weight-medium)',
-    fontStyle: 'italic',
   },
 
   // Jinja2 comments {# ... #}
@@ -192,40 +191,9 @@ export const templateHighlightStyle = HighlightStyle.define([
 ]);
 
 /**
- * Custom tag definitions for our template language
- * We need to extend the standard tags to match our token types
- */
-const customTags = {
-  variable: tags.variableName,
-  context: tags.special(tags.variableName),
-  ifOpen: tags.keyword,
-  ifClose: tags.keyword,
-  templateError: tags.invalid,
-
-  xmlTagOpen: tags.tagName,
-  xmlTagClose: tags.tagName,
-  xmlTagSelf: tags.tagName,
-  xmlError: tags.invalid,
-
-  markdownHeader: tags.heading,
-  markdownCodeBlock: tags.monospace,
-  markdownInlineCode: tags.monospace,
-  markdownBold: tags.strong,
-  markdownItalic: tags.emphasis,
-  markdownList: tags.list,
-
-  text: tags.content,
-};
-
-/**
  * Combined theme extension for CodeMirror
  */
 export const templateTheme: Extension = [
   templateEditorTheme,
   syntaxHighlighting(templateHighlightStyle),
 ];
-
-/**
- * Export custom tags for use in language definition
- */
-export { customTags };

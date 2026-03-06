@@ -12,7 +12,7 @@
     --prompt-color-text:            oklch(0.253 0.010 271.4);
     --prompt-color-variable:        oklch(0.617 0.138 230.0);   /* {{ variable }} - blue */
     --prompt-color-context:         oklch(0.672 0.030 180.8);   /* context vars - teal */
-    --prompt-color-prompt-fn:       oklch(52.603% 0.08891 189.329);    /* {{ prompt() }} - orange */
+    --prompt-color-include-block:   oklch(0.560 0.120 154.0);   /* {% include ... %} - green */
     --prompt-color-comment:         oklch(0.500 0.155 149.0);   /* {# comment #} - green */
     --prompt-color-keyword:         oklch(0.610 0.248 26.0);    /* {% if/for %} - red */
     --prompt-color-tag:             oklch(0.608 0.119 30.2);    /* <xml> tags - orange */
@@ -37,7 +37,7 @@
     --prompt-color-text:            oklch(0.950 0.001 55.0);
     --prompt-color-variable:        oklch(0.740 0.120 230.0);   /* brighter blue */
     --prompt-color-context:         oklch(0.740 0.040 117.0);   /* brighter teal-green */
-    --prompt-color-prompt-fn:       oklch(75.45% 0.12298 188.232);    /* brighter orange */
+    --prompt-color-include-block:   oklch(0.720 0.145 154.0);   /* brighter green */
     --prompt-color-comment:         oklch(0.540 0.144 146.8);   /* brighter green */
     --prompt-color-keyword:         oklch(0.740 0.160 26.0);    /* brighter red */
     --prompt-color-tag:             oklch(0.740 0.100 23.0);    /* brighter accent orange */

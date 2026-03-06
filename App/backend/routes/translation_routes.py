@@ -20,8 +20,8 @@ from ..models.db_models import User, Project
 from ..models.translation_models import ObjectVersion
 from ..services.object_change_events import queue_object_change
 from ..services.object_service import object_service
+from ..services.ownership import require_owned_object, resolve_project_id_for_object
 from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
-from .unified_object_routes import get_object_or_404, resolve_project_id_for_object
 
 LOREBOOK_TYPE = normalize_object_type('lorebook')
 
@@ -277,7 +277,12 @@ async def batch_delete_translations(
             object_id = UUID(object_id_str)
 
             # Verify object exists and belongs to the current user.
-            get_object_or_404(db, object_type, object_id, user_id=current_user.id)
+            require_owned_object(
+                db,
+                object_type=object_type,
+                object_id=object_id,
+                user_id=current_user.id,
+            )
 
             # Remove from latest version data only
             latest_version = db.query(ObjectVersion).filter(
@@ -420,7 +425,12 @@ async def get_object_languages(
     Get list of available languages for a specific object.
     """
     object_type = normalize_object_type(object_type)
-    get_object_or_404(db, object_type, object_id, user_id=current_user.id)
+    require_owned_object(
+        db,
+        object_type=object_type,
+        object_id=object_id,
+        user_id=current_user.id,
+    )
 
     latest_version = db.query(ObjectVersion).filter(
         ObjectVersion.object_type == object_type,
@@ -450,7 +460,12 @@ async def delete_translation(
     WARNING: Cannot delete if it's the only language!
     """
     object_type = normalize_object_type(object_type)
-    get_object_or_404(db, object_type, object_id, user_id=current_user.id)
+    require_owned_object(
+        db,
+        object_type=object_type,
+        object_id=object_id,
+        user_id=current_user.id,
+    )
     project_id = resolve_project_id_for_object(
         db,
         object_type=object_type,

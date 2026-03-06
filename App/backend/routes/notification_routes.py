@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import get_db
-from ..models.db_models import NotificationModel, Project, User
+from ..models.db_models import NotificationModel, User
 from ..schemas.notifications import (
     DeleteAllNotificationsRequest,
     DeleteAllNotificationsResponse,
@@ -27,18 +27,12 @@ from ..services.notification_service import (
     mark_notifications_read,
     serialize_notification,
 )
+from ..services.ownership import require_owned_project
 from ..services.run_pipeline import run_pipeline
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 
 
 router = APIRouter(prefix="/api/v1", tags=["notifications"])
-
-
-def _owned_project_or_404(db: Session, *, project_id: UUID, user_id: UUID) -> Project:
-    project = db.query(Project).filter(Project.id == project_id, Project.user_id == user_id).first()
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project
 
 
 async def _cancel_linked_journey_threads_for_delete(
@@ -69,7 +63,7 @@ async def get_project_notifications(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _owned_project_or_404(db, project_id=project_id, user_id=current_user.id)
+    require_owned_project(db, project_id=project_id, user_id=current_user.id)
 
     normalized_source = str(source).strip() if source is not None else None
     if normalized_source is not None and normalized_source not in NOTIFICATION_SOURCE_VALUES:
@@ -98,7 +92,7 @@ async def mark_project_notifications_read(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _owned_project_or_404(db, project_id=project_id, user_id=current_user.id)
+    require_owned_project(db, project_id=project_id, user_id=current_user.id)
 
     updated_ids = mark_notifications_read(
         db,
@@ -132,7 +126,7 @@ async def delete_project_notification(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _owned_project_or_404(db, project_id=project_id, user_id=current_user.id)
+    require_owned_project(db, project_id=project_id, user_id=current_user.id)
 
     targets = list_notification_delete_targets(
         db,
@@ -185,7 +179,7 @@ async def delete_all_project_notifications(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _owned_project_or_404(db, project_id=project_id, user_id=current_user.id)
+    require_owned_project(db, project_id=project_id, user_id=current_user.id)
 
     targets = list_notification_delete_targets(
         db,

@@ -39,6 +39,7 @@ from ..services.notification_service import (
 from ..services.run_pipeline import run_pipeline
 from ..services.tool_engine import tool_engine
 from ..services.reasoning.normalize import normalize_reasoning_detail
+from ..services.ownership import require_owned_project, require_owned_thread
 
 
 router = APIRouter(prefix="/api/v1", tags=["threads"])
@@ -127,20 +128,6 @@ def _assistant_has_content_or_reasoning(data: Any) -> bool:
     return False
 
 
-def _owned_thread_or_404(db: Session, *, thread_id: UUID, user_id: UUID) -> Thread:
-    thread = db.query(Thread).filter(Thread.id == thread_id, Thread.user_id == user_id).first()
-    if thread is None:
-        raise HTTPException(status_code=404, detail="Thread not found")
-    return thread
-
-
-def _owned_project_or_404(db: Session, *, project_id: UUID, user_id: UUID) -> Project:
-    project = db.query(Project).filter(Project.id == project_id, Project.user_id == user_id).first()
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project
-
-
 def _sync_run_thread_status(db: Session, *, run_id: UUID) -> tuple[RunModel | None, Thread | None, str | None]:
     run = db.query(RunModel).filter(RunModel.id == run_id).first()
     if run is None:
@@ -220,7 +207,7 @@ async def _apply_tool_decision(
     project_id: UUID | None = None
     run_language = "English"
     try:
-        thread = _owned_thread_or_404(db, thread_id=thread_id, user_id=user_id)
+        thread = require_owned_thread(db, thread_id=thread_id, user_id=user_id)
         project_id = thread.project_id
         tool_call = (
             db.query(RunToolCallModel)
@@ -296,7 +283,7 @@ async def _apply_tool_decision(
 
     db2 = SessionLocal()
     try:
-        thread2 = _owned_thread_or_404(db2, thread_id=thread_id, user_id=user_id)
+        thread2 = require_owned_thread(db2, thread_id=thread_id, user_id=user_id)
         executed_row = (
             db2.query(RunToolCallModel)
             .with_for_update()
@@ -339,7 +326,7 @@ async def _apply_tool_decision(
             except Exception as exc:  # noqa: BLE001
                 db3 = SessionLocal()
                 try:
-                    thread3 = _owned_thread_or_404(db3, thread_id=thread_id, user_id=user_id)
+                    thread3 = require_owned_thread(db3, thread_id=thread_id, user_id=user_id)
                     failed_row = (
                         db3.query(RunToolCallModel)
                         .with_for_update()
@@ -418,7 +405,7 @@ async def stream_project_events(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _owned_project_or_404(db, project_id=project_id, user_id=current_user.id)
+    require_owned_project(db, project_id=project_id, user_id=current_user.id)
 
     async def event_gen():
         async for envelope in run_event_bus.subscribe(
@@ -457,7 +444,7 @@ async def list_project_threads_runtime(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _owned_project_or_404(db, project_id=project_id, user_id=current_user.id)
+    require_owned_project(db, project_id=project_id, user_id=current_user.id)
 
     threads = (
         db.query(Thread)
@@ -544,7 +531,7 @@ async def list_thread_messages(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    thread = _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
+    thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
 
     latest_run = (
         db.query(RunModel)
@@ -619,7 +606,7 @@ async def patch_thread_message(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    thread = _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
+    thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
     row = (
         db.query(RunMessageModel)
         .filter(RunMessageModel.id == message_id, RunMessageModel.thread_id == thread.id)
@@ -754,7 +741,7 @@ async def _execute_batched_patch_group(
 
     db = SessionLocal()
     try:
-        thread = _owned_thread_or_404(db, thread_id=thread_id, user_id=user_id)
+        thread = require_owned_thread(db, thread_id=thread_id, user_id=user_id)
         is_translation = getattr(thread, "journey_kind", None) == "objectTranslation"
         create_new_version = not is_translation
         run_id: UUID | None = None
@@ -1064,7 +1051,7 @@ async def delete_thread_message(
       which CASCADE deletes their tool_call messages via parent_tool_call_id FK.
     - tool_call message: SET NULL on the tool call's message_id.
     """
-    thread = _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
+    thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
     row = (
         db.query(RunMessageModel)
         .filter(RunMessageModel.id == message_id, RunMessageModel.thread_id == thread_id)
@@ -1087,7 +1074,7 @@ async def delete_thread_tool_call(
 ):
     """Delete a tool call. FK CASCADE via parent_tool_call_id on run_messages
     automatically deletes the associated tool_call messages."""
-    thread = _owned_thread_or_404(db, thread_id=thread_id, user_id=current_user.id)
+    thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
     row = (
         db.query(RunToolCallModel)
         .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread_id)
@@ -1143,7 +1130,7 @@ async def create_thread(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _owned_project_or_404(db, project_id=project_id, user_id=current_user.id)
+    require_owned_project(db, project_id=project_id, user_id=current_user.id)
 
     notification_label = str(payload.notification_label or "").strip()
     notification_meta = (

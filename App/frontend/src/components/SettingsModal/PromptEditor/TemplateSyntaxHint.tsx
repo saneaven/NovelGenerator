@@ -26,7 +26,8 @@ const GROUP_LABELS: Record<string, string> = {
 // Jinja2 syntax documentation
 const JINJA_SYNTAX = {
     'Fragment Inclusion': [
-        { name: 'prompt', syntax: '{{ prompt("folder/name") }}', desc: 'Include a fragment (supports keyword args)' },
+        { name: 'include', syntax: '{% include "fragment:folder/name" %}', desc: 'Include a fragment by canonical fragment address' },
+        { name: 'with + include', syntax: '{% with ids = value %}{% include "fragment:folder/name" %}{% endwith %}', desc: 'Bind local variables before including a fragment' },
     ],
     'Filters': [
         { name: 'filter_by_type', syntax: '{% for item in arr|filter_by_type("type") %}', desc: 'Filter objects by type field' },
@@ -43,6 +44,7 @@ const JINJA_SYNTAX = {
     'Control Flow': [
         { name: 'if / endif', syntax: '{% if condition %}...{% endif %}', desc: 'Conditional block' },
         { name: 'for / endfor', syntax: '{% for item in items %}...{% endfor %}', desc: 'Loop over items' },
+        { name: 'with / endwith', syntax: '{% with value = data %}...{% endwith %}', desc: 'Bind local variables in a scoped block' },
         { name: 'set', syntax: '{% set var = value %}', desc: 'Set a local variable' },
         { name: 'comment', syntax: '{# This is a comment #}', desc: 'Template comment (not rendered)' },
     ],

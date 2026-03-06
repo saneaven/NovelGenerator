@@ -38,6 +38,7 @@ from ..models.db_models import (
 from ..models.translation_models import ObjectVersion
 from ..schemas.project_transfer import ProjectExportOptions
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
+from ..services.ownership import require_owned_project
 from ..services.storage_service import storage_service
 from ..services.storage_quota_service import (
     StorageQuotaExceededError,
@@ -187,14 +188,6 @@ def _rewrite_tip_tap_doc_images(
 
     return walk(doc)
 
-
-def _get_project_or_404(db: Session, user_id: UUID, project_id: UUID) -> Project:
-    project = db.query(Project).filter(Project.id == project_id, Project.user_id == user_id).first()
-    if not project:
-        raise ValueError("Project not found")
-    return project
-
-
 class ProjectTransferService:
     @staticmethod
     def build_export_preview(
@@ -203,7 +196,7 @@ class ProjectTransferService:
         project_id: UUID,
         options: ProjectExportOptions,
     ) -> Dict[str, Any]:
-        _get_project_or_404(db, user_id=user_id, project_id=project_id)
+        require_owned_project(db, user_id=user_id, project_id=project_id)
 
         assets: List[Asset] = (
             db.query(Asset)
@@ -358,7 +351,7 @@ class ProjectTransferService:
         options: ProjectExportOptions,
         manual_asset_ids: Optional[List[str]] = None,
     ) -> Tuple[str, str]:
-        project = _get_project_or_404(db, user_id=user_id, project_id=project_id)
+        project = require_owned_project(db, user_id=user_id, project_id=project_id)
 
         preview = ProjectTransferService.build_export_preview(
             db=db, user_id=user_id, project_id=project_id, options=options

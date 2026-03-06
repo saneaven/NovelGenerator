@@ -24,6 +24,8 @@ from ..schemas.fragments import (
 from ..services.fragment_service import fragment_service
 from ..services.folder_service import FolderService
 from ..prompts import get_default_fragments
+from ..services.prompt_runtime.template_renderer import load_user_fragment_map
+from ..services.template_engine import format_template_error, validate_template_source
 
 router = APIRouter(prefix="/api/v1/fragments", tags=["fragments"])
 
@@ -93,43 +95,25 @@ async def validate_fragment(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Validate fragment content for syntax errors and circular references."""
-    import re
-
+    """Validate fragment content for syntax errors and literal include references."""
     preset_id = get_active_preset_id(current_user)
-    errors = []
-    warnings = []
-    referenced_fragments = []
+    fragment_map = load_user_fragment_map(db, current_user.id, preset_id)
 
-    # Extract {{ prompt("path") }} references
-    pattern = r'\{\{\s*prompt\s*\(\s*"([^"]+)"'
-    matches = re.findall(pattern, data.content)
-    referenced_fragments = list(set(matches))
-
-    # Check if referenced fragments exist
-    all_fragments = fragment_service.get_all_fragments(db=db, user_id=current_user.id, preset_id=preset_id)
-    fragment_paths = set()
-    for f in all_fragments:
-        path = f"{f.folder_path}/{f.fragment_name}" if f.folder_path else f.fragment_name
-        fragment_paths.add(path)
-
-    for ref in referenced_fragments:
-        if ref not in fragment_paths:
-            warnings.append(f"Referenced fragment not found: {ref}")
-
-    # Basic syntax check for unclosed Jinja2 delimiters
-    for open_d, close_d in [('{{', '}}'), ('{%', '%}'), ('{#', '#}')]:
-        o = data.content.count(open_d)
-        c = data.content.count(close_d)
-        if o != c:
-            errors.append(f"Mismatched delimiters: {o} '{open_d}' vs {c} '{close_d}'")
-
-    return FragmentValidationResponse(
-        is_valid=len(errors) == 0,
-        syntax_errors=errors,
-        warnings=warnings,
-        referenced_fragments=referenced_fragments
-    )
+    try:
+        report = validate_template_source(data.content, fragment_map=fragment_map)
+        return FragmentValidationResponse(
+            is_valid=len(report.errors) == 0,
+            syntax_errors=report.errors,
+            warnings=report.warnings,
+            referenced_fragments=report.referenced_fragments,
+        )
+    except Exception as exc:
+        return FragmentValidationResponse(
+            is_valid=False,
+            syntax_errors=[format_template_error(exc)],
+            warnings=[],
+            referenced_fragments=[],
+        )
 
 
 @router.post(

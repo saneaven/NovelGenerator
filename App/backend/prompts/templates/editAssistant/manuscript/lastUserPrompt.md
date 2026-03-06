@@ -1,5 +1,7 @@
 # Context (targets)
-{{ prompt("common/projectContext/filtered", objectIds=editAssistant.manuscript.objectIds) }}
+{% with objectIds = editAssistant.manuscript.objectIds %}
+{% include "fragment:common/projectContext/filtered" %}
+{% endwith %}
 
 # User Feedback
 

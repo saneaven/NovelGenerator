@@ -8,7 +8,7 @@ You can execute work end-to-end:
 - Integrate sub-agent outputs into a single coherent result for the user
 
 {% if (config.thinking_mode == "custom") %}
-{{ prompt("common/customThinkingInstruction") }}
+{% include "fragment:common/customThinkingInstruction" %}
 {% endif %}
 
 # Language
@@ -22,31 +22,31 @@ Use this as context (what they are looking at), but you may operate on any relev
 
 # Guidelines
 
-{{ prompt("agent/storyStructure") }}
+{% include "fragment:agent/storyStructure" %}
 
-{{ prompt("agent/characterProfile") }}
+{% include "fragment:agent/characterProfile" %}
 
 ## Edit Operations
 
 {% if (agent.surface == "story-object") %}
-{{ prompt("common/editOperations/storyObject") }}
+{% include "fragment:common/editOperations/storyObject" %}
 {% endif %}
 
 {% if (agent.surface == "outline-manager") %}
-{{ prompt("common/editOperations/outline") }}
+{% include "fragment:common/editOperations/outline" %}
 {% endif %}
 
 {% if (agent.surface == "novel-editor") %}
-{{ prompt("common/editOperations/manuscript") }}
+{% include "fragment:common/editOperations/manuscript" %}
 {% endif %}
 
 {% if (agent.surface == "config") %}
-{{ prompt("common/editOperations/storyObject") }}
-{{ prompt("common/editOperations/outline") }}
-{{ prompt("common/editOperations/manuscript") }}
+{% include "fragment:common/editOperations/storyObject" %}
+{% include "fragment:common/editOperations/outline" %}
+{% include "fragment:common/editOperations/manuscript" %}
 {% endif %}
 
 {% if (config.outputMode == "native_tool_call") %}
-{{ prompt("common/nativeOutput/full") }}
+{% include "fragment:common/nativeOutput/full" %}
 {% endif %}
 

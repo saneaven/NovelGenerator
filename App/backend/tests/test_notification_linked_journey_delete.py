@@ -33,7 +33,7 @@ def test_delete_project_notification_cancels_and_emits_thread_delete(monkeypatch
     emitted: list[tuple[str, dict[str, object]]] = []
     canceled: list[tuple[object, object]] = []
 
-    monkeypatch.setattr(notification_routes, "_owned_project_or_404", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(notification_routes, "require_owned_project", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
         notification_routes,
         "list_notification_delete_targets",
@@ -104,7 +104,7 @@ def test_delete_all_project_notifications_emits_bulk_thread_delete(monkeypatch) 
     emitted: list[tuple[str, dict[str, object]]] = []
     canceled: list[tuple[object, object]] = []
 
-    monkeypatch.setattr(notification_routes, "_owned_project_or_404", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(notification_routes, "require_owned_project", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
         notification_routes,
         "list_notification_delete_targets",
@@ -180,7 +180,7 @@ def test_delete_project_notification_raises_404_when_target_missing(monkeypatch)
     user_id = uuid4()
     notification_id = uuid4()
 
-    monkeypatch.setattr(notification_routes, "_owned_project_or_404", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(notification_routes, "require_owned_project", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
         notification_routes,
         "list_notification_delete_targets",

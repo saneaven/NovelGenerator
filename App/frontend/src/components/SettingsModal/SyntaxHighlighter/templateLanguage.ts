@@ -44,6 +44,17 @@ const templateParser: StreamParser<TemplateState> = {
       return 'list';
     }
 
+    // Include blocks: color the whole {% include ... %} block as one token.
+    if (stream.match(/^\{%\s*include\b/)) {
+      while (!stream.eol()) {
+        if (stream.match(/^%\}/)) {
+          return 'atom';
+        }
+        stream.next();
+      }
+      return 'atom';
+    }
+
     // Jinja2 comments: {# ... #}
     if (stream.match(/^\{#/)) {
       while (!stream.eol()) {
@@ -64,17 +75,6 @@ const templateParser: StreamParser<TemplateState> = {
         stream.next();
       }
       return 'keyword';
-    }
-
-    // Jinja2 prompt() function call: {{ prompt("...") }} (check BEFORE general {{ }})
-    if (stream.match(/^\{\{\s*prompt\s*\(/)) {
-      while (!stream.eol()) {
-        if (stream.match(/^\}\}/)) {
-          return 'atom';
-        }
-        stream.next();
-      }
-      return 'atom';
     }
 
     // Jinja2 variable output: {{ ... }}

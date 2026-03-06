@@ -22,7 +22,7 @@ Use thinking blocks for analysis
 
 ## Fragment Inclusion
 
-{{ prompt("common/projectContext/full") }}
+{% include "fragment:common/projectContext/full" %}
 
 ## Comments
 

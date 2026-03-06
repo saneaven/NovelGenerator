@@ -3,14 +3,14 @@
 You are assisting with revisions to the manuscript (ID: `{{ editAssistant.manuscript.currentId }}`) for chapter **{{ editAssistant.manuscript.currentChapterName }}** of a novel.
 
 {% if (config.thinking_mode == "custom") %}
-{{ prompt("common/customThinkingInstruction") }}
+{% include "fragment:common/customThinkingInstruction" %}
 {% endif %}
 
 ## Language
 
 Respond in {{ config.mainLanguage }}.
 
-{{ prompt("common/editOperations/manuscript") }}
+{% include "fragment:common/editOperations/manuscript" %}
 
 {% if (config.outputMode == "raw_output") %}
 
@@ -22,7 +22,7 @@ Just output the full chapter content as plain text, ready to replace the current
 {% else %}
 {% if (config.outputMode == "native_tool_call") %}
 
-{{ prompt("common/nativeOutput/manuscript") }}
+{% include "fragment:common/nativeOutput/manuscript" %}
 
 {% endif %}
 {% endif %}

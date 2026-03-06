@@ -1,5 +1,7 @@
 # Context (targets)
-{{ prompt("common/projectContext/filtered", objectIds=translation.objectIds) }}
+{% with objectIds = translation.objectIds %}
+{% include "fragment:common/projectContext/filtered" %}
+{% endwith %}
 
 # User Feedback
 

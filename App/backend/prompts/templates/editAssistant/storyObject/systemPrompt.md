@@ -3,14 +3,14 @@
 You are an AI assistant that helps with novel writing. The user wants to modify story objects (basic info, characters, locations, organizations, lorebook, outlines, acts, or chapters).
 
 {% if (config.thinking_mode == "custom") %}
-{{ prompt("common/customThinkingInstruction") }}
+{% include "fragment:common/customThinkingInstruction" %}
 {% endif %}
 
 ## Language
 
 Respond in {{ config.mainLanguage }}.
 
-{{ prompt("common/editOperations/storyObject") }}
+{% include "fragment:common/editOperations/storyObject" %}
 
 {% if (config.outputMode == "raw_output") %}
 
@@ -22,7 +22,7 @@ Just output the updated content text as plain text.
 {% else %}
 {% if (config.outputMode == "native_tool_call") %}
 
-{{ prompt("common/nativeOutput/storyObject") }}
+{% include "fragment:common/nativeOutput/storyObject" %}
 
 {% endif %}
 {% endif %}

@@ -44,6 +44,7 @@ from ..services.object_change_events import queue_object_change
 from ..services.storage_quota_service import StorageQuotaExceededError, enforce_user_asset_quota
 from ..services.credential_service import CredentialServiceError, credential_service
 from ..services.notification_service import serialize_notification, upsert_notification
+from ..services.ownership import require_owned_manuscript, require_owned_object
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..image_providers.registry import ImageProviderRegistry
 from ..image_providers.base import ReferenceImageData
@@ -1357,39 +1358,43 @@ async def get_story_object_assets(
 ):
     """Get all assets linked to a story object"""
     object_type = normalize_object_type(object_type)
-    # Verify project ownership
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.user_id == current_user.id
-    ).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    require_owned_object(
+        db,
+        user_id=current_user.id,
+        object_type=object_type,
+        object_id=object_id,
+        project_id=project_id,
+    )
 
-    # Get all linked assets
-    links = db.query(StoryObjectAsset).filter(
-        StoryObjectAsset.object_type == object_type,
-        StoryObjectAsset.object_id == object_id
-    ).order_by(StoryObjectAsset.display_order).all()
+    rows = (
+        db.query(StoryObjectAsset, Asset)
+        .join(Asset, Asset.id == StoryObjectAsset.asset_id)
+        .filter(
+            StoryObjectAsset.object_type == object_type,
+            StoryObjectAsset.object_id == object_id,
+            Asset.project_id == project_id,
+        )
+        .order_by(StoryObjectAsset.display_order)
+        .all()
+    )
 
     responses = []
     main_asset = None
 
-    for link in links:
-        asset = db.query(Asset).filter(Asset.id == link.asset_id).first()
-        if asset:
-            response = StoryObjectAssetResponse(
-                id=str(link.id),
-                object_type=link.object_type,
-                object_id=str(link.object_id),
-                asset_id=str(link.asset_id),
-                is_main=link.is_main,
-                display_order=link.display_order,
-                created_at=link.created_at,
-                asset=_asset_to_response(asset)
-            )
-            responses.append(response)
-            if link.is_main:
-                main_asset = response
+    for link, asset in rows:
+        response = StoryObjectAssetResponse(
+            id=str(link.id),
+            object_type=link.object_type,
+            object_id=str(link.object_id),
+            asset_id=str(link.asset_id),
+            is_main=link.is_main,
+            display_order=link.display_order,
+            created_at=link.created_at,
+            asset=_asset_to_response(asset)
+        )
+        responses.append(response)
+        if link.is_main:
+            main_asset = response
 
     return StoryObjectAssetsResponse(assets=responses, main_asset=main_asset)
 
@@ -1405,20 +1410,27 @@ async def set_main_asset(
 ):
     """Set the main asset for a story object"""
     object_type = normalize_object_type(object_type)
-    # Verify project ownership
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.user_id == current_user.id
-    ).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    require_owned_object(
+        db,
+        user_id=current_user.id,
+        object_type=object_type,
+        object_id=object_id,
+        project_id=project_id,
+    )
 
     # Find the link to set as main
-    link = db.query(StoryObjectAsset).filter(
-        StoryObjectAsset.object_type == object_type,
-        StoryObjectAsset.object_id == object_id,
-        StoryObjectAsset.asset_id == UUID(request.asset_id)
-    ).first()
+    asset_id = UUID(request.asset_id)
+    link = (
+        db.query(StoryObjectAsset)
+        .join(Asset, Asset.id == StoryObjectAsset.asset_id)
+        .filter(
+            StoryObjectAsset.object_type == object_type,
+            StoryObjectAsset.object_id == object_id,
+            StoryObjectAsset.asset_id == asset_id,
+            Asset.project_id == project_id,
+        )
+        .first()
+    )
     if not link:
         raise HTTPException(status_code=404, detail="Asset not linked to this object")
 
@@ -1439,7 +1451,9 @@ async def set_main_asset(
     db.commit()
     db.refresh(link)
 
-    asset = db.query(Asset).filter(Asset.id == link.asset_id).first()
+    asset = db.query(Asset).filter(Asset.id == link.asset_id, Asset.project_id == project_id).first()
+    if asset is None:
+        raise HTTPException(status_code=404, detail="Asset not linked to this object")
 
     return StoryObjectAssetResponse(
         id=str(link.id),
@@ -1465,22 +1479,32 @@ async def get_manuscript_images(
     current_user: User = Depends(get_current_user)
 ):
     """Get all images in a manuscript"""
-    # Verify project ownership
-    manuscript = db.query(Manuscript).filter(
-        Manuscript.id == manuscript_id
-    ).first()
-    if not manuscript:
-        raise HTTPException(status_code=404, detail="Manuscript not found")
+    require_owned_manuscript(
+        db,
+        user_id=current_user.id,
+        manuscript_id=manuscript_id,
+        project_id=project_id,
+    )
 
     images = db.query(ManuscriptImage).filter(
         ManuscriptImage.manuscript_id == manuscript_id
     ).order_by(ManuscriptImage.position).all()
 
+    asset_ids = [img.asset_id for img in images if img.asset_id is not None]
+    assets_by_id: dict[UUID, Asset] = {}
+    if asset_ids:
+        assets = (
+            db.query(Asset)
+            .filter(Asset.project_id == project_id, Asset.id.in_(asset_ids))
+            .all()
+        )
+        assets_by_id = {asset.id: asset for asset in assets}
+
     responses = []
     for img in images:
         asset = None
         if img.asset_id:
-            asset_model = db.query(Asset).filter(Asset.id == img.asset_id).first()
+            asset_model = assets_by_id.get(img.asset_id)
             if asset_model:
                 asset = _asset_to_response(asset_model)
 
