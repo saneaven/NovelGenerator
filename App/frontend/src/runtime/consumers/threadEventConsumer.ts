@@ -76,6 +76,13 @@ export class ThreadEventConsumer {
   private readonly inFlightResumeByThread = new Set<string>();
   private readonly autoAcceptLockByThread = new Set<string>();
   private readonly autoContinuedAssistantByThread = new Map<string, string>();
+  private readonly deltaBuffer = new Map<string, Map<string, {
+    runId: string;
+    textDelta: string;
+    thinkingDeltas: Array<{ text: string; thinkingDisplay: string }>;
+  }>>();
+  private deltaFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly DELTA_FLUSH_INTERVAL_MS = 80;
   private disposed = false;
 
   constructor(projectId: string) {
@@ -84,6 +91,11 @@ export class ThreadEventConsumer {
 
   dispose(): void {
     this.disposed = true;
+    if (this.deltaFlushTimer !== null) {
+      clearTimeout(this.deltaFlushTimer);
+      this.deltaFlushTimer = null;
+    }
+    this.deltaBuffer.clear();
     this.streamingToolCallsByThread.clear();
     this.streamingArgBuffers.clear();
     this.autoContinueLockByThread.clear();
@@ -245,6 +257,73 @@ export class ThreadEventConsumer {
       isStreaming: true,
     });
     store.setThreadStreamActive(params.threadId, true);
+  }
+
+  private bufferDelta(threadId: string, messageId: string, runId: string, text: string): void {
+    let threadMap = this.deltaBuffer.get(threadId);
+    if (!threadMap) {
+      threadMap = new Map();
+      this.deltaBuffer.set(threadId, threadMap);
+    }
+    let entry = threadMap.get(messageId);
+    if (!entry) {
+      entry = { runId, textDelta: '', thinkingDeltas: [] };
+      threadMap.set(messageId, entry);
+    }
+    entry.textDelta += text;
+    this.scheduleDeltaFlush();
+  }
+
+  private bufferThinkingDelta(
+    threadId: string, messageId: string, runId: string,
+    text: string, thinkingDisplay: string,
+  ): void {
+    let threadMap = this.deltaBuffer.get(threadId);
+    if (!threadMap) {
+      threadMap = new Map();
+      this.deltaBuffer.set(threadId, threadMap);
+    }
+    let entry = threadMap.get(messageId);
+    if (!entry) {
+      entry = { runId, textDelta: '', thinkingDeltas: [] };
+      threadMap.set(messageId, entry);
+    }
+    entry.thinkingDeltas.push({ text, thinkingDisplay });
+    this.scheduleDeltaFlush();
+  }
+
+  private scheduleDeltaFlush(): void {
+    if (this.deltaFlushTimer !== null) return;
+    this.deltaFlushTimer = setTimeout(() => {
+      this.deltaFlushTimer = null;
+      this.flushDeltaBuffer();
+    }, ThreadEventConsumer.DELTA_FLUSH_INTERVAL_MS);
+  }
+
+  private flushDeltaBuffer(): void {
+    if (this.disposed) return;
+    const snapshot = new Map(this.deltaBuffer);
+    this.deltaBuffer.clear();
+
+    for (const [threadId, messageMap] of snapshot) {
+      for (const [messageId, entry] of messageMap) {
+        if (entry.textDelta) {
+          this.appendDelta({
+            threadId, messageId,
+            runId: entry.runId,
+            text: entry.textDelta,
+          });
+        }
+        for (const td of entry.thinkingDeltas) {
+          this.appendThinkingDelta({
+            threadId, messageId,
+            runId: entry.runId,
+            text: td.text,
+            thinkingDisplay: td.thinkingDisplay,
+          });
+        }
+      }
+    }
   }
 
   private refreshUnresolvedCount(threadId: string): void {
@@ -643,7 +722,7 @@ export class ThreadEventConsumer {
       const runId = payload.run_id ? String(payload.run_id) : '';
       const text = String(payload.text ?? '');
       if (!messageId || !runId || !text) return;
-      this.appendDelta({ threadId, messageId, runId, text });
+      this.bufferDelta(threadId, messageId, runId, text);
       return;
     }
 
@@ -653,7 +732,7 @@ export class ThreadEventConsumer {
       const text = String(payload.text ?? '');
       const thinkingDisplay = String(payload.thinking_display ?? '').trim();
       if (!messageId || !runId || !text || !thinkingDisplay) return;
-      this.appendThinkingDelta({ threadId, messageId, runId, text, thinkingDisplay });
+      this.bufferThinkingDelta(threadId, messageId, runId, text, thinkingDisplay);
       return;
     }
 
@@ -770,6 +849,7 @@ export class ThreadEventConsumer {
     }
 
     if (event.event === 'message:end') {
+      this.flushDeltaBuffer();
       const store = useThreadStore.getState();
       const messageId = String(payload.message_id ?? '');
       const runId = payload.run_id ? String(payload.run_id) : '';
@@ -849,6 +929,7 @@ export class ThreadEventConsumer {
     }
 
     if (event.event === 'run:done') {
+      this.flushDeltaBuffer();
       const finalStatus = String(payload.final_status ?? 'done') as ThreadStatus;
       this.patchThreadFromRunStatus(threadId, finalStatus, null, payload);
       useThreadStore.getState().setThreadStreamActive(threadId, false);
@@ -857,6 +938,7 @@ export class ThreadEventConsumer {
     }
 
     if (event.event === 'run:error') {
+      this.flushDeltaBuffer();
       const error = String(payload.error ?? 'Unknown error');
       this.patchThreadFromRunStatus(threadId, 'error', error, payload);
       useThreadStore.getState().setThreadStreamActive(threadId, false);
@@ -864,6 +946,7 @@ export class ThreadEventConsumer {
     }
 
     if (event.event === 'run:canceled') {
+      this.flushDeltaBuffer();
       this.patchThreadFromRunStatus(threadId, 'canceled', null, payload);
       useThreadStore.getState().setThreadStreamActive(threadId, false);
     }
