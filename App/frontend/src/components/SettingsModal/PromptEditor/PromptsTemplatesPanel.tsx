@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -496,7 +497,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     return promptCount + fragmentCount + variableCount + subAgentCount;
   }, [scenarioDrafts, fragmentDrafts, subAgentDrafts, variableDrafts]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     onUnsavedCountChange?.(unsavedCount);
   }, [onUnsavedCountChange, unsavedCount]);
 

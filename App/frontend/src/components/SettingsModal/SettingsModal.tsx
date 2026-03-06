@@ -108,7 +108,9 @@ function isEmptyConfig(config: NormalizedProviderConfig): boolean {
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const { t } = useTranslation();
-  const settingsStore = useSettingsStore();
+  const updateSettings = useSettingsStore((s) => s.updateSettings);
+  const saveSettingsToServer = useSettingsStore((s) => s.saveToServer);
+  const setStoreTheme = useSettingsStore((s) => s.setTheme);
   const settings = useSettings();
   const [localSettings, setLocalSettings] = useState<Settings>(settings);
   const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>(DEFAULT_CREDENTIAL_DRAFT);
@@ -334,13 +336,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             } else {
               try {
                 if (settingsDirty) {
-                  settingsStore.updateSettings(localSettings);
+                  updateSettings(localSettings);
                 }
                 const prevCredentials = credentialsSnapshotRef.current
                   ? (JSON.parse(credentialsSnapshotRef.current) as ProviderCredentials)
                   : DEFAULT_CREDENTIAL_DRAFT;
                 if (settingsDirty) {
-                  await settingsStore.saveToServer();
+                  await saveSettingsToServer();
                 }
                 if (credentialsDirty) {
                   await syncCredentialDraftDiff(prevCredentials, localCredentials);
@@ -787,7 +789,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               // Update local settings for consistency
               setLocalSettings({ ...localSettings, theme });
               // Apply theme immediately to global store
-              settingsStore.setTheme(theme);
+              setStoreTheme(theme);
             }}
           />
         )}
