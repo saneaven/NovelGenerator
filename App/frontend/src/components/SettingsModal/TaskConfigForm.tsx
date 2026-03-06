@@ -36,13 +36,35 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
 
   // Detect if model is GPT-5 family (gpt-5, gpt-5-mini, gpt-5.1, etc.)
   const isGpt5 = config.provider === 'openai' && /gpt-?5/i.test(config.model);
-  // GPT-5.2+ supports additional effort levels (minimal, xhigh)
-  const isGpt52Plus = config.provider === 'openai' && /gpt-?5\.[2-9]/i.test(config.model);
   const isCustomProvider = config.provider === 'custom';
   const customRequestFormat: RequestFormat = config.advanced.request_format ?? 'openai_sdk';
   const isCustomOpenaiSdk = isCustomProvider && customRequestFormat === 'openai_sdk';
   const isCustomClaudeSdk = isCustomProvider && customRequestFormat === 'claude_sdk';
   const isCustomOpenaiResponses = isCustomProvider && customRequestFormat === 'openai_responses';
+  const isResponsesReasoningProvider = config.provider === 'openai' || isCustomOpenaiResponses;
+  const responsesEffortOptions = [
+    { value: 'none', label: t('settings.taskConfig.thinking_config.effortOptions.none') },
+    { value: 'minimal', label: t('settings.taskConfig.thinking_config.effortOptions.minimal') },
+    {
+      value: 'low',
+      label: isGpt5
+        ? t('settings.taskConfig.thinking_config.effortOptions.lowPercent')
+        : t('settings.taskConfig.thinking_config.effortOptions.low'),
+    },
+    {
+      value: 'medium',
+      label: isGpt5
+        ? t('settings.taskConfig.thinking_config.effortOptions.mediumPercent')
+        : t('settings.taskConfig.thinking_config.effortOptions.medium'),
+    },
+    {
+      value: 'high',
+      label: isGpt5
+        ? t('settings.taskConfig.thinking_config.effortOptions.highPercent')
+        : t('settings.taskConfig.thinking_config.effortOptions.high'),
+    },
+    { value: 'xhigh', label: t('settings.taskConfig.thinking_config.effortOptions.xhigh') },
+  ];
 
   const getDefaultThinkingConfig = (
     provider: ProviderType,
@@ -421,21 +443,24 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                 {(config.provider === 'openrouter' || config.provider === 'openai' || config.provider === 'xai') && (
                   <>
                     <div className="form-field">
-                      <label>{isGpt5 ? t('settings.taskConfig.thinking_config.reasoningEffort') : t('settings.taskConfig.thinking_config.effortLevel')}</label>
+                      <label>
+                        {isResponsesReasoningProvider
+                          ? t('settings.taskConfig.thinking_config.reasoningEffort')
+                          : t('settings.taskConfig.thinking_config.effortLevel')}
+                      </label>
                       <CustomSelect
                         value={config.advanced.thinking_config?.effort || 'medium'}
                         onChange={(value) => handleThinkingConfigChange('effort', value)}
-                        options={[
-                          ...(isGpt5 ? [{ value: 'none', label: t('settings.taskConfig.thinking_config.effortOptions.none') }] : []),
-                          ...(isGpt52Plus ? [{ value: 'minimal', label: t('settings.taskConfig.thinking_config.effortOptions.minimal') }] : []),
-                          { value: 'low', label: isGpt5 ? t('settings.taskConfig.thinking_config.effortOptions.lowPercent') : t('settings.taskConfig.thinking_config.effortOptions.low') },
-                          { value: 'medium', label: isGpt5 ? t('settings.taskConfig.thinking_config.effortOptions.mediumPercent') : t('settings.taskConfig.thinking_config.effortOptions.medium') },
-                          { value: 'high', label: isGpt5 ? t('settings.taskConfig.thinking_config.effortOptions.highPercent') : t('settings.taskConfig.thinking_config.effortOptions.high') },
-                          ...(isGpt52Plus ? [{ value: 'xhigh', label: t('settings.taskConfig.thinking_config.effortOptions.xhigh') }] : []),
-                        ]}
+                        options={isResponsesReasoningProvider
+                          ? responsesEffortOptions
+                          : [
+                              { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
+                              { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
+                              { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
+                            ]}
                       />
                       <p className="field-hint">
-                        {isGpt5
+                        {isResponsesReasoningProvider
                           ? t('settings.taskConfig.thinking_config.effortHint')
                           : t('settings.taskConfig.thinking_config.effortHintGeneric')}
                       </p>
@@ -533,17 +558,13 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                 {/* Custom endpoint + OpenAI Responses API: effort dropdown (native reasoning) */}
                 {isCustomOpenaiResponses && (
                   <div className="form-field">
-                    <label>{t('settings.taskConfig.thinking_config.effortLevel')}</label>
+                    <label>{t('settings.taskConfig.thinking_config.reasoningEffort')}</label>
                     <CustomSelect
                       value={config.advanced.thinking_config?.effort || 'medium'}
                       onChange={(value) => handleThinkingConfigChange('effort', value)}
-                      options={[
-                        { value: 'low', label: t('settings.taskConfig.thinking_config.effortOptions.low') },
-                        { value: 'medium', label: t('settings.taskConfig.thinking_config.effortOptions.medium') },
-                        { value: 'high', label: t('settings.taskConfig.thinking_config.effortOptions.high') },
-                      ]}
+                      options={responsesEffortOptions}
                     />
-                    <p className="field-hint">{t('settings.taskConfig.thinking_config.effortHintGeneric')}</p>
+                    <p className="field-hint">{t('settings.taskConfig.thinking_config.effortHint')}</p>
                   </div>
                 )}
 

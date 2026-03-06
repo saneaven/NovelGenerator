@@ -575,7 +575,7 @@
       "thinking_config": {
         "title": "사고 구성",
         "effortLevel": "노력 수준",
-        "reasoningEffort": "추론 노력 (GPT-5)",
+        "reasoningEffort": "추론 노력 (Responses API)",
         "effortOptions": {
           "none": "없음 - 추론 없음 (가장 빠름)",
           "minimal": "최소 - 매우 가벼운 추론",
@@ -588,7 +588,7 @@
           "max": "최대 - 가능한 최고 추론",
           "xhigh": "매우 높음 - 최대 추론"
         },
-        "effortHint": "GPT-5가 응답하기 전에 수행하는 추론의 양을 제어합니다",
+        "effortHint": "Responses API로 전송할 추론 수준을 제어합니다. 실제 지원 여부는 모델과 프로바이더에 따라 다릅니다.",
         "effortHintGeneric": "모델이 내부적으로 수행하는 사고의 양을 제어합니다",
         "verbosity": "출력 상세도 (GPT-5)",
         "verbosityOptions": {

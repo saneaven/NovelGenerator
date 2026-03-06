@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, Check } from '../icons';
@@ -57,29 +57,34 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
   const selectedOption = options.find(opt => opt.value === value);
 
-  // Calculate position when opening
-  useEffect(() => {
-    if (isOpen && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      const menuHeight = Math.min(options.length * 36 + 8, 280); // Approximate
-      const viewportHeight = window.innerHeight;
-      const spaceBelow = viewportHeight - rect.bottom;
-      const spaceAbove = rect.top;
+  useLayoutEffect(() => {
+    if (!isOpen || !triggerRef.current) return;
 
-      const shouldFlipUp = spaceBelow < menuHeight && spaceAbove > menuHeight;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const menuWidth = minWidth ? Math.max(rect.width, minWidth) : rect.width;
+    const measuredHeight = menuRef.current?.offsetHeight ?? Math.min(options.length * 40 + 8, 280);
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const shouldFlipUp = spaceBelow < measuredHeight && spaceAbove > spaceBelow;
 
-      const menuWidth = minWidth ? Math.max(rect.width, minWidth) : rect.width;
-      const leftPosition = align === 'right'
-        ? rect.right + window.scrollX - menuWidth
-        : rect.left + window.scrollX;
-      setMenuPosition({
-        top: shouldFlipUp
-          ? rect.top + window.scrollY - menuHeight - 4
-          : rect.bottom + window.scrollY + 4,
-        left: leftPosition,
-        width: menuWidth,
-      });
-    }
+    const unclampedLeft = align === 'right'
+      ? rect.right - menuWidth
+      : rect.left;
+    const left = Math.min(
+      Math.max(8, unclampedLeft),
+      Math.max(8, viewportWidth - menuWidth - 8),
+    );
+    const top = shouldFlipUp
+      ? Math.max(8, rect.top - measuredHeight - 4)
+      : Math.min(rect.bottom + 4, Math.max(8, viewportHeight - measuredHeight - 8));
+
+    setMenuPosition({
+      top,
+      left,
+      width: menuWidth,
+    });
   }, [isOpen, options.length, minWidth, align]);
 
   // Close on click outside
@@ -161,7 +166,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
           ref={menuRef}
           className="custom-select-menu"
           style={{
-            position: 'absolute',
+            position: 'fixed',
             top: menuPosition.top,
             left: menuPosition.left,
             width: menuPosition.width,

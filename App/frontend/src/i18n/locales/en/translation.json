@@ -575,7 +575,7 @@
       "thinking_config": {
         "title": "Thinking Configuration",
         "effortLevel": "Effort Level",
-        "reasoningEffort": "Reasoning Effort (GPT-5)",
+        "reasoningEffort": "Reasoning Effort (Responses API)",
         "effortOptions": {
           "none": "None - No reasoning (fastest)",
           "minimal": "Minimal - Very light reasoning",
@@ -588,7 +588,7 @@
           "max": "Max - Highest available reasoning",
           "xhigh": "Extra High - Maximum reasoning"
         },
-        "effortHint": "Controls how much reasoning GPT-5 performs before responding",
+        "effortHint": "Controls the reasoning effort sent to the Responses API. Actual support depends on the model and provider.",
         "effortHintGeneric": "Controls how much thinking the model performs internally",
         "verbosity": "Output Verbosity (GPT-5)",
         "verbosityOptions": {
