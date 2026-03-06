@@ -17,10 +17,14 @@ import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { FunctionCallsThread } from '../../toolCall/ui';
 import ThinkingDisplay from '../common/ThinkingDisplay';
+import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import { Close } from '../icons';
 import { Loading } from '../common/Loading';
+import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
+import { hasRenderableAssistantOutput } from '../../runtime/messageVisibility';
+import { applyThreadSnapshot } from '../../runtime/threadHydration';
 import './JourneyNotificationDetail.css';
 
 interface JourneyNotificationDetailProps {
@@ -122,6 +126,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const userScrolledUpRef = useRef(false);
 
   const mainLanguage = useSettingsStore((s) => s.getSettings().mainLanguage);
+  const liveView = useThreadLiveViewState(threadId);
 
   // Subscribe to ThreadStore
   const threadMessages = useThreadStore(
@@ -153,20 +158,10 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     setLoading(true);
     setFetchError(null);
 
-    void threadService
-      .listMessages(threadId)
+    void threadService.listMessages(threadId)
       .then((response) => {
         if (cancelled) return;
-        const nextStore = useThreadStore.getState();
-        nextStore.upsertThread(response.thread);
-        for (const msg of response.messages) {
-          nextStore.upsertMessage(msg);
-        }
-        if (response.toolCalls.length > 0) {
-          for (const tc of response.toolCalls) {
-            nextStore.upsertToolCall(tc);
-          }
-        }
+        applyThreadSnapshot(response);
         if (response.latestRun) {
           setLatestRunContext({
             inputPayload: response.latestRun.inputPayload,
@@ -197,8 +192,19 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
 
   // Only user + assistant messages
   const displayMessages = useMemo(
-    () => sortedMessages.filter((m) => m.role === 'user' || m.role === 'assistant'),
-    [sortedMessages],
+    () => sortedMessages.filter((message) => {
+      if (message.role === 'user') return true;
+      if (message.role !== 'assistant') return false;
+      const attachedToolCalls = (toolCallIdsByAssistantMessageId[message.id] ?? [])
+        .map((id) => toolCallsById[id])
+        .filter((toolCall): toolCall is ThreadToolCall => Boolean(toolCall));
+      return hasRenderableAssistantOutput({
+        message,
+        language: mainLanguage,
+        toolCalls: attachedToolCalls,
+      });
+    }),
+    [sortedMessages, toolCallIdsByAssistantMessageId, toolCallsById, mainLanguage],
   );
 
   // Sticky message = last user message
@@ -330,10 +336,8 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
           isStreaming={message.isStreaming === true}
         />
 
-        {(text || !hasToolCalls) && (
-          <div className="journey-detail-message-content">
-            {text || (message.isStreaming ? null : <span className="journey-detail-waiting">Waiting...</span>)}
-          </div>
+        {text && (
+          <div className="journey-detail-message-content">{text}</div>
         )}
 
         {hasToolCalls && (
@@ -449,7 +453,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
 
       {/* Scrollable message timeline */}
       <div className="journey-detail-body" ref={bodyRef} onScroll={handleBodyScroll}>
-        {timelineMessages.length === 0 && !isRunning && (
+        {timelineMessages.length === 0 && !isRunning && liveView?.noticeKind !== 'preexisting_live_run' && (
           <div className="journey-detail-empty">No messages yet.</div>
         )}
 
@@ -463,7 +467,11 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
         })}
 
         {/* Streaming indicator */}
-        {isRunning && displayMessages.length > 0 && !displayMessages.some((m) => m.isStreaming) && (
+        {isRunning && !liveView?.hasStreamingMessage && liveView?.noticeKind === 'preexisting_live_run' && (
+          <PreexistingLiveRunNotice className="journey-detail-notice" compact />
+        )}
+
+        {isRunning && !liveView?.hasStreamingMessage && liveView?.noticeKind !== 'preexisting_live_run' && displayMessages.length > 0 && (
           <div className="journey-detail-typing">
             <div className="loading-track">
               <div className="loading-bar" />

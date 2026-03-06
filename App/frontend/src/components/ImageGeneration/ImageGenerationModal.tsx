@@ -23,8 +23,10 @@ import { useImageTaskStore } from '../../imageTask/store';
 import { UnifiedImageModal } from '../AssetManager';
 import UnifiedImagePromptModal, { type PromptResult, type PromptMode } from './UnifiedImagePromptModal';
 import ThinkingDisplay from '../common/ThinkingDisplay';
-import { useJourneyStreamingSession } from '../../hooks/useJourneyStreamingSession';
+import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
+import { useJourneyStore } from '../../store/journeyStore';
 import { useThreadStore } from '../../store/threadStore';
+import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
 import { AIAssistMini, Close } from '../icons';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
@@ -368,7 +370,38 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         }
     }, [provider]);
 
-    const streamingSession = useJourneyStreamingSession(streamingSessionId);
+    const journeyThreadId = useJourneyStore((state) =>
+        streamingSessionId ? state.journeys[streamingSessionId]?.threadId : undefined
+    );
+    const streamingThreadStatus = useThreadStore((state) =>
+        journeyThreadId ? state.threadsById[journeyThreadId]?.status : undefined
+    );
+    const streamingThreadError = useThreadStore((state) =>
+        journeyThreadId ? state.threadsById[journeyThreadId]?.lastError : undefined
+    );
+    const liveView = useThreadLiveViewState(journeyThreadId ?? null);
+    const streamingSession = useMemo(() => {
+        if (!streamingSessionId) return null;
+
+        const status = streamingThreadStatus === 'error'
+            ? 'error'
+            : (streamingThreadStatus === 'done' || streamingThreadStatus === 'canceled')
+                ? 'done'
+                : 'running';
+
+        return {
+            status,
+            deliveryMode: liveView?.deliveryMode ?? 'live',
+            contentParts: liveView?.contentParts ?? [],
+            reasoningDetail: liveView?.reasoningDetail,
+            error: status === 'error' ? (streamingThreadError ?? 'Failed to generate prompt') : undefined,
+            toolCallProgress: (liveView?.streamingToolCalls ?? []).map((toolCall) => ({
+                draft: { parsedArguments: (toolCall.arguments ?? {}) as Record<string, unknown> },
+            })),
+            threadId: journeyThreadId,
+        };
+    }, [streamingSessionId, streamingThreadStatus, streamingThreadError, liveView, journeyThreadId]);
+    const isSuppressedStreaming = streamingSession?.status === 'running' && streamingSession.deliveryMode === 'suppressed';
 
     // Effect to extract and update prompt during streaming
     useEffect(() => {
@@ -643,11 +676,15 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                         <label>Prompt</label>
                         {/* Thinking display during streaming */}
                         {isStreamingNatural && streamingSession && (
-                            <ThinkingDisplay
-                                messageId={streamingSessionId!}
-                                reasoningDetail={streamingSession.reasoningDetail}
-                                isStreaming={streamingSession.status === 'running'}
-                            />
+                            isSuppressedStreaming ? (
+                                <PreexistingLiveRunNotice compact />
+                            ) : (
+                                <ThinkingDisplay
+                                    messageId={streamingSessionId!}
+                                    reasoningDetail={streamingSession.reasoningDetail}
+                                    isStreaming={streamingSession.status === 'running'}
+                                />
+                            )
                         )}
                         <div className="prompt-input-wrapper">
                             <textarea
@@ -677,11 +714,15 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                         <label>Prompt</label>
                         {/* Thinking display during streaming */}
                         {(isStreamingPositive || isStreamingNegative) && streamingSession && (
-                            <ThinkingDisplay
-                                messageId={streamingSessionId!}
-                                reasoningDetail={streamingSession.reasoningDetail}
-                                isStreaming={streamingSession.status === 'running'}
-                            />
+                            isSuppressedStreaming ? (
+                                <PreexistingLiveRunNotice compact />
+                            ) : (
+                                <ThinkingDisplay
+                                    messageId={streamingSessionId!}
+                                    reasoningDetail={streamingSession.reasoningDetail}
+                                    isStreaming={streamingSession.status === 'running'}
+                                />
+                            )
                         )}
                         <div className="prompt-tabs">
                             <button

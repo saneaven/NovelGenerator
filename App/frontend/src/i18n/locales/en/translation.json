@@ -36,6 +36,10 @@
     "copied": "Copied {{value}}",
     "copyFailed": "Copy failed"
   },
+  "streamRecovery": {
+    "title": "Live display skipped",
+    "body": "This task was already in progress before the app loaded. Intermediate generation will not be recovered; the final result will appear when it finishes."
+  },
   "landing": {
     "title": "Novel Buds",
     "tagline": "Write creative novels with AI assistance",

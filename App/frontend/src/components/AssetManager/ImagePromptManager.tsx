@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useJourneyStore } from '../../store/journeyStore';
 import { useSettings } from '../../store/settingsStore';
 import UnifiedImagePromptModal, { type PromptMode } from '../ImageGeneration/UnifiedImagePromptModal';
 import ThinkingDisplay from '../common/ThinkingDisplay';
-import { useJourneyStreamingSession } from '../../hooks/useJourneyStreamingSession';
+import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
+import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
 import { useThreadStore } from '../../store/threadStore';
 import type { ObjectType } from '../../types/unifiedObject';
 import { TextButton } from '../TextButton';
@@ -44,7 +46,38 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
     const [streamingMode, setStreamingMode] = useState<PromptMode | null>(null);
     const [streamingError, setStreamingError] = useState<string | null>(null);
 
-    const streamingSession = useJourneyStreamingSession(streamingSessionId);
+    const journeyThreadId = useJourneyStore((state) =>
+        streamingSessionId ? state.journeys[streamingSessionId]?.threadId : undefined
+    );
+    const streamingThreadStatus = useThreadStore((state) =>
+        journeyThreadId ? state.threadsById[journeyThreadId]?.status : undefined
+    );
+    const streamingThreadError = useThreadStore((state) =>
+        journeyThreadId ? state.threadsById[journeyThreadId]?.lastError : undefined
+    );
+    const liveView = useThreadLiveViewState(journeyThreadId ?? null);
+    const streamingSession = useMemo(() => {
+        if (!streamingSessionId) return null;
+
+        const status = streamingThreadStatus === 'error'
+            ? 'error'
+            : (streamingThreadStatus === 'done' || streamingThreadStatus === 'canceled')
+                ? 'done'
+                : 'running';
+
+        return {
+            status,
+            deliveryMode: liveView?.deliveryMode ?? 'live',
+            contentParts: liveView?.contentParts ?? [],
+            reasoningDetail: liveView?.reasoningDetail,
+            error: status === 'error' ? (streamingThreadError ?? 'Failed to generate prompt') : undefined,
+            toolCallProgress: (liveView?.streamingToolCalls ?? []).map((toolCall) => ({
+                draft: { parsedArguments: (toolCall.arguments ?? {}) as Record<string, unknown> },
+            })),
+            threadId: journeyThreadId,
+        };
+    }, [streamingSessionId, streamingThreadStatus, streamingThreadError, liveView, journeyThreadId]);
+    const isSuppressedStreaming = streamingSession?.status === 'running' && streamingSession.deliveryMode === 'suppressed';
 
     // Get object from store
     const object = useMemo(() => {
@@ -312,11 +345,15 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                         </div>
                         {/* Thinking display during streaming */}
                         {isStreamingNatural && streamingSession && (
-                            <ThinkingDisplay
-                                messageId={streamingSessionId!}
-                                reasoningDetail={streamingSession.reasoningDetail}
-                                isStreaming={streamingSession.status === 'running'}
-                            />
+                            isSuppressedStreaming ? (
+                                <PreexistingLiveRunNotice compact />
+                            ) : (
+                                <ThinkingDisplay
+                                    messageId={streamingSessionId!}
+                                    reasoningDetail={streamingSession.reasoningDetail}
+                                    isStreaming={streamingSession.status === 'running'}
+                                />
+                            )
                         )}
                         <textarea
                             value={naturalPrompt}
@@ -360,11 +397,15 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                         </div>
                         {/* Thinking display during streaming */}
                         {isStreamingPositive && streamingSession && (
-                            <ThinkingDisplay
-                                messageId={streamingSessionId!}
-                                reasoningDetail={streamingSession.reasoningDetail}
-                                isStreaming={streamingSession.status === 'running'}
-                            />
+                            isSuppressedStreaming ? (
+                                <PreexistingLiveRunNotice compact />
+                            ) : (
+                                <ThinkingDisplay
+                                    messageId={streamingSessionId!}
+                                    reasoningDetail={streamingSession.reasoningDetail}
+                                    isStreaming={streamingSession.status === 'running'}
+                                />
+                            )
                         )}
                         <textarea
                             value={positivePrompt}
@@ -408,11 +449,15 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                         </div>
                         {/* Thinking display during streaming */}
                         {isStreamingNegative && streamingSession && (
-                            <ThinkingDisplay
-                                messageId={streamingSessionId!}
-                                reasoningDetail={streamingSession.reasoningDetail}
-                                isStreaming={streamingSession.status === 'running'}
-                            />
+                            isSuppressedStreaming ? (
+                                <PreexistingLiveRunNotice compact />
+                            ) : (
+                                <ThinkingDisplay
+                                    messageId={streamingSessionId!}
+                                    reasoningDetail={streamingSession.reasoningDetail}
+                                    isStreaming={streamingSession.status === 'running'}
+                                />
+                            )
                         )}
                         <textarea
                             value={negativePrompt}

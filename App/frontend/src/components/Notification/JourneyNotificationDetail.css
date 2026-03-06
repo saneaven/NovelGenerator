@@ -214,6 +214,10 @@
   padding: var(--spacing-sm) 0;
 }
 
+.journey-detail-notice {
+  padding: var(--spacing-sm) 0;
+}
+
 /* ===== Feedback Area ===== */
 .journey-detail-feedback {
   flex-shrink: 0;

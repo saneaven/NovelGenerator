@@ -11,11 +11,10 @@ import { useNotificationStore } from '../../store/notificationStore';
 import { useSettings } from '../../store/settingsStore';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { alert as showAlert } from '../../store/dialogStore';
-import { useThreadStore } from '../../store/threadStore';
 import { notificationService } from '../../api/notificationService';
-import { threadService } from '../../api/threadService';
 import { translationService } from '../../api/unifiedObjectService';
-import { startProjectRuntime, stopProjectRuntime } from '../../runtime/runtimeStream';
+import { stopProjectRuntime } from '../../runtime/runtimeStream';
+import { bootstrapProjectRuntime } from '../../runtime/projectRuntimeBootstrap';
 
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
 import TranslationModal from '../../components/Modal/TranslationModal';
@@ -72,7 +71,6 @@ const UnifiedWorkspace: React.FC = () => {
   const unifiedObjects = useUnifiedObjectStore(state => state.objects);
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const hydrateNotifications = useNotificationStore((state) => state.hydrate);
-  const upsertThreadsRuntime = useThreadStore((state) => state.upsertThreadsRuntime);
 
   // NovelEditor specific stores
   const selectedChapterByProject = useNovelEditorStore(state => state.selectedChapterByProject);
@@ -220,24 +218,12 @@ const UnifiedWorkspace: React.FC = () => {
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
-    void threadService
-      .listProjectThreadRuntime(projectId)
-      .then((threads) => {
-        if (cancelled) return;
-        upsertThreadsRuntime(threads);
-      })
-      .catch((error) => {
-        console.warn('Failed to hydrate thread runtime', { projectId, error });
-      });
+    void bootstrapProjectRuntime(projectId).catch((error) => {
+      if (cancelled) return;
+      console.warn('Failed to bootstrap project runtime', { projectId, error });
+    });
     return () => {
       cancelled = true;
-    };
-  }, [projectId, upsertThreadsRuntime]);
-
-  useEffect(() => {
-    if (!projectId) return;
-    void startProjectRuntime(projectId);
-    return () => {
       stopProjectRuntime(projectId);
     };
   }, [projectId]);

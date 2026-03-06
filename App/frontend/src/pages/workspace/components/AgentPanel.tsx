@@ -24,6 +24,7 @@ import type { AgentRunMode } from '../../../types/agentRuntime';
 import type { ChatMessage, ToolCallMetadata } from '../../../types/chat';
 import { resolveRunMessageDisplay, type ThreadMessage, type ThreadToolCall } from '../../../types/thread';
 import ThinkingDisplay from '../../../components/common/ThinkingDisplay';
+import PreexistingLiveRunNotice from '../../../components/common/PreexistingLiveRunNotice';
 import { FunctionCallsThread } from '../../../toolCall/ui';
 import { SubAgentPeekDock } from '../../../components/SubAgentPeek';
 import { TextButton } from '../../../components/TextButton';
@@ -39,6 +40,9 @@ import '../../../pages/workspace/styles/AgentMessages.css';
 import '../../../pages/workspace/styles/MessageEdit.css';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import '../../../pages/workspace/styles/AgentInput.css';
+import { useThreadLiveViewState } from '../../../hooks/useThreadLiveViewState';
+import { hasRenderableAssistantOutput } from '../../../runtime/messageVisibility';
+import { fetchAndReplaceThreadSnapshot } from '../../../runtime/threadHydration';
 
 const EMPTY_MESSAGES: ThreadMessage[] = [];
 
@@ -310,13 +314,18 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     thread,
     messages,
     toolCallsByMessageId,
+    toolCallsById,
+    toolCallIdsByAssistantMessageId,
   } = useThreadStore(
     useShallow((state) => ({
       thread: threadId ? state.threadsById[threadId] : undefined,
       messages: threadId ? state.messagesByThreadId[threadId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES,
       toolCallsByMessageId: state.toolCallsByMessageId,
+      toolCallsById: state.toolCallsById,
+      toolCallIdsByAssistantMessageId: state.toolCallIdsByAssistantMessageId,
     })),
   );
+  const liveView = useThreadLiveViewState(threadId);
 
   const totalObjectCount = useMemo(() => (
     Object.values(unifiedObjects).filter((obj) => (
@@ -353,6 +362,21 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         const wantsSecondary = messageLanguageView[msg.id] === 'secondary' && Boolean(secondaryLanguage);
         const requestedLanguage = wantsSecondary && secondaryLanguage ? secondaryLanguage : primaryLanguage;
         const fallbackLanguage = wantsSecondary ? primaryLanguage : secondaryLanguage;
+        const attachedToolCalls = msg.role === 'assistant'
+          ? (toolCallIdsByAssistantMessageId[msg.id] ?? [])
+            .map((id) => toolCallsById[id])
+            .filter((toolCall): toolCall is ThreadToolCall => Boolean(toolCall))
+          : [];
+
+        if (msg.role === 'assistant' && !hasRenderableAssistantOutput({
+          message: msg,
+          language: requestedLanguage,
+          fallbackLanguage: fallbackLanguage ?? undefined,
+          toolCalls: attachedToolCalls,
+        })) {
+          i++;
+          continue;
+        }
 
         const resolved = msg.isStreaming
           ? {
@@ -415,7 +439,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     }
 
     return items;
-  }, [orderedMessages, toolCallsByMessageId, messageLanguageView, primaryLanguage, secondaryLanguage]);
+  }, [
+    orderedMessages,
+    toolCallsById,
+    toolCallIdsByAssistantMessageId,
+    toolCallsByMessageId,
+    messageLanguageView,
+    primaryLanguage,
+    secondaryLanguage,
+  ]);
 
   const lastAssistantMessageId = useMemo(() => {
     for (let i = orderedMessages.length - 1; i >= 0; i--) {
@@ -466,10 +498,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     return 'Resolve pending operations before sending.';
   }, [sendBlockingState]);
 
-  const hasStreamingMessage = useMemo(
-    () => orderedMessages.some((message) => message.isStreaming),
-    [orderedMessages],
-  );
+  const hasStreamingMessage = liveView?.hasStreamingMessage ?? false;
 
   const latestRunError = useMemo(() => {
     if (thread?.status !== 'error') return undefined;
@@ -507,18 +536,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     }
 
     let cancelled = false;
-    void threadService
-      .listMessages(threadId)
-      .then((response) => {
+    void fetchAndReplaceThreadSnapshot(threadId)
+      .then(() => {
         if (cancelled) return;
-        const nextStore = useThreadStore.getState();
-        nextStore.upsertThread(response.thread);
-        for (const msg of response.messages) {
-          nextStore.upsertMessage(msg);
-        }
-        for (const tc of response.toolCalls) {
-          nextStore.upsertToolCall(tc);
-        }
         hydratedThreadIdsRef.current.add(threadId);
       })
       .catch((error) => {
@@ -1130,7 +1150,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
           );
         })}
 
-        {isLoading && !hasStreamingMessage && thread?.status === 'running' && (
+        {isLoading && !hasStreamingMessage && liveView?.noticeKind === 'preexisting_live_run' && (
+          <PreexistingLiveRunNotice />
+        )}
+
+        {isLoading
+          && !hasStreamingMessage
+          && liveView?.noticeKind !== 'preexisting_live_run'
+          && (thread?.status === 'running' || thread?.status === 'processing') && (
           <div className="typing-indicator">
             <div className="loading-track">
               <div className="loading-bar" />

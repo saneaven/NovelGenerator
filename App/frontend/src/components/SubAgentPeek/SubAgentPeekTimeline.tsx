@@ -10,11 +10,15 @@ import type { ThreadMessage, ThreadToolCall } from '../../types/thread';
 import { resolveRunMessageDisplay } from '../../types/thread';
 import { FunctionCallsThread } from '../../toolCall/ui';
 import ThinkingDisplay from '../common/ThinkingDisplay';
+import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
 import { IconButton } from '../IconButton';
 import { Trash } from '../icons';
 import { MarkdownRenderer } from '../MarkdownRenderer/MarkdownRenderer';
 import { confirm } from '../../store/dialogStore';
 import { decideToolCallsBatch } from '../../runtime/threadCommands';
+import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
+import { hasRenderableAssistantOutput } from '../../runtime/messageVisibility';
+import { fetchAndReplaceThreadSnapshot } from '../../runtime/threadHydration';
 
 function formatRole(role: string, t: (key: string) => string): string {
   if (role === 'user') return t('subAgent.parentAgent');
@@ -64,6 +68,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   const { t } = useTranslation();
   const [isApplying, setIsApplying] = useState(false);
   const hydratedThreadIdsRef = useRef<Set<string>>(new Set());
+  const liveView = useThreadLiveViewState(childThreadId);
 
   const { thread, threadMessages, toolCallsById, toolCallIdsByAssistantMessageId } = useThreadStore(
     useShallow((state) => ({
@@ -91,18 +96,9 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     }
 
     let cancelled = false;
-    void threadService
-      .listMessages(childThreadId)
-      .then((response) => {
+    void fetchAndReplaceThreadSnapshot(childThreadId)
+      .then(() => {
         if (cancelled) return;
-        const nextStore = useThreadStore.getState();
-        nextStore.upsertThread(response.thread);
-        for (const msg of response.messages) {
-          nextStore.upsertMessage(msg);
-        }
-        for (const tc of response.toolCalls) {
-          nextStore.upsertToolCall(tc);
-        }
         hydratedThreadIdsRef.current.add(childThreadId);
       })
       .catch((error) => {
@@ -118,19 +114,24 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
   const messages = useMemo(() => {
     if (!threadMessages) return [];
     return [...threadMessages]
-      .filter((msg) => msg.role === 'assistant' && !msg.isStreaming)
+      .filter((message) => {
+        if (message.role !== 'assistant' || message.isStreaming) return false;
+        const attachedToolCalls = (toolCallIdsByAssistantMessageId[message.id] ?? [])
+          .map((id) => toolCallsById[id])
+          .filter((toolCall): toolCall is ThreadToolCall => Boolean(toolCall));
+        return hasRenderableAssistantOutput({
+          message,
+          language: 'English',
+          toolCalls: attachedToolCalls,
+        });
+      })
       .sort((a, b) => {
         const aSit = a.seqInThread ?? Number.MAX_SAFE_INTEGER;
         const bSit = b.seqInThread ?? Number.MAX_SAFE_INTEGER;
         if (aSit !== bSit) return aSit - bSit;
         return a.createdAt.localeCompare(b.createdAt);
       });
-  }, [threadMessages]);
-
-  const streamingMessage = useMemo(() => {
-    if (!threadMessages) return null;
-    return threadMessages.find((m) => m.role === 'assistant' && m.isStreaming) ?? null;
-  }, [threadMessages]);
+  }, [threadMessages, toolCallIdsByAssistantMessageId, toolCallsById]);
 
   const lastAssistantMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -185,10 +186,10 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     });
   }, [childThreadId]);
 
-  const streamingText = useMemo(() => {
-    if (!streamingMessage?.streamingData?.contentParts) return '';
-    return collapseContent(streamingMessage.streamingData.contentParts).trim();
-  }, [streamingMessage]);
+  const streamingText = useMemo(
+    () => collapseContent(liveView?.contentParts ?? []).trim(),
+    [liveView?.contentParts],
+  );
 
   return (
     <div className="sub-agent-peek-timeline">
@@ -267,7 +268,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
         );
       })}
 
-      {streamingMessage && (
+      {liveView?.hasStreamingMessage && (
         <div className={`agent-message assistant${messages.length > 0 && messages[messages.length - 1].role === 'assistant' ? ' same-role-as-previous' : ''}`}>
           <div className="message-wrapper">
             {!(messages.length > 0 && messages[messages.length - 1].role === 'assistant') && (
@@ -278,7 +279,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
             )}
             <ThinkingDisplay
               messageId={`stream:${childThreadId}`}
-              reasoningDetail={streamingMessage.streamingData?.reasoningDetail}
+              reasoningDetail={liveView.reasoningDetail}
               isStreaming={true}
             />
             {streamingText && (
@@ -291,6 +292,10 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {!liveView?.hasStreamingMessage && liveView?.noticeKind === 'preexisting_live_run' && (
+        <PreexistingLiveRunNotice compact />
       )}
 
     </div>

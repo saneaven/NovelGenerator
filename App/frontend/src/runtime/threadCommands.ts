@@ -105,6 +105,7 @@ function applyToolDecisionResponse(response: ToolCallDecisionResponse): void {
 
 export async function sendThreadMessage(params: SendThreadMessageParams): Promise<boolean> {
   useThreadStore.getState().setAutoContinuePaused(params.threadId, false);
+  useThreadStore.getState().clearPreexistingLiveThread(params.threadId);
 
   const trimmed = params.inputText.trim();
   if (!trimmed) {
@@ -163,6 +164,7 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
 
 export async function resumeThread(params: ResumeThreadParams): Promise<boolean> {
   useThreadStore.getState().setAutoContinuePaused(params.threadId, false);
+  useThreadStore.getState().clearPreexistingLiveThread(params.threadId);
 
   const response = await threadService.chat(params.threadId, {
     input_text: '',

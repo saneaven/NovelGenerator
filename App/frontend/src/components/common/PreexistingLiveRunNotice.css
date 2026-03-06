@@ -1,0 +1,23 @@
+.preexisting-live-run-notice {
+  border: 1px solid rgba(180, 140, 32, 0.28);
+  background: rgba(180, 140, 32, 0.08);
+  color: #d2c08f;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.preexisting-live-run-notice--compact {
+  padding: 10px 12px;
+}
+
+.preexisting-live-run-notice__title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.preexisting-live-run-notice__body {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  opacity: 0.92;
+}

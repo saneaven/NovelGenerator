@@ -4,6 +4,8 @@ import { useJourneyStore } from '../../store/journeyStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useThreadStore } from '../../store/threadStore';
 import { getAutoApproveCategory } from '../../toolCall/registry/autoApprove';
+import { fetchAndReplaceThreadSnapshot } from '../threadHydration';
+import { isLiveThreadStatus, isNonLiveThreadStatus } from '../threadStreamLifecycle';
 import {
   toThreadType,
   nowIso,
@@ -25,8 +27,6 @@ type AutoApproveConfig = {
   search: boolean;
   subAgent: boolean;
 };
-
-const THREAD_TERMINAL_STATUSES = new Set<ThreadStatus>(['done', 'paused', 'error', 'canceled']);
 
 function isPendingToolStatus(status: ToolCallStatus): boolean {
   return status === 'pending' || status === 'streaming' || status === 'validating' || status === 'processing';
@@ -181,6 +181,12 @@ export class ThreadEventConsumer {
       latestRunId: payload.run_id ? String(payload.run_id) : null,
       latestRunStatus: status,
     });
+  }
+
+  private isSuppressed(threadId: string): boolean {
+    const state = useThreadStore.getState();
+    const thread = state.threadsById[threadId];
+    return state.isPreexistingLiveThread(threadId) && isLiveThreadStatus(thread?.status);
   }
 
   private appendDelta(params: {
@@ -668,8 +674,11 @@ export class ThreadEventConsumer {
       const status = String(payload.status ?? 'running') as ThreadStatus;
       const error = payload.error ? String(payload.error) : null;
       this.patchThreadFromRunStatus(threadId, status, error, payload);
-      if (THREAD_TERMINAL_STATUSES.has(status)) {
+      if (isNonLiveThreadStatus(status)) {
         useThreadStore.getState().setThreadStreamActive(threadId, false);
+      }
+      if (isNonLiveThreadStatus(status) && useThreadStore.getState().isPreexistingLiveThread(threadId)) {
+        void fetchAndReplaceThreadSnapshot(threadId);
       }
       await this.checkAutoContinue(threadId);
       return;
@@ -703,6 +712,7 @@ export class ThreadEventConsumer {
     }
 
     if (event.event === 'message:start') {
+      if (this.isSuppressed(threadId)) return;
       const messageId = String(payload.message_id ?? '');
       const runId = payload.run_id ? String(payload.run_id) : '';
       if (!messageId || !runId) return;
@@ -718,6 +728,7 @@ export class ThreadEventConsumer {
     }
 
     if (event.event === 'content:delta') {
+      if (this.isSuppressed(threadId)) return;
       const messageId = String(payload.message_id ?? '');
       const runId = payload.run_id ? String(payload.run_id) : '';
       const text = String(payload.text ?? '');
@@ -727,6 +738,7 @@ export class ThreadEventConsumer {
     }
 
     if (event.event === 'thinking:delta') {
+      if (this.isSuppressed(threadId)) return;
       const messageId = String(payload.message_id ?? '');
       const runId = payload.run_id ? String(payload.run_id) : '';
       const text = String(payload.text ?? '');
@@ -737,11 +749,13 @@ export class ThreadEventConsumer {
     }
 
     if (event.event === 'tool_call:start') {
+      if (this.isSuppressed(threadId)) return;
       this.handleToolCallStart(threadId, payload);
       return;
     }
 
     if (event.event === 'tool_call:delta') {
+      if (this.isSuppressed(threadId)) return;
       this.handleToolCallDelta(threadId, payload);
       return;
     }
@@ -933,6 +947,9 @@ export class ThreadEventConsumer {
       const finalStatus = String(payload.final_status ?? 'done') as ThreadStatus;
       this.patchThreadFromRunStatus(threadId, finalStatus, null, payload);
       useThreadStore.getState().setThreadStreamActive(threadId, false);
+      if (useThreadStore.getState().isPreexistingLiveThread(threadId)) {
+        void fetchAndReplaceThreadSnapshot(threadId);
+      }
       await this.checkAutoContinue(threadId);
       return;
     }
@@ -942,6 +959,9 @@ export class ThreadEventConsumer {
       const error = String(payload.error ?? 'Unknown error');
       this.patchThreadFromRunStatus(threadId, 'error', error, payload);
       useThreadStore.getState().setThreadStreamActive(threadId, false);
+      if (useThreadStore.getState().isPreexistingLiveThread(threadId)) {
+        void fetchAndReplaceThreadSnapshot(threadId);
+      }
       return;
     }
 
@@ -949,6 +969,9 @@ export class ThreadEventConsumer {
       this.flushDeltaBuffer();
       this.patchThreadFromRunStatus(threadId, 'canceled', null, payload);
       useThreadStore.getState().setThreadStreamActive(threadId, false);
+      if (useThreadStore.getState().isPreexistingLiveThread(threadId)) {
+        void fetchAndReplaceThreadSnapshot(threadId);
+      }
     }
   }
 }

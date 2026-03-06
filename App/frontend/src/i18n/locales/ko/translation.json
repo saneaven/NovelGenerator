@@ -36,6 +36,10 @@
     "copied": "{{value}} 복사됨",
     "copyFailed": "복사 실패"
   },
+  "streamRecovery": {
+    "title": "실시간 표시 생략됨",
+    "body": "이 작업은 앱이 열리기 전에 이미 진행 중이었습니다. 중간 생성 과정은 복구하지 않고, 완료되면 최종 결과만 표시합니다."
+  },
   "landing": {
     "title": "Novel Buds",
     "tagline": "AI와 함께 창작 소설을 작성하세요",

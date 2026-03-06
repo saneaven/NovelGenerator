@@ -2,6 +2,7 @@ import { connectProjectStream, type ProjectSSEEvent } from '../api/sseClient';
 import { notificationService } from '../api/notificationService';
 import { EventRouter } from './eventRouter';
 import { useNotificationStore } from '../store/notificationStore';
+import { hydrateProjectRuntimeSummary, reconcilePreexistingLiveThreads } from './projectRuntimeState';
 
 class ProjectRuntimeConnection {
   readonly projectId: string;
@@ -59,14 +60,18 @@ class ProjectRuntimeConnection {
       {
         onReconnect: async () => {
           try {
-            const response = await notificationService.list(this.projectId, {
-              limit: 50,
-              offset: 0,
-              includeRead: true,
-            });
-            useNotificationStore.getState().hydrate(response.items);
+            const [notificationResponse, runtimeRows] = await Promise.all([
+              notificationService.list(this.projectId, {
+                limit: 50,
+                offset: 0,
+                includeRead: true,
+              }),
+              hydrateProjectRuntimeSummary(this.projectId),
+            ]);
+            useNotificationStore.getState().hydrate(notificationResponse.items);
+            await reconcilePreexistingLiveThreads(this.projectId, runtimeRows);
           } catch (error) {
-            console.warn('Failed to rehydrate notifications after SSE reconnect', {
+            console.warn('Failed to rehydrate runtime state after SSE reconnect', {
               projectId: this.projectId,
               error,
             });

@@ -22,9 +22,10 @@ export interface FinalizeMessageFromEndParams {
   ts?: string;
 }
 
-interface ThreadState {
+export interface ThreadState {
   threadsById: Record<string, ThreadInfo | undefined>;
   messagesByThreadId: Record<string, ThreadMessage[] | undefined>;
+  preexistingLiveThreadsById: Record<string, true | undefined>;
 
   toolCallsById: Record<string, ThreadToolCall | undefined>;
   toolCallIdsByMessageId: Record<string, string[] | undefined>;
@@ -46,6 +47,9 @@ interface ThreadState {
   removeThreadCascade: (threadId: string) => void;
   removeThreadsCascade: (threadIds: string[]) => void;
   getThread: (threadId: string) => ThreadInfo | undefined;
+  markPreexistingLiveThreads: (threadIds: string[]) => void;
+  clearPreexistingLiveThread: (threadId: string) => void;
+  isPreexistingLiveThread: (threadId: string) => boolean;
 
   upsertMessage: (message: ThreadMessage) => void;
   finalizeMessageFromEnd: (params: FinalizeMessageFromEndParams) => void;
@@ -53,6 +57,7 @@ interface ThreadState {
   patchMessage: (threadId: string, messageId: string, partial: Partial<ThreadMessage>) => void;
   removeMessage: (threadId: string, messageId: string) => void;
   getMessages: (threadId: string) => ThreadMessage[];
+  replaceThreadMessages: (threadId: string, messages: ThreadMessage[]) => void;
   updateMessageData: (
     threadId: string,
     messageId: string,
@@ -77,6 +82,8 @@ interface ThreadState {
   removeToolCall: (toolCallId: string) => void;
 
   upsertToolCalls: (messageId: string, toolCalls: ThreadToolCall[]) => void;
+  replaceToolCallsForAssistant: (assistantMessageId: string, newToolCalls: ThreadToolCall[]) => void;
+  replaceThreadToolCalls: (threadId: string, toolCalls: ThreadToolCall[]) => void;
   getToolCalls: (messageId: string) => ThreadToolCall[];
   getToolCallsForAssistantMessage: (assistantMessageId: string) => ThreadToolCall[];
 
@@ -185,18 +192,42 @@ function fallbackDataFromStreaming(message: ThreadMessage | undefined): ThreadMe
   };
 }
 
+function buildThreadScopedToolCallState(
+  toolCallsById: Record<string, ThreadToolCall | undefined>,
+): Pick<
+  ThreadState,
+  | 'toolCallsById'
+  | 'toolCallIdsByMessageId'
+  | 'toolCallIdsByAssistantMessageId'
+  | 'toolCallsByMessageId'
+  | 'pendingToolCallIdsByThread'
+  | 'pendingToolCallMessageByThread'
+> {
+  const pendingToolCallIdsByThread = buildPendingByThread(toolCallsById);
+  return {
+    toolCallsById,
+    toolCallIdsByMessageId: buildToolCallIdsByMessageId(toolCallsById),
+    toolCallIdsByAssistantMessageId: buildToolCallIdsByAssistantMessageId(toolCallsById),
+    toolCallsByMessageId: buildMessageMap(toolCallsById),
+    pendingToolCallIdsByThread,
+    pendingToolCallMessageByThread: buildPendingMessageByThread(toolCallsById, pendingToolCallIdsByThread),
+  };
+}
+
 function removeThreadsCascadeState(state: ThreadState, threadIds: string[]): Partial<ThreadState> | ThreadState {
   if (threadIds.length === 0) return state;
 
   const toDelete = new Set(threadIds);
   const nextThreadsById = { ...state.threadsById };
   const nextMessagesByThreadId = { ...state.messagesByThreadId };
+  const nextPreexistingLiveThreadsById = { ...state.preexistingLiveThreadsById };
   const nextActiveStreamByThread = { ...state.activeStreamByThread };
   const nextAutoContinuePausedByThread = { ...state.autoContinuePausedByThread };
 
   for (const threadId of toDelete) {
     delete nextThreadsById[threadId];
     delete nextMessagesByThreadId[threadId];
+    delete nextPreexistingLiveThreadsById[threadId];
     delete nextActiveStreamByThread[threadId];
     delete nextAutoContinuePausedByThread[threadId];
   }
@@ -207,17 +238,11 @@ function removeThreadsCascadeState(state: ThreadState, threadIds: string[]): Par
     nextToolCallsById[toolCallId] = toolCall;
   }
 
-  const pendingToolCallIdsByThread = buildPendingByThread(nextToolCallsById);
-
   return {
     threadsById: nextThreadsById,
     messagesByThreadId: nextMessagesByThreadId,
-    toolCallsById: nextToolCallsById,
-    toolCallIdsByMessageId: buildToolCallIdsByMessageId(nextToolCallsById),
-    toolCallIdsByAssistantMessageId: buildToolCallIdsByAssistantMessageId(nextToolCallsById),
-    toolCallsByMessageId: buildMessageMap(nextToolCallsById),
-    pendingToolCallIdsByThread,
-    pendingToolCallMessageByThread: buildPendingMessageByThread(nextToolCallsById, pendingToolCallIdsByThread),
+    preexistingLiveThreadsById: nextPreexistingLiveThreadsById,
+    ...buildThreadScopedToolCallState(nextToolCallsById),
     activeStreamByThread: nextActiveStreamByThread,
     autoContinuePausedByThread: nextAutoContinuePausedByThread,
   };
@@ -226,6 +251,7 @@ function removeThreadsCascadeState(state: ThreadState, threadIds: string[]): Par
 export const useThreadStore = create<ThreadState>()((set, get) => ({
   threadsById: {},
   messagesByThreadId: {},
+  preexistingLiveThreadsById: {},
 
   toolCallsById: {},
   toolCallIdsByMessageId: {},
@@ -278,7 +304,12 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
     set((s) => {
       const { [threadId]: _, ...rest } = s.threadsById;
       const { [threadId]: __, ...restMsgs } = s.messagesByThreadId;
-      return { threadsById: rest, messagesByThreadId: restMsgs };
+      const { [threadId]: ___, ...restPreexisting } = s.preexistingLiveThreadsById;
+      return {
+        threadsById: rest,
+        messagesByThreadId: restMsgs,
+        preexistingLiveThreadsById: restPreexisting,
+      };
     }),
 
   removeThreadCascade: (threadId) =>
@@ -288,6 +319,26 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
     set((s) => removeThreadsCascadeState(s, threadIds)),
 
   getThread: (threadId) => get().threadsById[threadId],
+
+  markPreexistingLiveThreads: (threadIds) =>
+    set((s) => {
+      if (threadIds.length === 0) return s;
+      const next = { ...s.preexistingLiveThreadsById };
+      for (const threadId of threadIds) {
+        if (!threadId) continue;
+        next[threadId] = true;
+      }
+      return { preexistingLiveThreadsById: next };
+    }),
+
+  clearPreexistingLiveThread: (threadId) =>
+    set((s) => {
+      if (!s.preexistingLiveThreadsById[threadId]) return s;
+      const { [threadId]: _, ...rest } = s.preexistingLiveThreadsById;
+      return { preexistingLiveThreadsById: rest };
+    }),
+
+  isPreexistingLiveThread: (threadId) => Boolean(get().preexistingLiveThreadsById[threadId]),
 
   upsertMessage: (message) =>
     set((s) => {
@@ -403,6 +454,14 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
     }),
 
   getMessages: (threadId) => get().messagesByThreadId[threadId] ?? [],
+
+  replaceThreadMessages: (threadId, messages) =>
+    set((s) => ({
+      messagesByThreadId: {
+        ...s.messagesByThreadId,
+        [threadId]: sortMessages(messages),
+      },
+    })),
 
   updateMessageData: (threadId, messageId, language, entry) =>
     set((s) => {
@@ -562,6 +621,32 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
       };
     }),
 
+  replaceToolCallsForAssistant: (assistantMessageId, newToolCalls) =>
+    set((s) => {
+      const nextToolCallsById = { ...s.toolCallsById };
+      for (const toolCall of Object.values(nextToolCallsById)) {
+        if (!toolCall || toolCall.assistantMessageId !== assistantMessageId) continue;
+        delete nextToolCallsById[toolCall.id];
+      }
+      for (const toolCall of newToolCalls) {
+        nextToolCallsById[toolCall.id] = toolCall;
+      }
+      return buildThreadScopedToolCallState(nextToolCallsById);
+    }),
+
+  replaceThreadToolCalls: (threadId, toolCalls) =>
+    set((s) => {
+      const nextToolCallsById = { ...s.toolCallsById };
+      for (const toolCall of Object.values(nextToolCallsById)) {
+        if (!toolCall || toolCall.threadId !== threadId) continue;
+        delete nextToolCallsById[toolCall.id];
+      }
+      for (const toolCall of toolCalls) {
+        nextToolCallsById[toolCall.id] = toolCall;
+      }
+      return buildThreadScopedToolCallState(nextToolCallsById);
+    }),
+
   getToolCalls: (messageId) => {
     const state = get();
     const ids = state.toolCallIdsByMessageId[messageId] ?? [];
@@ -615,6 +700,7 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
     set({
       threadsById: {},
       messagesByThreadId: {},
+      preexistingLiveThreadsById: {},
       toolCallsById: {},
       toolCallIdsByMessageId: {},
       toolCallIdsByAssistantMessageId: {},
