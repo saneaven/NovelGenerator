@@ -67,18 +67,28 @@
   color: var(--color-brand-primary);
 }
 
-.journey-detail-status--pending_confirmation {
-  background: var(--color-warning-light, oklch(0.95 0.08 80));
-  color: var(--color-warning, oklch(0.65 0.15 80));
+.journey-detail-status--waiting {
+  background: var(--color-warning-light);
+  color: var(--color-warning);
 }
 
-.journey-detail-status--success {
+.journey-detail-status--paused {
+  background: var(--color-warning-light);
+  color: var(--color-warning);
+}
+
+.journey-detail-status--done {
   background: var(--color-success-light);
   color: var(--color-success);
 }
 
+.journey-detail-status--canceled {
+  background: var(--color-surface-subtle);
+  color: var(--color-text-muted);
+}
+
 .journey-detail-status--error {
-  background: var(--color-error-light, oklch(0.95 0.05 20));
+  background: var(--color-error-light);
   color: var(--color-error);
 }
 

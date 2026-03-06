@@ -69,7 +69,7 @@ function getDisplayReasoningDetail(message: ThreadMessage, language: string) {
   return resolved.reasoningDetail;
 }
 
-type DisplayStatus = 'idle' | 'running' | 'processing' | 'pending_confirmation' | 'success' | 'error';
+type DisplayStatus = 'idle' | 'running' | 'processing' | 'waiting' | 'paused' | 'done' | 'canceled' | 'error';
 
 function deriveDisplayStatus(params: {
   threadStatus: string | undefined;
@@ -81,10 +81,11 @@ function deriveDisplayStatus(params: {
   if (threadStatus === 'processing') return 'processing';
   if (isStreamActive) return 'running';
   if (threadStatus === 'error') return 'error';
-  if (hasPendingToolCalls) return 'pending_confirmation';
-  if (threadStatus === 'waiting' || threadStatus === 'paused') return 'pending_confirmation';
+  if (hasPendingToolCalls || threadStatus === 'waiting') return 'waiting';
+  if (threadStatus === 'paused') return 'paused';
   if (threadStatus === 'running') return 'running';
-  if (threadStatus === 'done' || threadStatus === 'canceled') return 'success';
+  if (threadStatus === 'done') return 'done';
+  if (threadStatus === 'canceled') return 'canceled';
   return 'idle';
 }
 
@@ -92,8 +93,10 @@ function statusLabel(status: DisplayStatus): string {
   switch (status) {
     case 'running': return 'Running';
     case 'processing': return 'Processing';
-    case 'pending_confirmation': return 'Needs confirmation';
-    case 'success': return 'Completed';
+    case 'waiting': return 'Needs confirmation';
+    case 'paused': return 'Paused';
+    case 'done': return 'Completed';
+    case 'canceled': return 'Canceled';
     case 'error': return 'Error';
     default: return '';
   }
@@ -233,7 +236,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   );
 
   const isRunning = displayStatus === 'running' || displayStatus === 'processing';
-  const isPending = displayStatus === 'pending_confirmation' || hasPendingToolCalls;
+  const isPending = displayStatus === 'waiting' || hasPendingToolCalls;
   const isFeedbackDisabled = isRunning || isPending;
 
   // Auto-scroll
