@@ -229,6 +229,12 @@
     justify-content: flex-start;
 }
 
+.editor-wrapper__blocks-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .editor-wrapper__sidebar-toggle {
     flex-shrink: 0;
 }

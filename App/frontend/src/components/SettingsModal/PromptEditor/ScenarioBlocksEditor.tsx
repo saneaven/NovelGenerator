@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import ReactDOM from 'react-dom';
 import {
   DndContext,
   KeyboardSensor,
@@ -16,9 +17,10 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown, ChevronUp, Collapse, Copy, Expand, Eye, HamburgerMenu, Plus, Trash } from '../../icons';
+import { ChevronDown, ChevronUp, Copy, Eye, Lightning, MoreHorizontal, Plus, Trash } from '../../icons';
 import { IconButton } from '../../IconButton';
-import { DropdownMenu, DropdownItem } from '../../ui/DropdownMenu';
+import { DropdownMenu, DropdownItem, DropdownDivider } from '../../ui/DropdownMenu';
+import { BaseModal } from '../../BaseModal';
 import ToggleSwitch from '../../common/ToggleSwitch';
 import { NumberInput } from '../../ui/NumberInput';
 import TemplateEditor from './TemplateEditor';
@@ -101,11 +103,17 @@ function buildSampleConversation(runCount: number, includeToolResults: boolean):
   return messages;
 }
 
-const SortableBlockCard: React.FC<{
+interface SortableBlockCardProps {
   block: ScenarioBlock;
   children: React.ReactNode;
   disabled?: boolean;
-}> = ({ block, children, disabled }) => {
+}
+
+const SortableBlockCard: React.FC<SortableBlockCardProps> = ({
+  block,
+  children,
+  disabled,
+}) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: block.id,
     disabled,
@@ -118,10 +126,14 @@ const SortableBlockCard: React.FC<{
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const pinned = isPinned(block);
+
   return (
-    <div ref={setNodeRef} style={style} className={`scenario-block-card ${isPinned(block) ? 'is-pinned' : ''}`}>
-      <div className="scenario-block-card__drag-handle" {...attributes} {...listeners}>
-        <HamburgerMenu size="sm" />
+    <div ref={setNodeRef} style={style} className={`scenario-block-card ${pinned ? 'is-pinned' : ''}`}>
+      <div className="scenario-block-card__drag-row">
+        <div className="scenario-block-card__drag-bar" {...attributes} {...listeners}>
+          <span className="scenario-block-card__drag-bar-indicator" />
+        </div>
       </div>
       <div className="scenario-block-card__content">{children}</div>
     </div>
@@ -135,6 +147,7 @@ interface ScenarioBlocksEditorProps {
   blocks: ScenarioBlock[];
   onBlocksChange: (blocks: ScenarioBlock[]) => void;
   onToast?: (kind: ToastKind, message: string) => void;
+  headerActionsRef?: React.RefObject<HTMLElement | null>;
 }
 
 const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
@@ -143,9 +156,16 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
   systemTemplate,
   blocks,
   onBlocksChange,
+  headerActionsRef,
   onToast,
 }) => {
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
+
+  // Force re-render once the portal target ref is available
+  const [, setPortalReady] = useState(false);
+  useEffect(() => {
+    if (headerActionsRef?.current) setPortalReady(true);
+  }, [headerActionsRef]);
 
   const orderedBlocks = useMemo(() => {
     const list = [...(blocks || [])];
@@ -158,6 +178,7 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
     [orderedBlocks]
   );
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [activeTemplateTab, setActiveTemplateTab] = useState<Record<string, 'user' | 'assistant'>>({});
   const [preview, setPreview] = useState<{
     open: boolean;
     content: string;
@@ -171,6 +192,12 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
   );
 
   const setBlocks = (next: ScenarioBlock[]) => onBlocksChange(normalizeBlockOrders(next));
+
+  const getTemplateTab = (blockId: string): 'user' | 'assistant' =>
+    activeTemplateTab[blockId] || 'user';
+
+  const setTemplateTab = (blockId: string, tab: 'user' | 'assistant') =>
+    setActiveTemplateTab((prev) => ({ ...prev, [blockId]: tab }));
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -265,6 +292,7 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
   };
 
   // Mini simulation state
+  const [simModalOpen, setSimModalOpen] = useState(false);
   const [simN, setSimN] = useState(1);
   const [simIncludeToolResults, setSimIncludeToolResults] = useState(true);
   const [simLoading, setSimLoading] = useState(false);
@@ -305,18 +333,31 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
     }
   };
 
+  const toolbarActions = (
+    <>
+      <IconButton
+        icon={<Lightning size="sm" />}
+        title="Simulate"
+        size="sm"
+        onClick={() => setSimModalOpen(true)}
+      />
+      <DropdownMenu
+        trigger={<IconButton icon={<Plus size="sm" />} title="Add block" size="sm" variant="primary" />}
+        align="right"
+      >
+        <DropdownItem label="Static Block" onClick={() => addBlock('static')} />
+        <DropdownItem label="Range Mapping" onClick={() => addBlock('range')} />
+        <DropdownItem label="Memory Block" onClick={() => addBlock('memory')} disabled={hasMemory} />
+      </DropdownMenu>
+    </>
+  );
+
   return (
     <div className="scenario-blocks-editor">
-      <div className="scenario-blocks-editor__toolbar">
-        <DropdownMenu
-          trigger={<IconButton icon={<Plus size="sm" />} title="Add block" size="sm" />}
-          align="left"
-        >
-          <DropdownItem label="Static Block" onClick={() => addBlock('static')} />
-          <DropdownItem label="Range Mapping" onClick={() => addBlock('range')} />
-          <DropdownItem label="Memory Block" onClick={() => addBlock('memory')} disabled={hasMemory} />
-        </DropdownMenu>
-      </div>
+      {headerActionsRef?.current
+        ? ReactDOM.createPortal(toolbarActions, headerActionsRef.current)
+        : <div className="scenario-blocks-editor__toolbar">{toolbarActions}</div>
+      }
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={orderedBlocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
@@ -337,7 +378,11 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
               })();
 
               return (
-                <SortableBlockCard key={block.id} block={block} disabled={pinned}>
+                <SortableBlockCard
+                  key={block.id}
+                  block={block}
+                  disabled={pinned}
+                >
                   <div className="scenario-block-card__header">
                     <div className="scenario-block-card__title">
                       <span className="scenario-block-card__index">#{idx}</span>
@@ -348,45 +393,26 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                         checked={block.enabled}
                         onChange={(v) => updateBlock(block.id, (b) => ({ ...b, enabled: v }))}
                         label=""
+                        mode="bare"
                       />
-                      <IconButton
-                        icon={<ChevronUp size="sm" />}
-                        onClick={() => setBlocks(arrayMove(orderedBlocks, idx, Math.max(0, idx - 1)))}
-                        title="Move up"
-                        size="sm"
-                        variant="ghost"
-                        disabled={pinned || idx === 0}
-                      />
-                      <IconButton
-                        icon={<ChevronDown size="sm" />}
-                        onClick={() => setBlocks(arrayMove(orderedBlocks, idx, Math.min(orderedBlocks.length - 1, idx + 1)))}
-                        title="Move down"
-                        size="sm"
-                        variant="ghost"
-                        disabled={pinned || idx === orderedBlocks.length - 1}
-                      />
-                      <IconButton
-                        icon={expandedNow ? <Collapse size="sm" /> : <Expand size="sm" />}
-                        onClick={() => toggleExpanded(block.id)}
-                        title={expandedNow ? 'Collapse' : 'Edit'}
-                        size="sm"
-                        variant="ghost"
-                      />
-                      <IconButton
-                        icon={<Copy size="sm" />}
-                        onClick={() => duplicateBlock(block)}
-                        title="Duplicate"
-                        size="sm"
-                        variant="ghost"
-                        disabled={pinned}
-                      />
-                      <IconButton
-                        icon={<Trash size="sm" />}
-                        onClick={() => deleteBlock(block)}
-                        title="Delete"
-                        size="sm"
-                        variant="ghost"
-                      />
+                      <DropdownMenu
+                        trigger={<IconButton icon={<MoreHorizontal size="sm" />} title="More" size="sm" variant="ghost" />}
+                        align="right"
+                      >
+                        <DropdownItem
+                          icon={<Copy size="sm" />}
+                          label="Duplicate"
+                          onClick={() => duplicateBlock(block)}
+                          disabled={pinned}
+                        />
+                        <DropdownDivider />
+                        <DropdownItem
+                          icon={<Trash size="sm" />}
+                          label="Delete"
+                          onClick={() => deleteBlock(block)}
+                          variant="danger"
+                        />
+                      </DropdownMenu>
                     </div>
                   </div>
 
@@ -478,15 +504,35 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                             />
                           </div>
 
-                          <div className="scenario-block-field-header">
-                            <span>User Template</span>
+                          <div className="scenario-block-template-row">
+                            <div className="scenario-block-template-toggle">
+                              <button
+                                type="button"
+                                className={`scenario-block-template-toggle__btn ${getTemplateTab(block.id) === 'user' ? 'active' : ''}`}
+                                onClick={() => setTemplateTab(block.id, 'user')}
+                              >
+                                User
+                              </button>
+                              <button
+                                type="button"
+                                className={`scenario-block-template-toggle__btn ${getTemplateTab(block.id) === 'assistant' ? 'active' : ''}`}
+                                onClick={() => setTemplateTab(block.id, 'assistant')}
+                              >
+                                Assistant
+                              </button>
+                            </div>
                             <IconButton
                               icon={<Eye size="sm" />}
                               onClick={() => {
-                                const injectedInputKey = taskType === 'subAgent' ? 'agentMessage' : 'userMessage';
+                                const isUser = getTemplateTab(block.id) === 'user';
+                                const injectedInputKey = isUser
+                                  ? (taskType === 'subAgent' ? 'agentMessage' : 'userMessage')
+                                  : (taskType === 'subAgent' ? 'subAgentMessage' : 'agentMessage');
                                 setPreview({
                                   open: true,
-                                  content: block.rangeMapping?.user_template || '',
+                                  content: isUser
+                                    ? (block.rangeMapping?.user_template || '')
+                                    : (block.rangeMapping?.assistant_template || ''),
                                   injectedInputKey,
                                   isMemoryPrompt: false,
                                 });
@@ -496,53 +542,53 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                               variant="ghost"
                             />
                           </div>
-                          <TemplateEditor
-                            content={block.rangeMapping.user_template || ''}
-                            onContentChange={(text) =>
-                              updateBlock(block.id, (b) => ({
-                                ...b,
-                                rangeMapping: { ...b.rangeMapping!, user_template: text },
-                              }))
-                            }
-                            validation={null}
-                            isLoading={false}
-                            placeholder="Enter user template..."
-                          />
 
-                          <div className="scenario-block-field-header">
-                            <span>Assistant Template</span>
-                            <IconButton
-                              icon={<Eye size="sm" />}
-                              onClick={() => {
-                                const injectedInputKey = taskType === 'subAgent' ? 'subAgentMessage' : 'agentMessage';
-                                setPreview({
-                                  open: true,
-                                  content: block.rangeMapping?.assistant_template || '',
-                                  injectedInputKey,
-                                  isMemoryPrompt: false,
-                                });
-                              }}
-                              title="Preview"
-                              size="sm"
-                              variant="ghost"
+                          {getTemplateTab(block.id) === 'user' ? (
+                            <TemplateEditor
+                              content={block.rangeMapping.user_template || ''}
+                              onContentChange={(text) =>
+                                updateBlock(block.id, (b) => ({
+                                  ...b,
+                                  rangeMapping: { ...b.rangeMapping!, user_template: text },
+                                }))
+                              }
+                              validation={null}
+                              isLoading={false}
+                              placeholder="Enter user template..."
                             />
-                          </div>
-                          <TemplateEditor
-                            content={block.rangeMapping.assistant_template || ''}
-                            onContentChange={(text) =>
-                              updateBlock(block.id, (b) => ({
-                                ...b,
-                                rangeMapping: { ...b.rangeMapping!, assistant_template: text },
-                              }))
-                            }
-                            validation={null}
-                            isLoading={false}
-                            placeholder="Enter assistant template..."
-                          />
+                          ) : (
+                            <TemplateEditor
+                              content={block.rangeMapping.assistant_template || ''}
+                              onContentChange={(text) =>
+                                updateBlock(block.id, (b) => ({
+                                  ...b,
+                                  rangeMapping: { ...b.rangeMapping!, assistant_template: text },
+                                }))
+                              }
+                              validation={null}
+                              isLoading={false}
+                              placeholder="Enter assistant template..."
+                            />
+                          )}
                         </>
                       )}
                     </div>
                   )}
+
+                  <div
+                    className="scenario-block-card__expand-toggle"
+                    onClick={() => toggleExpanded(block.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleExpanded(block.id);
+                      }
+                    }}
+                  >
+                    {expandedNow ? <ChevronUp size="sm" /> : <ChevronDown size="sm" />}
+                  </div>
                 </SortableBlockCard>
               );
             })}
@@ -550,62 +596,70 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
         </SortableContext>
       </DndContext>
 
-      <div className="scenario-blocks-editor__simulation">
-        <div className="scenario-blocks-editor__simulation-header">
-          <strong>Mini Simulation</strong>
-          <span className="scenario-blocks-editor__simulation-hint">N = number of runs</span>
-        </div>
-        <div className="scenario-blocks-editor__simulation-controls">
-          <label>
-            N
-            <select value={simN} onChange={(e) => setSimN(parseInt(e.target.value, 10) || 1)}>
-              <option value={1}>1</option>
-              <option value={2}>2</option>
-              <option value={3}>3</option>
-              <option value={4}>4</option>
-            </select>
-          </label>
-          <label className="scenario-blocks-editor__simulation-toggle">
-            <input
-              type="checkbox"
-              checked={simIncludeToolResults}
-              onChange={(e) => setSimIncludeToolResults(e.target.checked)}
-            />
-            Attach tool_results after assistant
-          </label>
-          <button type="button" className="scenario-blocks-editor__simulation-run" onClick={runSimulation} disabled={simLoading}>
-            {simLoading ? 'Running…' : 'Run'}
-          </button>
-        </div>
-
-        {simError && <div className="scenario-blocks-editor__simulation-error">{simError}</div>}
-
-        {simResult && (
-          <div className="scenario-blocks-editor__simulation-result">
-            <details>
-              <summary>Rendered system prompt</summary>
-              <pre>{simResult.rendered_system_prompt}</pre>
-            </details>
-
-            <details open>
-              <summary>Rendered conversation</summary>
-              <div className="scenario-blocks-editor__simulation-messages">
-                {simResult.rendered_conversation?.map((m: any, i: number) => (
-                  <div key={i} className={`scenario-sim-msg scenario-sim-msg--${m.role || 'unknown'}`}>
-                    <div className="scenario-sim-msg__role">{m.role}</div>
-                    <pre className="scenario-sim-msg__content">{JSON.stringify(m, null, 2)}</pre>
-                  </div>
-                ))}
-              </div>
-            </details>
-
-            <details>
-              <summary>Memory template</summary>
-              <pre>{simResult.memory_template ?? '(null)'}</pre>
-            </details>
+      <BaseModal
+        isOpen={simModalOpen}
+        onClose={() => setSimModalOpen(false)}
+        title="Mini Simulation"
+        size="medium"
+      >
+        <div className="scenario-simulation-modal__content">
+          <div className="scenario-simulation-modal__controls">
+            <label>
+              N
+              <select value={simN} onChange={(e) => setSimN(parseInt(e.target.value, 10) || 1)}>
+                <option value={1}>1</option>
+                <option value={2}>2</option>
+                <option value={3}>3</option>
+                <option value={4}>4</option>
+              </select>
+            </label>
+            <label className="scenario-simulation-modal__toggle">
+              <input
+                type="checkbox"
+                checked={simIncludeToolResults}
+                onChange={(e) => setSimIncludeToolResults(e.target.checked)}
+              />
+              Attach tool_results after assistant
+            </label>
+            <button
+              type="button"
+              className="scenario-simulation-modal__run"
+              onClick={runSimulation}
+              disabled={simLoading}
+            >
+              {simLoading ? 'Running...' : 'Run'}
+            </button>
           </div>
-        )}
-      </div>
+
+          {simError && <div className="scenario-simulation-modal__error">{simError}</div>}
+
+          {simResult && (
+            <div className="scenario-simulation-modal__result">
+              <details>
+                <summary>Rendered system prompt</summary>
+                <pre>{simResult.rendered_system_prompt}</pre>
+              </details>
+
+              <details open>
+                <summary>Rendered conversation</summary>
+                <div className="scenario-simulation-modal__messages">
+                  {simResult.rendered_conversation?.map((m: any, i: number) => (
+                    <div key={i} className={`scenario-sim-msg scenario-sim-msg--${m.role || 'unknown'}`}>
+                      <div className="scenario-sim-msg__role">{m.role}</div>
+                      <pre className="scenario-sim-msg__content">{JSON.stringify(m, null, 2)}</pre>
+                    </div>
+                  ))}
+                </div>
+              </details>
+
+              <details>
+                <summary>Memory template</summary>
+                <pre>{simResult.memory_template ?? '(null)'}</pre>
+              </details>
+            </div>
+          )}
+        </div>
+      </BaseModal>
 
       {preview.open && (
         <PromptPreviewModal

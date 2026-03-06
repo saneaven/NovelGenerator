@@ -10,23 +10,17 @@
   align-items: center;
 }
 
-.scenario-blocks-editor__toolbar-left {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
 .scenario-blocks-editor__list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
+/* Block card */
 .scenario-block-card {
-  display: grid;
-  grid-template-columns: 24px 1fr;
-  gap: 10px;
-  padding: 10px 10px 10px 6px;
+  display: flex;
+  flex-direction: column;
+  padding: 0 10px 0 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.15);
@@ -36,20 +30,43 @@
   border-color: rgba(255, 176, 32, 0.25);
 }
 
-.scenario-block-card__drag-handle {
+/* Drag bar row with flanking move buttons */
+.scenario-block-card__drag-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  cursor: grab;
-  padding-top: 4px;
-  opacity: 0.7;
+  gap: 8px;
+  padding: 4px 0 0 0;
 }
 
-.scenario-block-card.is-pinned .scenario-block-card__drag-handle {
+.scenario-block-card__drag-bar {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4px 0;
+  cursor: grab;
+}
+
+.scenario-block-card.is-pinned .scenario-block-card__drag-bar {
   cursor: not-allowed;
   opacity: 0.35;
 }
 
+.scenario-block-card__drag-bar-indicator {
+  display: block;
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.25);
+  transition: background 0.15s;
+}
+
+.scenario-block-card__drag-bar:hover .scenario-block-card__drag-bar-indicator {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+/* Content area */
 .scenario-block-card__content {
   display: flex;
   flex-direction: column;
@@ -98,6 +115,24 @@
   flex: none;
 }
 
+/* Bottom expand/collapse chevron */
+.scenario-block-card__expand-toggle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4px 0 6px 0;
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 4px;
+}
+
+.scenario-block-card__expand-toggle:hover {
+  opacity: 0.85;
+}
+
+/* Field rows */
 .scenario-block-field-row {
   display: flex;
   align-items: center;
@@ -114,75 +149,92 @@
   color: inherit;
 }
 
-.scenario-block-field-header {
+/* Template toggle row: pill left, preview right */
+.scenario-block-template-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
-  opacity: 0.9;
 }
 
-.scenario-blocks-editor__simulation {
-  margin-top: 6px;
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.1);
-}
-
-.scenario-blocks-editor__simulation-header {
+/* Template toggle pill (User | Assistant) */
+.scenario-block-template-toggle {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 2px;
+  width: fit-content;
 }
 
-.scenario-blocks-editor__simulation-hint {
+.scenario-block-template-toggle__btn {
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
   font-size: 12px;
-  opacity: 0.7;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
 }
 
-.scenario-blocks-editor__simulation-controls {
+.scenario-block-template-toggle__btn.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.scenario-block-template-toggle__btn:hover:not(.active) {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Simulation modal */
+.scenario-simulation-modal__content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scenario-simulation-modal__controls {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  font-size: 13px;
 }
 
-.scenario-blocks-editor__simulation-controls select {
+.scenario-simulation-modal__controls select {
   margin-left: 6px;
 }
 
-.scenario-blocks-editor__simulation-toggle {
+.scenario-simulation-modal__toggle {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
 }
 
-.scenario-blocks-editor__simulation-run {
+.scenario-simulation-modal__run {
   padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
   color: inherit;
+  cursor: pointer;
 }
 
-.scenario-blocks-editor__simulation-error {
-  margin-top: 8px;
+.scenario-simulation-modal__error {
   font-size: 12px;
   color: #ff6b6b;
 }
 
-.scenario-blocks-editor__simulation-result {
-  margin-top: 10px;
+.scenario-simulation-modal__result {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.scenario-blocks-editor__simulation-result pre {
+.scenario-simulation-modal__result pre {
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 12px;
@@ -193,13 +245,14 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.scenario-blocks-editor__simulation-messages {
+.scenario-simulation-modal__messages {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin-top: 8px;
 }
 
+/* Simulation message cards (reused in modal) */
 .scenario-sim-msg {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
@@ -218,4 +271,3 @@
   margin: 0;
   padding: 8px 10px;
 }
-

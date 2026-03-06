@@ -358,6 +358,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   const [allFragmentContents, setAllFragmentContents] = useState<Map<string, string>>(new Map());
   const allFragmentContentsRef = useRef(allFragmentContents);
   useEffect(() => { allFragmentContentsRef.current = allFragmentContents; }, [allFragmentContents]);
+  const blocksHeaderActionsRef = useRef<HTMLDivElement>(null);
 
   const loadFragmentContents = useCallback(async () => {
     try {
@@ -1538,6 +1539,10 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                           />
                         )}
 
+                        {subTab === 'prompts' && selectedPrompt?.viewKind === 'blocks' && (
+                          <div ref={blocksHeaderActionsRef} className="editor-wrapper__blocks-actions" />
+                        )}
+
                         {subTab === 'fragments' && currentFragmentDraft && (
                           <IconButton
                             icon={<Trash size="sm" />}
@@ -1602,6 +1607,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                           taskSubtype={selectedPrompt.taskSubtype!}
                           systemTemplate={currentScenarioDraft.scenario.system_template || ''}
                           blocks={currentScenarioDraft.scenario.blocks || []}
+                          headerActionsRef={blocksHeaderActionsRef}
                           onBlocksChange={(blocks) => {
                             const taskType = selectedPrompt.taskType;
                             const taskSubtype = selectedPrompt.taskSubtype;

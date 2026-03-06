@@ -125,6 +125,24 @@
   pointer-events: none;
 }
 
+/* Bare mode — track-only, no island */
+.toggle-switch.mode-bare {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: default;
+  display: inline-flex;
+}
+
+.toggle-switch.mode-bare:hover {
+  background: transparent;
+  border: none;
+}
+
+.toggle-switch.mode-bare .toggle-switch-track {
+  cursor: pointer;
+}
+
 /* ===== Mobile Responsive ===== */
 @media (max-width: 768px) {
   .toggle-switch-track {
