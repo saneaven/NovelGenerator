@@ -88,13 +88,14 @@ async def assemble_resume(
     run: RunModel,
     thread: Thread,
     settings: UserSettings,
+    input_payload: dict[str, Any],
 ) -> tuple[str, list[dict[str, Any]], ScenarioBundle | None]:
     if thread.captured_history_conversation_json is None:
         # Cache invalidated (e.g. message deleted) — full rebuild through the
         # same rendering pipeline as create so conversation blocks are applied.
         return await assemble_create(
             db, run=run, thread=thread, settings=settings,
-            create_ctx=CreateContext(input_text="", input_payload={}),
+            create_ctx=CreateContext(input_text="", input_payload=input_payload),
         )
 
     system_prompt = thread.captured_history_system_prompt
@@ -151,7 +152,7 @@ async def assemble_resume(
                     run=run,
                     project_data=project_data,
                     input_text="",
-                    input_payload={},
+                    input_payload=input_payload,
                 )
                 bundle = ScenarioBundle(
                     task_type=task_type,

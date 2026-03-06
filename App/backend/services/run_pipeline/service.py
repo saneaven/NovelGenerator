@@ -238,6 +238,7 @@ class RunPipeline:
                     surface=surface,
                     context_object_ids=[str(x) for x in context_object_ids],
                     journey_target_ids=[str(x) for x in journey_target_ids],
+                    input_payload=normalized_input_payload,
                 )
                 db.add(run)
                 db.flush()
@@ -430,6 +431,56 @@ class RunPipeline:
                 finally:
                     db2.close()
 
+    async def cancel_run_for_delete(self, *, thread_id: UUID, user_id: UUID, timeout_s: float = 5.0) -> None:
+        async with self._thread_lock(thread_id):
+            db = self._db_factory()
+            run_id: UUID | None = None
+            project_id: UUID | None = None
+            try:
+                run = (
+                    db.query(RunModel)
+                    .join(Thread, Thread.id == RunModel.thread_id)
+                    .filter(
+                        Thread.id == thread_id,
+                        Thread.user_id == user_id,
+                        RunModel.status.in_(["queued", "running", "waiting", "processing"]),
+                    )
+                    .order_by(RunModel.created_at.desc())
+                    .first()
+                )
+                if run is None:
+                    return
+                run_id = run.id
+                project_id = run.project_id
+                run.status = "canceled"
+                thread_row = run.thread
+                if thread_row is not None:
+                    thread_row.status = "canceled"
+                db.commit()
+            finally:
+                db.close()
+
+            canceled = await self._cancel_task_and_wait(run_id, timeout_s=max(float(timeout_s), 0.1))
+            if not canceled:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Run cancellation timed out; retry deletion",
+                )
+
+            if project_id is not None:
+                await self._emit(
+                    project_id=project_id,
+                    thread_id=thread_id,
+                    event_name="run:canceled",
+                    data={"run_id": str(run_id)},
+                )
+                await self._emit(
+                    project_id=project_id,
+                    thread_id=thread_id,
+                    event_name="run:status",
+                    data={"run_id": str(run_id), "status": "canceled"},
+                )
+
     # ------------------------------------------------------------------
     # Tool call persistence
     # ------------------------------------------------------------------
@@ -573,6 +624,8 @@ class RunPipeline:
 
             settings: UserSettings = settings_service._get_settings(db, run.user_id)  # pylint: disable=protected-access
 
+            restored_payload = run.input_payload or {}
+
             if create_ctx is not None:
                 system_prompt, conversation, scenario_bundle = await prompt_assembly.assemble_create(
                     db, run=run, thread=thread, settings=settings, create_ctx=create_ctx,
@@ -580,6 +633,7 @@ class RunPipeline:
             else:
                 system_prompt, conversation, scenario_bundle = await prompt_assembly.assemble_resume(
                     db, run=run, thread=thread, settings=settings,
+                    input_payload=restored_payload,
                 )
 
             # Re-check cancellation after prompt assembly committed its transaction.
@@ -595,7 +649,7 @@ class RunPipeline:
                 system_prompt=system_prompt,
                 conversation=conversation,
                 scenario_bundle=scenario_bundle,
-                input_payload=create_ctx.input_payload if create_ctx is not None else {},
+                input_payload=create_ctx.input_payload if create_ctx is not None else restored_payload,
                 assistant_message_ref_out=assistant_message_ref,
                 emit_fn=self._emit,
                 persist_tool_calls_fn=self._persist_tool_calls,

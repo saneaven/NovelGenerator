@@ -754,6 +754,9 @@ class RunModel(Base):
     # Journey-only metadata (per-run targets)
     journey_target_ids = Column(JSONB, nullable=False, default=list)
 
+    # Payload sent with the initial user message (journey params, edit targets, etc.)
+    input_payload = Column(JSONB, nullable=False, default=dict)
+
     # Sub-agent metadata (which parent tool call spawned this run)
     parent_run_id = Column(UUID(as_uuid=True), ForeignKey('runs.id', ondelete='CASCADE'), nullable=True, index=True)
     parent_run_message_id = Column(UUID(as_uuid=True), nullable=True)

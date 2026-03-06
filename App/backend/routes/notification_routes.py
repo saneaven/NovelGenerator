@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -17,13 +18,16 @@ from ..schemas.notifications import (
     NotificationResponse,
 )
 from ..services.notification_service import (
+    ACTIVE_THREAD_DELETE_STATUSES,
     NOTIFICATION_SOURCE_VALUES,
-    delete_all_notifications,
-    delete_notification,
+    NotificationDeleteTarget,
+    delete_notification_targets,
+    list_notification_delete_targets,
     list_notifications,
     mark_notifications_read,
     serialize_notification,
 )
+from ..services.run_pipeline import run_pipeline
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 
 
@@ -35,6 +39,24 @@ def _owned_project_or_404(db: Session, *, project_id: UUID, user_id: UUID) -> Pr
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
+
+
+async def _cancel_linked_journey_threads_for_delete(
+    *,
+    targets: Iterable[NotificationDeleteTarget],
+    user_id: UUID,
+) -> None:
+    seen: set[UUID] = set()
+    for target in targets:
+        thread_id = target.linked_thread_id
+        if (
+            thread_id is None
+            or thread_id in seen
+            or target.linked_thread_status not in ACTIVE_THREAD_DELETE_STATUSES
+        ):
+            continue
+        seen.add(thread_id)
+        await run_pipeline.cancel_run_for_delete(thread_id=thread_id, user_id=user_id)
 
 
 @router.get("/projects/{project_id}/notifications", response_model=NotificationListResponse)
@@ -112,19 +134,32 @@ async def delete_project_notification(
 ):
     _owned_project_or_404(db, project_id=project_id, user_id=current_user.id)
 
-    row = delete_notification(
+    targets = list_notification_delete_targets(
         db,
         user_id=current_user.id,
         project_id=project_id,
         notification_id=notification_id,
     )
-    if row is None:
+    if not targets:
         raise HTTPException(status_code=404, detail="Notification not found")
 
+    await _cancel_linked_journey_threads_for_delete(targets=targets, user_id=current_user.id)
+    db.expire_all()
+
+    deleted_ids, deleted_thread_ids = delete_notification_targets(
+        db,
+        user_id=current_user.id,
+        project_id=project_id,
+        targets=targets,
+    )
+    if not deleted_ids:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    target = targets[0]
     payload = {
-        "id": str(row.id),
-        "source": row.source,
-        "source_ref_id": row.source_ref_id,
+        "id": deleted_ids[0],
+        "source": target.source,
+        "source_ref_id": target.source_ref_id,
     }
     db.commit()
 
@@ -133,6 +168,12 @@ async def delete_project_notification(
         event_name="notification:delete",
         data=payload,
     )
+    if deleted_thread_ids:
+        await runtime_event_dispatcher.emit_project_event(
+            project_id=project_id,
+            event_name="thread:delete",
+            data={"id": deleted_thread_ids[0]},
+        )
 
     return Response(status_code=204)
 
@@ -146,11 +187,20 @@ async def delete_all_project_notifications(
 ):
     _owned_project_or_404(db, project_id=project_id, user_id=current_user.id)
 
-    deleted_ids = delete_all_notifications(
+    targets = list_notification_delete_targets(
         db,
         user_id=current_user.id,
         project_id=project_id,
         only_read=payload.only_read,
+    )
+    await _cancel_linked_journey_threads_for_delete(targets=targets, user_id=current_user.id)
+    db.expire_all()
+
+    deleted_ids, deleted_thread_ids = delete_notification_targets(
+        db,
+        user_id=current_user.id,
+        project_id=project_id,
+        targets=targets,
     )
     db.commit()
 
@@ -159,6 +209,12 @@ async def delete_all_project_notifications(
             project_id=project_id,
             event_name="notification:bulk_delete",
             data={"ids": deleted_ids},
+        )
+    if deleted_thread_ids:
+        await runtime_event_dispatcher.emit_project_event(
+            project_id=project_id,
+            event_name="thread:bulk_delete",
+            data={"ids": deleted_thread_ids},
         )
 
     return DeleteAllNotificationsResponse(deleted=len(deleted_ids), ids=deleted_ids)

@@ -49,6 +49,8 @@ interface JourneyStore {
   createJourney: (journey: AnyJourney) => void;
   updateJourney: (id: string, partial: Partial<Omit<AnyJourney, 'id' | 'kind' | 'input'>>) => void;
   clearJourney: (id: string) => void;
+  clearByThreadId: (threadId: string) => void;
+  clearByThreadIds: (threadIds: string[]) => void;
 
   // Query helpers
   getJourneyById: (id: string) => AnyJourney | undefined;
@@ -103,6 +105,12 @@ export const useJourneyStore = create<JourneyStore>((set, get) => ({
       return { journeys: next, detailJourneyId };
     }),
 
+  clearByThreadId: (threadId) =>
+    set((state) => clearJourneysByThreadIdsState(state, [threadId])),
+
+  clearByThreadIds: (threadIds) =>
+    set((state) => clearJourneysByThreadIdsState(state, threadIds)),
+
   // Query helpers
   getJourneyById: (id) => get().journeys[id],
 
@@ -113,3 +121,27 @@ export const useJourneyStore = create<JourneyStore>((set, get) => ({
       .sort((a, b) => b.createdAt - a.createdAt);
   },
 }));
+
+function clearJourneysByThreadIdsState(
+  state: JourneyStore,
+  threadIds: string[],
+): Partial<JourneyStore> | JourneyStore {
+  if (threadIds.length === 0) return state;
+  const toDelete = new Set(threadIds);
+  let changed = false;
+  const next: Record<string, AnyJourney | undefined> = {};
+  let detailJourneyId = state.detailJourneyId;
+
+  for (const [journeyId, journey] of Object.entries(state.journeys)) {
+    if (journey && journey.threadId && toDelete.has(journey.threadId)) {
+      changed = true;
+      if (detailJourneyId === journeyId) {
+        detailJourneyId = null;
+      }
+      continue;
+    }
+    next[journeyId] = journey;
+  }
+
+  return changed ? { journeys: next, detailJourneyId } : state;
+}

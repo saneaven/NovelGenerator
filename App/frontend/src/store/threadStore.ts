@@ -43,6 +43,8 @@ interface ThreadState {
   setThreadRuntime: (threadId: string, partial: Partial<ThreadInfo>) => void;
   patchThread: (threadId: string, partial: Partial<ThreadInfo>) => void;
   removeThread: (threadId: string) => void;
+  removeThreadCascade: (threadId: string) => void;
+  removeThreadsCascade: (threadIds: string[]) => void;
   getThread: (threadId: string) => ThreadInfo | undefined;
 
   upsertMessage: (message: ThreadMessage) => void;
@@ -110,6 +112,28 @@ function buildMessageMap(toolCallsById: Record<string, ThreadToolCall | undefine
   return byMessageId;
 }
 
+function buildToolCallIdsByMessageId(
+  toolCallsById: Record<string, ThreadToolCall | undefined>,
+): Record<string, string[] | undefined> {
+  const out: Record<string, string[]> = {};
+  for (const tc of Object.values(toolCallsById)) {
+    if (!tc || !tc.messageId) continue;
+    out[tc.messageId] = uniqueIds([...(out[tc.messageId] ?? []), tc.id]);
+  }
+  return out;
+}
+
+function buildToolCallIdsByAssistantMessageId(
+  toolCallsById: Record<string, ThreadToolCall | undefined>,
+): Record<string, string[] | undefined> {
+  const out: Record<string, string[]> = {};
+  for (const tc of Object.values(toolCallsById)) {
+    if (!tc || !tc.assistantMessageId) continue;
+    out[tc.assistantMessageId] = uniqueIds([...(out[tc.assistantMessageId] ?? []), tc.id]);
+  }
+  return out;
+}
+
 function buildPendingByThread(toolCallsById: Record<string, ThreadToolCall | undefined>): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const tc of Object.values(toolCallsById)) {
@@ -158,6 +182,44 @@ function fallbackDataFromStreaming(message: ThreadMessage | undefined): ThreadMe
   return {
     ...(message.data ?? {}),
     [preferLanguage]: entry,
+  };
+}
+
+function removeThreadsCascadeState(state: ThreadState, threadIds: string[]): Partial<ThreadState> | ThreadState {
+  if (threadIds.length === 0) return state;
+
+  const toDelete = new Set(threadIds);
+  const nextThreadsById = { ...state.threadsById };
+  const nextMessagesByThreadId = { ...state.messagesByThreadId };
+  const nextActiveStreamByThread = { ...state.activeStreamByThread };
+  const nextAutoContinuePausedByThread = { ...state.autoContinuePausedByThread };
+
+  for (const threadId of toDelete) {
+    delete nextThreadsById[threadId];
+    delete nextMessagesByThreadId[threadId];
+    delete nextActiveStreamByThread[threadId];
+    delete nextAutoContinuePausedByThread[threadId];
+  }
+
+  const nextToolCallsById: Record<string, ThreadToolCall | undefined> = {};
+  for (const [toolCallId, toolCall] of Object.entries(state.toolCallsById)) {
+    if (!toolCall || toDelete.has(toolCall.threadId)) continue;
+    nextToolCallsById[toolCallId] = toolCall;
+  }
+
+  const pendingToolCallIdsByThread = buildPendingByThread(nextToolCallsById);
+
+  return {
+    threadsById: nextThreadsById,
+    messagesByThreadId: nextMessagesByThreadId,
+    toolCallsById: nextToolCallsById,
+    toolCallIdsByMessageId: buildToolCallIdsByMessageId(nextToolCallsById),
+    toolCallIdsByAssistantMessageId: buildToolCallIdsByAssistantMessageId(nextToolCallsById),
+    toolCallsByMessageId: buildMessageMap(nextToolCallsById),
+    pendingToolCallIdsByThread,
+    pendingToolCallMessageByThread: buildPendingMessageByThread(nextToolCallsById, pendingToolCallIdsByThread),
+    activeStreamByThread: nextActiveStreamByThread,
+    autoContinuePausedByThread: nextAutoContinuePausedByThread,
   };
 }
 
@@ -218,6 +280,12 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
       const { [threadId]: __, ...restMsgs } = s.messagesByThreadId;
       return { threadsById: rest, messagesByThreadId: restMsgs };
     }),
+
+  removeThreadCascade: (threadId) =>
+    set((s) => removeThreadsCascadeState(s, [threadId])),
+
+  removeThreadsCascade: (threadIds) =>
+    set((s) => removeThreadsCascadeState(s, threadIds)),
 
   getThread: (threadId) => get().threadsById[threadId],
 

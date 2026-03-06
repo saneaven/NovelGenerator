@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Iterable
 from uuid import UUID
@@ -12,6 +13,16 @@ from ..models.db_models import NotificationModel, Thread
 
 NOTIFICATION_SOURCE_VALUES = {"journey", "imageTask"}
 NOTIFICATION_STATUS_VALUES = {"running", "pending", "success", "error", "cancelled"}
+ACTIVE_THREAD_DELETE_STATUSES = {"running", "waiting", "processing"}
+
+
+@dataclass(frozen=True)
+class NotificationDeleteTarget:
+    notification_id: UUID
+    source: str
+    source_ref_id: str
+    linked_thread_id: UUID | None
+    linked_thread_status: str | None
 
 
 def _as_uuid(value: UUID | str | None) -> UUID | None:
@@ -306,49 +317,136 @@ def mark_notifications_read(
     return updated_ids
 
 
-def delete_notification(
+def _resolve_linked_journey_thread(
     db: Session,
     *,
     user_id: UUID,
     project_id: UUID,
-    notification_id: UUID,
-) -> NotificationModel | None:
-    row = (
-        db.query(NotificationModel)
+    row: NotificationModel,
+) -> Thread | None:
+    if row.source != "journey":
+        return None
+
+    if row.thread_id is not None:
+        thread = (
+            db.query(Thread)
+            .filter(
+                Thread.id == row.thread_id,
+                Thread.user_id == user_id,
+                Thread.project_id == project_id,
+                Thread.thread_type == "journey",
+            )
+            .first()
+        )
+        if thread is not None:
+            return thread
+
+    fallback_thread_id = _as_uuid(row.source_ref_id)
+    if fallback_thread_id is None or fallback_thread_id == row.thread_id:
+        return None
+
+    return (
+        db.query(Thread)
         .filter(
-            NotificationModel.id == notification_id,
-            NotificationModel.user_id == user_id,
-            NotificationModel.project_id == project_id,
+            Thread.id == fallback_thread_id,
+            Thread.user_id == user_id,
+            Thread.project_id == project_id,
+            Thread.thread_type == "journey",
         )
         .first()
     )
-    if row is None:
-        return None
-    db.delete(row)
-    db.flush()
-    return row
 
 
-def delete_all_notifications(
+def list_notification_delete_targets(
     db: Session,
     *,
     user_id: UUID,
     project_id: UUID,
-    only_read: bool,
-) -> list[str]:
+    notification_id: UUID | None = None,
+    only_read: bool = False,
+) -> list[NotificationDeleteTarget]:
     q = db.query(NotificationModel).filter(
         NotificationModel.user_id == user_id,
         NotificationModel.project_id == project_id,
     )
+    if notification_id is not None:
+        q = q.filter(NotificationModel.id == notification_id)
     if only_read:
         q = q.filter(NotificationModel.is_read == True)  # noqa: E712
 
     rows = q.all()
-    ids = [str(row.id) for row in rows]
+    out: list[NotificationDeleteTarget] = []
     for row in rows:
+        thread = _resolve_linked_journey_thread(
+            db,
+            user_id=user_id,
+            project_id=project_id,
+            row=row,
+        )
+        out.append(
+            NotificationDeleteTarget(
+                notification_id=row.id,
+                source=row.source,
+                source_ref_id=row.source_ref_id,
+                linked_thread_id=(thread.id if thread is not None else None),
+                linked_thread_status=(thread.status if thread is not None else None),
+            )
+        )
+    return out
+
+
+def delete_notification_targets(
+    db: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+    targets: Iterable[NotificationDeleteTarget],
+) -> tuple[list[str], list[str]]:
+    deleted_notification_ids: list[str] = []
+    deleted_thread_ids: list[str] = []
+    unique_thread_ids: list[UUID] = []
+    seen_thread_ids: set[UUID] = set()
+
+    target_list = list(targets)
+    for target in target_list:
+        row = (
+            db.query(NotificationModel)
+            .filter(
+                NotificationModel.id == target.notification_id,
+                NotificationModel.user_id == user_id,
+                NotificationModel.project_id == project_id,
+            )
+            .first()
+        )
+        if row is None:
+            continue
         db.delete(row)
+        deleted_notification_ids.append(str(target.notification_id))
+
+        thread_id = target.linked_thread_id
+        if thread_id is None or thread_id in seen_thread_ids:
+            continue
+        seen_thread_ids.add(thread_id)
+        unique_thread_ids.append(thread_id)
+
+    for thread_id in unique_thread_ids:
+        thread = (
+            db.query(Thread)
+            .filter(
+                Thread.id == thread_id,
+                Thread.user_id == user_id,
+                Thread.project_id == project_id,
+                Thread.thread_type == "journey",
+            )
+            .first()
+        )
+        if thread is None:
+            continue
+        db.delete(thread)
+        deleted_thread_ids.append(str(thread_id))
+
     db.flush()
-    return ids
+    return deleted_notification_ids, deleted_thread_ids
 
 
 def sync_journey_notification_from_runtime_status(

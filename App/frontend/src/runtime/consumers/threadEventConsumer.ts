@@ -1,5 +1,6 @@
 import { threadService, type ToolCallDecisionResponse } from '../../api/threadService';
 import type { ThreadRuntimeEvent } from '../../api/sseClient';
+import { useJourneyStore } from '../../store/journeyStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useThreadStore } from '../../store/threadStore';
 import { getAutoApproveCategory } from '../../toolCall/registry/autoApprove';
@@ -506,6 +507,46 @@ export class ThreadEventConsumer {
     if (this.disposed) return;
     const payload = (event.data ?? {}) as Record<string, unknown>;
     if (payload.project_id && String(payload.project_id) !== this.projectId) return;
+
+    if (event.event === 'thread:delete') {
+      const threadId = payload.id ? String(payload.id) : '';
+      if (!threadId) return;
+      useThreadStore.getState().removeThreadCascade(threadId);
+      useJourneyStore.getState().clearByThreadId(threadId);
+      const toolMap = this.streamingToolCallsByThread.get(threadId);
+      if (toolMap) {
+        for (const tempId of toolMap.values()) {
+          this.streamingArgBuffers.delete(tempId);
+        }
+      }
+      this.streamingToolCallsByThread.delete(threadId);
+      this.autoContinueLockByThread.delete(threadId);
+      this.inFlightResumeByThread.delete(threadId);
+      this.autoAcceptLockByThread.delete(threadId);
+      this.autoContinuedAssistantByThread.delete(threadId);
+      return;
+    }
+
+    if (event.event === 'thread:bulk_delete') {
+      const ids = Array.isArray(payload.ids) ? payload.ids.map((id) => String(id)).filter(Boolean) : [];
+      if (ids.length === 0) return;
+      useThreadStore.getState().removeThreadsCascade(ids);
+      useJourneyStore.getState().clearByThreadIds(ids);
+      for (const threadId of ids) {
+        const toolMap = this.streamingToolCallsByThread.get(threadId);
+        if (toolMap) {
+          for (const tempId of toolMap.values()) {
+            this.streamingArgBuffers.delete(tempId);
+          }
+        }
+        this.streamingToolCallsByThread.delete(threadId);
+        this.autoContinueLockByThread.delete(threadId);
+        this.inFlightResumeByThread.delete(threadId);
+        this.autoAcceptLockByThread.delete(threadId);
+        this.autoContinuedAssistantByThread.delete(threadId);
+      }
+      return;
+    }
 
     const threadId = payload.thread_id ? String(payload.thread_id) : '';
     if (!threadId) return;

@@ -118,7 +118,7 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
 
   const store = useThreadStore.getState();
   const lang = useDisplayLanguageStore.getState().preferredDisplayLanguage
-    || useSettingsStore.getState().settings.mainLanguage;
+    || useSettingsStore.getState().getSettings().mainLanguage;
   const existingMessages = store.getMessages(params.threadId);
   const maxSeq = existingMessages.reduce((max, message) => Math.max(max, message.seqInThread), 0);
   store.appendMessage({

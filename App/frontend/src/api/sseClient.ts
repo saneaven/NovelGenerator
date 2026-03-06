@@ -104,7 +104,31 @@ export type NotificationSSEEvent =
   | NotificationDeleteEvent
   | NotificationBulkDeleteEvent;
 
-export type ProjectSSEEvent = ObjectChangedEvent | ThreadRuntimeEvent | NotificationSSEEvent;
+export type ThreadDeleteEvent = {
+  event: 'thread:delete';
+  data: {
+    id: string;
+    project_id: string;
+    ts: string;
+  };
+};
+
+export type ThreadBulkDeleteEvent = {
+  event: 'thread:bulk_delete';
+  data: {
+    ids: string[];
+    project_id: string;
+    ts: string;
+  };
+};
+
+export type ThreadDeletionSSEEvent = ThreadDeleteEvent | ThreadBulkDeleteEvent;
+
+export type ProjectSSEEvent =
+  | ObjectChangedEvent
+  | ThreadRuntimeEvent
+  | NotificationSSEEvent
+  | ThreadDeletionSSEEvent;
 
 interface ConnectOptions {
   onReconnect?: () => Promise<void> | void;
