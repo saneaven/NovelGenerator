@@ -113,6 +113,10 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
+  const [latestRunContext, setLatestRunContext] = useState<{
+    inputPayload: Record<string, any>;
+    journeyTargetIds: string[];
+  } | null>(null);
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
@@ -162,6 +166,12 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
           for (const tc of response.toolCalls) {
             nextStore.upsertToolCall(tc);
           }
+        }
+        if (response.latestRun) {
+          setLatestRunContext({
+            inputPayload: response.latestRun.inputPayload,
+            journeyTargetIds: response.latestRun.journeyTargetIds,
+          });
         }
       })
       .catch((err) => {
@@ -277,10 +287,14 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
       projectId,
       threadType: 'journey',
       inputText: feedbackText,
+      request: latestRunContext ? {
+        input_payload: latestRunContext.inputPayload,
+        journey_target_ids: latestRunContext.journeyTargetIds,
+      } : undefined,
     });
     setFeedbackText('');
     setFeedbackOpen(false);
-  }, [threadId, projectId, feedbackText]);
+  }, [threadId, projectId, feedbackText, latestRunContext]);
 
   const handleFeedbackKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

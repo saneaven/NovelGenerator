@@ -10,8 +10,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
-revision = "0005_add_run_input_payload"
-down_revision = "0004_remove_prefill"
+revision = "0006_add_run_input_payload"
+down_revision = "0005_reset_native_output_fragments"
 
 
 def upgrade() -> None:

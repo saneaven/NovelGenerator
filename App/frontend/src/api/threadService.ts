@@ -47,6 +47,8 @@ export interface ThreadMessagesResponse {
     language: string;
     createdAt: string;
     updatedAt: string;
+    inputPayload: Record<string, any>;
+    journeyTargetIds: string[];
   } | null;
   messages: ThreadMessage[];
   toolCalls: ThreadToolCall[];
@@ -188,6 +190,10 @@ export const threadService = {
             language: String(latestRunRaw.language ?? ''),
             createdAt: String(latestRunRaw.created_at ?? new Date().toISOString()),
             updatedAt: String(latestRunRaw.updated_at ?? new Date().toISOString()),
+            inputPayload: (latestRunRaw.input_payload ?? {}) as Record<string, any>,
+            journeyTargetIds: Array.isArray(latestRunRaw.journey_target_ids)
+              ? (latestRunRaw.journey_target_ids as string[])
+              : [],
           }
         : null,
       messages: Array.isArray(raw.messages)

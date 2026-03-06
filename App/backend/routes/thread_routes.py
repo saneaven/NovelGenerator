@@ -601,6 +601,8 @@ async def list_thread_messages(
             "language": latest_run.language,
             "created_at": latest_run.created_at,
             "updated_at": latest_run.updated_at,
+            "input_payload": latest_run.input_payload,
+            "journey_target_ids": latest_run.journey_target_ids,
         }
         if latest_run
         else None,
