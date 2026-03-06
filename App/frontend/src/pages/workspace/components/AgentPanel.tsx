@@ -605,16 +605,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
 
   useEffect(() => {
     const container = scrollContainerRef.current;
-    if (!container || !isUserNearBottomRef.current) return;
-    container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
-  }, [displayItems.length, hasStreamingMessage, isLoading]);
-
-  useEffect(() => {
+    if (!container) return;
+    if (isUserNearBottomRef.current) {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
+    }
     if (!isLoading) {
       setShowScrollButton(false);
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
-  }, [isLoading]);
+  }, [displayItems.length, hasStreamingMessage, isLoading]);
 
   const formatTimestamp = useCallback((input: Date | string | number | undefined | null) => {
     if (!input) return '';

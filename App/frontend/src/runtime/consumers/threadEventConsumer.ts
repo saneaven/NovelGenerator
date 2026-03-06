@@ -680,7 +680,7 @@ export class ThreadEventConsumer {
       if (isNonLiveThreadStatus(status) && useThreadStore.getState().isPreexistingLiveThread(threadId)) {
         void fetchAndReplaceThreadSnapshot(threadId);
       }
-      await this.checkAutoContinue(threadId);
+      void this.checkAutoContinue(threadId);
       return;
     }
 
@@ -879,23 +879,24 @@ export class ThreadEventConsumer {
       });
 
       // message:end is the authoritative final state. Wipe all existing
-      // tool calls for this assistant message and replace with the payload.
+      // tool calls for this assistant message and replace with the payload
+      // in a single batched store update to avoid per-item re-renders.
       const toolCalls = Array.isArray(payload.tool_calls) ? payload.tool_calls as Record<string, unknown>[] : [];
-      const existingToolCalls = store.getToolCallsForAssistantMessage(messageId);
-      for (const tc of existingToolCalls) {
-        store.removeToolCall(tc.id);
-      }
       const toolMap = this.streamingToolCallsByThread.get(threadId);
       if (toolMap) {
         for (const tempId of toolMap.values()) this.streamingArgBuffers.delete(tempId);
       }
       this.streamingToolCallsByThread.delete(threadId);
 
+      const now = nowIso();
+      const newToolCalls: import('../types/thread').ThreadToolCall[] = [];
+      const newMessages: import('../types/thread').ThreadMessage[] = [];
+
       for (const tc of toolCalls) {
         const toolCallId = String(tc.tool_call_id ?? '');
         if (!toolCallId) continue;
 
-        store.upsertToolCall({
+        newToolCalls.push({
           id: toolCallId,
           threadId,
           runId,
@@ -911,13 +912,13 @@ export class ThreadEventConsumer {
           result: null,
           childThreadId: null,
           acceptedAt: null,
-          createdAt: nowIso(),
-          updatedAt: nowIso(),
+          createdAt: now,
+          updatedAt: now,
         });
 
         const toolCallMessageId = String(tc.message_id ?? '');
         if (toolCallMessageId) {
-          store.upsertMessage({
+          newMessages.push({
             id: toolCallMessageId,
             threadId,
             runId,
@@ -926,19 +927,28 @@ export class ThreadEventConsumer {
             seqInThread: Number(tc.seq_in_thread ?? 0),
             data: {},
             isStreaming: false,
-            createdAt: nowIso(),
+            createdAt: now,
           });
         }
       }
 
+      // Batch: single store update for tool calls, single for messages
+      store.replaceToolCallsForAssistant(messageId, newToolCalls);
+      if (newMessages.length > 0) {
+        store.upsertMessages(newMessages);
+      }
+
       store.setThreadRuntime(threadId, {
-        latestMessageAt: payload.ts ? String(payload.ts) : nowIso(),
-        updatedAt: payload.ts ? String(payload.ts) : nowIso(),
+        latestMessageAt: payload.ts ? String(payload.ts) : now,
+        updatedAt: payload.ts ? String(payload.ts) : now,
       });
 
-      await this.tryAutoAcceptForAssistant(threadId, messageId);
-      await this.checkAutoContinue(threadId);
-      this.refreshUnresolvedCount(threadId);
+      // Fire-and-forget: don't block the event consumer with network calls.
+      // tryAutoAccept must complete before checkAutoContinue can evaluate.
+      this.tryAutoAcceptForAssistant(threadId, messageId).then(() => {
+        this.checkAutoContinue(threadId);
+        this.refreshUnresolvedCount(threadId);
+      });
       return;
     }
 
@@ -950,7 +960,7 @@ export class ThreadEventConsumer {
       if (useThreadStore.getState().isPreexistingLiveThread(threadId)) {
         void fetchAndReplaceThreadSnapshot(threadId);
       }
-      await this.checkAutoContinue(threadId);
+      void this.checkAutoContinue(threadId);
       return;
     }
 

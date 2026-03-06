@@ -52,6 +52,7 @@ export interface ThreadState {
   isPreexistingLiveThread: (threadId: string) => boolean;
 
   upsertMessage: (message: ThreadMessage) => void;
+  upsertMessages: (messages: ThreadMessage[]) => void;
   finalizeMessageFromEnd: (params: FinalizeMessageFromEndParams) => void;
   appendMessage: (message: ThreadMessage) => void;
   patchMessage: (threadId: string, messageId: string, partial: Partial<ThreadMessage>) => void;
@@ -369,6 +370,26 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
           [message.threadId]: sortMessages(merged),
         },
       };
+    }),
+
+  upsertMessages: (messages) =>
+    set((s) => {
+      if (messages.length === 0) return s;
+      const nextByThread = { ...s.messagesByThreadId };
+      for (const message of messages) {
+        const existing = nextByThread[message.threadId] ?? [];
+        const index = existing.findIndex((m) => m.id === message.id);
+        if (index < 0) {
+          nextByThread[message.threadId] = [...existing, message];
+        } else {
+          nextByThread[message.threadId] = existing.map((m) => (m.id === message.id ? { ...m, ...message } : m));
+        }
+      }
+      // Sort each modified thread's messages once
+      for (const threadId of new Set(messages.map((m) => m.threadId))) {
+        nextByThread[threadId] = sortMessages(nextByThread[threadId] ?? []);
+      }
+      return { messagesByThreadId: nextByThread };
     }),
 
   finalizeMessageFromEnd: (params) =>
