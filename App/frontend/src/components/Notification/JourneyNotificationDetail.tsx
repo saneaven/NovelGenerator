@@ -8,14 +8,13 @@ import { threadService } from '../../api/threadService';
 import {
   sendThreadMessage,
   cancelThread,
-  decideToolCallsBatch,
 } from '../../runtime/threadCommands';
 import { resolveRunMessageDisplay } from '../../types/thread';
 import type { ThreadMessage, ThreadToolCall } from '../../types/thread';
 import type { ToolCallMetadata } from '../../types/chat';
-import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { FunctionCallsThread } from '../../toolCall/ui';
+import { useToolCallDecisions } from '../../toolCall/useToolCallDecisions';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
 import { TextButton } from '../TextButton';
@@ -274,17 +273,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     void cancelThread({ threadId });
   }, [threadId]);
 
-  const handleConfirm = useCallback(async (decisions: ToolCallDecisionMap) => {
-    const accepts = Object.entries(decisions).filter(([, d]) => d === 'accept').map(([id]) => id);
-    const rejects = Object.entries(decisions).filter(([, d]) => d === 'reject').map(([id]) => id);
-    await decideToolCallsBatch({
-      threadId,
-      decisions: [
-        ...accepts.map((id) => ({ toolCallId: id, decision: 'accept' as const })),
-        ...rejects.map((id) => ({ toolCallId: id, decision: 'reject' as const })),
-      ],
-    });
-  }, [threadId]);
+  const { commitDecisions, commitDecisionsAndPause } = useToolCallDecisions(threadId);
 
   const handleSendFeedback = useCallback(() => {
     if (!feedbackText.trim()) return;
@@ -346,10 +335,9 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
               threadId={`journey:${threadId}:${message.id}:calls`}
               mode={isLast && isPending ? 'pending' : 'confirmed'}
               cards={cards}
-              onCommitDecisions={isLast && isPending ? handleConfirm : undefined}
+              onCommitDecisions={isLast && isPending ? commitDecisions : undefined}
+              onCommitDecisionsAndPause={isLast && isPending ? commitDecisionsAndPause : undefined}
               projectId={projectId}
-              isApplyDisabled={false}
-              applyDisabledReason={undefined}
             />
           </div>
         )}

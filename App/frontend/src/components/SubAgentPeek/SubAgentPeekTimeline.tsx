@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { ToolCallMetadata } from '../../types/chat';
 import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
+import { useToolCallDecisions } from '../../toolCall/useToolCallDecisions';
 import { threadService } from '../../api/threadService';
 import { useThreadStore } from '../../store/threadStore';
 import type { ThreadMessage, ThreadToolCall } from '../../types/thread';
@@ -15,7 +16,6 @@ import { IconButton } from '../IconButton';
 import { Trash } from '../icons';
 import { MarkdownRenderer } from '../MarkdownRenderer/MarkdownRenderer';
 import { confirm } from '../../store/dialogStore';
-import { decideToolCallsBatch } from '../../runtime/threadCommands';
 import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
 import { hasRenderableAssistantOutput } from '../../runtime/messageVisibility';
 import { fetchAndReplaceThreadSnapshot } from '../../runtime/threadHydration';
@@ -152,26 +152,25 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     return resolveRunMessageDisplay(message, 'English').reasoningDetail;
   }, []);
 
-  const handleConfirm = useCallback(async (_messageId: string, decisions: ToolCallDecisionMap) => {
+  const { commitDecisions, commitDecisionsAndPause } = useToolCallDecisions(childThreadId);
+
+  const handleConfirm = useCallback(async (decisions: ToolCallDecisionMap) => {
     setIsApplying(true);
     try {
-      const accepts = Object.entries(decisions)
-        .filter(([, d]) => d === 'accept')
-        .map(([id]) => id);
-      const rejects = Object.entries(decisions)
-        .filter(([, d]) => d === 'reject')
-        .map(([id]) => id);
-      await decideToolCallsBatch({
-        threadId: childThreadId,
-        decisions: [
-          ...accepts.map((id) => ({ toolCallId: id, decision: 'accept' as const })),
-          ...rejects.map((id) => ({ toolCallId: id, decision: 'reject' as const })),
-        ],
-      });
+      await commitDecisions(decisions);
     } finally {
       setIsApplying(false);
     }
-  }, [childThreadId]);
+  }, [commitDecisions]);
+
+  const handleConfirmAndPause = useCallback(async (decisions: ToolCallDecisionMap) => {
+    setIsApplying(true);
+    try {
+      await commitDecisionsAndPause(decisions);
+    } finally {
+      setIsApplying(false);
+    }
+  }, [commitDecisionsAndPause]);
 
   const handleDeleteMessage = useCallback(async (messageId: string) => {
     const confirmed = await confirm({
@@ -244,7 +243,12 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
                     cards={cards}
                     onCommitDecisions={
                       waitingDecision && hasPendingCards
-                        ? (decisions) => handleConfirm(String(message.id), decisions)
+                        ? handleConfirm
+                        : undefined
+                    }
+                    onCommitDecisionsAndPause={
+                      waitingDecision && hasPendingCards
+                        ? handleConfirmAndPause
                         : undefined
                     }
                     projectId={projectId}

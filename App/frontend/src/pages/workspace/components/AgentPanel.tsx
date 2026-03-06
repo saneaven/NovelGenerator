@@ -14,9 +14,9 @@ import { runMessageTranslation } from '../../../agent/messageTranslation';
 import { isUuid } from '../../../utils/idUtils';
 import {
   cancelThread,
-  decideToolCallsBatch,
   sendThreadMessage,
 } from '../../../runtime/threadCommands';
+import { useToolCallDecisions } from '../../../toolCall/useToolCallDecisions';
 import ObjectPicker from '../../../components/ObjectPicker/ObjectPicker';
 import AgentSidebar from '../../../components/Agent/AgentSidebar';
 import { DefaultDisplayProcessor } from '../../../agent/processors/DisplayProcessor';
@@ -31,7 +31,7 @@ import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
 import AgentRunModeToggle from '../../../components/ui/AgentRunModeToggle';
 import { buildEditCardsFromToolCallMetadata } from '../../../toolCall';
-import type { ToolCallDecisionMap } from '../../../toolCall/types';
+
 import { Settings, Edit, Trash, Globe, CircularArrow, ChevronDown, Send, Stop } from '../../../components/icons';
 import { getByDotPath } from '../../../utils/dotPath';
 import '../../../pages/workspace/styles/AgentPanel.css';
@@ -684,44 +684,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     });
   }, [threadId]);
 
-  const handleCommitDecisions = useCallback(async (decisions: ToolCallDecisionMap) => {
-    if (!threadId) return;
-    const accepts = Object.entries(decisions)
-      .filter(([, decision]) => decision === 'accept')
-      .map(([id]) => id);
-    const rejects = Object.entries(decisions)
-      .filter(([, decision]) => decision === 'reject')
-      .map(([id]) => id);
-
-    await decideToolCallsBatch({
-      threadId,
-      decisions: [
-        ...accepts.map((id) => ({ toolCallId: id, decision: 'accept' as const })),
-        ...rejects.map((id) => ({ toolCallId: id, decision: 'reject' as const })),
-      ],
-    });
-  }, [threadId]);
-
-  const handleCommitDecisionsAndPause = useCallback(async (decisions: ToolCallDecisionMap) => {
-    if (!threadId) return;
-
-    useThreadStore.getState().setAutoContinuePaused(threadId, true);
-
-    const accepts = Object.entries(decisions)
-      .filter(([, decision]) => decision === 'accept')
-      .map(([id]) => id);
-    const rejects = Object.entries(decisions)
-      .filter(([, decision]) => decision === 'reject')
-      .map(([id]) => id);
-
-    await decideToolCallsBatch({
-      threadId,
-      decisions: [
-        ...accepts.map((id) => ({ toolCallId: id, decision: 'accept' as const })),
-        ...rejects.map((id) => ({ toolCallId: id, decision: 'reject' as const })),
-      ],
-    });
-  }, [threadId]);
+  const { commitDecisions, commitDecisionsAndPause } = useToolCallDecisions(threadId ?? null);
 
   const handleStartMessageEdit = useCallback((messageId: string, currentText: string) => {
     setEditingMessageId(messageId);
@@ -952,8 +915,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                       threadId={`agent:${selectedAgentId ?? 'none'}:tg:${item.assistantMessageId}`}
                       mode={groupMode}
                       cards={allCards}
-                      onCommitDecisions={groupMode === 'pending' ? handleCommitDecisions : undefined}
-                      onCommitDecisionsAndPause={groupMode === 'pending' ? handleCommitDecisionsAndPause : undefined}
+                      onCommitDecisions={groupMode === 'pending' ? commitDecisions : undefined}
+                      onCommitDecisionsAndPause={groupMode === 'pending' ? commitDecisionsAndPause : undefined}
                       onDeleteCard={(cardId) => void handleDeleteSingleToolCall(cardId)}
                       projectId={projectId}
                     />
