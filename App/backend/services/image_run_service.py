@@ -725,7 +725,7 @@ class ImageRunService:
             row = db.query(ImageRunModel).filter(ImageRunModel.id == image_run_id).first()
             if row is None:
                 return
-            payload = self.serialize(db, row).model_dump()
+            payload = self.serialize(db, row).model_dump(mode="json")
             await runtime_event_dispatcher.emit_project_event(
                 project_id=row.project_id,
                 event_name="image_run:update",

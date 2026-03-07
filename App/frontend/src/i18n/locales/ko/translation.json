@@ -506,6 +506,14 @@
         "positivePrompt": "긍정 프롬프트",
         "negativePrompt": "부정 프롬프트"
       },
+      "styleEditor": {
+        "title": "이미지 스타일 편집기",
+        "editStyles": "스타일 편집",
+        "addStyle": "스타일 추가",
+        "deleteStyle": "스타일 삭제",
+        "confirmDelete": "이 스타일을 삭제하시겠습니까?",
+        "noStyles": "설정된 스타일이 없습니다. \"스타일 추가\"를 클릭하여 새로 만드세요."
+      },
       "note": "참고: 선택한 제공자의 API 키가 자격 증명 탭에서 설정되어 있는지 확인하세요."
     },
     "taskConfig": {

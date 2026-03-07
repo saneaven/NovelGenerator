@@ -1,15 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
     ImageGenConfig,
     ImageProviderType,
-    NaturalImageStyle,
-    TagBasedImageStyle,
 } from '../../store/settingsStore';
-import { generateTempId } from '../../utils/tempId';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import { NumberInput } from '../ui/NumberInput';
+import ImageStyleEditorModal from './ImageStyleEditorModal';
 import './ImageGenPanel.css';
 
 interface ImageGenPanelProps {
@@ -84,10 +82,9 @@ const NOVELAI_NOISE_SCHEDULES = [
     'polyexponential',
 ];
 
-const generateId = (): string => generateTempId();
-
 const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
     const { t } = useTranslation();
+    const [showStyleModal, setShowStyleModal] = useState(false);
     const currentPromptType = PROVIDER_PROMPT_TYPES[config.provider];
     const isTagBased = currentPromptType === 'tag_based';
     const isNovelAI = config.provider === 'novelai';
@@ -103,70 +100,6 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
             provider,
             model: defaultModel,
             size: defaultSize,
-        });
-    };
-
-    // Natural style handlers
-    const handleAddNaturalStyle = () => {
-        const newStyle: NaturalImageStyle = {
-            id: generateId(),
-            name: 'New Style',
-            prefix: '',
-            postfix: '',
-        };
-        onChange({
-            ...config,
-            naturalStyles: [...config.naturalStyles, newStyle],
-        });
-    };
-
-    const handleUpdateNaturalStyle = (id: string, updates: Partial<NaturalImageStyle>) => {
-        onChange({
-            ...config,
-            naturalStyles: config.naturalStyles.map(s =>
-                s.id === id ? { ...s, ...updates } : s
-            ),
-        });
-    };
-
-    const handleDeleteNaturalStyle = (id: string) => {
-        onChange({
-            ...config,
-            naturalStyles: config.naturalStyles.filter(s => s.id !== id),
-            selectedNaturalStyleId: config.selectedNaturalStyleId === id ? null : config.selectedNaturalStyleId,
-        });
-    };
-
-    // Tag-based style handlers
-    const handleAddTagBasedStyle = () => {
-        const newStyle: TagBasedImageStyle = {
-            id: generateId(),
-            name: 'New Style',
-            positivePrefix: '',
-            positivePostfix: '',
-            negativePrefix: '',
-            negativePostfix: '',
-        };
-        onChange({
-            ...config,
-            tagBasedStyles: [...config.tagBasedStyles, newStyle],
-        });
-    };
-
-    const handleUpdateTagBasedStyle = (id: string, updates: Partial<TagBasedImageStyle>) => {
-        onChange({
-            ...config,
-            tagBasedStyles: config.tagBasedStyles.map(s =>
-                s.id === id ? { ...s, ...updates } : s
-            ),
-        });
-    };
-
-    const handleDeleteTagBasedStyle = (id: string) => {
-        onChange({
-            ...config,
-            tagBasedStyles: config.tagBasedStyles.filter(s => s.id !== id),
-            selectedTagBasedStyleId: config.selectedTagBasedStyleId === id ? null : config.selectedTagBasedStyleId,
         });
     };
 
@@ -425,216 +358,76 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                 </div>
             )}
 
-            {/* Natural Language Custom Styles Section */}
-            {!isTagBased && (
-                <div className="custom-styles-section">
-                    <div className="section-header">
-                        <h4>{t('settings.imageGen.naturalStyles.title')}</h4>
-                        <p className="section-description">
-                            {t('settings.imageGen.naturalStyles.description')}
-                        </p>
-                    </div>
-
-                    <div className="setting-item">
-                        <label className="setting-label">
-                            <span className="label-text">{t('settings.imageGen.naturalStyles.defaultStyle')}</span>
-                            <span className="label-hint">{t('settings.imageGen.naturalStyles.defaultStyleHint')}</span>
-                        </label>
-                        <div className="style-select-row">
-                            <CustomSelect
-                                value={config.selectedNaturalStyleId || ''}
-                                onChange={(value) => onChange({ ...config, selectedNaturalStyleId: value || null })}
-                                options={[
-                                    { value: '', label: t('settings.imageGen.naturalStyles.none') },
-                                    ...config.naturalStyles.map((s) => ({
-                                        value: s.id,
-                                        label: s.name,
-                                    })),
-                                ]}
-                            />
-                            <TextButton variant="secondary" size="sm" onClick={handleAddNaturalStyle}>
-                                {t('settings.imageGen.naturalStyles.addNew')}
-                            </TextButton>
-                        </div>
-                    </div>
-
-                    {config.naturalStyles.length > 0 && (
-                        <div className="custom-styles-list">
-                            {config.naturalStyles.map((style) => (
-                                <div key={style.id} className="custom-style-item">
-                                    <div className="style-header">
-                                        <input
-                                            type="text"
-                                            value={style.name}
-                                            onChange={(e) => handleUpdateNaturalStyle(style.id, { name: e.target.value })}
-                                            className="style-name-input"
-                                            placeholder={t('settings.imageGen.naturalStyles.styleName')}
-                                        />
-                                        <button
-                                            className="delete-style-button"
-                                            onClick={() => handleDeleteNaturalStyle(style.id)}
-                                            title={t('settings.imageGen.naturalStyles.deleteStyle')}
-                                        >
-                                            &times;
-                                        </button>
-                                    </div>
-                                    <div className="style-fields">
-                                        <div className="style-field">
-                                            <label>{t('settings.imageGen.naturalStyles.prefix')}</label>
-                                            <input
-                                                type="text"
-                                                value={style.prefix}
-                                                onChange={(e) => handleUpdateNaturalStyle(style.id, { prefix: e.target.value })}
-                                                placeholder={t('settings.imageGen.naturalStyles.prefixPlaceholder')}
-                                            />
-                                        </div>
-                                        <div className="style-field">
-                                            <label>{t('settings.imageGen.naturalStyles.postfix')}</label>
-                                            <input
-                                                type="text"
-                                                value={style.postfix}
-                                                onChange={(e) => handleUpdateNaturalStyle(style.id, { postfix: e.target.value })}
-                                                placeholder={t('settings.imageGen.naturalStyles.postfixPlaceholder')}
-                                            />
-                                        </div>
-                                    </div>
-                                    {(style.prefix || style.postfix) && (
-                                        <div className="style-preview">
-                                            <span className="preview-label">{t('settings.imageGen.naturalStyles.preview')}</span>
-                                            <span className="preview-text">
-                                                {style.prefix}<em>[prompt]</em>{style.postfix}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
+            {/* Custom Styles Section */}
+            <div className="custom-styles-section">
+                <div className="section-header">
+                    <h4>{isTagBased ? t('settings.imageGen.tagBasedStyles.title') : t('settings.imageGen.naturalStyles.title')}</h4>
+                    <p className="section-description">
+                        {isTagBased ? t('settings.imageGen.tagBasedStyles.description') : t('settings.imageGen.naturalStyles.description')}
+                    </p>
                 </div>
-            )}
 
-            {/* Tag-Based Custom Styles Section */}
-            {isTagBased && (
-                <div className="custom-styles-section">
-                    <div className="section-header">
-                        <h4>{t('settings.imageGen.tagBasedStyles.title')}</h4>
-                        <p className="section-description">
-                            {t('settings.imageGen.tagBasedStyles.description')}
-                        </p>
+                <div className="setting-item">
+                    <label className="setting-label">
+                        <span className="label-text">{t('settings.imageGen.naturalStyles.defaultStyle')}</span>
+                        <span className="label-hint">{t('settings.imageGen.naturalStyles.defaultStyleHint')}</span>
+                    </label>
+                    <div className="style-select-row">
+                        <CustomSelect
+                            value={isTagBased ? (config.selectedTagBasedStyleId || '') : (config.selectedNaturalStyleId || '')}
+                            onChange={(value) => onChange({
+                                ...config,
+                                ...(isTagBased
+                                    ? { selectedTagBasedStyleId: value || null }
+                                    : { selectedNaturalStyleId: value || null }
+                                ),
+                            })}
+                            options={[
+                                { value: '', label: t('settings.imageGen.naturalStyles.none') },
+                                ...(isTagBased ? config.tagBasedStyles : config.naturalStyles).map((s) => ({
+                                    value: s.id,
+                                    label: s.name,
+                                })),
+                            ]}
+                        />
+                        <TextButton variant="secondary" size="sm" onClick={() => setShowStyleModal(true)}>
+                            {t('settings.imageGen.styleEditor.editStyles')}
+                        </TextButton>
                     </div>
-
-                    <div className="setting-item">
-                        <label className="setting-label">
-                            <span className="label-text">{t('settings.imageGen.naturalStyles.defaultStyle')}</span>
-                            <span className="label-hint">{t('settings.imageGen.naturalStyles.defaultStyleHint')}</span>
-                        </label>
-                        <div className="style-select-row">
-                            <CustomSelect
-                                value={config.selectedTagBasedStyleId || ''}
-                                onChange={(value) => onChange({ ...config, selectedTagBasedStyleId: value || null })}
-                                options={[
-                                    { value: '', label: t('settings.imageGen.naturalStyles.none') },
-                                    ...config.tagBasedStyles.map((s) => ({
-                                        value: s.id,
-                                        label: s.name,
-                                    })),
-                                ]}
-                            />
-                            <TextButton variant="secondary" size="sm" onClick={handleAddTagBasedStyle}>
-                                {t('settings.imageGen.naturalStyles.addNew')}
-                            </TextButton>
-                        </div>
-                    </div>
-
-                    {config.tagBasedStyles.length > 0 && (
-                        <div className="custom-styles-list">
-                            {config.tagBasedStyles.map((style) => (
-                                <div key={style.id} className="custom-style-item">
-                                    <div className="style-header">
-                                        <input
-                                            type="text"
-                                            value={style.name}
-                                            onChange={(e) => handleUpdateTagBasedStyle(style.id, { name: e.target.value })}
-                                            className="style-name-input"
-                                            placeholder={t('settings.imageGen.naturalStyles.styleName')}
-                                        />
-                                        <button
-                                            className="delete-style-button"
-                                            onClick={() => handleDeleteTagBasedStyle(style.id)}
-                                            title={t('settings.imageGen.naturalStyles.deleteStyle')}
-                                        >
-                                            &times;
-                                        </button>
-                                    </div>
-                                    <div className="style-fields tag-based-fields">
-                                        <div className="style-field-group">
-                                            <label className="field-group-label">{t('settings.imageGen.tagBasedStyles.positivePrompt')}</label>
-                                            <div className="field-row">
-                                                <div className="style-field">
-                                                    <label>{t('settings.imageGen.naturalStyles.prefix')}</label>
-                                                    <input
-                                                        type="text"
-                                                        value={style.positivePrefix}
-                                                        onChange={(e) => handleUpdateTagBasedStyle(style.id, { positivePrefix: e.target.value })}
-                                                        placeholder={t('settings.imageGen.naturalStyles.prefixPlaceholder')}
-                                                    />
-                                                </div>
-                                                <div className="style-field">
-                                                    <label>{t('settings.imageGen.naturalStyles.postfix')}</label>
-                                                    <input
-                                                        type="text"
-                                                        value={style.positivePostfix}
-                                                        onChange={(e) => handleUpdateTagBasedStyle(style.id, { positivePostfix: e.target.value })}
-                                                        placeholder={t('settings.imageGen.naturalStyles.postfixPlaceholder')}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="style-field-group">
-                                            <label className="field-group-label">{t('settings.imageGen.tagBasedStyles.negativePrompt')}</label>
-                                            <div className="field-row">
-                                                <div className="style-field">
-                                                    <label>{t('settings.imageGen.naturalStyles.prefix')}</label>
-                                                    <input
-                                                        type="text"
-                                                        value={style.negativePrefix}
-                                                        onChange={(e) => handleUpdateTagBasedStyle(style.id, { negativePrefix: e.target.value })}
-                                                        placeholder={t('settings.imageGen.naturalStyles.prefixPlaceholder')}
-                                                    />
-                                                </div>
-                                                <div className="style-field">
-                                                    <label>{t('settings.imageGen.naturalStyles.postfix')}</label>
-                                                    <input
-                                                        type="text"
-                                                        value={style.negativePostfix}
-                                                        onChange={(e) => handleUpdateTagBasedStyle(style.id, { negativePostfix: e.target.value })}
-                                                        placeholder={t('settings.imageGen.naturalStyles.postfixPlaceholder')}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {(style.positivePrefix || style.positivePostfix || style.negativePrefix || style.negativePostfix) && (
-                                        <div className="style-preview tag-based">
-                                            <div className="preview-row">
-                                                <span className="preview-label positive">+</span>
-                                                <span className="preview-text">
-                                                    {style.positivePrefix}<em>[prompt]</em>{style.positivePostfix}
-                                                </span>
-                                            </div>
-                                            <div className="preview-row">
-                                                <span className="preview-label negative">−</span>
-                                                <span className="preview-text">
-                                                    {style.negativePrefix}<em>[prompt]</em>{style.negativePostfix}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </div>
+            </div>
+
+            {/* Style Editor Modal */}
+            {showStyleModal && (
+                isTagBased ? (
+                    <ImageStyleEditorModal
+                        isOpen={showStyleModal}
+                        onClose={() => setShowStyleModal(false)}
+                        mode="tag_based"
+                        styles={config.tagBasedStyles}
+                        onChange={(styles) => onChange({
+                            ...config,
+                            tagBasedStyles: styles,
+                            selectedTagBasedStyleId: config.selectedTagBasedStyleId && styles.some(s => s.id === config.selectedTagBasedStyleId)
+                                ? config.selectedTagBasedStyleId
+                                : null,
+                        })}
+                    />
+                ) : (
+                    <ImageStyleEditorModal
+                        isOpen={showStyleModal}
+                        onClose={() => setShowStyleModal(false)}
+                        mode="natural"
+                        styles={config.naturalStyles}
+                        onChange={(styles) => onChange({
+                            ...config,
+                            naturalStyles: styles,
+                            selectedNaturalStyleId: config.selectedNaturalStyleId && styles.some(s => s.id === config.selectedNaturalStyleId)
+                                ? config.selectedNaturalStyleId
+                                : null,
+                        })}
+                    />
+                )
             )}
 
             <div className="panel-note">

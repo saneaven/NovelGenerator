@@ -7,11 +7,14 @@ from typing import Any, Callable
 from uuid import UUID
 
 from fastapi import HTTPException
+from jinja2.exceptions import TemplateSyntaxError, UndefinedError
+from jinja2.sandbox import SecurityError
 from sqlalchemy.orm import Session
 
 from ...models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thread, UserSettings
 from ..runtime_event_dispatcher import RuntimeEventDispatcher
 from ..settings_service import settings_service
+from ..template_engine import FragmentNotFoundError, TemplateRenderLimitError, format_template_error
 from ..tool_engine import tool_engine
 from ..tool_engine.contracts import ToolOffer
 from .contracts import CreateContext
@@ -67,6 +70,23 @@ def _has_message_content(data: dict | None) -> bool:
         if entry.get("reasoningDetail"):
             return True
     return False
+
+
+def _format_user_run_error(exc: Exception) -> str:
+    if isinstance(
+        exc,
+        (
+            FragmentNotFoundError,
+            TemplateRenderLimitError,
+            SecurityError,
+            TemplateSyntaxError,
+            UndefinedError,
+        ),
+    ):
+        return format_template_error(exc)
+
+    text = str(exc).strip()
+    return text or "Run failed."
 
 
 class RunPipeline:
@@ -690,11 +710,12 @@ class RunPipeline:
         except Exception as exc:  # noqa: BLE001
             logger.error("Run %s failed: %s", run_id, exc, exc_info=True)
             db.rollback()
+            user_error = _format_user_run_error(exc)
             run = db.query(RunModel).filter(RunModel.id == run_id).first()
             if run is not None:
                 thread = run.thread
                 run.status = "error"
-                run.error = str(exc)
+                run.error = user_error
                 if thread is not None:
                     thread.status = "error"
                 try:
@@ -722,7 +743,7 @@ class RunPipeline:
                         event_name="run:error",
                         data={
                             "run_id": str(run.id),
-                            "error": str(exc),
+                            "error": user_error,
                         },
                     )
                     await self._emit(
@@ -732,7 +753,7 @@ class RunPipeline:
                         data={
                             "run_id": str(run.id),
                             "status": "error",
-                            "error": str(exc),
+                            "error": user_error,
                         },
                     )
         finally:

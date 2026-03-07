@@ -506,6 +506,14 @@
         "positivePrompt": "Positive Prompt",
         "negativePrompt": "Negative Prompt"
       },
+      "styleEditor": {
+        "title": "Image Style Editor",
+        "editStyles": "Edit Styles",
+        "addStyle": "Add Style",
+        "deleteStyle": "Delete Style",
+        "confirmDelete": "Are you sure you want to delete this style?",
+        "noStyles": "No styles configured. Click \"Add Style\" to create one."
+      },
       "note": "Note: Make sure you have configured the API key for the selected provider in the Credentials tab."
     },
     "taskConfig": {

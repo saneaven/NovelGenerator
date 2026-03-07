@@ -20,7 +20,6 @@ FRAGMENTS_DIR = BASE_DIR / "prompts" / "default_fragments"
 
 MAX_TEMPLATE_DEPTH = 10
 MAX_TEMPLATE_RESOLUTION_COUNT = 64
-MAX_RENDERED_OUTPUT_CHARS = 262_144
 
 
 class FragmentNotFoundError(RuntimeError):
@@ -53,10 +52,6 @@ class RenderBudget:
         self.resolution_count += 1
         if self.resolution_count > MAX_TEMPLATE_RESOLUTION_COUNT:
             raise TemplateRenderLimitError("count")
-
-    def note_output_length(self, rendered: str) -> None:
-        if len(rendered) > MAX_RENDERED_OUTPUT_CHARS:
-            raise TemplateRenderLimitError("output")
 
 
 @dataclass(frozen=True)
@@ -473,7 +468,6 @@ def render_template(env: Environment, template_text: str, data: dict[str, Any]) 
     try:
         template = env.from_string(template_text)
         rendered = template.render(**data)
-        budget.note_output_length(rendered)
         return rendered
     except TemplateNotFound as exc:
         raise FragmentNotFoundError(_fragment_reference_from_exception(exc)) from exc
