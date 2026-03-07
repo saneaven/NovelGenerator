@@ -84,6 +84,8 @@ export interface ToolCallWithStatus extends NormalizedToolCall {
   status: ToolCallStatus;
   /** Auxiliary tool-specific UI payload from backend */
   extraContent?: Record<string, unknown> | null;
+  /** Linked image generation lifecycle for image tools */
+  imageRunId?: string | null;
   /** Error message (when failed) or user-provided reason (when rejected) */
   reason?: string;
   /** Type of failure when status is 'failed' */

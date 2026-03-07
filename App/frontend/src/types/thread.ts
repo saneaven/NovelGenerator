@@ -47,6 +47,7 @@ export interface ThreadToolCall {
   status: ToolCallStatus;
   reason?: string | null;
   result?: Record<string, unknown> | null;
+  imageRunId?: string | null;
   childThreadId?: string | null;
   acceptedAt?: string | null;
   createdAt: string;

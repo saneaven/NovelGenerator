@@ -134,6 +134,7 @@ function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
     extra_content: toolCall.extraContent ?? undefined,
     status: toolCall.status as any,
     reason: toolCall.reason ?? undefined,
+    imageRunId: toolCall.imageRunId ?? undefined,
     failureType: toolCall.status === 'failed'
       ? (toolCall.reason?.startsWith('VALIDATION::') ? 'validation' : 'execution')
       : undefined,

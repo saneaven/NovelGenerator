@@ -1,6 +1,8 @@
 import { connectProjectStream, type ProjectSSEEvent } from '../api/sseClient';
+import { assetService } from '../api/assetService';
 import { notificationService } from '../api/notificationService';
 import { EventRouter } from './eventRouter';
+import { useImageRunStore } from '../imageRun';
 import { useNotificationStore } from '../store/notificationStore';
 import { hydrateProjectRuntimeSummary, reconcilePreexistingLiveThreads } from './projectRuntimeState';
 
@@ -60,15 +62,17 @@ class ProjectRuntimeConnection {
       {
         onReconnect: async () => {
           try {
-            const [notificationResponse, runtimeRows] = await Promise.all([
+            const [notificationResponse, runtimeRows, imageRuns] = await Promise.all([
               notificationService.list(this.projectId, {
                 limit: 50,
                 offset: 0,
                 includeRead: true,
               }),
               hydrateProjectRuntimeSummary(this.projectId),
+              assetService.listImageRuns(this.projectId, 'active'),
             ]);
             useNotificationStore.getState().hydrate(notificationResponse.items);
+            useImageRunStore.getState().upsertRuns(imageRuns);
             await reconcilePreexistingLiveThreads(this.projectId, runtimeRows);
           } catch (error) {
             console.warn('Failed to rehydrate runtime state after SSE reconnect', {

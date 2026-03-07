@@ -3,7 +3,7 @@ import { BaseModal } from '../BaseModal';
 import { useNotificationStore } from '../../store/notificationStore';
 import JourneyNotificationDetail from './JourneyNotificationDetail';
 
-const ImageTaskNotificationDetail: React.FC<{
+const ImageRunNotificationDetail: React.FC<{
   label: string;
   status: string;
   message: string;
@@ -79,7 +79,7 @@ export const NotificationModals: React.FC = () => {
     : undefined;
 
   return (
-    <ImageTaskNotificationDetail
+    <ImageRunNotificationDetail
       label={notification.label}
       status={notification.status}
       message={notification.message}

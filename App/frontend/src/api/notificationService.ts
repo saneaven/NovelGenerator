@@ -1,6 +1,6 @@
 import { apiClient } from './client';
 
-export type NotificationSource = 'journey' | 'imageTask';
+export type NotificationSource = 'journey' | 'imageRun';
 export type NotificationStatus = 'running' | 'pending' | 'success' | 'error' | 'cancelled';
 
 export interface NotificationProgressDTO {

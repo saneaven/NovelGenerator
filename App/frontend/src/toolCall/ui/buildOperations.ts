@@ -11,6 +11,7 @@ export function buildStoredOperations(cards: EditCard[]): OperationVM[] {
       toolName: card.toolCall.toolName,
       args: card.data,
       extraContent: card.toolCall.extraContent ?? null,
+      imageRunId: card.toolCall.imageRunId ?? null,
       status: card.toolCall.status,
       reason: card.toolCall.reason,
       failureType: card.toolCall.failureType,

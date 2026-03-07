@@ -65,6 +65,7 @@ from .routes.translation_routes import router as translation_router
 
 # Asset management routes
 from .routes.asset_routes import router as asset_router
+from .routes.image_run_routes import router as image_run_router
 
 # Fragment & folder management routes
 from .routes.fragment_routes import router as fragment_router
@@ -115,6 +116,7 @@ app.include_router(translation_router, prefix="/api/v1", tags=["translations"])
 
 # Include asset management router
 app.include_router(asset_router)
+app.include_router(image_run_router)
 
 # Include fragment & folder management routers
 app.include_router(fragment_router)

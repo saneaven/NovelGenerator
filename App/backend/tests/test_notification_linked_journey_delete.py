@@ -118,8 +118,8 @@ def test_delete_all_project_notifications_emits_bulk_thread_delete(monkeypatch) 
             ),
             NotificationDeleteTarget(
                 notification_id=notif_b,
-                source="imageTask",
-                source_ref_id="image-task-1",
+                source="imageRun",
+                source_ref_id="image-run-1",
                 linked_thread_id=None,
                 linked_thread_status=None,
             ),

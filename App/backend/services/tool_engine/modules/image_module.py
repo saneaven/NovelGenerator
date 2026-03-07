@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from ..contexts import ToolExecutionContext, ToolValidationContext
 from ..contracts import ToolSpec
 from ..registry import ToolRegistry
 from ..result_utils import invalid_result, valid_result
 from .common_object_helpers import obj_schema
-from ....services.agent_image_tool_service import (
+from ....services.image_run_service import (
     IMAGE_OBJECT_TOOL,
     IMAGE_SCENE_TOOL,
-    build_object_image_session,
-    build_scene_image_session,
-    generate_preview_for_tool_call,
+    image_run_service,
+    resolve_explicit_object_target,
+    validate_scene_anchor,
 )
 
 
@@ -30,22 +31,18 @@ def _object_validator(args: dict[str, Any], ctx: ToolValidationContext):
     base = _validate_prompt_and_ratio(args, "validate_generate_object_image")
     if base is not None:
         return base
+
+    raw_object_id = args.get("object_id")
+    if not isinstance(raw_object_id, str) or not raw_object_id.strip():
+        return invalid_result("validate_generate_object_image", "object_id must be a non-empty string")
+
     try:
-        exec_ctx = ToolExecutionContext(
-            db=ctx.db,
-            thread=ctx.thread,
-            run=ctx.run,
-            tool_call_row=None,  # type: ignore[arg-type]
-            user_id=ctx.user_id,
+        resolve_explicit_object_target(
+            ctx.db,
             project_id=ctx.project_id,
             language=ctx.language,
-            sidecar=ctx.sidecar,
-            preset_id=ctx.preset_id,
-            invocation_mode=ctx.invocation_mode,
-            allowed_tool_names=ctx.allowed_tool_names,
-            allowed_sub_agent_ids=ctx.allowed_sub_agent_ids,
+            object_id=UUID(raw_object_id),
         )
-        build_object_image_session(args, exec_ctx)
         return valid_result()
     except ValueError as exc:
         return invalid_result("validate_generate_object_image", str(exc))
@@ -55,27 +52,28 @@ def _scene_validator(args: dict[str, Any], ctx: ToolValidationContext):
     base = _validate_prompt_and_ratio(args, "validate_generate_scene_image")
     if base is not None:
         return base
+
+    raw_manuscript_id = args.get("manuscript_id")
+    if not isinstance(raw_manuscript_id, str) or not raw_manuscript_id.strip():
+        return invalid_result("validate_generate_scene_image", "manuscript_id must be a non-empty string")
+
     anchor = args.get("insert_before")
     if not isinstance(anchor, str) or not anchor.strip():
         return invalid_result("validate_generate_scene_image", "insert_before must be a non-empty string")
 
+    if ctx.sidecar is None:
+        return invalid_result("validate_generate_scene_image", "SIDECAR_ERROR: sidecar client unavailable")
+
     async def _run() -> Any:
         try:
-            exec_ctx = ToolExecutionContext(
-                db=ctx.db,
-                thread=ctx.thread,
-                run=ctx.run,
-                tool_call_row=None,  # type: ignore[arg-type]
-                user_id=ctx.user_id,
+            await validate_scene_anchor(
+                ctx.db,
                 project_id=ctx.project_id,
+                manuscript_id=UUID(raw_manuscript_id),
                 language=ctx.language,
+                anchor=anchor,
                 sidecar=ctx.sidecar,
-                preset_id=ctx.preset_id,
-                invocation_mode=ctx.invocation_mode,
-                allowed_tool_names=ctx.allowed_tool_names,
-                allowed_sub_agent_ids=ctx.allowed_sub_agent_ids,
             )
-            await build_scene_image_session(args, exec_ctx)
             return valid_result()
         except ValueError as exc:
             return invalid_result("validate_generate_scene_image", str(exc))
@@ -83,37 +81,41 @@ def _scene_validator(args: dict[str, Any], ctx: ToolValidationContext):
     return _run()
 
 
-async def _execute_object_image(args: dict[str, Any], ctx: ToolExecutionContext) -> dict[str, Any]:
-    extra_content = build_object_image_session(args, ctx)
+async def _execute_object_image(_args: dict[str, Any], ctx: ToolExecutionContext) -> dict[str, Any]:
     if ctx.tool_call_row is None:
         raise ValueError("Tool call row missing for image generation")
-    ctx.tool_call_row.extra_content = extra_content
-    result = await generate_preview_for_tool_call(
+
+    image_run = await image_run_service.create_tool_preview_run(
         ctx.db,
         tool_call=ctx.tool_call_row,
         user_id=ctx.user_id,
+        language=ctx.language,
     )
     return {
         "__continue_as": "working",
-        "__extra_content": ctx.tool_call_row.extra_content if isinstance(ctx.tool_call_row.extra_content, dict) else extra_content,
-        **result,
+        "success": True,
+        "message": "Image generation started.",
+        "image_run_id": str(image_run.id),
+        "data": {"image_run_id": str(image_run.id)},
     }
 
 
-async def _execute_scene_image(args: dict[str, Any], ctx: ToolExecutionContext) -> dict[str, Any]:
-    extra_content = await build_scene_image_session(args, ctx)
+async def _execute_scene_image(_args: dict[str, Any], ctx: ToolExecutionContext) -> dict[str, Any]:
     if ctx.tool_call_row is None:
         raise ValueError("Tool call row missing for image generation")
-    ctx.tool_call_row.extra_content = extra_content
-    result = await generate_preview_for_tool_call(
+
+    image_run = await image_run_service.create_tool_preview_run(
         ctx.db,
         tool_call=ctx.tool_call_row,
         user_id=ctx.user_id,
+        language=ctx.language,
     )
     return {
         "__continue_as": "working",
-        "__extra_content": ctx.tool_call_row.extra_content if isinstance(ctx.tool_call_row.extra_content, dict) else extra_content,
-        **result,
+        "success": True,
+        "message": "Image generation started.",
+        "image_run_id": str(image_run.id),
+        "data": {"image_run_id": str(image_run.id)},
     }
 
 
@@ -121,14 +123,14 @@ def register(registry: ToolRegistry) -> None:
     registry.register_tool(
         ToolSpec(
             name=IMAGE_OBJECT_TOOL,
-            description="Prepare an object image generation workflow for a story object or basic info entry.",
+            description="Generate an image for a specific story object or basic info entry.",
             parameters=obj_schema(
                 {
                     "prompt": {"type": "string", "description": "Image generation prompt."},
                     "ratio": {"type": "string", "description": "Desired aspect ratio such as 1:1 or 16:9."},
-                    "object_id": {"type": "string", "description": "Optional object UUID to target explicitly."},
+                    "object_id": {"type": "string", "description": "Target object UUID."},
                 },
-                ["prompt", "ratio"],
+                ["prompt", "ratio", "object_id"],
             ),
             tool_sets=frozenset({"agent_agent_mode", "agent_plan_mode"}),
             auto_approve_category=None,
@@ -139,14 +141,15 @@ def register(registry: ToolRegistry) -> None:
     registry.register_tool(
         ToolSpec(
             name=IMAGE_SCENE_TOOL,
-            description="Prepare a scene image generation workflow and insert the result before a manuscript text anchor.",
+            description="Generate a scene image and insert it before a specific manuscript text anchor.",
             parameters=obj_schema(
                 {
                     "prompt": {"type": "string", "description": "Image generation prompt."},
                     "ratio": {"type": "string", "description": "Desired aspect ratio such as 1:1 or 16:9."},
+                    "manuscript_id": {"type": "string", "description": "Target manuscript UUID."},
                     "insert_before": {"type": "string", "description": "Exact manuscript text anchor to insert the image before."},
                 },
-                ["prompt", "ratio", "insert_before"],
+                ["prompt", "ratio", "manuscript_id", "insert_before"],
             ),
             tool_sets=frozenset({"agent_agent_mode", "agent_plan_mode"}),
             auto_approve_category=None,

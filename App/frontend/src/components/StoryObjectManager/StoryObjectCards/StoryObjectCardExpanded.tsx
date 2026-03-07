@@ -276,6 +276,7 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
                     {activeTab === 'image' && currentProjectId && (
                         <div className="expanded-image-tab">
                             <ImageTabContent
+                                mode="object"
                                 objectType={objectType}
                                 objectId={itemId}
                                 onAssetChange={onAssetChange}

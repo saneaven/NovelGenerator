@@ -1,9 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useMasonry, usePositioner, useResizeObserver, type RenderComponentProps } from 'masonic';
-import { ImageGridItem, calculateItemHeight, calculatePlaceholderHeight } from './ImageGridItem';
+import { ImageGridItem } from './ImageGridItem';
 import type { DisplayAsset, ImageContentMode } from './ImageGridItem';
 import type { Asset, SceneAsset } from '../../api/assetService';
-import type { GenerationRecipe } from '../../imageTask';
+import type { ImageGenerationRecipe } from '../../imageRun';
+import { calculateItemHeight, calculatePlaceholderHeight } from './imageGridSizing';
 
 type VirtualizedImageGridContextValue = {
     mode: ImageContentMode;
@@ -24,9 +25,9 @@ type VirtualizedImageGridContextValue = {
     onOpenDetail: (asset: Asset | SceneAsset) => void;
     onDeleteAsset: (asset: Asset | SceneAsset) => void;
     onToggleMoreDropdown: (assetId: string | null) => void;
-    onCancelTask?: (taskId: string) => void;
-    onRetryTask?: (taskId: string, recipe: GenerationRecipe) => void;
-    onDismissTask?: (taskId: string) => void;
+    onCancelRun?: (runId: string) => void;
+    onRetryRun?: (runId: string, recipe: ImageGenerationRecipe) => void;
+    onDismissRun?: (runId: string) => void;
     onRegenerateAsset?: (assetId: string) => void;
 };
 
@@ -88,9 +89,9 @@ const MasonryCard: React.FC<RenderComponentProps<DisplayAsset>> = ({ data, width
             onOpenDetail={ctx.onOpenDetail}
             onDeleteAsset={ctx.onDeleteAsset}
             onToggleMoreDropdown={ctx.onToggleMoreDropdown}
-            onCancelTask={ctx.onCancelTask}
-            onRetryTask={ctx.onRetryTask}
-            onDismissTask={ctx.onDismissTask}
+            onCancelRun={ctx.onCancelRun}
+            onRetryRun={ctx.onRetryRun}
+            onDismissRun={ctx.onDismissRun}
             onRegenerateAsset={ctx.onRegenerateAsset}
             height={itemHeight}
         />
@@ -127,9 +128,9 @@ interface VirtualizedImageGridProps {
     onOpenDetail: (asset: Asset | SceneAsset) => void;
     onDeleteAsset: (asset: Asset | SceneAsset) => void;
     onToggleMoreDropdown: (assetId: string | null) => void;
-    onCancelTask?: (taskId: string) => void;
-    onRetryTask?: (taskId: string, recipe: GenerationRecipe) => void;
-    onDismissTask?: (taskId: string) => void;
+    onCancelRun?: (runId: string) => void;
+    onRetryRun?: (runId: string, recipe: ImageGenerationRecipe) => void;
+    onDismissRun?: (runId: string) => void;
     onRegenerateAsset?: (assetId: string) => void;
 }
 
@@ -235,9 +236,9 @@ export const VirtualizedImageGrid: React.FC<VirtualizedImageGridProps> = ({
     onOpenDetail,
     onDeleteAsset,
     onToggleMoreDropdown,
-    onCancelTask,
-    onRetryTask,
-    onDismissTask,
+    onCancelRun,
+    onRetryRun,
+    onDismissRun,
     onRegenerateAsset,
 }) => {
     const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
@@ -287,9 +288,9 @@ export const VirtualizedImageGrid: React.FC<VirtualizedImageGridProps> = ({
         onOpenDetail,
         onDeleteAsset,
         onToggleMoreDropdown,
-        onCancelTask,
-        onRetryTask,
-        onDismissTask,
+        onCancelRun,
+        onRetryRun,
+        onDismissRun,
         onRegenerateAsset,
     }), [
         mode,
@@ -310,9 +311,9 @@ export const VirtualizedImageGrid: React.FC<VirtualizedImageGridProps> = ({
         onOpenDetail,
         onDeleteAsset,
         onToggleMoreDropdown,
-        onCancelTask,
-        onRetryTask,
-        onDismissTask,
+        onCancelRun,
+        onRetryRun,
+        onDismissRun,
         onRegenerateAsset,
     ]);
 

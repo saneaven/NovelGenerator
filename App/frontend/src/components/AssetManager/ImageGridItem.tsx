@@ -2,8 +2,8 @@ import { memo, type RefObject } from 'react';
 import { IconButton } from '../IconButton';
 import { Star, Edit, MoreHorizontal, Trash, Info, Close, Refresh } from '../icons';
 import { getAssetUrl } from '../../utils/assetUrl';
-import type { Asset, SceneAsset } from '../../api/assetService';
-import type { GenerationRecipe, ImageProgressStage, ImageTaskBinding, ImageTaskStatus } from '../../imageTask';
+import type { Asset, ImageRunStage, SceneAsset } from '../../api/assetService';
+import type { ImageGenerationBinding, ImageGenerationRecipe } from '../../imageRun';
 
 export type ImageContentMode = 'object' | 'scene' | 'picker';
 
@@ -20,13 +20,13 @@ export type DisplayAsset =
     | {
         kind: 'placeholder';
         id: string;
-        taskId: string;
-        status: Exclude<ImageTaskStatus, 'idle' | 'success'>;
-        stage?: ImageProgressStage;
+        runId: string;
+        status: 'running' | 'error' | 'cancelled';
+        stage?: Exclude<ImageRunStage, null>;
         message: string;
         error?: string;
-        binding: ImageTaskBinding;
-        recipe: GenerationRecipe;
+        binding: ImageGenerationBinding;
+        recipe: ImageGenerationRecipe;
     };
 
 export interface ImageGridItemProps {
@@ -48,9 +48,9 @@ export interface ImageGridItemProps {
     onOpenDetail: (asset: Asset | SceneAsset) => void;
     onDeleteAsset: (asset: Asset | SceneAsset) => void;
     onToggleMoreDropdown: (assetId: string | null) => void;
-    onCancelTask?: (taskId: string) => void;
-    onRetryTask?: (taskId: string, recipe: GenerationRecipe) => void;
-    onDismissTask?: (taskId: string) => void;
+    onCancelRun?: (runId: string) => void;
+    onRetryRun?: (runId: string, recipe: ImageGenerationRecipe) => void;
+    onDismissRun?: (runId: string) => void;
     onRegenerateAsset?: (assetId: string) => void;
     height: number;
 }
@@ -74,9 +74,9 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
     onOpenDetail,
     onDeleteAsset,
     onToggleMoreDropdown,
-    onCancelTask,
-    onRetryTask,
-    onDismissTask,
+    onCancelRun,
+    onRetryRun,
+    onDismissRun,
     onRegenerateAsset,
     height,
 }) => {
@@ -109,7 +109,7 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
                         <IconButton
                             size="xs"
                             icon={<Refresh size="xs" />}
-                            onClick={() => onRetryTask?.(item.taskId, item.recipe)}
+                            onClick={() => onRetryRun?.(item.runId, item.recipe)}
                             title="Retry"
                             variant="primary"
                         />
@@ -118,7 +118,7 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
                         <IconButton
                             size="xs"
                             icon={<Close size="xs" />}
-                            onClick={() => onCancelTask?.(item.taskId)}
+                            onClick={() => onCancelRun?.(item.runId)}
                             title="Cancel"
                             variant="danger"
                         />
@@ -127,7 +127,7 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
                         <IconButton
                             size="xs"
                             icon={<Trash size="xs" />}
-                            onClick={() => onDismissTask?.(item.taskId)}
+                            onClick={() => onDismissRun?.(item.runId)}
                             title="Dismiss"
                             variant="danger"
                         />
@@ -265,45 +265,3 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
 });
 
 ImageGridItem.displayName = 'ImageGridItem';
-
-// Calculate item height based on aspect ratio
-export function calculateItemHeight(asset: { width?: number | null; height?: number | null }, columnWidth: number): number {
-    if (!asset.width || !asset.height) {
-        return 180; // Default height for unknown aspect ratio
-    }
-    const aspectRatio = asset.width / asset.height;
-    const height = Math.round(columnWidth / aspectRatio);
-    // Clamp between reasonable min/max
-    return Math.max(100, Math.min(height, 400));
-}
-
-function parseSize(size?: string): { width: number; height: number } | null {
-    if (!size) return null;
-    const match = size.trim().match(/^(\d+)\s*x\s*(\d+)$/i);
-    if (!match) return null;
-    const width = Number(match[1]);
-    const height = Number(match[2]);
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
-    return { width, height };
-}
-
-function parseAspectRatio(aspectRatio?: unknown): number | null {
-    if (typeof aspectRatio !== 'string') return null;
-    const match = aspectRatio.trim().match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/);
-    if (!match) return null;
-    const w = Number(match[1]);
-    const h = Number(match[2]);
-    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
-    return w / h;
-}
-
-export function calculatePlaceholderHeight(recipe: GenerationRecipe, columnWidth: number): number {
-    const fromSize = parseSize(recipe.size);
-    const aspect =
-        (fromSize ? fromSize.width / fromSize.height : null)
-        ?? parseAspectRatio(recipe.providerSettings?.aspect_ratio)
-        ?? 1; // default to 1:1 if we cannot infer
-
-    const height = Math.round(columnWidth / aspect);
-    return Math.max(100, Math.min(height, 400));
-}

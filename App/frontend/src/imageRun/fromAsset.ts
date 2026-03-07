@@ -1,5 +1,5 @@
-import type { Asset } from '../../api/assetService';
-import type { GenerationRecipe, ReferenceImageRef } from '../types';
+import type { Asset } from '../api/assetService';
+import type { ImageGenerationRecipe, ReferenceImageRef } from './types';
 
 function inferSize(asset: Asset): string | undefined {
   if (asset.width && asset.height) return `${asset.width}x${asset.height}`;
@@ -12,7 +12,7 @@ function mapReferenceImages(asset: Asset): ReferenceImageRef[] | undefined {
   return refs.map((r) => ({ assetId: r.asset_id, strength: r.strength }));
 }
 
-export function fromAsset(asset: Asset): GenerationRecipe | null {
+export function recipeFromAsset(asset: Asset): ImageGenerationRecipe | null {
   const provider = asset.generation_provider;
   const model = asset.generation_model;
   if (!provider || !model) return null;
@@ -21,7 +21,6 @@ export function fromAsset(asset: Asset): GenerationRecipe | null {
   const referenceImages = mapReferenceImages(asset);
   const size = inferSize(asset);
 
-  // Tag-based providers (NovelAI)
   if (asset.generation_positive_prompt) {
     return {
       promptType: 'tag_based',
@@ -36,7 +35,6 @@ export function fromAsset(asset: Asset): GenerationRecipe | null {
     };
   }
 
-  // Natural prompt providers (OpenAI, Gemini, xAI, ...)
   if (asset.generation_prompt) {
     return {
       promptType: 'natural',
@@ -52,4 +50,3 @@ export function fromAsset(asset: Asset): GenerationRecipe | null {
 
   return null;
 }
-

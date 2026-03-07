@@ -11,9 +11,8 @@ import { Folder, AIAssistMini, Close } from '../icons';
 import { VirtualizedImageGrid } from './VirtualizedImageGrid';
 import ToggleSwitch from '../common/ToggleSwitch';
 import type { DisplayAsset } from './ImageGridItem';
-import { ImageTaskRuntime, type GenerationRecipe } from '../../imageTask';
-import { useImageTaskStore } from '../../imageTask/store';
-import { fromAsset } from '../../imageTask/recipe/fromAsset';
+import type { ImageGenerationRecipe } from '../../imageRun';
+import { ImageRunRuntime, generationRecipeFromImageRun, imageRunBindingFromSnapshot, recipeFromAsset, useImageRunStore } from '../../imageRun';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
 import './ImageTabContent.css';
 
@@ -40,8 +39,7 @@ type SubTabType = 'library' | 'prompt';
 export type ImageContentMode = 'object' | 'scene' | 'picker';
 
 interface ImageTabContentProps {
-    // Mode (defaults to 'object' for backward compatibility)
-    mode?: ImageContentMode;
+    mode: ImageContentMode;
 
     // Object mode props (existing)
     objectType?: string;
@@ -69,11 +67,11 @@ interface ImageTabContentProps {
     onImageGenerated?: (asset: Asset) => void;
 
     // Optional initial recipe for generation UI (e.g., retry flow)
-    initialGenerationRecipe?: GenerationRecipe | null;
+    initialGenerationRecipe?: ImageGenerationRecipe | null;
 }
 
 const ImageTabContent: React.FC<ImageTabContentProps> = ({
-    mode = 'object',
+    mode,
     objectType,
     objectId,
     onAssetChange,
@@ -88,10 +86,9 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     initialGenerationRecipe,
 }) => {
     const { currentProjectId } = useProjectStore();
-    const imageTaskSessions = useImageTaskStore((s) => s.sessions);
+    const imageRuns = useImageRunStore((s) => s.runsById);
     const {
         assets,
-        storyObjectAssets,
         sceneAssets,
         isLoading,
         error,
@@ -120,7 +117,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     const [detailAsset, setDetailAsset] = useState<Asset | null>(null);
     const [showImportDropdown, setShowImportDropdown] = useState(false);
     const [showGeneratePanel, setShowGeneratePanel] = useState(false);
-    const [generationRecipe, setGenerationRecipe] = useState<GenerationRecipe | null>(null);
+    const [generationRecipe, setGenerationRecipe] = useState<ImageGenerationRecipe | null>(null);
     const [isDragOver, setIsDragOver] = useState(false);
     const [activeAssetId, setActiveAssetId] = useState<string | null>(null);
     const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -163,7 +160,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     const linkedAssets = useMemo(() => {
         if (mode !== 'object' || !objectType || !objectId) return [];
         return getStoryObjectAssets(objectType, objectId);
-    }, [mode, objectType, objectId, storyObjectAssets, getStoryObjectAssets]);
+    }, [mode, objectType, objectId, getStoryObjectAssets]);
 
     // Get display assets based on mode
     const displayAssets = useMemo((): DisplayAsset[] => {
@@ -199,12 +196,29 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         if (mode === 'object' && (!objectType || !objectId)) return [];
         if (mode === 'scene' && !showAllChapters && !manuscriptId) return [];
 
-        return Object.values(imageTaskSessions)
-            .filter((s): s is NonNullable<typeof s> => !!s)
-            .filter((s) => s.input.projectId === currentProjectId)
-            .filter((s) => s.status === 'running' || s.status === 'error' || s.status === 'cancelled')
-            .filter((s) => {
-                const b = s.input.binding;
+        return Object.values(imageRuns)
+            .filter((run): run is NonNullable<typeof run> => !!run)
+            .filter((run) => run.origin === 'direct')
+            .filter((run) => run.project_id === currentProjectId)
+            .filter((run) => (
+                run.status === 'queued'
+                || run.status === 'running'
+                || run.status === 'applying'
+                || run.status === 'failed'
+                || run.status === 'cancelled'
+            ))
+            .map((run) => {
+                const binding = imageRunBindingFromSnapshot(run);
+                const recipe = generationRecipeFromImageRun(run);
+                if (!binding || !recipe) return null;
+                return { run, binding, recipe };
+            })
+            .filter((entry): entry is {
+                run: NonNullable<(typeof imageRuns)[string]>;
+                binding: NonNullable<ReturnType<typeof imageRunBindingFromSnapshot>>;
+                recipe: ImageGenerationRecipe;
+            } => !!entry)
+            .filter(({ binding: b }) => {
                 if (mode === 'object') {
                     return b.type === 'object' && b.objectType === objectType && b.objectId === objectId;
                 }
@@ -215,24 +229,24 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                 }
                 return false;
             })
-            .sort((a, b) => b.createdAt - a.createdAt)
-            .map((s) => ({
+            .sort((a, b) => new Date(b.run.created_at).getTime() - new Date(a.run.created_at).getTime())
+            .map(({ run, binding, recipe }) => ({
                 kind: 'placeholder' as const,
-                id: `task:${s.id}`,
-                taskId: s.id,
-                status: s.status as 'running' | 'error' | 'cancelled',
-                stage: s.progress?.stage,
+                id: `image-run:${run.id}`,
+                runId: run.id,
+                status: run.status === 'failed' ? 'error' : run.status === 'cancelled' ? 'cancelled' : 'running',
+                stage: run.stage ?? undefined,
                 message:
-                    s.status === 'running'
-                        ? (s.progress?.message ?? 'Working...')
-                        : s.status === 'error'
-                            ? (s.error ?? 'An error occurred')
+                    run.status === 'queued' || run.status === 'running' || run.status === 'applying'
+                        ? (run.error_message ?? 'Working...')
+                        : run.status === 'failed'
+                            ? (run.error_message ?? 'An error occurred')
                             : 'Cancelled',
-                error: s.status === 'error' ? s.error : undefined,
-                binding: s.input.binding,
-                recipe: s.input.recipe,
+                error: run.status === 'failed' ? (run.error_message ?? 'An error occurred') : undefined,
+                binding,
+                recipe,
             }));
-    }, [currentProjectId, mode, objectType, objectId, manuscriptId, showAllChapters, imageTaskSessions]);
+    }, [currentProjectId, imageRuns, manuscriptId, mode, objectId, objectType, showAllChapters]);
 
     // Filter by search query
     const filteredAssets = useMemo(() => {
@@ -549,7 +563,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
 
         try {
             const fullAsset = await assetService.getAsset(currentProjectId, assetId);
-            const recipe = fromAsset(fullAsset);
+            const recipe = recipeFromAsset(fullAsset);
             if (!recipe) {
                 showAlert({ title: 'Regenerate Image', message: 'This image has no saved generation settings.' });
                 return;
@@ -561,18 +575,19 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         }
     }, [currentProjectId, mode, manuscriptId, objectType, objectId]);
 
-    const handleCancelTask = useCallback((taskId: string) => {
-        ImageTaskRuntime.cancel(taskId);
-    }, []);
+    const handleCancelRun = useCallback((runId: string) => {
+        if (!currentProjectId) return;
+        void ImageRunRuntime.cancel(currentProjectId, runId);
+    }, [currentProjectId]);
 
-    const handleRetryTask = useCallback((_taskId: string, recipe: GenerationRecipe) => {
+    const handleRetryRun = useCallback((runId: string, recipe: ImageGenerationRecipe) => {
         setGenerationRecipe(recipe);
         setShowGeneratePanel(true);
-        useImageTaskStore.getState().clearSession(_taskId);
+        useImageRunStore.getState().clearRun(runId);
     }, []);
 
-    const handleDismissTask = useCallback((taskId: string) => {
-        useImageTaskStore.getState().clearSession(taskId);
+    const handleDismissRun = useCallback((runId: string) => {
+        useImageRunStore.getState().clearRun(runId);
     }, []);
 
     const formatFileSize = (bytes: number | null): string => {
@@ -752,9 +767,9 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                             onOpenDetail={handleOpenDetail}
                             onDeleteAsset={handleDeleteAsset}
                             onToggleMoreDropdown={setMoreDropdownAssetId}
-                            onCancelTask={handleCancelTask}
-                            onRetryTask={handleRetryTask}
-                            onDismissTask={handleDismissTask}
+                            onCancelRun={handleCancelRun}
+                            onRetryRun={handleRetryRun}
+                            onDismissRun={handleDismissRun}
                             onRegenerateAsset={handleRegenerateAsset}
                         />
 

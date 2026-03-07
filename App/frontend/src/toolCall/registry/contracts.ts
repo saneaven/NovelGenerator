@@ -15,6 +15,7 @@ export interface MapToolToVmParams {
   toolName: string;
   args?: unknown;
   extraContent?: Record<string, unknown> | null;
+  imageRunId?: string | null;
   status?: string;
   reason?: string;
   failureType?: ToolCallFailureType;
@@ -123,6 +124,7 @@ export function buildOperationBase(
     toolName: params.toolName,
     status,
     extraContent: params.extraContent ?? null,
+    imageRunId: params.imageRunId ?? null,
     reason,
     result,
     args,

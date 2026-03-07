@@ -50,6 +50,7 @@ function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
     tool_name: toolCall.toolName,
     arguments: toolCall.arguments,
     extra_content: toolCall.extraContent ?? undefined,
+    imageRunId: toolCall.imageRunId ?? undefined,
     status: toolCall.status as any,
     reason: toolCall.reason ?? undefined,
     result: toolCall.result as any,

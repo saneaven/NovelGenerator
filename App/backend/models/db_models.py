@@ -865,6 +865,7 @@ class RunToolCallModel(Base):
     status = Column(String(20), nullable=False)
     reason = Column(Text, nullable=True)
     result = Column(JSONB, nullable=True)
+    image_run_id = Column(UUID(as_uuid=True), ForeignKey('image_runs.id', ondelete='SET NULL'), nullable=True, index=True)
     # For call_sub_agent: tracks the child run/thread spawned by this tool call
     child_run_id = Column(UUID(as_uuid=True), ForeignKey('runs.id', ondelete='SET NULL'), nullable=True)
     child_thread_id = Column(UUID(as_uuid=True), ForeignKey('threads.id', ondelete='SET NULL'), nullable=True)
@@ -898,6 +899,71 @@ class RunToolCallModel(Base):
 
 
 # ============================================================================
+# IMAGE RUNS
+# ============================================================================
+
+class ImageRunModel(Base):
+    """Server-managed image generation lifecycle shared by direct and tool flows."""
+    __tablename__ = 'image_runs'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    thread_id = Column(UUID(as_uuid=True), ForeignKey('threads.id', ondelete='CASCADE'), nullable=True, index=True)
+
+    client_request_id = Column(String(128), nullable=True, index=True)
+    origin = Column(String(20), nullable=False)
+    review_mode = Column(String(16), nullable=False)
+    status = Column(String(20), nullable=False)
+    stage = Column(String(20), nullable=True)
+
+    request_snapshot = Column(JSONB, nullable=False, default=dict)
+
+    preview_asset_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    final_asset_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+
+    provider = Column(String(50), nullable=True)
+    model = Column(String(100), nullable=True)
+    resolved_ratio = Column(String(32), nullable=True)
+    resolved_size = Column(String(32), nullable=True)
+    revised_prompt = Column(Text, nullable=True)
+
+    before_excerpt = Column(Text, nullable=True)
+    after_excerpt = Column(Text, nullable=True)
+
+    failure_code = Column(String(120), nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    thread = relationship("Thread", foreign_keys=[thread_id])
+    project = relationship("Project")
+    user = relationship("User")
+
+    __table_args__ = (
+        CheckConstraint(
+            "origin IN ('direct','tool_preview')",
+            name='ck_image_runs_origin',
+        ),
+        CheckConstraint(
+            "review_mode IN ('auto','manual')",
+            name='ck_image_runs_review_mode',
+        ),
+        CheckConstraint(
+            "status IN ('queued','running','review','applying','applied','rejected','failed','cancelled')",
+            name='ck_image_runs_status',
+        ),
+        CheckConstraint(
+            "stage IS NULL OR stage IN ('preparing','generating','saving','binding')",
+            name='ck_image_runs_stage',
+        ),
+        Index('ix_image_runs_project_status', 'project_id', 'status'),
+        Index('ix_image_runs_thread_created', 'thread_id', 'created_at'),
+    )
+
+
+# ============================================================================
 # NOTIFICATIONS
 # ============================================================================
 
@@ -909,7 +975,7 @@ class NotificationModel(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    source = Column(String(32), nullable=False)  # 'journey' | 'imageTask'
+    source = Column(String(32), nullable=False)  # 'journey' | 'imageRun'
     source_ref_id = Column(String(128), nullable=False)
     thread_id = Column(UUID(as_uuid=True), ForeignKey("threads.id", ondelete="SET NULL"), nullable=True, index=True)
 
@@ -928,7 +994,7 @@ class NotificationModel(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     __table_args__ = (
-        CheckConstraint("source IN ('journey','imageTask')", name="ck_notifications_source"),
+        CheckConstraint("source IN ('journey','imageRun')", name="ck_notifications_source"),
         CheckConstraint(
             "status IN ('running','pending','success','error','cancelled')",
             name="ck_notifications_status",
@@ -963,7 +1029,7 @@ class Asset(Base):
     # Manuscript ownership for scene assets (which manuscript this image belongs to)
     manuscript_id = Column(UUID(as_uuid=True), ForeignKey('manuscripts.id', ondelete='CASCADE'), nullable=True, index=True)
     # Tool-call owned preview assets remain hidden until explicitly applied.
-    preview_tool_call_id = Column(UUID(as_uuid=True), ForeignKey('run_tool_calls.id', ondelete='SET NULL'), nullable=True, index=True)
+    preview_image_run_id = Column(UUID(as_uuid=True), ForeignKey('image_runs.id', ondelete='SET NULL'), nullable=True, index=True)
 
     # Generation metadata - prompts stored as StyledPrompt JSON structure
     # StyledPrompt: { "prefix": str, "content": str, "postfix": str }

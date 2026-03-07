@@ -168,6 +168,65 @@ export interface ReferenceImage {
     strength: number;  // 0-1, how much to use this reference
 }
 
+export type ImageRunOrigin = 'direct' | 'tool_preview';
+export type ImageRunReviewMode = 'auto' | 'manual';
+export type ImageRunStatus = 'queued' | 'running' | 'review' | 'applying' | 'applied' | 'rejected' | 'failed' | 'cancelled';
+export type ImageRunStage = 'preparing' | 'generating' | 'saving' | 'binding' | null;
+
+export interface ImageRunRecipeRequest {
+    prompt_type: 'natural' | 'tag_based';
+    provider: string;
+    model: string;
+    requested_ratio: string;
+    prompt?: StyledPrompt;
+    positive_prompt?: StyledPrompt;
+    negative_prompt?: StyledPrompt;
+    provider_settings?: Record<string, unknown>;
+    reference_images?: ReferenceImage[];
+    reference_objects?: ReferenceObjectData[];
+}
+
+export interface ImageRunTargetRequest {
+    type: 'object' | 'scene';
+    manuscript_id?: string;
+    object_type?: string;
+    object_id?: string;
+}
+
+export interface CreateImageRunRequest {
+    client_request_id?: string | null;
+    recipe: ImageRunRecipeRequest;
+    target: ImageRunTargetRequest;
+}
+
+export interface ImageRun {
+    id: string;
+    project_id: string;
+    user_id: string;
+    thread_id: string | null;
+    tool_call_id: string | null;
+    client_request_id: string | null;
+    origin: ImageRunOrigin;
+    review_mode: ImageRunReviewMode;
+    status: ImageRunStatus;
+    stage: ImageRunStage;
+    request_snapshot: Record<string, unknown>;
+    preview_asset_id: string | null;
+    preview_asset_url: string | null;
+    final_asset_id: string | null;
+    provider: string | null;
+    model: string | null;
+    resolved_ratio: string | null;
+    resolved_size: string | null;
+    revised_prompt: string | null;
+    before_excerpt: string | null;
+    after_excerpt: string | null;
+    failure_code: string | null;
+    error_message: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
 export const assetService = {
     /**
      * List available image providers
@@ -186,6 +245,27 @@ export const assetService = {
             {}
         );
         return response.data;
+    },
+
+    async createImageRun(projectId: string, request: CreateImageRunRequest): Promise<ImageRun> {
+        return apiClient.post<ImageRun>(`/api/v1/projects/${projectId}/image-runs`, request);
+    },
+
+    async listImageRuns(projectId: string, scope: 'active' | 'recent' = 'recent'): Promise<ImageRun[]> {
+        const response = await apiClient.get<{ items: ImageRun[] }>(`/api/v1/projects/${projectId}/image-runs?scope=${scope}`);
+        return response.items;
+    },
+
+    async getImageRun(projectId: string, imageRunId: string): Promise<ImageRun> {
+        return apiClient.get<ImageRun>(`/api/v1/projects/${projectId}/image-runs/${imageRunId}`);
+    },
+
+    async decideImageRun(projectId: string, imageRunId: string, decision: 'accept' | 'reject'): Promise<ImageRun> {
+        return apiClient.post<ImageRun>(`/api/v1/projects/${projectId}/image-runs/${imageRunId}/decision`, { decision });
+    },
+
+    async cancelImageRun(projectId: string, imageRunId: string): Promise<ImageRun> {
+        return apiClient.post<ImageRun>(`/api/v1/projects/${projectId}/image-runs/${imageRunId}/cancel`, {});
     },
 
     /**

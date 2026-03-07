@@ -1,4 +1,5 @@
 import { threadService, type ThreadMessagesResponse } from '../api/threadService';
+import { useImageRunStore } from '../imageRun';
 import { useThreadStore } from '../store/threadStore';
 import { isNonLiveThreadStatus } from './threadStreamLifecycle';
 
@@ -16,6 +17,7 @@ export function applyThreadSnapshot(response: ThreadMessagesResponse): void {
   store.upsertThread(response.thread);
   store.replaceThreadMessages(threadId, response.messages);
   store.replaceThreadToolCalls(threadId, response.toolCalls);
+  useImageRunStore.getState().upsertRuns(response.imageRuns);
   store.setThreadStreamActive(threadId, false);
   store.setThreadRuntime(threadId, {
     unresolvedToolCallCount,

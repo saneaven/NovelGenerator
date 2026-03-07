@@ -2,6 +2,7 @@ import { API_BASE_URL, apiClient } from './client';
 import type { RunStatus, ToolCallStatus } from '../types/thread';
 import type { ObjectType } from '../types/unifiedObject';
 import type { NotificationDTO, NotificationSource } from './notificationService';
+import type { ImageRun, ImageRunStage, ImageRunStatus } from './assetService';
 
 interface RuntimeEventBase {
   project_id: string;
@@ -44,6 +45,7 @@ export type ThreadRuntimeEvent =
       reason?: string | null;
       result?: Record<string, unknown> | null;
       extra_content?: Record<string, unknown> | null;
+      image_run_id?: string | null;
       assistant_message_id?: string | null;
       child_thread_id?: string | null;
     } }
@@ -112,6 +114,16 @@ export type NotificationSSEEvent =
   | NotificationDeleteEvent
   | NotificationBulkDeleteEvent;
 
+export type ImageRunUpdateEvent = {
+  event: 'image_run:update';
+  data: ImageRun & {
+    project_id: string;
+    ts: string;
+    status: ImageRunStatus;
+    stage: ImageRunStage;
+  };
+};
+
 export type ThreadDeleteEvent = {
   event: 'thread:delete';
   data: {
@@ -136,6 +148,7 @@ export type ProjectSSEEvent =
   | ObjectChangedEvent
   | ThreadRuntimeEvent
   | NotificationSSEEvent
+  | ImageRunUpdateEvent
   | ThreadDeletionSSEEvent;
 
 interface ConnectOptions {

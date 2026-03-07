@@ -4,7 +4,7 @@ import { BaseModal } from '../BaseModal';
 import ImageTabContent, { type ImageContentMode } from './ImageTabContent';
 import { TextButton } from '../TextButton';
 import { type Asset } from '../../api/assetService';
-import type { GenerationRecipe } from '../../imageTask';
+import type { ImageGenerationRecipe } from '../../imageRun';
 import './UnifiedImageModal.css';
 
 // Modal preset types for common use cases
@@ -14,15 +14,9 @@ export type ModalPreset =
     | 'assetPicker'     // Pick from all project assets
     | 'referencePicker'; // Pick reference images for image generation
 
-interface UnifiedImageModalProps {
+interface UnifiedImageModalBaseProps {
     isOpen: boolean;
     onClose: () => void;
-
-    // Use preset for common configurations
-    preset?: ModalPreset;
-
-    // Or configure manually
-    mode?: ImageContentMode;
 
     // Common props
     title?: string;
@@ -46,8 +40,19 @@ interface UnifiedImageModalProps {
 
     // Image generation callback
     onImageGenerated?: (asset: Asset) => void;
-    initialGenerationRecipe?: GenerationRecipe | null;
+    initialGenerationRecipe?: ImageGenerationRecipe | null;
 }
+
+type UnifiedImageModalProps = UnifiedImageModalBaseProps & (
+    | {
+        preset: ModalPreset;
+        mode?: never;
+    }
+    | {
+        preset?: never;
+        mode: ImageContentMode;
+    }
+);
 
 // Preset configurations - title keys are i18n keys
 const PRESET_CONFIGS: Record<ModalPreset, {
@@ -77,29 +82,28 @@ const PRESET_CONFIGS: Record<ModalPreset, {
     },
 };
 
-const UnifiedImageModal: React.FC<UnifiedImageModalProps> = ({
-    isOpen,
-    onClose,
-    preset,
-    mode: modeProp,
-    title: titleProp,
-    size: sizeProp,
-    zIndexLayer,
-    objectType,
-    objectId,
-    onAssetChange,
-    manuscriptId,
-    onSelect,
-    excludeAssetIds,
-    sceneContext,
-    onImageGenerated,
-    initialGenerationRecipe,
-}) => {
+const UnifiedImageModal: React.FC<UnifiedImageModalProps> = (props) => {
+    const {
+        isOpen,
+        onClose,
+        title: titleProp,
+        size: sizeProp,
+        zIndexLayer,
+        objectType,
+        objectId,
+        onAssetChange,
+        manuscriptId,
+        onSelect,
+        excludeAssetIds,
+        sceneContext,
+        onImageGenerated,
+        initialGenerationRecipe,
+    } = props;
     const { t } = useTranslation();
 
     // Get config from preset or use direct props
-    const presetConfig = preset ? PRESET_CONFIGS[preset] : null;
-    const mode = modeProp ?? presetConfig?.mode ?? 'object';
+    const presetConfig = props.preset ? PRESET_CONFIGS[props.preset] : null;
+    const mode: ImageContentMode = props.preset ? PRESET_CONFIGS[props.preset].mode : props.mode;
     const title = titleProp ?? (presetConfig?.titleKey ? t(presetConfig.titleKey) : t('assetManager.images'));
     const size = sizeProp ?? presetConfig?.size ?? 'large';
 

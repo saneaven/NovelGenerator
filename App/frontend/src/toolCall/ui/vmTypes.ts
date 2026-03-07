@@ -41,6 +41,7 @@ export interface OperationBaseVM {
   toolName: string;
   status: HeaderStatus;
   extraContent?: Record<string, unknown> | null;
+  imageRunId?: string | null;
   reason?: string;
   result?: ApplicationResult;
   args: Record<string, unknown>;
@@ -74,19 +75,8 @@ export interface CallAgentOperationVM extends OperationBaseVM {
 export interface ImageOperationVM extends OperationBaseVM {
   category: 'image';
   imageKind: 'object' | 'scene';
-  imageState: 'generating' | 'generated';
   prompt: string;
   requestedRatio: string;
-  resolvedRatio?: string;
-  resolvedSize?: string;
-  provider?: string;
-  model?: string;
-  previewAssetId?: string;
-  previewAssetUrl?: string;
-  objectType?: string;
-  beforeExcerpt?: string;
-  afterExcerpt?: string;
-  failureCode?: string;
   isUserRejectedFailure: boolean;
 }
 

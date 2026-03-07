@@ -40,8 +40,8 @@ import { assetService, type Asset } from '../../../api/assetService';
 import type { ManuscriptObject } from '../../../types/unifiedObject';
 import type { TipTapDoc } from '../../../types/tiptap';
 import { emptyDoc, normalizeDoc, docWordCount } from '../../../editor/manuscript/doc';
-import type { GenerationRecipe } from '../../../imageTask';
-import { fromAsset } from '../../../imageTask/recipe/fromAsset';
+import type { ImageGenerationRecipe } from '../../../imageRun';
+import { recipeFromAsset } from '../../../imageRun';
 import ChapterSidebar from './ChapterSidebar';
 import ManuscriptEditor, { type ManuscriptEditorRef } from './ManuscriptEditor';
 import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, Lightbulb, MoreHorizontal, Clock } from '../../../components/icons';
@@ -114,7 +114,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const [showVersionsModal, setShowVersionsModal] = useState(false);
   // Image replace state
   const [replaceImageSrc, setReplaceImageSrc] = useState<string | null>(null);
-  const [regenerateRecipe, setRegenerateRecipe] = useState<GenerationRecipe | null>(null);
+  const [regenerateRecipe, setRegenerateRecipe] = useState<ImageGenerationRecipe | null>(null);
 
   // Editor state
   const [doc, setDoc] = useState<TipTapDoc>(emptyDoc());
@@ -527,7 +527,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         return;
       }
 
-      const recipe = fromAsset(asset);
+      const recipe = recipeFromAsset(asset);
       if (!recipe) {
         showAlert({ title: 'Regenerate Image', message: 'This image has no saved generation settings. Opening Change mode.' });
         setRegenerateRecipe(null);

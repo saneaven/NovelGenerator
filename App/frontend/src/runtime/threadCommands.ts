@@ -39,12 +39,6 @@ export interface DecideToolCallsBatchParams {
   }>;
 }
 
-export interface ImageToolActionParams {
-  threadId: string;
-  toolCallId: string;
-  action: 'accept' | 'reject';
-}
-
 function upsertThreadStatus(params: {
   threadId: string;
   projectId?: string;
@@ -220,11 +214,4 @@ export async function decideToolCallsBatch(params: DecideToolCallsBatchParams): 
     decisions,
   });
   response.results.forEach((item) => applyToolDecisionResponse(item));
-}
-
-export async function applyImageToolAction(params: ImageToolActionParams): Promise<void> {
-  const response = await threadService.imageToolAction(params.threadId, params.toolCallId, {
-    action: params.action,
-  });
-  applyToolDecisionResponse(response);
 }

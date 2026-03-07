@@ -41,9 +41,11 @@ function toToolCallMetadata(tc: ThreadToolCall): ToolCallMetadata {
     id: tc.id,
     tool_name: tc.toolName,
     arguments: tc.arguments,
+    extra_content: tc.extraContent ?? undefined,
     status: tc.status as any,
     reason: tc.reason ?? undefined,
     result: tc.result as any,
+    imageRunId: tc.imageRunId ?? undefined,
     acceptedAt: tc.acceptedAt ? new Date(tc.acceptedAt) : undefined,
   };
 }

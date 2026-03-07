@@ -1,12 +1,11 @@
 /**
- * Image provider UI configuration (ImageTask-era)
+ * Image provider UI configuration.
  * Kept minimal: only what the generation UI needs.
  */
 
 export type ImageProviderType = 'openai' | 'gemini' | 'xai' | 'novelai';
 export type PromptType = 'natural' | 'tag_based';
 
-// Provider display names
 export const PROVIDER_LABELS: Record<ImageProviderType, string> = {
   openai: 'OpenAI (DALL-E / GPT-Image)',
   gemini: 'Gemini',
@@ -14,7 +13,6 @@ export const PROVIDER_LABELS: Record<ImageProviderType, string> = {
   novelai: 'NovelAI',
 };
 
-// Available models per provider (UI defaults; backend can also provide dynamic lists)
 export const MODEL_OPTIONS: Record<ImageProviderType, { id: string; name: string }[]> = {
   openai: [{ id: 'gpt-image-1', name: 'GPT Image 1' }],
   gemini: [
@@ -31,19 +29,16 @@ export const MODEL_OPTIONS: Record<ImageProviderType, { id: string; name: string
   ],
 };
 
-// Size options per provider
 export const SIZE_OPTIONS: Record<ImageProviderType, string[]> = {
   openai: ['1024x1024', '1024x1792', '1792x1024'],
-  gemini: [], // Gemini uses aspect_ratio + resolution separately
+  gemini: [],
   xai: ['1024x1024', '1024x1792', '1792x1024'],
   novelai: ['1024x1024', '1216x832', '832x1216', '1472x704', '704x1472'],
 };
 
-// Gemini-specific options
 export const GEMINI_ASPECT_RATIOS = ['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '21:9'];
 export const GEMINI_RESOLUTIONS = ['1K', '2K', '4K'];
 
-// NovelAI-specific options
 export const NOVELAI_SAMPLERS = [
   'k_euler_ancestral',
   'k_euler',
@@ -55,7 +50,6 @@ export const NOVELAI_SAMPLERS = [
 
 export const NOVELAI_NOISE_SCHEDULES = ['native', 'karras', 'exponential', 'polyexponential'];
 
-// Provider prompt types
 export const PROVIDER_PROMPT_TYPES: Record<ImageProviderType, PromptType> = {
   openai: 'natural',
   gemini: 'natural',
@@ -82,4 +76,3 @@ export const DEFAULT_NOVELAI_SETTINGS = {
   vibeStrength: 0.6,
   vibeInfoExtracted: 1.0,
 };
-

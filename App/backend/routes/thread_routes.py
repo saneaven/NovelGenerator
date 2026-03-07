@@ -27,7 +27,6 @@ from ..schemas.thread_api import (
     ToolCallBatchDecisionResponse,
     ToolCallDecisionRequest,
     ToolCallDecisionResponse,
-    ToolCallImageActionRequest,
 )
 from ..services.run_event_bus import run_event_bus
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
@@ -42,13 +41,7 @@ from ..services.tool_engine import tool_engine
 from ..services.sidecar_client import sidecar_client
 from ..services.reasoning.normalize import normalize_reasoning_detail
 from ..services.ownership import require_owned_project, require_owned_thread
-from ..services.agent_image_tool_service import (
-    apply_preview_for_tool_call,
-    cleanup_preview_assets,
-    get_image_state,
-    is_image_tool_name,
-    reject_generated_preview,
-)
+from ..services.image_run_service import image_run_service
 
 
 router = APIRouter(prefix="/api/v1", tags=["threads"])
@@ -82,6 +75,7 @@ def _serialize_tool_call(row: RunToolCallModel) -> dict:
         "status": row.status,
         "reason": row.reason,
         "result": row.result if isinstance(row.result, dict) else None,
+        "image_run_id": row.image_run_id,
         "child_thread_id": row.child_thread_id,
         "accepted_at": row.accepted_at,
         "created_at": row.created_at,
@@ -187,6 +181,7 @@ async def _emit_tool_call_status(*, thread: Thread, tool_call: RunToolCallModel)
             "reason": tool_call.reason,
             "result": tool_call.result if isinstance(tool_call.result, dict) else None,
             "extra_content": tool_call.extra_content if isinstance(tool_call.extra_content, dict) else None,
+            "image_run_id": str(tool_call.image_run_id) if tool_call.image_run_id else None,
             "assistant_message_id": str(tool_call.assistant_message_id) if tool_call.assistant_message_id else None,
             "child_thread_id": str(tool_call.child_thread_id) if tool_call.child_thread_id else None,
         },
@@ -319,6 +314,19 @@ async def _apply_tool_decision(
 
     # Start child run for sub-agent calls
     exec_result = execution.get("result") if isinstance(execution.get("result"), dict) else None
+    if isinstance(exec_result, dict) and exec_result.get("image_run_id"):
+        try:
+            await image_run_service.start_run(UUID(str(exec_result["image_run_id"])))
+        except Exception as exc:  # noqa: BLE001
+            try:
+                await image_run_service.fail_run(
+                    image_run_id=UUID(str(exec_result["image_run_id"])),
+                    failure_code="startup_failed",
+                    error_message=f"Image run start failed: {exc}",
+                )
+            except Exception:
+                pass
+
     if isinstance(exec_result, dict) and exec_result.get("child_thread_id"):
         child_input = exec_result.get("input_text", "")
         if child_input:
@@ -564,6 +572,7 @@ async def list_thread_messages(
         .order_by(RunToolCallModel.created_at.asc(), RunToolCallModel.call_seq.asc())
         .all()
     )
+    image_runs = image_run_service.list_thread_runs(db, thread_id=thread.id)
 
     boundary_row = (
         db.query(MessageMemorySummary.to_message_id)
@@ -606,6 +615,7 @@ async def list_thread_messages(
         else None,
         messages=[_serialize_message(m) for m in messages],
         tool_calls=[_serialize_tool_call(t) for t in tool_calls],
+        image_runs=[image_run_service.serialize(db, row) for row in image_runs],
     )
 
 
@@ -681,118 +691,6 @@ async def decide_tool_call(
         reason=payload.reason,
     )
     return ToolCallDecisionResponse(**result)
-
-
-@router.post("/threads/{thread_id}/tool-calls/{tool_call_id}/image-actions", response_model=ToolCallDecisionResponse)
-async def apply_image_tool_action(
-    thread_id: UUID,
-    tool_call_id: UUID,
-    payload: ToolCallImageActionRequest,
-    current_user: User = Depends(get_current_user),
-):
-    action = payload.action
-
-    if action == "reject":
-        db = SessionLocal()
-        try:
-            thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
-            tool_call = (
-                db.query(RunToolCallModel)
-                .with_for_update()
-                .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread.id)
-                .first()
-            )
-            if tool_call is None:
-                raise HTTPException(status_code=404, detail="Tool call not found")
-            if not is_image_tool_name(tool_call.tool_name):
-                raise HTTPException(status_code=409, detail="Tool call does not support image actions")
-            if tool_call.status != "working" or get_image_state(tool_call.extra_content) != "generated":
-                raise HTTPException(status_code=409, detail="Image reject requires working+generated")
-            failure_result = reject_generated_preview(tool_call)
-            tool_call.status = "failed"
-            tool_call.reason = str(failure_result.get("message") or "Generated image rejected by user")
-            tool_call.result = failure_result
-            tool_call.updated_at = datetime.utcnow()
-            synced_run, synced_thread, _ = _sync_run_thread_status(db, run_id=tool_call.run_id)
-            db.commit()
-            db.refresh(tool_call)
-            if synced_run is not None and synced_thread is not None:
-                await _emit_tool_call_status(thread=synced_thread, tool_call=tool_call)
-                await _emit_run_status(thread=synced_thread, run=synced_run)
-            return ToolCallDecisionResponse(tool_call=_serialize_tool_call(tool_call))
-        finally:
-            db.close()
-
-    if action != "accept":
-        raise HTTPException(status_code=422, detail="Invalid image action")
-
-    db = SessionLocal()
-    try:
-        thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
-        tool_call = (
-            db.query(RunToolCallModel)
-            .with_for_update()
-            .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread.id)
-            .first()
-        )
-        if tool_call is None:
-            raise HTTPException(status_code=404, detail="Tool call not found")
-        if not is_image_tool_name(tool_call.tool_name):
-            raise HTTPException(status_code=409, detail="Tool call does not support image actions")
-        if tool_call.status != "working" or get_image_state(tool_call.extra_content) != "generated":
-            raise HTTPException(status_code=409, detail="Image apply requires working+generated")
-        run = db.query(RunModel).filter(RunModel.id == tool_call.run_id).first()
-        language = run.language if run and isinstance(run.language, str) and run.language.strip() else "English"
-        tool_call.status = "processing"
-        tool_call.reason = None
-        tool_call.updated_at = datetime.utcnow()
-        synced_run, synced_thread, _ = _sync_run_thread_status(db, run_id=tool_call.run_id)
-        db.commit()
-        db.refresh(tool_call)
-        if synced_run is not None and synced_thread is not None:
-            await _emit_tool_call_status(thread=synced_thread, tool_call=tool_call)
-            await _emit_run_status(thread=synced_thread, run=synced_run)
-    finally:
-        db.close()
-
-    db2 = SessionLocal()
-    try:
-        thread = require_owned_thread(db2, thread_id=thread_id, user_id=current_user.id)
-        tool_call = (
-            db2.query(RunToolCallModel)
-            .with_for_update()
-            .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread.id)
-            .first()
-        )
-        if tool_call is None:
-            raise HTTPException(status_code=404, detail="Tool call not found")
-        run = db2.query(RunModel).filter(RunModel.id == tool_call.run_id).first()
-        language = run.language if run and isinstance(run.language, str) and run.language.strip() else "English"
-        try:
-            tool_call.result = await apply_preview_for_tool_call(
-                db2,
-                tool_call=tool_call,
-                user_id=current_user.id,
-                language=language,
-                sidecar=sidecar_client,
-            )
-            tool_call.status = "applied"
-            tool_call.reason = None
-        except Exception as exc:  # noqa: BLE001
-            tool_call.status = "failed"
-            tool_call.reason = str(exc)
-            tool_call.result = {"success": False, "message": str(exc), "error": str(exc)}
-        tool_call.updated_at = datetime.utcnow()
-        synced_run, synced_thread, _ = _sync_run_thread_status(db2, run_id=tool_call.run_id)
-        db2.commit()
-        db2.refresh(tool_call)
-        if synced_run is not None and synced_thread is not None:
-            await _emit_tool_call_status(thread=synced_thread, tool_call=tool_call)
-            await _emit_run_status(thread=synced_thread, run=synced_run)
-        return ToolCallDecisionResponse(tool_call=_serialize_tool_call(tool_call))
-    finally:
-        db2.close()
-
 
 def _tool_call_target_key(tc: RunToolCallModel | None) -> str:
     """Compute a grouping key so patches on the same object are serialized."""
@@ -1204,10 +1102,10 @@ async def delete_thread_tool_call(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Tool call not found")
-    if is_image_tool_name(row.tool_name):
-        cleanup_preview_assets(
+    if row.image_run_id is not None:
+        image_run_service.cleanup_preview_assets_for_image_run(
             db,
-            tool_call_id=tool_call_id,
+            image_run_id=row.image_run_id,
             project_id=thread.project_id,
         )
     assistant_message_id = row.assistant_message_id

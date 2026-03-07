@@ -5,6 +5,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+from .assets import ImageRunResponse
 
 
 class ChatRequest(BaseModel):
@@ -27,11 +28,6 @@ class ChatResponse(BaseModel):
 class ToolCallDecisionRequest(BaseModel):
     decision: Literal["accept", "reject"]
     reason: str | None = None
-
-
-class ToolCallImageActionRequest(BaseModel):
-    action: Literal["accept", "reject"]
-
 
 class ToolCallBatchDecisionItem(BaseModel):
     tool_call_id: UUID
@@ -95,6 +91,7 @@ class ToolCallResponse(BaseModel):
     status: str
     reason: str | None
     result: dict[str, Any] | None
+    image_run_id: UUID | None
     child_thread_id: UUID | None
     accepted_at: datetime | None
     created_at: datetime
@@ -118,6 +115,7 @@ class ThreadMessagesResponse(BaseModel):
     latest_run: dict[str, Any] | None
     messages: list[MessageResponse]
     tool_calls: list[ToolCallResponse]
+    image_runs: list[ImageRunResponse]
 
 
 class ThreadRuntimeItemResponse(BaseModel):

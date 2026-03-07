@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ..models.db_models import NotificationModel, Thread
 
 
-NOTIFICATION_SOURCE_VALUES = {"journey", "imageTask"}
+NOTIFICATION_SOURCE_VALUES = {"journey", "imageRun"}
 NOTIFICATION_STATUS_VALUES = {"running", "pending", "success", "error", "cancelled"}
 ACTIVE_THREAD_DELETE_STATUSES = {"running", "waiting", "processing"}
 

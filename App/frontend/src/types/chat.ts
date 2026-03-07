@@ -67,6 +67,7 @@ export interface ToolCallMetadata {
   reason?: string;
   failureType?: ToolCallFailureType;
   result?: ApplicationResult;
+  imageRunId?: string | null;
   acceptedAt?: Date;
 }
 

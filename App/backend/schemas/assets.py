@@ -1,6 +1,6 @@
 """Pydantic schemas for asset management"""
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 
 
@@ -28,46 +28,66 @@ class ReferenceObject(BaseModel):
     name: str
 
 
-class ImageGenerationRequest(BaseModel):
-    """Request to generate an image"""
-    # For natural language providers (OpenAI, Gemini, xAI) - StyledPrompt structure
+class ImageRunRecipe(BaseModel):
+    prompt_type: Literal["natural", "tag_based"]
+    provider: str
+    model: str
+    requested_ratio: str
     prompt: Optional[StyledPrompt] = None
-
-    # For tag-based providers (NovelAI) - StyledPrompt structure
     positive_prompt: Optional[StyledPrompt] = None
     negative_prompt: Optional[StyledPrompt] = None
-
-    provider: str  # 'openai', 'gemini', 'xai', 'novelai'
-    model: str
-    size: str = "1024x1024"
-
-    # Provider-specific settings (e.g., sampler, steps for NovelAI)
     provider_settings: Optional[Dict[str, Any]] = None
-
-    # Reference images for image-to-image generation (OpenAI GPT-Image, Gemini)
     reference_images: Optional[List[ReferenceImage]] = None
-
-    # Reference objects used (stored in Asset metadata)
     reference_objects: Optional[List[ReferenceObject]] = None
 
-    # Asset type for categorization ('scene', 'object', or None)
-    asset_type: Optional[str] = None
 
-    # Notification metadata (server-managed notifications)
-    notification_source_ref_id: Optional[str] = None
-    notification_label: Optional[str] = None
-    notification_meta: Optional[Dict[str, Any]] = None
+class ImageRunTarget(BaseModel):
+    type: Literal["object", "scene"]
+    manuscript_id: Optional[str] = None
+    object_type: Optional[str] = None
+    object_id: Optional[str] = None
 
 
-class ImageGenerationResponse(BaseModel):
-    """Response from image generation"""
-    success: bool
-    asset_id: Optional[str] = None
-    file_path: Optional[str] = None
-    notification_id: Optional[str] = None
+class CreateImageRunRequest(BaseModel):
+    client_request_id: Optional[str] = None
+    recipe: ImageRunRecipe
+    target: ImageRunTarget
+
+
+class ImageRunDecisionRequest(BaseModel):
+    decision: Literal["accept", "reject"]
+
+
+class ImageRunResponse(BaseModel):
+    id: str
+    project_id: str
+    user_id: str
+    thread_id: Optional[str] = None
+    tool_call_id: Optional[str] = None
+    client_request_id: Optional[str] = None
+    origin: Literal["direct", "tool_preview"]
+    review_mode: Literal["auto", "manual"]
+    status: Literal["queued", "running", "review", "applying", "applied", "rejected", "failed", "cancelled"]
+    stage: Optional[Literal["preparing", "generating", "saving", "binding"]] = None
+    request_snapshot: Dict[str, Any]
+    preview_asset_id: Optional[str] = None
+    preview_asset_url: Optional[str] = None
+    final_asset_id: Optional[str] = None
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    resolved_ratio: Optional[str] = None
+    resolved_size: Optional[str] = None
     revised_prompt: Optional[str] = None
-    object_link: Optional["StoryObjectAssetResponse"] = None  # Present when object binding is used
-    error: Optional[str] = None
+    before_excerpt: Optional[str] = None
+    after_excerpt: Optional[str] = None
+    failure_code: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ImageRunListResponse(BaseModel):
+    items: List[ImageRunResponse]
 
 
 class ImageProviderInfo(BaseModel):

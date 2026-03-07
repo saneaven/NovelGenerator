@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { TextButton } from '../../../components/TextButton';
+import { assetService } from '../../../api/assetService';
+import { useImageRunStore } from '../../../imageRun';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
-import { applyImageToolAction } from '../../../runtime/threadCommands';
 import type { ImageCardProps } from './types';
 
-function summarizeExcerpt(text: string | undefined, position: 'before' | 'after'): string {
+function summarizeExcerpt(text: string | undefined | null, position: 'before' | 'after'): string {
   const trimmed = String(text ?? '').trim();
   if (!trimmed) {
     return position === 'before' ? '...[previous text]' : '[following text]...';
@@ -49,14 +50,14 @@ function ActionRow(props: {
 }
 
 function PreviewIsland(props: {
-  imageUrl?: string;
+  imageUrl?: string | null;
   alt: string;
   prompt: string;
   targetLabel?: string;
   requestedRatio: string;
-  resolvedRatio?: string;
-  provider?: string;
-  model?: string;
+  resolvedRatio?: string | null;
+  provider?: string | null;
+  model?: string | null;
 }) {
   const { imageUrl, alt, prompt, targetLabel, requestedRatio, resolvedRatio, provider, model } = props;
   return (
@@ -99,8 +100,8 @@ function PreviewIsland(props: {
 }
 
 export const ImageToolCard: React.FC<ImageCardProps> = ({
-  threadId,
   scopeKey,
+  projectId,
   operation,
   showDecisionButtons,
   decisionDisabled = false,
@@ -108,6 +109,7 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
   onReject,
 }) => {
   const [loadingAction, setLoadingAction] = useState<'accept' | 'reject' | null>(null);
+  const imageRun = useImageRunStore((state) => (operation.imageRunId ? state.runsById[operation.imageRunId] : undefined));
 
   const buttonsDisabled = decisionDisabled || loadingAction !== null;
   const previewTitle = operation.imageKind === 'scene' ? 'Generated scene image' : 'Generated object image';
@@ -117,58 +119,65 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
       ? operation.reason
       : undefined;
 
-  const runImageAction = useCallback(async (action: 'accept' | 'reject') => {
-    if (buttonsDisabled) return;
-    setLoadingAction(action);
+  const runDecision = useCallback(async (decision: 'accept' | 'reject') => {
+    if (!operation.imageRunId || !projectId || buttonsDisabled) return;
+    setLoadingAction(decision);
     try {
-      await applyImageToolAction({
-        threadId,
-        toolCallId: operation.id,
-        action,
-      });
+      const updated = await assetService.decideImageRun(projectId, operation.imageRunId, decision);
+      useImageRunStore.getState().upsertRun(updated);
     } finally {
       setLoadingAction(null);
     }
-  }, [buttonsDisabled, operation.id, threadId]);
+  }, [buttonsDisabled, operation.imageRunId, projectId]);
 
   const actionIsland = useMemo(() => {
     if (operation.status === 'pending') {
       return (
         <div className="function-call-image-panel function-call-image-panel--note">
-          Generate image from this prompt, or reject the request.
+          Accept to start image generation, or reject the request.
         </div>
       );
     }
-    if (operation.status === 'working' && operation.imageState === 'generating') {
-      return (
-        <div className="function-call-image-panel">
-          <div className="function-call-image-status-note">Generating image preview...</div>
-        </div>
-      );
-    }
-    if (operation.status === 'working' && operation.imageState === 'generated') {
-      return (
-        <div className="function-call-image-panel">
-          <div className="function-call-image-status-note">Preview ready. Apply it or reject it.</div>
-          <ActionRow
-            loadingAction={loadingAction}
-            disabled={buttonsDisabled}
-            acceptLabel={operation.imageKind === 'object' ? 'Apply as main image' : 'Apply'}
-            onAccept={() => void runImageAction('accept')}
-            onReject={() => void runImageAction('reject')}
-          />
-        </div>
-      );
-    }
+
     if (operation.status === 'processing') {
       return (
         <div className="function-call-image-panel">
-          <div className="function-call-image-status-note">
-            {operation.previewAssetUrl ? 'Applying generated image...' : 'Generating image preview...'}
-          </div>
+          <div className="function-call-image-status-note">Starting image generation...</div>
         </div>
       );
     }
+
+    if (operation.status === 'working') {
+      if (!imageRun || imageRun.status === 'queued' || imageRun.status === 'running') {
+        return (
+          <div className="function-call-image-panel">
+            <div className="function-call-image-status-note">Generating image preview...</div>
+          </div>
+        );
+      }
+      if (imageRun.status === 'applying') {
+        return (
+          <div className="function-call-image-panel">
+            <div className="function-call-image-status-note">Applying generated image...</div>
+          </div>
+        );
+      }
+      if (imageRun.status === 'review') {
+        return (
+          <div className="function-call-image-panel">
+            <div className="function-call-image-status-note">Preview ready. Apply it or reject it.</div>
+            <ActionRow
+              loadingAction={loadingAction}
+              disabled={buttonsDisabled}
+              acceptLabel={operation.imageKind === 'object' ? 'Apply as main image' : 'Apply'}
+              onAccept={() => void runDecision('accept')}
+              onReject={() => void runDecision('reject')}
+            />
+          </div>
+        );
+      }
+    }
+
     if (operation.status === 'applied') {
       return (
         <div className="function-call-image-panel">
@@ -178,6 +187,7 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
         </div>
       );
     }
+
     if (operation.isUserRejectedFailure) {
       return (
         <div className="function-call-image-panel">
@@ -185,6 +195,7 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
         </div>
       );
     }
+
     if (operation.status === 'rejected') {
       return (
         <div className="function-call-image-panel">
@@ -192,14 +203,15 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
         </div>
       );
     }
+
     return (
       <div className="function-call-image-panel">
         <div className="function-call-image-status-note">
-          {operation.reason || operation.result?.error || 'Image workflow failed.'}
+          {operation.reason || imageRun?.error_message || operation.result?.error || 'Image workflow failed.'}
         </div>
       </div>
     );
-  }, [buttonsDisabled, loadingAction, operation, runImageAction]);
+  }, [buttonsDisabled, imageRun, loadingAction, operation, runDecision]);
 
   const defaultExpanded = operation.status === 'pending'
     || operation.status === 'working'
@@ -222,23 +234,23 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
         defaultExpanded={defaultExpanded}
         islands={[
           <div className="function-call-image-excerpt" key="before">
-            {summarizeExcerpt(operation.beforeExcerpt, 'before')}
+            {summarizeExcerpt(imageRun?.before_excerpt, 'before')}
           </div>,
           <div className="function-call-image-middle-island" key="middle">
             <PreviewIsland
-              imageUrl={operation.previewAssetUrl}
+              imageUrl={imageRun?.preview_asset_url}
               alt={previewTitle}
               prompt={operation.prompt}
               targetLabel={operation.targetLabel}
               requestedRatio={operation.requestedRatio}
-              resolvedRatio={operation.resolvedRatio}
-              provider={operation.provider}
-              model={operation.model}
+              resolvedRatio={imageRun?.resolved_ratio}
+              provider={imageRun?.provider}
+              model={imageRun?.model}
             />
             {actionIsland}
           </div>,
           <div className="function-call-image-excerpt" key="after">
-            {summarizeExcerpt(operation.afterExcerpt, 'after')}
+            {summarizeExcerpt(imageRun?.after_excerpt, 'after')}
           </div>,
         ]}
       />
@@ -247,14 +259,14 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
 
   const firstIsland = (
     <PreviewIsland
-      imageUrl={operation.previewAssetUrl}
+      imageUrl={imageRun?.preview_asset_url}
       alt={previewTitle}
       prompt={operation.prompt}
       targetLabel={operation.targetLabel}
       requestedRatio={operation.requestedRatio}
-      resolvedRatio={operation.resolvedRatio}
-      provider={operation.provider}
-      model={operation.model}
+      resolvedRatio={imageRun?.resolved_ratio}
+      provider={imageRun?.provider}
+      model={imageRun?.model}
     />
   );
 

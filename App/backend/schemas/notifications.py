@@ -6,7 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-NotificationSource = Literal["journey", "imageTask"]
+NotificationSource = Literal["journey", "imageRun"]
 NotificationStatus = Literal["running", "pending", "success", "error", "cancelled"]
 
 

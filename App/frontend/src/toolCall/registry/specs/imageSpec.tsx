@@ -6,35 +6,70 @@ import {
   type RenderCardParams,
   type ToolUiSpec,
 } from '../contracts';
+import { useDisplayLanguageStore } from '../../../store/displayLanguageStore';
+import { useSettingsStore } from '../../../store/settingsStore';
+import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { ImageToolCard } from '../../ui/cards/ImageToolCard';
 import type { ImageOperationVM } from '../../ui/vmTypes';
 
 const IMAGE_TOOL_NAMES = new Set(['generate_object_image', 'generate_scene_image']);
 
-function imageKindForTool(toolName: string, extraContent: Record<string, unknown>): 'object' | 'scene' {
-  const kind = typeof extraContent.kind === 'string' ? extraContent.kind : '';
-  if (kind === 'scene') return 'scene';
-  if (kind === 'object') return 'object';
-  return toolName === 'generate_scene_image' ? 'scene' : 'object';
-}
-
-function imageTitle(params: MapToolToVmParams, extraContent: Record<string, unknown>): string {
-  const kind = imageKindForTool(params.toolName, extraContent);
-  const targetLabel = typeof extraContent.object_label === 'string'
-    ? extraContent.object_label
-    : typeof extraContent.manuscript_label === 'string'
-      ? extraContent.manuscript_label
-      : '';
-  if (kind === 'scene') {
-    return targetLabel ? `Scene Image: ${targetLabel}` : 'Scene Image';
+function resolveLanguage(): string {
+  const preferred = useDisplayLanguageStore.getState().preferredDisplayLanguage;
+  if (preferred) return preferred;
+  try {
+    return useSettingsStore.getState().getSettings().mainLanguage || 'English';
+  } catch {
+    return 'English';
   }
-  return targetLabel ? `Object Image: ${targetLabel}` : 'Object Image';
 }
 
-function imageState(extraContent: Record<string, unknown>): 'generating' | 'generated' {
-  const raw = typeof extraContent.image_state === 'string' ? extraContent.image_state : 'generating';
-  if (raw === 'generated') return raw;
-  return 'generating';
+function dataForLanguage(object: { data?: Record<string, unknown> } | undefined, language: string): Record<string, unknown> {
+  const data = object?.data;
+  if (!data || typeof data !== 'object') return {};
+  const exact = data[language];
+  if (exact && typeof exact === 'object' && !Array.isArray(exact)) {
+    return exact as Record<string, unknown>;
+  }
+  for (const value of Object.values(data)) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return {};
+}
+
+function resolveObjectLabel(objectId: string | undefined, language: string): string | undefined {
+  if (!objectId) return undefined;
+  const object = useUnifiedObjectStore.getState().objects[objectId];
+  if (!object) return undefined;
+  const data = dataForLanguage(object, language);
+  if (object.type === 'basic_info') {
+    const title = data.title;
+    return typeof title === 'string' && title.trim() ? title.trim() : 'Basic Info';
+  }
+  for (const key of ['name', 'title']) {
+    const value = data[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return object.id;
+}
+
+function resolveSceneLabel(manuscriptId: string | undefined, language: string): string | undefined {
+  if (!manuscriptId) return undefined;
+  const objects = useUnifiedObjectStore.getState().objects;
+  const manuscript = objects[manuscriptId];
+  if (!manuscript) return undefined;
+  const chapterId = typeof manuscript.metadata?.chapter_id === 'string' ? manuscript.metadata.chapter_id : null;
+  if (chapterId) {
+    const chapter = objects[chapterId];
+    const chapterData = dataForLanguage(chapter, language);
+    const chapterName = chapterData.name;
+    if (typeof chapterName === 'string' && chapterName.trim()) {
+      return `Manuscript: ${chapterName.trim()}`;
+    }
+  }
+  return 'Manuscript';
 }
 
 function failureCode(params: MapToolToVmParams): string | undefined {
@@ -56,22 +91,22 @@ const imageSpec: ToolUiSpec = {
 
   toOperationVM(params: MapToolToVmParams): ImageOperationVM {
     const args = coerceRecord(params.args);
-    const extraContent = coerceRecord(params.extraContent);
-    const targetLabel = typeof extraContent.object_label === 'string'
-      ? extraContent.object_label
-      : typeof extraContent.manuscript_label === 'string'
-        ? extraContent.manuscript_label
-        : undefined;
+    const language = resolveLanguage();
+    const imageKind = params.toolName === 'generate_scene_image' ? 'scene' : 'object';
+    const objectId = typeof args.object_id === 'string' ? args.object_id : undefined;
+    const manuscriptId = typeof args.manuscript_id === 'string' ? args.manuscript_id : undefined;
+    const targetLabel = imageKind === 'scene'
+      ? resolveSceneLabel(manuscriptId, language)
+      : resolveObjectLabel(objectId, language);
+    const title = imageKind === 'scene'
+      ? (targetLabel ? `Scene Image: ${targetLabel}` : 'Scene Image')
+      : (targetLabel ? `Object Image: ${targetLabel}` : 'Object Image');
     const resolvedFailureCode = failureCode(params);
 
     const base = buildOperationBase(
       params,
-      imageTitle(params, extraContent),
-      typeof extraContent.object_id === 'string'
-        ? extraContent.object_id
-        : typeof extraContent.manuscript_id === 'string'
-          ? extraContent.manuscript_id
-          : undefined,
+      title,
+      imageKind === 'scene' ? manuscriptId : objectId,
       targetLabel,
     );
 
@@ -80,24 +115,9 @@ const imageSpec: ToolUiSpec = {
       args,
       category: 'image',
       includeInBulkDecision: false,
-      imageKind: imageKindForTool(params.toolName, extraContent),
-      imageState: imageState(extraContent),
+      imageKind,
       prompt: typeof args.prompt === 'string' ? args.prompt : '',
-      requestedRatio: typeof extraContent.requested_ratio === 'string'
-        ? extraContent.requested_ratio
-        : typeof args.ratio === 'string'
-          ? args.ratio
-          : '',
-      resolvedRatio: typeof extraContent.resolved_ratio === 'string' ? extraContent.resolved_ratio : undefined,
-      resolvedSize: typeof extraContent.resolved_size === 'string' ? extraContent.resolved_size : undefined,
-      provider: typeof extraContent.provider === 'string' ? extraContent.provider : undefined,
-      model: typeof extraContent.model === 'string' ? extraContent.model : undefined,
-      previewAssetId: typeof extraContent.preview_asset_id === 'string' ? extraContent.preview_asset_id : undefined,
-      previewAssetUrl: typeof extraContent.preview_asset_url === 'string' ? extraContent.preview_asset_url : undefined,
-      objectType: typeof extraContent.object_type === 'string' ? extraContent.object_type : undefined,
-      beforeExcerpt: typeof extraContent.before_excerpt === 'string' ? extraContent.before_excerpt : undefined,
-      afterExcerpt: typeof extraContent.after_excerpt === 'string' ? extraContent.after_excerpt : undefined,
-      failureCode: resolvedFailureCode,
+      requestedRatio: typeof args.ratio === 'string' ? args.ratio : '',
       isUserRejectedFailure: base.status === 'failed' && resolvedFailureCode === 'user_rejected_generated_image',
     };
   },

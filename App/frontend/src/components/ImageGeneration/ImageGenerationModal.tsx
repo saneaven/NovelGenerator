@@ -15,11 +15,11 @@ import {
     PROVIDER_PROMPT_TYPES,
     type NovelAIReferenceMode,
     type ImageProviderType,
-} from '../../imageTask/providerCatalog/providerConfig';
+} from '../../imageRun/providerConfig';
 import { assetService, type Asset, type ImageProvider, type StyledPrompt } from '../../api/assetService';
 import { getAssetUrl } from '../../utils/assetUrl';
-import { ImageTaskRuntime, type GenerationRecipe, type ImageTaskBinding } from '../../imageTask';
-import { useImageTaskStore } from '../../imageTask/store';
+import type { ImageGenerationBinding, ImageGenerationRecipe } from '../../imageRun';
+import { ImageRunRuntime, useImageRunStore } from '../../imageRun';
 import { UnifiedImageModal } from '../AssetManager';
 import UnifiedImagePromptModal, { type PromptResult, type PromptMode } from './UnifiedImagePromptModal';
 import ThinkingDisplay from '../common/ThinkingDisplay';
@@ -48,7 +48,7 @@ interface ImageGenerationModalProps {
     objectType?: string;
     objectId?: string;
     manuscriptId?: string;  // For scene mode: ownership
-    initialRecipe?: GenerationRecipe | null; // Prefill UI for retry flow
+    initialRecipe?: ImageGenerationRecipe | null; // Prefill UI for retry flow
     // Scene context for scene mode AI assist
     sceneContext?: { preContext: string; postContext: string };
     // Asset type for generated images ('object' or 'scene')
@@ -103,9 +103,9 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const { getObject } = useUnifiedObjectStore();
 
     const [taskId, setTaskId] = useState<string | null>(null);
-    const session = useImageTaskStore((state) => (taskId ? state.sessions[taskId] : undefined));
-    const isGenerating = session?.status === 'running';
-    const error = session?.status === 'error' ? session.error ?? 'Image generation failed' : null;
+    const session = useImageRunStore((state) => (taskId ? state.runsById[taskId] : undefined));
+    const isGenerating = session?.status === 'queued' || session?.status === 'running' || session?.status === 'applying';
+    const error = session?.status === 'failed' ? session.error_message ?? 'Image generation failed' : null;
     // Get saved prompts from object metadata
     const savedPromptObject = objectId ? getObject(objectId) : null;
     const savedPrompts = useMemo(() => {
@@ -544,7 +544,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         return tagBasedStyles.find((s) => s.id === selectedTagBasedStyleId) || null;
     };
 
-    const binding: ImageTaskBinding | null = useMemo(() => {
+    const binding: ImageGenerationBinding | null = useMemo(() => {
         if (assetType === 'scene') {
             return manuscriptId ? { type: 'scene', manuscriptId } : null;
         }
@@ -615,7 +615,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     ? { prefix: negPrefix, content: negContent, postfix: negPostfix }
                     : undefined;
 
-            const recipe: GenerationRecipe = {
+            const recipe: ImageGenerationRecipe = {
                 promptType: 'tag_based',
                 provider,
                 model,
@@ -627,7 +627,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 referenceImages: referenceImagesData,
             };
 
-                const { taskId: newTaskId } = ImageTaskRuntime.start(
+                const { imageRunId: newTaskId } = await ImageRunRuntime.start(
                     { projectId: currentProjectId, binding, recipe, label: 'Generate image' },
                     {
                         onSuccess: (result) => {
@@ -650,7 +650,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 postfix: (style?.postfix ?? customNaturalPostfix) || '',
             };
 
-            const recipe: GenerationRecipe = {
+            const recipe: ImageGenerationRecipe = {
                 promptType: 'natural',
                 provider,
                 model,
@@ -661,7 +661,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 referenceImages: referenceImagesData,
             };
 
-            const { taskId: newTaskId } = ImageTaskRuntime.start(
+            const { imageRunId: newTaskId } = await ImageRunRuntime.start(
                 { projectId: currentProjectId, binding, recipe, label: 'Generate image' },
                 {
                     onSuccess: (result) => {
