@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
 import { BaseModal } from '../BaseModal';
@@ -123,9 +123,6 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     journeyTargetIds: string[];
   } | null>(null);
 
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const userScrolledUpRef = useRef(false);
-
   const mainLanguage = useSettingsStore((s) => s.getSettings().mainLanguage);
   const liveView = useThreadLiveViewState(threadId);
 
@@ -208,19 +205,12 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     [sortedMessages, toolCallIdsByAssistantMessageId, toolCallsById, mainLanguage],
   );
 
-  // Sticky message = last user message
-  const stickyMessage = useMemo(() => {
+  const latestUserMessageId = useMemo(() => {
     for (let i = displayMessages.length - 1; i >= 0; i--) {
-      if (displayMessages[i].role === 'user') return displayMessages[i];
+      if (displayMessages[i].role === 'user') return displayMessages[i].id;
     }
     return null;
   }, [displayMessages]);
-
-  // Timeline messages = all except the sticky one
-  const timelineMessages = useMemo(
-    () => (stickyMessage ? displayMessages.filter((m) => m.id !== stickyMessage.id) : displayMessages),
-    [displayMessages, stickyMessage],
-  );
 
   // Last assistant message (for tool call pending detection)
   const lastAssistantMessage = useMemo(() => {
@@ -260,20 +250,6 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const isPending = displayStatus === 'waiting' || hasPendingToolCalls;
   const isFeedbackDisabled = isRunning || isPending;
 
-  // Auto-scroll
-  const handleBodyScroll = useCallback(() => {
-    const el = bodyRef.current;
-    if (!el) return;
-    userScrolledUpRef.current = el.scrollHeight - el.scrollTop - el.clientHeight > 50;
-  }, []);
-
-  useEffect(() => {
-    if (userScrolledUpRef.current) return;
-    const el = bodyRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [displayMessages, threadStatus, isStreamActive]);
-
   // Handlers
   const handleCancel = useCallback(() => {
     void cancelThread({ threadId });
@@ -306,9 +282,6 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     },
     [handleSendFeedback],
   );
-
-  // Render helpers
-  const renderStickyText = stickyMessage ? getMessageText(stickyMessage, mainLanguage) : '';
 
   const renderAssistantMessage = (message: ThreadMessage, isLast: boolean) => {
     const text = getMessageText(message, mainLanguage);
@@ -354,9 +327,19 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
 
   const renderUserMessage = (message: ThreadMessage) => {
     const text = getMessageText(message, mainLanguage);
+    const isStickyCurrent = message.id === latestUserMessageId;
     return (
-      <div key={message.id} className="journey-detail-message journey-detail-message--user">
-        <div className="journey-detail-message-content">{text}</div>
+      <div
+        key={message.id}
+        className={[
+          'journey-detail-message',
+          'journey-detail-message--user',
+          isStickyCurrent ? 'journey-detail-message--sticky-current' : '',
+        ].filter(Boolean).join(' ')}
+      >
+        <div className="journey-detail-user-bubble">
+          <div className="journey-detail-message-content">{text}</div>
+        </div>
       </div>
     );
   };
@@ -397,6 +380,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   }
 
   const statusText = statusLabel(displayStatus);
+  const hasInlineWarning = Boolean(warning || (displayStatus === 'error' && threadLastError));
 
   return (
     <BaseModal
@@ -424,35 +408,13 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
         </div>
       </div>
 
-      {/* Sticky user message */}
-      <AnimatePresence mode="popLayout">
-        {renderStickyText && (
-          <motion.div
-            key={stickyMessage!.id}
-            className="journey-detail-sticky-user"
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.2 }}
-          >
-            <div className="journey-detail-sticky-user-label">Current Request</div>
-            <div className="journey-detail-sticky-user-text">{renderStickyText}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Warning / Error details */}
-      {(warning || (displayStatus === 'error' && threadLastError)) && (
-        <div className="journey-detail-warning">{warning || threadLastError}</div>
-      )}
-
       {/* Scrollable message timeline */}
-      <div className="journey-detail-body" ref={bodyRef} onScroll={handleBodyScroll}>
-        {timelineMessages.length === 0 && !isRunning && liveView?.noticeKind !== 'preexisting_live_run' && (
+      <div className="journey-detail-body">
+        {displayMessages.length === 0 && !isRunning && !hasInlineWarning && liveView?.noticeKind !== 'preexisting_live_run' && (
           <div className="journey-detail-empty">No messages yet.</div>
         )}
 
-        {timelineMessages.map((message) => {
+        {displayMessages.map((message) => {
           if (message.role === 'user') return renderUserMessage(message);
           if (message.role === 'assistant') {
             const isLastAssistant = message.id === lastAssistantMessage?.id;
@@ -460,6 +422,10 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
           }
           return null;
         })}
+
+        {hasInlineWarning && (
+          <div className="journey-detail-warning">{warning || threadLastError}</div>
+        )}
 
         {/* Streaming indicator */}
         {isRunning && !liveView?.hasStreamingMessage && liveView?.noticeKind === 'preexisting_live_run' && (

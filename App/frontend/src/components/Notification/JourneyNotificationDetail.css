@@ -92,40 +92,14 @@
   color: var(--color-error);
 }
 
-/* ===== Sticky User Message ===== */
-.journey-detail-sticky-user {
-  padding: var(--spacing-md) var(--spacing-xl);
-  background: var(--color-surface-subtle);
-  border-bottom: 1px solid var(--color-border-default);
-  flex-shrink: 0;
-}
-
-.journey-detail-sticky-user-label {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium, 500);
-  color: var(--color-brand-primary);
-  margin-bottom: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.journey-detail-sticky-user-text {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 80px;
-  overflow-y: auto;
-}
-
 /* ===== Warning ===== */
 .journey-detail-warning {
-  padding: var(--spacing-sm) var(--spacing-xl);
+  padding: var(--spacing-sm) var(--spacing-md);
   background: var(--color-warning-light, oklch(0.95 0.08 80));
   color: var(--color-warning, oklch(0.65 0.15 80));
   font-size: var(--font-size-xs);
-  border-bottom: 1px solid var(--color-border-default);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
   flex-shrink: 0;
 }
 
@@ -133,7 +107,7 @@
 .journey-detail-body {
   flex: 1;
   overflow-y: auto;
-  padding: var(--spacing-lg) var(--spacing-xl);
+  padding: 0 var(--spacing-xl) var(--spacing-lg);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
@@ -180,16 +154,40 @@
   gap: var(--spacing-xs);
 }
 
-
 .journey-detail-message--user {
+  margin: 0;
+}
+
+.journey-detail-user-bubble {
   padding: var(--spacing-md);
   background: var(--color-surface-subtle);
   border-radius: var(--border-radius-lg);
   border: 1px solid var(--color-border-subtle);
 }
 
+.journey-detail-message--sticky-current {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-left: calc(var(--spacing-xl) * -1);
+  margin-right: calc(var(--spacing-xl) * -1);
+  border-radius: 0;
+}
+
+.journey-detail-message--sticky-current .journey-detail-user-bubble {
+  border-color: var(--color-border-default);
+  border-left: none;
+  border-right: none;
+  border-radius: 0;
+  box-shadow: var(--shadow-sm);
+}
+
 .journey-detail-message--assistant {
   padding: 0 var(--spacing-md);
+}
+
+.journey-detail-message--sticky-current + .journey-detail-message--assistant {
+  margin-top: calc(var(--spacing-lg) * -0.35);
 }
 
 .journey-detail-message-content {
@@ -307,12 +305,13 @@
     padding: var(--spacing-sm) var(--spacing-lg);
   }
 
-  .journey-detail-sticky-user {
-    padding: var(--spacing-sm) var(--spacing-lg);
+  .journey-detail-body {
+    padding: 0 var(--spacing-lg) var(--spacing-md);
   }
 
-  .journey-detail-body {
-    padding: var(--spacing-md) var(--spacing-lg);
+  .journey-detail-message--sticky-current {
+    margin-left: calc(var(--spacing-lg) * -1);
+    margin-right: calc(var(--spacing-lg) * -1);
   }
 
   .journey-detail-title {
