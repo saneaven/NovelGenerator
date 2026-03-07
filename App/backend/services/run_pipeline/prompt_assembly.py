@@ -13,6 +13,7 @@ from ..prompt_runtime.template_renderer import TemplateRenderer, load_user_fragm
 from ..prompt_runtime.contracts import ScenarioBundle
 from ..settings_service import settings_service
 from ..sidecar_client import sidecar_client
+from ..storage_usage_service import apply_project_usage_delta, build_thread_delta, snapshot_thread_row
 from .contracts import CreateContext
 
 
@@ -67,8 +68,16 @@ async def assemble_create(
         template_data=template_data,
     )
 
+    before = snapshot_thread_row(thread)
     thread.captured_history_system_prompt = system_prompt
     thread.captured_history_conversation_json = conversation
+    apply_project_usage_delta(
+        db,
+        user_id=run.user_id,
+        project_id=run.project_id,
+        delta=build_thread_delta(before, snapshot_thread_row(thread)),
+        enforce_quota=True,
+    )
     db.commit()
 
     bundle = ScenarioBundle(

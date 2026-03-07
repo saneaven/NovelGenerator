@@ -36,7 +36,6 @@ from ..services.deletion_service import (
     delete_assets_with_files,
     delete_object_versions_bulk,
     delete_rag_sources_bulk,
-    delete_story_object_assets_with_files,
 )
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.rag_index_service import index_object
@@ -44,6 +43,22 @@ from ..utils.object_type_aliases import externalize_object_type, normalize_objec
 from .object_change_events import queue_object_change
 from .credential_service import CredentialServiceError, credential_service
 from .settings_service import settings_service
+from .storage_usage_service import (
+    apply_project_usage_delta,
+    apply_project_usage_deltas,
+    build_asset_rows_delta,
+    build_manuscript_images_delta,
+    build_object_version_delta,
+    build_story_core_delta,
+    build_story_core_rows_delta,
+    build_usage_delta_for_measurement_rows,
+    measure_object_version_row,
+    snapshot_asset_row,
+    snapshot_manuscript_image_row,
+    snapshot_object_version_row,
+    snapshot_rows,
+    snapshot_story_core_row,
+)
 
 
 LOREBOOK_TYPE = normalize_object_type("lorebook")
@@ -631,6 +646,13 @@ class ObjectService:
         )
         db.add(version)
         db.flush()
+        deltas = [
+            build_object_version_delta(
+                object_type=t,
+                before=None,
+                after=snapshot_object_version_row(version),
+            )
+        ]
 
         # Chapter creation side effect: auto-create manuscript + v1
         if t == "chapter":
@@ -651,6 +673,13 @@ class ObjectService:
             )
             db.add(manuscript_version)
             db.flush()
+            deltas.append(
+                build_object_version_delta(
+                    object_type="manuscript",
+                    before=None,
+                    after=snapshot_object_version_row(manuscript_version),
+                )
+            )
 
             # refresh chapter relation for metadata manuscript_id
             core_obj = (
@@ -691,6 +720,14 @@ class ObjectService:
                 action="created",
             )
 
+        if created_by is not None:
+            apply_project_usage_deltas(
+                db,
+                user_id=created_by,
+                project_id=project_id,
+                deltas=deltas,
+                enforce_quota=True,
+            )
         return _serialize_object(db, t, core_obj, language)
 
     def update_object(
@@ -723,7 +760,15 @@ class ObjectService:
         if metadata:
             _handle_metadata_update(db, t, object_id, obj, metadata)
 
-        _create_or_update_version(
+        version_before = None if create_new_version else snapshot_object_version_row(_latest_version(db, t, object_id))
+        manuscript_images_before = None
+        if t == "manuscript":
+            manuscript_images_before = snapshot_rows(
+                db.query(ManuscriptImage).filter(ManuscriptImage.manuscript_id == object_id).all(),
+                snapshot_manuscript_image_row,
+            )
+
+        version = _create_or_update_version(
             db,
             object_type=t,
             object_id=object_id,
@@ -771,6 +816,28 @@ class ObjectService:
             action="updated",
         )
 
+        if created_by is not None:
+            deltas = [
+                build_object_version_delta(
+                    object_type=t,
+                    before=version_before if not create_new_version else None,
+                    after=snapshot_object_version_row(version),
+                )
+            ]
+            if t == "manuscript":
+                manuscript_images_after = snapshot_rows(
+                    db.query(ManuscriptImage).filter(ManuscriptImage.manuscript_id == object_id).all(),
+                    snapshot_manuscript_image_row,
+                )
+                deltas.append(build_manuscript_images_delta(manuscript_images_before, manuscript_images_after))
+
+            apply_project_usage_deltas(
+                db,
+                user_id=created_by,
+                project_id=project_id,
+                deltas=deltas,
+                enforce_quota=True,
+            )
         return _serialize_object(db, t, obj)
 
     def add_translation(
@@ -797,7 +864,8 @@ class ObjectService:
         if language in latest_data:
             raise ValueError(f"Translation for {language} already exists in latest version")
 
-        _create_or_update_version(
+        version_before = snapshot_object_version_row(latest)
+        version = _create_or_update_version(
             db,
             object_type=t,
             object_id=object_id,
@@ -824,6 +892,18 @@ class ObjectService:
             object_id=object_id,
             action="updated",
         )
+        if created_by is not None:
+            apply_project_usage_delta(
+                db,
+                user_id=created_by,
+                project_id=project_id,
+                delta=build_object_version_delta(
+                    object_type=t,
+                    before=version_before,
+                    after=snapshot_object_version_row(version),
+                ),
+                enforce_quota=True,
+            )
 
         refreshed_latest = _latest_version(db, t, object_id)
         if refreshed_latest is None:
@@ -925,6 +1005,18 @@ class ObjectService:
             object_id=object_id,
             action="updated",
         )
+        if created_by is not None:
+            apply_project_usage_delta(
+                db,
+                user_id=created_by,
+                project_id=project_id,
+                delta=build_object_version_delta(
+                    object_type=t,
+                    before=None,
+                    after=snapshot_object_version_row(new_version),
+                ),
+                enforce_quota=True,
+            )
 
         return {
             "message": f"Restored v{version_to_restore.version_number} as new v{next_version_number}",
@@ -955,25 +1047,84 @@ class ObjectService:
             for k, v in subtree.items():
                 ids_by_type.setdefault(k, []).extend(v)
 
+        story_core_before: list[object] = []
+        for model_class, key in (
+            (BasicInfo, "basic_info"),
+            (Character, "character"),
+            (Organization, "organization"),
+            (Location, "location"),
+            (LorebookEntry, LOREBOOK_TYPE),
+        ):
+            object_ids = ids_by_type.get(key) or []
+            if not object_ids:
+                continue
+            story_core_before.extend(
+                snapshot_rows(
+                    db.query(model_class).filter(model_class.id.in_(list(object_ids))).all(),
+                    snapshot_story_core_row,
+                )
+            )
+
+        story_version_before = []
+        manuscript_version_before = []
+        for deleted_type, deleted_ids in ids_by_type.items():
+            if not deleted_ids:
+                continue
+            rows = snapshot_rows(
+                db.query(ObjectVersion)
+                .filter(ObjectVersion.object_type == deleted_type, ObjectVersion.object_id.in_(list(deleted_ids)))
+                .all(),
+                snapshot_object_version_row,
+            )
+            if deleted_type == "manuscript":
+                manuscript_version_before.extend(rows)
+            else:
+                story_version_before.extend(rows)
+
+        manuscript_image_before = []
+        manuscript_ids = ids_by_type.get("manuscript") or []
+        if manuscript_ids:
+            manuscript_image_before = snapshot_rows(
+                db.query(ManuscriptImage).filter(ManuscriptImage.manuscript_id.in_(list(manuscript_ids))).all(),
+                snapshot_manuscript_image_row,
+            )
+
+        owned_assets: list[Asset] = []
         if t in {"basic_info", "character", "organization", "location", LOREBOOK_TYPE}:
-            delete_story_object_assets_with_files(
-                db,
-                project_id=resolved_project_id,
-                object_type=t,
-                object_id=object_id,
+            owned_assets = (
+                db.query(Asset)
+                .join(StoryObjectAsset, StoryObjectAsset.asset_id == Asset.id)
+                .filter(StoryObjectAsset.object_type == t, StoryObjectAsset.object_id == object_id)
+                .all()
             )
         elif t == "manuscript":
-            owned_assets = db.query(Asset).filter(Asset.project_id == resolved_project_id, Asset.manuscript_id == object_id).all()
+            owned_assets = (
+                db.query(Asset)
+                .filter(Asset.project_id == resolved_project_id, Asset.manuscript_id == object_id)
+                .all()
+            )
+        elif t in {"outline", "act", "chapter"} and manuscript_ids:
+            owned_assets = (
+                db.query(Asset)
+                .filter(Asset.project_id == resolved_project_id, Asset.manuscript_id.in_(list(manuscript_ids)))
+                .all()
+            )
+
+        deleted_asset_ids = [asset.id for asset in owned_assets if isinstance(asset.id, UUID)]
+        deleted_asset_before = snapshot_rows(owned_assets, snapshot_asset_row)
+        remaining_ref_assets_before = snapshot_rows(
+            db.query(Asset)
+            .filter(
+                Asset.project_id == resolved_project_id,
+                Asset.generation_reference_images.isnot(None),
+                ~Asset.id.in_(deleted_asset_ids) if deleted_asset_ids else True,
+            )
+            .all(),
+            snapshot_asset_row,
+        )
+
+        if owned_assets:
             delete_assets_with_files(db, assets=owned_assets, scrub_references_in_project_id=resolved_project_id)
-        elif t in {"outline", "act", "chapter"}:
-            manuscript_ids = ids_by_type.get("manuscript") or []
-            if manuscript_ids:
-                owned_assets = (
-                    db.query(Asset)
-                    .filter(Asset.project_id == resolved_project_id, Asset.manuscript_id.in_(list(manuscript_ids)))
-                    .all()
-                )
-                delete_assets_with_files(db, assets=owned_assets, scrub_references_in_project_id=resolved_project_id)
 
         delete_rag_sources_bulk(db, user_id=user_id, project_id=resolved_project_id, ids_by_type=ids_by_type)
         delete_object_versions_bulk(db, ids_by_type=ids_by_type)
@@ -989,6 +1140,40 @@ class ObjectService:
                 )
 
         db.delete(obj)
+        remaining_ref_assets_after = snapshot_rows(
+            db.query(Asset)
+            .filter(
+                Asset.project_id == resolved_project_id,
+                Asset.generation_reference_images.isnot(None),
+                ~Asset.id.in_(deleted_asset_ids) if deleted_asset_ids else True,
+            )
+            .all(),
+            snapshot_asset_row,
+        )
+        apply_project_usage_deltas(
+            db,
+            user_id=user_id,
+            project_id=resolved_project_id,
+            deltas=[
+                build_story_core_rows_delta(story_core_before, []),
+                build_usage_delta_for_measurement_rows(
+                    category="story",
+                    before_rows=story_version_before,
+                    after_rows=[],
+                    measure_fn=lambda row: measure_object_version_row(row),
+                ),
+                build_usage_delta_for_measurement_rows(
+                    category="manuscript",
+                    before_rows=manuscript_version_before,
+                    after_rows=[],
+                    measure_fn=lambda row: measure_object_version_row(row),
+                ),
+                build_manuscript_images_delta(manuscript_image_before, []),
+                build_asset_rows_delta(deleted_asset_before, []),
+                build_asset_rows_delta(remaining_ref_assets_before, remaining_ref_assets_after),
+            ],
+            enforce_quota=False,
+        )
         db.flush()
 
     def get_object(self, db: Session, object_type: str, object_id: UUID, *, project_id: UUID, language: str | None = None) -> dict[str, Any] | None:
@@ -1033,6 +1218,7 @@ class ObjectService:
         project_id: UUID,
         object_type: str,
         object_id: UUID,
+        user_id: UUID | None = None,
         image_prompt: str | None = None,
         image_prompt_positive: str | None = None,
         image_prompt_negative: str | None = None,
@@ -1045,6 +1231,7 @@ class ObjectService:
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             raise ValueError(f"{t} not found")
+        before = snapshot_story_core_row(obj)
 
         if image_prompt is not None:
             obj.image_prompt = image_prompt or None
@@ -1062,6 +1249,14 @@ class ObjectService:
             object_id=object_id,
             action="updated",
         )
+        if user_id is not None:
+            apply_project_usage_delta(
+                db,
+                user_id=user_id,
+                project_id=project_id,
+                delta=build_story_core_delta(before, snapshot_story_core_row(obj)),
+                enforce_quota=True,
+            )
 
         return {
             "success": True,

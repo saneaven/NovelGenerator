@@ -59,7 +59,7 @@ const AdminPage: React.FC = () => {
         Object.fromEntries(
           response.users.map((user) => [
             user.user_id,
-            user.asset_quota_bytes_override != null ? String(user.asset_quota_bytes_override) : '',
+            user.storage_quota_bytes_override != null ? String(user.storage_quota_bytes_override) : '',
           ])
         )
       );
@@ -80,7 +80,7 @@ const AdminPage: React.FC = () => {
     setUsers((prev) => prev.map((user) => (user.user_id === nextUser.user_id ? nextUser : user)));
     setQuotaDrafts((prev) => ({
       ...prev,
-      [nextUser.user_id]: nextUser.asset_quota_bytes_override != null ? String(nextUser.asset_quota_bytes_override) : '',
+      [nextUser.user_id]: nextUser.storage_quota_bytes_override != null ? String(nextUser.storage_quota_bytes_override) : '',
     }));
   };
 
@@ -118,7 +118,7 @@ const AdminPage: React.FC = () => {
     setRowErrors((prev) => ({ ...prev, [targetUser.user_id]: null }));
 
     try {
-      const updated = await adminService.updateUser(targetUser.user_id, { asset_quota_bytes: parsedQuota });
+      const updated = await adminService.updateUser(targetUser.user_id, { storage_quota_bytes: parsedQuota });
       replaceUser(updated);
     } catch (err) {
       setRowErrors((prev) => ({
@@ -135,7 +135,7 @@ const AdminPage: React.FC = () => {
     setRowErrors((prev) => ({ ...prev, [targetUser.user_id]: null }));
 
     try {
-      const updated = await adminService.updateUser(targetUser.user_id, { asset_quota_bytes: null });
+      const updated = await adminService.updateUser(targetUser.user_id, { storage_quota_bytes: null });
       replaceUser(updated);
     } catch (err) {
       setRowErrors((prev) => ({
@@ -186,7 +186,7 @@ const AdminPage: React.FC = () => {
               <span>Admin Console</span>
             </div>
             <h1>Admin Console</h1>
-            <p>Manage user roles and asset storage quotas from one dedicated surface.</p>
+            <p>Manage user roles and total project storage quotas from one dedicated surface.</p>
           </div>
 
           <div className="admin-page__header-actions">
@@ -311,7 +311,7 @@ const AdminPage: React.FC = () => {
                     <div className="admin-user-card__meta">
                       <span>{`Joined ${formatJoinedDate(targetUser.created_at)}`}</span>
                       <span>
-                        {targetUser.asset_quota_bytes_override != null
+                        {targetUser.storage_quota_bytes_override != null
                           ? 'Custom quota override'
                           : 'Using default quota'}
                       </span>
@@ -372,7 +372,7 @@ const AdminPage: React.FC = () => {
                           onClick={() => {
                             void handleResetQuota(targetUser);
                           }}
-                          disabled={targetUser.asset_quota_bytes_override == null && !quotaDraft}
+                          disabled={targetUser.storage_quota_bytes_override == null && !quotaDraft}
                           loading={pendingAction === 'reset'}
                         >
                           Reset

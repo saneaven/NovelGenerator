@@ -16,6 +16,7 @@ from ..schemas.assets import (
 )
 from ..services.image_run_service import image_run_service
 from ..services.ownership import require_owned_project
+from ..services.storage_usage_service import StorageQuotaExceededError
 
 
 router = APIRouter(prefix="/api/v1/projects", tags=["image-runs"])
@@ -39,6 +40,9 @@ async def create_image_run(
         db.commit()
         db.refresh(row)
         response = image_run_service.serialize(db, row)
+    except StorageQuotaExceededError:
+        db.rollback()
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc

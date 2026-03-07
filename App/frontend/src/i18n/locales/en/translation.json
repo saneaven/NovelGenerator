@@ -287,7 +287,8 @@
       "storageLoading": "Loading...",
       "storageLoadFailed": "Failed to load storage info",
       "storageByProject": "By project",
-      "storageImages": "{{count}} images"
+      "storageImages": "{{count}} images",
+      "storageProjectSummary": "Images {{images}} • Story {{story}} • Manuscripts {{manuscripts}} • Chat {{chat}}"
     },
     "theme": {
       "title": "Theme Settings",

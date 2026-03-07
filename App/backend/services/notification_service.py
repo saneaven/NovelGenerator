@@ -9,6 +9,11 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..models.db_models import NotificationModel, Thread
+from .storage_usage_service import (
+    apply_project_usage_delta,
+    build_notification_delta,
+    snapshot_notification_row,
+)
 
 
 NOTIFICATION_SOURCE_VALUES = {"journey", "imageRun"}
@@ -216,8 +221,16 @@ def upsert_notification(
         )
         db.add(row)
         db.flush()
+        apply_project_usage_delta(
+            db,
+            user_id=user_id,
+            project_id=project_id,
+            delta=build_notification_delta(None, snapshot_notification_row(row)),
+            enforce_quota=False,
+        )
         return row
 
+    before = snapshot_notification_row(row)
     next_thread_id = thread_id if thread_id is not None else row.thread_id
     changed = any(
         [
@@ -246,6 +259,13 @@ def upsert_notification(
         row.is_read = False
 
     db.flush()
+    apply_project_usage_delta(
+        db,
+        user_id=user_id,
+        project_id=project_id,
+        delta=build_notification_delta(before, snapshot_notification_row(row)),
+        enforce_quota=False,
+    )
     return row
 
 

@@ -7,6 +7,17 @@ import './ProfilePanel.css';
 import { accountService, type AccountStorageResponse } from '../../api';
 import { StorageUsageSummary, formatBytes } from '../StorageUsageSummary';
 
+function formatProjectStorageMeta(storage: AccountStorageResponse, projectId: string, t: (key: string, options?: Record<string, unknown>) => string): string {
+  const project = storage.by_project.find((item) => item.project_id === projectId);
+  if (!project) return '';
+  return t('settings.profile.storageProjectSummary', {
+    images: formatBytes(project.categories.image_bytes),
+    story: formatBytes(project.categories.story_bytes + project.categories.project_meta_bytes),
+    manuscripts: formatBytes(project.categories.manuscript_bytes),
+    chat: formatBytes(project.categories.chat_bytes),
+  });
+}
+
 const ProfilePanel: React.FC = () => {
   const { t } = useTranslation();
   const { user, isLoading, error, updateProfile, changePassword, clearError } = useAuthStore();
@@ -212,7 +223,7 @@ const ProfilePanel: React.FC = () => {
             breakdownItems={storage.by_project.map((project) => ({
               id: project.project_id,
               name: project.project_name,
-              meta: `${formatBytes(project.used_bytes)} • ${t('settings.profile.storageImages', { count: project.asset_count })}`,
+              meta: `${formatBytes(project.used_bytes)} • ${t('settings.profile.storageImages', { count: project.image_count })} • ${formatProjectStorageMeta(storage, project.project_id, t)}`,
             }))}
           />
         )}

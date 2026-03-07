@@ -27,7 +27,14 @@ from ..services.deletion_service import (
     delete_rag_sources_for_project,
 )
 from ..services.object_change_events import queue_object_change
-from ..services.storage_quota_service import StorageQuotaExceededError
+from ..services.storage_usage_service import (
+    StorageQuotaExceededError,
+    apply_project_usage_deltas,
+    build_object_version_delta,
+    build_project_delta,
+    snapshot_object_version_row,
+    snapshot_project_row,
+)
 
 
 def _get_cover_asset(db: Session, project: Project) -> dict | None:
@@ -163,6 +170,29 @@ async def create_project(
         action="created",
     )
 
+    try:
+        apply_project_usage_deltas(
+            db,
+            user_id=current_user.id,
+            project_id=project_id,
+            deltas=[
+                build_project_delta(None, snapshot_project_row(new_project)),
+                build_object_version_delta(
+                    object_type="basic_info",
+                    before=None,
+                    after=snapshot_object_version_row(version),
+                ),
+                build_object_version_delta(
+                    object_type="guidelines",
+                    before=None,
+                    after=snapshot_object_version_row(guidelines_version),
+                ),
+            ],
+            enforce_quota=True,
+        )
+    except StorageQuotaExceededError:
+        db.rollback()
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     db.commit()
     db.refresh(new_project)
 
@@ -250,12 +280,25 @@ async def update_project(
             detail="Project not found"
         )
 
+    project_before = snapshot_project_row(project)
+
     # Update fields if provided
     if project_data.name is not None:
         project.name = project_data.name
     if project_data.description is not None:
         project.description = project_data.description
 
+    try:
+        apply_project_usage_deltas(
+            db,
+            user_id=current_user.id,
+            project_id=project_id,
+            deltas=[build_project_delta(project_before, snapshot_project_row(project))],
+            enforce_quota=True,
+        )
+    except StorageQuotaExceededError:
+        db.rollback()
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     db.commit()
     db.refresh(project)
 

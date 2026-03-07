@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from jinja2.exceptions import TemplateSyntaxError, UndefinedError
 
-os.environ.setdefault("DEFAULT_ASSET_QUOTA_BYTES", "0")
+os.environ.setdefault("DEFAULT_STORAGE_QUOTA_BYTES", "0")
 
 from App.backend.models.db_models import RunModel, Thread, UserSettings
 from App.backend.services.run_pipeline import service as run_service
@@ -145,6 +145,7 @@ def test_execute_loop_formats_template_errors_for_user(monkeypatch: pytest.Monke
     monkeypatch.setattr(run_service.settings_service, "_get_settings", lambda *_args, **_kwargs: UserSettings())
     monkeypatch.setattr(run_service.prompt_assembly, "assemble_create", _raise_fragment_not_found)
     monkeypatch.setattr(run_service.llm_executor, "run_llm", _should_not_run_llm)
+    monkeypatch.setattr(run_service, "recalculate_project_usage", lambda *_args, **_kwargs: None)
 
     asyncio.run(
         pipeline.execute_loop(
@@ -182,6 +183,7 @@ def test_execute_loop_preserves_non_template_errors(monkeypatch: pytest.MonkeyPa
 
     monkeypatch.setattr(run_service.settings_service, "_get_settings", lambda *_args, **_kwargs: SimpleNamespace())
     monkeypatch.setattr(run_service.prompt_assembly, "assemble_create", _raise_runtime_error)
+    monkeypatch.setattr(run_service, "recalculate_project_usage", lambda *_args, **_kwargs: None)
 
     asyncio.run(
         pipeline.execute_loop(

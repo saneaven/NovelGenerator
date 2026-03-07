@@ -5,6 +5,10 @@ services:
     volumes:
       - assets_data:/app/App/backend/storage/assets
 
+  usage-reconciler:
+    environment:
+      STORAGE_USAGE_RECONCILER_ENABLED: "1"
+
   frontend:
     environment:
       FRONTEND_MODE: "prod"

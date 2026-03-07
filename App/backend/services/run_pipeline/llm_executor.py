@@ -31,6 +31,11 @@ from ..reasoning.mode_policy import apply_thinking_mode
 from ..reasoning.normalize import normalize_reasoning_detail
 from ..reasoning.provider_io import get_provider_io
 from ..settings_service import settings_service
+from ..storage_usage_service import (
+    apply_project_usage_delta,
+    build_run_message_delta,
+    snapshot_run_message_row,
+)
 from ...providers.stream_retry import normalize_retry_config, stream_with_retry
 from ..token_count_service import count_message_tokens
 from ..tool_engine import tool_engine
@@ -276,6 +281,13 @@ async def run_llm(
     db.flush()
     run.next_message_seq += 1
     thread.next_message_seq += 1
+    apply_project_usage_delta(
+        db,
+        user_id=run.user_id,
+        project_id=run.project_id,
+        delta=build_run_message_delta(None, snapshot_run_message_row(assistant_message)),
+        enforce_quota=True,
+    )
     db.commit()
 
     await emit_fn(
@@ -571,14 +583,28 @@ async def run_llm(
     language_entry: dict[str, Any] = {"contentParts": content_only_parts}
     if reasoning_detail is not None:
         language_entry["reasoningDetail"] = reasoning_detail
+    assistant_message_before = snapshot_run_message_row(assistant_message)
     assistant_message.data = {
         run.language: language_entry,
     }
+    assistant_message_delta = build_run_message_delta(
+        assistant_message_before,
+        snapshot_run_message_row(assistant_message),
+    )
+    assistant_message_delta_applied = False
 
     persisted_tools: list[RunToolCallModel] = []
     if output_mode == "raw_output":
         run.status = "processing"
         thread.status = "processing"
+        apply_project_usage_delta(
+            db,
+            user_id=run.user_id,
+            project_id=run.project_id,
+            delta=assistant_message_delta,
+            enforce_quota=True,
+        )
+        assistant_message_delta_applied = True
         db.commit()
         await emit_fn(
             project_id=run.project_id,
@@ -618,6 +644,14 @@ async def run_llm(
         run.status = "done"
         thread.status = "done"
 
+    if not assistant_message_delta_applied:
+        apply_project_usage_delta(
+            db,
+            user_id=run.user_id,
+            project_id=run.project_id,
+            delta=assistant_message_delta,
+            enforce_quota=True,
+        )
     db.commit()
 
     tool_call_summaries: list[dict[str, Any]] = [

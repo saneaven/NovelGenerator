@@ -32,10 +32,11 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
     is_admin = Column(Boolean, default=False, nullable=False)
-    asset_quota_bytes = Column(BigInteger, nullable=True)
+    storage_quota_bytes = Column(BigInteger, nullable=True)
 
     # Relationships
     projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
+    project_storage_usages = relationship("ProjectStorageUsage", back_populates="user", cascade="all, delete-orphan")
     settings = relationship("UserSettings", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 
@@ -426,6 +427,7 @@ class Project(Base):
 
     # Relationships
     user = relationship("User", back_populates="projects")
+    storage_usage = relationship("ProjectStorageUsage", back_populates="project", uselist=False, cascade="all, delete-orphan")
     basic_info = relationship("BasicInfo", back_populates="project", uselist=False, cascade="all, delete-orphan")
     guidelines = relationship("Guidelines", back_populates="project", uselist=False, cascade="all, delete-orphan")
     characters = relationship("Character", back_populates="project", cascade="all, delete-orphan")
@@ -435,6 +437,37 @@ class Project(Base):
     outlines = relationship("Outline", back_populates="project", cascade="all, delete-orphan", order_by="Outline.order")
     agents = relationship("Agent", back_populates="project", cascade="all, delete-orphan")
     assets = relationship("Asset", back_populates="project", cascade="all, delete-orphan")
+
+
+class ProjectStorageUsage(Base):
+    """Precomputed per-project logical storage totals."""
+    __tablename__ = "project_storage_usage"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, unique=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    project_meta_bytes = Column(BigInteger, nullable=False, default=0)
+    story_bytes = Column(BigInteger, nullable=False, default=0)
+    manuscript_bytes = Column(BigInteger, nullable=False, default=0)
+    chat_bytes = Column(BigInteger, nullable=False, default=0)
+    notification_bytes = Column(BigInteger, nullable=False, default=0)
+    image_run_bytes = Column(BigInteger, nullable=False, default=0)
+    image_bytes = Column(BigInteger, nullable=False, default=0)
+    total_bytes = Column(BigInteger, nullable=False, default=0)
+    needs_reconcile = Column(Boolean, nullable=False, default=False, server_default=sa_text("false"))
+    last_reconciled_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    project = relationship("Project", back_populates="storage_usage")
+    user = relationship("User", back_populates="project_storage_usages")
+
+    __table_args__ = (
+        Index("ix_project_storage_usage_needs_reconcile", "needs_reconcile"),
+        Index("ix_project_storage_usage_last_reconciled_at", "last_reconciled_at"),
+    )
 
 
 # ============================================================================

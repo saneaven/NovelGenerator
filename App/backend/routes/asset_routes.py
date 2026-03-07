@@ -40,7 +40,17 @@ from ..services.storage_service import storage_service
 from ..services.deletion_service import delete_assets_with_files
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.object_change_events import queue_object_change
-from ..services.storage_quota_service import StorageQuotaExceededError, enforce_user_asset_quota
+from ..services.storage_usage_service import (
+    StorageQuotaExceededError,
+    apply_project_usage_delta,
+    apply_project_usage_deltas,
+    build_asset_delta,
+    build_asset_rows_delta,
+    build_manuscript_images_delta,
+    snapshot_asset_row,
+    snapshot_manuscript_image_row,
+    snapshot_rows,
+)
 from ..services.credential_service import CredentialServiceError, credential_service
 from ..services.ownership import require_owned_manuscript, require_owned_object
 from ..image_providers.registry import ImageProviderRegistry
@@ -401,16 +411,6 @@ async def upload_asset(
     )
 
     try:
-        # Enforce user storage quota after we know actual sizes.
-        try:
-            enforce_user_asset_quota(
-                db,
-                user_id=current_user.id,
-                additional_bytes=int(file_size or 0),
-            )
-        except StorageQuotaExceededError:
-            raise HTTPException(status_code=413, detail="Storage quota exceeded")
-
         # Create asset record
         asset = Asset(
             id=uuid4(),
@@ -449,8 +449,20 @@ async def upload_asset(
                 action="updated",
             )
 
+        db.flush()
+        apply_project_usage_delta(
+            db,
+            user_id=current_user.id,
+            project_id=project_id,
+            delta=build_asset_delta(None, snapshot_asset_row(asset)),
+            enforce_quota=True,
+        )
         db.commit()
         db.refresh(asset)
+    except StorageQuotaExceededError:
+        db.rollback()
+        storage_service.delete_asset_files(file_path)
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     except Exception:
         db.rollback()
         # Prevent orphan files if DB commit fails
@@ -496,10 +508,22 @@ async def update_asset(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
+    before = snapshot_asset_row(asset)
     if request.name is not None:
         asset.name = request.name
 
     asset.updated_at = datetime.utcnow()
+    try:
+        apply_project_usage_delta(
+            db,
+            user_id=current_user.id,
+            project_id=project_id,
+            delta=build_asset_delta(before, snapshot_asset_row(asset)),
+            enforce_quota=True,
+        )
+    except StorageQuotaExceededError:
+        db.rollback()
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     db.commit()
     db.refresh(asset)
 
@@ -523,10 +547,41 @@ async def delete_asset(
         raise HTTPException(status_code=404, detail="Asset not found")
 
     affected_refs = _collect_story_object_refs_for_asset_ids(db, asset_ids=[asset_id])
+    deleted_asset_before = snapshot_asset_row(asset)
+    scrubbed_before = snapshot_rows(
+        db.query(Asset)
+        .filter(
+            Asset.project_id == project_id,
+            Asset.generation_reference_images.isnot(None),
+            Asset.id != asset_id,
+        )
+        .all(),
+        snapshot_asset_row,
+    )
 
     # Delete from storage + DB, and scrub stale generation_reference_images pointers.
     delete_assets_with_files(db, assets=[asset], scrub_references_in_project_id=project_id)
     _queue_story_object_updates(db, project_id=project_id, refs=affected_refs)
+    scrubbed_after = snapshot_rows(
+        db.query(Asset)
+        .filter(
+            Asset.project_id == project_id,
+            Asset.generation_reference_images.isnot(None),
+            Asset.id != asset_id,
+        )
+        .all(),
+        snapshot_asset_row,
+    )
+    apply_project_usage_deltas(
+        db,
+        user_id=current_user.id,
+        project_id=project_id,
+        deltas=[
+            build_asset_delta(deleted_asset_before, None),
+            build_asset_rows_delta(scrubbed_before, scrubbed_after),
+        ],
+        enforce_quota=False,
+    )
     db.commit()
 
     return {"success": True}
@@ -806,11 +861,27 @@ async def execute_image_cleanup(
     deleted: List[str] = []
 
     # Scrub deleted IDs from other assets' generation_reference_images when allowed.
+    deleted_asset_before = snapshot_rows(to_delete, snapshot_asset_row)
+    scrubbed_before = snapshot_rows(
+        db.query(Asset)
+        .filter(
+            Asset.project_id == project_id,
+            Asset.generation_reference_images.isnot(None),
+            ~Asset.id.in_([asset.id for asset in to_delete]) if to_delete else True,
+        )
+        .all(),
+        snapshot_asset_row,
+    )
+
     if to_delete and not policy.treat_reference_images_as_used:
         delete_id_strings = {str(a.id) for a in to_delete}
         assets_with_refs = (
             db.query(Asset)
-            .filter(Asset.project_id == project_id, Asset.generation_reference_images.isnot(None))
+            .filter(
+                Asset.project_id == project_id,
+                Asset.generation_reference_images.isnot(None),
+                ~Asset.id.in_([asset.id for asset in to_delete]) if to_delete else True,
+            )
             .all()
         )
         for src in assets_with_refs:
@@ -841,6 +912,26 @@ async def execute_image_cleanup(
         deleted.append(str(asset.id))
 
     _queue_story_object_updates(db, project_id=project_id, refs=affected_story_object_refs)
+    scrubbed_after = snapshot_rows(
+        db.query(Asset)
+        .filter(
+            Asset.project_id == project_id,
+            Asset.generation_reference_images.isnot(None),
+            ~Asset.id.in_([asset.id for asset in to_delete]) if to_delete else True,
+        )
+        .all(),
+        snapshot_asset_row,
+    )
+    apply_project_usage_deltas(
+        db,
+        user_id=current_user.id,
+        project_id=project_id,
+        deltas=[
+            build_asset_rows_delta(deleted_asset_before, []),
+            build_asset_rows_delta(scrubbed_before, scrubbed_after),
+        ],
+        enforce_quota=False,
+    )
     db.commit()
 
     for file_path in file_deletions:
@@ -883,6 +974,17 @@ async def rebuild_manuscript_images_index(
     images_inserted = 0
     unresolved_refs = 0
 
+    manuscript_images_before = snapshot_rows(
+        db.query(ManuscriptImage)
+        .join(Manuscript, Manuscript.id == ManuscriptImage.manuscript_id)
+        .join(Chapter, Chapter.id == Manuscript.chapter_id)
+        .join(Act, Act.id == Chapter.act_id)
+        .join(Outline, Outline.id == Act.outline_id)
+        .filter(Outline.project_id == project_id)
+        .all(),
+        snapshot_manuscript_image_row,
+    )
+
     for manuscript in manuscripts:
         manuscripts_processed += 1
         latest_version = db.query(ObjectVersion).filter(
@@ -913,6 +1015,23 @@ async def rebuild_manuscript_images_index(
             images_inserted += int(stats.get("inserted", 0))
             unresolved_refs += int(stats.get("unresolved", 0))
 
+    manuscript_images_after = snapshot_rows(
+        db.query(ManuscriptImage)
+        .join(Manuscript, Manuscript.id == ManuscriptImage.manuscript_id)
+        .join(Chapter, Chapter.id == Manuscript.chapter_id)
+        .join(Act, Act.id == Chapter.act_id)
+        .join(Outline, Outline.id == Act.outline_id)
+        .filter(Outline.project_id == project_id)
+        .all(),
+        snapshot_manuscript_image_row,
+    )
+    apply_project_usage_delta(
+        db,
+        user_id=current_user.id,
+        project_id=project_id,
+        delta=build_manuscript_images_delta(manuscript_images_before, manuscript_images_after),
+        enforce_quota=False,
+    )
     db.commit()
 
     return RebuildManuscriptImagesResponse(

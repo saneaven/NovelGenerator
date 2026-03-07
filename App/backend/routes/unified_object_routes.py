@@ -31,6 +31,7 @@ from ..services.ownership import (
     require_owned_project,
     resolve_project_id_for_object,
 )
+from ..services.storage_usage_service import StorageQuotaExceededError
 
 LOREBOOK_TYPE = normalize_object_type('lorebook')
 
@@ -269,6 +270,8 @@ async def update_object(
     except HTTPException:
         db.rollback()
         raise
+    except StorageQuotaExceededError:
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     except ValueError as exc:
         db.rollback()
         message = str(exc)
@@ -316,6 +319,8 @@ async def add_translation(
     except HTTPException:
         db.rollback()
         raise
+    except StorageQuotaExceededError:
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     except ValueError as exc:
         db.rollback()
         message = str(exc)
@@ -350,6 +355,8 @@ async def get_versions(
             object_id=object_id,
         )
         return [VersionResponse(**v) for v in versions]
+    except StorageQuotaExceededError:
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     except ValueError as exc:
         message = str(exc)
         if "not found" in message.lower():
@@ -391,6 +398,8 @@ async def restore_version(
     except HTTPException:
         db.rollback()
         raise
+    except StorageQuotaExceededError:
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     except ValueError as exc:
         db.rollback()
         message = str(exc)
@@ -558,12 +567,16 @@ async def update_image_prompt(
             project_id=project_id,
             object_type=object_type,
             object_id=object_id,
+            user_id=current_user.id,
             image_prompt=request.image_prompt,
             image_prompt_positive=request.image_prompt_positive,
             image_prompt_negative=request.image_prompt_negative,
         )
         db.commit()
         return result
+    except StorageQuotaExceededError:
+        db.rollback()
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     except ValueError as exc:
         db.rollback()
         message = str(exc)

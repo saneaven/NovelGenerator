@@ -14,6 +14,16 @@ from sqlalchemy.orm import Session
 from ...models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thread, UserSettings
 from ..runtime_event_dispatcher import RuntimeEventDispatcher
 from ..settings_service import settings_service
+from ..storage_usage_service import (
+    StorageQuotaExceededError,
+    apply_project_usage_deltas,
+    build_run_delta,
+    build_run_message_delta,
+    build_tool_call_delta,
+    snapshot_run_message_row,
+    snapshot_run_row,
+    snapshot_tool_call_row,
+)
 from ..template_engine import FragmentNotFoundError, TemplateRenderLimitError, format_template_error
 from ..tool_engine import tool_engine
 from ..tool_engine.contracts import ToolOffer
@@ -279,6 +289,16 @@ class RunPipeline:
                 thread.next_message_seq += 1
                 thread.next_run_seq += 1
                 thread.status = "running"
+                apply_project_usage_deltas(
+                    db,
+                    user_id=user_id,
+                    project_id=thread.project_id,
+                    deltas=[
+                        build_run_delta(None, snapshot_run_row(run)),
+                        build_run_message_delta(None, snapshot_run_message_row(msg)),
+                    ],
+                    enforce_quota=True,
+                )
                 db.commit()
                 db.refresh(run)
                 db.refresh(msg)
@@ -289,6 +309,9 @@ class RunPipeline:
                 user_msg_seq = msg.seq
                 user_msg_seq_in_thread = msg.seq_in_thread
                 user_msg_data = msg.data
+            except StorageQuotaExceededError:
+                db.rollback()
+                raise HTTPException(status_code=413, detail="Storage quota exceeded")
             finally:
                 db.close()
 
@@ -517,6 +540,7 @@ class RunPipeline:
         preset_id: UUID | None,
     ) -> list[RunToolCallModel]:
         out: list[RunToolCallModel] = []
+        deltas = []
 
         for idx, tc in enumerate(tool_calls):
             llm_call_id = str(tc.id or f"tool_call_{idx}")
@@ -583,6 +607,8 @@ class RunPipeline:
                 row.status = "failed"
                 row.reason = f"[{validation.validator}] {validation.reason}" if validation.validator else validation.reason
 
+            deltas.append(build_run_message_delta(None, snapshot_run_message_row(tool_msg)))
+            deltas.append(build_tool_call_delta(None, snapshot_tool_call_row(row)))
             out.append(row)
 
             await self._emit(
@@ -616,6 +642,15 @@ class RunPipeline:
                     "assistant_message_id": str(row.assistant_message_id) if row.assistant_message_id else None,
                     "child_thread_id": str(row.child_thread_id) if row.child_thread_id else None,
                 },
+            )
+
+        if deltas:
+            apply_project_usage_deltas(
+                db,
+                user_id=run.user_id,
+                project_id=run.project_id,
+                deltas=deltas,
+                enforce_quota=True,
             )
 
         return out
@@ -714,10 +749,18 @@ class RunPipeline:
             run = db.query(RunModel).filter(RunModel.id == run_id).first()
             if run is not None:
                 thread = run.thread
+                run_before = snapshot_run_row(run)
                 run.status = "error"
                 run.error = user_error
                 if thread is not None:
                     thread.status = "error"
+                apply_project_usage_deltas(
+                    db,
+                    user_id=run.user_id,
+                    project_id=run.project_id,
+                    deltas=[build_run_delta(run_before, snapshot_run_row(run))],
+                    enforce_quota=False,
+                )
                 try:
                     db.commit()
                 except Exception:

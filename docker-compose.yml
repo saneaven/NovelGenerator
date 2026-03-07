@@ -39,15 +39,44 @@ services:
       DB_NAME: ${POSTGRES_DB:?set in .env.dev/.env.prod}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set in .env.dev/.env.prod}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?set in .env.dev/.env.prod}
-      DEFAULT_ASSET_QUOTA_BYTES: ${DEFAULT_ASSET_QUOTA_BYTES:?set in .env.dev/.env.prod}
+      DEFAULT_STORAGE_QUOTA_BYTES: ${DEFAULT_STORAGE_QUOTA_BYTES:?set in .env.dev/.env.prod}
       SIDECAR_URL: http://sidecar:3001
     depends_on:
       db:
         condition: service_healthy
       sidecar:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
     expose:
       - "8000"
+    restart: unless-stopped
+
+  usage-reconciler:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    entrypoint: ["/app/docker/backend/reconciler_entrypoint.sh"]
+    environment:
+      DB_USER: ${POSTGRES_USER:?set in .env.dev/.env.prod}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:?set in .env.dev/.env.prod}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set in .env.dev/.env.prod}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?set in .env.dev/.env.prod}
+      DEFAULT_STORAGE_QUOTA_BYTES: ${DEFAULT_STORAGE_QUOTA_BYTES:?set in .env.dev/.env.prod}
+      STORAGE_USAGE_RECONCILER_ENABLED: ${STORAGE_USAGE_RECONCILER_ENABLED:-1}
+      STORAGE_USAGE_RECONCILER_INTERVAL_SECONDS: ${STORAGE_USAGE_RECONCILER_INTERVAL_SECONDS:-300}
+      STORAGE_USAGE_RECONCILER_BATCH_SIZE: ${STORAGE_USAGE_RECONCILER_BATCH_SIZE:-100}
+      STORAGE_USAGE_RECONCILER_STALE_AFTER_SECONDS: ${STORAGE_USAGE_RECONCILER_STALE_AFTER_SECONDS:-86400}
+      STORAGE_USAGE_RECONCILER_ADVISORY_LOCK_KEY: ${STORAGE_USAGE_RECONCILER_ADVISORY_LOCK_KEY:-84512001}
+    depends_on:
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:

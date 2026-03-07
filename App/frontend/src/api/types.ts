@@ -434,8 +434,18 @@ export interface UserSettingsUpdate {
 export interface ProjectStorageBreakdown {
   project_id: string;
   project_name: string;
-  asset_count: number;
   used_bytes: number;
+  image_count: number;
+  categories: {
+    project_meta_bytes: number;
+    story_bytes: number;
+    manuscript_bytes: number;
+    chat_bytes: number;
+    notification_bytes: number;
+    image_run_bytes: number;
+    image_bytes: number;
+    total_bytes: number;
+  };
 }
 
 export interface AccountStorageResponse {
@@ -457,7 +467,7 @@ export interface AdminUserStorageItem {
   quota_bytes: number;
   remaining_bytes: number;
   percent_used: number;
-  asset_quota_bytes_override?: number | null;
+  storage_quota_bytes_override?: number | null;
   created_at: string;
 }
 
@@ -469,5 +479,5 @@ export interface AdminUsersStorageResponse {
 
 export interface AdminUserUpdateRequest {
   is_admin?: boolean;
-  asset_quota_bytes?: number | null;
+  storage_quota_bytes?: number | null;
 }

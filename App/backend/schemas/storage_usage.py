@@ -1,4 +1,4 @@
-"""Pydantic schemas for account storage/usage (assets only)."""
+"""Pydantic schemas for total project storage usage."""
 
 from __future__ import annotations
 
@@ -8,11 +8,23 @@ from typing import List
 from pydantic import BaseModel
 
 
+class StorageCategoryBreakdown(BaseModel):
+    project_meta_bytes: int
+    story_bytes: int
+    manuscript_bytes: int
+    chat_bytes: int
+    notification_bytes: int
+    image_run_bytes: int
+    image_bytes: int
+    total_bytes: int
+
+
 class ProjectStorageBreakdown(BaseModel):
     project_id: str
     project_name: str
-    asset_count: int
     used_bytes: int
+    image_count: int
+    categories: StorageCategoryBreakdown
 
 
 class AccountStorageResponse(BaseModel):
@@ -23,4 +35,3 @@ class AccountStorageResponse(BaseModel):
     percent_used: float
     by_project: List[ProjectStorageBreakdown]
     computed_at: datetime
-

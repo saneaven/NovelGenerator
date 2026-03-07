@@ -14,9 +14,10 @@ RUN python -m pip install --upgrade pip && \
 
 COPY App /app/App
 COPY docker/backend/entrypoint.sh /app/docker/backend/entrypoint.sh
+COPY docker/backend/reconciler_entrypoint.sh /app/docker/backend/reconciler_entrypoint.sh
 COPY docker/backend/wait_for_db.py /app/docker/backend/wait_for_db.py
 
-RUN chmod +x /app/docker/backend/entrypoint.sh
+RUN chmod +x /app/docker/backend/entrypoint.sh /app/docker/backend/reconciler_entrypoint.sh
 
 EXPOSE 8000
 

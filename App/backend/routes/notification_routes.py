@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import get_db
-from ..models.db_models import NotificationModel, User
+from ..models.db_models import ImageRunModel, NotificationModel, User
 from ..schemas.notifications import (
     DeleteAllNotificationsRequest,
     DeleteAllNotificationsResponse,
@@ -30,6 +30,22 @@ from ..services.notification_service import (
 from ..services.ownership import require_owned_project
 from ..services.run_pipeline import run_pipeline
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
+from ..services.storage_usage_service import (
+    apply_project_usage_deltas,
+    build_image_run_delta,
+    build_notification_delta,
+    build_run_delta,
+    build_run_message_delta,
+    build_thread_delta,
+    build_tool_call_delta,
+    snapshot_notification_row,
+    snapshot_rows,
+    snapshot_image_run_row,
+    snapshot_run_message_row,
+    snapshot_run_row,
+    snapshot_thread_row,
+    snapshot_tool_call_row,
+)
 
 
 router = APIRouter(prefix="/api/v1", tags=["notifications"])
@@ -51,6 +67,84 @@ async def _cancel_linked_journey_threads_for_delete(
             continue
         seen.add(thread_id)
         await run_pipeline.cancel_run_for_delete(thread_id=thread_id, user_id=user_id)
+
+
+def _collect_notification_delete_deltas(
+    db: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+    targets: Iterable[NotificationDeleteTarget],
+):
+    target_list = list(targets)
+    notification_ids = [target.notification_id for target in target_list]
+    thread_ids = list(
+        {
+            thread_id
+            for thread_id in (target.linked_thread_id for target in target_list)
+            if isinstance(thread_id, UUID)
+        }
+    )
+
+    notification_rows = (
+        db.query(NotificationModel)
+        .filter(
+            NotificationModel.user_id == user_id,
+            NotificationModel.project_id == project_id,
+            NotificationModel.id.in_(notification_ids),
+        )
+        .all()
+        if notification_ids
+        else []
+    )
+    thread_rows = (
+        db.query(Thread)
+        .filter(
+            Thread.user_id == user_id,
+            Thread.project_id == project_id,
+            Thread.thread_type == "journey",
+            Thread.id.in_(thread_ids),
+        )
+        .all()
+        if thread_ids
+        else []
+    )
+    run_rows = (
+        db.query(RunModel)
+        .filter(RunModel.thread_id.in_(thread_ids))
+        .all()
+        if thread_ids
+        else []
+    )
+    image_run_rows = (
+        db.query(ImageRunModel)
+        .filter(ImageRunModel.thread_id.in_(thread_ids))
+        .all()
+        if thread_ids
+        else []
+    )
+    message_rows = (
+        db.query(RunMessageModel)
+        .filter(RunMessageModel.thread_id.in_(thread_ids))
+        .all()
+        if thread_ids
+        else []
+    )
+    tool_call_rows = (
+        db.query(RunToolCallModel)
+        .filter(RunToolCallModel.thread_id.in_(thread_ids))
+        .all()
+        if thread_ids
+        else []
+    )
+
+    deltas = [build_notification_delta(snapshot_notification_row(row), None) for row in notification_rows]
+    deltas.extend(build_thread_delta(snapshot_thread_row(row), None) for row in thread_rows)
+    deltas.extend(build_run_delta(snapshot_run_row(row), None) for row in run_rows)
+    deltas.extend(build_image_run_delta(snapshot_image_run_row(row), None) for row in image_run_rows)
+    deltas.extend(build_run_message_delta(snapshot_run_message_row(row), None) for row in message_rows)
+    deltas.extend(build_tool_call_delta(snapshot_tool_call_row(row), None) for row in tool_call_rows)
+    return deltas
 
 
 @router.get("/projects/{project_id}/notifications", response_model=NotificationListResponse)
@@ -140,6 +234,12 @@ async def delete_project_notification(
     await _cancel_linked_journey_threads_for_delete(targets=targets, user_id=current_user.id)
     db.expire_all()
 
+    deltas = _collect_notification_delete_deltas(
+        db,
+        user_id=current_user.id,
+        project_id=project_id,
+        targets=targets,
+    )
     deleted_ids, deleted_thread_ids = delete_notification_targets(
         db,
         user_id=current_user.id,
@@ -155,6 +255,13 @@ async def delete_project_notification(
         "source": target.source,
         "source_ref_id": target.source_ref_id,
     }
+    apply_project_usage_deltas(
+        db,
+        user_id=current_user.id,
+        project_id=project_id,
+        deltas=deltas,
+        enforce_quota=False,
+    )
     db.commit()
 
     await runtime_event_dispatcher.emit_project_event(
@@ -190,11 +297,24 @@ async def delete_all_project_notifications(
     await _cancel_linked_journey_threads_for_delete(targets=targets, user_id=current_user.id)
     db.expire_all()
 
+    deltas = _collect_notification_delete_deltas(
+        db,
+        user_id=current_user.id,
+        project_id=project_id,
+        targets=targets,
+    )
     deleted_ids, deleted_thread_ids = delete_notification_targets(
         db,
         user_id=current_user.id,
         project_id=project_id,
         targets=targets,
+    )
+    apply_project_usage_deltas(
+        db,
+        user_id=current_user.id,
+        project_id=project_id,
+        deltas=deltas,
+        enforce_quota=False,
     )
     db.commit()
 

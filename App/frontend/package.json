@@ -31,7 +31,6 @@
     "i18next": "^25.7.4",
     "masonic": "^4.1.0",
     "motion": "^12.23.25",
-    "openai": "^6.16.0",
     "partial-json": "^0.1.7",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

@@ -1,6 +1,6 @@
 """Admin user management CLI.
 
-Use this to bootstrap the first admin and manage per-user asset quotas.
+Use this to bootstrap the first admin and manage per-user storage quotas.
 
 Examples (docker-compose):
   docker compose exec backend python -m App.backend.scripts.admin_users show --email you@example.com
@@ -48,7 +48,7 @@ def _print_user(user: User) -> None:
     print("email:", user.email)
     print("username:", user.username)
     print("is_admin:", bool(getattr(user, "is_admin", False)))
-    print("asset_quota_bytes:", getattr(user, "asset_quota_bytes", None))
+    print("storage_quota_bytes:", getattr(user, "storage_quota_bytes", None))
 
 
 def main() -> int:
@@ -69,11 +69,11 @@ def main() -> int:
     p_revoke = sub.add_parser("revoke", help="Revoke admin role")
     add_ident(p_revoke)
 
-    p_set_quota = sub.add_parser("set-quota", help="Set per-user asset quota override")
+    p_set_quota = sub.add_parser("set-quota", help="Set per-user storage quota override")
     add_ident(p_set_quota)
     p_set_quota.add_argument("--bytes", type=int, required=True)
 
-    p_clear_quota = sub.add_parser("clear-quota", help="Clear per-user asset quota override")
+    p_clear_quota = sub.add_parser("clear-quota", help="Clear per-user storage quota override")
     add_ident(p_clear_quota)
 
     args = parser.parse_args()
@@ -111,14 +111,14 @@ def main() -> int:
         if args.cmd == "set-quota":
             if args.bytes < 0:
                 raise SystemExit("--bytes must be >= 0")
-            user.asset_quota_bytes = int(args.bytes)
+            user.storage_quota_bytes = int(args.bytes)
             db.commit()
             db.refresh(user)
             _print_user(user)
             return 0
 
         if args.cmd == "clear-quota":
-            user.asset_quota_bytes = None
+            user.storage_quota_bytes = None
             db.commit()
             db.refresh(user)
             _print_user(user)

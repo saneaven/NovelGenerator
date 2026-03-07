@@ -10,6 +10,11 @@ from sqlalchemy.orm import Session
 from ...models.db_models import RunMessageModel, RunModel, RunToolCallModel, SubAgentDefinitionModel, Thread, UserSettings
 from ..settings_service import settings_service
 from ..sidecar_client import sidecar_client
+from ..storage_usage_service import (
+    apply_project_usage_delta,
+    build_tool_call_delta,
+    snapshot_tool_call_row,
+)
 from .contexts import ToolExecutionContext, ToolOfferContext, ToolValidationContext
 from .contracts import ToolOffer, ToolSetName, ValidationResult
 from .registry import ToolRegistry
@@ -316,6 +321,7 @@ class ToolEngineService:
 
             raw_result = await spec.executor(args, exec_ctx)
             continue_as, extra_patch, result = self._extract_execution_controls(raw_result)
+            before = snapshot_tool_call_row(tool_call)
 
             if extra_patch is not None:
                 base_extra = tool_call.extra_content if isinstance(tool_call.extra_content, dict) else {}
@@ -333,6 +339,13 @@ class ToolEngineService:
                 tool_call.updated_at = datetime.utcnow()
 
             db.flush()
+            apply_project_usage_delta(
+                db,
+                user_id=user_id,
+                project_id=effective_project_id,
+                delta=build_tool_call_delta(before, snapshot_tool_call_row(tool_call)),
+                enforce_quota=True,
+            )
             db.commit()
             db.refresh(tool_call)
             return {"tool_call": tool_call, "result": result}
@@ -341,10 +354,18 @@ class ToolEngineService:
             db.rollback()
             row = db.query(RunToolCallModel).filter(RunToolCallModel.id == tool_call_id).first()
             if row is not None:
+                before = snapshot_tool_call_row(row)
                 row.status = "failed"
                 row.reason = str(exc)
                 row.result = {"success": False, "message": str(exc), "error": str(exc)}
                 row.updated_at = datetime.utcnow()
+                apply_project_usage_delta(
+                    db,
+                    user_id=user_id,
+                    project_id=row.run.project_id if row.run is not None else project_id,
+                    delta=build_tool_call_delta(before, snapshot_tool_call_row(row)),
+                    enforce_quota=False,
+                )
                 db.commit()
                 db.refresh(row)
                 return {"tool_call": row, "result": row.result}
@@ -372,6 +393,7 @@ class ToolEngineService:
         )
         if parent_tc is None or parent_tc.status != "working":
             return
+        parent_tc_before = snapshot_tool_call_row(parent_tc)
 
         if run.status == "done":
             final_msg = (
@@ -424,6 +446,13 @@ class ToolEngineService:
             parent_run.status = "done"
             parent_thread.status = "done"
 
+        apply_project_usage_delta(
+            db,
+            user_id=parent_run.user_id,
+            project_id=parent_thread.project_id,
+            delta=build_tool_call_delta(parent_tc_before, snapshot_tool_call_row(parent_tc)),
+            enforce_quota=False,
+        )
         db.commit()
 
         await emit(

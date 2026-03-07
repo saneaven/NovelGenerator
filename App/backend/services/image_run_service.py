@@ -41,8 +41,20 @@ from ..services.object_service import object_service
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..services.settings_service import settings_service
 from ..services.sidecar_client import SidecarClient, SidecarConversionError, SidecarUnavailableError, sidecar_client
-from ..services.storage_quota_service import StorageQuotaExceededError, enforce_user_asset_quota
 from ..services.storage_service import storage_service
+from ..services.storage_usage_service import (
+    StorageQuotaExceededError,
+    apply_project_usage_delta,
+    apply_project_usage_deltas,
+    build_asset_delta,
+    build_asset_rows_delta,
+    build_image_run_delta,
+    build_tool_call_delta,
+    snapshot_asset_row,
+    snapshot_image_run_row,
+    snapshot_rows,
+    snapshot_tool_call_row,
+)
 from ..utils.object_type_aliases import normalize_object_type
 
 
@@ -493,11 +505,19 @@ class ImageRunService:
                 raise HTTPException(status_code=404, detail="Image run not found")
             if row.status not in {"queued", "running"}:
                 return row
+            before = snapshot_image_run_row(row)
             row.status = "cancelled"
             row.stage = None
             row.failure_code = "cancelled"
             row.error_message = None
             row.updated_at = datetime.utcnow()
+            apply_project_usage_delta(
+                db,
+                user_id=user_id,
+                project_id=project_id,
+                delta=build_image_run_delta(before, snapshot_image_run_row(row)),
+                enforce_quota=False,
+            )
             db.commit()
             db.refresh(row)
         finally:
@@ -562,6 +582,13 @@ class ImageRunService:
         )
         db.add(row)
         db.flush()
+        apply_project_usage_delta(
+            db,
+            user_id=user_id,
+            project_id=project_id,
+            delta=build_image_run_delta(None, snapshot_image_run_row(row)),
+            enforce_quota=True,
+        )
         return row
 
     async def create_tool_preview_run(
@@ -660,6 +687,13 @@ class ImageRunService:
         tool_call.image_run_id = row.id
         tool_call.updated_at = datetime.utcnow()
         db.flush()
+        apply_project_usage_delta(
+            db,
+            user_id=user_id,
+            project_id=project_id,
+            delta=build_image_run_delta(None, snapshot_image_run_row(row)),
+            enforce_quota=True,
+        )
         return row
 
     def serialize(self, db: Session, row: ImageRunModel) -> ImageRunResponse:
@@ -945,6 +979,7 @@ class ImageRunService:
             row = db.query(ImageRunModel).filter(ImageRunModel.id == image_run_id).with_for_update().first()
             if row is None:
                 raise ValueError("Image run not found")
+            before = snapshot_image_run_row(row)
             asset = self._create_asset_for_run(
                 db=db,
                 row=row,
@@ -960,6 +995,13 @@ class ImageRunService:
             row.model = str(recipe.get("model") or row.model or "")
             row.stage = "binding"
             row.updated_at = datetime.utcnow()
+            apply_project_usage_delta(
+                db,
+                user_id=row.user_id,
+                project_id=row.project_id,
+                delta=build_image_run_delta(before, snapshot_image_run_row(row)),
+                enforce_quota=True,
+            )
             db.commit()
         finally:
             db.close()
@@ -1020,16 +1062,6 @@ class ImageRunService:
         else:
             raise ValueError("No image data returned from provider")
 
-        try:
-            enforce_user_asset_quota(
-                db,
-                user_id=row.user_id,
-                additional_bytes=int(file_size or 0),
-            )
-        except StorageQuotaExceededError as exc:
-            storage_service.delete_asset_files(file_path)
-            raise ValueError("Storage quota exceeded") from exc
-
         prompt_payload = _styled_prompt_from_dict(recipe.get("prompt"))
         positive_prompt = _styled_prompt_from_dict(recipe.get("positive_prompt"))
         negative_prompt = _styled_prompt_from_dict(recipe.get("negative_prompt"))
@@ -1058,6 +1090,17 @@ class ImageRunService:
         )
         db.add(asset)
         db.flush()
+        try:
+            apply_project_usage_delta(
+                db,
+                user_id=row.user_id,
+                project_id=row.project_id,
+                delta=build_asset_delta(None, snapshot_asset_row(asset)),
+                enforce_quota=True,
+            )
+        except StorageQuotaExceededError as exc:
+            storage_service.delete_asset_files(file_path)
+            raise ValueError("Storage quota exceeded") from exc
         return asset
 
     async def _apply_auto_run(self, *, image_run_id: UUID) -> None:
@@ -1240,10 +1283,18 @@ class ImageRunService:
             if row.review_mode != "manual" or row.status != "review":
                 raise HTTPException(status_code=409, detail="Image run is not in review")
             if decision == "reject":
+                before = snapshot_image_run_row(row)
                 row.status = "rejected"
                 row.failure_code = "user_rejected_generated_image"
                 row.error_message = "Generated image rejected by user"
                 row.updated_at = datetime.utcnow()
+                apply_project_usage_delta(
+                    db,
+                    user_id=user_id,
+                    project_id=project_id,
+                    delta=build_image_run_delta(before, snapshot_image_run_row(row)),
+                    enforce_quota=False,
+                )
                 db.commit()
                 db.refresh(row)
             else:
@@ -1283,11 +1334,19 @@ class ImageRunService:
                 row = db.query(ImageRunModel).filter(ImageRunModel.id == image_run_id).with_for_update().first()
                 if row is None:
                     raise
+                before = snapshot_image_run_row(row)
                 row.status = "failed"
                 row.failure_code = "apply_failed"
                 row.error_message = str(exc)
                 row.stage = None
                 row.updated_at = datetime.utcnow()
+                apply_project_usage_delta(
+                    db,
+                    user_id=user_id,
+                    project_id=project_id,
+                    delta=build_image_run_delta(before, snapshot_image_run_row(row)),
+                    enforce_quota=False,
+                )
                 db.commit()
                 db.refresh(row)
         finally:
@@ -1303,11 +1362,19 @@ class ImageRunService:
             row = db.query(ImageRunModel).filter(ImageRunModel.id == image_run_id).with_for_update().first()
             if row is None:
                 return
+            before = snapshot_image_run_row(row)
             row.status = "failed"
             row.stage = None
             row.failure_code = failure_code
             row.error_message = error_message
             row.updated_at = datetime.utcnow()
+            apply_project_usage_delta(
+                db,
+                user_id=row.user_id,
+                project_id=row.project_id,
+                delta=build_image_run_delta(before, snapshot_image_run_row(row)),
+                enforce_quota=False,
+            )
             db.commit()
         finally:
             db.close()
@@ -1327,6 +1394,7 @@ class ImageRunService:
             )
             if tool_call is None or tool_call.status != "working":
                 return
+            before = snapshot_tool_call_row(tool_call)
 
             if image_run.status == "applied":
                 tool_call.status = "applied"
@@ -1393,6 +1461,13 @@ class ImageRunService:
                 if latest_run is not None and latest_run.id == run.id:
                     thread.status = next_status
 
+            apply_project_usage_delta(
+                db,
+                user_id=image_run.user_id,
+                project_id=image_run.project_id,
+                delta=build_tool_call_delta(before, snapshot_tool_call_row(tool_call)),
+                enforce_quota=False,
+            )
             db.commit()
 
             await runtime_event_dispatcher.emit_runtime_event(
@@ -1425,7 +1500,7 @@ class ImageRunService:
         finally:
             db.close()
 
-    def cleanup_preview_assets_for_image_run(self, db: Session, *, image_run_id: UUID, project_id: UUID) -> list[UUID]:
+    def cleanup_preview_assets_for_image_run(self, db: Session, *, image_run_id: UUID, project_id: UUID, user_id: UUID) -> list[UUID]:
         assets = (
             db.query(Asset)
             .filter(
@@ -1436,11 +1511,44 @@ class ImageRunService:
         )
         if not assets:
             return []
-        return delete_assets_with_files(
+        deleted_asset_ids = [asset.id for asset in assets if isinstance(asset.id, UUID)]
+        deleted_before = snapshot_rows(assets, snapshot_asset_row)
+        scrubbed_before = snapshot_rows(
+            db.query(Asset)
+            .filter(
+                Asset.project_id == project_id,
+                Asset.generation_reference_images.isnot(None),
+                ~Asset.id.in_(deleted_asset_ids) if deleted_asset_ids else True,
+            )
+            .all(),
+            snapshot_asset_row,
+        )
+        deleted_ids = delete_assets_with_files(
             db,
             assets=assets,
             scrub_references_in_project_id=project_id,
         )
+        scrubbed_after = snapshot_rows(
+            db.query(Asset)
+            .filter(
+                Asset.project_id == project_id,
+                Asset.generation_reference_images.isnot(None),
+                ~Asset.id.in_(deleted_asset_ids) if deleted_asset_ids else True,
+            )
+            .all(),
+            snapshot_asset_row,
+        )
+        apply_project_usage_deltas(
+            db,
+            user_id=user_id,
+            project_id=project_id,
+            deltas=[
+                build_asset_rows_delta(deleted_before, []),
+                build_asset_rows_delta(scrubbed_before, scrubbed_after),
+            ],
+            enforce_quota=False,
+        )
+        return deleted_ids
 
     def _validate_direct_target(self, db: Session, *, project_id: UUID, target: dict[str, Any]) -> None:
         target_type = str(target.get("type") or "").strip()

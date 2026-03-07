@@ -146,7 +146,7 @@ app.include_router(token_router)
 app.include_router(account_router)
 app.include_router(admin_router)
 
-# Mount static files for asset storage
+# Mount static files for generated and uploaded assets
 storage_path = Path(__file__).parent / "storage" / "assets"
 storage_path.mkdir(parents=True, exist_ok=True)
 app.mount("/storage/assets", StaticFiles(directory=str(storage_path)), name="assets")

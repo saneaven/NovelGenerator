@@ -10,10 +10,17 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..auth import require_admin
-from ..database import get_db
-from ..models.db_models import Asset, Project, User
-from ..schemas.admin import AdminUserStorageItem, AdminUsersStorageResponse, AdminUserUpdateRequest
-from ..services.storage_quota_service import resolve_user_asset_quota_bytes
+from ..database import SessionLocal, get_db
+from ..models.db_models import ProjectStorageUsage, User
+from ..schemas.admin import (
+    AdminStorageReconcileProjectResult,
+    AdminStorageReconcileRequest,
+    AdminStorageReconcileResponse,
+    AdminUserStorageItem,
+    AdminUsersStorageResponse,
+    AdminUserUpdateRequest,
+)
+from ..services.storage_usage_service import resolve_user_storage_quota_bytes, run_storage_usage_reconcile_batch
 
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
@@ -24,15 +31,12 @@ async def list_users_storage(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    size_expr = func.coalesce(Asset.file_size, 0)
-
     usage_subq = (
         db.query(
-            Project.user_id.label("user_id"),
-            func.coalesce(func.sum(size_expr), 0).label("used_bytes"),
+            ProjectStorageUsage.user_id.label("user_id"),
+            func.coalesce(func.sum(ProjectStorageUsage.total_bytes), 0).label("used_bytes"),
         )
-        .join(Asset, Asset.project_id == Project.id, isouter=True)
-        .group_by(Project.user_id)
+        .group_by(ProjectStorageUsage.user_id)
         .subquery()
     )
 
@@ -48,11 +52,11 @@ async def list_users_storage(
 
     items: list[AdminUserStorageItem] = []
     for user, used_bytes in rows:
-        quota_bytes = resolve_user_asset_quota_bytes(user)
+        quota_bytes = resolve_user_storage_quota_bytes(user)
         remaining_bytes = max(int(quota_bytes) - int(used_bytes or 0), 0)
         percent_used = 0.0 if quota_bytes <= 0 else min(float(used_bytes or 0) / float(quota_bytes), 1.0)
 
-        override = getattr(user, "asset_quota_bytes", None)
+        override = getattr(user, "storage_quota_bytes", None)
         override_out = int(override) if isinstance(override, int) else None
 
         items.append(
@@ -65,7 +69,7 @@ async def list_users_storage(
                 quota_bytes=int(quota_bytes),
                 remaining_bytes=int(remaining_bytes),
                 percent_used=float(percent_used),
-                asset_quota_bytes_override=override_out,
+                storage_quota_bytes_override=override_out,
                 created_at=user.created_at,
             )
         )
@@ -104,27 +108,24 @@ async def update_user_admin_fields(
 
         user.is_admin = bool(request.is_admin)
 
-    if "asset_quota_bytes" in fields:
-        user.asset_quota_bytes = request.asset_quota_bytes
+    if "storage_quota_bytes" in fields:
+        user.storage_quota_bytes = request.storage_quota_bytes
 
     db.commit()
     db.refresh(user)
 
-    # Compute used bytes for response
-    size_expr = func.coalesce(Asset.file_size, 0)
     used_bytes = (
-        db.query(func.coalesce(func.sum(size_expr), 0))
-        .join(Project, Project.id == Asset.project_id)
-        .filter(Project.user_id == user.id)
+        db.query(func.coalesce(func.sum(ProjectStorageUsage.total_bytes), 0))
+        .filter(ProjectStorageUsage.user_id == user.id)
         .scalar()
     )
     used_bytes_int = int(used_bytes or 0)
 
-    quota_bytes = resolve_user_asset_quota_bytes(user)
+    quota_bytes = resolve_user_storage_quota_bytes(user)
     remaining_bytes = max(int(quota_bytes) - used_bytes_int, 0)
     percent_used = 0.0 if quota_bytes <= 0 else min(float(used_bytes_int) / float(quota_bytes), 1.0)
 
-    override = getattr(user, "asset_quota_bytes", None)
+    override = getattr(user, "storage_quota_bytes", None)
     override_out = int(override) if isinstance(override, int) else None
 
     return AdminUserStorageItem(
@@ -136,6 +137,53 @@ async def update_user_admin_fields(
         quota_bytes=int(quota_bytes),
         remaining_bytes=int(remaining_bytes),
         percent_used=float(percent_used),
-        asset_quota_bytes_override=override_out,
+        storage_quota_bytes_override=override_out,
         created_at=user.created_at,
+    )
+
+
+@router.post("/storage/reconcile", response_model=AdminStorageReconcileResponse)
+async def reconcile_storage_usage(
+    request: AdminStorageReconcileRequest,
+    current_admin: User = Depends(require_admin),
+):
+    _ = current_admin
+
+    try:
+        resolved_user_id = UUID(request.user_id) if request.user_id else None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid user_id") from exc
+    try:
+        resolved_project_id = UUID(request.project_id) if request.project_id else None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid project_id") from exc
+
+    result = run_storage_usage_reconcile_batch(
+        session_factory=SessionLocal,
+        scope=request.scope,
+        apply=request.apply,
+        limit=request.limit,
+        user_id=resolved_user_id,
+        project_id=resolved_project_id,
+    )
+
+    return AdminStorageReconcileResponse(
+        scope=result.scope,
+        applied=result.applied,
+        scanned_projects=result.scanned_projects,
+        reconciled_projects=result.reconciled_projects,
+        drifted_projects=result.drifted_projects,
+        failed_projects=result.failed_projects,
+        results=[
+            AdminStorageReconcileProjectResult(
+                project_id=str(item.project_id),
+                before_total_bytes=int(item.before.total_bytes),
+                after_total_bytes=int(item.after.total_bytes),
+                drift_bytes=int(item.drift_bytes),
+                needs_reconcile_after=bool(item.needs_reconcile_after),
+                status=item.status,
+                error=item.error,
+            )
+            for item in result.results
+        ],
     )

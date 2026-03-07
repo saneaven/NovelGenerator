@@ -8,6 +8,12 @@ from ..database import get_db
 from ..models.db_models import User, Project, Agent, Thread
 from ..schemas.agents import AgentCreate, AgentUpdate, AgentResponse
 from ..auth import get_current_user
+from ..services.storage_usage_service import (
+    StorageQuotaExceededError,
+    apply_project_usage_delta,
+    build_agent_delta,
+    snapshot_agent_row,
+)
 
 router = APIRouter(prefix="/api/v1/projects/{project_id}/agents", tags=["Agents"])
 
@@ -87,6 +93,17 @@ async def create_agent(
         status="done",
     )
     db.add(thread)
+    try:
+        apply_project_usage_delta(
+            db,
+            user_id=current_user.id,
+            project_id=project_id,
+            delta=build_agent_delta(None, snapshot_agent_row(agent)),
+            enforce_quota=True,
+        )
+    except StorageQuotaExceededError:
+        db.rollback()
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     db.commit()
     db.refresh(agent)
 
@@ -164,7 +181,19 @@ async def update_agent(
             detail="Agent not found"
         )
 
+    before = snapshot_agent_row(agent)
     agent.name = data.name
+    try:
+        apply_project_usage_delta(
+            db,
+            user_id=current_user.id,
+            project_id=project_id,
+            delta=build_agent_delta(before, snapshot_agent_row(agent)),
+            enforce_quota=True,
+        )
+    except StorageQuotaExceededError:
+        db.rollback()
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     db.commit()
     db.refresh(agent)
 
@@ -192,7 +221,15 @@ async def delete_agent(
             detail="Agent not found"
         )
 
+    before = snapshot_agent_row(agent)
     db.delete(agent)
+    apply_project_usage_delta(
+        db,
+        user_id=current_user.id,
+        project_id=project_id,
+        delta=build_agent_delta(before, None),
+        enforce_quota=False,
+    )
     db.commit()
 
     return None

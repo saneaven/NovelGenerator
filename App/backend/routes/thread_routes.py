@@ -42,6 +42,20 @@ from ..services.sidecar_client import sidecar_client
 from ..services.reasoning.normalize import normalize_reasoning_detail
 from ..services.ownership import require_owned_project, require_owned_thread
 from ..services.image_run_service import image_run_service
+from ..services.storage_usage_service import (
+    StorageQuotaExceededError,
+    apply_project_usage_deltas,
+    build_notification_delta,
+    build_run_message_delta,
+    build_thread_delta,
+    build_tool_call_delta,
+    enforce_user_storage_quota,
+    snapshot_notification_row,
+    snapshot_run_message_row,
+    snapshot_thread_row,
+    snapshot_tool_call_row,
+    snapshot_rows,
+)
 
 
 router = APIRouter(prefix="/api/v1", tags=["threads"])
@@ -129,6 +143,30 @@ def _assistant_has_content_or_reasoning(data: Any) -> bool:
         if isinstance(reasoning_detail, dict):
             return True
     return False
+
+
+def _snapshot_assistant_tool_call_tree(
+    db: Session,
+    *,
+    assistant_message_id: UUID,
+) -> tuple[list[object], list[object]]:
+    tool_calls = (
+        db.query(RunToolCallModel)
+        .filter(RunToolCallModel.assistant_message_id == assistant_message_id)
+        .all()
+    )
+    tool_call_ids = [row.id for row in tool_calls if isinstance(row.id, UUID)]
+    tool_messages = (
+        db.query(RunMessageModel)
+        .filter(RunMessageModel.parent_tool_call_id.in_(tool_call_ids))
+        .all()
+        if tool_call_ids
+        else []
+    )
+    return (
+        snapshot_rows(tool_calls, snapshot_tool_call_row),
+        snapshot_rows(tool_messages, snapshot_run_message_row),
+    )
 
 
 def _sync_run_thread_status(db: Session, *, run_id: UUID) -> tuple[RunModel | None, Thread | None, str | None]:
@@ -1079,8 +1117,30 @@ async def delete_thread_message(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Message not found")
+    thread_before = snapshot_thread_row(thread)
+    message_before = snapshot_run_message_row(row)
+    tool_calls_before: list[object] = []
+    tool_messages_before: list[object] = []
+    if row.role == "assistant":
+        tool_calls_before, tool_messages_before = _snapshot_assistant_tool_call_tree(
+            db,
+            assistant_message_id=row.id,
+        )
     db.delete(row)
     thread.captured_history_conversation_json = None
+    deltas = [
+        build_run_message_delta(message_before, None),
+        build_thread_delta(thread_before, snapshot_thread_row(thread)),
+    ]
+    deltas.extend(build_tool_call_delta(tool_call, None) for tool_call in tool_calls_before)
+    deltas.extend(build_run_message_delta(tool_message, None) for tool_message in tool_messages_before)
+    apply_project_usage_deltas(
+        db,
+        user_id=current_user.id,
+        project_id=thread.project_id,
+        deltas=deltas,
+        enforce_quota=False,
+    )
     db.commit()
     return Response(status_code=204)
 
@@ -1102,11 +1162,18 @@ async def delete_thread_tool_call(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Tool call not found")
+    thread_before = snapshot_thread_row(thread)
+    tool_call_before = snapshot_tool_call_row(row)
+    tool_messages_before = snapshot_rows(
+        db.query(RunMessageModel).filter(RunMessageModel.parent_tool_call_id == row.id).all(),
+        snapshot_run_message_row,
+    )
     if row.image_run_id is not None:
         image_run_service.cleanup_preview_assets_for_image_run(
             db,
             image_run_id=row.image_run_id,
             project_id=thread.project_id,
+            user_id=current_user.id,
         )
     assistant_message_id = row.assistant_message_id
     db.delete(row)
@@ -1133,9 +1200,30 @@ async def delete_thread_tool_call(
                 .first()
             )
             if assistant_row is not None and not _assistant_has_content_or_reasoning(assistant_row.data):
+                assistant_message_before = snapshot_run_message_row(assistant_row)
                 db.delete(assistant_row)
+            else:
+                assistant_message_before = None
+        else:
+            assistant_message_before = None
+    else:
+        assistant_message_before = None
 
     thread.captured_history_conversation_json = None
+    deltas = [
+        build_tool_call_delta(tool_call_before, None),
+        build_thread_delta(thread_before, snapshot_thread_row(thread)),
+    ]
+    deltas.extend(build_run_message_delta(message_before, None) for message_before in tool_messages_before)
+    if assistant_message_before is not None:
+        deltas.append(build_run_message_delta(assistant_message_before, None))
+    apply_project_usage_deltas(
+        db,
+        user_id=current_user.id,
+        project_id=thread.project_id,
+        deltas=deltas,
+        enforce_quota=False,
+    )
     db.commit()
     return Response(status_code=204)
 
@@ -1199,6 +1287,11 @@ async def create_thread(
         meta=merged_notification_meta,
     )
 
+    try:
+        enforce_user_storage_quota(db, user_id=current_user.id)
+    except StorageQuotaExceededError:
+        db.rollback()
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     db.commit()
     db.refresh(thread)
     db.refresh(notification_row)
