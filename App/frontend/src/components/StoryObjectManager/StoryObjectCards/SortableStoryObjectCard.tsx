@@ -9,12 +9,12 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { HamburgerMenu } from '../../icons';
 import type { SpanType } from '../../../hooks/useCardSpanType';
+import DragHandle from '../../ui/DragHandle';
 
 interface SortableStoryObjectCardProps {
   id: string;
-  children: React.ReactNode;
+  children: (dragHandle: React.ReactNode) => React.ReactNode;
   disabled?: boolean;
   spanType?: SpanType;
 }
@@ -41,6 +41,14 @@ export const SortableStoryObjectCard: React.FC<SortableStoryObjectCardProps> = (
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const dragHandle = (
+    <DragHandle
+      orientation="horizontal"
+      disabled={disabled}
+      handleProps={{ ...attributes, ...listeners } as React.HTMLAttributes<HTMLDivElement>}
+    />
+  );
+
   return (
     <div
       ref={setNodeRef}
@@ -48,12 +56,7 @@ export const SortableStoryObjectCard: React.FC<SortableStoryObjectCardProps> = (
       className="sortable-card-wrapper"
       data-span={spanType}
     >
-      <div className="sortable-card-wrapper__drag-handle" {...attributes} {...listeners}>
-        <HamburgerMenu size="xs" />
-      </div>
-      <div className="sortable-card-wrapper__content">
-        {children}
-      </div>
+      {children(dragHandle)}
     </div>
   );
 };

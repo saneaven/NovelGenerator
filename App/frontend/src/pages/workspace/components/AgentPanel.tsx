@@ -499,6 +499,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   }, [sendBlockingState]);
 
   const hasStreamingMessage = liveView?.hasStreamingMessage ?? false;
+  const streamingContentLength = liveView?.contentParts?.reduce((sum, p) => sum + p.text.length, 0) ?? 0;
 
   const latestRunError = useMemo(() => {
     if (thread?.status !== 'error') return undefined;
@@ -612,7 +613,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     if (!isLoading) {
       setShowScrollButton(false);
     }
-  }, [displayItems.length, hasStreamingMessage, isLoading]);
+  }, [displayItems.length, hasStreamingMessage, isLoading, streamingContentLength]);
 
   const formatTimestamp = useCallback((input: Date | string | number | undefined | null) => {
     if (!input) return '';

@@ -26,9 +26,10 @@ import VersionHistoryModal from '../../../components/Modal/VersionHistoryModal';
 import { BaseModal } from '../../../components/BaseModal';
 import OutlineSidebar from './OutlineSidebar';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
+import DragHandle from '../../../components/ui/DragHandle';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
-import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll, GripVertical } from '../../../components/icons';
+import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll } from '../../../components/icons';
 import type { UnifiedObject, OutlineObject, ActObject, ChapterObject } from '../../../types/unifiedObject';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
 import { OutlineItemCard } from '../../../components/OutlineItemCard';
@@ -772,263 +773,287 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
                       return (
                         <SortableActGroup key={act.id} id={act.id} disabled={editingAct === act.id} isExpanded={isActExpanded}>
-                          {/* Act Node */}
-                          <div className="timeline-act-node" style={{ '--act-index': actIndex } as React.CSSProperties}>
-                            <div className="node-marker">
-                              <span className="act-index">{actIndex + 1}</span>
-                            </div>
-
-                            <div className="act-content-wrapper">
-                              {editingAct === act.id ? (
-                                <div className="outline-item-card">
-                                  <div className="content-card act-card is-editing">
-                                    <div className="card-header">
-                                      <div className="card-title-section" style={{ flex: 1 }}>
-                                        <input
-                                          type="text"
-                                          className="inline-title-input"
-                                          value={editActData.name}
-                                          onChange={(e) => setEditActData(prev => ({ ...prev, name: e.target.value }))}
-                                          placeholder="Act Title"
-                                          autoFocus
-                                        />
-                                      </div>
-                                    </div>
-                                    <div className="card-body-wrapper is-expanded">
-                                      <div className="card-body-content">
-                                        <textarea
-                                          className="inline-description-input"
-                                          value={editActData.description}
-                                          onChange={(e) => setEditActData(prev => ({ ...prev, description: e.target.value }))}
-                                          placeholder="Describe the main events that happen in this act"
-                                          rows={4}
-                                        />
-                                        <div className="inline-content-editor">
-                                          <RichTextEditor
-                                            ref={actEditorRef}
-                                            key={editingAct}
-                                            initialContent={editActData.content}
-                                            onChange={(markdown) => setEditActData(prev => ({ ...prev, content: markdown }))}
-                                            placeholder="Full act content..."
-                                          />
-                                        </div>
-                                        <div className="edit-actions-split">
-                                          <TextButton
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => setShowActAIModal(act.id)}
-                                            iconLeft={<AIAssist size="xs" />}
-                                          >
-                                            AI Edit
-                                          </TextButton>
-                                          <div className="edit-actions-right">
-                                            <TextButton
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={cancelEditingAct}
-                                              iconLeft={<Close size="xs" />}
-                                            >
-                                              Cancel
-                                            </TextButton>
-                                            <TextButton
-                                              variant="secondary"
-                                              size="sm"
-                                              onClick={handleUpdateAct}
-                                              iconLeft={<Save size="xs" />}
-                                            >
-                                              Save
-                                            </TextButton>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
+                          {(dragHandle) => (
+                            <>
+                              {/* Act Node */}
+                              <div className="timeline-act-node" style={{ '--act-index': actIndex } as React.CSSProperties}>
+                                <div className="node-marker">
+                                  <span className="act-index">{actIndex + 1}</span>
                                 </div>
-                              ) : (
-                                <OutlineItemCard
-                                  variant="act"
-                                  name={actData.name || 'Untitled Act'}
-                                  description={actData.description}
-                                  content={actData.content}
-                                  meta={`${actChapters.length} Chapters`}
-                                  expanded={isActExpanded}
-                                  showFallbackWarning={actFallback}
-                                  onHeaderClick={() => toggleActExpand(act.id)}
-                                  footerActions={
-                                    <>
-                                      <DropdownMenu
-                                        trigger={
-                                          <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
-                                            More
-                                          </TextButton>
-                                        }
-                                      >
-                                        <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteAct(act.id)} variant="danger" />
-                                      </DropdownMenu>
-                                      <TextButton
-                                        size="sm"
-                                        variant="secondary"
-                                        iconLeft={<Edit size="xs" />}
-                                        onClick={() => startEditingAct(act.id)}
-                                      >
-                                        Edit
-                                      </TextButton>
-                                    </>
-                                  }
-                                />
-                              )}
-                            </div>
-                          </div>
 
-                          {/* Chapter Stream */}
-                          <div className="chapter-stream-wrapper">
-                            <div className="timeline-chapter-stream">
-                              <div className="stream-line"></div>
-
-                              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={makeChapterDragEndHandler(act.id)}>
-                                <SortableContext items={actChapters.map(ch => ch.id)} strategy={verticalListSortingStrategy}>
-                                  {actChapters.map((chapter, chapterIndex) => {
-                                    const { effectiveLanguage: chLang, isFallback: chFallback } = getEffectiveLanguage(chapter);
-                                    const chData = getDataForLanguage(chapter, chLang);
-                                    const isChapterExpanded = expandedChapters.has(chapter.id);
-                                    const globalChapterIndex = chapterNumberById.get(chapter.id) ?? chapterIndex + 1;
-
-                                    return (
-                                      <SortableChapterNode key={chapter.id} id={chapter.id} disabled={editingChapter === chapter.id} chapterIndex={chapterIndex}>
-                                        <div className="chapter-marker"></div>
-                                        <div className="chapter-content-wrapper">
-                                          {editingChapter === chapter.id ? (
-                                            <div className="outline-item-card">
-                                              <div className="content-card chapter-card is-editing">
-                                                <div className="chapter-header">
-                                                  <div className="chapter-info" style={{ flex: 1 }}>
-                                                    <span className="chapter-index">CH {globalChapterIndex}</span>
-                                                    <input
-                                                      type="text"
-                                                      className="inline-title-input"
-                                                      value={editChapterData.name}
-                                                      onChange={(e) => setEditChapterData(prev => ({ ...prev, name: e.target.value }))}
-                                                      placeholder="Chapter Title"
-                                                      autoFocus
-                                                    />
-                                                  </div>
+                                <div className="act-content-wrapper">
+                                  {editingAct === act.id ? (
+                                    <div className="outline-item-card" data-has-drag-handle="true">
+                                      <div className="outline-item-card__layout">
+                                        <div className="outline-item-card__drag-slot">
+                                          {dragHandle}
+                                        </div>
+                                        <div className="outline-item-card__main">
+                                          <div className="content-card act-card is-editing">
+                                            <div className="card-header">
+                                              <div className="card-title-section" style={{ flex: 1 }}>
+                                                <input
+                                                  type="text"
+                                                  className="inline-title-input"
+                                                  value={editActData.name}
+                                                  onChange={(e) => setEditActData(prev => ({ ...prev, name: e.target.value }))}
+                                                  placeholder="Act Title"
+                                                  autoFocus
+                                                />
+                                              </div>
+                                            </div>
+                                            <div className="card-body-wrapper is-expanded">
+                                              <div className="card-body-content">
+                                                <textarea
+                                                  className="inline-description-input"
+                                                  value={editActData.description}
+                                                  onChange={(e) => setEditActData(prev => ({ ...prev, description: e.target.value }))}
+                                                  placeholder="Describe the main events that happen in this act"
+                                                  rows={4}
+                                                />
+                                                <div className="inline-content-editor">
+                                                  <RichTextEditor
+                                                    ref={actEditorRef}
+                                                    key={editingAct}
+                                                    initialContent={editActData.content}
+                                                    onChange={(markdown) => setEditActData(prev => ({ ...prev, content: markdown }))}
+                                                    placeholder="Full act content..."
+                                                  />
                                                 </div>
-                                                <div className="chapter-expand-wrapper is-expanded">
-                                                  <div className="chapter-expand-content">
-                                                    <textarea
-                                                      className="inline-description-input"
-                                                      value={editChapterData.description}
-                                                      onChange={(e) => setEditChapterData(prev => ({ ...prev, description: e.target.value }))}
-                                                      placeholder="Describe what happens in this chapter"
-                                                      rows={3}
-                                                    />
-                                                    <div className="inline-content-editor">
-                                                      <RichTextEditor
-                                                        ref={chapterEditorRef}
-                                                        key={editingChapter}
-                                                        initialContent={editChapterData.content}
-                                                        onChange={(markdown) => setEditChapterData(prev => ({ ...prev, content: markdown }))}
-                                                        placeholder="Full chapter content..."
-                                                      />
-                                                    </div>
-                                                    <div className="edit-actions-split">
-                                                      <TextButton
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => setShowChapterAIModal(chapter.id)}
-                                                        iconLeft={<AIAssist size="xs" />}
-                                                      >
-                                                        AI Edit
-                                                      </TextButton>
-                                                      <div className="edit-actions-right">
-                                                        <TextButton
-                                                          variant="ghost"
-                                                          size="sm"
-                                                          onClick={cancelEditingChapter}
-                                                          iconLeft={<Close size="xs" />}
-                                                        >
-                                                          Cancel
-                                                        </TextButton>
-                                                        <TextButton
-                                                          variant="secondary"
-                                                          size="sm"
-                                                          onClick={handleUpdateChapter}
-                                                          iconLeft={<Save size="xs" />}
-                                                        >
-                                                          Save
-                                                        </TextButton>
-                                                      </div>
-                                                    </div>
+                                                <div className="edit-actions-split">
+                                                  <TextButton
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => setShowActAIModal(act.id)}
+                                                    iconLeft={<AIAssist size="xs" />}
+                                                  >
+                                                    AI Edit
+                                                  </TextButton>
+                                                  <div className="edit-actions-right">
+                                                    <TextButton
+                                                      variant="ghost"
+                                                      size="sm"
+                                                      onClick={cancelEditingAct}
+                                                      iconLeft={<Close size="xs" />}
+                                                    >
+                                                      Cancel
+                                                    </TextButton>
+                                                    <TextButton
+                                                      variant="secondary"
+                                                      size="sm"
+                                                      onClick={handleUpdateAct}
+                                                      iconLeft={<Save size="xs" />}
+                                                    >
+                                                      Save
+                                                    </TextButton>
                                                   </div>
                                                 </div>
                                               </div>
                                             </div>
-                                          ) : (
-                                            <OutlineItemCard
-                                              variant="chapter"
-                                              name={chData.name || 'Untitled Chapter'}
-                                              description={chData.description}
-                                              content={chData.content}
-                                              chapterIndex={globalChapterIndex}
-                                              expanded={isChapterExpanded}
-                                              showFallbackWarning={chFallback}
-                                              onHeaderClick={() => toggleChapterExpand(chapter.id)}
-                                              footerActions={
-                                                <>
-                                                  <DropdownMenu
-                                                    trigger={
-                                                      <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
-                                                        More
-                                                      </TextButton>
-                                                    }
-                                                  >
-                                                    <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteChapter(chapter.id)} variant="danger" />
-                                                  </DropdownMenu>
-                                                  <TextButton
-                                                    size="sm"
-                                                    variant="secondary"
-                                                    iconLeft={<Edit size="xs" />}
-                                                    onClick={() => startEditingChapter(chapter.id)}
-                                                  >
-                                                    Edit
-                                                  </TextButton>
-                                                </>
-                                              }
-                                            />
-                                          )}
+                                          </div>
                                         </div>
-                                      </SortableChapterNode>
-                                    );
-                                  })}
-                                </SortableContext>
-                              </DndContext>
-
-                              {/* Add Chapter Button */}
-                              {showAddChapterForm === act.id ? (
-                                <div className="timeline-chapter-node creation-node">
-                                  <div className="chapter-marker creation-marker"><Plus size="xs" /></div>
-                                  <div className="chapter-content-wrapper">
-                                    <AddChapterForm
-                                      onAdd={(name, desc, content) => handleAddChapter(act.id, name, desc, content)}
-                                      onCancel={() => setShowAddChapterForm(null)}
-                                    />
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="timeline-chapter-node add-chapter-node" onClick={() => setShowAddChapterForm(act.id)}>
-                                  <div className="chapter-marker add-marker"><Plus size="xs" /></div>
-                                  <div className="chapter-content-wrapper">
-                                    <div className="content-card add-chapter-card">
-                                      <div className="add-chapter-content">
-                                        <Plus size="sm" />
-                                        <span>Add Chapter</span>
                                       </div>
                                     </div>
-                                  </div>
+                                  ) : (
+                                    <OutlineItemCard
+                                      variant="act"
+                                      name={actData.name || 'Untitled Act'}
+                                      description={actData.description}
+                                      content={actData.content}
+                                      meta={`${actChapters.length} Chapters`}
+                                      expanded={isActExpanded}
+                                      showFallbackWarning={actFallback}
+                                      dragHandle={dragHandle}
+                                      onHeaderClick={() => toggleActExpand(act.id)}
+                                      footerActions={
+                                        <>
+                                          <DropdownMenu
+                                            trigger={
+                                              <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
+                                                More
+                                              </TextButton>
+                                            }
+                                          >
+                                            <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteAct(act.id)} variant="danger" />
+                                          </DropdownMenu>
+                                          <TextButton
+                                            size="sm"
+                                            variant="secondary"
+                                            iconLeft={<Edit size="xs" />}
+                                            onClick={() => startEditingAct(act.id)}
+                                          >
+                                            Edit
+                                          </TextButton>
+                                        </>
+                                      }
+                                    />
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                          </div>
+                              </div>
+
+                              {/* Chapter Stream */}
+                              <div className="chapter-stream-wrapper">
+                                <div className="timeline-chapter-stream">
+                                  <div className="stream-line"></div>
+
+                                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={makeChapterDragEndHandler(act.id)}>
+                                    <SortableContext items={actChapters.map(ch => ch.id)} strategy={verticalListSortingStrategy}>
+                                      {actChapters.map((chapter, chapterIndex) => {
+                                        const { effectiveLanguage: chLang, isFallback: chFallback } = getEffectiveLanguage(chapter);
+                                        const chData = getDataForLanguage(chapter, chLang);
+                                        const isChapterExpanded = expandedChapters.has(chapter.id);
+                                        const globalChapterIndex = chapterNumberById.get(chapter.id) ?? chapterIndex + 1;
+
+                                        return (
+                                          <SortableChapterNode key={chapter.id} id={chapter.id} disabled={editingChapter === chapter.id} chapterIndex={chapterIndex}>
+                                            {(chapterDragHandle) => (
+                                              <>
+                                                <div className="chapter-marker"></div>
+                                                <div className="chapter-content-wrapper">
+                                                  {editingChapter === chapter.id ? (
+                                                    <div className="outline-item-card" data-has-drag-handle="true">
+                                                      <div className="outline-item-card__layout">
+                                                        <div className="outline-item-card__drag-slot">
+                                                          {chapterDragHandle}
+                                                        </div>
+                                                        <div className="outline-item-card__main">
+                                                          <div className="content-card chapter-card is-editing">
+                                                            <div className="chapter-header">
+                                                              <div className="chapter-info" style={{ flex: 1 }}>
+                                                                <span className="chapter-index">CH {globalChapterIndex}</span>
+                                                                <input
+                                                                  type="text"
+                                                                  className="inline-title-input"
+                                                                  value={editChapterData.name}
+                                                                  onChange={(e) => setEditChapterData(prev => ({ ...prev, name: e.target.value }))}
+                                                                  placeholder="Chapter Title"
+                                                                  autoFocus
+                                                                />
+                                                              </div>
+                                                            </div>
+                                                            <div className="chapter-expand-wrapper is-expanded">
+                                                              <div className="chapter-expand-content">
+                                                                <textarea
+                                                                  className="inline-description-input"
+                                                                  value={editChapterData.description}
+                                                                  onChange={(e) => setEditChapterData(prev => ({ ...prev, description: e.target.value }))}
+                                                                  placeholder="Describe what happens in this chapter"
+                                                                  rows={3}
+                                                                />
+                                                                <div className="inline-content-editor">
+                                                                  <RichTextEditor
+                                                                    ref={chapterEditorRef}
+                                                                    key={editingChapter}
+                                                                    initialContent={editChapterData.content}
+                                                                    onChange={(markdown) => setEditChapterData(prev => ({ ...prev, content: markdown }))}
+                                                                    placeholder="Full chapter content..."
+                                                                  />
+                                                                </div>
+                                                                <div className="edit-actions-split">
+                                                                  <TextButton
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={() => setShowChapterAIModal(chapter.id)}
+                                                                    iconLeft={<AIAssist size="xs" />}
+                                                                  >
+                                                                    AI Edit
+                                                                  </TextButton>
+                                                                  <div className="edit-actions-right">
+                                                                    <TextButton
+                                                                      variant="ghost"
+                                                                      size="sm"
+                                                                      onClick={cancelEditingChapter}
+                                                                      iconLeft={<Close size="xs" />}
+                                                                    >
+                                                                      Cancel
+                                                                    </TextButton>
+                                                                    <TextButton
+                                                                      variant="secondary"
+                                                                      size="sm"
+                                                                      onClick={handleUpdateChapter}
+                                                                      iconLeft={<Save size="xs" />}
+                                                                    >
+                                                                      Save
+                                                                    </TextButton>
+                                                                  </div>
+                                                                </div>
+                                                              </div>
+                                                            </div>
+                                                          </div>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  ) : (
+                                                    <OutlineItemCard
+                                                      variant="chapter"
+                                                      name={chData.name || 'Untitled Chapter'}
+                                                      description={chData.description}
+                                                      content={chData.content}
+                                                      chapterIndex={globalChapterIndex}
+                                                      expanded={isChapterExpanded}
+                                                      showFallbackWarning={chFallback}
+                                                      dragHandle={chapterDragHandle}
+                                                      onHeaderClick={() => toggleChapterExpand(chapter.id)}
+                                                      footerActions={
+                                                        <>
+                                                          <DropdownMenu
+                                                            trigger={
+                                                              <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
+                                                                More
+                                                              </TextButton>
+                                                            }
+                                                          >
+                                                            <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteChapter(chapter.id)} variant="danger" />
+                                                          </DropdownMenu>
+                                                          <TextButton
+                                                            size="sm"
+                                                            variant="secondary"
+                                                            iconLeft={<Edit size="xs" />}
+                                                            onClick={() => startEditingChapter(chapter.id)}
+                                                          >
+                                                            Edit
+                                                          </TextButton>
+                                                        </>
+                                                      }
+                                                    />
+                                                  )}
+                                                </div>
+                                              </>
+                                            )}
+                                          </SortableChapterNode>
+                                        );
+                                      })}
+                                    </SortableContext>
+                                  </DndContext>
+
+                                  {/* Add Chapter Button */}
+                                  {showAddChapterForm === act.id ? (
+                                    <div className="timeline-chapter-node creation-node">
+                                      <div className="chapter-marker creation-marker"><Plus size="xs" /></div>
+                                      <div className="chapter-content-wrapper">
+                                        <AddChapterForm
+                                          onAdd={(name, desc, content) => handleAddChapter(act.id, name, desc, content)}
+                                          onCancel={() => setShowAddChapterForm(null)}
+                                        />
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="timeline-chapter-node add-chapter-node" onClick={() => setShowAddChapterForm(act.id)}>
+                                      <div className="chapter-marker add-marker"><Plus size="xs" /></div>
+                                      <div className="chapter-content-wrapper">
+                                        <div className="content-card add-chapter-card">
+                                          <div className="add-chapter-content">
+                                            <Plus size="sm" />
+                                            <span>Add Chapter</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </SortableActGroup>
                       );
                     })}
@@ -1301,7 +1326,7 @@ interface SortableActGroupProps {
   id: string;
   disabled: boolean;
   isExpanded: boolean;
-  children: React.ReactNode;
+  children: (dragHandle: React.ReactNode) => React.ReactNode;
 }
 
 const SortableActGroup: React.FC<SortableActGroupProps> = ({ id, disabled, isExpanded, children }) => {
@@ -1321,16 +1346,21 @@ const SortableActGroup: React.FC<SortableActGroupProps> = ({ id, disabled, isExp
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const dragHandle = (
+    <DragHandle
+      orientation="vertical"
+      disabled={disabled}
+      handleProps={{ ...attributes, ...listeners } as React.HTMLAttributes<HTMLDivElement>}
+    />
+  );
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={`timeline-act-group ${isExpanded ? 'is-expanded' : 'is-collapsed'} ${isDragging ? 'is-dragging' : ''}`}
     >
-      <div className="timeline-act-group__drag-handle" {...attributes} {...listeners}>
-        <GripVertical size="xs" />
-      </div>
-      {children}
+      {children(dragHandle)}
     </div>
   );
 };
@@ -1339,7 +1369,7 @@ interface SortableChapterNodeProps {
   id: string;
   disabled: boolean;
   chapterIndex: number;
-  children: React.ReactNode;
+  children: (dragHandle: React.ReactNode) => React.ReactNode;
 }
 
 const SortableChapterNode: React.FC<SortableChapterNodeProps> = ({ id, disabled, chapterIndex, children }) => {
@@ -1360,16 +1390,21 @@ const SortableChapterNode: React.FC<SortableChapterNodeProps> = ({ id, disabled,
     '--chapter-index': chapterIndex,
   } as React.CSSProperties;
 
+  const dragHandle = (
+    <DragHandle
+      orientation="vertical"
+      disabled={disabled}
+      handleProps={{ ...attributes, ...listeners } as React.HTMLAttributes<HTMLDivElement>}
+    />
+  );
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={`timeline-chapter-node ${isDragging ? 'is-dragging' : ''}`}
     >
-      <div className="timeline-chapter-node__drag-handle" {...attributes} {...listeners}>
-        <GripVertical size="xs" />
-      </div>
-      {children}
+      {children(dragHandle)}
     </div>
   );
 };

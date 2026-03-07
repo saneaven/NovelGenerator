@@ -23,6 +23,8 @@ export interface StoryObjectCardProps {
   spanType?: SpanType;
   /** Additional CSS class (e.g. 'function-call-readonly-item') */
   className?: string;
+  /** Optional drag handle slot rendered inside the card */
+  dragHandle?: React.ReactNode;
 
   // --- Interactive variant only ---
   /** Framer Motion layoutId for shared-layout animation */
@@ -47,6 +49,7 @@ const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
   expanded = false,
   spanType,
   className,
+  dragHandle,
   layoutId,
   isFullExpanded,
   isAnimating,
@@ -87,53 +90,61 @@ const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
         />
       )}
 
+      {dragHandle && (
+        <div className="story-object-card__drag-slot">
+          {dragHandle}
+        </div>
+      )}
+
       {/* Content */}
       <div className="story-object-card__content">
-        {/* Header — always visible */}
-        <header className="story-object-card__header">
-          {enableFitText ? (
-            <div
-              ref={containerRef}
-              className="story-object-card__title-container"
-            >
+        <div className="story-object-card__body-shell">
+          {/* Header — always visible */}
+          <header className="story-object-card__header">
+            {enableFitText ? (
+              <div
+                ref={containerRef}
+                className="story-object-card__title-container"
+              >
+                <h4
+                  ref={textRef as React.RefObject<HTMLHeadingElement>}
+                  className="story-object-card__title story-object-card__title--no-toggle story-object-card__title--fit"
+                  style={{
+                    fontSize: isReady ? `${fontSize}px` : undefined,
+                    opacity: isReady ? 1 : 0,
+                  }}
+                >
+                  {name}
+                </h4>
+              </div>
+            ) : onToggleExpand ? (
               <h4
-                ref={textRef as React.RefObject<HTMLHeadingElement>}
-                className="story-object-card__title story-object-card__title--no-toggle story-object-card__title--fit"
-                style={{
-                  fontSize: isReady ? `${fontSize}px` : undefined,
-                  opacity: isReady ? 1 : 0,
-                }}
+                className="story-object-card__title"
+                onClick={onToggleExpand}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && onToggleExpand()}
               >
                 {name}
               </h4>
+            ) : (
+              <h4 className="story-object-card__title story-object-card__title--no-toggle">
+                {name}
+              </h4>
+            )}
+
+            {showSubtitle && (
+              <p className="story-object-card__subtitle">{description}</p>
+            )}
+          </header>
+
+          {/* Content — always in DOM, CSS controls visibility via max-height */}
+          <div className="story-object-card__description-wrapper">
+            <div className="story-object-card__description">
+              <MarkdownRenderer>
+                {content || 'No content.'}
+              </MarkdownRenderer>
             </div>
-          ) : onToggleExpand ? (
-            <h4
-              className="story-object-card__title"
-              onClick={onToggleExpand}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && onToggleExpand()}
-            >
-              {name}
-            </h4>
-          ) : (
-            <h4 className="story-object-card__title story-object-card__title--no-toggle">
-              {name}
-            </h4>
-          )}
-
-          {showSubtitle && (
-            <p className="story-object-card__subtitle">{description}</p>
-          )}
-        </header>
-
-        {/* Content — always in DOM, CSS controls visibility via max-height */}
-        <div className="story-object-card__description-wrapper">
-          <div className="story-object-card__description">
-            <MarkdownRenderer>
-              {content || 'No content.'}
-            </MarkdownRenderer>
           </div>
         </div>
       </div>

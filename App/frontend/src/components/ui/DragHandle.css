@@ -1,0 +1,57 @@
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+  user-select: none;
+  touch-action: none;
+}
+
+.drag-handle:not(.is-disabled) {
+  cursor: grab;
+}
+
+.drag-handle:not(.is-disabled):active {
+  cursor: grabbing;
+}
+
+.drag-handle.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.drag-handle__indicator {
+  display: block;
+  background: rgba(255, 255, 255, 0.24);
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+.drag-handle:not(.is-disabled):hover .drag-handle__indicator,
+.drag-handle:focus-visible .drag-handle__indicator {
+  background: rgba(255, 255, 255, 0.46);
+}
+
+.drag-handle--horizontal {
+  width: 100%;
+  padding: 4px 0 6px;
+}
+
+.drag-handle--horizontal .drag-handle__indicator {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+}
+
+.drag-handle--vertical {
+  width: 100%;
+  height: 100%;
+  padding: 10px 0;
+  align-items: stretch;
+}
+
+.drag-handle--vertical .drag-handle__indicator {
+  width: 4px;
+  min-height: 100%;
+  border-radius: 999px;
+}

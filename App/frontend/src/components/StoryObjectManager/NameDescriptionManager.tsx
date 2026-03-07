@@ -484,18 +484,21 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
                     return (
                       <SortableStoryObjectCard key={item.id} id={item.id} disabled={isFullExpanded} spanType={spanType}>
-                        <StoryObjectDisplay
-                          item={item}
-                          itemData={itemData}
-                          isExpanded={isExpanded}
-                          isFullExpanded={isFullExpanded}
-                          isAnimating={animatingCardId === item.id}
-                          mainAsset={mainAsset}
-                          spanType={spanType}
-                          onToggleExpand={() => toggleItemExpand(item.id)}
-                          onOpenFullExpand={() => openFullExpand(item.id)}
-                          onAnimationComplete={() => handleAnimationComplete(item.id)}
-                        />
+                        {(dragHandle) => (
+                          <StoryObjectDisplay
+                            item={item}
+                            itemData={itemData}
+                            isExpanded={isExpanded}
+                            isFullExpanded={isFullExpanded}
+                            isAnimating={animatingCardId === item.id}
+                            mainAsset={mainAsset}
+                            spanType={spanType}
+                            dragHandle={dragHandle}
+                            onToggleExpand={() => toggleItemExpand(item.id)}
+                            onOpenFullExpand={() => openFullExpand(item.id)}
+                            onAnimationComplete={() => handleAnimationComplete(item.id)}
+                          />
+                        )}
                       </SortableStoryObjectCard>
                     );
                   })}
@@ -655,6 +658,7 @@ interface StoryObjectDisplayProps {
   isAnimating: boolean;       // Card is animating (needs z-index elevation)
   mainAsset: Asset | null;
   spanType: SpanType;
+  dragHandle: React.ReactNode;
   onToggleExpand: () => void;      // Toggle State 1 ↔ 2
   onOpenFullExpand: () => void;    // Open State 3 overlay
   onAnimationComplete: () => void; // Called when layout animation completes
@@ -668,6 +672,7 @@ const StoryObjectDisplay = React.memo<StoryObjectDisplayProps>(({
   isAnimating,
   mainAsset,
   spanType,
+  dragHandle,
   onToggleExpand,
   onOpenFullExpand,
   onAnimationComplete,
@@ -682,6 +687,7 @@ const StoryObjectDisplay = React.memo<StoryObjectDisplayProps>(({
       imageUrl={imageUrl}
       expanded={isExpanded}
       spanType={spanType}
+      dragHandle={dragHandle}
       layoutId={`card-${item.id}`}
       isFullExpanded={isFullExpanded}
       isAnimating={isAnimating}
@@ -701,7 +707,8 @@ const StoryObjectDisplay = React.memo<StoryObjectDisplayProps>(({
     prevProps.isFullExpanded === nextProps.isFullExpanded &&
     prevProps.isAnimating === nextProps.isAnimating &&
     prevProps.mainAsset?.id === nextProps.mainAsset?.id &&
-    prevProps.spanType === nextProps.spanType
+    prevProps.spanType === nextProps.spanType &&
+    prevProps.dragHandle === nextProps.dragHandle
   );
 });
 
