@@ -12,3 +12,4 @@ export { novelService } from './novelService';
 export { assetService } from './assetService';
 export { presetService } from './presetService';
 export { accountService } from './accountService';
+export { adminService } from './adminService';

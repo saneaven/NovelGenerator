@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useJourneyStore } from '../../store/journeyStore';
 import { useSettings } from '../../store/settingsStore';
@@ -18,13 +18,45 @@ interface ImagePromptManagerProps {
 
 type PromptTabType = PromptMode;
 
+function readPromptValue(value: unknown): string {
+    return typeof value === 'string' ? value : '';
+}
+
+function extractPromptTextFromData(data: Record<string, { contentParts?: Array<{ type: 'content'; text: string }> }>): string {
+    const entry = Object.values(data)[0];
+    if (!entry) return '';
+    return (entry.contentParts ?? [])
+        .filter((part) => part.type === 'content')
+        .map((part) => part.text)
+        .join('');
+}
+
+function extractFinalPromptFromThread(threadId: string): string {
+    const store = useThreadStore.getState();
+    const messages = store.getMessages(threadId);
+    const lastAssistantMsg = [...messages].reverse().find((message) => message.role === 'assistant');
+    if (!lastAssistantMsg) return '';
+
+    const finalText = extractPromptTextFromData(lastAssistantMsg.data);
+    if (finalText) return finalText;
+
+    const toolCalls = store.getToolCallsForAssistantMessage(lastAssistantMsg.id);
+    for (const toolCall of toolCalls) {
+        const promptFromArguments = readPromptValue((toolCall.arguments as Record<string, unknown> | undefined)?.prompt);
+        if (promptFromArguments) return promptFromArguments;
+        const promptFromResult = readPromptValue((toolCall.result as Record<string, unknown> | null | undefined)?.prompt);
+        if (promptFromResult) return promptFromResult;
+    }
+
+    return '';
+}
+
 const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
     objectType,
     objectId,
 }) => {
     const settings = useSettings();
     const {
-        objects,
         loading,
         errors,
         updateImagePrompt,
@@ -45,6 +77,7 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
     const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
     const [streamingMode, setStreamingMode] = useState<PromptMode | null>(null);
     const [streamingError, setStreamingError] = useState<string | null>(null);
+    const previousStreamingStatusRef = useRef<'running' | 'done' | 'error' | null>(null);
 
     const journeyThreadId = useJourneyStore((state) =>
         streamingSessionId ? state.journeys[streamingSessionId]?.threadId : undefined
@@ -56,33 +89,52 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
         journeyThreadId ? state.threadsById[journeyThreadId]?.lastError : undefined
     );
     const liveView = useThreadLiveViewState(journeyThreadId ?? null);
-    const streamingSession = useMemo(() => {
+    const streamingStatus = useMemo(() => {
         if (!streamingSessionId) return null;
-
-        const status = streamingThreadStatus === 'error'
+        return streamingThreadStatus === 'error'
             ? 'error'
             : (streamingThreadStatus === 'done' || streamingThreadStatus === 'canceled')
                 ? 'done'
                 : 'running';
+    }, [streamingSessionId, streamingThreadStatus]);
+    const streamingDeliveryMode = liveView?.deliveryMode ?? 'live';
+    const streamingReasoningDetail = liveView?.reasoningDetail;
+    const streamedText = useMemo(
+        () => (liveView?.contentParts ?? []).map((part) => part.text).join(''),
+        [liveView?.contentParts],
+    );
+    const streamedToolPrompt = useMemo(() => {
+        const firstToolCall = liveView?.streamingToolCalls[0];
+        return readPromptValue((firstToolCall?.arguments as Record<string, unknown> | undefined)?.prompt);
+    }, [liveView?.streamingToolCalls]);
+    const effectivePrompt = useMemo(
+        () => streamedToolPrompt || streamedText,
+        [streamedToolPrompt, streamedText],
+    );
+    const streamThreadId = journeyThreadId ?? null;
+    const streamingErrorMessage = streamingStatus === 'error'
+        ? (streamingThreadError ?? 'Failed to generate prompt')
+        : null;
+    const isSuppressedStreaming = streamingStatus === 'running' && streamingDeliveryMode === 'suppressed';
+    const isStreamingRunning = streamingStatus === 'running';
 
-        return {
-            status,
-            deliveryMode: liveView?.deliveryMode ?? 'live',
-            contentParts: liveView?.contentParts ?? [],
-            reasoningDetail: liveView?.reasoningDetail,
-            error: status === 'error' ? (streamingThreadError ?? 'Failed to generate prompt') : undefined,
-            toolCallProgress: (liveView?.streamingToolCalls ?? []).map((toolCall) => ({
-                draft: { parsedArguments: (toolCall.arguments ?? {}) as Record<string, unknown> },
-            })),
-            threadId: journeyThreadId,
-        };
-    }, [streamingSessionId, streamingThreadStatus, streamingThreadError, liveView, journeyThreadId]);
-    const isSuppressedStreaming = streamingSession?.status === 'running' && streamingSession.deliveryMode === 'suppressed';
+    const applyPromptForMode = useCallback((mode: PromptMode, nextPrompt: string) => {
+        switch (mode) {
+            case 'natural':
+                setNaturalPrompt((prev) => (prev === nextPrompt ? prev : nextPrompt));
+                break;
+            case 'positive':
+                setPositivePrompt((prev) => (prev === nextPrompt ? prev : nextPrompt));
+                break;
+            case 'negative':
+                setNegativePrompt((prev) => (prev === nextPrompt ? prev : nextPrompt));
+                break;
+        }
+    }, []);
 
     // Get object from store
-    const object = useMemo(() => {
-        return getObject(objectId);
-    }, [objectId, objects, getObject]);
+    const object = getObject(objectId);
+    const objectMetadata = object?.metadata;
 
     // Get object name for display (use title for basic_info, name for others)
     const objectName = useMemo(() => {
@@ -93,25 +145,25 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
 
     // Load initial values from object metadata
     useEffect(() => {
-        if (object?.metadata) {
-            const newNatural = object.metadata.image_prompt || '';
-            const newPositive = object.metadata.image_prompt_positive || '';
-            const newNegative = object.metadata.image_prompt_negative || '';
+        if (objectMetadata) {
+            const newNatural = objectMetadata.image_prompt || '';
+            const newPositive = objectMetadata.image_prompt_positive || '';
+            const newNegative = objectMetadata.image_prompt_negative || '';
 
             setNaturalPrompt(newNatural);
             setPositivePrompt(newPositive);
             setNegativePrompt(newNegative);
             setHasChanges(false);
         }
-    }, [object?.id, object?.metadata?.image_prompt, object?.metadata?.image_prompt_positive, object?.metadata?.image_prompt_negative]);
+    }, [object?.id, objectMetadata]);
 
     // Track changes
     useEffect(() => {
-        if (!object?.metadata) return;
+        if (!objectMetadata) return;
 
-        const origNatural = object.metadata.image_prompt || '';
-        const origPositive = object.metadata.image_prompt_positive || '';
-        const origNegative = object.metadata.image_prompt_negative || '';
+        const origNatural = objectMetadata.image_prompt || '';
+        const origPositive = objectMetadata.image_prompt_positive || '';
+        const origNegative = objectMetadata.image_prompt_negative || '';
 
         const changed =
             naturalPrompt !== origNatural ||
@@ -119,79 +171,55 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
             negativePrompt !== origNegative;
 
         setHasChanges(changed);
-    }, [naturalPrompt, positivePrompt, negativePrompt, object?.metadata]);
+    }, [naturalPrompt, positivePrompt, negativePrompt, objectMetadata]);
 
-    // Effect to extract and update prompt during streaming
+    // Reflect incremental streaming updates without re-setting identical prompt text.
     useEffect(() => {
-        if (!streamingSession || !streamingSessionId || !streamingMode) return;
+        if (!streamingSessionId || !streamingMode) return;
+        if (streamingStatus !== 'running') return;
+        if (!effectivePrompt) return;
+        applyPromptForMode(streamingMode, effectivePrompt);
+    }, [streamingSessionId, streamingMode, streamingStatus, effectivePrompt, applyPromptForMode]);
 
-        // Check for error status
-        if (streamingSession.status === 'error') {
-            setStreamingError(streamingSession.error || 'Failed to generate prompt');
+    // Finalize or fail the streaming session exactly once per terminal transition.
+    useEffect(() => {
+        if (!streamingSessionId || !streamingMode || !streamingStatus) {
+            previousStreamingStatusRef.current = null;
+            return;
+        }
+
+        if (streamingStatus === 'running') {
+            previousStreamingStatusRef.current = 'running';
+            return;
+        }
+
+        if (previousStreamingStatusRef.current === streamingStatus) return;
+        previousStreamingStatusRef.current = streamingStatus;
+
+        if (streamingStatus === 'error') {
+            setStreamingError(streamingErrorMessage ?? 'Failed to generate prompt');
             setStreamingSessionId(null);
             setStreamingMode(null);
             return;
         }
 
-        // Extract prompt from contentParts (for native output mode)
-        const textContent = streamingSession.contentParts
-            ?.filter((p: any) => p.type === 'content')
-            .map((p: any) => p.text)
-            .join('') || '';
-
-        // Extract prompt from toolCallProgress (for tool call mode)
-        const toolProgress = streamingSession.toolCallProgress?.[0];
-        const parsedArgs = toolProgress?.draft?.parsedArguments;
-        const toolPrompt = (parsedArgs as any)?.prompt || '';
-
-        // Use whichever has content
-        const streamingPrompt = toolPrompt || textContent;
-
-        // Update the appropriate prompt field during streaming
-        if (streamingPrompt) {
-            switch (streamingMode) {
-                case 'natural': setNaturalPrompt(streamingPrompt); break;
-                case 'positive': setPositivePrompt(streamingPrompt); break;
-                case 'negative': setNegativePrompt(streamingPrompt); break;
+        if (streamThreadId) {
+            const finalPrompt = extractFinalPromptFromThread(streamThreadId);
+            if (finalPrompt) {
+                applyPromptForMode(streamingMode, finalPrompt);
             }
         }
 
-        // On completion, extract final prompt from finalized thread messages
-        if (streamingSession.status === 'done' && streamingSession.threadId) {
-            const messages = useThreadStore.getState().getMessages(streamingSession.threadId);
-            const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
-            if (lastAssistantMsg) {
-                const data = lastAssistantMsg.data;
-                const entry = data[Object.keys(data)[0]];
-                const finalText = entry?.contentParts
-                    ?.filter((p) => p.type === 'content')
-                    .map((p) => p.text)
-                    .join('') || '';
-
-                let finalPrompt = finalText;
-                if (!finalPrompt) {
-                    const toolCalls = useThreadStore.getState().getToolCallsForAssistantMessage(lastAssistantMsg.id);
-                    finalPrompt = (toolCalls
-                        .map(tc => (tc.arguments as Record<string, unknown>)?.prompt || (tc.result as Record<string, unknown> | null)?.prompt)
-                        .find(Boolean) as string) || '';
-                }
-
-                if (finalPrompt) {
-                    switch (streamingMode) {
-                        case 'natural': setNaturalPrompt(finalPrompt); break;
-                        case 'positive': setPositivePrompt(finalPrompt); break;
-                        case 'negative': setNegativePrompt(finalPrompt); break;
-                    }
-                }
-            }
-        }
-
-        // Clear streaming state when complete
-        if (streamingSession.status !== 'running') {
-            setStreamingSessionId(null);
-            setStreamingMode(null);
-        }
-    }, [streamingSession, streamingSessionId, streamingMode]);
+        setStreamingSessionId(null);
+        setStreamingMode(null);
+    }, [
+        streamingSessionId,
+        streamingMode,
+        streamingStatus,
+        streamingErrorMessage,
+        streamThreadId,
+        applyPromptForMode,
+    ]);
 
     const handleSave = async () => {
         setIsSaving(true);
@@ -223,33 +251,24 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
 
     // Handler for when streaming starts
     const handleStreamingStart = useCallback((sessionId: string, mode: PromptMode) => {
+        previousStreamingStatusRef.current = null;
         setStreamingSessionId(sessionId);
         setStreamingMode(mode);
         setStreamingError(null);
         // Clear target prompt to show streaming from scratch
-        switch (mode) {
-            case 'natural': setNaturalPrompt(''); break;
-            case 'positive': setPositivePrompt(''); break;
-            case 'negative': setNegativePrompt(''); break;
-        }
-    }, []);
+        applyPromptForMode(mode, '');
+    }, [applyPromptForMode]);
 
     // Handler for streaming errors
     const handleStreamingError = useCallback((error: string) => {
+        previousStreamingStatusRef.current = null;
         setStreamingError(error);
         setStreamingSessionId(null);
         setStreamingMode(null);
     }, []);
 
     const handlePromptGenerated = (result: { prompt: string; mode: PromptMode }) => {
-        // Determine which field to update based on mode from result
-        if (result.mode === 'natural') {
-            setNaturalPrompt(result.prompt);
-        } else if (result.mode === 'positive') {
-            setPositivePrompt(result.prompt);
-        } else if (result.mode === 'negative') {
-            setNegativePrompt(result.prompt);
-        }
+        applyPromptForMode(result.mode, result.prompt);
     };
 
     const handleClear = (tab: PromptTabType) => {
@@ -344,14 +363,14 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                             </div>
                         </div>
                         {/* Thinking display during streaming */}
-                        {isStreamingNatural && streamingSession && (
+                        {isStreamingNatural && streamingStatus && (
                             isSuppressedStreaming ? (
                                 <PreexistingLiveRunNotice compact />
                             ) : (
                                 <ThinkingDisplay
                                     messageId={streamingSessionId!}
-                                    reasoningDetail={streamingSession.reasoningDetail}
-                                    isStreaming={streamingSession.status === 'running'}
+                                    reasoningDetail={streamingReasoningDetail}
+                                    isStreaming={isStreamingRunning}
                                 />
                             )
                         )}
@@ -396,14 +415,14 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                             </div>
                         </div>
                         {/* Thinking display during streaming */}
-                        {isStreamingPositive && streamingSession && (
+                        {isStreamingPositive && streamingStatus && (
                             isSuppressedStreaming ? (
                                 <PreexistingLiveRunNotice compact />
                             ) : (
                                 <ThinkingDisplay
                                     messageId={streamingSessionId!}
-                                    reasoningDetail={streamingSession.reasoningDetail}
-                                    isStreaming={streamingSession.status === 'running'}
+                                    reasoningDetail={streamingReasoningDetail}
+                                    isStreaming={isStreamingRunning}
                                 />
                             )
                         )}
@@ -448,14 +467,14 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                             </div>
                         </div>
                         {/* Thinking display during streaming */}
-                        {isStreamingNegative && streamingSession && (
+                        {isStreamingNegative && streamingStatus && (
                             isSuppressedStreaming ? (
                                 <PreexistingLiveRunNotice compact />
                             ) : (
                                 <ThinkingDisplay
                                     messageId={streamingSessionId!}
-                                    reasoningDetail={streamingSession.reasoningDetail}
-                                    isStreaming={streamingSession.status === 'running'}
+                                    reasoningDetail={streamingReasoningDetail}
+                                    isStreaming={isStreamingRunning}
                                 />
                             )
                         )}

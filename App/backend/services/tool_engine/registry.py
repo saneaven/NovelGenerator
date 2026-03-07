@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .contexts import ToolOfferContext
-from .contracts import AutoApproveCategory, ToolOffer, ToolProvider, ToolSpec
+from .contracts import AutoApproveCategory, ToolOffer, ToolProvider, ToolSetName, ToolSpec
 
 
 class ToolRegistry:
@@ -67,6 +67,13 @@ class ToolRegistry:
     def resolve_spec(self, name: str, offer: ToolOffer, ctx: ToolOfferContext) -> ToolSpec | None:
         _ = ctx
         return offer.specs_by_name.get(name)
+
+    def list_static_tool_names(self, tool_set: ToolSetName) -> list[str]:
+        return sorted(
+            name
+            for name, spec in self._tools_by_name.items()
+            if tool_set in spec.tool_sets
+        )
 
     def get_auto_approve_category(self, tool_name: str, offer: ToolOffer) -> AutoApproveCategory | None:
         return offer.auto_approve_category_by_name.get(tool_name)

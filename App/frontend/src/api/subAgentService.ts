@@ -22,4 +22,8 @@ export const subAgentService = {
   async delete(id: string): Promise<void> {
     await apiClient.delete(`${BASE_PATH}/${encodeURIComponent(id)}`);
   },
+
+  async listAvailableTools(): Promise<string[]> {
+    return await apiClient.get<string[]>(`${BASE_PATH}/available_tools`);
+  },
 };

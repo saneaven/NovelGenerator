@@ -5,19 +5,7 @@ import { People, Lock, Image as ImageIcon } from '../icons';
 import { TextButton } from '../TextButton';
 import './ProfilePanel.css';
 import { accountService, type AccountStorageResponse } from '../../api';
-
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  const precision = unitIndex === 0 ? 0 : 1;
-  return `${value.toFixed(precision)} ${units[unitIndex]}`;
-}
+import { StorageUsageSummary, formatBytes } from '../StorageUsageSummary';
 
 const ProfilePanel: React.FC = () => {
   const { t } = useTranslation();
@@ -210,45 +198,23 @@ const ProfilePanel: React.FC = () => {
         {storageError && <div className="form-error">{storageError}</div>}
 
         {storage && (
-          <>
-            <div className="storage-summary">
-              <div className="storage-metric">
-                <div className="storage-metric-label">{t('settings.profile.storageUsed')}</div>
-                <div className="storage-metric-value">{formatBytes(storage.used_bytes)}</div>
-              </div>
-              <div className="storage-metric">
-                <div className="storage-metric-label">{t('settings.profile.storageRemaining')}</div>
-                <div className="storage-metric-value">{formatBytes(storage.remaining_bytes)}</div>
-              </div>
-              <div className="storage-metric">
-                <div className="storage-metric-label">{t('settings.profile.storageQuota')}</div>
-                <div className="storage-metric-value">{formatBytes(storage.quota_bytes)}</div>
-              </div>
-            </div>
-
-            <div className="storage-bar" aria-label="storage usage">
-              <div
-                className="storage-bar-fill"
-                style={{ width: `${Math.round(Math.min(Math.max(storage.percent_used ?? 0, 0), 1) * 100)}%` }}
-              />
-            </div>
-
-            {storage.by_project?.length > 0 && (
-              <div className="storage-breakdown">
-                <div className="storage-breakdown-title">{t('settings.profile.storageByProject')}</div>
-                <div className="storage-breakdown-list">
-                  {storage.by_project.map((p) => (
-                    <div key={p.project_id} className="storage-breakdown-item">
-                      <div className="storage-breakdown-name">{p.project_name}</div>
-                      <div className="storage-breakdown-meta">
-                        {formatBytes(p.used_bytes)} • {t('settings.profile.storageImages', { count: p.asset_count })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
+          <StorageUsageSummary
+            usedBytes={storage.used_bytes}
+            remainingBytes={storage.remaining_bytes}
+            quotaBytes={storage.quota_bytes}
+            percentUsed={storage.percent_used}
+            labels={{
+              used: t('settings.profile.storageUsed'),
+              remaining: t('settings.profile.storageRemaining'),
+              quota: t('settings.profile.storageQuota'),
+              breakdownTitle: t('settings.profile.storageByProject'),
+            }}
+            breakdownItems={storage.by_project.map((project) => ({
+              id: project.project_id,
+              name: project.project_name,
+              meta: `${formatBytes(project.used_bytes)} • ${t('settings.profile.storageImages', { count: project.asset_count })}`,
+            }))}
+          />
         )}
       </div>
 

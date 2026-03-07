@@ -167,20 +167,34 @@ export class ThreadEventConsumer {
 
   private patchThreadFromRunStatus(threadId: string, status: ThreadStatus, error: string | null, payload: Record<string, unknown>): void {
     const store = useThreadStore.getState();
-    this.ensureThread(threadId, {
+    const partial: Partial<ThreadInfo> = {
       status,
       lastError: error,
       updatedAt: String(payload.ts ?? nowIso()),
       latestRunId: payload.run_id ? String(payload.run_id) : null,
       latestRunStatus: status,
-    });
-    store.setThreadRuntime(threadId, {
-      status,
-      lastError: error,
-      updatedAt: String(payload.ts ?? nowIso()),
-      latestRunId: payload.run_id ? String(payload.run_id) : null,
-      latestRunStatus: status,
-    });
+    };
+    const existing = store.threadsById[threadId];
+
+    if (!existing) {
+      store.upsertThread({
+        id: threadId,
+        projectId: this.projectId,
+        threadType: toThreadType(String(payload.thread_type ?? 'agent')),
+        ownerId: null,
+        journeyKind: null,
+        status,
+        lastError: error,
+        updatedAt: String(payload.ts ?? nowIso()),
+        latestRunId: payload.run_id ? String(payload.run_id) : null,
+        latestRunStatus: status,
+        latestMessageAt: null,
+        unresolvedToolCallCount: 0,
+      });
+      return;
+    }
+
+    store.setThreadRuntime(threadId, partial);
   }
 
   private isSuppressed(threadId: string): boolean {

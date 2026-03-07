@@ -38,6 +38,7 @@ export interface UserResponse extends BaseMetadata {
   username: string;
   is_active: boolean;
   is_verified: boolean;
+  is_admin: boolean;
   last_login_at?: string;
 }
 
@@ -445,4 +446,28 @@ export interface AccountStorageResponse {
   percent_used: number;
   by_project: ProjectStorageBreakdown[];
   computed_at: string;
+}
+
+export interface AdminUserStorageItem {
+  user_id: string;
+  email: string;
+  username: string;
+  is_admin: boolean;
+  used_bytes: number;
+  quota_bytes: number;
+  remaining_bytes: number;
+  percent_used: number;
+  asset_quota_bytes_override?: number | null;
+  created_at: string;
+}
+
+export interface AdminUsersStorageResponse {
+  users: AdminUserStorageItem[];
+  total: number;
+  computed_at: string;
+}
+
+export interface AdminUserUpdateRequest {
+  is_admin?: boolean;
+  asset_quota_bytes?: number | null;
 }

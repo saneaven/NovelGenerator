@@ -12,6 +12,7 @@ from ..auth import get_current_user
 from ..models.db_models import User
 from ..schemas.sub_agents import SubAgentCreate, SubAgentDefinition, SubAgentUpdate
 from ..services.sub_agent_service import sub_agent_service
+from ..services.tool_engine import tool_engine
 
 
 router = APIRouter(prefix="/api/v1/sub_agents", tags=["sub_agents"])
@@ -34,6 +35,13 @@ async def list_sub_agents(
 ):
     preset_id = get_active_preset_id(current_user)
     return sub_agent_service.list_sub_agents(db=db, user_id=current_user.id, preset_id=preset_id)
+
+
+@router.get("/available_tools", response_model=List[str])
+async def list_available_tools(
+    _current_user: User = Depends(get_current_user),
+):
+    return tool_engine._registry.list_static_tool_names("agent_agent_mode")
 
 
 @router.post("", response_model=SubAgentDefinition, status_code=status.HTTP_201_CREATED)

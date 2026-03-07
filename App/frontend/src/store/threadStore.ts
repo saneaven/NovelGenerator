@@ -110,6 +110,25 @@ function uniqueIds(values: string[]): string[] {
   return [...new Set(values)];
 }
 
+function mergeThreadInfo(
+  existing: ThreadInfo,
+  partial: Partial<ThreadInfo>,
+): { changed: boolean; nextValue: ThreadInfo } {
+  let changed = false;
+  const nextValue: ThreadInfo = { ...existing };
+
+  for (const [key, value] of Object.entries(partial) as Array<[keyof ThreadInfo, ThreadInfo[keyof ThreadInfo]]>) {
+    if (Object.is(existing[key], value)) continue;
+    nextValue[key] = value as never;
+    changed = true;
+  }
+
+  return {
+    changed,
+    nextValue: changed ? nextValue : existing,
+  };
+}
+
 function buildMessageMap(toolCallsById: Record<string, ThreadToolCall | undefined>): Record<string, ThreadToolCall[] | undefined> {
   const byMessageId: Record<string, ThreadToolCall[]> = {};
   for (const tc of Object.values(toolCallsById)) {
@@ -267,8 +286,16 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
   upsertThread: (thread) =>
     set((s) => {
       const existing = s.threadsById[thread.id];
+      if (existing) {
+        const { changed, nextValue } = mergeThreadInfo(existing, thread);
+        if (!changed) return s;
+        return {
+          threadsById: { ...s.threadsById, [thread.id]: nextValue },
+        };
+      }
+
       return {
-        threadsById: { ...s.threadsById, [thread.id]: existing ? { ...existing, ...thread } : thread },
+        threadsById: { ...s.threadsById, [thread.id]: thread },
       };
     }),
 
@@ -276,10 +303,20 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
     set((s) => {
       if (threads.length === 0) return s;
       const nextThreads = { ...s.threadsById };
+      let changed = false;
       for (const thread of threads) {
         const existing = nextThreads[thread.id];
-        nextThreads[thread.id] = existing ? { ...existing, ...thread } : thread;
+        if (!existing) {
+          nextThreads[thread.id] = thread;
+          changed = true;
+          continue;
+        }
+        const merged = mergeThreadInfo(existing, thread);
+        if (!merged.changed) continue;
+        nextThreads[thread.id] = merged.nextValue;
+        changed = true;
       }
+      if (!changed) return s;
       return { threadsById: nextThreads };
     }),
 
@@ -287,8 +324,10 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
     set((s) => {
       const existing = s.threadsById[threadId];
       if (!existing) return s;
+      const { changed, nextValue } = mergeThreadInfo(existing, partial);
+      if (!changed) return s;
       return {
-        threadsById: { ...s.threadsById, [threadId]: { ...existing, ...partial } },
+        threadsById: { ...s.threadsById, [threadId]: nextValue },
       };
     }),
 
@@ -296,8 +335,10 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
     set((s) => {
       const existing = s.threadsById[threadId];
       if (!existing) return s;
+      const { changed, nextValue } = mergeThreadInfo(existing, partial);
+      if (!changed) return s;
       return {
-        threadsById: { ...s.threadsById, [threadId]: { ...existing, ...partial } },
+        threadsById: { ...s.threadsById, [threadId]: nextValue },
       };
     }),
 
@@ -696,16 +737,22 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
     }),
 
   setThreadStreamActive: (threadId, active) =>
-    set((s) => ({
-      activeStreamByThread: { ...s.activeStreamByThread, [threadId]: active },
-    })),
+    set((s) => {
+      if (s.activeStreamByThread[threadId] === active) return s;
+      return {
+        activeStreamByThread: { ...s.activeStreamByThread, [threadId]: active },
+      };
+    }),
 
   isThreadStreamActive: (threadId) => Boolean(get().activeStreamByThread[threadId]),
 
   setAutoContinuePaused: (threadId, paused) =>
-    set((s) => ({
-      autoContinuePausedByThread: { ...s.autoContinuePausedByThread, [threadId]: paused },
-    })),
+    set((s) => {
+      if (s.autoContinuePausedByThread[threadId] === paused) return s;
+      return {
+        autoContinuePausedByThread: { ...s.autoContinuePausedByThread, [threadId]: paused },
+      };
+    }),
 
   isAutoContinuePaused: (threadId) => Boolean(get().autoContinuePausedByThread[threadId]),
 

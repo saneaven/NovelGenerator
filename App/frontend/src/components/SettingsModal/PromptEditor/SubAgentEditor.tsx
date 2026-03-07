@@ -9,7 +9,7 @@ import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
 import ToggleSwitch from '../../common/ToggleSwitch';
 import { ChevronLeft, ChevronRight, Trash, Sliders, Clock, Eye } from '../../icons';
-// TODO: Tool schema list should come from backend API
+import { subAgentService } from '../../../api/subAgentService';
 import TemplateEditor from './TemplateEditor';
 import VersionHistoryModal from '../../Modal/VersionHistoryModal';
 import { scenarioService } from '../../../api/scenarioService';
@@ -350,9 +350,9 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
     return selectedId ? subAgents.find((s) => s.id === selectedId) : undefined;
   }, [selectedId, subAgents]);
 
-  // TODO: fetch tool list from backend API
-  const allStaticTools = useMemo(() => {
-    return [] as string[];
+  const [allStaticTools, setAllStaticTools] = useState<string[]>([]);
+  useEffect(() => {
+    subAgentService.listAvailableTools().then(setAllStaticTools).catch(() => {});
   }, []);
 
   const [toolFilter, setToolFilter] = useState('');

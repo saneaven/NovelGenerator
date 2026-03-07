@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { BaseModal } from '../BaseModal';
 import { BaseSidebar } from '../BaseSidebar';
 import { useSettings, useSettingsStore } from '../../store/settingsStore';
@@ -15,10 +16,11 @@ import ImageGenPanel from './ImageGenPanel';
 import ProfilePanel from './ProfilePanel';
 import SearchMemoryPanel from './SearchMemoryPanel';
 import { SettingsToastProvider, type SettingsToastApi, type SettingsToastKind } from './SettingsToastContext';
-import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu, People, List } from '../icons';
+import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu, People, List, Star } from '../icons';
 import { TextButton } from '../TextButton';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
 import apiClient from '../../api/client';
+import { useAuthStore } from '../../store/authStore';
 import './SettingsModal.css';
 import './_shared-components.css';
 
@@ -108,10 +110,12 @@ function isEmptyConfig(config: NormalizedProviderConfig): boolean {
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const updateSettings = useSettingsStore((s) => s.updateSettings);
   const saveSettingsToServer = useSettingsStore((s) => s.saveToServer);
   const setStoreTheme = useSettingsStore((s) => s.setTheme);
   const settings = useSettings();
+  const user = useAuthStore((state) => state.user);
   const [localSettings, setLocalSettings] = useState<Settings>(settings);
   const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>(DEFAULT_CREDENTIAL_DRAFT);
   const [storedProviders, setStoredProviders] = useState<string[]>([]);
@@ -130,6 +134,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   // Mobile sidebar state from store
   const openSidebar = useSidebarStore((state) => state.openSidebar);
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
+  const isAdmin = Boolean(user?.is_admin);
 
   useEffect(() => {
     if (isOpen) {
@@ -169,6 +174,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       }
     };
   }, []);
+
+  const handleOpenAdminConsole = useCallback(() => {
+    closeSidebar('__global__');
+    navigate('/admin');
+  }, [closeSidebar, navigate]);
 
   const toastApi = useMemo<SettingsToastApi>(() => {
     return {
@@ -586,6 +596,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               <span>{t('settings.tabs.advanced')}</span>
             </button>
           </li>
+          {isAdmin && (
+            <li className="settings-mobile-sidebar-separator">
+              <button
+                className="settings-mobile-sidebar-item settings-mobile-sidebar-item--navigation"
+                onClick={handleOpenAdminConsole}
+              >
+                <Star size="md" />
+                <span>Admin Console</span>
+              </button>
+            </li>
+          )}
         </ul>
       </BaseSidebar>
 
@@ -675,6 +696,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <span>{t('settings.tabs.advanced')}</span>
               </button>
             </li>
+            {isAdmin && (
+              <li className="settings-desktop-sidebar-separator">
+                <button
+                  className="settings-desktop-sidebar-item settings-desktop-sidebar-item--navigation"
+                  onClick={handleOpenAdminConsole}
+                >
+                  <Star size="md" />
+                  <span>Admin Console</span>
+                </button>
+              </li>
+            )}
           </ul>
         </aside>
 
