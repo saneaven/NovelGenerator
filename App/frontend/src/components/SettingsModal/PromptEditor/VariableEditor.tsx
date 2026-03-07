@@ -275,16 +275,15 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
             {getVariableTypeLabel(variable.var_type)}
           </span>
         </div>
-        <div className="variable-editor__actions">
-          {onToggleSidebar && (
-            <IconButton
-              icon={isSidebarCollapsed ? <ChevronLeft size="sm" /> : <ChevronRight size="sm" />}
-              onClick={onToggleSidebar}
-              title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              size="sm"
-            />
-          )}
-        </div>
+        {onToggleSidebar && (
+          <IconButton
+            icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
+            onClick={onToggleSidebar}
+            title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            size="lg"
+            variant="ghost"
+          />
+        )}
       </div>
 
       <div className="variable-editor__content">

@@ -6,7 +6,6 @@ import type { SubAgentAllowedInvocation } from '../../../types/subAgents';
 import type { TaskAIConfig } from '../../../store/settingsStore';
 import TaskConfigForm from '../TaskConfigForm';
 import { IconButton } from '../../IconButton';
-import { TextButton } from '../../TextButton';
 import ToggleSwitch from '../../common/ToggleSwitch';
 import { ChevronLeft, ChevronRight, Trash, Sliders, Clock, Eye } from '../../icons';
 import { subAgentService } from '../../../api/subAgentService';
@@ -267,21 +266,23 @@ const SubAgentPromptEditors: React.FC<{
           </button>
         </div>
 
-        <IconButton
-          icon={<Eye size="sm" />}
-          onClick={() => setShowPreview(true)}
-          title={t('settings.promptEditor.preview.title')}
-          size="sm"
-          disabled={!scenarioDraft || scenarioDraft.isLoading}
-        />
+        <div className="sub-agent-editor__section-actions">
+          <IconButton
+            icon={<Eye size="sm" />}
+            onClick={() => setShowPreview(true)}
+            title={t('settings.promptEditor.preview.title')}
+            size="sm"
+            disabled={!scenarioDraft || scenarioDraft.isLoading}
+          />
 
-        <IconButton
-          icon={<Clock size="sm" />}
-          onClick={() => setShowVersions(true)}
-          title={t('settings.promptEditor.versionHistory')}
-          size="sm"
-          disabled={!scenarioDraft || scenarioDraft.isLoading}
-        />
+          <IconButton
+            icon={<Clock size="sm" />}
+            onClick={() => setShowVersions(true)}
+            title={t('settings.promptEditor.versionHistory')}
+            size="sm"
+            disabled={!scenarioDraft || scenarioDraft.isLoading}
+          />
+        </div>
       </div>
 
       <TemplateEditor
@@ -474,31 +475,30 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
                 label={t('common.enabled')}
               />
             </div>
+            <IconButton
+              icon={<Trash size="sm" />}
+              onClick={handleDelete}
+              title={t('common.delete')}
+              size="sm"
+              variant="danger"
+            />
           </div>
           <div className="sub-agent-editor__id-block">
             <div className="sub-agent-editor__id-line">
               <span className="sub-agent-editor__id-key">{t('settings.promptEditor.subAgentIds.tool')}</span>
               <span className="sub-agent-editor__id-value">{toCallToolName(agentNameForPreview)}</span>
             </div>
-            <div className="sub-agent-editor__id-line">
-              <span className="sub-agent-editor__id-key">{t('settings.promptEditor.subAgentIds.uuid')}</span>
-              <span className="sub-agent-editor__id-value">{agent.id}</span>
-            </div>
           </div>
         </div>
-        <div className="sub-agent-editor__actions">
-          {onToggleSidebar && (
-            <IconButton
-              icon={isSidebarCollapsed ? <ChevronLeft size="sm" /> : <ChevronRight size="sm" />}
-              onClick={onToggleSidebar}
-              title={isSidebarCollapsed ? t('settings.promptEditor.expandSidebar') : t('settings.promptEditor.collapseSidebar')}
-              size="sm"
-            />
-          )}
-          <TextButton iconLeft={<Trash size="sm" />} variant="secondary" onClick={handleDelete}>
-            {t('common.delete')}
-          </TextButton>
-        </div>
+        {onToggleSidebar && (
+          <IconButton
+            icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
+            onClick={onToggleSidebar}
+            title={isSidebarCollapsed ? t('settings.promptEditor.expandSidebar') : t('settings.promptEditor.collapseSidebar')}
+            size="lg"
+            variant="ghost"
+          />
+        )}
       </div>
 
       <div className="sub-agent-editor__content">

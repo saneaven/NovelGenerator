@@ -139,9 +139,9 @@ const VariableListNav: React.FC<VariableListNavProps> = ({
   return (
     <div className="variable-list-nav">
       {onClose && (
-        <div className="variable-list-nav__header">
-          <span className="variable-list-nav__title">Variables</span>
-        </div>
+        <header className="variable-list-nav__header">
+          <h3 className="variable-list-nav__title">Variables</h3>
+        </header>
       )}
 
       <div className="variable-list-nav__list">

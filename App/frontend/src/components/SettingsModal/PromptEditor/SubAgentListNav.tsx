@@ -34,9 +34,9 @@ const SubAgentListNav: React.FC<SubAgentListNavProps> = ({
   return (
     <div className="sub-agent-list-nav">
       {onClose && (
-        <div className="sub-agent-list-nav__header">
-          <span className="sub-agent-list-nav__title">{t('settings.promptEditor.subAgents')}</span>
-        </div>
+        <header className="sub-agent-list-nav__header">
+          <h3 className="sub-agent-list-nav__title">{t('settings.promptEditor.subAgents')}</h3>
+        </header>
       )}
 
       <div className="sub-agent-list-nav__list">

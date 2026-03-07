@@ -94,13 +94,6 @@
   white-space: nowrap;
 }
 
-.sub-agent-editor__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  flex-shrink: 0;
-}
-
 .sub-agent-editor__content {
   flex: 1;
   overflow: auto;
@@ -356,6 +349,12 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--spacing-md);
+}
+
+.sub-agent-editor__section-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
 }
 
 .sub-agent-editor__error {

@@ -70,11 +70,6 @@
   border-radius: var(--border-radius-full);
 }
 
-.variable-editor__actions {
-  display: flex;
-  gap: var(--spacing-xs);
-}
-
 /* Content */
 .variable-editor__content {
   flex: 1;
