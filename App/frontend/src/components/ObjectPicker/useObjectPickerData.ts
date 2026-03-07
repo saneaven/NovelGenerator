@@ -260,7 +260,7 @@ function buildGroups(
 
               // Convert TipTap doc to markdown for content
               const manuscriptContent = manuscriptData?.doc
-                ? docToMarkdown(manuscriptData.doc)
+                ? docToMarkdown(manuscriptData.doc, { stripImages: true })
                 : undefined;
 
               const item: ObjectPickerItem = {

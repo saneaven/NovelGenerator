@@ -1,7 +1,11 @@
 import { Editor } from '@tiptap/core';
 import type { TipTapDoc } from '../../types/tiptap';
 import { buildManuscriptExtensions } from './extensions';
-import { emptyDoc, normalizeDoc } from './doc';
+import { emptyDoc, normalizeDoc, stripImagesFromDoc } from './doc';
+
+type DocToMarkdownOptions = {
+  stripImages?: boolean;
+};
 
 export function markdownToDoc(markdown: string): TipTapDoc {
   const editor = new Editor({
@@ -20,8 +24,10 @@ export function markdownToDoc(markdown: string): TipTapDoc {
   return doc;
 }
 
-export function docToMarkdown(docInput: unknown): string {
-  const doc = normalizeDoc(docInput);
+export function docToMarkdown(docInput: unknown, options: DocToMarkdownOptions = {}): string {
+  const doc = options.stripImages
+    ? stripImagesFromDoc(docInput)
+    : normalizeDoc(docInput);
 
   const editor = new Editor({
     extensions: buildManuscriptExtensions({ includeMarkdown: true, placeholder: '' }),
@@ -32,4 +38,3 @@ export function docToMarkdown(docInput: unknown): string {
   editor.destroy();
   return markdown;
 }
-
