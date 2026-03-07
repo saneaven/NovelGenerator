@@ -24,7 +24,7 @@
  * - Version restoration
  */
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettings } from '../../../store/settingsStore';
@@ -74,6 +74,18 @@ const CACHE_KEY_PREFIX = 'novel_editor_cache_';
 const getCacheKey = (manuscriptId: string, language: string) =>
   `${CACHE_KEY_PREFIX}${manuscriptId}_${language}`;
 
+const getDocHash = (doc: TipTapDoc): string => {
+  const raw = JSON.stringify(normalizeDoc(doc));
+  let hash = 2166136261;
+
+  for (let i = 0; i < raw.length; i += 1) {
+    hash ^= raw.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(16);
+};
+
 const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   projectId,
   selectedChapter,
@@ -119,13 +131,17 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // Editor state
   const [doc, setDoc] = useState<TipTapDoc>(emptyDoc());
   const isSaving = useNovelEditorStore((state) => state.isSavingByProject[projectId] ?? false);
-  const setIsSaving = (saving: boolean) => setIsSavingAction(projectId, saving);
+  const setIsSaving = useCallback((saving: boolean) => {
+    setIsSavingAction(projectId, saving);
+  }, [projectId, setIsSavingAction]);
   const [savingType, setSavingType] = useState<'auto' | 'manual' | null>(null);
 
   // Refs
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef<ManuscriptEditorRef>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const pendingScrollRestoreRef = useRef<number | null>(null);
   const docRef = useRef<TipTapDoc>(doc);
   docRef.current = doc;
 
@@ -233,21 +249,22 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // Use editorRef.hasChanges() which handles TipTap normalization internally
   const hasUnsavedChanges = editorRef.current?.hasChanges() ?? false;
 
-  // Generate editor key - changes trigger editor remount for external content updates
-  // This replaces the fragile isSettingContentRef approach with React's key mechanism
-  // Include globalDisplayLanguage to ensure remount when user switches display language
-  // Fixes bug where switching to main language after AI Edit showed empty content
-  const editorKey = useMemo(() => {
-    if (!manuscript) return 'loading';
-    return `${manuscriptId}-${manuscript.version?.number ?? 0}-${globalDisplayLanguage}-${effectiveLanguage}`;
-  }, [manuscriptId, manuscript?.version?.number, globalDisplayLanguage, effectiveLanguage]);
-
-  // Compute initial content INLINE during render (not in an effect!)
-  // This ensures the value is ready BEFORE the editor mounts with a new key
-  const initialDoc = useMemo(() => {
-    if (!manuscript?.data || editorKey === 'loading') return emptyDoc();
+  const serverDoc = useMemo(() => {
+    if (!manuscript?.data) return emptyDoc();
     return getManuscriptData(effectiveLanguage).doc;
-  }, [manuscript?.data, editorKey, effectiveLanguage, getManuscriptData]);
+  }, [manuscript?.data, effectiveLanguage, getManuscriptData]);
+
+  const serverDocHash = useMemo(() => getDocHash(serverDoc), [serverDoc]);
+
+  const editorKey = useMemo(() => {
+    if (!manuscript || !manuscriptId) return 'loading';
+    return `${manuscriptId}-${globalDisplayLanguage}-${effectiveLanguage}-${serverDocHash}`;
+  }, [manuscriptId, manuscript, globalDisplayLanguage, effectiveLanguage, serverDocHash]);
+
+  const initialDoc = useMemo(() => {
+    if (editorKey === 'loading') return emptyDoc();
+    return serverDoc;
+  }, [editorKey, serverDoc]);
 
   // ============================================================================
   // EFFECTS
@@ -344,6 +361,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         // Only restore if cache is newer than server data
         if (savedAt > serverUpdatedAt) {
           const nextDoc = normalizeDoc(cachedDoc);
+          docRef.current = nextDoc;
           setDoc(nextDoc);
           editorRef.current?.setDoc(nextDoc);
           // Note: Editor baseline is set from server content on mount,
@@ -354,7 +372,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         localStorage.removeItem(cacheKey);
       }
     }
-  }, [manuscriptId, effectiveLanguage, manuscript?.version?.created_at]);
+  }, [manuscriptId, effectiveLanguage, manuscript]);
 
   // Sync hasUnsavedChanges to the store for cross-component access
   useEffect(() => {
@@ -369,6 +387,26 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       }
     };
   }, []);
+
+  useLayoutEffect(() => {
+    const nextScrollTop = pendingScrollRestoreRef.current;
+    if (nextScrollTop === null) return;
+
+    let frameOne = 0;
+    let frameTwo = 0;
+
+    frameOne = requestAnimationFrame(() => {
+      frameTwo = requestAnimationFrame(() => {
+        editorRef.current?.setScrollPosition(nextScrollTop);
+        pendingScrollRestoreRef.current = null;
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(frameOne);
+      cancelAnimationFrame(frameTwo);
+    };
+  }, [editorKey, manuscript?.version?.number]);
 
   // ============================================================================
   // SAVE HANDLERS
@@ -401,7 +439,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
    */
   const handleManualSave = useCallback(
     async (reason: string = 'Manual Save') => {
-      if (!manuscript || !manuscriptId) return;
+      if (!manuscript || !manuscriptId || !editorRef.current?.hasChanges()) return;
+
+      const latestDoc = normalizeDoc(editorRef.current?.getDoc() ?? docRef.current);
+      const latestWordCount = docWordCount(latestDoc);
+
+      docRef.current = latestDoc;
+      setDoc(latestDoc);
+      pendingScrollRestoreRef.current = editorRef.current?.getScrollPosition() ?? null;
 
       setIsSaving(true);
       setSavingType('manual');
@@ -409,21 +454,22 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       try {
         await updateObject('manuscript', manuscriptId, {
           data: {
-            doc,
-            wordCount,
+            doc: latestDoc,
+            wordCount: latestWordCount,
           },
           language: effectiveLanguage,
           user_request: reason,
           create_new_version: true, // CREATE VERSION SNAPSHOT
         });
 
-        // Reset editor baseline after save so hasChanges() returns false
+        setDoc(latestDoc);
         editorRef.current?.resetBaseline();
 
         // Clear localStorage cache after successful save
         const cacheKey = getCacheKey(manuscriptId, effectiveLanguage);
         localStorage.removeItem(cacheKey);
       } catch (err) {
+        pendingScrollRestoreRef.current = null;
         console.error('Manual save failed:', err);
         showAlert({ title: 'Save Error', message: 'Failed to save. Please try again.' });
       } finally {
@@ -431,7 +477,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         setSavingType(null);
       }
     },
-    [manuscript, manuscriptId, doc, wordCount, effectiveLanguage]
+    [effectiveLanguage, manuscript, manuscriptId, setIsSaving, updateObject]
   );
 
   // ============================================================================
@@ -440,7 +486,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   const handleDocChange = useCallback(
     (newDoc: TipTapDoc) => {
-      setDoc(normalizeDoc(newDoc));
+      const normalized = normalizeDoc(newDoc);
+      docRef.current = normalized;
+      setDoc(normalized);
 
       // Clear existing auto-save timeout
       if (autoSaveTimeoutRef.current) {
@@ -456,6 +504,27 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     },
     [handleAutoSave]
   );
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's') return;
+
+      const focusNode = e.target instanceof Node ? e.target : document.activeElement;
+      if (!panelRef.current || !(focusNode instanceof Node) || !panelRef.current.contains(focusNode)) {
+        return;
+      }
+
+      e.preventDefault();
+
+      if (isSaving) return;
+      if (!editorRef.current?.hasChanges()) return;
+
+      void handleManualSave('Manual Save');
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleManualSave, isSaving]);
 
   // Handle image selection from AssetManagerModal
   const handleImageSelect = useCallback((asset: Asset) => {
@@ -636,7 +705,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   return (
     <>
-      <div className="novel-editor-panel">
+      <div ref={panelRef} className="novel-editor-panel">
         <div className="editor-main">
           {/* Chapter Header */}
           {selectedChapter && (

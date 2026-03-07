@@ -1265,7 +1265,7 @@
       "objectEdit": "AI Edit",
       "objectEditChapter": "AI Edit Chapter",
       "save": "Save",
-      "saveSnapshot": "Create version snapshot (Ctrl+S)",
+      "saveSnapshot": "Create version snapshot (Ctrl/Cmd+S)",
       "moreActions": "More actions",
       "retranslate": "Retranslate",
       "translate": "Translate",

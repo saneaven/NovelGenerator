@@ -1265,7 +1265,7 @@
       "objectEdit": "AI 편집",
       "objectEditChapter": "AI 챕터 편집",
       "save": "저장",
-      "saveSnapshot": "버전 스냅샷 생성 (Ctrl+S)",
+      "saveSnapshot": "버전 스냅샷 생성 (Ctrl/Cmd+S)",
       "moreActions": "더 많은 작업",
       "retranslate": "재번역",
       "translate": "번역",

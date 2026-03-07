@@ -33,6 +33,8 @@ export interface ManuscriptEditorRef {
   getText: () => string;
   getDoc: () => TipTapDoc;
   setDoc: (doc: TipTapDoc) => void;
+  getScrollPosition: () => number;
+  setScrollPosition: (scrollTop: number) => void;
   insertImage: (src: string, alt?: string, assetId?: string) => void;
   updateImageSrc: (oldSrc: string, newSrc: string, newAlt?: string, newAssetId?: string) => boolean;
   focus: () => void;
@@ -86,6 +88,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
   const tableMenuRef = useRef<HTMLDivElement>(null);
 
   const showImageButton = !!onBrowseAssets;
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const imageOverlayCallbacks = useMemo<ImageOverlayCallbacks>(() => ({
     onSwapImage,
@@ -205,6 +208,12 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
     setDoc: (nextDoc: TipTapDoc) => {
       if (!editor) return;
       editor.commands.setContent(normalizeDoc(nextDoc));
+    },
+    getScrollPosition: () => scrollContainerRef.current?.scrollTop ?? 0,
+    setScrollPosition: (scrollTop: number) => {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = scrollTop;
+      }
     },
     insertImage,
     updateImageSrc,
@@ -462,7 +471,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
         )}
       </div>
 
-      <div className="editor-content-wrapper">
+      <div ref={scrollContainerRef} className="editor-content-wrapper">
         <EditorContent editor={editor} />
       </div>
     </div>
