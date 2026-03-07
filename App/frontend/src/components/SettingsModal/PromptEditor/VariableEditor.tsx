@@ -114,12 +114,13 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
             <div className="variable-editor__title-row">
               <h3 className="variable-editor__title">Variables</h3>
             </div>
-            <div className="variable-editor__actions">
+            <div className="variable-editor__header-right">
               <IconButton
-                icon={isSidebarCollapsed ? <ChevronLeft size="sm" /> : <ChevronRight size="sm" />}
+                icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
                 onClick={onToggleSidebar}
                 title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                size="sm"
+                size="lg"
+                variant="ghost"
               />
             </div>
           </div>
@@ -276,13 +277,15 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
           </span>
         </div>
         {onToggleSidebar && (
-          <IconButton
-            icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
-            onClick={onToggleSidebar}
-            title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            size="lg"
-            variant="ghost"
-          />
+          <div className="variable-editor__header-right">
+            <IconButton
+              icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
+              onClick={onToggleSidebar}
+              title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              size="lg"
+              variant="ghost"
+            />
+          </div>
         )}
       </div>
 

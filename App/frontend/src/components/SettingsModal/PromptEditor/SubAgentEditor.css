@@ -7,10 +7,24 @@
 .sub-agent-editor__header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--spacing-md);
   padding: var(--spacing-md) var(--spacing-lg);
   border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.sub-agent-editor__header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+.sub-agent-editor__header-divider {
+  width: 1px;
+  height: 20px;
+  background-color: var(--color-border-subtle);
+  margin: 0 var(--spacing-xs);
 }
 
 .sub-agent-editor__title-row {

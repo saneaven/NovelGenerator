@@ -440,16 +440,17 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
           <div className="sub-agent-editor__title-row">
             <h3 className="sub-agent-editor__title">{t('settings.promptEditor.subAgents')}</h3>
           </div>
-          <div className="sub-agent-editor__actions">
-            {onToggleSidebar && (
+          {onToggleSidebar && (
+            <div className="sub-agent-editor__header-right">
               <IconButton
-                icon={isSidebarCollapsed ? <ChevronLeft size="sm" /> : <ChevronRight size="sm" />}
+                icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
                 onClick={onToggleSidebar}
                 title={isSidebarCollapsed ? t('settings.promptEditor.expandSidebar') : t('settings.promptEditor.collapseSidebar')}
-                size="sm"
+                size="lg"
+                variant="ghost"
               />
-            )}
-          </div>
+            </div>
+          )}
         </div>
         <div className="sub-agent-editor__empty-state">
           <p>{t('settings.promptEditor.subAgentSelectToEdit')}</p>
@@ -491,13 +492,16 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
           </div>
         </div>
         {onToggleSidebar && (
-          <IconButton
-            icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
-            onClick={onToggleSidebar}
-            title={isSidebarCollapsed ? t('settings.promptEditor.expandSidebar') : t('settings.promptEditor.collapseSidebar')}
-            size="lg"
-            variant="ghost"
-          />
+          <div className="sub-agent-editor__header-right">
+            <span className="sub-agent-editor__header-divider" />
+            <IconButton
+              icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
+              onClick={onToggleSidebar}
+              title={isSidebarCollapsed ? t('settings.promptEditor.expandSidebar') : t('settings.promptEditor.collapseSidebar')}
+              size="lg"
+              variant="ghost"
+            />
+          </div>
         )}
       </div>
 

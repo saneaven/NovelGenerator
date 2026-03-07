@@ -1527,9 +1527,9 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                     </div>
                   )}
 
-                  <div className="editor-wrapper__actions">
+                  <div className="editor-wrapper__header-right">
                     {hasSelection && (
-                      <>
+                      <div className="editor-wrapper__actions">
                         <TemplateSyntaxHint selectedNode={subTab === 'prompts' ? selectedPrompt : null} />
 
                         {subTab === 'prompts' && selectedPrompt?.viewKind === 'system' && currentScenarioDraft && (
@@ -1566,22 +1566,23 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                             disabled={currentFragmentDraft.isDeleting}
                           />
                         )}
-                      </>
+                      </div>
                     )}
-                  </div>
 
-                  <IconButton
-                    icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
-                    onClick={toggleSidebar}
-                    title={
-                      isSidebarCollapsed
-                        ? t('settings.promptEditor.expandSidebar')
-                        : t('settings.promptEditor.collapseSidebar')
-                    }
-                    size="lg"
-                    variant="ghost"
-                    className="editor-wrapper__sidebar-toggle"
-                  />
+                    {hasSelection && <span className="editor-wrapper__header-divider" />}
+
+                    <IconButton
+                      icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
+                      onClick={toggleSidebar}
+                      title={
+                        isSidebarCollapsed
+                          ? t('settings.promptEditor.expandSidebar')
+                          : t('settings.promptEditor.collapseSidebar')
+                      }
+                      size="lg"
+                      variant="ghost"
+                    />
+                  </div>
                 </header>
               )}
 
