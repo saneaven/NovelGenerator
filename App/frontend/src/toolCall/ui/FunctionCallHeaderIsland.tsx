@@ -9,6 +9,7 @@ const STATUS_LABEL_KEYS: Record<HeaderStatus, string> = {
   validating: 'operationStatus.validating',
   pending: 'operationStatus.pending',
   processing: 'operationStatus.processing',
+  working: 'operationStatus.working',
   streaming: 'operationStatus.running',
   applied: 'operationStatus.applied',
   rejected: 'operationStatus.rejected',
@@ -23,6 +24,7 @@ const CATEGORY_LABELS: Record<OperationCategory, string> = {
   delete: 'DELETE',
   search: 'SEARCH',
   call_agent: 'CALL AGENT',
+  image: 'IMAGE',
 };
 
 export interface FunctionCallHeaderIslandProps {

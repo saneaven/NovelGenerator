@@ -281,7 +281,7 @@ export type JourneyKind =
   | 'sceneImagePrompt'
   | 'messageTranslation';
 export type RunMessageRole = 'user' | 'assistant' | 'system' | 'tool_call';
-export type RunToolCallStatus = 'streaming' | 'validating' | 'pending' | 'processing' | 'failed' | 'rejected' | 'applied';
+export type RunToolCallStatus = 'streaming' | 'validating' | 'pending' | 'processing' | 'working' | 'failed' | 'rejected' | 'applied';
 export type RunToolCallFailureType = 'validation' | 'execution' | 'partial';
 
 export interface AgentStartRunRequest {

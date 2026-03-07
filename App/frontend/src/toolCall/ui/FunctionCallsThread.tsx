@@ -14,6 +14,7 @@ import './functionCalls.css';
 
 export interface FunctionCallsThreadProps {
   threadId: string;
+  scopeKey?: string;
   mode: 'streaming' | 'pending' | 'confirmed';
   cards?: EditCard[];
   streamingProgress?: ToolCallProgress[];
@@ -31,6 +32,7 @@ function isPatchOperation(operation: OperationVM): operation is ObjectOperationV
 
 export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
   threadId,
+  scopeKey,
   mode,
   cards = [],
   streamingProgress = [],
@@ -41,6 +43,7 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
   isApplyDisabled = false,
   applyDisabledReason,
 }) => {
+  const resolvedScopeKey = scopeKey || threadId;
   const [committingById, setCommittingById] = useState<Record<string, boolean>>({});
   const setPatchDecisionsBulk = useFunctionCallUIStore((state) => state.setPatchDecisionsBulk);
 
@@ -69,7 +72,9 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
   );
 
   const unresolvedIds = useMemo(
-    () => operations.filter((operation) => operation.decisionEligible && !operation.isValidationFailure).map((operation) => operation.id),
+    () => operations
+      .filter((operation) => operation.decisionEligible && operation.includeInBulkDecision && !operation.isValidationFailure)
+      .map((operation) => operation.id),
     [operations]
   );
 
@@ -110,7 +115,7 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
 
   const handleAcceptAll = useCallback(async () => {
     if (!hasDecisionFlow || isApplyDisabled || unresolvedIds.length === 0) return;
-    setPatchDecisionsBulk(threadId, unresolvedIds, 'accept');
+    setPatchDecisionsBulk(resolvedScopeKey, unresolvedIds, 'accept');
 
     // Mark all operations as committing for per-card button blocking
     setCommittingById((prev) => {
@@ -132,11 +137,11 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
         return next;
       });
     }
-  }, [hasDecisionFlow, isApplyDisabled, unresolvedIds, setPatchDecisionsBulk, threadId, commitDecisions]);
+  }, [hasDecisionFlow, isApplyDisabled, unresolvedIds, setPatchDecisionsBulk, resolvedScopeKey, commitDecisions]);
 
   const handleAcceptAllAndPause = useCallback(async () => {
     if (!hasDecisionFlow || isApplyDisabled || unresolvedIds.length === 0 || !onCommitDecisionsAndPause) return;
-    setPatchDecisionsBulk(threadId, unresolvedIds, 'accept');
+    setPatchDecisionsBulk(resolvedScopeKey, unresolvedIds, 'accept');
 
     setCommittingById((prev) => {
       const next = { ...prev };
@@ -157,11 +162,11 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
         return next;
       });
     }
-  }, [hasDecisionFlow, isApplyDisabled, unresolvedIds, setPatchDecisionsBulk, threadId, onCommitDecisionsAndPause, commitDecisions]);
+  }, [hasDecisionFlow, isApplyDisabled, unresolvedIds, setPatchDecisionsBulk, resolvedScopeKey, onCommitDecisionsAndPause, commitDecisions]);
 
   const handleRejectAll = useCallback(async () => {
     if (!hasDecisionFlow || isApplyDisabled || unresolvedIds.length === 0) return;
-    setPatchDecisionsBulk(threadId, unresolvedIds, 'reject');
+    setPatchDecisionsBulk(resolvedScopeKey, unresolvedIds, 'reject');
 
     setCommittingById((prev) => {
       const next = { ...prev };
@@ -182,7 +187,7 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
         return next;
       });
     }
-  }, [hasDecisionFlow, isApplyDisabled, unresolvedIds, setPatchDecisionsBulk, threadId, commitDecisions]);
+  }, [hasDecisionFlow, isApplyDisabled, unresolvedIds, setPatchDecisionsBulk, resolvedScopeKey, commitDecisions]);
 
   const wrapCard = useCallback((element: React.ReactElement, operationId: string) => {
     if (!onDeleteCard) return element;
@@ -213,6 +218,7 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
     const spec = resolveToolUiSpec(operation.toolName);
     const card = spec.renderCard({
       threadId,
+      scopeKey: resolvedScopeKey,
       projectId,
       operation,
       showDecisionButtons,
@@ -238,7 +244,7 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
           {patchGroups.map((group) => (
             <PatchGroupCard
               key={group.id}
-              threadId={threadId}
+              scopeKey={resolvedScopeKey}
               projectId={projectId}
               groupId={group.id}
               targetLabel={group.label}

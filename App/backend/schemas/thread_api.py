@@ -29,6 +29,10 @@ class ToolCallDecisionRequest(BaseModel):
     reason: str | None = None
 
 
+class ToolCallImageActionRequest(BaseModel):
+    action: Literal["accept", "reject"]
+
+
 class ToolCallBatchDecisionItem(BaseModel):
     tool_call_id: UUID
     decision: Literal["accept", "reject"]

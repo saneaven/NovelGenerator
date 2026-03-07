@@ -28,6 +28,10 @@ export interface ToolCallDecisionRequest {
   reason?: string;
 }
 
+export interface ToolCallImageActionRequest {
+  action: 'accept' | 'reject';
+}
+
 export interface ToolCallBatchDecisionItem {
   tool_call_id: string;
   decision: 'accept' | 'reject';
@@ -212,6 +216,18 @@ export const threadService = {
   ): Promise<ToolCallDecisionResponse> {
     const raw = await apiClient.patch<Record<string, unknown>>(
       `/api/v1/threads/${threadId}/tool-calls/${toolCallId}`,
+      req,
+    );
+    return toDecisionResponse(raw);
+  },
+
+  async imageToolAction(
+    threadId: string,
+    toolCallId: string,
+    req: ToolCallImageActionRequest,
+  ): Promise<ToolCallDecisionResponse> {
+    const raw = await apiClient.post<Record<string, unknown>>(
+      `/api/v1/threads/${threadId}/tool-calls/${toolCallId}/image-actions`,
       req,
     );
     return toDecisionResponse(raw);

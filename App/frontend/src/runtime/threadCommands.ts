@@ -39,6 +39,12 @@ export interface DecideToolCallsBatchParams {
   }>;
 }
 
+export interface ImageToolActionParams {
+  threadId: string;
+  toolCallId: string;
+  action: 'accept' | 'reject';
+}
+
 function upsertThreadStatus(params: {
   threadId: string;
   projectId?: string;
@@ -86,7 +92,13 @@ function refreshUnresolvedCount(threadId: string): void {
   let unresolvedCount = 0;
   for (const toolCall of Object.values(store.toolCallsById)) {
     if (!toolCall || toolCall.threadId !== threadId) continue;
-    if (toolCall.status === 'pending' || toolCall.status === 'streaming' || toolCall.status === 'validating' || toolCall.status === 'processing') {
+    if (
+      toolCall.status === 'pending'
+      || toolCall.status === 'streaming'
+      || toolCall.status === 'validating'
+      || toolCall.status === 'processing'
+      || toolCall.status === 'working'
+    ) {
       unresolvedCount += 1;
     }
   }
@@ -208,4 +220,11 @@ export async function decideToolCallsBatch(params: DecideToolCallsBatchParams): 
     decisions,
   });
   response.results.forEach((item) => applyToolDecisionResponse(item));
+}
+
+export async function applyImageToolAction(params: ImageToolActionParams): Promise<void> {
+  const response = await threadService.imageToolAction(params.threadId, params.toolCallId, {
+    action: params.action,
+  });
+  applyToolDecisionResponse(response);
 }

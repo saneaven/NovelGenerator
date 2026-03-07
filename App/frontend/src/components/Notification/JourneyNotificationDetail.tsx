@@ -240,7 +240,11 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
 
   const hasPendingToolCalls = useMemo(
     () => lastAssistantToolCalls.some(
-      (tc) => tc.status === 'pending' || tc.status === 'streaming' || tc.status === 'validating' || tc.status === 'processing',
+      (tc) => tc.status === 'pending'
+        || tc.status === 'streaming'
+        || tc.status === 'validating'
+        || tc.status === 'processing'
+        || tc.status === 'working',
     ),
     [lastAssistantToolCalls],
   );
@@ -332,7 +336,8 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
         {hasToolCalls && (
           <div className="journey-detail-tool-calls">
             <FunctionCallsThread
-              threadId={`journey:${threadId}:${message.id}:calls`}
+              threadId={threadId}
+              scopeKey={`journey:${threadId}:${message.id}:calls`}
               mode={isLast && isPending ? 'pending' : 'confirmed'}
               cards={cards}
               onCommitDecisions={isLast && isPending ? commitDecisions : undefined}

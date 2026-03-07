@@ -46,6 +46,7 @@ const callAgentSpec: ToolUiSpec = {
       <CallAgentCard
         key={operation.id}
         threadId={params.threadId}
+        scopeKey={params.scopeKey}
         projectId={params.projectId}
         operation={operation}
         showDecisionButtons={params.showDecisionButtons}

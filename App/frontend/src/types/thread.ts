@@ -1,7 +1,7 @@
 export type ThreadType = 'agent' | 'subAgent' | 'journey';
 export type ThreadStatus = 'running' | 'waiting' | 'processing' | 'paused' | 'done' | 'error' | 'canceled';
 export type RunStatus = ThreadStatus;
-export type ToolCallStatus = 'streaming' | 'validating' | 'pending' | 'processing' | 'failed' | 'rejected' | 'applied';
+export type ToolCallStatus = 'streaming' | 'validating' | 'pending' | 'processing' | 'working' | 'failed' | 'rejected' | 'applied';
 
 export interface ThreadInfo {
   id: string;

@@ -38,7 +38,15 @@ export type ThreadRuntimeEvent =
   | { event: 'tool_call:start'; data: RuntimeEventBase & { tool_call_id: string; message_id: string; assistant_message_id: string; index: number; name: string } }
   | { event: 'tool_call:delta'; data: RuntimeEventBase & { tool_call_id: string; index: number; arguments_delta: string; name?: string } }
   | { event: 'tool_call:end'; data: RuntimeEventBase & { tool_call_id: string; message_id: string; assistant_message_id: string; index: number; name: string; arguments: Record<string, unknown>; extra_content?: Record<string, unknown> | null; status?: ToolCallStatus } }
-  | { event: 'tool_call:status'; data: RuntimeEventBase & { tool_call_id: string; status: ToolCallStatus; reason?: string | null; result?: Record<string, unknown> | null } }
+  | { event: 'tool_call:status'; data: RuntimeEventBase & {
+      tool_call_id: string;
+      status: ToolCallStatus;
+      reason?: string | null;
+      result?: Record<string, unknown> | null;
+      extra_content?: Record<string, unknown> | null;
+      assistant_message_id?: string | null;
+      child_thread_id?: string | null;
+    } }
   | { event: 'message:update'; data: RuntimeEventBase & { message_id: string; data: Record<string, unknown> } }
   | { event: 'message:end'; data: RuntimeEventBase & {
       message_id: string;

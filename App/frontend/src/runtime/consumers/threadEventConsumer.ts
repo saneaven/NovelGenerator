@@ -29,7 +29,7 @@ type AutoApproveConfig = {
 };
 
 function isPendingToolStatus(status: ToolCallStatus): boolean {
-  return status === 'pending' || status === 'streaming' || status === 'validating' || status === 'processing';
+  return status === 'pending' || status === 'streaming' || status === 'validating' || status === 'processing' || status === 'working';
 }
 
 function toToolCallStatus(value: unknown): ToolCallStatus {
@@ -39,6 +39,7 @@ function toToolCallStatus(value: unknown): ToolCallStatus {
     || text === 'validating'
     || text === 'pending'
     || text === 'processing'
+    || text === 'working'
     || text === 'failed'
     || text === 'rejected'
     || text === 'applied'
@@ -798,6 +799,7 @@ export class ThreadEventConsumer {
           llmCallId: toolCallId,
           toolName: '',
           arguments: {},
+          extraContent: (payload.extra_content ?? null) as Record<string, unknown> | null,
           status: toToolCallStatus(payload.status),
           reason: payload.reason ? String(payload.reason) : null,
           result: (payload.result ?? null) as Record<string, unknown> | null,
@@ -811,6 +813,7 @@ export class ThreadEventConsumer {
         store.upsertToolCall({
           ...existing,
           status: toToolCallStatus(payload.status),
+          extraContent: (payload.extra_content ?? existing.extraContent ?? null) as Record<string, unknown> | null,
           reason: payload.reason ? String(payload.reason) : null,
           result: (payload.result ?? null) as Record<string, unknown> | null,
           assistantMessageId: assistantMsgId,
@@ -820,6 +823,7 @@ export class ThreadEventConsumer {
       } else {
         const patch: Partial<ThreadToolCall> = {
           status: toToolCallStatus(payload.status),
+          extraContent: (payload.extra_content ?? existing.extraContent ?? null) as Record<string, unknown> | null,
           reason: payload.reason ? String(payload.reason) : null,
           result: (payload.result ?? null) as Record<string, unknown> | null,
           updatedAt: nowIso(),

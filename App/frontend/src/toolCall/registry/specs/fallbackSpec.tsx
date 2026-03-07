@@ -38,7 +38,7 @@ const fallbackSpec: ToolUiSpec = {
     const operation = params.operation;
     return (
       <FunctionCallCardShell
-        threadId={params.threadId}
+        scopeKey={params.scopeKey}
         cardId={operation.id}
         category="read"
         status={operation.status}

@@ -14,6 +14,7 @@ export interface MapToolToVmParams {
   id: string;
   toolName: string;
   args?: unknown;
+  extraContent?: Record<string, unknown> | null;
   status?: string;
   reason?: string;
   failureType?: ToolCallFailureType;
@@ -23,6 +24,7 @@ export interface MapToolToVmParams {
 
 export interface RenderCardParams {
   threadId: string;
+  scopeKey: string;
   projectId: string;
   operation: OperationVM;
   showDecisionButtons: boolean;
@@ -70,6 +72,7 @@ function normalizeStoredStatus(status?: string): HeaderStatus {
     case 'validating':
     case 'pending':
     case 'processing':
+    case 'working':
     case 'failed':
     case 'applied':
     case 'rejected':
@@ -119,6 +122,7 @@ export function buildOperationBase(
     id: params.id,
     toolName: params.toolName,
     status,
+    extraContent: params.extraContent ?? null,
     reason,
     result,
     args,
@@ -126,7 +130,8 @@ export function buildOperationBase(
     targetId,
     targetLabel,
     decisionEligible: DECISION_ELIGIBLE_STATUSES.has(status),
+    includeInBulkDecision: true,
     isValidationFailure: status === 'failed' && params.failureType === 'validation',
-    isRunning: status === 'collecting' || status === 'streaming' || status === 'processing',
+    isRunning: status === 'collecting' || status === 'streaming' || status === 'processing' || status === 'working',
   };
 }

@@ -1,6 +1,7 @@
 import type { ToolUiSpec } from './contracts';
 import callAgentSpec from './specs/callAgentSpec';
 import fallbackSpec from './specs/fallbackSpec';
+import imageSpec from './specs/imageSpec';
 import objectOpsSpec from './specs/objectOpsSpec';
 import patchSpec from './specs/patchSpec';
 import searchSpec from './specs/searchSpec';
@@ -9,6 +10,7 @@ const SPECS: ToolUiSpec[] = [
   patchSpec,
   searchSpec,
   callAgentSpec,
+  imageSpec,
   objectOpsSpec,
 ];
 

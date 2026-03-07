@@ -34,6 +34,7 @@ function countPendingDecisions(
       || tc?.status === 'streaming'
       || tc?.status === 'validating'
       || tc?.status === 'processing'
+      || tc?.status === 'working'
     )).length;
   }
   return 0;

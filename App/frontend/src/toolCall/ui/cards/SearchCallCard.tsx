@@ -4,7 +4,7 @@ import type { SearchCardProps } from './types';
 import { extractSearchPayload } from './searchPayload';
 
 export const SearchCallCard: React.FC<SearchCardProps> = ({
-  threadId,
+  scopeKey,
   operation,
   showDecisionButtons,
   decisionDisabled,
@@ -56,7 +56,7 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
 
   return (
     <FunctionCallCardShell
-      threadId={threadId}
+      scopeKey={scopeKey}
       cardId={operation.id}
       category="search"
       status={operation.status}

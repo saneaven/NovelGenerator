@@ -5,7 +5,7 @@ import { FunctionCallHeaderIsland } from './FunctionCallHeaderIsland';
 import { FunctionCallContentIsland } from './FunctionCallContentIsland';
 
 export interface FunctionCallCardShellProps {
-  threadId: string;
+  scopeKey: string;
   cardId: string;
   category: OperationCategory;
   status: HeaderStatus;
@@ -29,7 +29,7 @@ export interface FunctionCallCardShellProps {
 }
 
 export const FunctionCallCardShell: React.FC<FunctionCallCardShellProps> = ({
-  threadId,
+  scopeKey,
   cardId,
   category,
   status,
@@ -45,13 +45,13 @@ export const FunctionCallCardShell: React.FC<FunctionCallCardShellProps> = ({
   islands,
 }) => {
   const expanded = useFunctionCallUIStore(
-    (state) => state.expandedByThread[threadId]?.[cardId] ?? defaultExpanded
+    (state) => state.expandedByThread[scopeKey]?.[cardId] ?? defaultExpanded
   );
   const setExpanded = useFunctionCallUIStore((state) => state.setExpanded);
 
   const handleToggle = useCallback(() => {
-    setExpanded(threadId, cardId, !expanded);
-  }, [setExpanded, threadId, cardId, expanded]);
+    setExpanded(scopeKey, cardId, !expanded);
+  }, [setExpanded, scopeKey, cardId, expanded]);
 
   const panelId = `function-call-card-panel-${cardId}`;
 

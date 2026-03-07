@@ -37,11 +37,12 @@ export type ExecutionMode = 'storyObject' | 'novelEditor' | 'translation' | 'edi
  * - validating: async validation in progress
  * - pending: validation passed, awaiting user decision
  * - processing: apply in progress
+ * - working: interactive tool session in progress
  * - failed: validation or execution failed
  * - rejected: user rejected
  * - applied: execution completed successfully
  */
-export type ToolCallStatus = 'streaming' | 'validating' | 'pending' | 'processing' | 'failed' | 'rejected' | 'applied';
+export type ToolCallStatus = 'streaming' | 'validating' | 'pending' | 'processing' | 'working' | 'failed' | 'rejected' | 'applied';
 
 /** Type of failure when status is 'failed' */
 export type ToolCallFailureType = 'validation' | 'execution' | 'partial';
@@ -81,6 +82,8 @@ export interface NormalizedToolCall {
 export interface ToolCallWithStatus extends NormalizedToolCall {
   /** Current status of the tool call */
   status: ToolCallStatus;
+  /** Auxiliary tool-specific UI payload from backend */
+  extraContent?: Record<string, unknown> | null;
   /** Error message (when failed) or user-provided reason (when rejected) */
   reason?: string;
   /** Type of failure when status is 'failed' */

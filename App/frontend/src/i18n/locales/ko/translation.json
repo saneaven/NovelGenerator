@@ -1032,6 +1032,7 @@
     "error": "오류",
     "pending": "대기 중",
     "processing": "처리 중",
+    "working": "작업 중",
     "running": "적용 중",
     "applied": "적용됨",
     "rejected": "거부됨",

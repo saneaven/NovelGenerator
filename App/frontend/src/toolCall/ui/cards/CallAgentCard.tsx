@@ -4,7 +4,7 @@ import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import type { CallAgentCardProps } from './types';
 
 export const CallAgentCard: React.FC<CallAgentCardProps> = ({
-  threadId,
+  scopeKey,
   operation,
   showDecisionButtons,
   decisionDisabled,
@@ -16,7 +16,7 @@ export const CallAgentCard: React.FC<CallAgentCardProps> = ({
 
   return (
     <FunctionCallCardShell
-      threadId={threadId}
+      scopeKey={scopeKey}
       cardId={operation.id}
       category="call_agent"
       status={operation.status}
@@ -26,7 +26,12 @@ export const CallAgentCard: React.FC<CallAgentCardProps> = ({
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}
       onReject={onReject}
-      defaultExpanded={operation.status === 'pending' || operation.status === 'processing' || operation.status === 'streaming'}
+      defaultExpanded={
+        operation.status === 'pending'
+        || operation.status === 'processing'
+        || operation.status === 'working'
+        || operation.status === 'streaming'
+      }
       islands={[
         <div className="function-call-call-agent-body" key="body">
           <div className="function-call-call-agent-body__label">Sub-agent request</div>

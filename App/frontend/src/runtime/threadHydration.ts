@@ -3,7 +3,7 @@ import { useThreadStore } from '../store/threadStore';
 import { isNonLiveThreadStatus } from './threadStreamLifecycle';
 
 const inFlightThreadSnapshotRefresh = new Set<string>();
-const UNRESOLVED_TOOL_CALL_STATUSES = new Set(['streaming', 'validating', 'pending', 'processing']);
+const UNRESOLVED_TOOL_CALL_STATUSES = new Set(['streaming', 'validating', 'pending', 'processing', 'working']);
 
 export function applyThreadSnapshot(response: ThreadMessagesResponse): void {
   const store = useThreadStore.getState();

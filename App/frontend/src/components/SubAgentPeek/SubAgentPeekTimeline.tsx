@@ -34,7 +34,7 @@ function formatTime(input?: Date | string): string {
 }
 
 function hasPendingStatus(status: string | undefined): boolean {
-  return status === 'pending' || status === 'streaming' || status === 'validating' || status === 'processing';
+  return status === 'pending' || status === 'streaming' || status === 'validating' || status === 'processing' || status === 'working';
 }
 
 function collapseContent(parts: Array<{ type: 'content'; text: string }>): string {
@@ -49,6 +49,7 @@ function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
     id: toolCall.id,
     tool_name: toolCall.toolName,
     arguments: toolCall.arguments,
+    extra_content: toolCall.extraContent ?? undefined,
     status: toolCall.status as any,
     reason: toolCall.reason ?? undefined,
     result: toolCall.result as any,
@@ -238,7 +239,8 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
               {cards.length > 0 && (
                 <div className="message-function-calls">
                   <FunctionCallsThread
-                    threadId={`${childThreadId}:message:${message.id}`}
+                    threadId={childThreadId}
+                    scopeKey={`${childThreadId}:message:${message.id}`}
                     mode={waitingDecision && hasPendingCards ? 'pending' : 'confirmed'}
                     cards={cards}
                     onCommitDecisions={

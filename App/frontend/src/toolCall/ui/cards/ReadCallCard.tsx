@@ -17,7 +17,7 @@ function isOffset(value: unknown): value is { from?: number; to?: number } {
 }
 
 export const ReadCallCard: React.FC<ObjectCardProps> = ({
-  threadId,
+  scopeKey,
   projectId,
   operation,
   showDecisionButtons,
@@ -101,7 +101,7 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
 
   return (
     <FunctionCallCardShell
-      threadId={threadId}
+      scopeKey={scopeKey}
       cardId={operation.id}
       category="read"
       status={operation.status}

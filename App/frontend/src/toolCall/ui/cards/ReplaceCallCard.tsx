@@ -46,7 +46,7 @@ function metadataMapForObjectType(objectType: ObjectCardProps['operation']['obje
 }
 
 export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
-  threadId,
+  scopeKey,
   projectId,
   operation,
   showDecisionButtons,
@@ -159,7 +159,7 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
 
   return (
     <FunctionCallCardShell
-      threadId={threadId}
+      scopeKey={scopeKey}
       cardId={operation.id}
       category="replace"
       status={operation.status}

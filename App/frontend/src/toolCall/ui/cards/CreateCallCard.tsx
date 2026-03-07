@@ -27,7 +27,7 @@ function createFieldKeysForObjectType(objectType: ObjectCardProps['operation']['
 }
 
 export const CreateCallCard: React.FC<ObjectCardProps> = ({
-  threadId,
+  scopeKey,
   operation,
   showDecisionButtons,
   decisionDisabled,
@@ -85,7 +85,7 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
 
   return (
     <FunctionCallCardShell
-      threadId={threadId}
+      scopeKey={scopeKey}
       cardId={operation.id}
       category="create"
       status={operation.status}

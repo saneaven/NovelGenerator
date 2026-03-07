@@ -135,6 +135,16 @@ class ToolEngineService:
         return value
 
     @staticmethod
+    def _extract_execution_controls(result: Any) -> tuple[str | None, dict[str, Any] | None, Any]:
+        if not isinstance(result, dict):
+            return None, None, result
+        continue_as_raw = result.get("__continue_as")
+        continue_as = str(continue_as_raw) if isinstance(continue_as_raw, str) else None
+        extra_patch = result.get("__extra_content")
+        safe_result = {k: v for k, v in result.items() if k not in {"__continue_as", "__extra_content"}}
+        return continue_as, extra_patch if isinstance(extra_patch, dict) else None, safe_result
+
+    @staticmethod
     def _candidate_tool_sets_for_execution(
         thread: Thread,
         run: RunModel,
@@ -304,15 +314,16 @@ class ToolEngineService:
                 allowed_sub_agent_ids=allowed_sub_agent_ids,
             )
 
-            result = await spec.executor(args, exec_ctx)
+            raw_result = await spec.executor(args, exec_ctx)
+            continue_as, extra_patch, result = self._extract_execution_controls(raw_result)
 
-            if tool_call.status == "processing" and isinstance(result, dict) and result.get("child_thread_id"):
-                # Sub-agent calls remain processing until child thread run completes.
-                if not isinstance(tool_call.result, dict):
-                    tool_call.result = {
-                        "child_thread_id": result.get("child_thread_id"),
-                        "agent_name": result.get("agent_name"),
-                    }
+            if extra_patch is not None:
+                base_extra = tool_call.extra_content if isinstance(tool_call.extra_content, dict) else {}
+                tool_call.extra_content = {**base_extra, **extra_patch}
+
+            if continue_as in {"working"} and tool_call.status == "processing":
+                tool_call.status = continue_as
+                tool_call.result = result if isinstance(result, dict) else None
                 tool_call.reason = None
                 tool_call.updated_at = datetime.utcnow()
             else:
@@ -359,7 +370,7 @@ class ToolEngineService:
             .filter(RunToolCallModel.child_thread_id == thread.id)
             .first()
         )
-        if parent_tc is None or parent_tc.status != "processing":
+        if parent_tc is None or parent_tc.status != "working":
             return
 
         if run.status == "done":
@@ -403,7 +414,7 @@ class ToolEngineService:
         if any(s == "pending" for s in statuses):
             parent_run.status = "waiting"
             parent_thread.status = "waiting"
-        elif any(s in {"streaming", "validating", "processing"} for s in statuses):
+        elif any(s in {"streaming", "validating", "processing", "working"} for s in statuses):
             parent_run.status = "processing"
             parent_thread.status = "processing"
         elif any(s == "rejected" for s in statuses):
@@ -425,6 +436,7 @@ class ToolEngineService:
                 "status": parent_tc.status,
                 "reason": parent_tc.reason,
                 "result": parent_tc.result if isinstance(parent_tc.result, dict) else None,
+                "extra_content": parent_tc.extra_content if isinstance(parent_tc.extra_content, dict) else None,
                 "child_thread_id": str(parent_tc.child_thread_id) if parent_tc.child_thread_id else None,
                 "assistant_message_id": str(parent_tc.assistant_message_id) if parent_tc.assistant_message_id else None,
             },

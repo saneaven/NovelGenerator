@@ -885,7 +885,7 @@ class RunToolCallModel(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('streaming','validating','pending','processing','failed','rejected','applied')",
+            "status IN ('streaming','validating','pending','processing','working','failed','rejected','applied')",
             name='ck_run_tool_calls_status',
         ),
         UniqueConstraint('message_id', 'llm_call_id', name='uq_run_tool_calls_message_llm_call_id'),
@@ -962,6 +962,8 @@ class Asset(Base):
 
     # Manuscript ownership for scene assets (which manuscript this image belongs to)
     manuscript_id = Column(UUID(as_uuid=True), ForeignKey('manuscripts.id', ondelete='CASCADE'), nullable=True, index=True)
+    # Tool-call owned preview assets remain hidden until explicitly applied.
+    preview_tool_call_id = Column(UUID(as_uuid=True), ForeignKey('run_tool_calls.id', ondelete='SET NULL'), nullable=True, index=True)
 
     # Generation metadata - prompts stored as StyledPrompt JSON structure
     # StyledPrompt: { "prefix": str, "content": str, "postfix": str }

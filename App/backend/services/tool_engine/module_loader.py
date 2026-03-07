@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .registry import ToolRegistry
-from .modules import manuscript_module, outline_module, project_meta_module, search_module, story_object_module, sub_agent_module, translation_module
+from .modules import image_module, manuscript_module, outline_module, project_meta_module, search_module, story_object_module, sub_agent_module, translation_module
 
 
 def build_registry() -> ToolRegistry:
@@ -11,6 +11,7 @@ def build_registry() -> ToolRegistry:
     outline_module.register(registry)
     manuscript_module.register(registry)
     search_module.register(registry)
+    image_module.register(registry)
     sub_agent_module.register(registry)
     translation_module.register(registry)
     return registry

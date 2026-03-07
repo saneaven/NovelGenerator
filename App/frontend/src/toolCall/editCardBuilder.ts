@@ -15,6 +15,7 @@ export function buildEditCardsFromToolCallMetadata(toolCalls: ToolCallMetadata[]
       toolName: tc.tool_name,
       arguments: args,
       status: tc.status as ToolCallStatus,
+      extraContent: tc.extra_content ?? null,
       reason: tc.reason,
       failureType: tc.failureType,
       result: tc.result,

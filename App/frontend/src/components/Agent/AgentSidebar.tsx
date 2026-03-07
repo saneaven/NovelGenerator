@@ -93,7 +93,13 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
           const tcs = toolCallsByMessageId[msg.id];
           if (!tcs) continue;
           for (const tc of tcs) {
-            if (tc.status === 'pending' || tc.status === 'streaming' || tc.status === 'validating' || tc.status === 'processing') {
+            if (
+              tc.status === 'pending'
+              || tc.status === 'streaming'
+              || tc.status === 'validating'
+              || tc.status === 'processing'
+              || tc.status === 'working'
+            ) {
               hasPendingToolRequest = true;
               break;
             }

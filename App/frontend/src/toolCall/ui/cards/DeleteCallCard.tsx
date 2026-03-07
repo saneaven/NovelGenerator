@@ -11,7 +11,7 @@ import type { ObjectCardProps } from './types';
 import { getObjectSnapshot } from './helpers';
 
 export const DeleteCallCard: React.FC<ObjectCardProps> = ({
-  threadId,
+  scopeKey,
   projectId,
   operation,
   showDecisionButtons,
@@ -76,7 +76,7 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
 
   return (
     <FunctionCallCardShell
-      threadId={threadId}
+      scopeKey={scopeKey}
       cardId={operation.id}
       category="delete"
       status={operation.status}

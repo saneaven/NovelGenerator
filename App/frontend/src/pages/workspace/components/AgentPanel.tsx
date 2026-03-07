@@ -8,6 +8,7 @@ import { useSidebarStore } from '../../../store/sidebarStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useDisplayLanguageStore } from '../../../store/displayLanguageStore';
 import { useSettings } from '../../../store/settingsStore';
+import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useThreadStore } from '../../../store/threadStore';
 import { threadService } from '../../../api/threadService';
 import { runMessageTranslation } from '../../../agent/messageTranslation';
@@ -94,7 +95,7 @@ interface AgentInputFormProps {
   onStop: () => void;
 }
 
-const BLOCKING_TOOL_CALL_STATUSES = new Set(['pending', 'streaming', 'validating', 'processing']);
+const BLOCKING_TOOL_CALL_STATUSES = new Set(['pending', 'streaming', 'validating', 'processing', 'working']);
 
 function isBlockingToolCallStatus(status: string | undefined): boolean {
   if (!status) return false;
@@ -287,6 +288,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   const setRunMode = useAgentUIStore((state) => state.setRunMode);
   const setInput = useAgentUIStore((state) => state.setInput);
   const unifiedObjects = useUnifiedObjectStore((state) => state.objects);
+  const selectedChapterId = useNovelEditorStore((state) => state.selectedChapterByProject[projectId]);
 
   const [isDesktop, setIsDesktop] = useState(() => (
     typeof window === 'undefined' ? true : window.innerWidth > 768
@@ -343,8 +345,25 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
 
   const isLoading = useMemo(() => {
     const status = thread?.status;
-    return status === 'running' || status === 'waiting' || status === 'processing';
+    return status === 'running' || status === 'processing';
   }, [thread?.status]);
+
+  const focusedManuscriptId = useMemo(() => {
+    if (surface !== 'novel-editor') return null;
+    const chapterId = selectedChapterId || localStorage.getItem(`selectedChapter_${projectId}`) || null;
+    if (!chapterId) return null;
+
+    const chapterObject = unifiedObjects[chapterId];
+    const linkedId = chapterObject?.metadata?.manuscript_id;
+    if (typeof linkedId === 'string' && linkedId.trim()) {
+      return linkedId;
+    }
+
+    const manuscript = Object.values(unifiedObjects).find(
+      (obj) => obj.type === 'manuscript' && obj.metadata?.chapter_id === chapterId,
+    );
+    return manuscript?.id ?? null;
+  }, [projectId, selectedChapterId, surface, unifiedObjects]);
 
   const orderedMessages = useMemo(
     () => [...messages].sort((a, b) => a.seqInThread - b.seqInThread),
@@ -649,12 +668,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         run_mode: runMode,
         surface,
         context_object_ids: selectedContextIds,
+        input_payload: focusedManuscriptId
+          ? { agent_focus: { manuscript_id: focusedManuscriptId } }
+          : undefined,
       },
     });
     if (shouldClear) {
       setInput(projectId, '');
     }
-  }, [threadId, runMode, surface, selectedContextIds, setInput, projectId]);
+  }, [threadId, runMode, surface, selectedContextIds, focusedManuscriptId, setInput, projectId]);
 
   const handleSubmitFromInput = useCallback(async (e: React.FormEvent, inputText: string) => {
     if (isLoading) {
@@ -913,7 +935,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                       <span key={mid} data-function-call-message-id={mid} />
                     ))}
                     <FunctionCallsThread
-                      threadId={`agent:${selectedAgentId ?? 'none'}:tg:${item.assistantMessageId}`}
+                      threadId={threadId ?? item.toolCalls[0]?.threadId ?? ''}
+                      scopeKey={`agent:${selectedAgentId ?? 'none'}:tg:${item.assistantMessageId}`}
                       mode={groupMode}
                       cards={allCards}
                       onCommitDecisions={groupMode === 'pending' ? commitDecisions : undefined}

@@ -7,7 +7,8 @@ export type OperationCategory =
   | 'patch'
   | 'delete'
   | 'search'
-  | 'call_agent';
+  | 'call_agent'
+  | 'image';
 
 export type ObjectType =
   | 'story_object'
@@ -27,6 +28,7 @@ export type HeaderStatus =
   | 'validating'
   | 'pending'
   | 'processing'
+  | 'working'
   | 'streaming'
   | 'applied'
   | 'rejected'
@@ -38,6 +40,7 @@ export interface OperationBaseVM {
   id: string;
   toolName: string;
   status: HeaderStatus;
+  extraContent?: Record<string, unknown> | null;
   reason?: string;
   result?: ApplicationResult;
   args: Record<string, unknown>;
@@ -45,6 +48,7 @@ export interface OperationBaseVM {
   targetId?: string;
   targetLabel?: string;
   decisionEligible: boolean;
+  includeInBulkDecision: boolean;
   isValidationFailure: boolean;
   isRunning: boolean;
 }
@@ -67,10 +71,30 @@ export interface CallAgentOperationVM extends OperationBaseVM {
   input: string;
 }
 
+export interface ImageOperationVM extends OperationBaseVM {
+  category: 'image';
+  imageKind: 'object' | 'scene';
+  imageState: 'generating' | 'generated';
+  prompt: string;
+  requestedRatio: string;
+  resolvedRatio?: string;
+  resolvedSize?: string;
+  provider?: string;
+  model?: string;
+  previewAssetId?: string;
+  previewAssetUrl?: string;
+  objectType?: string;
+  beforeExcerpt?: string;
+  afterExcerpt?: string;
+  failureCode?: string;
+  isUserRejectedFailure: boolean;
+}
+
 export type OperationVM =
   | ObjectOperationVM
   | SearchOperationVM
-  | CallAgentOperationVM;
+  | CallAgentOperationVM
+  | ImageOperationVM;
 
 export type OperationSource = 'stored' | 'streaming';
 
@@ -87,6 +111,7 @@ export const BLOCKING_STATUSES: ReadonlySet<HeaderStatus | ToolCallStatus> = new
   'pending',
   'validating',
   'processing',
+  'working',
   'streaming',
 ]);
 
@@ -94,5 +119,6 @@ export const STREAMING_STATUSES: ReadonlySet<HeaderStatus> = new Set([
   'collecting',
   'validating',
   'processing',
+  'working',
   'streaming',
 ]);

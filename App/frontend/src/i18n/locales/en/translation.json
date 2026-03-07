@@ -1032,6 +1032,7 @@
     "error": "Error",
     "pending": "Pending",
     "processing": "Processing",
+    "working": "Working",
     "running": "Running",
     "applied": "Applied",
     "rejected": "Rejected",

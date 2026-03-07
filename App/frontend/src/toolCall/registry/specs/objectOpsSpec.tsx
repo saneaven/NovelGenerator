@@ -217,6 +217,7 @@ const objectOpsSpec: ToolUiSpec = {
     const operation = params.operation as ObjectOperationVM;
     const cardProps = {
       threadId: params.threadId,
+      scopeKey: params.scopeKey,
       projectId: params.projectId,
       operation,
       showDecisionButtons: params.showDecisionButtons,

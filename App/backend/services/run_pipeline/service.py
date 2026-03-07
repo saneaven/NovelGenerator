@@ -592,6 +592,9 @@ class RunPipeline:
                     "status": row.status,
                     "reason": row.reason,
                     "result": row.result,
+                    "extra_content": row.extra_content if isinstance(row.extra_content, dict) else None,
+                    "assistant_message_id": str(row.assistant_message_id) if row.assistant_message_id else None,
+                    "child_thread_id": str(row.child_thread_id) if row.child_thread_id else None,
                 },
             )
 

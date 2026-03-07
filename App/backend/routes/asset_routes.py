@@ -668,7 +668,8 @@ async def list_scene_assets(
     # Get scene assets (optionally filtered by manuscript ownership)
     query = db.query(Asset).filter(
         Asset.project_id == project_id,
-        Asset.asset_type == 'scene'
+        Asset.asset_type == 'scene',
+        Asset.preview_tool_call_id.is_(None),
     )
     if manuscript_id:
         query = query.filter(Asset.manuscript_id == manuscript_id)
@@ -747,7 +748,12 @@ async def list_assets(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    assets = db.query(Asset).filter(Asset.project_id == project_id).order_by(Asset.created_at.desc()).all()
+    assets = (
+        db.query(Asset)
+        .filter(Asset.project_id == project_id, Asset.preview_tool_call_id.is_(None))
+        .order_by(Asset.created_at.desc())
+        .all()
+    )
 
     return AssetListResponse(
         assets=[_asset_to_response(a) for a in assets],
@@ -1039,7 +1045,12 @@ async def preview_image_cleanup(
     keep_recent_days = max(int(policy.keep_recent_days or 0), 0)
     cutoff = datetime.utcnow() - timedelta(days=keep_recent_days) if keep_recent_days > 0 else None
 
-    assets = db.query(Asset).filter(Asset.project_id == project_id).order_by(Asset.created_at.desc()).all()
+    assets = (
+        db.query(Asset)
+        .filter(Asset.project_id == project_id, Asset.preview_tool_call_id.is_(None))
+        .order_by(Asset.created_at.desc())
+        .all()
+    )
 
     used_in_manuscripts_rows = (
         db.query(ManuscriptImage.asset_id)
@@ -1140,7 +1151,11 @@ async def execute_image_cleanup(
     assets_by_id = {
         a.id: a
         for a in db.query(Asset)
-        .filter(Asset.project_id == project_id, Asset.id.in_(valid_ids))
+        .filter(
+            Asset.project_id == project_id,
+            Asset.preview_tool_call_id.is_(None),
+            Asset.id.in_(valid_ids),
+        )
         .all()
     }
 
@@ -1171,7 +1186,10 @@ async def execute_image_cleanup(
     story_non_main_assets: set[UUID] = {row[0] for row in story_non_main_rows if row[0]}
 
     # Reference index (project-wide) for eligibility checks
-    all_assets = db.query(Asset).filter(Asset.project_id == project_id).all()
+    all_assets = db.query(Asset).filter(
+        Asset.project_id == project_id,
+        Asset.preview_tool_call_id.is_(None),
+    ).all()
     referenced_by = _build_reference_reverse_index(all_assets)
 
     eligible: List[Asset] = []

@@ -4,7 +4,10 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
-from App.backend.schemas.thread_api import ToolCallDecisionResponse
+import pytest
+from pydantic import ValidationError
+
+from App.backend.schemas.thread_api import ToolCallDecisionResponse, ToolCallImageActionRequest
 
 
 def test_tool_call_decision_response_has_no_new_objects_field() -> None:
@@ -42,3 +45,17 @@ def test_tool_decision_backend_contract_has_no_new_objects_literal() -> None:
 
     assert "new_objects" not in routes_text
     assert "new_objects" not in engine_text
+
+
+def test_image_action_route_exists() -> None:
+    backend_root = Path(__file__).resolve().parents[1]
+    routes_text = (backend_root / "routes" / "thread_routes.py").read_text(encoding="utf-8")
+
+    assert '"/threads/{thread_id}/tool-calls/{tool_call_id}/image-actions"' in routes_text
+
+
+def test_image_action_schema_only_allows_accept_and_reject() -> None:
+    assert ToolCallImageActionRequest(action="accept").action == "accept"
+    assert ToolCallImageActionRequest(action="reject").action == "reject"
+    with pytest.raises(ValidationError):
+        ToolCallImageActionRequest(action="generate")

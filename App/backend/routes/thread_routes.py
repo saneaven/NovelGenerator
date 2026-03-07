@@ -27,6 +27,7 @@ from ..schemas.thread_api import (
     ToolCallBatchDecisionResponse,
     ToolCallDecisionRequest,
     ToolCallDecisionResponse,
+    ToolCallImageActionRequest,
 )
 from ..services.run_event_bus import run_event_bus
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
@@ -38,8 +39,16 @@ from ..services.notification_service import (
 )
 from ..services.run_pipeline import run_pipeline
 from ..services.tool_engine import tool_engine
+from ..services.sidecar_client import sidecar_client
 from ..services.reasoning.normalize import normalize_reasoning_detail
 from ..services.ownership import require_owned_project, require_owned_thread
+from ..services.agent_image_tool_service import (
+    apply_preview_for_tool_call,
+    cleanup_preview_assets,
+    get_image_state,
+    is_image_tool_name,
+    reject_generated_preview,
+)
 
 
 router = APIRouter(prefix="/api/v1", tags=["threads"])
@@ -145,7 +154,7 @@ def _sync_run_thread_status(db: Session, *, run_id: UUID) -> tuple[RunModel | No
 
     if any(s == "pending" for s in statuses):
         next_status = "waiting"
-    elif any(s in {"streaming", "validating", "processing"} for s in statuses):
+    elif any(s in {"streaming", "validating", "processing", "working"} for s in statuses):
         next_status = "processing"
     elif any(s == "rejected" for s in statuses):
         next_status = "paused"
@@ -177,6 +186,8 @@ async def _emit_tool_call_status(*, thread: Thread, tool_call: RunToolCallModel)
             "status": tool_call.status,
             "reason": tool_call.reason,
             "result": tool_call.result if isinstance(tool_call.result, dict) else None,
+            "extra_content": tool_call.extra_content if isinstance(tool_call.extra_content, dict) else None,
+            "assistant_message_id": str(tool_call.assistant_message_id) if tool_call.assistant_message_id else None,
             "child_thread_id": str(tool_call.child_thread_id) if tool_call.child_thread_id else None,
         },
     )
@@ -222,8 +233,8 @@ async def _apply_tool_decision(
             run_language = run.language
 
         if decision == "reject":
-            if tool_call.status == "processing":
-                raise HTTPException(status_code=409, detail="Cannot reject processing tool call")
+            if tool_call.status in {"processing", "working"}:
+                raise HTTPException(status_code=409, detail="Cannot reject in-progress tool call")
             if tool_call.status in {"rejected", "applied", "failed"}:
                 return {
                     "tool_call": _serialize_tool_call(tool_call),
@@ -249,7 +260,7 @@ async def _apply_tool_decision(
         if decision != "accept":
             raise HTTPException(status_code=422, detail="Invalid decision")
 
-        if tool_call.status in {"applied", "failed", "processing"}:
+        if tool_call.status in {"applied", "failed", "processing", "working"}:
             return {
                 "tool_call": _serialize_tool_call(tool_call),
             }
@@ -333,7 +344,7 @@ async def _apply_tool_decision(
                         .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread3.id)
                         .first()
                     )
-                    if failed_row is not None and failed_row.status == "processing":
+                    if failed_row is not None and failed_row.status in {"processing", "working"}:
                         failed_row.status = "failed"
                         failed_row.reason = f"Child run start failed: {exc}"
                         base_result = failed_row.result if isinstance(failed_row.result, dict) else {}
@@ -463,7 +474,7 @@ async def list_project_threads_runtime(
             db.query(RunToolCallModel.thread_id, func.count(RunToolCallModel.id))
             .filter(
                 RunToolCallModel.thread_id.in_(thread_ids),
-                RunToolCallModel.status.in_(["streaming", "validating", "pending", "processing"]),
+                RunToolCallModel.status.in_(["streaming", "validating", "pending", "processing", "working"]),
             )
             .group_by(RunToolCallModel.thread_id)
             .all()
@@ -672,6 +683,117 @@ async def decide_tool_call(
     return ToolCallDecisionResponse(**result)
 
 
+@router.post("/threads/{thread_id}/tool-calls/{tool_call_id}/image-actions", response_model=ToolCallDecisionResponse)
+async def apply_image_tool_action(
+    thread_id: UUID,
+    tool_call_id: UUID,
+    payload: ToolCallImageActionRequest,
+    current_user: User = Depends(get_current_user),
+):
+    action = payload.action
+
+    if action == "reject":
+        db = SessionLocal()
+        try:
+            thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
+            tool_call = (
+                db.query(RunToolCallModel)
+                .with_for_update()
+                .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread.id)
+                .first()
+            )
+            if tool_call is None:
+                raise HTTPException(status_code=404, detail="Tool call not found")
+            if not is_image_tool_name(tool_call.tool_name):
+                raise HTTPException(status_code=409, detail="Tool call does not support image actions")
+            if tool_call.status != "working" or get_image_state(tool_call.extra_content) != "generated":
+                raise HTTPException(status_code=409, detail="Image reject requires working+generated")
+            failure_result = reject_generated_preview(tool_call)
+            tool_call.status = "failed"
+            tool_call.reason = str(failure_result.get("message") or "Generated image rejected by user")
+            tool_call.result = failure_result
+            tool_call.updated_at = datetime.utcnow()
+            synced_run, synced_thread, _ = _sync_run_thread_status(db, run_id=tool_call.run_id)
+            db.commit()
+            db.refresh(tool_call)
+            if synced_run is not None and synced_thread is not None:
+                await _emit_tool_call_status(thread=synced_thread, tool_call=tool_call)
+                await _emit_run_status(thread=synced_thread, run=synced_run)
+            return ToolCallDecisionResponse(tool_call=_serialize_tool_call(tool_call))
+        finally:
+            db.close()
+
+    if action != "accept":
+        raise HTTPException(status_code=422, detail="Invalid image action")
+
+    db = SessionLocal()
+    try:
+        thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
+        tool_call = (
+            db.query(RunToolCallModel)
+            .with_for_update()
+            .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread.id)
+            .first()
+        )
+        if tool_call is None:
+            raise HTTPException(status_code=404, detail="Tool call not found")
+        if not is_image_tool_name(tool_call.tool_name):
+            raise HTTPException(status_code=409, detail="Tool call does not support image actions")
+        if tool_call.status != "working" or get_image_state(tool_call.extra_content) != "generated":
+            raise HTTPException(status_code=409, detail="Image apply requires working+generated")
+        run = db.query(RunModel).filter(RunModel.id == tool_call.run_id).first()
+        language = run.language if run and isinstance(run.language, str) and run.language.strip() else "English"
+        tool_call.status = "processing"
+        tool_call.reason = None
+        tool_call.updated_at = datetime.utcnow()
+        synced_run, synced_thread, _ = _sync_run_thread_status(db, run_id=tool_call.run_id)
+        db.commit()
+        db.refresh(tool_call)
+        if synced_run is not None and synced_thread is not None:
+            await _emit_tool_call_status(thread=synced_thread, tool_call=tool_call)
+            await _emit_run_status(thread=synced_thread, run=synced_run)
+    finally:
+        db.close()
+
+    db2 = SessionLocal()
+    try:
+        thread = require_owned_thread(db2, thread_id=thread_id, user_id=current_user.id)
+        tool_call = (
+            db2.query(RunToolCallModel)
+            .with_for_update()
+            .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread.id)
+            .first()
+        )
+        if tool_call is None:
+            raise HTTPException(status_code=404, detail="Tool call not found")
+        run = db2.query(RunModel).filter(RunModel.id == tool_call.run_id).first()
+        language = run.language if run and isinstance(run.language, str) and run.language.strip() else "English"
+        try:
+            tool_call.result = await apply_preview_for_tool_call(
+                db2,
+                tool_call=tool_call,
+                user_id=current_user.id,
+                language=language,
+                sidecar=sidecar_client,
+            )
+            tool_call.status = "applied"
+            tool_call.reason = None
+        except Exception as exc:  # noqa: BLE001
+            tool_call.status = "failed"
+            tool_call.reason = str(exc)
+            tool_call.result = {"success": False, "message": str(exc), "error": str(exc)}
+        tool_call.updated_at = datetime.utcnow()
+        synced_run, synced_thread, _ = _sync_run_thread_status(db2, run_id=tool_call.run_id)
+        db2.commit()
+        db2.refresh(tool_call)
+        if synced_run is not None and synced_thread is not None:
+            await _emit_tool_call_status(thread=synced_thread, tool_call=tool_call)
+            await _emit_run_status(thread=synced_thread, run=synced_run)
+        return ToolCallDecisionResponse(tool_call=_serialize_tool_call(tool_call))
+    finally:
+        db2.close()
+
+
 def _tool_call_target_key(tc: RunToolCallModel | None) -> str:
     """Compute a grouping key so patches on the same object are serialized."""
     if tc is None:
@@ -767,8 +889,8 @@ async def _execute_batched_patch_group(
                 if tc.status in {"rejected", "applied", "failed"}:
                     results.append((item.tool_call_id, {"tool_call": _serialize_tool_call(tc)}))
                     continue
-                if tc.status == "processing":
-                    raise HTTPException(status_code=409, detail="Cannot reject processing tool call")
+                if tc.status in {"processing", "working"}:
+                    raise HTTPException(status_code=409, detail="Cannot reject in-progress tool call")
                 if tc.status not in {"pending", "validating", "streaming"}:
                     raise HTTPException(status_code=409, detail=f"Cannot reject tool call in status={tc.status}")
                 tc.status = "rejected"
@@ -782,7 +904,7 @@ async def _execute_batched_patch_group(
             # --- Accept path: skip already-terminal ---
             if item.decision != "accept":
                 raise HTTPException(status_code=422, detail="Invalid decision")
-            if tc.status in {"applied", "failed", "processing"}:
+            if tc.status in {"applied", "failed", "processing", "working"}:
                 results.append((item.tool_call_id, {"tool_call": _serialize_tool_call(tc)}))
                 continue
             if tc.status not in {"pending", "validating", "streaming"}:
@@ -1082,6 +1204,12 @@ async def delete_thread_tool_call(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Tool call not found")
+    if is_image_tool_name(row.tool_name):
+        cleanup_preview_assets(
+            db,
+            tool_call_id=tool_call_id,
+            project_id=thread.project_id,
+        )
     assistant_message_id = row.assistant_message_id
     db.delete(row)
     db.flush()
