@@ -13,6 +13,11 @@ from ...providers.contracts import (
     merge_meta_payload,
     patch_snapshot_with_meta,
 )
+from ...providers.content_normalization import (
+    StreamContentNormalizer,
+    has_effective_delta,
+    normalize_final_snapshot_content,
+)
 from ...providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from ...providers.registry import ProviderRegistry
 from ..credential_service import credential_service
@@ -415,6 +420,7 @@ async def run_llm(
     stream = stream_with_retry(_create_stream, retry_cfg)
 
     assembler = FallbackSnapshotAssembler(provider=task_config.provider, model=task_config.model)
+    content_normalizer = StreamContentNormalizer()
     native_final = None
     merged_meta: MetaPayload | None = None
     raw_response: dict[str, Any] | None = None
@@ -439,8 +445,10 @@ async def run_llm(
         if event.raw_response is not None:
             raw_response = event.raw_response
         if event.kind == "delta" and event.delta is not None:
-            delta: DeltaPayload = event.delta
+            delta: DeltaPayload = content_normalizer.normalize_delta(event.delta)
             assembler.apply_delta(delta)
+            if not has_effective_delta(delta):
+                continue
 
             if delta.content_delta:
                 await emit_fn(
@@ -533,6 +541,7 @@ async def run_llm(
 
     if native_tool_call_mode:
         final_snapshot = extract_native_tool_calls_from_snapshot(final_snapshot)
+    final_snapshot = normalize_final_snapshot_content(final_snapshot)
 
     if output_mode == "raw_output" and final_snapshot.tool_calls:
         raise RuntimeError("Raw output mode cannot include tool calls")

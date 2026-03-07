@@ -25,6 +25,11 @@ from .providers.contracts import (
     patch_snapshot_with_meta,
     extract_native_tool_calls_from_snapshot,
 )
+from .providers.content_normalization import (
+    StreamContentNormalizer,
+    has_effective_delta,
+    normalize_final_snapshot_content,
+)
 from .providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from .providers.sse_encoder import encode_sse
 from .providers.stream_retry import normalize_retry_config, stream_with_retry
@@ -358,6 +363,7 @@ async def stream_chat(
             native_final = None
             merged_meta: MetaPayload | None = None
             assembler = FallbackSnapshotAssembler(provider=provider, model=request.model)
+            content_normalizer = StreamContentNormalizer()
 
             try:
                 async for event in stream:
@@ -367,9 +373,12 @@ async def stream_chat(
                         break
 
                     if event.kind == "delta" and event.delta is not None:
+                        delta = content_normalizer.normalize_delta(event.delta)
+                        assembler.apply_delta(delta)
+                        if not has_effective_delta(delta):
+                            continue
                         seq += 1
-                        assembler.apply_delta(event.delta)
-                        yield encode_sse("delta", delta_payload_to_wire(seq, event.delta))
+                        yield encode_sse("delta", delta_payload_to_wire(seq, delta))
                         continue
 
                     if event.kind == "meta" and event.meta is not None:
@@ -412,6 +421,7 @@ async def stream_chat(
 
                 if request.native_tool_call:
                     final_snapshot = extract_native_tool_calls_from_snapshot(final_snapshot)
+                final_snapshot = normalize_final_snapshot_content(final_snapshot)
 
                 yield encode_sse("final", {"snapshot": final_snapshot_to_wire(final_snapshot)})
                 yield encode_sse("done", {"ok": True})

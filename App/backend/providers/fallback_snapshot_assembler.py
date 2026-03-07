@@ -28,8 +28,11 @@ class FallbackSnapshotAssembler:
         self._finish_reason: Optional[str] = None
         self._reasoning_tokens: Optional[int] = None
         self._anonymous_tool_counter = 0
+        self._saw_content_delta = False
 
     def apply_delta(self, payload: DeltaPayload) -> None:
+        if payload.content_delta is not None:
+            self._saw_content_delta = True
         if payload.content_delta:
             self._append_content_part("content", payload.content_delta)
 
@@ -56,6 +59,7 @@ class FallbackSnapshotAssembler:
             bool(self._content_parts)
             or bool(self._reasoning_details)
             or bool(self._tool_call_order)
+            or self._saw_content_delta
         )
         if not has_any_data:
             raise ValueError("Unable to assemble final snapshot: stream had no usable data")
