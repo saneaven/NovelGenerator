@@ -19,6 +19,7 @@ import SubAgentEditor, { type SubAgentDefinitionDraft } from './SubAgentEditor';
 import CreateSubAgentModal from './CreateSubAgentModal';
 import TemplateEditor from './TemplateEditor';
 import ScenarioBlocksEditor from './ScenarioBlocksEditor';
+import EditorPanelHeader from './EditorPanelHeader';
 import PromptPreviewModal from './PromptPreviewModal';
 import VersionHistoryModal from '../../Modal/VersionHistoryModal';
 import PresetSelector from '../PresetSelector';
@@ -33,7 +34,7 @@ import { fragmentService } from '../../../api/fragmentService';
 import { PROMPT_TREE, getFirstPromptNode, findPromptNode, type PromptNode } from './promptTree';
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
-import { ChevronLeft, ChevronRight, Document, Copy, Clock, Trash, Edit, Eye } from '../../icons';
+import { Document, Clock, Trash, Eye } from '../../icons';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import './PromptsTemplatesPanel.css';
 import TemplateSyntaxHint from './TemplateSyntaxHint';
@@ -419,9 +420,6 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   // Version history modal
   const [showVersionHistory, setShowVersionHistory] = useState(false);
 
-  // Inline description editing (fragments)
-  const [isEditingDescription, setIsEditingDescription] = useState(false);
-  const [editedDescription, setEditedDescription] = useState('');
 
   // System prompt preview modal
   const [showSystemPreview, setShowSystemPreview] = useState(false);
@@ -446,7 +444,6 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     setSelectedFragment(null);
     setSelectedVariableId(null);
     setSelectedSubAgentId(null);
-    setIsEditingDescription(false);
     setShowVersionHistory(false);
     setRefreshTrigger((prev) => prev + 1);
     loadFragmentContents().catch(() => undefined);
@@ -610,8 +607,6 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       }
       return next;
     });
-    setIsEditingDescription(false);
-    setEditedDescription('');
   }, []);
 
   const saveAllDrafts = useCallback(async (): Promise<SaveSummary> => {
@@ -1331,14 +1326,8 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     setShowVersionHistory(false);
   };
 
-  const handleStartEditDescription = () => {
-    setEditedDescription(currentFragmentDraft?.description || '');
-    setIsEditingDescription(true);
-  };
-
-  const handleSaveDescription = () => {
+  const handleDescriptionChange = useCallback((value: string) => {
     if (!currentFragmentDraft) return;
-    const nextDesc = editedDescription;
     setFragmentDrafts((prev) => {
       const cur = prev[currentFragmentDraft.key];
       if (!cur) return prev;
@@ -1346,17 +1335,12 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         ...prev,
         [currentFragmentDraft.key]: {
           ...cur,
-          description: nextDesc,
-          dirty: cur.content !== cur.originalContent || nextDesc !== cur.originalDescription,
+          description: value,
+          dirty: cur.content !== cur.originalContent || value !== cur.originalDescription,
         },
       };
     });
-    setIsEditingDescription(false);
-  };
-
-  const handleCancelEditDescription = () => {
-    setIsEditingDescription(false);
-  };
+  }, [currentFragmentDraft]);
 
   const handleDeleteSelectedFragment = async () => {
     if (!currentFragmentDraft) return;
@@ -1390,7 +1374,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         return { ...prev, [key]: { ...cur, isDeleting: false, loadError: toErrorMessage(error) } };
       });
     } finally {
-      setIsEditingDescription(false);
+      // cleanup handled by EditorPanelHeader internally
     }
   };
 
@@ -1466,124 +1450,69 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
           <main className="panel-editor__main">
             <div className="editor-wrapper">
-              {canShowHeader && (
-                <header className="editor-wrapper__header">
-                  {hasSelection && (
-                    <div className="editor-wrapper__title-group">
-                      <div className="editor-wrapper__title-row">
-                        <h3 className="editor-wrapper__title">{getEditorTitle()}</h3>
-                        {subTab === 'fragments' && selectedPath && (
-                          <IconButton
-                            icon={<Copy size="sm" />}
-                            onClick={handleCopyFragmentPath}
-                            title={t('settings.promptEditor.copyPathForTemplates')}
-                            size="xs"
-                            className="editor-wrapper__copy-btn"
-                          />
-                        )}
-                      </div>
+              {canShowHeader && hasSelection && (
+                <EditorPanelHeader
+                  title={getEditorTitle()}
+                  subtitle={
+                    subTab === 'fragments'
+                      ? (currentFragmentDraft?.description || '')
+                      : (getEditorDescription() || undefined)
+                  }
+                  editableSubtitle={subTab === 'fragments' && !!currentFragmentDraft}
+                  onSubtitleChange={handleDescriptionChange}
+                  subtitlePlaceholder={t('settings.promptEditor.addDescription')}
+                  onCopyTitle={subTab === 'fragments' && selectedPath ? handleCopyFragmentPath : undefined}
+                  meta={
+                    (currentScenarioDraft || currentFragmentDraft) ? (
+                      <>
+                        <span>{t('settings.promptEditor.chars', { count: currentEditorContentLength || 0 })}</span>
+                        {currentEditorDirty && <span className="editor-wrapper__unsaved"> • {t('settings.promptEditor.unsavedChanges')}</span>}
+                      </>
+                    ) : undefined
+                  }
+                  actions={
+                    <>
+                      <TemplateSyntaxHint selectedNode={subTab === 'prompts' ? selectedPrompt : null} />
 
-                      {subTab === 'fragments' && currentFragmentDraft ? (
-                        <div className="editor-wrapper__description editor-wrapper__description--editable">
-                          {isEditingDescription ? (
-                            <input
-                              type="text"
-                              value={editedDescription}
-                              onChange={(e) => setEditedDescription(e.target.value)}
-                              onBlur={handleSaveDescription}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSaveDescription();
-                                if (e.key === 'Escape') handleCancelEditDescription();
-                              }}
-                              placeholder={t('settings.promptEditor.addDescription')}
-                              className="editor-wrapper__description-input"
-                              autoFocus
-                            />
-                          ) : (
-                            <>
-                              <span className="editor-wrapper__description-text">
-                                {currentFragmentDraft.description || t('settings.promptEditor.noDescription')}
-                              </span>
-                              <button
-                                className="editor-wrapper__description-edit"
-                                onClick={handleStartEditDescription}
-                                title={t('settings.promptEditor.editDescription')}
-                              >
-                                <Edit size="xs" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      ) : (
-                        getEditorDescription() && <p className="editor-wrapper__description">{getEditorDescription()}</p>
+                      {subTab === 'prompts' && selectedPrompt?.viewKind === 'system' && currentScenarioDraft && (
+                        <IconButton
+                          icon={<Eye size="sm" />}
+                          onClick={() => setShowSystemPreview(true)}
+                          title="Preview system template"
+                          size="sm"
+                          variant="ghost"
+                        />
                       )}
 
-                      {(currentScenarioDraft || currentFragmentDraft) && (
-                        <div className="editor-wrapper__meta">
-                          <span>{t('settings.promptEditor.chars', { count: currentEditorContentLength || 0 })}</span>
-                          {currentEditorDirty && <span className="editor-wrapper__unsaved"> • {t('settings.promptEditor.unsavedChanges')}</span>}
-                        </div>
+                      {currentVersionHistoryProps && (
+                        <IconButton
+                          icon={<Clock size="sm" />}
+                          onClick={() => setShowVersionHistory(true)}
+                          title={t('settings.promptEditor.versionHistory')}
+                          size="sm"
+                          disabled={currentFragmentDraft?.isDeleting}
+                        />
                       )}
-                    </div>
-                  )}
 
-                  <div className="editor-wrapper__header-right">
-                    {hasSelection && (
-                      <div className="editor-wrapper__actions">
-                        <TemplateSyntaxHint selectedNode={subTab === 'prompts' ? selectedPrompt : null} />
+                      {subTab === 'prompts' && selectedPrompt?.viewKind === 'blocks' && (
+                        <div ref={blocksHeaderActionsRef} className="editor-wrapper__blocks-actions" />
+                      )}
 
-                        {subTab === 'prompts' && selectedPrompt?.viewKind === 'system' && currentScenarioDraft && (
-                          <IconButton
-                            icon={<Eye size="sm" />}
-                            onClick={() => setShowSystemPreview(true)}
-                            title="Preview system template"
-                            size="sm"
-                            variant="ghost"
-                          />
-                        )}
-
-                        {currentVersionHistoryProps && (
-                          <IconButton
-                            icon={<Clock size="sm" />}
-                            onClick={() => setShowVersionHistory(true)}
-                            title={t('settings.promptEditor.versionHistory')}
-                            size="sm"
-                            disabled={currentFragmentDraft?.isDeleting}
-                          />
-                        )}
-
-                        {subTab === 'prompts' && selectedPrompt?.viewKind === 'blocks' && (
-                          <div ref={blocksHeaderActionsRef} className="editor-wrapper__blocks-actions" />
-                        )}
-
-                        {subTab === 'fragments' && currentFragmentDraft && (
-                          <IconButton
-                            icon={<Trash size="sm" />}
-                            onClick={handleDeleteSelectedFragment}
-                            title={t('settings.promptEditor.deleteFragment')}
-                            size="sm"
-                            className="editor-wrapper__delete-btn"
-                            disabled={currentFragmentDraft.isDeleting}
-                          />
-                        )}
-                      </div>
-                    )}
-
-                    {hasSelection && <span className="editor-wrapper__header-divider" />}
-
-                    <IconButton
-                      icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
-                      onClick={toggleSidebar}
-                      title={
-                        isSidebarCollapsed
-                          ? t('settings.promptEditor.expandSidebar')
-                          : t('settings.promptEditor.collapseSidebar')
-                      }
-                      size="lg"
-                      variant="ghost"
-                    />
-                  </div>
-                </header>
+                      {subTab === 'fragments' && currentFragmentDraft && (
+                        <IconButton
+                          icon={<Trash size="sm" />}
+                          onClick={handleDeleteSelectedFragment}
+                          title={t('settings.promptEditor.deleteFragment')}
+                          size="sm"
+                          className="editor-wrapper__delete-btn"
+                          disabled={currentFragmentDraft.isDeleting}
+                        />
+                      )}
+                    </>
+                  }
+                  isSidebarCollapsed={isSidebarCollapsed}
+                  onToggleSidebar={toggleSidebar}
+                />
               )}
 
               <div className="editor-wrapper__body">

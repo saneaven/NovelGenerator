@@ -7,9 +7,10 @@ import type { TaskAIConfig } from '../../../store/settingsStore';
 import TaskConfigForm from '../TaskConfigForm';
 import { IconButton } from '../../IconButton';
 import ToggleSwitch from '../../common/ToggleSwitch';
-import { ChevronLeft, ChevronRight, Trash, Sliders, Clock, Eye } from '../../icons';
+import { Trash, Sliders, Clock, Eye } from '../../icons';
 import { subAgentService } from '../../../api/subAgentService';
 import TemplateEditor from './TemplateEditor';
+import EditorPanelHeader from './EditorPanelHeader';
 import VersionHistoryModal from '../../Modal/VersionHistoryModal';
 import { scenarioService } from '../../../api/scenarioService';
 import { validateTemplate } from '../../../templateEngine/engine';
@@ -436,22 +437,11 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   if (!agent || !draft) {
     return (
       <div className="sub-agent-editor sub-agent-editor--empty">
-        <div className="sub-agent-editor__header">
-          <div className="sub-agent-editor__title-row">
-            <h3 className="sub-agent-editor__title">{t('settings.promptEditor.subAgents')}</h3>
-          </div>
-          {onToggleSidebar && (
-            <div className="sub-agent-editor__header-right">
-              <IconButton
-                icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
-                onClick={onToggleSidebar}
-                title={isSidebarCollapsed ? t('settings.promptEditor.expandSidebar') : t('settings.promptEditor.collapseSidebar')}
-                size="lg"
-                variant="ghost"
-              />
-            </div>
-          )}
-        </div>
+        <EditorPanelHeader
+          title={t('settings.promptEditor.subAgents')}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={onToggleSidebar}
+        />
         <div className="sub-agent-editor__empty-state">
           <p>{t('settings.promptEditor.subAgentSelectToEdit')}</p>
           <p className="sub-agent-editor__empty-hint">{t('settings.promptEditor.subAgentSelectToEditHint')}</p>
@@ -465,45 +455,21 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
 
   return (
     <div className="sub-agent-editor">
-      <div className="sub-agent-editor__header">
-        <div className="sub-agent-editor__title-row">
-          <div className="sub-agent-editor__title-line">
-            <h3 className="sub-agent-editor__title">{draft.current.display_name}</h3>
-            <div className="sub-agent-editor__enabled-toggle">
-              <ToggleSwitch
-                checked={draft.current.enabled}
-                onChange={(checked) => updateDraft((cur) => ({ ...cur, current: { ...cur.current, enabled: checked } }))}
-                label={t('common.enabled')}
-              />
-            </div>
-            <IconButton
-              icon={<Trash size="sm" />}
-              onClick={handleDelete}
-              title={t('common.delete')}
-              size="sm"
-              variant="danger"
-            />
-          </div>
-          <div className="sub-agent-editor__id-block">
-            <div className="sub-agent-editor__id-line">
-              <span className="sub-agent-editor__id-key">{t('settings.promptEditor.subAgentIds.tool')}</span>
-              <span className="sub-agent-editor__id-value">{toCallToolName(agentNameForPreview)}</span>
-            </div>
-          </div>
-        </div>
-        {onToggleSidebar && (
-          <div className="sub-agent-editor__header-right">
-            <span className="sub-agent-editor__header-divider" />
-            <IconButton
-              icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
-              onClick={onToggleSidebar}
-              title={isSidebarCollapsed ? t('settings.promptEditor.expandSidebar') : t('settings.promptEditor.collapseSidebar')}
-              size="lg"
-              variant="ghost"
-            />
-          </div>
-        )}
-      </div>
+      <EditorPanelHeader
+        title={draft.current.display_name}
+        subtitle={toCallToolName(agentNameForPreview)}
+        actions={
+          <IconButton
+            icon={<Trash size="sm" />}
+            onClick={handleDelete}
+            title={t('common.delete')}
+            size="sm"
+            variant="danger"
+          />
+        }
+        isSidebarCollapsed={isSidebarCollapsed}
+        onToggleSidebar={onToggleSidebar}
+      />
 
       <div className="sub-agent-editor__content">
         <div
@@ -566,6 +532,15 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
         >
           <section className="sub-agent-editor__section">
             <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.identity')}</h4>
+
+            <div className="sub-agent-editor__field-row">
+              <label className="sub-agent-editor__label">{t('common.enabled')}</label>
+              <ToggleSwitch
+                checked={draft.current.enabled}
+                onChange={(checked) => updateDraft((cur) => ({ ...cur, current: { ...cur.current, enabled: checked } }))}
+                label={t('common.enabled')}
+              />
+            </div>
 
             <div className="sub-agent-editor__field-row">
               <label className="sub-agent-editor__label">{t('settings.promptEditor.subAgentSettings.toolId')}</label>

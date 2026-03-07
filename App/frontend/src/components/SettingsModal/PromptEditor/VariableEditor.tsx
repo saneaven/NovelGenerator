@@ -3,10 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { useVariableStore } from '../../../store/variableStore';
 import type { VariableType } from '../../../types/variables';
 import { getVariableTypeLabel, isValidVariableName } from '../../../types/variables';
-import { Trash, Copy, Plus, Close, ChevronLeft, ChevronRight } from '../../icons';
-import { TextButton } from '../../TextButton';
+import { Trash, Copy, Plus, Close } from '../../icons';
 import { IconButton } from '../../IconButton';
 import { CustomSelect } from '../../ui/CustomSelect';
+import EditorPanelHeader from './EditorPanelHeader';
 import { useSettingsToast } from '../SettingsToastContext';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import './VariableEditor.css';
@@ -110,20 +110,11 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
     return (
       <div className="variable-editor variable-editor--empty">
         {onToggleSidebar && (
-          <div className="variable-editor__header variable-editor__header--empty">
-            <div className="variable-editor__title-row">
-              <h3 className="variable-editor__title">Variables</h3>
-            </div>
-            <div className="variable-editor__header-right">
-              <IconButton
-                icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
-                onClick={onToggleSidebar}
-                title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                size="lg"
-                variant="ghost"
-              />
-            </div>
-          </div>
+          <EditorPanelHeader
+            title="Variables"
+            isSidebarCollapsed={isSidebarCollapsed}
+            onToggleSidebar={onToggleSidebar}
+          />
         )}
         <div className="variable-editor__empty-state">
           <p>Select a variable to edit</p>
@@ -269,25 +260,25 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
 
   return (
     <div className="variable-editor">
-      <div className="variable-editor__header">
-        <div className="variable-editor__title-row">
-          <h3 className="variable-editor__title">{draft.current.name}</h3>
+      <EditorPanelHeader
+        title={draft.current.name}
+        badge={
           <span className="variable-editor__type-badge">
             {getVariableTypeLabel(variable.var_type)}
           </span>
-        </div>
-        {onToggleSidebar && (
-          <div className="variable-editor__header-right">
-            <IconButton
-              icon={isSidebarCollapsed ? <ChevronLeft size="lg" /> : <ChevronRight size="lg" />}
-              onClick={onToggleSidebar}
-              title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              size="lg"
-              variant="ghost"
-            />
-          </div>
-        )}
-      </div>
+        }
+        actions={
+          <IconButton
+            icon={<Trash size="sm" />}
+            onClick={handleDelete}
+            title={t('common.delete')}
+            size="sm"
+            variant="danger"
+          />
+        }
+        isSidebarCollapsed={isSidebarCollapsed}
+        onToggleSidebar={onToggleSidebar}
+      />
 
       <div className="variable-editor__content">
         {/* Usage hint */}
@@ -457,16 +448,6 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
         )}
       </div>
 
-      {/* Footer */}
-      <div className="variable-editor__footer">
-        <TextButton
-          iconLeft={<Trash size="sm" />}
-          onClick={handleDelete}
-          variant="danger"
-        >
-          Delete
-        </TextButton>
-      </div>
     </div>
   );
 };
