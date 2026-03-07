@@ -48,6 +48,7 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobil
     if (!isMobile) return notifications;
     return [...notifications].reverse();
   }, [notifications, isMobile]);
+  const firstNotificationId = orderedNotifications[0]?.id;
 
   const handleDismiss = useCallback(
     (id: string) => {
@@ -128,7 +129,7 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobil
       resizeObserver.disconnect();
       window.removeEventListener('resize', scheduleMeasure);
     };
-  }, [orderedNotifications.length, orderedNotifications[0]?.id]);
+  }, [orderedNotifications.length, firstNotificationId]);
 
   // Auto-scroll to bottom on mobile
   useLayoutEffect(() => {
@@ -168,6 +169,7 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobil
               stackLift={stackLift}
               maxBlur={maxBlur}
               isMobile={isMobile}
+              scrollRootRef={itemsViewportRef}
               onDismiss={handleDismiss}
               onClick={handleClick}
             />

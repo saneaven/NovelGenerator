@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useMotionTemplate, useTransform, useMotionValue, animate, useDragControls, type MotionValue } from 'motion/react';
 import type { NotificationEntry } from '../../store/notificationStore';
 import { Check, Close, ChevronRight, Trash } from '../icons';
@@ -17,6 +17,7 @@ interface NotificationItemProps {
   stackLift: number;
   maxBlur: number;
   isMobile: boolean;
+  scrollRootRef: React.RefObject<HTMLDivElement | null>;
   onDismiss: (id: string) => void;
   onClick: (id: string) => void;
 }
@@ -48,6 +49,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   stackLift,
   maxBlur,
   isMobile,
+  scrollRootRef,
   onDismiss,
   onClick,
 }) => {
@@ -55,6 +57,8 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   const itemRef = useRef<HTMLDivElement>(null);
   const [itemTop, setItemTop] = useState(0);
   const [itemHeight, setItemHeight] = useState(0);
+  const [shouldLoadThumbnail, setShouldLoadThumbnail] = useState(false);
+  const hasImageThumbnail = customSlot.type === 'image';
 
   // Swipe-to-delete
   const DELETE_THRESHOLD = 80;
@@ -80,6 +84,42 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
       resizeObserver.disconnect();
     };
   }, [index, totalCount]);
+
+  useEffect(() => {
+    if (!hasImageThumbnail) {
+      setShouldLoadThumbnail(false);
+      return;
+    }
+
+    if (shouldLoadThumbnail) {
+      return;
+    }
+
+    if (typeof IntersectionObserver === 'undefined') {
+      setShouldLoadThumbnail(true);
+      return;
+    }
+
+    const node = itemRef.current;
+    if (!node) return;
+
+    const preloadDistance = Math.max(itemStride * 2, 120);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const isVisible = entries.some((entry) => entry.isIntersecting || entry.intersectionRatio > 0);
+        if (!isVisible) return;
+        setShouldLoadThumbnail(true);
+      },
+      {
+        root: scrollRootRef.current,
+        rootMargin: `${preloadDistance}px 0px ${preloadDistance}px 0px`,
+        threshold: 0.01,
+      },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasImageThumbnail, itemStride, scrollRootRef, shouldLoadThumbnail]);
 
   const depth = useTransform(scrollY, (value) => {
     const safeStride = itemStride > 0 ? itemStride : 1;
@@ -188,7 +228,20 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
     if (customSlot.type === 'image') {
       return (
         <div className="notification-item-thumbnail">
-          <img src={customSlot.url} alt={customSlot.alt || 'Preview'} />
+          {shouldLoadThumbnail ? (
+            <img
+              src={customSlot.url}
+              alt={customSlot.alt || 'Preview'}
+              loading="lazy"
+              decoding="async"
+              fetchPriority="low"
+            />
+          ) : (
+            <div
+              className="notification-item-thumbnail-placeholder"
+              aria-hidden="true"
+            />
+          )}
         </div>
       );
     }

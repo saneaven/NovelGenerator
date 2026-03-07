@@ -276,12 +276,25 @@
   border-radius: var(--border-radius-md);
   overflow: hidden;
   margin-left: auto;
+  background: color-mix(in srgb, var(--color-surface-elevated) 72%, var(--color-text-muted) 28%);
 }
 
 .notification-item-thumbnail img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
+}
+
+.notification-item-thumbnail-placeholder {
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-surface-elevated) 88%, white 12%) 0%,
+      color-mix(in srgb, var(--color-surface-elevated) 70%, var(--color-text-muted) 30%) 100%
+    );
 }
 
 /* Mobile adjustments */
