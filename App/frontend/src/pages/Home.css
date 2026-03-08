@@ -46,12 +46,13 @@
 }
 
 .brand-area h1 {
-  font-family: var(--font-family-heading);
-  font-size: var(--font-size-3xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
+  display: flex;
+  justify-content: flex-end;
   margin: 0;
-  letter-spacing: -0.02em;
+}
+
+.home-brand-logo {
+  width: clamp(180px, 22vw, 280px);
 }
 
 .user-controls {
@@ -69,6 +70,12 @@
 @media (min-width: 768px) {
   .user-greeting {
     display: block;
+  }
+}
+
+@media (max-width: 767px) {
+  .home-brand-logo {
+    width: clamp(160px, 42vw, 220px);
   }
 }
 

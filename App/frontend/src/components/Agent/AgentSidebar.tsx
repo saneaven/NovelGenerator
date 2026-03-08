@@ -67,7 +67,7 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
 
       const threadInfo = threadId ? threadsById[threadId] : undefined;
       const threadStatus = threadInfo?.status;
-      const isRunning = threadStatus === 'running' || threadStatus === 'processing' || isRunningFromPreflight;
+      const isRunning = threadStatus === 'running' || isRunningFromPreflight;
 
       // Has completed since viewed: runtime timestamp moved forward while thread is done.
       const messages = threadId ? messagesByThreadId[threadId] : undefined;

@@ -10,6 +10,7 @@ import SettingsModal from '../components/SettingsModal/SettingsModal';
 import { IconButton } from '../components/IconButton';
 import { Settings, Logout, Close, Plus, Upload } from '../components/icons';
 import { Loading } from '../components/common/Loading';
+import BrandLogo from '../components/common/BrandLogo';
 import { confirm, alert as showAlert } from '../store/dialogStore';
 
 const Home: React.FC = () => {
@@ -127,7 +128,9 @@ const Home: React.FC = () => {
             </div>
           </div>
           <div className="brand-area">
-            <h1>{t('landing.title')}</h1>
+            <h1>
+              <BrandLogo className="home-brand-logo" alt={t('landing.title')} />
+            </h1>
             {user && <span className="user-greeting">{t('home.hello', { username: user.username })}</span>}
           </div>
         </div>

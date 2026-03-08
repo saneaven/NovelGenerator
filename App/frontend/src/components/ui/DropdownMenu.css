@@ -84,13 +84,13 @@
 
 /* Selected state */
 .dropdown-item.is-selected {
-  background: var(--color-primary-subtle);
-  color: var(--color-primary-main);
+  background: var(--color-brand-primary-subtle);
+  color: var(--color-brand-primary);
   font-weight: 500;
 }
 
 .dropdown-item.is-selected:hover:not(.disabled) {
-  background: var(--color-primary-subtle);
+  background: var(--color-brand-primary-subtle);
 }
 
 /* Danger variant */

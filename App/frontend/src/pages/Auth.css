@@ -40,20 +40,18 @@
 }
 
 .auth-icon {
-    width: 64px;
-    height: 64px;
+    width: 72px;
+    height: 72px;
     margin: 0 auto var(--spacing-xl);
-    background: var(--gradient-accent);
-    border-radius: var(--border-radius-lg);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    border-radius: var(--border-radius-xl);
+    overflow: hidden;
 }
 
-.auth-icon svg {
-    width: 32px;
-    height: 32px;
-    color: var(--color-text-inverse);
+.auth-icon img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .auth-header h1 {
@@ -174,7 +172,7 @@
 .auth-submit {
     margin-top: var(--spacing-sm);
     padding: var(--spacing-lg);
-    background: var(--gradient-accent);
+    background: var(--color-brand-primary);
     border: none;
     border-radius: var(--border-radius-md);
     color: var(--color-text-inverse);
@@ -189,7 +187,7 @@
 }
 
 .auth-submit:hover:not(:disabled) {
-    opacity: var(--opacity-hover);
+    background: var(--color-brand-primary-hover);
 }
 
 .auth-submit:disabled {
@@ -277,7 +275,7 @@
 }
 
 .auth-link:hover {
-    color: var(--color-primary-main);
+    color: var(--color-brand-primary);
     gap: var(--spacing-md);
 }
 .auth-link:hover svg {
@@ -302,12 +300,8 @@
     }
 
     .auth-icon {
-        width: 56px;
-        height: 56px;
+        width: 64px;
+        height: 64px;
     }
 
-    .auth-icon svg {
-        width: 28px;
-        height: 28px;
-    }
 }

@@ -23,7 +23,7 @@
     --color-primary-100: oklch(0.901 0.036 56.7);
     --color-primary-50: oklch(0.950 0.017 56.7);
 
-    --color-primary-main: var(--color-primary-500);
+    --color-brand-primary: var(--color-primary-500);
 
     /* Secondary - Blue */
     --color-secondary-50: oklch(0.950 0.018 180.8);
@@ -109,7 +109,7 @@
     --color-info-dark: var(--color-info-900);
 
     /* ===== Brand & Accent Semantic Tokens ===== */
-    --color-brand-primary: var(--color-primary-main);
+    --color-brand-primary: var(--color-brand-primary);
     --color-brand-primary-hover: var(--color-primary-600);
     --color-brand-primary-active: var(--color-primary-700);
     --color-brand-primary-strong: var(--color-primary-800);
@@ -421,47 +421,51 @@
     /* ===== Inverted Color Palette ===== */
 
     /* Primary - Inverted */
-    --color-primary-50: oklch(0.100 0.012 240.3);
-    --color-primary-100: oklch(0.180 0.021 240.3);
-    --color-primary-200: oklch(0.260 0.030 240.3);
-    --color-primary-300: oklch(0.340 0.039 240.3);
-    --color-primary-400: oklch(0.420 0.048 240.3);
-    --color-primary-500: oklch(0.500 0.058 240.3);
-    --color-primary-600: oklch(0.580 0.067 240.3);
-    --color-primary-700: oklch(0.660 0.076 240.3);
-    --color-primary-800: oklch(0.740 0.075 240.3);
-    --color-primary-900: oklch(0.820 0.050 240.3);
-    --color-primary-950: oklch(0.900 0.027 240.3);
 
-    --color-primary-main: var(--color-primary-800);
+
+    --color-primary-50: oklch(0.330 0.030 117.0);
+    --color-primary-100: oklch(0.392 0.034 117.0);
+    --color-primary-200: oklch(0.454 0.038 117.0);
+    --color-primary-300: oklch(0.516 0.042 117.0);
+    --color-primary-400: oklch(0.578 0.046 117.0);
+    --color-primary-500: oklch(0.640 0.050 117.0);
+    --color-primary-600: oklch(0.702 0.063 117.0);
+    --color-primary-700: oklch(0.764 0.067 117.0);
+    --color-primary-800: oklch(0.826 0.071 117.0);
+    --color-primary-900: oklch(0.888 0.065 117.0);
+    --color-primary-950: oklch(0.950 0.065 117.0);
+
+    --color-brand-primary: var(--color-primary-800);
 
     /* Secondary (inverted) */
-    --color-secondary-50: oklch(0.330 0.020 117.0);
-    --color-secondary-100: oklch(0.392 0.024 117.0);
-    --color-secondary-200: oklch(0.454 0.028 117.0);
-    --color-secondary-300: oklch(0.516 0.032 117.0);
-    --color-secondary-400: oklch(0.578 0.036 117.0);
-    --color-secondary-500: oklch(0.640 0.040 117.0);
-    --color-secondary-600: oklch(0.702 0.043 117.0);
-    --color-secondary-700: oklch(0.764 0.047 117.0);
-    --color-secondary-800: oklch(0.826 0.051 117.0);
-    --color-secondary-900: oklch(0.888 0.055 117.0);
-    --color-secondary-950: oklch(0.950 0.055 117.0);
+    --color-secondary-50: oklch(0.330 0.060 50.0);
+    --color-secondary-100: oklch(0.392 0.064 50.0);
+    --color-secondary-200: oklch(0.454 0.075 50.0);
+    --color-secondary-300: oklch(0.516 0.081 50.0);
+    --color-secondary-400: oklch(0.578 0.095 50.0);
+    --color-secondary-500: oklch(0.640 0.112 50.0);
+    --color-secondary-600: oklch(0.702 0.095 50.0);
+    --color-secondary-700: oklch(0.764 0.081 50.0);
+    --color-secondary-800: oklch(0.826 0.075 50.0);
+    --color-secondary-900: oklch(0.888 0.055 50.0);
+    --color-secondary-950: oklch(0.950 0.032 50.0);
 
     --color-secondary-main: var(--color-secondary-800);
 
     /* Accent - Green (inverted) */
-    --color-accent-50: oklch(0.330 0.045 23.0);
-    --color-accent-100: oklch(0.392 0.054 23.0);
-    --color-accent-200: oklch(0.454 0.062 23.0);
-    --color-accent-300: oklch(0.516 0.071 23.0);
-    --color-accent-400: oklch(0.578 0.079 23.0);
-    --color-accent-500: oklch(0.640 0.084 23.0);
-    --color-accent-600: oklch(0.702 0.064 23.0);
-    --color-accent-700: oklch(0.764 0.048 23.0);
-    --color-accent-800: oklch(0.826 0.033 23.0);
-    --color-accent-900: oklch(0.888 0.020 23.0);
-    --color-accent-950: oklch(0.950 0.008 23.0);
+    --color-accent-50: oklch(0.100 0.012 240.3);
+    --color-accent-100: oklch(0.180 0.021 240.3);
+    --color-accent-200: oklch(0.260 0.030 240.3);
+    --color-accent-300: oklch(0.340 0.039 240.3);
+    --color-accent-400: oklch(0.420 0.048 240.3);
+    --color-accent-500: oklch(0.500 0.058 240.3);
+    --color-accent-600: oklch(0.580 0.067 240.3);
+    --color-accent-700: oklch(0.660 0.076 240.3);
+    --color-accent-800: oklch(0.740 0.075 240.3);
+    --color-accent-900: oklch(0.820 0.050 240.3);
+    --color-accent-950: oklch(0.900 0.027 240.3);
+
+    --color-accent-main: var(--color-accent-700);
 
 
     /* Neutral Scale - Inverted for dark */
@@ -509,6 +513,22 @@
     --color-surface-overlay: var(--color-neutral-400);
     --color-surface-muted: var(--color-neutral-0);
     --color-surface-hover: var(--color-neutral-400);
+
+    --color-brand-primary: var(--color-primary-700);
+    --color-brand-primary-hover: var(--color-primary-800);
+    --color-brand-primary-contrast: var(--color-primary-900);
+    --color-brand-primary-border: var(--color-primary-500);
+    --color-brand-primary-outline: var(--color-primary-400);
+    --color-brand-primary-soft: var(--color-primary-100);
+    --color-brand-primary-muted: var(--color-primary-200);
+
+    --color-brand-accent: var(--color-accent-700);
+    --color-brand-accent-hover: var(--color-accent-800);
+    --color-brand-accent-contrast: var(--color-accent-900);
+    --color-brand-accent-border: var(--color-accent-500);
+    --color-brand-accent-outline: var(--color-accent-400);
+    --color-brand-accent-soft: var(--color-accent-100);
+    --color-brand-accent-muted: var(--color-accent-200);
 
     /* ===== Text Colors - Light on Dark ===== */
     --color-text-primary: var(--color-neutral-1000);

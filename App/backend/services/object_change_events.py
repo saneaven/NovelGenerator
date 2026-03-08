@@ -11,7 +11,6 @@ from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from ..utils.object_type_aliases import externalize_object_type
-from .runtime_event_dispatcher import runtime_event_dispatcher
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +82,8 @@ def queue_object_change(
 
 async def _emit_object_change_batch(project_id: str, changes: list[dict[str, str]]) -> None:
     try:
+        from .runtime_event_dispatcher import runtime_event_dispatcher
+
         await runtime_event_dispatcher.emit_project_event(
             project_id=project_id,
             event_name="object:changed",

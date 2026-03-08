@@ -5,7 +5,7 @@ import { ImageGenerationModal } from '../ImageGeneration';
 import ImagePromptManager from './ImagePromptManager';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
-import { assetService, formatStyledPrompt, type Asset } from '../../api/assetService';
+import { assetService, formatStyledPrompt, type Asset, type SceneAsset, type StoryObjectAsset } from '../../api/assetService';
 import { getAssetUrl } from '../../utils/assetUrl';
 import { Folder, AIAssistMini, Close } from '../icons';
 import { VirtualizedImageGrid } from './VirtualizedImageGrid';
@@ -70,6 +70,10 @@ interface ImageTabContentProps {
     initialGenerationRecipe?: ImageGenerationRecipe | null;
 }
 
+const EMPTY_LINKED_ASSETS: StoryObjectAsset[] = [];
+const EMPTY_PROJECT_ASSETS: Asset[] = [];
+const EMPTY_SCENE_ASSETS: SceneAsset[] = [];
+
 const ImageTabContent: React.FC<ImageTabContentProps> = ({
     mode,
     objectType,
@@ -87,21 +91,16 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
 }) => {
     const { currentProjectId } = useProjectStore();
     const imageRuns = useImageRunStore((s) => s.runsById);
-    const {
-        assets,
-        sceneAssets,
-        isLoading,
-        error,
-        fetchAssets,
-        fetchStoryObjectAssets,
-        fetchSceneAssets,
-        getStoryObjectAssets,
-        uploadAsset,
-        updateAsset,
-        deleteAsset,
-        setMainAsset,
-        clearError,
-    } = useAssetStore();
+    const isLoading = useAssetStore((state) => state.isLoading);
+    const error = useAssetStore((state) => state.error);
+    const fetchAssets = useAssetStore((state) => state.fetchAssets);
+    const fetchStoryObjectAssets = useAssetStore((state) => state.fetchStoryObjectAssets);
+    const fetchSceneAssets = useAssetStore((state) => state.fetchSceneAssets);
+    const uploadAsset = useAssetStore((state) => state.uploadAsset);
+    const updateAsset = useAssetStore((state) => state.updateAsset);
+    const deleteAsset = useAssetStore((state) => state.deleteAsset);
+    const setMainAsset = useAssetStore((state) => state.setMainAsset);
+    const clearError = useAssetStore((state) => state.clearError);
 
     // Determine UI visibility based on mode
     const showImportButton = showImportButtonProp ?? (mode !== 'picker');
@@ -127,6 +126,22 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     const importButtonRef = useRef<HTMLDivElement>(null);
     const moreDropdownRef = useRef<HTMLDivElement>(null);
     const gridScrollContainerRef = useRef<HTMLDivElement>(null);
+    const currentSceneManuscriptId = showAllChapters ? undefined : manuscriptId;
+    const linkedAssets = useAssetStore((state) =>
+        currentProjectId && mode === 'object' && objectType && objectId
+            ? state.getStoryObjectAssets(currentProjectId, objectType, objectId)
+            : EMPTY_LINKED_ASSETS
+    );
+    const projectAssets = useAssetStore((state) =>
+        currentProjectId
+            ? state.getProjectAssets(currentProjectId)
+            : EMPTY_PROJECT_ASSETS
+    );
+    const sceneAssets = useAssetStore((state) =>
+        currentProjectId && mode === 'scene'
+            ? state.getSceneAssets(currentProjectId, currentSceneManuscriptId)
+            : EMPTY_SCENE_ASSETS
+    );
 
     // Fetch data based on mode
     useEffect(() => {
@@ -137,12 +152,12 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         } else if (mode === 'scene') {
             // If showAllChapters is true, fetch all scene assets (no manuscriptId filter)
             // Otherwise, fetch only assets owned by current manuscript
-            fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
+            fetchSceneAssets(currentProjectId, currentSceneManuscriptId);
         } else if (mode === 'picker') {
             // Picker mode: fetch all assets or scene assets
             fetchAssets(currentProjectId);
         }
-    }, [currentProjectId, mode, objectType, objectId, manuscriptId, showAllChapters, fetchStoryObjectAssets, fetchSceneAssets, fetchAssets]);
+    }, [currentProjectId, mode, objectType, objectId, currentSceneManuscriptId, fetchStoryObjectAssets, fetchSceneAssets, fetchAssets]);
 
     // Auto-open generate panel when an initial recipe is provided (e.g., retry flow)
     useEffect(() => {
@@ -155,12 +170,6 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         setShowGeneratePanel(false);
         setGenerationRecipe(null);
     }, []);
-
-    // Get linked assets with is_main info (for object mode)
-    const linkedAssets = useMemo(() => {
-        if (mode !== 'object' || !objectType || !objectId) return [];
-        return getStoryObjectAssets(objectType, objectId);
-    }, [mode, objectType, objectId, getStoryObjectAssets]);
 
     // Get display assets based on mode
     const displayAssets = useMemo((): DisplayAsset[] => {
@@ -182,13 +191,13 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             }));
         } else {
             // Picker mode: show all assets
-            return assets.map(asset => ({
+            return projectAssets.map(asset => ({
                 kind: 'asset',
                 id: asset.id,
                 asset,
             }));
         }
-    }, [mode, linkedAssets, sceneAssets, assets]);
+    }, [mode, linkedAssets, sceneAssets, projectAssets]);
 
     const placeholderItems = useMemo((): DisplayAsset[] => {
         if (!currentProjectId) return [];

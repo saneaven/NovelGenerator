@@ -113,7 +113,7 @@
 
 .agent-item:hover .agent-item-icon,
 .agent-item.selected .agent-item-icon {
-  color: var(--color-primary-main);
+  color: var(--color-brand-primary);
 }
 
 /* Content */
@@ -155,9 +155,9 @@
 }
 
 .agent-status-chip.running {
-  border-color: color-mix(in srgb, var(--color-primary-main) 30%, var(--color-border-subtle));
-  background: color-mix(in srgb, var(--color-primary-main) 14%, transparent);
-  color: var(--color-primary-main);
+  border-color: color-mix(in srgb, var(--color-brand-primary) 30%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--color-brand-primary) 14%, transparent);
+  color: var(--color-brand-primary);
 }
 
 .agent-status-chip.done {
@@ -205,7 +205,7 @@
   font-family: inherit;
   font-size: var(--font-size-sm);
   padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--color-primary-main);
+  border: 1px solid var(--color-brand-primary);
   border-radius: var(--border-radius-sm);
   background: var(--color-surface-base);
   color: var(--color-text-primary);

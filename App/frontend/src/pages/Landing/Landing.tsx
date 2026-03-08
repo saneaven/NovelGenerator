@@ -7,6 +7,7 @@ import { Loading } from '../../components/common/Loading';
 import type { IconProps } from '../../components/icons';
 import { IconButton } from '../../components/IconButton';
 import { TextButton } from '../../components/TextButton';
+import BrandLogo from '../../components/common/BrandLogo';
 import { LANDING_NEXT_ICON, LANDING_SECTIONS } from './sections';
 import type { LandingBackgroundConfig, LandingSectionConfig } from './sections';
 import { LandingBackground } from './components/LandingBackground';
@@ -223,7 +224,14 @@ const Landing: React.FC = () => {
                       <div className="landing-hero-text">
                         {(() => {
                           const Heading = index === 0 ? 'h1' : 'h2';
-                          return <Heading className="landing-title landing-hero-title">{t(section.center.titleKey)}</Heading>;
+                          return (
+                            <Heading className="landing-title landing-hero-title">
+                              <BrandLogo
+                                className="landing-brand-logo landing-hero-brand-logo"
+                                alt={t(section.center.titleKey)}
+                              />
+                            </Heading>
+                          );
                         })()}
                         {section.center.subtitleKey && (
                           <p className="landing-subtitle landing-hero-subtitle">{t(section.center.subtitleKey)}</p>

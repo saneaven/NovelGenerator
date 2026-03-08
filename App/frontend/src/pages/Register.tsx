@@ -5,6 +5,8 @@ import { useAuthStore } from '../store/authStore';
 import { Loading } from '../components/common/Loading';
 import './Auth.css';
 
+const AUTH_PLACEHOLDER_ICON_SRC = `${import.meta.env.BASE_URL}${encodeURI('Icon_Background.svg')}`;
+
 const Register: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -95,11 +97,7 @@ const Register: React.FC = () => {
       <div className="auth-card">
         <div className="auth-header">
           <div className="auth-icon">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M16 21V19C16 17.9391 15.5786 16.9217 14.8284 16.1716C14.0783 15.4214 13.0609 15 12 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <circle cx="8.5" cy="7" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M20 8V14M17 11H23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            <img src={AUTH_PLACEHOLDER_ICON_SRC} alt="" aria-hidden="true" />
           </div>
           <h1>{t('auth.createAccountTitle')}</h1>
           <p>{t('auth.createAccountSubtitle')}</p>

@@ -173,7 +173,7 @@
 }
 
 .agent-message.user .message-role {
-    color: var(--color-primary-main);
+    color: var(--color-brand-primary);
 }
 
 .agent-message.user .message-content {
@@ -347,7 +347,7 @@
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    background: var(--color-primary-main);
+    background: var(--color-brand-primary);
     color: var(--color-text-inverse);
     border: none;
     cursor: pointer;

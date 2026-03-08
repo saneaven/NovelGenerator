@@ -98,7 +98,7 @@
 
 .outline-sidebar .outline-list-item.is-active .outline-card {
   background-color: var(--color-surface-base);
-  border-color: var(--color-primary-main);
+  border-color: var(--color-brand-primary);
   box-shadow: var(--shadow-md);
 }
 
@@ -249,8 +249,8 @@
 .outline-sidebar .sidebar-add-form .form-group input:focus,
 .outline-sidebar .sidebar-add-form .form-group textarea:focus {
   outline: none;
-  border-color: var(--color-primary-main);
-  box-shadow: 0 0 0 2px var(--color-primary-subtle);
+  border-color: var(--color-brand-primary);
+  box-shadow: 0 0 0 2px var(--color-brand-primary-subtle);
 }
 
 .outline-sidebar .sidebar-add-form .form-group input::placeholder,

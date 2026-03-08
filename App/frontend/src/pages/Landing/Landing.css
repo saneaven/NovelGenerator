@@ -150,6 +150,15 @@
   font-size: var(--font-size-6xl);
 }
 
+.landing-brand-logo {
+  display: block;
+  width: min(100%, 420px);
+}
+
+.landing-hero-brand-logo {
+  width: min(100%, 540px);
+}
+
 .landing-hero-subtitle {
   margin: 0;
 }
@@ -426,6 +435,10 @@
 
   .landing-title.landing-hero-title {
     font-size: var(--font-size-3xl);
+  }
+
+  .landing-hero-brand-logo {
+    width: min(100%, 360px);
   }
 
   .landing-split {

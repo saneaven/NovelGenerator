@@ -192,7 +192,7 @@
 }
 
 .story-object-card[data-has-image="true"] .story-object-card__header:hover .story-object-card__title {
-  color: var(--color-primary-main);
+  color: var(--color-brand-primary);
 }
 
 /* ----------------------------------------
