@@ -287,8 +287,14 @@
       "storageLoading": "Loading...",
       "storageLoadFailed": "Failed to load storage info",
       "storageByProject": "By project",
-      "storageImages": "{{count}} images",
-      "storageProjectSummary": "Images {{images}} • Story {{story}} • Manuscripts {{manuscripts}} • Chat {{chat}}"
+      "storageProjectDetailsToggle": "Show storage details for {{project}}",
+      "storageCategoryImages": "Images",
+      "storageCategoryStory": "Story",
+      "storageCategoryProjectMeta": "Project info",
+      "storageCategoryManuscripts": "Manuscripts",
+      "storageCategoryChat": "Chat",
+      "storageCategoryNotifications": "Notifications",
+      "storageCategoryImageRuns": "Image runs"
     },
     "theme": {
       "title": "Theme Settings",

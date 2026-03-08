@@ -287,8 +287,14 @@
       "storageLoading": "불러오는 중...",
       "storageLoadFailed": "저장소 정보를 불러오지 못했습니다",
       "storageByProject": "프로젝트별",
-      "storageImages": "{{count}}개 이미지",
-      "storageProjectSummary": "이미지 {{images}} • 스토리 {{story}} • 원고 {{manuscripts}} • 채팅 {{chat}}"
+      "storageProjectDetailsToggle": "{{project}} 사용량 상세 보기",
+      "storageCategoryImages": "이미지",
+      "storageCategoryStory": "스토리",
+      "storageCategoryProjectMeta": "프로젝트 정보",
+      "storageCategoryManuscripts": "원고",
+      "storageCategoryChat": "채팅",
+      "storageCategoryNotifications": "알림",
+      "storageCategoryImageRuns": "이미지 실행"
     },
     "theme": {
       "title": "테마 설정",

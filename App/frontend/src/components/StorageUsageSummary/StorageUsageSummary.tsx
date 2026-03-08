@@ -1,10 +1,20 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { IconButton } from '../IconButton';
+import { Info } from '../icons';
 import './StorageUsageSummary.css';
+
+export interface StorageUsageBreakdownDetail {
+  id: string;
+  label: string;
+  value: string;
+}
 
 export interface StorageUsageBreakdownItem {
   id: string;
   name: string;
   meta: string;
+  details?: StorageUsageBreakdownDetail[];
+  detailToggleLabel?: string;
 }
 
 export interface StorageUsageSummaryLabels {
@@ -51,6 +61,8 @@ const StorageUsageSummary: React.FC<StorageUsageSummaryProps> = ({
   compact = false,
   className = '',
 }) => {
+  const [openItemId, setOpenItemId] = useState<string | null>(null);
+  const anchorRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const classes = [
     'storage-usage-summary',
     compact && 'storage-usage-summary--compact',
@@ -60,6 +72,30 @@ const StorageUsageSummary: React.FC<StorageUsageSummaryProps> = ({
     .join(' ');
 
   const normalizedPercent = Math.round(Math.min(Math.max(percentUsed ?? 0, 0), 1) * 100);
+  const toggleBreakdownItem = (itemId: string) => {
+    setOpenItemId((current) => (current === itemId ? null : itemId));
+  };
+
+  useEffect(() => {
+    if (!openItemId) return undefined;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const activeAnchor = anchorRefs.current[openItemId];
+      if (!activeAnchor) {
+        setOpenItemId(null);
+        return;
+      }
+
+      if (!activeAnchor.contains(event.target as Node)) {
+        setOpenItemId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [openItemId]);
 
   return (
     <div className={classes}>
@@ -86,12 +122,50 @@ const StorageUsageSummary: React.FC<StorageUsageSummaryProps> = ({
         <div className="storage-usage-summary__breakdown">
           <div className="storage-usage-summary__breakdown-title">{labels.breakdownTitle}</div>
           <div className="storage-usage-summary__breakdown-list">
-            {breakdownItems.map((item) => (
-              <div key={item.id} className="storage-usage-summary__breakdown-item">
-                <div className="storage-usage-summary__breakdown-name">{item.name}</div>
-                <div className="storage-usage-summary__breakdown-meta">{item.meta}</div>
-              </div>
-            ))}
+            {breakdownItems.map((item) => {
+              const hasDetails = (item.details?.length ?? 0) > 0;
+              const isExpanded = hasDetails && openItemId === item.id;
+
+              return (
+                <div key={item.id} className="storage-usage-summary__breakdown-item">
+                  <div className="storage-usage-summary__breakdown-name">{item.name}</div>
+                  <div className="storage-usage-summary__breakdown-trailing">
+                    <div className="storage-usage-summary__breakdown-meta">{item.meta}</div>
+                    {hasDetails && (
+                      <div
+                        className="storage-usage-summary__dropdown-anchor"
+                        ref={(node) => {
+                          anchorRefs.current[item.id] = node;
+                        }}
+                      >
+                        <IconButton
+                          icon={<Info size="sm" />}
+                          size="xs"
+                          variant="ghost"
+                          className="storage-usage-summary__detail-toggle"
+                          title={item.detailToggleLabel}
+                          ariaLabel={item.detailToggleLabel}
+                          ariaExpanded={isExpanded}
+                          isActive={isExpanded}
+                          onClick={() => toggleBreakdownItem(item.id)}
+                        />
+
+                        {isExpanded && (
+                          <div className="storage-usage-summary__detail-dropdown">
+                            {item.details?.map((detail) => (
+                              <div key={`${item.id}-${detail.id}`} className="storage-usage-summary__detail-row">
+                                <span className="storage-usage-summary__detail-label">{detail.label}</span>
+                                <span className="storage-usage-summary__detail-value">{detail.value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

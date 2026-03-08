@@ -4,18 +4,61 @@ import { useAuthStore } from '../../store/authStore';
 import { People, Lock, Image as ImageIcon } from '../icons';
 import { TextButton } from '../TextButton';
 import './ProfilePanel.css';
-import { accountService, type AccountStorageResponse } from '../../api';
-import { StorageUsageSummary, formatBytes } from '../StorageUsageSummary';
+import { accountService, type AccountStorageResponse, type ProjectStorageBreakdown } from '../../api';
+import { StorageUsageSummary, formatBytes, type StorageUsageBreakdownDetail } from '../StorageUsageSummary';
 
-function formatProjectStorageMeta(storage: AccountStorageResponse, projectId: string, t: (key: string, options?: Record<string, unknown>) => string): string {
-  const project = storage.by_project.find((item) => item.project_id === projectId);
-  if (!project) return '';
-  return t('settings.profile.storageProjectSummary', {
-    images: formatBytes(project.categories.image_bytes),
-    story: formatBytes(project.categories.story_bytes + project.categories.project_meta_bytes),
-    manuscripts: formatBytes(project.categories.manuscript_bytes),
-    chat: formatBytes(project.categories.chat_bytes),
-  });
+function formatProjectStorageDetails(
+  project: ProjectStorageBreakdown,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): StorageUsageBreakdownDetail[] {
+  const items = [
+    {
+      id: 'images',
+      label: t('settings.profile.storageCategoryImages'),
+      value: formatBytes(project.categories.image_bytes),
+      bytes: project.categories.image_bytes,
+    },
+    {
+      id: 'story',
+      label: t('settings.profile.storageCategoryStory'),
+      value: formatBytes(project.categories.story_bytes),
+      bytes: project.categories.story_bytes,
+    },
+    {
+      id: 'project-meta',
+      label: t('settings.profile.storageCategoryProjectMeta'),
+      value: formatBytes(project.categories.project_meta_bytes),
+      bytes: project.categories.project_meta_bytes,
+    },
+    {
+      id: 'manuscripts',
+      label: t('settings.profile.storageCategoryManuscripts'),
+      value: formatBytes(project.categories.manuscript_bytes),
+      bytes: project.categories.manuscript_bytes,
+    },
+    {
+      id: 'chat',
+      label: t('settings.profile.storageCategoryChat'),
+      value: formatBytes(project.categories.chat_bytes),
+      bytes: project.categories.chat_bytes,
+    },
+    {
+      id: 'notifications',
+      label: t('settings.profile.storageCategoryNotifications'),
+      value: formatBytes(project.categories.notification_bytes),
+      bytes: project.categories.notification_bytes,
+    },
+    {
+      id: 'image-runs',
+      label: t('settings.profile.storageCategoryImageRuns'),
+      value: formatBytes(project.categories.image_run_bytes),
+      bytes: project.categories.image_run_bytes,
+    },
+  ];
+
+  return items
+    .filter((item) => item.bytes > 0)
+    .map(({ bytes: _bytes, ...detail }) => detail);
 }
 
 const ProfilePanel: React.FC = () => {
@@ -223,7 +266,11 @@ const ProfilePanel: React.FC = () => {
             breakdownItems={storage.by_project.map((project) => ({
               id: project.project_id,
               name: project.project_name,
-              meta: `${formatBytes(project.used_bytes)} • ${t('settings.profile.storageImages', { count: project.image_count })} • ${formatProjectStorageMeta(storage, project.project_id, t)}`,
+              meta: formatBytes(project.used_bytes),
+              details: formatProjectStorageDetails(project, t),
+              detailToggleLabel: t('settings.profile.storageProjectDetailsToggle', {
+                project: project.project_name,
+              }),
             }))}
           />
         )}
