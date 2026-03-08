@@ -53,9 +53,17 @@
       "title": "What is Novel Buds?",
       "description": "Novel Buds is an intelligent writing platform that helps you bring your stories to life. Chat with AI to create characters, build worlds, and develop plots — all organized in one beautiful workspace."
     },
+    "storyObjects": {
+      "title": "Manage Story Objects in One Workspace",
+      "description": "Organize characters, organizations, locations, and lorebook entries in dedicated tabs, scan them as cards, expand into full editing, use AI assistance, and connect images without leaving the same workspace."
+    },
     "agentWriting": {
       "title": "Build Worlds & Write with Agent",
       "description": "Expand and refine your ideas with the agent. Provide character context and world-building details, then let the agent craft scenes, develop plotlines, and write dialogue that stays true to your vision."
+    },
+    "sceneImage": {
+      "title": "Generate Scene Images from Manuscript Context",
+      "description": "Use the current chapter context together with selected story objects to generate scene images that match the mood, staging, and details already established in your manuscript."
     },
     "agentQuery": {
       "title": "Ask the Agent",

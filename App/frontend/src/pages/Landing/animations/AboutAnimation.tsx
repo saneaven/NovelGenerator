@@ -15,7 +15,6 @@ const AI_RESPONSE = 'Here are two characters for your story:';
 interface CardData {
   name: string;
   description: string;
-  gradient: string;
 }
 
 const CARDS: CardData[] = [
@@ -23,13 +22,11 @@ const CARDS: CardData[] = [
     name: 'Seraphina Veil',
     description:
       'A reclusive scholar cursed with forbidden sight, walking the boundary between mortal realm and shadow court.',
-    gradient: 'linear-gradient(135deg, #2d1b69 0%, #11243e 100%)',
   },
   {
     name: 'Kael Duskborn',
     description:
       'Once a decorated knight, now bound to darkness after a betrayal that cost him everything but his blade.',
-    gradient: 'linear-gradient(135deg, #1a3a2a 0%, #0d2137 100%)',
   },
 ];
 
@@ -44,48 +41,40 @@ type Phase =
 
 /* ------------------------------------------------------------------ */
 
-interface MiniStoryCardProps {
+interface ToolCallCardProps {
   card: CardData;
-  fillActive: boolean;
+  active: boolean;
+  complete: boolean;
   delay: number;
   onComplete: () => void;
 }
 
-const MiniStoryCard: React.FC<MiniStoryCardProps> = ({
+const ToolCallCard: React.FC<ToolCallCardProps> = ({
   card,
-  fillActive,
+  active,
+  complete,
   delay,
   onComplete,
 }) => {
-  const [showDesc, setShowDesc] = useState(false);
-
   return (
     <motion.div
-      className="landing-anim-story-card"
+      className="landing-anim-about-op-card"
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.35, delay, ...SPRING }}
     >
-      <div
-        className="landing-anim-story-card__image"
-        style={{ background: card.gradient }}
-      />
-      <div className="landing-anim-story-card__content">
-        <motion.div
-          className="landing-anim-story-card__title"
-          initial={{ opacity: 0, y: 6 }}
-          animate={fillActive ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
-          transition={{ duration: 0.25, delay: 0.1 }}
-          onAnimationComplete={() => {
-            if (fillActive) setShowDesc(true);
-          }}
-        >
-          {card.name}
-        </motion.div>
-        <div className="landing-anim-story-card__desc">
+      <div className="landing-anim-about-op-card__header">
+        <div className="landing-anim-about-op-card__title-row">
+          <h4 className="landing-anim-about-op-card__title">{card.name}</h4>
+        </div>
+        <span className="landing-anim-about-op-card__status">{complete ? 'Done' : 'Creating'}</span>
+      </div>
+
+      <div className="landing-anim-about-op-card__body">
+        <div className="landing-anim-about-op-card__value">
           <TypingText
             text={card.description}
-            active={showDesc}
+            active={active}
             speed={18}
             onComplete={onComplete}
           />
@@ -145,86 +134,82 @@ const AboutContent: React.FC = () => {
     phase !== 'inputTyping' &&
     phase !== 'messageSent' &&
     phase !== 'thinking';
-  const showCards =
+  const showToolCard =
     phase === 'cardsReveal' || phase === 'cardsFilling' || phase === 'done';
 
   return (
-    <>
-      {/* ===== Chat Frame ===== */}
-      <div className="landing-anim-frame">
-        {showBubble && (
-          <motion.div
-            className="landing-anim-bubble landing-anim-bubble--user"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ...SPRING }}
-          >
-            {USER_MSG}
-          </motion.div>
-        )}
-
+    <div className="landing-anim-about-thread">
+      {showBubble && (
         <motion.div
-          className="landing-anim-typing"
-          animate={{ opacity: showTyping ? 1 : 0 }}
-          transition={{ duration: 0.15 }}
+          className="landing-anim-bubble landing-anim-bubble--user"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ...SPRING }}
         >
-          <div className="landing-anim-typing-track">
-            <div className="landing-anim-typing-bar" />
-          </div>
+          {USER_MSG}
         </motion.div>
+      )}
 
-        {showAiResponse && (
-          <motion.div
-            className="landing-anim-bubble landing-anim-bubble--assistant"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ...SPRING }}
-          >
-            <TypingText
-              text={AI_RESPONSE}
-              active
-              speed={25}
-              onComplete={() => setPhase('cardsReveal')}
-            />
-          </motion.div>
-        )}
-
-        {/* Input bar */}
-        <div className="landing-anim-input">
-          {isInputting && (
-            <TypingText
-              text={USER_MSG}
-              active
-              speed={25}
-              onComplete={() => setPhase('messageSent')}
-            />
-          )}
+      <motion.div
+        className="landing-anim-typing"
+        animate={{ opacity: showTyping ? 1 : 0 }}
+        transition={{ duration: 0.15 }}
+      >
+        <div className="landing-anim-typing-track">
+          <div className="landing-anim-typing-bar" />
         </div>
-      </div>
+      </motion.div>
 
-      {/* ===== Card Zone (outside chat frame) ===== */}
-      {showCards && (
+      {showAiResponse && (
         <motion.div
-          className="landing-anim-about-cards"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.2 }}
+          className="landing-anim-bubble landing-anim-bubble--assistant"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ...SPRING }}
         >
-          <MiniStoryCard
-            card={CARDS[0]}
-            fillActive={card1Active}
-            delay={0}
-            onComplete={handleCardComplete}
-          />
-          <MiniStoryCard
-            card={CARDS[1]}
-            fillActive={card2Active}
-            delay={0.1}
-            onComplete={handleCardComplete}
+          <TypingText
+            text={AI_RESPONSE}
+            active
+            speed={25}
+            onComplete={() => setPhase('cardsReveal')}
           />
         </motion.div>
       )}
-    </>
+
+      {showToolCard && (
+        <div className="landing-anim-about-call-stack">
+          {card1Active && (
+            <ToolCallCard
+              card={CARDS[0]}
+              active
+              complete={phase === 'done' || card2Active}
+              delay={0}
+              onComplete={handleCardComplete}
+            />
+          )}
+          {card2Active && (
+            <ToolCallCard
+              card={CARDS[1]}
+              active
+              complete={phase === 'done'}
+              delay={0.08}
+              onComplete={handleCardComplete}
+            />
+          )}
+        </div>
+      )}
+
+      <div className="landing-anim-input">
+        {isInputting && (
+          <TypingText
+            text={USER_MSG}
+            active
+            speed={25}
+            onComplete={() => setPhase('messageSent')}
+          />
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -239,11 +224,9 @@ export const AboutAnimation: React.FC<AboutAnimationProps> = ({ isActive }) => {
 
   return (
     <motion.div
-      className="landing-anim-about-wrapper"
+      className="landing-anim-frame landing-anim-frame--about landing-anim-about-wrapper"
       initial={{ opacity: 0, scale: 0.98 }}
-      animate={
-        isActive ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.98 }
-      }
+      animate={isActive ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.98 }}
       transition={{ duration: 0.4 }}
     >
       {isActive && <AboutContent key={playKey} />}

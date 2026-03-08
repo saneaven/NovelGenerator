@@ -4,6 +4,8 @@ import { ChevronDown } from '../../components/icons';
 import { AboutAnimation } from './animations/AboutAnimation';
 import { AgentWritingAnimation } from './animations/AgentWritingAnimation';
 import { AgentQueryAnimation } from './animations/AgentQueryAnimation';
+import { SceneImageAnimation } from './animations/SceneImageAnimation';
+import { StoryObjectsAnimation } from './animations/StoryObjectsAnimation';
 import { TranslationAnimation } from './animations/TranslationAnimation';
 import { PromptEditorAnimation } from './animations/PromptEditorAnimation';
 
@@ -92,15 +94,37 @@ export const LANDING_SECTIONS: LandingSectionConfig[] = [
     right: { type: 'animation', component: AboutAnimation },
   },
   {
-    id: 'agentWriting',
+    id: 'storyObjects',
     layout: 'split',
     tone: 'inverse',
     background: { type: 'surface', cssVar: '--color-surface-inverse' },
+    left: {
+      titleKey: 'landing.storyObjects.title',
+      bodyKey: 'landing.storyObjects.description',
+    },
+    right: { type: 'animation', component: StoryObjectsAnimation },
+  },
+  {
+    id: 'agentWriting',
+    layout: 'split',
+    tone: 'base',
+    background: { type: 'surface', cssVar: '--color-surface-base' },
     left: {
       titleKey: 'landing.agentWriting.title',
       bodyKey: 'landing.agentWriting.description',
     },
     right: { type: 'animation', component: AgentWritingAnimation },
+  },
+  {
+    id: 'sceneImage',
+    layout: 'split',
+    tone: 'inverse',
+    background: { type: 'surface', cssVar: '--color-surface-inverse' },
+    left: {
+      titleKey: 'landing.sceneImage.title',
+      bodyKey: 'landing.sceneImage.description',
+    },
+    right: { type: 'animation', component: SceneImageAnimation },
   },
   {
     id: 'agentQuery',
