@@ -462,10 +462,27 @@
     grid-template-columns: 1fr;
     align-content: center;
     gap: var(--spacing-lg);
-    padding: var(--spacing-xl);
+    justify-items: center;
+    text-align: center;
+    padding:
+      var(--spacing-xl)
+      var(--spacing-xl)
+      calc(var(--spacing-5xl) + env(safe-area-inset-bottom));
+  }
+
+  .landing-hero-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+
+  .landing-hero-subtitle {
+    text-align: center;
   }
 
   .landing-cta--hero {
-    justify-content: flex-start;
+    width: 100%;
+    justify-content: center;
   }
 }
