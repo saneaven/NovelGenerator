@@ -133,6 +133,9 @@ const UnifiedImageModal: React.FC<UnifiedImageModalProps> = (props) => {
             zIndexLayer={zIndexLayer}
             footer={
                 <>
+                    <TextButton variant="secondary" onClick={onClose}>
+                        {onSelect ? t('assetManager.cancel') : t('assetManager.close')}
+                    </TextButton>
                     {onSelect && (
                         <TextButton
                             variant="primary"
@@ -142,9 +145,6 @@ const UnifiedImageModal: React.FC<UnifiedImageModalProps> = (props) => {
                             {t('assetManager.select')}
                         </TextButton>
                     )}
-                    <TextButton variant="secondary" onClick={onClose}>
-                        {onSelect ? t('assetManager.cancel') : t('assetManager.close')}
-                    </TextButton>
                 </>
             }
         >
