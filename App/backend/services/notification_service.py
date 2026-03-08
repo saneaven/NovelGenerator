@@ -8,11 +8,29 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..models.db_models import NotificationModel, Thread
+from ..models.db_models import (
+    ImageRunModel,
+    NotificationModel,
+    RunMessageModel,
+    RunModel,
+    RunToolCallModel,
+    Thread,
+)
 from .storage_usage_service import (
+    StorageUsageDelta,
     apply_project_usage_delta,
+    build_image_run_delta,
     build_notification_delta,
+    build_run_delta,
+    build_run_message_delta,
+    build_thread_delta,
+    build_tool_call_delta,
+    snapshot_image_run_row,
     snapshot_notification_row,
+    snapshot_run_message_row,
+    snapshot_run_row,
+    snapshot_thread_row,
+    snapshot_tool_call_row,
 )
 
 
@@ -300,6 +318,42 @@ def list_notifications(
     return rows, total
 
 
+def get_notifications_by_ids(
+    db: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+    notification_ids: Iterable[UUID | str],
+) -> list[NotificationModel]:
+    ordered_ids: list[UUID] = []
+    seen_ids: set[UUID] = set()
+    for raw_id in notification_ids:
+        notification_id = _as_uuid(raw_id)
+        if notification_id is None or notification_id in seen_ids:
+            continue
+        seen_ids.add(notification_id)
+        ordered_ids.append(notification_id)
+
+    if not ordered_ids:
+        return []
+
+    rows = (
+        db.query(NotificationModel)
+        .filter(
+            NotificationModel.user_id == user_id,
+            NotificationModel.project_id == project_id,
+            NotificationModel.id.in_(ordered_ids),
+        )
+        .all()
+    )
+    rows_by_id = {
+        row.id: row
+        for row in rows
+        if isinstance(getattr(row, "id", None), UUID)
+    }
+    return [rows_by_id[notification_id] for notification_id in ordered_ids if notification_id in rows_by_id]
+
+
 def mark_notifications_read(
     db: Session,
     *,
@@ -335,6 +389,17 @@ def mark_notifications_read(
 
     db.flush()
     return updated_ids
+
+
+def _dedupe_uuid_values(values: Iterable[UUID | None]) -> list[UUID]:
+    ordered: list[UUID] = []
+    seen: set[UUID] = set()
+    for value in values:
+        if not isinstance(value, UUID) or value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered
 
 
 def _resolve_linked_journey_thread(
@@ -413,6 +478,73 @@ def list_notification_delete_targets(
             )
         )
     return out
+
+
+def collect_notification_delete_deltas(
+    db: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+    targets: Iterable[NotificationDeleteTarget],
+) -> list[StorageUsageDelta]:
+    target_list = list(targets)
+    notification_ids = [target.notification_id for target in target_list]
+    thread_ids = _dedupe_uuid_values(target.linked_thread_id for target in target_list)
+
+    notification_rows = get_notifications_by_ids(
+        db,
+        user_id=user_id,
+        project_id=project_id,
+        notification_ids=notification_ids,
+    )
+    thread_rows = (
+        db.query(Thread)
+        .filter(
+            Thread.user_id == user_id,
+            Thread.project_id == project_id,
+            Thread.thread_type == "journey",
+            Thread.id.in_(thread_ids),
+        )
+        .all()
+        if thread_ids
+        else []
+    )
+    run_rows = (
+        db.query(RunModel)
+        .filter(RunModel.thread_id.in_(thread_ids))
+        .all()
+        if thread_ids
+        else []
+    )
+    image_run_rows = (
+        db.query(ImageRunModel)
+        .filter(ImageRunModel.thread_id.in_(thread_ids))
+        .all()
+        if thread_ids
+        else []
+    )
+    message_rows = (
+        db.query(RunMessageModel)
+        .filter(RunMessageModel.thread_id.in_(thread_ids))
+        .all()
+        if thread_ids
+        else []
+    )
+    tool_call_rows = (
+        db.query(RunToolCallModel)
+        .filter(RunToolCallModel.thread_id.in_(thread_ids))
+        .all()
+        if thread_ids
+        else []
+    )
+
+    deltas = [build_notification_delta(snapshot_notification_row(row), None) for row in notification_rows]
+    deltas.extend(build_thread_delta(snapshot_thread_row(row), None) for row in thread_rows)
+    deltas.extend(build_run_delta(snapshot_run_row(row), None) for row in run_rows)
+    deltas.extend(build_image_run_delta(snapshot_image_run_row(row), None) for row in image_run_rows)
+    deltas.extend(build_run_message_delta(snapshot_run_message_row(row), None) for row in message_rows)
+    deltas.extend(build_tool_call_delta(snapshot_tool_call_row(row), None) for row in tool_call_rows)
+    return deltas
 
 
 def delete_notification_targets(

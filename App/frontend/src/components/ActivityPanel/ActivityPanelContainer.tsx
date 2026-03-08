@@ -2,7 +2,7 @@ import React from 'react';
 import { notificationService } from '../../api/notificationService';
 import { useProjectStore } from '../../store/projectStore';
 import { useTranslation } from 'react-i18next';
-import { useNotificationStore } from '../../store/notificationStore';
+import { useNotificationStore, type NotificationEntry } from '../../store/notificationStore';
 import { Bell, Sliders } from '../icons';
 import NotificationsView from './NotificationsView';
 import VariablesView from './VariablesView';
@@ -21,7 +21,9 @@ const ActivityPanelContainer: React.FC<ActivityPanelContainerProps> = ({
   isMobile = false,
 }) => {
   const { t } = useTranslation();
+  const detailNotificationId = useNotificationStore((state) => state.detailNotificationId);
   const removeManyFromServer = useNotificationStore((state) => state.removeManyFromServer);
+  const restoreEntries = useNotificationStore((state) => state.restoreEntries);
   const notificationsMap = useNotificationStore((state) => state.notifications);
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
 
@@ -31,10 +33,15 @@ const ActivityPanelContainer: React.FC<ActivityPanelContainerProps> = ({
 
   const handleClearAll = async () => {
     if (!currentProjectId) return;
+    const entriesToRemove = Object.values(notificationsMap).filter(
+      (entry): entry is NotificationEntry => entry !== undefined
+    );
+    if (!entriesToRemove.length) return;
+    removeManyFromServer(entriesToRemove.map((entry) => entry.id));
     try {
-      const response = await notificationService.deleteAll(currentProjectId, { only_read: false });
-      removeManyFromServer(response.ids);
+      await notificationService.deleteAll(currentProjectId, { only_read: false });
     } catch (error) {
+      restoreEntries(entriesToRemove, detailNotificationId);
       console.warn('Failed to clear notifications', { currentProjectId, error });
     }
   };

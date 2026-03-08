@@ -7,6 +7,7 @@ interface NotificationStore {
 
   hydrate: (items: NotificationServerDTO[]) => void;
   upsertFromServer: (item: NotificationServerDTO) => void;
+  restoreEntries: (items: NotificationEntry[], detailNotificationId?: string | null) => void;
   removeFromServer: (id: string) => void;
   removeManyFromServer: (ids: string[]) => void;
   markReadLocal: (ids: string[]) => void;
@@ -93,6 +94,24 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
           ...state.notifications,
           [normalized.id]: normalized,
         },
+      };
+    }),
+
+  restoreEntries: (items, restoreDetailNotificationId = null) =>
+    set((state) => {
+      if (!items.length) return state;
+      const next = { ...state.notifications };
+      for (const item of items) {
+        next[item.id] = item;
+      }
+      const shouldRestoreDetail =
+        restoreDetailNotificationId !== null &&
+        items.some((item) => item.id === restoreDetailNotificationId);
+      return {
+        notifications: next,
+        detailNotificationId: shouldRestoreDetail
+          ? restoreDetailNotificationId
+          : state.detailNotificationId,
       };
     }),
 
