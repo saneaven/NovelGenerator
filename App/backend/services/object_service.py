@@ -23,6 +23,7 @@ from ..models.db_models import (
     LorebookEntry,
     Location,
     Manuscript,
+    ManuscriptImage,
     Organization,
     Outline,
     Project,
