@@ -189,7 +189,6 @@
 }
 
 .landing-title {
-  max-width: 720px;
   width: 100%;
   font-size: var(--font-size-5xl);
   font-weight: var(--font-weight-bold);
@@ -199,14 +198,12 @@
 }
 
 .landing-subtitle {
-      max-width: 720px;
   font-size: var(--font-size-xl);
   margin: 0 0 var(--spacing-xl);
   color: var(--color-text-secondary);
 }
 
 .landing-body {
-      max-width: 720px;
   font-size: var(--font-size-lg);
   margin: 0 0 var(--spacing-2xl);
   color: var(--color-text-secondary);
