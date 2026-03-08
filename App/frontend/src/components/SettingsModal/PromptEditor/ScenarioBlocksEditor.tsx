@@ -17,12 +17,13 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown, ChevronUp, Copy, Eye, Lightning, MoreHorizontal, Plus, Trash } from '../../icons';
+import { ChevronDown, ChevronUp, Clock, Copy, Eye, Lightning, MoreHorizontal, Plus, Trash } from '../../icons';
 import { IconButton } from '../../IconButton';
 import { DropdownMenu, DropdownItem, DropdownDivider } from '../../ui/DropdownMenu';
 import { BaseModal } from '../../BaseModal';
 import ToggleSwitch from '../../common/ToggleSwitch';
 import { NumberInput } from '../../ui/NumberInput';
+import HeaderOverflowMenu from './HeaderOverflowMenu';
 import TemplateEditor from './TemplateEditor';
 import PromptPreviewModal from './PromptPreviewModal';
 import { buildPreviewData } from './previewDataBuilder';
@@ -148,6 +149,8 @@ interface ScenarioBlocksEditorProps {
   onBlocksChange: (blocks: ScenarioBlock[]) => void;
   onToast?: (kind: ToastKind, message: string) => void;
   headerActionsRef?: React.RefObject<HTMLElement | null>;
+  onOpenVersionHistory?: () => void;
+  versionHistoryDisabled?: boolean;
 }
 
 const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
@@ -158,6 +161,8 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
   onBlocksChange,
   headerActionsRef,
   onToast,
+  onOpenVersionHistory,
+  versionHistoryDisabled = false,
 }) => {
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
 
@@ -334,22 +339,45 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
   };
 
   const toolbarActions = (
-    <>
-      <IconButton
-        icon={<Lightning size="sm" />}
-        title="Simulate"
-        size="sm"
-        onClick={() => setSimModalOpen(true)}
-      />
-      <DropdownMenu
-        trigger={<IconButton icon={<Plus size="sm" />} title="Add block" size="sm" variant="primary" />}
-        align="right"
-      >
-        <DropdownItem label="Static Block" onClick={() => addBlock('static')} />
-        <DropdownItem label="Range Mapping" onClick={() => addBlock('range')} />
-        <DropdownItem label="Memory Block" onClick={() => addBlock('memory')} disabled={hasMemory} />
-      </DropdownMenu>
-    </>
+    <HeaderOverflowMenu
+      items={[
+        ...(onOpenVersionHistory
+          ? [{
+              key: 'scenario-version-history',
+              icon: <Clock size="sm" />,
+              label: 'Version history',
+              onClick: onOpenVersionHistory,
+              disabled: versionHistoryDisabled,
+              dividerAfter: true,
+            }]
+          : []),
+        {
+          key: 'simulate-scenario',
+          icon: <Lightning size="sm" />,
+          label: 'Simulate',
+          onClick: () => setSimModalOpen(true),
+        },
+        {
+          key: 'add-static-block',
+          icon: <Plus size="sm" />,
+          label: 'Add static block',
+          onClick: () => addBlock('static'),
+        },
+        {
+          key: 'add-range-block',
+          icon: <Plus size="sm" />,
+          label: 'Add range mapping',
+          onClick: () => addBlock('range'),
+        },
+        {
+          key: 'add-memory-block',
+          icon: <Plus size="sm" />,
+          label: 'Add memory block',
+          onClick: () => addBlock('memory'),
+          disabled: hasMemory,
+        },
+      ]}
+    />
   );
 
   return (

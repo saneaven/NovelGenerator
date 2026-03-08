@@ -5,12 +5,12 @@ import { useSubAgentStore } from '../../../store/subAgentStore';
 import type { SubAgentAllowedInvocation } from '../../../types/subAgents';
 import type { TaskAIConfig } from '../../../store/settingsStore';
 import TaskConfigForm from '../TaskConfigForm';
-import { IconButton } from '../../IconButton';
 import ToggleSwitch from '../../common/ToggleSwitch';
 import { Trash, Sliders, Clock, Eye } from '../../icons';
 import { subAgentService } from '../../../api/subAgentService';
 import TemplateEditor from './TemplateEditor';
 import EditorPanelHeader from './EditorPanelHeader';
+import HeaderOverflowMenu from './HeaderOverflowMenu';
 import VersionHistoryModal from '../../Modal/VersionHistoryModal';
 import { scenarioService } from '../../../api/scenarioService';
 import { validateTemplate } from '../../../templateEngine/engine';
@@ -268,20 +268,23 @@ const SubAgentPromptEditors: React.FC<{
         </div>
 
         <div className="sub-agent-editor__section-actions">
-          <IconButton
-            icon={<Eye size="sm" />}
-            onClick={() => setShowPreview(true)}
-            title={t('settings.promptEditor.preview.title')}
-            size="sm"
-            disabled={!scenarioDraft || scenarioDraft.isLoading}
-          />
-
-          <IconButton
-            icon={<Clock size="sm" />}
-            onClick={() => setShowVersions(true)}
-            title={t('settings.promptEditor.versionHistory')}
-            size="sm"
-            disabled={!scenarioDraft || scenarioDraft.isLoading}
+          <HeaderOverflowMenu
+            items={[
+              {
+                key: 'preview-sub-agent-prompt',
+                icon: <Eye size="sm" />,
+                label: t('settings.promptEditor.preview.title'),
+                onClick: () => setShowPreview(true),
+                disabled: !scenarioDraft || scenarioDraft.isLoading,
+              },
+              {
+                key: 'sub-agent-prompt-versions',
+                icon: <Clock size="sm" />,
+                label: t('settings.promptEditor.versionHistory'),
+                onClick: () => setShowVersions(true),
+                disabled: !scenarioDraft || scenarioDraft.isLoading,
+              },
+            ]}
           />
         </div>
       </div>
@@ -459,12 +462,16 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
         title={draft.current.display_name}
         subtitle={toCallToolName(agentNameForPreview)}
         actions={
-          <IconButton
-            icon={<Trash size="sm" />}
-            onClick={handleDelete}
-            title={t('common.delete')}
-            size="sm"
-            variant="danger"
+          <HeaderOverflowMenu
+            items={[
+              {
+                key: 'delete-sub-agent',
+                icon: <Trash size="sm" />,
+                label: t('common.delete'),
+                onClick: handleDelete,
+                variant: 'danger',
+              },
+            ]}
           />
         }
         isSidebarCollapsed={isSidebarCollapsed}

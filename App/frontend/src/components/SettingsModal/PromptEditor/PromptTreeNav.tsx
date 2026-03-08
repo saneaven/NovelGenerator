@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PromptNode } from './promptTree';
-import { Expand, Collapse, Close } from '../../icons';
+import { ChevronRight, Close } from '../../icons';
 import './PromptTreeNav.css';
 
 interface PromptTreeNavProps {
@@ -56,8 +56,8 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         onClick={handleClick}
       >
         {isExpandable && (
-          <span className="tree-node__expand-icon">
-             {hasChildren ? (isExpanded ? <Collapse size="xs" /> : <Expand size="xs" />) : <span style={{ width: 12 }} />}
+          <span className={`tree-node__expand-icon ${isExpanded ? 'tree-node__expand-icon--expanded' : ''}`}>
+            {hasChildren ? <ChevronRight size="xs" /> : <span className="tree-node__expand-placeholder" />}
           </span>
         )}
 
@@ -68,19 +68,21 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         <span className="tree-node__label">{node.label}</span>
       </div>
 
-      {isExpandable && hasChildren && isExpanded && (
-        <div className="tree-node__children">
-          {node.children!.map((child) => (
-            <TreeNode
-              key={child.id}
-              node={child}
-              level={level + 1}
-              selectedNodeId={selectedNodeId}
-              expandedNodes={expandedNodes}
-              onNodeSelect={onNodeSelect}
-              onToggleExpand={onToggleExpand}
-            />
-          ))}
+      {isExpandable && hasChildren && (
+        <div className={`tree-node__children ${isExpanded ? 'tree-node__children--expanded' : ''}`}>
+          <div className="tree-node__children-inner">
+            {node.children!.map((child) => (
+              <TreeNode
+                key={child.id}
+                node={child}
+                level={level + 1}
+                selectedNodeId={selectedNodeId}
+                expandedNodes={expandedNodes}
+                onNodeSelect={onNodeSelect}
+                onToggleExpand={onToggleExpand}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

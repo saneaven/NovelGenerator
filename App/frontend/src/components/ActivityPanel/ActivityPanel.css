@@ -243,6 +243,7 @@
 
 .variable-control__input {
   flex-shrink: 0;
+  min-width: 0;
 }
 
 /* Toggle */
@@ -286,19 +287,13 @@
 
 /* Select */
 .variable-control__select {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  background-color: var(--color-surface-default);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--border-radius-sm);
-  cursor: pointer;
-  transition: border-color var(--transition-fast);
+  width: 140px;
 }
 
-.variable-control__select:focus {
-  outline: none;
-  border-color: var(--color-brand-primary);
+.variable-control__select .custom-select-trigger {
+  min-height: 34px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-sm);
 }
 
 /* Text/Number inputs */

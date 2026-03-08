@@ -20,6 +20,7 @@ import CreateSubAgentModal from './CreateSubAgentModal';
 import TemplateEditor from './TemplateEditor';
 import ScenarioBlocksEditor from './ScenarioBlocksEditor';
 import EditorPanelHeader from './EditorPanelHeader';
+import HeaderOverflowMenu from './HeaderOverflowMenu';
 import PromptPreviewModal from './PromptPreviewModal';
 import VersionHistoryModal from '../../Modal/VersionHistoryModal';
 import PresetSelector from '../PresetSelector';
@@ -32,9 +33,8 @@ import { useVariableStore } from '../../../store/variableStore';
 import { scenarioService } from '../../../api/scenarioService';
 import { fragmentService } from '../../../api/fragmentService';
 import { PROMPT_TREE, getFirstPromptNode, findPromptNode, type PromptNode } from './promptTree';
-import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
-import { Document, Clock, Trash, Eye } from '../../icons';
+import { Copy, Document, Eye, Trash } from '../../icons';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import './PromptsTemplatesPanel.css';
 import TemplateSyntaxHint from './TemplateSyntaxHint';
@@ -214,6 +214,26 @@ const CreateFragmentModal: React.FC<CreateFragmentModalProps> = ({ isOpen, folde
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
 
+  const resetForm = (nextFolderPath: string | null = null) => {
+    setName('');
+    setNewFolderPath(nextFolderPath || '');
+    setContent('');
+    setDescription('');
+    setIsCreating(false);
+    setError('');
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    resetForm(folderPath);
+  }, [folderPath, isOpen]);
+
+  const handleClose = () => {
+    if (isCreating) return;
+    resetForm();
+    onClose();
+  };
+
   const handleCreate = async () => {
     if (!name.trim()) {
       setError(t('settings.promptEditor.createFragment.nameRequired'));
@@ -239,6 +259,7 @@ const CreateFragmentModal: React.FC<CreateFragmentModalProps> = ({ isOpen, folde
       );
       const fullPath = result.folder_path ? `${result.folder_path}/${name.trim()}` : name.trim();
       onCreate(result.folder_id, name.trim(), fullPath);
+      resetForm();
       onClose();
     } catch (err: any) {
       if (err.message?.includes('409') || err.message?.includes('already exists')) {
@@ -254,13 +275,13 @@ const CreateFragmentModal: React.FC<CreateFragmentModalProps> = ({ isOpen, folde
   return (
     <BaseModal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
       title={t('settings.promptEditor.createFragment.title')}
       size="small"
       zIndexLayer={1}
       footer={
         <>
-          <TextButton variant="secondary" onClick={onClose}>
+          <TextButton variant="secondary" onClick={handleClose}>
             {t('common.cancel')}
           </TextButton>
           <TextButton variant="primary" onClick={handleCreate} disabled={isCreating || !name.trim()} loading={isCreating}>
@@ -1166,6 +1187,11 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     setShowCreateModal(true);
   };
 
+  const handleCloseCreateFragmentModal = () => {
+    setShowCreateModal(false);
+    setCreateFolderPath(null);
+  };
+
   const handleFragmentCreated = (folderId: string | null, fragmentName: string, fullPath: string) => {
     setRefreshTrigger((prev) => prev + 1);
     setSelectedFragment({ folderId, fragmentName, fullPath });
@@ -1175,6 +1201,18 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   const handleFragmentDeleted = () => {
     setSelectedFragment(null);
     setRefreshTrigger((prev) => prev + 1);
+    loadFragmentContents().catch(() => undefined);
+  };
+
+  const handleFolderDeleted = (deletedFolderPath: string) => {
+    setFragmentDrafts((prev) => Object.fromEntries(
+      Object.entries(prev).filter(([, draft]) => !draft.fullPath.startsWith(`${deletedFolderPath}/`))
+    ));
+    setSelectedFragment((prev) => {
+      if (!prev) return null;
+      return prev.fullPath.startsWith(`${deletedFolderPath}/`) ? null : prev;
+    });
+    setShowVersionHistory(false);
     loadFragmentContents().catch(() => undefined);
   };
 
@@ -1222,7 +1260,9 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       const parentLabel = parentNode?.label || '';
       return `${parentLabel} — ${selectedPrompt.label}`;
     }
+    if (subTab === 'prompts') return t('settings.promptEditor.prompts');
     if (subTab === 'fragments' && selectedPath) return selectedPath;
+    if (subTab === 'fragments') return t('settings.promptEditor.fragments');
     return '';
   };
 
@@ -1241,7 +1281,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     subTab === 'variables' ||
     subTab === 'subAgents';
 
-  const canShowHeader = subTab !== 'variables' && subTab !== 'subAgents';
+  const showEditorHeader = subTab === 'prompts' || subTab === 'fragments';
 
   const currentEditorContentLength = subTab === 'prompts'
     ? (() => {
@@ -1442,6 +1482,78 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     setShowPresetModal(true);
   };
 
+  const editorHeaderMeta = (currentScenarioDraft || currentFragmentDraft) ? (
+    <>
+      <span>{t('settings.promptEditor.chars', { count: currentEditorContentLength || 0 })}</span>
+      {currentEditorDirty && <span className="editor-wrapper__unsaved"> • {t('settings.promptEditor.unsavedChanges')}</span>}
+    </>
+  ) : undefined;
+
+  const isBlocksPromptView = subTab === 'prompts' && selectedPrompt?.viewKind === 'blocks';
+  const editorHeaderActionsList: React.ReactNode[] = [];
+  const editorHeaderMenuItems = [];
+
+  if (subTab === 'prompts' && selectedPrompt) {
+    editorHeaderActionsList.push(
+      <TemplateSyntaxHint key="syntax-hint" selectedNode={selectedPrompt} />
+    );
+  }
+
+  if (!isBlocksPromptView && subTab === 'prompts' && selectedPrompt?.viewKind === 'system' && currentScenarioDraft) {
+    editorHeaderMenuItems.push({
+      key: 'system-preview',
+      icon: <Eye size="sm" />,
+      label: t('settings.promptEditor.preview.title'),
+      onClick: () => setShowSystemPreview(true),
+    });
+  }
+
+  if (subTab === 'fragments' && selectedPath) {
+    editorHeaderMenuItems.push({
+      key: 'copy-fragment-path',
+      icon: <Copy size="sm" />,
+      label: t('settings.promptEditor.copyPathForTemplates'),
+      onClick: handleCopyFragmentPath,
+    });
+  }
+
+  if (!isBlocksPromptView && currentVersionHistoryProps) {
+    editorHeaderMenuItems.push({
+      key: 'version-history',
+      label: t('settings.promptEditor.versionHistory'),
+      onClick: () => setShowVersionHistory(true),
+      disabled: currentFragmentDraft?.isDeleting,
+    });
+  }
+
+  if (isBlocksPromptView) {
+    editorHeaderActionsList.push(
+      <div key="blocks-actions" ref={blocksHeaderActionsRef} className="editor-wrapper__blocks-actions" />
+    );
+  }
+
+  if (subTab === 'fragments' && currentFragmentDraft) {
+    editorHeaderMenuItems.push({
+      key: 'delete-fragment',
+      icon: <Trash size="sm" />,
+      label: t('settings.promptEditor.deleteFragment'),
+      onClick: handleDeleteSelectedFragment,
+      disabled: currentFragmentDraft.isDeleting,
+      variant: 'danger' as const,
+    });
+  }
+
+  if (editorHeaderMenuItems.length > 0) {
+    editorHeaderActionsList.push(
+      <HeaderOverflowMenu
+        key="editor-overflow-menu"
+        items={editorHeaderMenuItems}
+      />
+    );
+  }
+
+  const editorHeaderActions = editorHeaderActionsList.length > 0 ? <>{editorHeaderActionsList}</> : undefined;
+
   return (
     <div className="prompts-templates-panel">
       <div className="prompts-layout__content">
@@ -1450,66 +1562,19 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
           <main className="panel-editor__main">
             <div className="editor-wrapper">
-              {canShowHeader && hasSelection && (
+              {showEditorHeader && (
                 <EditorPanelHeader
                   title={getEditorTitle()}
                   subtitle={
-                    subTab === 'fragments'
+                    subTab === 'fragments' && currentFragmentDraft
                       ? (currentFragmentDraft?.description || '')
-                      : (getEditorDescription() || undefined)
+                      : (subTab === 'prompts' && selectedPrompt ? (getEditorDescription() || undefined) : undefined)
                   }
                   editableSubtitle={subTab === 'fragments' && !!currentFragmentDraft}
-                  onSubtitleChange={handleDescriptionChange}
-                  subtitlePlaceholder={t('settings.promptEditor.addDescription')}
-                  onCopyTitle={subTab === 'fragments' && selectedPath ? handleCopyFragmentPath : undefined}
-                  meta={
-                    (currentScenarioDraft || currentFragmentDraft) ? (
-                      <>
-                        <span>{t('settings.promptEditor.chars', { count: currentEditorContentLength || 0 })}</span>
-                        {currentEditorDirty && <span className="editor-wrapper__unsaved"> • {t('settings.promptEditor.unsavedChanges')}</span>}
-                      </>
-                    ) : undefined
-                  }
-                  actions={
-                    <>
-                      <TemplateSyntaxHint selectedNode={subTab === 'prompts' ? selectedPrompt : null} />
-
-                      {subTab === 'prompts' && selectedPrompt?.viewKind === 'system' && currentScenarioDraft && (
-                        <IconButton
-                          icon={<Eye size="sm" />}
-                          onClick={() => setShowSystemPreview(true)}
-                          title="Preview system template"
-                          size="sm"
-                          variant="ghost"
-                        />
-                      )}
-
-                      {currentVersionHistoryProps && (
-                        <IconButton
-                          icon={<Clock size="sm" />}
-                          onClick={() => setShowVersionHistory(true)}
-                          title={t('settings.promptEditor.versionHistory')}
-                          size="sm"
-                          disabled={currentFragmentDraft?.isDeleting}
-                        />
-                      )}
-
-                      {subTab === 'prompts' && selectedPrompt?.viewKind === 'blocks' && (
-                        <div ref={blocksHeaderActionsRef} className="editor-wrapper__blocks-actions" />
-                      )}
-
-                      {subTab === 'fragments' && currentFragmentDraft && (
-                        <IconButton
-                          icon={<Trash size="sm" />}
-                          onClick={handleDeleteSelectedFragment}
-                          title={t('settings.promptEditor.deleteFragment')}
-                          size="sm"
-                          className="editor-wrapper__delete-btn"
-                          disabled={currentFragmentDraft.isDeleting}
-                        />
-                      )}
-                    </>
-                  }
+                  onSubtitleChange={currentFragmentDraft ? handleDescriptionChange : undefined}
+                  subtitlePlaceholder={currentFragmentDraft ? t('settings.promptEditor.addDescription') : undefined}
+                  meta={editorHeaderMeta}
+                  actions={editorHeaderActions}
                   isSidebarCollapsed={isSidebarCollapsed}
                   onToggleSidebar={toggleSidebar}
                 />
@@ -1551,6 +1616,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                           systemTemplate={currentScenarioDraft.scenario.system_template || ''}
                           blocks={currentScenarioDraft.scenario.blocks || []}
                           headerActionsRef={blocksHeaderActionsRef}
+                          onOpenVersionHistory={currentVersionHistoryProps ? () => setShowVersionHistory(true) : undefined}
                           onBlocksChange={(blocks) => {
                             const taskType = selectedPrompt.taskType;
                             const taskSubtype = selectedPrompt.taskSubtype;
@@ -1779,6 +1845,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                 selectedPath={selectedPath}
                 onFragmentSelect={handleFragmentSelect}
                 onCreateFragment={handleCreateFragment}
+                onFolderDeleted={handleFolderDeleted}
                 refreshTrigger={refreshTrigger}
                 onClose={() => setIsSidebarCollapsed(true)}
               />
@@ -1812,7 +1879,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       <CreateFragmentModal
         isOpen={showCreateModal}
         folderPath={createFolderPath}
-        onClose={() => setShowCreateModal(false)}
+        onClose={handleCloseCreateFragmentModal}
         onCreate={handleFragmentCreated}
       />
 

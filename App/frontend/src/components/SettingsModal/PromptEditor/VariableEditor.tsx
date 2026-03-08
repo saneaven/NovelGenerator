@@ -7,6 +7,7 @@ import { Trash, Copy, Plus, Close } from '../../icons';
 import { IconButton } from '../../IconButton';
 import { CustomSelect } from '../../ui/CustomSelect';
 import EditorPanelHeader from './EditorPanelHeader';
+import HeaderOverflowMenu from './HeaderOverflowMenu';
 import { useSettingsToast } from '../SettingsToastContext';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import './VariableEditor.css';
@@ -268,12 +269,16 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
           </span>
         }
         actions={
-          <IconButton
-            icon={<Trash size="sm" />}
-            onClick={handleDelete}
-            title={t('common.delete')}
-            size="sm"
-            variant="danger"
+          <HeaderOverflowMenu
+            items={[
+              {
+                key: 'delete-variable',
+                icon: <Trash size="sm" />,
+                label: t('common.delete'),
+                onClick: handleDelete,
+                variant: 'danger',
+              },
+            ]}
           />
         }
         isSidebarCollapsed={isSidebarCollapsed}

@@ -119,15 +119,6 @@
     color: var(--color-warning);
 }
 
-/* Delete button */
-.editor-wrapper__delete-btn {
-    color: var(--color-text-tertiary);
-}
-
-.editor-wrapper__delete-btn:hover:not(:disabled) {
-    color: var(--color-error);
-}
-
 .editor-wrapper__blocks-actions {
     display: flex;
     align-items: center;

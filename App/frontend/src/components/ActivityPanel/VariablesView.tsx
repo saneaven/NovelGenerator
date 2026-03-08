@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useVariableStore } from '../../store/variableStore';
 import type { PromptVariable } from '../../types/variables';
+import { CustomSelect } from '../ui/CustomSelect';
 
 // Debounce hook for text/number inputs
 function useDebounce<T>(value: T, delay: number): T {
@@ -53,8 +54,8 @@ const VariableControl: React.FC<VariableControlProps> = ({ variable, onValueChan
     onValueChange(variable.id, !variable.value);
   };
 
-  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    onValueChange(variable.id, e.target.value);
+  const handleSelectChange = (value: string) => {
+    onValueChange(variable.id, value);
   };
 
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,17 +86,16 @@ const VariableControl: React.FC<VariableControlProps> = ({ variable, onValueChan
         )}
 
         {variable.var_type === 'select' && variable.select_options && (
-          <select
-            className="variable-control__select"
-            value={variable.value as string || ''}
-            onChange={handleSelectChange}
-          >
-            {variable.select_options.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+          <div className="variable-control__select">
+            <CustomSelect
+              value={typeof variable.value === 'string' ? variable.value : ''}
+              onChange={handleSelectChange}
+              options={variable.select_options.map((option) => ({
+                value: option,
+                label: option,
+              }))}
+            />
+          </div>
         )}
 
         {variable.var_type === 'string' && (
