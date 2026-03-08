@@ -36,7 +36,7 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
   }, [operation.storySubtype, snapshot.id, fetchStoryObjectAssets, projectId]);
 
   const mainAsset = operation.storySubtype && snapshot.id
-    ? getMainAsset(operation.storySubtype, snapshot.id)
+    ? getMainAsset(projectId, operation.storySubtype, snapshot.id)
     : null;
   const imageUrl = getAssetUrl(mainAsset);
 

@@ -41,6 +41,7 @@ from ..services.deletion_service import (
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.rag_index_service import index_object
 from ..utils.object_type_aliases import externalize_object_type, normalize_object_type
+from .asset_change_events import queue_scene_assets_change
 from .object_change_events import queue_object_change
 from .credential_service import CredentialServiceError, credential_service
 from .settings_service import settings_service
@@ -763,6 +764,7 @@ class ObjectService:
 
         version_before = None if create_new_version else snapshot_object_version_row(_latest_version(db, t, object_id))
         manuscript_images_before = None
+        manuscript_images_after = None
         if t == "manuscript":
             manuscript_images_before = snapshot_rows(
                 db.query(ManuscriptImage).filter(ManuscriptImage.manuscript_id == object_id).all(),
@@ -802,6 +804,25 @@ class ObjectService:
         if obj is None:
             raise ValueError(f"{t} not found after update")
 
+        if t == "manuscript":
+            manuscript_images_after = snapshot_rows(
+                db.query(ManuscriptImage).filter(ManuscriptImage.manuscript_id == object_id).all(),
+                snapshot_manuscript_image_row,
+            )
+            if manuscript_images_before != manuscript_images_after:
+                queue_scene_assets_change(
+                    db,
+                    project_id=project_id,
+                    manuscript_id=None,
+                    action="updated",
+                )
+                queue_scene_assets_change(
+                    db,
+                    project_id=project_id,
+                    manuscript_id=object_id,
+                    action="updated",
+                )
+
         _queue_rag_index(
             db,
             user_id=created_by,
@@ -826,10 +847,6 @@ class ObjectService:
                 )
             ]
             if t == "manuscript":
-                manuscript_images_after = snapshot_rows(
-                    db.query(ManuscriptImage).filter(ManuscriptImage.manuscript_id == object_id).all(),
-                    snapshot_manuscript_image_row,
-                )
                 deltas.append(build_manuscript_images_delta(manuscript_images_before, manuscript_images_after))
 
             apply_project_usage_deltas(

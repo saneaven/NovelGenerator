@@ -1,7 +1,7 @@
 import type { ThreadStatus } from '../types/thread';
 
 export function isLiveThreadStatus(status: ThreadStatus | null | undefined): boolean {
-  return status === 'running' || status === 'processing';
+  return status === 'running';
 }
 
 export function isNonLiveThreadStatus(status: ThreadStatus | null | undefined): boolean {

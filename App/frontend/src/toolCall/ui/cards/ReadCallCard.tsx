@@ -43,7 +43,7 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
   }, [canLoadStoryAsset, operation.storySubtype, snapshot.id, projectId, fetchStoryObjectAssets]);
 
   const mainAsset = operation.storySubtype && snapshot.id
-    ? getMainAsset(operation.storySubtype, snapshot.id)
+    ? getMainAsset(projectId, operation.storySubtype, snapshot.id)
     : null;
   const imageUrl = getAssetUrl(mainAsset);
 

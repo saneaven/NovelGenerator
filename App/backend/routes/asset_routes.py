@@ -36,6 +36,11 @@ from ..schemas.assets import (
     RebuildManuscriptImagesResponse,
     StyledPrompt
 )
+from ..services.asset_change_events import (
+    queue_project_assets_change,
+    queue_scene_assets_change,
+    queue_story_object_assets_change,
+)
 from ..services.storage_service import storage_service
 from ..services.deletion_service import delete_assets_with_files
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
@@ -104,6 +109,48 @@ def _queue_story_object_updates(
             object_type=object_type,
             object_id=object_id,
             action="updated",
+        )
+
+
+def _queue_story_object_asset_updates(
+    db: Session,
+    *,
+    project_id: UUID,
+    refs: list[tuple[str, UUID]],
+    action: str = "updated",
+) -> None:
+    for object_type, object_id in set(refs):
+        queue_story_object_assets_change(
+            db,
+            project_id=project_id,
+            object_type=object_type,
+            object_id=object_id,
+            action=action,
+        )
+
+
+def _queue_scene_asset_updates(
+    db: Session,
+    *,
+    project_id: UUID,
+    manuscript_ids: list[UUID | None],
+    action: str = "updated",
+) -> None:
+    if not manuscript_ids:
+        return
+
+    queue_scene_assets_change(
+        db,
+        project_id=project_id,
+        manuscript_id=None,
+        action=action,
+    )
+    for manuscript_id in {value for value in manuscript_ids if isinstance(value, UUID)}:
+        queue_scene_assets_change(
+            db,
+            project_id=project_id,
+            manuscript_id=manuscript_id,
+            action=action,
         )
 
 
@@ -448,6 +495,22 @@ async def upload_asset(
                 object_id=object_id,
                 action="updated",
             )
+            queue_story_object_assets_change(
+                db,
+                project_id=project_id,
+                object_type=normalized_object_type,
+                object_id=object_id,
+                action="created",
+            )
+
+        queue_project_assets_change(db, project_id=project_id, action="created")
+        if manuscript_id is not None:
+            _queue_scene_asset_updates(
+                db,
+                project_id=project_id,
+                manuscript_ids=[manuscript_id],
+                action="created",
+            )
 
         db.flush()
         apply_project_usage_delta(
@@ -508,11 +571,26 @@ async def update_asset(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
+    affected_refs = _collect_story_object_refs_for_asset_ids(db, asset_ids=[asset_id])
+    scene_manuscript_ids = [asset.manuscript_id] if asset.asset_type == "scene" else []
     before = snapshot_asset_row(asset)
     if request.name is not None:
         asset.name = request.name
 
     asset.updated_at = datetime.utcnow()
+    queue_project_assets_change(db, project_id=project_id, action="updated")
+    _queue_story_object_asset_updates(
+        db,
+        project_id=project_id,
+        refs=affected_refs,
+        action="updated",
+    )
+    _queue_scene_asset_updates(
+        db,
+        project_id=project_id,
+        manuscript_ids=scene_manuscript_ids,
+        action="updated",
+    )
     try:
         apply_project_usage_delta(
             db,
@@ -547,6 +625,7 @@ async def delete_asset(
         raise HTTPException(status_code=404, detail="Asset not found")
 
     affected_refs = _collect_story_object_refs_for_asset_ids(db, asset_ids=[asset_id])
+    scene_manuscript_ids = [asset.manuscript_id] if asset.asset_type == "scene" else []
     deleted_asset_before = snapshot_asset_row(asset)
     scrubbed_before = snapshot_rows(
         db.query(Asset)
@@ -562,6 +641,19 @@ async def delete_asset(
     # Delete from storage + DB, and scrub stale generation_reference_images pointers.
     delete_assets_with_files(db, assets=[asset], scrub_references_in_project_id=project_id)
     _queue_story_object_updates(db, project_id=project_id, refs=affected_refs)
+    _queue_story_object_asset_updates(
+        db,
+        project_id=project_id,
+        refs=affected_refs,
+        action="deleted",
+    )
+    _queue_scene_asset_updates(
+        db,
+        project_id=project_id,
+        manuscript_ids=scene_manuscript_ids,
+        action="deleted",
+    )
+    queue_project_assets_change(db, project_id=project_id, action="deleted")
     scrubbed_after = snapshot_rows(
         db.query(Asset)
         .filter(
@@ -912,6 +1004,21 @@ async def execute_image_cleanup(
         deleted.append(str(asset.id))
 
     _queue_story_object_updates(db, project_id=project_id, refs=affected_story_object_refs)
+    _queue_story_object_asset_updates(
+        db,
+        project_id=project_id,
+        refs=affected_story_object_refs,
+        action="deleted",
+    )
+    scene_manuscript_ids = [asset.manuscript_id for asset in to_delete if asset.asset_type == "scene"]
+    _queue_scene_asset_updates(
+        db,
+        project_id=project_id,
+        manuscript_ids=scene_manuscript_ids,
+        action="deleted",
+    )
+    if deleted:
+        queue_project_assets_change(db, project_id=project_id, action="deleted")
     scrubbed_after = snapshot_rows(
         db.query(Asset)
         .filter(
@@ -1032,6 +1139,13 @@ async def rebuild_manuscript_images_index(
         delta=build_manuscript_images_delta(manuscript_images_before, manuscript_images_after),
         enforce_quota=False,
     )
+    if manuscripts:
+        _queue_scene_asset_updates(
+            db,
+            project_id=project_id,
+            manuscript_ids=[cast(UUID, manuscript.id) for manuscript in manuscripts],
+            action="updated",
+        )
     db.commit()
 
     return RebuildManuscriptImagesResponse(
@@ -1055,7 +1169,7 @@ async def get_story_object_assets(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get all assets linked to a story object"""
+    """Get all assets linked to a story object, newest first."""
     object_type = normalize_object_type(object_type)
     require_owned_object(
         db,
@@ -1073,7 +1187,7 @@ async def get_story_object_assets(
             StoryObjectAsset.object_id == object_id,
             Asset.project_id == project_id,
         )
-        .order_by(StoryObjectAsset.display_order)
+        .order_by(Asset.created_at.desc(), StoryObjectAsset.created_at.desc())
         .all()
     )
 
@@ -1141,6 +1255,13 @@ async def set_main_asset(
 
     link.is_main = True
     queue_object_change(
+        db,
+        project_id=project_id,
+        object_type=object_type,
+        object_id=object_id,
+        action="updated",
+    )
+    queue_story_object_assets_change(
         db,
         project_id=project_id,
         object_type=object_type,

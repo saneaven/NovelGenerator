@@ -88,7 +88,7 @@ interface AgentContextTriggerProps {
 interface AgentInputFormProps {
   projectId: string;
   hasSelectedAgent: boolean;
-  isLoading: boolean;
+  isMessageRunActive: boolean;
   isSendBlocked: boolean;
   sendBlockedReason?: string | null;
   onSubmit: (e: React.FormEvent, input: string) => Promise<void>;
@@ -106,8 +106,9 @@ function summarizeToolCallBlocking(
   messageIds: string[],
   toolCallsByMessageId: Record<string, ThreadToolCall[] | undefined>,
   latestRunId?: string | null,
+  runtimeUnresolvedCount: number = 0,
 ): ToolCallBlockingSummary {
-  let count = 0;
+  let localCount = 0;
   let firstMessageId: string | undefined;
 
   for (const messageId of messageIds) {
@@ -116,13 +117,14 @@ function summarizeToolCallBlocking(
       // Only block sending for unresolved tool calls from the latest run.
       if (latestRunId && toolCall.runId && toolCall.runId !== latestRunId) continue;
       if (!isBlockingToolCallStatus(toolCall.status)) continue;
-      count += 1;
+      localCount += 1;
       if (!firstMessageId) {
         firstMessageId = messageId;
       }
     }
   }
 
+  const count = runtimeUnresolvedCount > 0 ? runtimeUnresolvedCount : localCount;
   return { count, firstMessageId };
 }
 
@@ -204,7 +206,7 @@ const AgentContextTrigger: React.FC<AgentContextTriggerProps> = React.memo(({
 const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
   projectId,
   hasSelectedAgent,
-  isLoading,
+  isMessageRunActive,
   isSendBlocked,
   sendBlockedReason,
   onSubmit,
@@ -215,23 +217,23 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
   const setInput = useAgentUIStore((state) => state.setInput);
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
-    if (isLoading || isSendBlocked || !hasSelectedAgent) {
+    if (isMessageRunActive || isSendBlocked || !hasSelectedAgent) {
       e.preventDefault();
       return;
     }
     void onSubmit(e, input);
-  }, [isLoading, isSendBlocked, hasSelectedAgent, onSubmit, input]);
+  }, [isMessageRunActive, isSendBlocked, hasSelectedAgent, onSubmit, input]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key !== 'Enter' || e.shiftKey) return;
     e.preventDefault();
-    if (isLoading || isSendBlocked || !hasSelectedAgent) return;
+    if (isMessageRunActive || isSendBlocked || !hasSelectedAgent) return;
     void onSubmit(e as unknown as React.FormEvent, input);
-  }, [isLoading, isSendBlocked, hasSelectedAgent, onSubmit, input]);
+  }, [isMessageRunActive, isSendBlocked, hasSelectedAgent, onSubmit, input]);
 
   return (
     <form onSubmit={handleSubmit} className="agent-form">
-      {!isLoading && isSendBlocked && sendBlockedReason && (
+      {!isMessageRunActive && isSendBlocked && sendBlockedReason && (
         <div className="agent-send-blocker-hint" role="status">
           {sendBlockedReason}
         </div>
@@ -245,7 +247,7 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
           className="agent-input"
           onKeyDown={handleKeyDown}
         />
-        {isLoading ? (
+        {isMessageRunActive ? (
           <IconButton
             key="stop"
             icon={<Stop size="md" />}
@@ -343,11 +345,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         .map((obj) => obj.id),
     )
   ), [unifiedObjects, projectId]);
-
-  const isLoading = useMemo(() => {
-    const status = thread?.status;
-    return status === 'running' || status === 'processing';
-  }, [thread?.status]);
 
   const focusedManuscriptId = useMemo(() => {
     if (surface !== 'novel-editor') return null;
@@ -479,14 +476,25 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     return null;
   }, [orderedMessages]);
 
+  const hasStreamingMessage = liveView?.hasStreamingMessage ?? false;
+  const streamingContentLength = liveView?.contentParts?.reduce((sum, p) => sum + p.text.length, 0) ?? 0;
+  const runtimeUnresolvedToolCallCount = Number(thread?.unresolvedToolCallCount ?? 0);
+
+  const isMessageRunActive = useMemo(() => (
+    thread?.status === 'running'
+    || hasStreamingMessage
+    || liveView?.noticeKind === 'preexisting_live_run'
+  ), [thread?.status, hasStreamingMessage, liveView?.noticeKind]);
+
   const sendBlockingState: SendBlockingState = useMemo(() => {
     const missingAgent = !selectedAgentId;
     const unresolvedToolCalls = summarizeToolCallBlocking(
       orderedMessages.map((message) => message.id),
       toolCallsByMessageId,
       thread?.latestRunId ?? null,
+      runtimeUnresolvedToolCallCount,
     );
-    const running = isLoading;
+    const running = isMessageRunActive;
 
     let reason: SendBlockReason = null;
     if (missingAgent) {
@@ -502,7 +510,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       reason,
       unresolvedToolCalls,
     };
-  }, [selectedAgentId, orderedMessages, toolCallsByMessageId, isLoading, thread?.latestRunId]);
+  }, [
+    selectedAgentId,
+    orderedMessages,
+    toolCallsByMessageId,
+    isMessageRunActive,
+    thread?.latestRunId,
+    runtimeUnresolvedToolCallCount,
+  ]);
 
   const sendBlockedReason = useMemo(() => {
     if (!sendBlockingState.blocked || !sendBlockingState.reason) return null;
@@ -513,13 +528,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       return `Resolve ${sendBlockingState.unresolvedToolCalls.count} pending operation(s) before sending.`;
     }
     if (sendBlockingState.reason === 'running') {
-      return 'The agent is still running or applying operations.';
+      return 'The agent is still generating a response.';
     }
     return 'Resolve pending operations before sending.';
   }, [sendBlockingState]);
-
-  const hasStreamingMessage = liveView?.hasStreamingMessage ?? false;
-  const streamingContentLength = liveView?.contentParts?.reduce((sum, p) => sum + p.text.length, 0) ?? 0;
 
   const latestRunError = useMemo(() => {
     if (thread?.status !== 'error') return undefined;
@@ -614,8 +626,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     const threshold = 100;
     const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
     isUserNearBottomRef.current = isNearBottom;
-    setShowScrollButton(!isNearBottom && isLoading);
-  }, [isLoading]);
+    setShowScrollButton(!isNearBottom && isMessageRunActive);
+  }, [isMessageRunActive]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -630,10 +642,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     if (isUserNearBottomRef.current) {
       container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
     }
-    if (!isLoading) {
+    if (!isMessageRunActive) {
       setShowScrollButton(false);
     }
-  }, [displayItems.length, hasStreamingMessage, isLoading, streamingContentLength]);
+  }, [displayItems.length, hasStreamingMessage, isMessageRunActive, streamingContentLength]);
 
   const formatTimestamp = useCallback((input: Date | string | number | undefined | null) => {
     if (!input) return '';
@@ -680,7 +692,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   }, [threadId, runMode, surface, selectedContextIds, focusedManuscriptId, setInput, projectId]);
 
   const handleSubmitFromInput = useCallback(async (e: React.FormEvent, inputText: string) => {
-    if (isLoading) {
+    if (isMessageRunActive) {
       e.preventDefault();
       return;
     }
@@ -694,7 +706,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     }
     await handleSubmit(e, inputText);
   }, [
-    isLoading,
+    isMessageRunActive,
     sendBlockingState.blocked,
     scrollToFirstBlockedMessage,
     sendBlockedReason,
@@ -1136,14 +1148,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
           );
         })}
 
-        {isLoading && !hasStreamingMessage && liveView?.noticeKind === 'preexisting_live_run' && (
+        {isMessageRunActive && !hasStreamingMessage && liveView?.noticeKind === 'preexisting_live_run' && (
           <PreexistingLiveRunNotice />
         )}
 
-        {isLoading
+        {isMessageRunActive
           && !hasStreamingMessage
           && liveView?.noticeKind !== 'preexisting_live_run'
-          && (thread?.status === 'running' || thread?.status === 'processing') && (
+          && thread?.status === 'running' && (
           <div className="typing-indicator">
             <div className="loading-track">
               <div className="loading-bar" />
@@ -1214,7 +1226,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         <AgentInputForm
           projectId={projectId}
           hasSelectedAgent={Boolean(selectedAgentId && threadId)}
-          isLoading={isLoading}
+          isMessageRunActive={isMessageRunActive}
           isSendBlocked={sendBlockingState.blocked}
           sendBlockedReason={sendBlockedReason}
           onSubmit={handleSubmitFromInput}

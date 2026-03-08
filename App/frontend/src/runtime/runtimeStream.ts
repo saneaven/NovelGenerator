@@ -3,6 +3,7 @@ import { assetService } from '../api/assetService';
 import { notificationService } from '../api/notificationService';
 import { EventRouter } from './eventRouter';
 import { useImageRunStore } from '../imageRun';
+import { useAssetStore } from '../store/assetStore';
 import { useNotificationStore } from '../store/notificationStore';
 import { hydrateProjectRuntimeSummary, reconcilePreexistingLiveThreads } from './projectRuntimeState';
 
@@ -73,6 +74,7 @@ class ProjectRuntimeConnection {
             ]);
             useNotificationStore.getState().hydrate(notificationResponse.items);
             useImageRunStore.getState().upsertRuns(imageRuns);
+            await useAssetStore.getState().refreshLoadedCaches(this.projectId);
             await reconcilePreexistingLiveThreads(this.projectId, runtimeRows);
           } catch (error) {
             console.warn('Failed to rehydrate runtime state after SSE reconnect', {

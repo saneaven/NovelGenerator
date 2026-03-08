@@ -42,6 +42,11 @@ from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..services.settings_service import settings_service
 from ..services.sidecar_client import SidecarClient, SidecarConversionError, SidecarUnavailableError, sidecar_client
 from ..services.storage_service import storage_service
+from .asset_change_events import (
+    queue_project_assets_change,
+    queue_scene_assets_change,
+    queue_story_object_assets_change,
+)
 from ..services.storage_usage_service import (
     StorageQuotaExceededError,
     apply_project_usage_delta,
@@ -1174,6 +1179,14 @@ class ImageRunService:
                 object_id=object_id,
                 action="updated",
             )
+            queue_project_assets_change(db, project_id=row.project_id, action="created")
+            queue_story_object_assets_change(
+                db,
+                project_id=row.project_id,
+                object_type=object_type,
+                object_id=object_id,
+                action="created",
+            )
             row.final_asset_id = asset.id
             return
 
@@ -1181,6 +1194,19 @@ class ImageRunService:
             manuscript_id = _parse_uuid(target.get("manuscript_id"), field_name="manuscript_id")
             asset.manuscript_id = manuscript_id
             asset.preview_image_run_id = None
+            queue_project_assets_change(db, project_id=row.project_id, action="created")
+            queue_scene_assets_change(
+                db,
+                project_id=row.project_id,
+                manuscript_id=None,
+                action="created",
+            )
+            queue_scene_assets_change(
+                db,
+                project_id=row.project_id,
+                manuscript_id=manuscript_id,
+                action="created",
+            )
             row.final_asset_id = asset.id
             return
 
@@ -1214,6 +1240,14 @@ class ImageRunService:
                 object_type=object_type,
                 object_id=object_id,
                 action="updated",
+            )
+            queue_project_assets_change(db, project_id=row.project_id, action="created")
+            queue_story_object_assets_change(
+                db,
+                project_id=row.project_id,
+                object_type=object_type,
+                object_id=object_id,
+                action="created",
             )
             row.final_asset_id = asset.id
             return
@@ -1260,6 +1294,19 @@ class ImageRunService:
         asset.preview_image_run_id = None
         asset.manuscript_id = manuscript_id
         asset.updated_at = datetime.utcnow()
+        queue_project_assets_change(db, project_id=row.project_id, action="created")
+        queue_scene_assets_change(
+            db,
+            project_id=row.project_id,
+            manuscript_id=None,
+            action="created",
+        )
+        queue_scene_assets_change(
+            db,
+            project_id=row.project_id,
+            manuscript_id=manuscript_id,
+            action="created",
+        )
         row.final_asset_id = asset.id
 
     async def decide_run(self, *, project_id: UUID, user_id: UUID, image_run_id: UUID, decision: str) -> ImageRunModel:

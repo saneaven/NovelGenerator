@@ -38,6 +38,7 @@ from .database import get_db
 from .models.db_models import User
 from .services.credential_service import CredentialServiceError, credential_service
 from .services.embedding_models_service import list_embedding_models
+from .services.asset_change_events import register_asset_change_event_hooks
 from .services.object_change_events import register_object_change_event_hooks
 
 # Ensure correct Content-Type for AVIF assets when served via StaticFiles.
@@ -105,6 +106,7 @@ app = FastAPI(
 
 # Register SQLAlchemy session hooks for object:changed SSE batching.
 register_object_change_event_hooks()
+register_asset_change_event_hooks()
 
 # Include all database API routers
 app.include_router(auth_router)

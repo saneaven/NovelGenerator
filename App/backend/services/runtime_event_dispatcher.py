@@ -5,8 +5,6 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from ..database import SessionLocal
-from .notification_service import serialize_notification, sync_journey_notification_from_runtime_status
 from .run_event_bus import InMemoryRunEventBus, run_event_bus
 
 logger = logging.getLogger(__name__)
@@ -100,8 +98,12 @@ class RuntimeEventDispatcher:
         status: str,
         error: Any,
     ) -> dict[str, Any] | None:
-        db = SessionLocal()
+        db = None
         try:
+            from ..database import SessionLocal
+            from .notification_service import serialize_notification, sync_journey_notification_from_runtime_status
+
+            db = SessionLocal()
             row = sync_journey_notification_from_runtime_status(
                 db,
                 thread_id=thread_id,
@@ -116,11 +118,13 @@ class RuntimeEventDispatcher:
             db.refresh(row)
             return serialize_notification(row)
         except Exception:
-            db.rollback()
+            if db is not None:
+                db.rollback()
             logger.exception("Failed to sync journey notification from run:status event")
             return None
         finally:
-            db.close()
+            if db is not None:
+                db.close()
 
 
 runtime_event_dispatcher = RuntimeEventDispatcher(run_event_bus)

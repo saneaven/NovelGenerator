@@ -476,7 +476,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                     const isFullExpanded = expandedCardId === item.id;
                     const { effectiveLanguage } = getEffectiveLanguage(item);
                     const itemData = getDataForLanguage(item, effectiveLanguage);
-                    const mainAsset = getMainAsset(category, item.id);
+                    const mainAsset = projectId ? getMainAsset(projectId, category, item.id) : null;
                     const baseSpanType = getSpanType(mainAsset);
                     // When only 1 column fits, horizontal cards should not span 2
                     const spanType = (baseSpanType === 'horizontal' && columnCount < 2) ? 'normal' : baseSpanType;
@@ -513,7 +513,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
               const { effectiveLanguage } = getEffectiveLanguage(item);
               const itemData = getDataForLanguage(item, effectiveLanguage);
-              const mainAsset = getMainAsset(category, item.id);
+              const mainAsset = projectId ? getMainAsset(projectId, category, item.id) : null;
               const loading = store.loading[item.id] || false;
               const showSecondaryLanguage = settings.mainLanguage !== globalDisplayLanguage;
 

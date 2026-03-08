@@ -30,6 +30,23 @@ export type ObjectChangedEvent = {
   data: ObjectChangedEventData;
 };
 
+export type AssetChangedChange =
+  | { scope: 'project_assets'; action: 'created' | 'updated' | 'deleted' }
+  | { scope: 'story_object_assets'; action: 'created' | 'updated' | 'deleted'; object_type: ObjectType; object_id: string }
+  | { scope: 'scene_assets'; action: 'created' | 'updated' | 'deleted'; manuscript_id: string | null };
+
+export interface AssetChangedEventData {
+  project_id: string;
+  ts: string;
+  batch_id: string;
+  changes: AssetChangedChange[];
+}
+
+export type AssetChangedEvent = {
+  event: 'asset:changed';
+  data: AssetChangedEventData;
+};
+
 export type ThreadRuntimeEvent =
   | { event: 'run:status'; data: RuntimeEventBase & { status: RunStatus; error?: string | null } }
   | { event: 'message:user'; data: RuntimeEventBase & { message_id: string; role: 'user'; seq: number; seq_in_thread: number; data: Record<string, unknown> } }
@@ -145,6 +162,7 @@ export type ThreadBulkDeleteEvent = {
 export type ThreadDeletionSSEEvent = ThreadDeleteEvent | ThreadBulkDeleteEvent;
 
 export type ProjectSSEEvent =
+  | AssetChangedEvent
   | ObjectChangedEvent
   | ThreadRuntimeEvent
   | NotificationSSEEvent
