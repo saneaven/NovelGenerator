@@ -20,7 +20,6 @@ from ...providers.content_normalization import (
 )
 from ...providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from ...providers.registry import ProviderRegistry
-from ..credential_service import credential_service
 from ..memory_builder import build_memory_prompt
 from ..prompt_runtime.output_mode import resolve_output_mode
 from ..prompt_runtime.contracts import ScenarioBundle
@@ -31,6 +30,7 @@ from ..reasoning.mode_policy import apply_thinking_mode
 from ..reasoning.normalize import normalize_reasoning_detail
 from ..reasoning.provider_io import get_provider_io
 from ..settings_service import settings_service
+from ..llm_runtime_service import get_llm_runtime
 from ..storage_usage_service import (
     apply_project_usage_delta,
     build_run_message_delta,
@@ -187,7 +187,8 @@ async def run_llm(
         template_renderer = TemplateRenderer(fragment_map=fragment_map)
 
     task_type = scenario_bundle.task_type if scenario_bundle else ScenarioManager.resolve_task_type(thread=thread, run=run)
-    task_config = settings_service.get_task_config(db, run.user_id, task_type)
+    resolved_runtime = get_llm_runtime(db, user_id=run.user_id, task_type=task_type)
+    task_config = resolved_runtime.task_config
     tokenizer_override = task_config.advanced.get("tokenizer_override") if isinstance(task_config.advanced, dict) else None
 
     if scenario_bundle is not None and template_renderer is not None:
@@ -324,14 +325,7 @@ async def run_llm(
         tool_set_name=tool_set_name,
     )
 
-    provider_config = credential_service.get_provider_config(db, run.user_id, task_config.provider)
-    if task_config.provider == "custom":
-        provider_config = {
-            **provider_config,
-            "request_format": task_config.advanced.get("request_format") or "openai_sdk",
-        }
-
-    provider = ProviderRegistry.get_provider(task_config.provider, provider_config)
+    provider = ProviderRegistry.get_provider(task_config.provider, resolved_runtime.provider_config)
     if not provider.validate_config():
         raise RuntimeError(f"Invalid provider configuration: {task_config.provider}")
 

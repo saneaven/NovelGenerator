@@ -35,7 +35,7 @@ _install_import_stubs()
 
 import App.backend.routes.auth_routes as auth_routes
 import App.backend.services.preset_service as preset_service_module
-from App.backend.models.db_models import PromptFragment, PromptPreset, PromptScenarioVersion, PromptVariable, SubAgentDefinitionModel
+from App.backend.models.db_models import PromptFragment, PromptPreset, PromptScenarioVersion, PromptVariable, SubAgentDefinitionModel, UserSettings
 from App.backend.schemas.auth import UserRegister
 from App.backend.schemas.presets import PresetExportData
 from App.backend.services.default_preset_seed import load_default_preset_seed
@@ -188,3 +188,29 @@ def test_register_fails_when_default_preset_init_fails(monkeypatch) -> None:
 
     assert session.commits == 0
     assert any(isinstance(row, PromptPreset) for row in session.added) is False
+
+
+def test_register_enables_demo_mode_for_new_users(monkeypatch) -> None:
+    session = FakeSession(first_results=[None, None])
+    preset_id = uuid4()
+
+    monkeypatch.setattr(
+        auth_routes.preset_service,
+        "initialize_default_preset",
+        lambda *_args, **_kwargs: SimpleNamespace(id=preset_id),
+    )
+
+    asyncio.run(
+        auth_routes.register(
+            UserRegister(
+                email="demo@example.com",
+                username="demo-user",
+                password="secret123",
+            ),
+            db=session,
+        )
+    )
+
+    settings_row = next(row for row in session.added if isinstance(row, UserSettings))
+    assert settings_row.demo_mode_enabled is True
+    assert settings_row.active_preset_id == preset_id

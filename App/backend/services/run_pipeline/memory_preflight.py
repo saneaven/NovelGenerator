@@ -9,13 +9,13 @@ from ...models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thr
 from ...providers.contracts import ProviderErrorPayload, merge_meta_payload, patch_snapshot_with_meta, MetaPayload
 from ...providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from ...providers.registry import ProviderRegistry
-from ..credential_service import credential_service
 from ..memory_builder import render_memory_summary_prompt
 from ..memory_service import archive_thread_until, get_thread_memory_status
 from ..prompt_runtime.contracts import ScenarioBundle
 from ..prompt_runtime.scenario_manager import ScenarioManager
 from ..prompt_runtime.template_renderer import TemplateRenderer
 from ..settings_service import settings_service
+from ..llm_runtime_service import get_llm_runtime
 from ...providers.stream_retry import normalize_retry_config, stream_with_retry
 from .text_utils import (
     build_archive_payload_for_message,
@@ -36,15 +36,10 @@ async def run_summary_model(
     system_prompt: str,
     user_prompt: str,
 ) -> str:
-    summary_cfg = settings_service.get_task_config(db, user_id, "summary")
-    provider_config = credential_service.get_provider_config(db, user_id, summary_cfg.provider)
-    if summary_cfg.provider == "custom":
-        provider_config = {
-            **provider_config,
-            "request_format": summary_cfg.advanced.get("request_format") or "openai_sdk",
-        }
+    resolved_runtime = get_llm_runtime(db, user_id=user_id, task_type="summary")
+    summary_cfg = resolved_runtime.task_config
 
-    provider = ProviderRegistry.get_provider(summary_cfg.provider, provider_config)
+    provider = ProviderRegistry.get_provider(summary_cfg.provider, resolved_runtime.provider_config)
     if not provider.validate_config():
         raise RuntimeError(f"Invalid summary provider configuration: {summary_cfg.provider}")
 

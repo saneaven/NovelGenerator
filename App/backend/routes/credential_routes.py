@@ -12,6 +12,7 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..models.db_models import User
 from ..services.credential_service import CredentialServiceError, credential_service
+from ..services.demo_policy import require_demo_off
 
 
 router = APIRouter(prefix="/api/v1/credentials", tags=["credentials"])
@@ -30,6 +31,7 @@ class ProvidersResponse(BaseModel):
 async def put_credential(
     provider: str,
     payload: CredentialUpsertRequest,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -53,6 +55,7 @@ async def list_credentials(
 @router.delete("/{provider}")
 async def delete_credential(
     provider: str,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

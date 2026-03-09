@@ -25,6 +25,7 @@ from ..services.scenario_service import scenario_service
 from ..services.prompt_runtime.scenario_runtime import assemble_scenario
 from ..services.prompt_runtime.template_renderer import TemplateRenderer, load_user_fragment_map
 from ..services.prompt_runtime.scenario_validation import normalize_and_validate_scenario
+from ..services.demo_policy import require_demo_off
 
 
 router = APIRouter(prefix="/api/v1/scenarios", tags=["scenarios"])
@@ -77,6 +78,7 @@ async def save_scenario(
     task_type: str,
     task_subtype: str,
     data: ScenarioSaveRequest,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -144,6 +146,7 @@ async def restore_scenario_version(
     task_type: str,
     task_subtype: str,
     data: ScenarioRestoreRequest,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

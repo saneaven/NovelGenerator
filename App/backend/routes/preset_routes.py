@@ -17,6 +17,7 @@ from ..schemas.presets import (
     PresetImportData
 )
 from ..services.preset_service import preset_service
+from ..services.demo_policy import require_demo_off
 
 router = APIRouter(prefix="/api/v1/presets", tags=["presets"])
 
@@ -57,6 +58,7 @@ async def get_active_preset(
 )
 async def set_active_preset(
     preset_id: str,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -87,6 +89,7 @@ async def set_active_preset(
 )
 async def create_preset(
     data: PresetCreate,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -116,6 +119,7 @@ async def create_preset(
 async def duplicate_preset(
     preset_id: str,
     data: PresetDuplicateRequest,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -187,6 +191,7 @@ async def get_preset(
 async def update_preset(
     preset_id: str,
     data: PresetUpdate,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -228,6 +233,7 @@ async def update_preset(
 )
 async def delete_preset(
     preset_id: str,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -287,6 +293,7 @@ async def export_preset(
 )
 async def import_preset(
     data: PresetImportData,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

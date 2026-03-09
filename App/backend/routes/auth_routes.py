@@ -5,7 +5,7 @@ from datetime import datetime
 import uuid
 
 from ..database import get_db
-from ..models.db_models import User, UserSettings
+from ..models.db_models import User
 from ..schemas.auth import UserRegister, UserLogin, Token, UserResponse, ProfileUpdate, PasswordChange
 from ..auth import (
     get_password_hash,
@@ -58,14 +58,8 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     db.flush()  # Get user ID without committing
 
     # Create default settings for user
-    default_settings = UserSettings(
-        id=uuid.uuid4(),
-        user_id=new_user.id,
-        task_config_settings=settings_service.create_settings_row(user_id=new_user.id).task_config_settings,
-        main_language='English',
-        sub_languages=[],
-        default_sub_language=None,
-    )
+    default_settings = settings_service.create_settings_row(user_id=new_user.id, demo_mode_enabled=True)
+    default_settings.id = uuid.uuid4()
 
     db.add(default_settings)
     db.flush()  # Flush to get settings ID

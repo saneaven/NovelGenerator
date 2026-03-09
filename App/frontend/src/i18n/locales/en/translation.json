@@ -422,6 +422,26 @@
       },
       "validation": {
         "modelRequired": "Please select a model for {{task}}."
+      },
+      "demo": {
+        "badge": "Demo Mode",
+        "title": "Demo mode is enabled",
+        "description": "This account is currently running in demo mode.",
+        "unlockHint": "Disable demo mode to edit AI settings, credentials, prompts, and advanced options directly.",
+        "lockedTitle": "Locked while demo mode is enabled",
+        "toggleLabel": "Demo Mode",
+        "toggleHint": "Turn this off to edit AI settings and prompts yourself.",
+        "editableHint": "Language and theme settings remain available while demo mode is on.",
+        "lockedTabToast": "Disable demo mode to edit this setting.",
+        "discardChangesTitle": "Discard locked-section changes?",
+        "discardChangesMessage": "Turning demo mode back on will discard unsaved AI, credential, and prompt changes. Continue?",
+        "lockedFeatures": {
+          "credentials": "Credentials",
+          "prompts": "Prompt Editor",
+          "searchMemory": "Search Memory",
+          "imageGen": "Image Generation",
+          "advanced": "Advanced Settings"
+        }
       }
     },
     "advanced": {

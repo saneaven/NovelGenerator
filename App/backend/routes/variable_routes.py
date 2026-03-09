@@ -17,6 +17,7 @@ from ..schemas.variables import (
     VariableReorderRequest
 )
 from ..services.variable_service import variable_service
+from ..services.demo_policy import require_demo_off
 
 router = APIRouter(prefix="/api/v1/variables", tags=["variables"])
 
@@ -85,6 +86,7 @@ async def get_variable_by_id(
 )
 async def create_variable(
     data: VariableCreate,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -106,6 +108,7 @@ async def create_variable(
 async def update_variable_value_by_id(
     variable_id: str,
     data: VariableValueUpdate,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -135,6 +138,7 @@ async def update_variable_value_by_id(
 async def update_variable_definition_by_id(
     variable_id: str,
     data: VariableDefinitionUpdate,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -163,6 +167,7 @@ async def update_variable_definition_by_id(
 )
 async def delete_variable_by_id(
     variable_id: str,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -183,6 +188,7 @@ async def delete_variable_by_id(
 )
 async def reorder_variables(
     data: VariableReorderRequest,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

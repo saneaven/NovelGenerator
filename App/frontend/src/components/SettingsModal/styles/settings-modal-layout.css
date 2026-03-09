@@ -144,6 +144,16 @@
     color: var(--color-brand-primary);
 }
 
+.settings-mobile-sidebar-item[aria-disabled="true"] {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.settings-mobile-sidebar-item[aria-disabled="true"]:hover {
+    background-color: transparent;
+    color: var(--color-text-secondary);
+}
+
 .settings-mobile-sidebar-item--navigation {
     color: var(--color-brand-primary);
 }
@@ -203,6 +213,16 @@
 .settings-desktop-sidebar-item.active {
     background-color: var(--color-brand-primary-soft);
     color: var(--color-brand-primary);
+}
+
+.settings-desktop-sidebar-item[aria-disabled="true"] {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.settings-desktop-sidebar-item[aria-disabled="true"]:hover {
+    background-color: transparent;
+    color: var(--color-text-secondary);
 }
 
 .settings-desktop-sidebar-item--navigation {

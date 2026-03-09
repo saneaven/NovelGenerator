@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { settingsService } from '../api/settingsService';
 import { scenarioService } from '../api/scenarioService';
+import { buildDemoScopedSettingsPayload, buildSettingsUpdatePayload } from './settingsUpdatePayload';
 import type { ScenarioDocument, TaskType } from '../types/scenarios';
 import {
     resolveAllTaskConfigs as resolveStoredTaskConfigs,
@@ -239,6 +240,38 @@ export interface Settings {
 
     // Tool call auto-approve settings (all-or-none per assistant response)
     toolCallAutoApprove: ToolCallAutoApproveConfig;
+
+    // Demo mode toggle for first-run guided experience
+    demoModeEnabled: boolean;
+}
+
+export interface SettingsUpdatePayload {
+    taskConfigSettings?: TaskConfigSettings;
+    imageGenConfig?: ImageGenConfig;
+    customThinkingTemplates?: CustomThinkingTemplate[];
+    mainLanguage?: string;
+    subLanguages?: string[];
+    defaultSubLanguage?: string | null;
+    uiLanguage?: UILanguageCode;
+    theme?: ThemeMode;
+    retryConfig?: RetryConfig;
+    nativeOutputMode?: boolean;
+    ragSearchEnabled?: boolean;
+    embeddingConfigs?: EmbeddingConfigs;
+    ragSearchTopKPerQuery?: number;
+    ragSearchNeighborWindow?: number;
+    ragSearchMaxPrimaryChunks?: number;
+    ragSearchMaxTotalChunks?: number;
+    ragSearchKeywordPageSize?: number;
+    agentMemoryTopKPerQuery?: number;
+    agentMemoryNeighborWindow?: number;
+    agentMemoryMaxPrimaryMessages?: number;
+    agentMemoryMaxTotalMessages?: number;
+    llmLoggingEnabled?: boolean;
+    toolCallHistoryLimit?: number;
+    thinkingHistoryLimit?: number;
+    toolCallAutoApprove?: ToolCallAutoApproveConfig;
+    demoModeEnabled?: boolean;
 }
 
 export type SettingsLoadStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -275,7 +308,7 @@ export interface SettingsStore {
 
     // Sync methods
     loadFromServer: () => Promise<void>;
-    saveToServer: () => Promise<void>;
+    saveToServer: (settingsOverride?: Settings) => Promise<Settings>;
 
     // Image generation config setters
     setImageGenConfig: (config: Partial<ImageGenConfig>) => void;
@@ -371,11 +404,15 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
         }
     },
 
-    saveToServer: async () => {
+    saveToServer: async (settingsOverride) => {
         try {
-            const settings = get().getSettings();
-            const saved = await settingsService.updateSettings(settings);
+            const settings = settingsOverride ?? get().getSettings();
+            const payload = settings.demoModeEnabled
+                ? buildDemoScopedSettingsPayload(settings)
+                : buildSettingsUpdatePayload(settings);
+            const saved = await settingsService.updateSettings(payload);
             set({ settings: saved, lastSyncedAt: new Date().toISOString() });
+            return saved;
         } catch (error) {
             console.error('Failed to save settings to server:', error);
             throw error;

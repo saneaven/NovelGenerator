@@ -11,6 +11,7 @@ from ..database import get_db
 from ..auth import get_current_user
 from ..models.db_models import User
 from ..schemas.sub_agents import SubAgentCreate, SubAgentDefinition, SubAgentUpdate
+from ..services.demo_policy import require_demo_off
 from ..services.sub_agent_service import sub_agent_service
 from ..services.tool_engine import tool_engine
 
@@ -47,6 +48,7 @@ async def list_available_tools(
 @router.post("", response_model=SubAgentDefinition, status_code=status.HTTP_201_CREATED)
 async def create_sub_agent(
     data: SubAgentCreate,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -66,6 +68,7 @@ async def create_sub_agent(
 async def update_sub_agent(
     sub_agent_id: uuid.UUID = Path(..., description="Sub agent UUID id"),
     data: SubAgentUpdate = ...,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -91,6 +94,7 @@ async def update_sub_agent(
 )
 async def delete_sub_agent(
     sub_agent_id: uuid.UUID = Path(..., description="Sub agent UUID id"),
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

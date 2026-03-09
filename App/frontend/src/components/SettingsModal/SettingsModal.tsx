@@ -6,9 +6,11 @@ import { BaseSidebar } from '../BaseSidebar';
 import { useSettings, useSettingsStore } from '../../store/settingsStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import type { ProviderCredentials, Settings, AITaskType } from '../../store/settingsStore';
+import { buildLockedSectionReset } from '../../store/settingsUpdatePayload';
 import { hasTaskOverride, resolveAllTaskConfigs, TASK_CONFIG_TASK_TYPES } from '../../store/taskConfigSettings';
 import CredentialsPanel from './CredentialsPanel';
 import GeneralPanel from './GeneralPanel';
+import DemoGeneralPanel from './DemoGeneralPanel';
 import LanguagePanel from './LanguagePanel';
 import PromptsTemplatesPanel, { type PromptsTemplatesPanelHandle } from './PromptEditor/PromptsTemplatesPanel';
 import ThemePanel from './ThemePanel';
@@ -56,6 +58,7 @@ const DEFAULT_CREDENTIAL_DRAFT: ProviderCredentials = {
 };
 
 const PROVIDERS: ProviderName[] = ['openai', 'gemini', 'claude', 'openrouter', 'custom', 'xai', 'novelai'];
+const DEMO_LOCKED_TABS = new Set<MainTab>(['credentials', 'searchMemory', 'imageGen', 'prompts', 'advanced']);
 
 type NormalizedProviderConfig = Record<string, unknown>;
 
@@ -114,7 +117,6 @@ function isEmptyConfig(config: NormalizedProviderConfig): boolean {
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const updateSettings = useSettingsStore((s) => s.updateSettings);
   const saveSettingsToServer = useSettingsStore((s) => s.saveToServer);
   const setStoreTheme = useSettingsStore((s) => s.setTheme);
   const settings = useSettings();
@@ -126,6 +128,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [promptUnsavedCount, setPromptUnsavedCount] = useState(0);
   const [hasMountedPromptsPanel, setHasMountedPromptsPanel] = useState(false);
+  const [promptsPanelKey, setPromptsPanelKey] = useState(0);
   const [toast, setToast] = useState<{ kind: SettingsToastKind; message: string } | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
   const [mainTab, setMainTab] = useState<MainTab>('profile');
@@ -147,7 +150,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       settingsSnapshotRef.current = JSON.stringify(settings);
       credentialsSnapshotRef.current = JSON.stringify(DEFAULT_CREDENTIAL_DRAFT);
       setPromptUnsavedCount(0);
-      setHasMountedPromptsPanel(mainTab === 'prompts');
+      setHasMountedPromptsPanel(mainTab === 'prompts' && !settings.demoModeEnabled);
       void apiClient
         .get<{ providers: string[] }>('/api/v1/credentials')
         .then((resp) => setStoredProviders(Array.isArray(resp.providers) ? resp.providers : []))
@@ -191,6 +194,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       error: (message, durationMs) => showToast('error', message, durationMs),
     };
   }, [showToast]);
+
+  const isDemoLockedTab = useCallback(
+    (tab: MainTab) => localSettings.demoModeEnabled && DEMO_LOCKED_TABS.has(tab),
+    [localSettings.demoModeEnabled]
+  );
+
+  const handleLockedTabAttempt = useCallback(() => {
+    showToast('error', t('settings.general.demo.lockedTabToast'));
+  }, [showToast, t]);
+
+  const handleMainTabSelect = useCallback(
+    (tab: MainTab, closeMobileSidebar = false) => {
+      if (isDemoLockedTab(tab)) {
+        handleLockedTabAttempt();
+        return;
+      }
+      setMainTab(tab);
+      if (closeMobileSidebar) {
+        closeSidebar('__global__');
+      }
+    },
+    [closeSidebar, handleLockedTabAttempt, isDemoLockedTab]
+  );
 
   const resolvedTaskConfigs = useMemo(
     () => resolveAllTaskConfigs(localSettings.taskConfigSettings),
@@ -332,62 +358,131 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     []
   );
 
+  const handleDemoModeChange = useCallback(
+    async (enabled: boolean) => {
+      if (enabled === localSettings.demoModeEnabled) {
+        return;
+      }
+
+      if (!enabled) {
+        setLocalSettings((prev) => ({ ...prev, demoModeEnabled: false }));
+        return;
+      }
+
+      const nextSettings = { ...buildLockedSectionReset(localSettings, settings), demoModeEnabled: true };
+      const lockedSettingsDirty = JSON.stringify(localSettings) !== JSON.stringify(buildLockedSectionReset(localSettings, settings));
+      const credentialsDirty = JSON.stringify(localCredentials) !== credentialsSnapshotRef.current;
+      const promptsDirty = promptUnsavedCount > 0;
+
+      if (lockedSettingsDirty || credentialsDirty || promptsDirty) {
+        const shouldDiscard = await confirm({
+          title: t('settings.general.demo.discardChangesTitle'),
+          message: t('settings.general.demo.discardChangesMessage'),
+          variant: 'warning',
+          confirmLabel: t('common.confirm'),
+          cancelLabel: t('common.cancel'),
+        });
+        if (!shouldDiscard) {
+          return;
+        }
+      }
+
+      setLocalSettings(nextSettings);
+      setLocalCredentials(DEFAULT_CREDENTIAL_DRAFT);
+      credentialsSnapshotRef.current = JSON.stringify(DEFAULT_CREDENTIAL_DRAFT);
+      setPromptUnsavedCount(0);
+      setHasMountedPromptsPanel(false);
+      setPromptsPanelKey((prev) => prev + 1);
+      setMainTab('general');
+    },
+    [localCredentials, localSettings, promptUnsavedCount, settings, t]
+  );
+
   const handleSave = async () => {
     if (isSaving) return;
 
     setIsSaving(true);
     try {
-      const promptSavePromise =
-        promptsPanelRef.current?.saveAllDrafts?.() ??
-        Promise.resolve({ attempted: 0, saved: 0, failed: 0, failures: [] });
-
       const settingsDirty = JSON.stringify(localSettings) !== settingsSnapshotRef.current;
-      const credentialsDirty = JSON.stringify(localCredentials) !== credentialsSnapshotRef.current;
+      const credentialsDirty =
+        !localSettings.demoModeEnabled &&
+        JSON.stringify(localCredentials) !== credentialsSnapshotRef.current;
 
       if (settingsDirty || credentialsDirty) {
-        const taskModelError = validateTaskModels();
-        if (taskModelError) {
-          setMainTab('general');
-          setActiveGeneralTarget(taskModelError.target);
-          showToast('error', taskModelError.message);
-        } else {
+        if (!localSettings.demoModeEnabled) {
+          const taskModelError = validateTaskModels();
+          if (taskModelError) {
+            setMainTab('general');
+            setActiveGeneralTarget(taskModelError.target);
+            showToast('error', taskModelError.message);
+            return;
+          }
+
           const embeddingError = validateEmbeddings();
           if (embeddingError) {
             setMainTab(embeddingError.tab);
             showToast('error', embeddingError.message);
-          } else {
-            const customJsonError = validateCustomCredentialJson();
-            if (customJsonError) {
-              setMainTab(customJsonError.tab);
-              showToast('error', customJsonError.message);
-            } else {
-              try {
-                if (settingsDirty) {
-                  updateSettings(localSettings);
-                }
-                const prevCredentials = credentialsSnapshotRef.current
-                  ? (JSON.parse(credentialsSnapshotRef.current) as ProviderCredentials)
-                  : DEFAULT_CREDENTIAL_DRAFT;
-                if (settingsDirty) {
-                  await saveSettingsToServer();
-                }
-                if (credentialsDirty) {
-                  await syncCredentialDraftDiff(prevCredentials, localCredentials);
-                }
-                settingsSnapshotRef.current = JSON.stringify(localSettings);
-                credentialsSnapshotRef.current = JSON.stringify(localCredentials);
-                showToast('success', t('settings.savedSuccessfully'));
-              } catch (error) {
-                console.error('Failed to save settings:', error);
-                const message = error instanceof Error ? error.message : t('settings.saveError');
-                showToast('error', message);
-              }
-            }
+            return;
+          }
+
+          const customJsonError = validateCustomCredentialJson();
+          if (customJsonError) {
+            setMainTab(customJsonError.tab);
+            showToast('error', customJsonError.message);
+            return;
           }
         }
+
+        const promptSavePromise =
+          localSettings.demoModeEnabled
+            ? Promise.resolve({ attempted: 0, saved: 0, failed: 0, failures: [] })
+            : promptsPanelRef.current?.saveAllDrafts?.() ??
+              Promise.resolve({ attempted: 0, saved: 0, failed: 0, failures: [] });
+
+        try {
+          let savedSettings = localSettings;
+          if (settingsDirty) {
+            savedSettings = await saveSettingsToServer(localSettings);
+            setLocalSettings(savedSettings);
+            settingsSnapshotRef.current = JSON.stringify(savedSettings);
+          }
+
+          if (credentialsDirty) {
+            const prevCredentials = credentialsSnapshotRef.current
+              ? (JSON.parse(credentialsSnapshotRef.current) as ProviderCredentials)
+              : DEFAULT_CREDENTIAL_DRAFT;
+            await syncCredentialDraftDiff(prevCredentials, localCredentials);
+            credentialsSnapshotRef.current = JSON.stringify(localCredentials);
+          }
+
+          if (settingsDirty || credentialsDirty) {
+            showToast('success', t('settings.savedSuccessfully'));
+          }
+        } catch (error) {
+          console.error('Failed to save settings:', error);
+          const message = error instanceof Error ? error.message : t('settings.saveError');
+          showToast('error', message);
+        }
+
+        const promptSummary = await promptSavePromise;
+        if (promptSummary.attempted > 0 && promptSummary.failed === 0) {
+          showToast('success', `Saved ${promptSummary.saved} prompt items`);
+        } else if (promptSummary.failed > 0) {
+          showToast('error', `Saved ${promptSummary.saved}/${promptSummary.attempted} prompt items. ${promptSummary.failed} failed.`);
+          const lines = promptSummary.failures.map((f) => `- ${f.item.label}: ${f.error}`);
+          showAlert({ title: 'Save Error', message: `Some prompt items failed to save:\n\n${lines.join('\n')}`, variant: 'warning' });
+        }
+        return;
       }
 
-      const promptSummary = await promptSavePromise;
+      const promptSummary =
+        localSettings.demoModeEnabled
+          ? { attempted: 0, saved: 0, failed: 0, failures: [] }
+          : await (
+            promptsPanelRef.current?.saveAllDrafts?.() ??
+            Promise.resolve({ attempted: 0, saved: 0, failed: 0, failures: [] })
+          );
+
       if (promptSummary.attempted > 0 && promptSummary.failed === 0) {
         showToast('success', `Saved ${promptSummary.saved} prompt items`);
       } else if (promptSummary.failed > 0) {
@@ -402,7 +497,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
   const getUnsavedCount = useCallback(() => {
     const settingsDirty = JSON.stringify(localSettings) !== settingsSnapshotRef.current;
-    const credentialsDirty = JSON.stringify(localCredentials) !== credentialsSnapshotRef.current;
+    const credentialsDirty =
+      !localSettings.demoModeEnabled &&
+      JSON.stringify(localCredentials) !== credentialsSnapshotRef.current;
     const promptDirty = promptUnsavedCount;
     return promptDirty + (settingsDirty ? 1 : 0) + (credentialsDirty ? 1 : 0);
   }, [localCredentials, localSettings, promptUnsavedCount]);
@@ -410,6 +507,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const closeWithoutSaving = useCallback(() => {
     setLocalSettings(settings);
     setLocalCredentials(DEFAULT_CREDENTIAL_DRAFT);
+    setPromptUnsavedCount(0);
+    setHasMountedPromptsPanel(false);
     onClose();
   }, [onClose, settings]);
 
@@ -471,10 +570,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
   useEffect(() => {
     if (!isOpen) return;
-    if (mainTab === 'prompts') {
+    if (mainTab === 'prompts' && !localSettings.demoModeEnabled) {
       setHasMountedPromptsPanel(true);
     }
-  }, [isOpen, mainTab]);
+  }, [isOpen, localSettings.demoModeEnabled, mainTab]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (isDemoLockedTab(mainTab)) {
+      setMainTab('general');
+    }
+  }, [isDemoLockedTab, isOpen, mainTab]);
 
   return (
     <SettingsToastProvider value={toastApi}>
@@ -535,7 +641,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           <li>
             <button
               className={`settings-mobile-sidebar-item ${mainTab === 'profile' ? 'active' : ''}`}
-              onClick={() => { setMainTab('profile'); closeSidebar('__global__'); }}
+              onClick={() => { handleMainTabSelect('profile', true); }}
             >
               <People size="md" />
               <span>{t('settings.tabs.profile')}</span>
@@ -543,8 +649,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           </li>
           <li>
             <button
-              className={`settings-mobile-sidebar-item ${mainTab === 'credentials' ? 'active' : ''}`}
-              onClick={() => { setMainTab('credentials'); closeSidebar('__global__'); }}
+              className={`settings-mobile-sidebar-item ${mainTab === 'credentials' ? 'active' : ''} ${isDemoLockedTab('credentials') ? 'settings-sidebar-item--locked' : ''}`}
+              onClick={() => { handleMainTabSelect('credentials', true); }}
+              aria-disabled={isDemoLockedTab('credentials')}
+              data-locked={isDemoLockedTab('credentials') ? 'true' : undefined}
             >
               <Lock size="md" />
               <span>{t('settings.tabs.credentials')}</span>
@@ -553,7 +661,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           <li>
             <button
               className={`settings-mobile-sidebar-item ${mainTab === 'general' ? 'active' : ''}`}
-              onClick={() => { setMainTab('general'); closeSidebar('__global__'); }}
+              onClick={() => { handleMainTabSelect('general', true); }}
             >
               <SettingsIcon size="md" />
               <span>{t('settings.tabs.general')}</span>
@@ -561,8 +669,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           </li>
           <li>
             <button
-              className={`settings-mobile-sidebar-item ${mainTab === 'searchMemory' ? 'active' : ''}`}
-              onClick={() => { setMainTab('searchMemory'); closeSidebar('__global__'); }}
+              className={`settings-mobile-sidebar-item ${mainTab === 'searchMemory' ? 'active' : ''} ${isDemoLockedTab('searchMemory') ? 'settings-sidebar-item--locked' : ''}`}
+              onClick={() => { handleMainTabSelect('searchMemory', true); }}
+              aria-disabled={isDemoLockedTab('searchMemory')}
+              data-locked={isDemoLockedTab('searchMemory') ? 'true' : undefined}
             >
               <List size="md" />
               <span>{t('settings.tabs.searchMemory')}</span>
@@ -570,8 +680,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           </li>
           <li>
             <button
-              className={`settings-mobile-sidebar-item ${mainTab === 'imageGen' ? 'active' : ''}`}
-              onClick={() => { setMainTab('imageGen'); closeSidebar('__global__'); }}
+              className={`settings-mobile-sidebar-item ${mainTab === 'imageGen' ? 'active' : ''} ${isDemoLockedTab('imageGen') ? 'settings-sidebar-item--locked' : ''}`}
+              onClick={() => { handleMainTabSelect('imageGen', true); }}
+              aria-disabled={isDemoLockedTab('imageGen')}
+              data-locked={isDemoLockedTab('imageGen') ? 'true' : undefined}
             >
               <Image size="md" />
               <span>{t('settings.tabs.imageGen')}</span>
@@ -579,8 +691,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           </li>
           <li>
             <button
-              className={`settings-mobile-sidebar-item ${mainTab === 'prompts' ? 'active' : ''}`}
-              onClick={() => { setMainTab('prompts'); closeSidebar('__global__'); }}
+              className={`settings-mobile-sidebar-item ${mainTab === 'prompts' ? 'active' : ''} ${isDemoLockedTab('prompts') ? 'settings-sidebar-item--locked' : ''}`}
+              onClick={() => { handleMainTabSelect('prompts', true); }}
+              aria-disabled={isDemoLockedTab('prompts')}
+              data-locked={isDemoLockedTab('prompts') ? 'true' : undefined}
             >
               <Document size="md" />
               <span>{t('settings.tabs.prompts')}</span>
@@ -589,7 +703,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           <li>
             <button
               className={`settings-mobile-sidebar-item ${mainTab === 'language' ? 'active' : ''}`}
-              onClick={() => { setMainTab('language'); closeSidebar('__global__'); }}
+              onClick={() => { handleMainTabSelect('language', true); }}
             >
               <Globe size="md" />
               <span>{t('settings.tabs.language')}</span>
@@ -598,17 +712,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           <li>
             <button
               className={`settings-mobile-sidebar-item ${mainTab === 'theme' ? 'active' : ''}`}
-              onClick={() => { setMainTab('theme'); closeSidebar('__global__'); }}
+              onClick={() => { handleMainTabSelect('theme', true); }}
             >
               <Palette size="md" />
               <span>{t('settings.tabs.theme')}</span>
             </button>
           </li>
           <li>
-            <button
-              className={`settings-mobile-sidebar-item ${mainTab === 'advanced' ? 'active' : ''}`}
-              onClick={() => { setMainTab('advanced'); closeSidebar('__global__'); }}
-            >
+              <button
+                className={`settings-mobile-sidebar-item ${mainTab === 'advanced' ? 'active' : ''} ${isDemoLockedTab('advanced') ? 'settings-sidebar-item--locked' : ''}`}
+                onClick={() => { handleMainTabSelect('advanced', true); }}
+                aria-disabled={isDemoLockedTab('advanced')}
+                data-locked={isDemoLockedTab('advanced') ? 'true' : undefined}
+              >
               <Wrench size="md" />
               <span>{t('settings.tabs.advanced')}</span>
             </button>
@@ -635,7 +751,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             <li>
               <button
                 className={`settings-desktop-sidebar-item ${mainTab === 'profile' ? 'active' : ''}`}
-                onClick={() => setMainTab('profile')}
+                onClick={() => handleMainTabSelect('profile')}
               >
                 <People size="md" />
                 <span>{t('settings.tabs.profile')}</span>
@@ -643,8 +759,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             </li>
             <li>
               <button
-                className={`settings-desktop-sidebar-item ${mainTab === 'credentials' ? 'active' : ''}`}
-                onClick={() => setMainTab('credentials')}
+                className={`settings-desktop-sidebar-item ${mainTab === 'credentials' ? 'active' : ''} ${isDemoLockedTab('credentials') ? 'settings-sidebar-item--locked' : ''}`}
+                onClick={() => handleMainTabSelect('credentials')}
+                aria-disabled={isDemoLockedTab('credentials')}
+                data-locked={isDemoLockedTab('credentials') ? 'true' : undefined}
               >
                 <Lock size="md" />
                 <span>{t('settings.tabs.credentials')}</span>
@@ -653,7 +771,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             <li>
               <button
                 className={`settings-desktop-sidebar-item ${mainTab === 'general' ? 'active' : ''}`}
-                onClick={() => setMainTab('general')}
+                onClick={() => handleMainTabSelect('general')}
               >
                 <SettingsIcon size="md" />
                 <span>{t('settings.tabs.general')}</span>
@@ -661,8 +779,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             </li>
             <li>
               <button
-                className={`settings-desktop-sidebar-item ${mainTab === 'searchMemory' ? 'active' : ''}`}
-                onClick={() => setMainTab('searchMemory')}
+                className={`settings-desktop-sidebar-item ${mainTab === 'searchMemory' ? 'active' : ''} ${isDemoLockedTab('searchMemory') ? 'settings-sidebar-item--locked' : ''}`}
+                onClick={() => handleMainTabSelect('searchMemory')}
+                aria-disabled={isDemoLockedTab('searchMemory')}
+                data-locked={isDemoLockedTab('searchMemory') ? 'true' : undefined}
               >
                 <List size="md" />
                 <span>{t('settings.tabs.searchMemory')}</span>
@@ -670,8 +790,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             </li>
             <li>
               <button
-                className={`settings-desktop-sidebar-item ${mainTab === 'imageGen' ? 'active' : ''}`}
-                onClick={() => setMainTab('imageGen')}
+                className={`settings-desktop-sidebar-item ${mainTab === 'imageGen' ? 'active' : ''} ${isDemoLockedTab('imageGen') ? 'settings-sidebar-item--locked' : ''}`}
+                onClick={() => handleMainTabSelect('imageGen')}
+                aria-disabled={isDemoLockedTab('imageGen')}
+                data-locked={isDemoLockedTab('imageGen') ? 'true' : undefined}
               >
                 <Image size="md" />
                 <span>{t('settings.tabs.imageGen')}</span>
@@ -679,8 +801,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             </li>
             <li>
               <button
-                className={`settings-desktop-sidebar-item ${mainTab === 'prompts' ? 'active' : ''}`}
-                onClick={() => setMainTab('prompts')}
+                className={`settings-desktop-sidebar-item ${mainTab === 'prompts' ? 'active' : ''} ${isDemoLockedTab('prompts') ? 'settings-sidebar-item--locked' : ''}`}
+                onClick={() => handleMainTabSelect('prompts')}
+                aria-disabled={isDemoLockedTab('prompts')}
+                data-locked={isDemoLockedTab('prompts') ? 'true' : undefined}
               >
                 <Document size="md" />
                 <span>{t('settings.tabs.prompts')}</span>
@@ -689,7 +813,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             <li>
               <button
                 className={`settings-desktop-sidebar-item ${mainTab === 'language' ? 'active' : ''}`}
-                onClick={() => setMainTab('language')}
+                onClick={() => handleMainTabSelect('language')}
               >
                 <Globe size="md" />
                 <span>{t('settings.tabs.language')}</span>
@@ -698,7 +822,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             <li>
               <button
                 className={`settings-desktop-sidebar-item ${mainTab === 'theme' ? 'active' : ''}`}
-                onClick={() => setMainTab('theme')}
+                onClick={() => handleMainTabSelect('theme')}
               >
                 <Palette size="md" />
                 <span>{t('settings.tabs.theme')}</span>
@@ -706,8 +830,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             </li>
             <li>
               <button
-                className={`settings-desktop-sidebar-item ${mainTab === 'advanced' ? 'active' : ''}`}
-                onClick={() => setMainTab('advanced')}
+                className={`settings-desktop-sidebar-item ${mainTab === 'advanced' ? 'active' : ''} ${isDemoLockedTab('advanced') ? 'settings-sidebar-item--locked' : ''}`}
+                onClick={() => handleMainTabSelect('advanced')}
+                aria-disabled={isDemoLockedTab('advanced')}
+                data-locked={isDemoLockedTab('advanced') ? 'true' : undefined}
               >
                 <Wrench size="md" />
                 <span>{t('settings.tabs.advanced')}</span>
@@ -731,7 +857,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         <div className={`settings-panel-content${mainTab === 'prompts' || mainTab === 'general' ? ' settings-panel-content--fill' : ''}`}>
         {mainTab === 'profile' && <ProfilePanel />}
 
-        {mainTab === 'credentials' && (
+        {mainTab === 'credentials' && !localSettings.demoModeEnabled && (
           <CredentialsPanel
             credentials={localCredentials}
             storedProviders={storedProviders}
@@ -740,7 +866,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           />
         )}
 
-        {mainTab === 'searchMemory' && (
+        {mainTab === 'searchMemory' && !localSettings.demoModeEnabled && (
           <SearchMemoryPanel
             enabled={localSettings.ragSearchEnabled}
             onEnabledChange={(enabled) => setLocalSettings(prev => ({ ...prev, ragSearchEnabled: enabled }))}
@@ -781,24 +907,31 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         )}
 
         {mainTab === 'general' && (
-          <GeneralPanel
-            taskConfigSettings={localSettings.taskConfigSettings}
-            activeTarget={activeGeneralTarget}
-            onTargetChange={setActiveGeneralTarget}
-            onTaskConfigSettingsChange={(taskConfigSettings) =>
-              setLocalSettings((prev) => ({
-                ...prev,
-                taskConfigSettings,
-              }))
-            }
-            customThinkingTemplates={localSettings.customThinkingTemplates}
-            onTemplatesChange={(templates) =>
-              setLocalSettings(prev => ({ ...prev, customThinkingTemplates: templates }))
-            }
-          />
+          localSettings.demoModeEnabled ? (
+            <DemoGeneralPanel
+              enabled={localSettings.demoModeEnabled}
+              onEnabledChange={(enabled) => { void handleDemoModeChange(enabled); }}
+            />
+          ) : (
+            <GeneralPanel
+              taskConfigSettings={localSettings.taskConfigSettings}
+              activeTarget={activeGeneralTarget}
+              onTargetChange={setActiveGeneralTarget}
+              onTaskConfigSettingsChange={(taskConfigSettings) =>
+                setLocalSettings((prev) => ({
+                  ...prev,
+                  taskConfigSettings,
+                }))
+              }
+              customThinkingTemplates={localSettings.customThinkingTemplates}
+              onTemplatesChange={(templates) =>
+                setLocalSettings(prev => ({ ...prev, customThinkingTemplates: templates }))
+              }
+            />
+          )
         )}
 
-        {mainTab === 'imageGen' && (
+        {mainTab === 'imageGen' && !localSettings.demoModeEnabled && (
           <ImageGenPanel
             config={localSettings.imageGenConfig}
             onChange={(config) =>
@@ -840,7 +973,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           />
         )}
 
-        {hasMountedPromptsPanel && (
+        {hasMountedPromptsPanel && !localSettings.demoModeEnabled && (
           <div
             style={{
               display: mainTab === 'prompts' ? 'flex' : 'none',
@@ -848,11 +981,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               minHeight: 0,
             }}
           >
-            <PromptsTemplatesPanel ref={promptsPanelRef} onUnsavedCountChange={setPromptUnsavedCount} />
+            <PromptsTemplatesPanel
+              key={promptsPanelKey}
+              ref={promptsPanelRef}
+              onUnsavedCountChange={setPromptUnsavedCount}
+            />
           </div>
         )}
 
-        {mainTab === 'advanced' && (
+        {mainTab === 'advanced' && !localSettings.demoModeEnabled && (
           <AdvancedPanel
             retryConfig={localSettings.retryConfig}
             onRetryConfigChange={(config) =>

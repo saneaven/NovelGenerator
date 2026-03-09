@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { Settings } from '../store/settingsStore';
+import type { Settings, SettingsUpdatePayload } from '../store/settingsStore';
 
 export const settingsService = {
     /**
@@ -12,7 +12,7 @@ export const settingsService = {
     /**
      * Update all settings on server
      */
-    async updateSettings(settings: Partial<Settings>): Promise<Settings> {
+    async updateSettings(settings: SettingsUpdatePayload): Promise<Settings> {
         return await apiClient.put<Settings>('/api/v1/settings', settings);
     },
 };

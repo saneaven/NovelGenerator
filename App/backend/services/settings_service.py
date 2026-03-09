@@ -60,13 +60,14 @@ class RagSettings:
 
 
 class SettingsService:
-    def create_settings_row(self, *, user_id: UUID) -> UserSettings:
+    def create_settings_row(self, *, user_id: UUID, demo_mode_enabled: bool = False) -> UserSettings:
         return UserSettings(
             user_id=user_id,
             task_config_settings=make_initial_task_config_settings(),
             main_language="English",
             sub_languages=[],
             default_sub_language=None,
+            demo_mode_enabled=demo_mode_enabled,
         )
 
     def _get_settings(self, db: Session, user_id: UUID) -> UserSettings:
@@ -88,6 +89,12 @@ class SettingsService:
         return validate_task_config_settings(raw)
 
     def get_task_config(self, db: Session, user_id: UUID, task_type: str) -> TaskConfig:
+        settings = self._get_settings(db, user_id)
+        if bool(getattr(settings, "demo_mode_enabled", False)):
+            from .demo_runtime import build_demo_task_config
+
+            return build_demo_task_config()
+
         cfg = resolve_task_config(self.get_task_config_settings(db, user_id), task_type)
         provider_preference = cfg.get("provider_preference")
 

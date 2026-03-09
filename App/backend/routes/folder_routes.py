@@ -7,6 +7,7 @@ from ..database import get_db
 from ..auth import get_current_user
 from ..models.db_models import User
 from ..schemas.folders import FolderCreate, FolderRename, FolderMoveRequest, FolderResponse
+from ..services.demo_policy import require_demo_off
 from ..services.folder_service import FolderService
 
 router = APIRouter(prefix="/api/v1/folders", tags=["folders"])
@@ -36,6 +37,7 @@ def _folder_to_response(db: Session, folder) -> FolderResponse:
 @router.post("", response_model=FolderResponse, status_code=status.HTTP_201_CREATED)
 async def create_folder(
     data: FolderCreate,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -54,6 +56,7 @@ async def create_folder(
 async def rename_folder(
     folder_id: str,
     data: FolderRename,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -73,6 +76,7 @@ async def rename_folder(
 async def move_folder(
     folder_id: str,
     data: FolderMoveRequest,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -96,6 +100,7 @@ async def move_folder(
 @router.delete("/{folder_id}", status_code=status.HTTP_200_OK)
 async def delete_folder(
     folder_id: str,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

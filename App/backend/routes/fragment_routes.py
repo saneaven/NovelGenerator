@@ -26,6 +26,7 @@ from ..services.folder_service import FolderService
 from ..services.default_preset_seed import load_default_preset_seed
 from ..services.prompt_runtime.template_renderer import load_user_fragment_map
 from ..services.template_engine import format_template_error, validate_template_source
+from ..services.demo_policy import require_demo_off
 
 router = APIRouter(prefix="/api/v1/fragments", tags=["fragments"])
 
@@ -123,6 +124,7 @@ async def validate_fragment(
 )
 async def create_fragment(
     data: FragmentCreate,
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -200,6 +202,7 @@ async def save_fragment(
     data: FragmentUpdate,
     folder_id: Optional[str] = Query(None, description="Folder ID (None for root)"),
     fragment_name: str = Query(..., description="Fragment name"),
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -246,6 +249,7 @@ async def restore_version(
     data: FragmentRestoreRequest,
     folder_id: Optional[str] = Query(None, description="Folder ID (None for root)"),
     fragment_name: str = Query(..., description="Fragment name"),
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -280,6 +284,7 @@ async def restore_version(
 async def delete_fragment(
     folder_id: Optional[str] = Query(None, description="Folder ID (None for root)"),
     fragment_name: str = Query(..., description="Fragment name"),
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -310,6 +315,7 @@ async def move_fragment(
     data: FragmentMoveRequest,
     folder_id: Optional[str] = Query(None, description="Current folder ID"),
     fragment_name: str = Query(..., description="Fragment name"),
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -338,6 +344,7 @@ async def move_fragment(
     status_code=status.HTTP_200_OK
 )
 async def initialize_default_fragments(
+    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

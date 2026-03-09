@@ -143,6 +143,9 @@ class UserSettings(Base):
     # UI Language for interface localization (i18next)
     ui_language = Column(String(10), default='en', nullable=False)
 
+    # Demo mode toggle for first-run experience
+    demo_mode_enabled = Column(Boolean, default=False, nullable=False)
+
     # Active prompt preset
     active_preset_id = Column(UUID(as_uuid=True), ForeignKey('prompt_presets.id', ondelete='SET NULL'), nullable=True)
 

@@ -422,6 +422,26 @@
       },
       "validation": {
         "modelRequired": "{{task}}에 사용할 모델을 선택해주세요."
+      },
+      "demo": {
+        "badge": "Demo Mode",
+        "title": "데모 모드가 켜져 있습니다",
+        "description": "이 계정은 현재 데모 모드로 동작 중입니다.",
+        "unlockHint": "데모 모드를 끄면 AI 설정, credential, prompt, 고급 옵션을 직접 편집할 수 있습니다.",
+        "lockedTitle": "데모 모드에서 잠기는 항목",
+        "toggleLabel": "데모 모드",
+        "toggleHint": "이 설정을 끄면 AI 설정과 프롬프트를 직접 편집할 수 있습니다.",
+        "editableHint": "데모 모드에서도 Language와 Theme 설정은 계속 변경할 수 있습니다.",
+        "lockedTabToast": "데모 모드를 끄면 이 설정을 편집할 수 있습니다.",
+        "discardChangesTitle": "잠기는 설정 변경을 버릴까요?",
+        "discardChangesMessage": "데모 모드를 다시 켜면 AI, credential, prompt 관련 미저장 변경사항이 버려집니다. 계속할까요?",
+        "lockedFeatures": {
+          "credentials": "자격 증명",
+          "prompts": "프롬프트 에디터",
+          "searchMemory": "검색 & 메모리",
+          "imageGen": "이미지 생성",
+          "advanced": "고급 설정"
+        }
       }
     },
     "advanced": {

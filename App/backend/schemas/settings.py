@@ -344,6 +344,7 @@ class UserSettingsResponse(BaseModel):
     thinkingHistoryLimit: int = 5
     toolCallAutoApprove: ToolCallAutoApprove = Field(default_factory=ToolCallAutoApprove)
     uiLanguage: str = "en"
+    demoModeEnabled: bool = False
 
     class Config:
         from_attributes = True
@@ -377,3 +378,4 @@ class UserSettingsUpdate(BaseModel):
     thinkingHistoryLimit: Optional[int] = None
     toolCallAutoApprove: Optional[ToolCallAutoApprove] = None
     uiLanguage: Optional[str] = None
+    demoModeEnabled: Optional[bool] = None

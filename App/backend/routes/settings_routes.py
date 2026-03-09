@@ -139,6 +139,7 @@ def _build_settings_response(settings: UserSettings) -> UserSettingsResponse:
         thinkingHistoryLimit=getattr(settings, "thinking_history_limit", 5),
         toolCallAutoApprove=tool_call_auto_approve_dict,
         uiLanguage=getattr(settings, "ui_language", "en"),
+        demoModeEnabled=bool(getattr(settings, "demo_mode_enabled", False)),
     )
 
 
@@ -168,7 +169,12 @@ async def update_user_settings(
             detail="Settings not found. Please get settings first.",
         )
 
-    if update_data.taskConfigSettings is not None:
+    if "demoModeEnabled" in update_data.model_fields_set and update_data.demoModeEnabled is not None:
+        settings.demo_mode_enabled = update_data.demoModeEnabled  # type: ignore[assignment]
+
+    demo_mode_enabled = bool(getattr(settings, "demo_mode_enabled", False))
+
+    if not demo_mode_enabled and update_data.taskConfigSettings is not None:
         raw_task_config_settings = update_data.taskConfigSettings.model_dump(exclude_unset=True)
         try:
             settings.task_config_settings = validate_task_config_settings(raw_task_config_settings)  # type: ignore[assignment]
@@ -183,22 +189,25 @@ async def update_user_settings(
         if settings.default_sub_language and settings.default_sub_language not in update_data.subLanguages:
             settings.default_sub_language = update_data.subLanguages[0] if update_data.subLanguages else None
 
-    if update_data.defaultSubLanguage is not None:
-        if update_data.defaultSubLanguage in (settings.sub_languages or []):
+    if "defaultSubLanguage" in update_data.model_fields_set:
+        if update_data.defaultSubLanguage in (None, ""):
+            settings.default_sub_language = None
+        elif update_data.defaultSubLanguage in (settings.sub_languages or []):
             settings.default_sub_language = update_data.defaultSubLanguage
-    elif update_data.defaultSubLanguage == "":
-        settings.default_sub_language = None
+
+    if update_data.uiLanguage is not None:
+        settings.ui_language = update_data.uiLanguage  # type: ignore[assignment]
 
     if update_data.theme is not None:
         settings.theme = update_data.theme
 
-    if update_data.retryConfig is not None:
+    if not demo_mode_enabled and update_data.retryConfig is not None:
         settings.retry_config = update_data.retryConfig.model_dump()  # type: ignore[assignment]
 
-    if update_data.imageGenConfig is not None:
+    if not demo_mode_enabled and update_data.imageGenConfig is not None:
         settings.image_gen_config = update_data.imageGenConfig.model_dump()  # type: ignore[assignment]
 
-    if update_data.customThinkingTemplates is not None:
+    if not demo_mode_enabled and update_data.customThinkingTemplates is not None:
         templates = []
         for template in update_data.customThinkingTemplates:
             item = template.model_dump()
@@ -208,13 +217,13 @@ async def update_user_settings(
         settings.custom_thinking_templates = templates  # type: ignore[assignment]
         _cascade_clear_deleted_templates(settings, {item["id"] for item in templates if item.get("id")})
 
-    if update_data.nativeOutputMode is not None:
+    if not demo_mode_enabled and update_data.nativeOutputMode is not None:
         settings.native_output_mode = update_data.nativeOutputMode  # type: ignore[assignment]
 
-    if update_data.ragSearchEnabled is not None:
+    if not demo_mode_enabled and update_data.ragSearchEnabled is not None:
         settings.rag_search_enabled = update_data.ragSearchEnabled  # type: ignore[assignment]
 
-    if update_data.embeddingConfigs is not None:
+    if not demo_mode_enabled and update_data.embeddingConfigs is not None:
         prev = merge_embedding_configs(getattr(settings, "embedding_configs", None))
         next_cfg = merge_embedding_configs(update_data.embeddingConfigs.model_dump(exclude_none=True))
 
@@ -232,50 +241,47 @@ async def update_user_settings(
 
         settings.embedding_configs = next_cfg  # type: ignore[assignment]
 
-    if update_data.ragSearchTopKPerQuery is not None:
+    if not demo_mode_enabled and update_data.ragSearchTopKPerQuery is not None:
         settings.rag_search_top_k_per_query = update_data.ragSearchTopKPerQuery  # type: ignore[assignment]
 
-    if update_data.ragSearchNeighborWindow is not None:
+    if not demo_mode_enabled and update_data.ragSearchNeighborWindow is not None:
         settings.rag_search_neighbor_window = update_data.ragSearchNeighborWindow  # type: ignore[assignment]
 
-    if update_data.ragSearchMaxPrimaryChunks is not None:
+    if not demo_mode_enabled and update_data.ragSearchMaxPrimaryChunks is not None:
         settings.rag_search_max_primary_chunks = update_data.ragSearchMaxPrimaryChunks  # type: ignore[assignment]
 
-    if update_data.ragSearchMaxTotalChunks is not None:
+    if not demo_mode_enabled and update_data.ragSearchMaxTotalChunks is not None:
         settings.rag_search_max_total_chunks = update_data.ragSearchMaxTotalChunks  # type: ignore[assignment]
 
-    if update_data.ragSearchKeywordPageSize is not None:
+    if not demo_mode_enabled and update_data.ragSearchKeywordPageSize is not None:
         settings.rag_search_keyword_page_size = update_data.ragSearchKeywordPageSize  # type: ignore[assignment]
 
-    if update_data.agentMemoryTopKPerQuery is not None:
+    if not demo_mode_enabled and update_data.agentMemoryTopKPerQuery is not None:
         settings.agent_memory_top_k_per_query = update_data.agentMemoryTopKPerQuery  # type: ignore[assignment]
 
-    if update_data.agentMemoryNeighborWindow is not None:
+    if not demo_mode_enabled and update_data.agentMemoryNeighborWindow is not None:
         settings.agent_memory_neighbor_window = update_data.agentMemoryNeighborWindow  # type: ignore[assignment]
 
-    if update_data.agentMemoryMaxPrimaryMessages is not None:
+    if not demo_mode_enabled and update_data.agentMemoryMaxPrimaryMessages is not None:
         settings.agent_memory_max_primary_messages = update_data.agentMemoryMaxPrimaryMessages  # type: ignore[assignment]
 
-    if update_data.agentMemoryMaxTotalMessages is not None:
+    if not demo_mode_enabled and update_data.agentMemoryMaxTotalMessages is not None:
         settings.agent_memory_max_total_messages = update_data.agentMemoryMaxTotalMessages  # type: ignore[assignment]
 
-    if update_data.patchAutoRetry is not None:
+    if not demo_mode_enabled and update_data.patchAutoRetry is not None:
         settings.patch_auto_retry = update_data.patchAutoRetry  # type: ignore[assignment]
 
-    if update_data.llmLoggingEnabled is not None:
+    if not demo_mode_enabled and update_data.llmLoggingEnabled is not None:
         settings.llm_logging_enabled = update_data.llmLoggingEnabled  # type: ignore[assignment]
 
-    if update_data.toolCallHistoryLimit is not None:
+    if not demo_mode_enabled and update_data.toolCallHistoryLimit is not None:
         settings.tool_call_history_limit = update_data.toolCallHistoryLimit  # type: ignore[assignment]
 
-    if update_data.thinkingHistoryLimit is not None:
+    if not demo_mode_enabled and update_data.thinkingHistoryLimit is not None:
         settings.thinking_history_limit = update_data.thinkingHistoryLimit  # type: ignore[assignment]
 
-    if update_data.toolCallAutoApprove is not None:
+    if not demo_mode_enabled and update_data.toolCallAutoApprove is not None:
         settings.tool_call_auto_approve = update_data.toolCallAutoApprove.model_dump()  # type: ignore[assignment]
-
-    if update_data.uiLanguage is not None:
-        settings.ui_language = update_data.uiLanguage  # type: ignore[assignment]
 
     db.commit()
     db.refresh(settings)
