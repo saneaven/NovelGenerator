@@ -96,6 +96,7 @@ services:
       context: .
       dockerfile: docker/frontend/Dockerfile
     environment:
+      APP_DOMAIN: ${APP_DOMAIN:-}
       VITE_API_URL: ${VITE_API_URL}
     expose:
       - "5173"
