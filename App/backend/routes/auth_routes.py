@@ -14,6 +14,7 @@ from ..auth import (
     get_current_user
 )
 from ..services.preset_service import preset_service
+from ..services.settings_service import settings_service
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
@@ -60,6 +61,7 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     default_settings = UserSettings(
         id=uuid.uuid4(),
         user_id=new_user.id,
+        task_config_settings=settings_service.create_settings_row(user_id=new_user.id).task_config_settings,
         main_language='English',
         sub_languages=[],
         default_sub_language=None,

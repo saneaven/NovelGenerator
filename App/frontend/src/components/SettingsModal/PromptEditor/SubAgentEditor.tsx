@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSettings } from '../../../store/settingsStore';
+import { useResolvedTaskConfig, useSettings } from '../../../store/settingsStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
 import type { SubAgentAllowedInvocation } from '../../../types/subAgents';
 import type { TaskAIConfig } from '../../../store/settingsStore';
@@ -349,7 +349,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   const { t } = useTranslation();
   const settings = useSettings();
   const { subAgents, deleteSubAgent } = useSubAgentStore();
-  const globalSubAgentConfig = settings.task_configs.subAgent;
+  const globalSubAgentConfig = useResolvedTaskConfig('subAgent');
 
   const agent = useMemo(() => {
     return selectedId ? subAgents.find((s) => s.id === selectedId) : undefined;

@@ -9,6 +9,7 @@ import type {
   TokenizerOverride,
   CustomThinkingTemplate,
 } from '../../store/settingsStore';
+import { normalizeEffectiveTaskConfig } from '../../store/taskConfigSettings';
 import ModelBrowser from './ModelBrowser';
 import ThinkingTemplateEditorModal from './ThinkingTemplateEditorModal';
 import { TextButton } from '../TextButton';
@@ -17,6 +18,7 @@ import { Warning, Settings, Advenced } from '../icons';
 
 interface TaskConfigFormProps {
   taskType: AITaskType;
+  formKey?: string;
   config: TaskAIConfig;
   onChange: (config: TaskAIConfig) => void;
   customThinkingTemplates?: CustomThinkingTemplate[];
@@ -25,14 +27,20 @@ interface TaskConfigFormProps {
 
 const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   taskType,
+  formKey,
   config,
   onChange,
   customThinkingTemplates = [],
   onTemplatesChange,
 }) => {
   const { t } = useTranslation();
+  const radioNameKey = formKey ?? taskType;
   const [showModelBrowser, setShowModelBrowser] = useState(false);
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
+
+  const emitChange = (nextConfig: TaskAIConfig) => {
+    onChange(normalizeEffectiveTaskConfig(nextConfig));
+  };
 
   // Detect if model is GPT-5 family (gpt-5, gpt-5-mini, gpt-5.1, etc.)
   const isGpt5 = config.provider === 'openai' && /gpt-?5/i.test(config.model);
@@ -95,7 +103,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
     // Close model browser when provider changes
     setShowModelBrowser(false);
 
-    onChange({
+    emitChange({
       ...config,
       provider,
       model: '',  // Clear model when provider changes
@@ -104,28 +112,36 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
         ...config.advanced,
         thinking_mode: newThinkingMode,
         thinking_config: getDefaultThinkingConfig(provider),
+        request_format:
+          provider === 'custom'
+            ? (config.advanced.request_format ?? 'openai_sdk')
+            : undefined,
+        custom_thinking_template_id:
+          provider === 'custom'
+            ? config.advanced.custom_thinking_template_id
+            : undefined,
       },
     });
   };
 
   const handleModelChange = (model: string) => {
-    onChange({ ...config, model });
+    emitChange({ ...config, model });
   };
 
   const handleTemperatureChange = (temperature: number) => {
-    onChange({ ...config, temperature });
+    emitChange({ ...config, temperature });
   };
 
   const handleMaxOutputTokensChange = (value: number | undefined) => {
-    onChange({ ...config, max_output_tokens: value });
+    emitChange({ ...config, max_output_tokens: value });
   };
 
   const handleContextWindowTokensChange = (value: number | undefined) => {
-    onChange({ ...config, context_window_tokens: value });
+    emitChange({ ...config, context_window_tokens: value });
   };
 
   const handleThinkingModeChange = (mode: 'off' | 'model' | 'custom') => {
-    onChange({
+    emitChange({
       ...config,
       advanced: {
         ...config.advanced,
@@ -138,7 +154,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
     key: keyof ThinkingConfig,
     value: any
   ) => {
-    onChange({
+    emitChange({
       ...config,
       advanced: {
         ...config.advanced,
@@ -151,7 +167,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   };
 
   const handleThinkingTemplateChange = (templateId: string | undefined) => {
-    onChange({
+    emitChange({
       ...config,
       advanced: {
         ...config.advanced,
@@ -161,7 +177,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   };
 
   const handleRequestFormatChange = (format: RequestFormat) => {
-    onChange({
+    emitChange({
       ...config,
       advanced: {
         ...config.advanced,
@@ -173,7 +189,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   };
 
   const handleTokenizerOverrideChange = (tokenizer: TokenizerOverride | undefined) => {
-    onChange({
+    emitChange({
       ...config,
       advanced: {
         ...config.advanced,
@@ -280,10 +296,10 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
               provider={config.provider}
               request_format={config.provider === 'custom' ? customRequestFormat : undefined}
               currentModel={config.model}
-              provider_preference={config.provider_preference}
+              provider_preference={config.provider_preference ?? undefined}
               onSelectModel={handleModelChange}
               onUpdateProviderPreference={(pref) =>
-                onChange({ ...config, provider_preference: pref })
+                emitChange({ ...config, provider_preference: pref })
               }
             />
           )}
@@ -294,7 +310,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
             <label>{t('settings.taskConfig.thinking_config.verbosity')}</label>
             <CustomSelect
               value={config.advanced.verbosity || 'medium'}
-              onChange={(value) => onChange({
+              onChange={(value) => emitChange({
                 ...config,
                 advanced: {
                   ...config.advanced,
@@ -385,7 +401,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
               <label className={`radio-option ${config.provider === 'gemini' ? 'disabled' : ''}`}>
                 <input
                   type="radio"
-                  name={`thinking-mode-${taskType}`}
+                  name={`thinking-mode-${radioNameKey}`}
                   value="off"
                   checked={config.advanced.thinking_mode === 'off'}
                   onChange={() => handleThinkingModeChange('off')}
@@ -404,7 +420,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
               <label className="radio-option">
                 <input
                   type="radio"
-                  name={`thinking-mode-${taskType}`}
+                  name={`thinking-mode-${radioNameKey}`}
                   value="model"
                   checked={config.advanced.thinking_mode === 'model'}
                   onChange={() => handleThinkingModeChange('model')}
@@ -420,7 +436,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
               <label className="radio-option">
                 <input
                   type="radio"
-                  name={`thinking-mode-${taskType}`}
+                  name={`thinking-mode-${radioNameKey}`}
                   value="custom"
                   checked={config.advanced.thinking_mode === 'custom'}
                   onChange={() => handleThinkingModeChange('custom')}

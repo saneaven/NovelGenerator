@@ -1,11 +1,31 @@
-﻿import { create } from 'zustand';
+﻿import { useMemo } from 'react';
+import { create } from 'zustand';
 import { settingsService } from '../api/settingsService';
 import { scenarioService } from '../api/scenarioService';
 import type { ScenarioDocument, TaskType } from '../types/scenarios';
+import {
+    resolveAllTaskConfigs as resolveStoredTaskConfigs,
+    resolveTaskConfig as resolveStoredTaskConfig,
+} from './taskConfigSettings';
+import type {
+    AITaskType,
+    ProviderType,
+    TaskConfigSettings,
+} from './taskConfigSettings';
+export type {
+    AdvancedTaskSettings,
+    AITaskType,
+    ProviderPreference,
+    ProviderType,
+    RequestFormat,
+    TaskAIConfig,
+    TaskAIConfigOverride,
+    TaskConfigSettings,
+    TokenizerOverride,
+    ThinkingConfig,
+} from './taskConfigSettings';
 
 // Types
-export type ProviderType = 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
-export type AITaskType = 'agent' | 'translation' | 'editAssistant' | 'imagePrompt' | 'summary' | 'subAgent';
 export type ImageProviderType = 'openai' | 'gemini' | 'xai' | 'novelai';
 export type PromptType = 'natural' | 'tag_based';
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -46,14 +66,6 @@ export interface ProviderCredentials {
     };
 }
 
-// OpenRouter provider preference
-export interface ProviderPreference {
-    only?: string[];
-    ignore?: string[];
-}
-
-export type RequestFormat = 'openai_sdk' | 'claude_sdk' | 'openai_responses';
-
 // Custom thinking template types
 export interface CustomThinkingEffortField {
     path: string;
@@ -79,14 +91,6 @@ export interface CustomThinkingTemplate {
     history_fields: CustomThinkingHistoryField[];
 }
 
-// Thinking configuration for model-native thinking
-export interface ThinkingConfig {
-    effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';  // Claude adaptive uses low|medium|high|max
-    max_tokens?: number;
-    gemini_thinking_level?: 'minimal' | 'low' | 'medium' | 'high';  // Gemini 3 Flash supports all, Pro only low/high
-    gemini_budget_tokens?: number;
-}
-
 // Retry configuration for error handling
 export interface RetryConfig {
     enabled: boolean;                  // Enable/disable retry logic
@@ -104,34 +108,6 @@ export interface ToolCallAutoApproveConfig {
     read: boolean;
     search: boolean;
     subAgent: boolean;
-}
-
-// Tokenizer type for token counting (used with openrouter/custom providers)
-export type TokenizerOverride = 'openai' | 'claude' | 'gemini';
-
-// Advanced settings for AI functions
-export interface AdvancedTaskSettings {
-    thinking_mode: 'off' | 'model' | 'custom';
-    thinking_config?: ThinkingConfig;
-    custom_thinking_template_id?: string;
-    tokenizer_override?: TokenizerOverride;  // For openrouter/custom providers: which tokenizer to use for token counting
-    request_format?: RequestFormat;
-    verbosity?: 'low' | 'medium' | 'high';  // GPT-5 output verbosity (text.verbosity in Responses API)
-}
-
-// Complete configuration for a single AI function
-export interface TaskAIConfig {
-    provider: ProviderType;
-    model: string;
-    temperature: number;
-    provider_preference?: ProviderPreference;
-    // Max output tokens for the LLM response (maps to backend `max_tokens`)
-    // If omitted, provider defaults are used.
-    max_output_tokens?: number;
-    // Context window upper bound (used for local prompt budgeting preflight)
-    // If omitted, falls back to conservative defaults.
-    context_window_tokens?: number;
-    advanced: AdvancedTaskSettings;
 }
 
 // Embedding profile configuration (used by RAG Search / Agent Memory)
@@ -208,10 +184,7 @@ export interface ImageGenConfig {
 
 // Main settings interface
 export interface Settings {
-    // Per-function complete configurations
-    task_configs: {
-        [K in AITaskType]: TaskAIConfig;
-    };
+    taskConfigSettings: TaskConfigSettings;
 
     // Image generation configuration
     imageGenConfig: ImageGenConfig;
@@ -303,17 +276,6 @@ export interface SettingsStore {
     // Sync methods
     loadFromServer: () => Promise<void>;
     saveToServer: () => Promise<void>;
-
-    // Function config setters
-    setTaskConfig: (functionType: AITaskType, config: TaskAIConfig) => void;
-    setTaskProvider: (functionType: AITaskType, provider: ProviderType) => void;
-    setTaskModel: (functionType: AITaskType, model: string) => void;
-    setTaskTemperature: (functionType: AITaskType, temperature: number) => void;
-    setTaskProviderPreference: (functionType: AITaskType, pref?: ProviderPreference) => void;
-    setTaskAdvanced: (functionType: AITaskType, advanced: Partial<AdvancedTaskSettings>) => void;
-
-    // Getters
-    getTaskConfig: (functionType: AITaskType) => TaskAIConfig;
 
     // Image generation config setters
     setImageGenConfig: (config: Partial<ImageGenConfig>) => void;
@@ -418,125 +380,6 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
             console.error('Failed to save settings to server:', error);
             throw error;
         }
-    },
-
-    // Function configuration
-    setTaskConfig: (functionType, config) => {
-        set((state) => {
-            const settings = requireSettings(state.settings);
-            return {
-                settings: {
-                    ...settings,
-                    task_configs: {
-                        ...settings.task_configs,
-                        [functionType]: config,
-                    },
-                },
-            };
-        });
-    },
-
-    setTaskProvider: (functionType, provider) => {
-        set((state) => {
-            const settings = requireSettings(state.settings);
-            return {
-                settings: {
-                    ...settings,
-                    task_configs: {
-                        ...settings.task_configs,
-                        [functionType]: {
-                            ...settings.task_configs[functionType],
-                            provider,
-                            // Clear provider preferences if switching away from OpenRouter
-                            provider_preference:
-                                provider === 'openrouter'
-                                    ? settings.task_configs[functionType].provider_preference
-                                    : undefined,
-                        },
-                    },
-                },
-            };
-        });
-    },
-
-    setTaskModel: (functionType, model) => {
-        set((state) => {
-            const settings = requireSettings(state.settings);
-            return {
-                settings: {
-                    ...settings,
-                    task_configs: {
-                        ...settings.task_configs,
-                        [functionType]: {
-                            ...settings.task_configs[functionType],
-                            model,
-                        },
-                    },
-                },
-            };
-        });
-    },
-
-    setTaskTemperature: (functionType, temperature) => {
-        set((state) => {
-            const settings = requireSettings(state.settings);
-            return {
-                settings: {
-                    ...settings,
-                    task_configs: {
-                        ...settings.task_configs,
-                        [functionType]: {
-                            ...settings.task_configs[functionType],
-                            temperature,
-                        },
-                    },
-                },
-            };
-        });
-    },
-
-    setTaskProviderPreference: (functionType, pref) => {
-        set((state) => {
-            const settings = requireSettings(state.settings);
-            return {
-                settings: {
-                    ...settings,
-                    task_configs: {
-                        ...settings.task_configs,
-                        [functionType]: {
-                            ...settings.task_configs[functionType],
-                            provider_preference: pref,
-                        },
-                    },
-                },
-            };
-        });
-    },
-
-    setTaskAdvanced: (functionType, advanced) => {
-        set((state) => {
-            const settings = requireSettings(state.settings);
-            return {
-                settings: {
-                    ...settings,
-                    task_configs: {
-                        ...settings.task_configs,
-                        [functionType]: {
-                            ...settings.task_configs[functionType],
-                            advanced: {
-                                ...settings.task_configs[functionType].advanced,
-                                ...advanced,
-                            },
-                        },
-                    },
-                },
-            };
-        });
-    },
-
-    // Getters
-    getTaskConfig: (functionType) => {
-        return get().getSettings().task_configs[functionType];
     },
 
     // Image generation config
@@ -727,4 +570,20 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
 
 export const useSettings = (): Settings => {
     return useSettingsStore((state) => requireSettings(state.settings));
+};
+
+export const useResolvedTaskConfig = (taskType: AITaskType) => {
+    const taskConfigSettings = useSettingsStore((state) => requireSettings(state.settings).taskConfigSettings);
+    return useMemo(
+        () => resolveStoredTaskConfig(taskConfigSettings, taskType),
+        [taskConfigSettings, taskType]
+    );
+};
+
+export const useResolvedTaskConfigs = () => {
+    const taskConfigSettings = useSettingsStore((state) => requireSettings(state.settings).taskConfigSettings);
+    return useMemo(
+        () => resolveStoredTaskConfigs(taskConfigSettings),
+        [taskConfigSettings]
+    );
 };

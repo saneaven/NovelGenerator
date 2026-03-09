@@ -421,7 +421,7 @@ async def run_llm(
             tools=tools_wire,
             tool_choice="auto" if tools_wire else None,
             max_tokens=task_config.max_output_tokens,
-            provider_preference=advanced.get("provider_preference"),
+            provider_preference=getattr(task_config, "provider_preference", None),
             thinking_config=effective_thinking_config,
             thinking_mode=thinking_mode,
             request_format=advanced.get("request_format"),

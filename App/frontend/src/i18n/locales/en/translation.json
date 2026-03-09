@@ -377,8 +377,23 @@
       }
     },
     "general": {
-      "description": "Configure AI model settings for each task.",
+      "title": "General",
+      "description": "Configure one shared AI default, then opt specific tasks into overrides only when needed.",
       "configuration": "Configuration",
+      "generalLabel": "General",
+      "generalConfigTitle": "General Default Configuration",
+      "generalDescription": "This configuration is used by every AI task unless that task enables its own override.",
+      "sidebarTitle": "AI Settings",
+      "baseSectionLabel": "Base",
+      "taskSectionLabel": "Task Settings",
+      "overrideBadge": "Override",
+      "overrideToggle": "Use override for this task",
+      "overrideHint": "When enabled, only the differences from General will be stored for this task.",
+      "overrideFormHint": "Fields you do not change here will continue to inherit from the General configuration.",
+      "resetOverride": "Reset to General",
+      "inheritedTitle": "Inherited from General",
+      "inheritedBadge": "Following General",
+      "inheritedDescription": "This task is currently using the shared General configuration.",
       "tasks": {
         "agent": {
           "label": "Agent",

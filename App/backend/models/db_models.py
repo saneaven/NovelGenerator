@@ -51,15 +51,8 @@ class UserSettings(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True)
 
-    # Task-based configuration (provider, model, temperature, advanced settings per task)
-    task_configs = Column(JSONB, nullable=False, server_default="""{
-        "agent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
-        "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
-        "editAssistant": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
-        "imagePrompt": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
-        "summary": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.2, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},
-        "subAgent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}}
-    }""")
+    # General task config plus per-task overrides.
+    task_config_settings = Column(JSONB, nullable=False)
 
     # Language settings
     main_language = Column(String(50), default='English', nullable=False)

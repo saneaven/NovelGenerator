@@ -6,6 +6,7 @@ import { BaseSidebar } from '../BaseSidebar';
 import { useSettings, useSettingsStore } from '../../store/settingsStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import type { ProviderCredentials, Settings, AITaskType } from '../../store/settingsStore';
+import { hasTaskOverride, resolveAllTaskConfigs, TASK_CONFIG_TASK_TYPES } from '../../store/taskConfigSettings';
 import CredentialsPanel from './CredentialsPanel';
 import GeneralPanel from './GeneralPanel';
 import LanguagePanel from './LanguagePanel';
@@ -39,6 +40,8 @@ type MainTab =
   | 'language'
   | 'theme'
   | 'advanced';
+
+type GeneralConfigTarget = 'general' | AITaskType;
 
 type ProviderName = keyof ProviderCredentials;
 
@@ -126,7 +129,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [toast, setToast] = useState<{ kind: SettingsToastKind; message: string } | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
   const [mainTab, setMainTab] = useState<MainTab>('profile');
-  const [activeTask, setActiveTask] = useState<AITaskType>('agent');
+  const [activeGeneralTarget, setActiveGeneralTarget] = useState<GeneralConfigTarget>('general');
   const promptsPanelRef = useRef<PromptsTemplatesPanelHandle | null>(null);
   const settingsSnapshotRef = useRef<string>('');
   const credentialsSnapshotRef = useRef<string>('');
@@ -140,6 +143,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     if (isOpen) {
       setLocalSettings(settings);
       setLocalCredentials(DEFAULT_CREDENTIAL_DRAFT);
+      setActiveGeneralTarget('general');
       settingsSnapshotRef.current = JSON.stringify(settings);
       credentialsSnapshotRef.current = JSON.stringify(DEFAULT_CREDENTIAL_DRAFT);
       setPromptUnsavedCount(0);
@@ -188,19 +192,32 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     };
   }, [showToast]);
 
-  const validateTaskModels = (): { taskType: AITaskType; message: string } | null => {
-    const taskTypes: AITaskType[] = ['agent', 'translation', 'editAssistant', 'imagePrompt', 'summary', 'subAgent'];
-    for (const taskType of taskTypes) {
-      const cfg = localSettings.task_configs?.[taskType];
-      const model = (cfg as any)?.model;
+  const resolvedTaskConfigs = useMemo(
+    () => resolveAllTaskConfigs(localSettings.taskConfigSettings),
+    [localSettings.taskConfigSettings]
+  );
+
+  const validateTaskModels = (): { target: GeneralConfigTarget; message: string } | null => {
+    const generalModel = localSettings.taskConfigSettings.general.model;
+    if (typeof generalModel !== 'string' || !generalModel.trim()) {
+      return {
+        target: 'general',
+        message: t('settings.general.validation.modelRequired', { task: t('settings.general.generalLabel') }),
+      };
+    }
+
+    for (const taskType of TASK_CONFIG_TASK_TYPES) {
+      if (!hasTaskOverride(localSettings.taskConfigSettings, taskType)) continue;
+      const model = resolvedTaskConfigs[taskType]?.model;
       if (typeof model !== 'string' || !model.trim()) {
         const label = t(`settings.general.tasks.${taskType}.label`);
         return {
-          taskType,
+          target: taskType,
           message: t('settings.general.validation.modelRequired', { task: label }),
         };
       }
     }
+
     return null;
   };
 
@@ -331,7 +348,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         const taskModelError = validateTaskModels();
         if (taskModelError) {
           setMainTab('general');
-          setActiveTask(taskModelError.taskType);
+          setActiveGeneralTarget(taskModelError.target);
           showToast('error', taskModelError.message);
         } else {
           const embeddingError = validateEmbeddings();
@@ -711,7 +728,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         </aside>
 
         {/* Panel Content */}
-        <div className={`settings-panel-content${mainTab === 'prompts' ? ' settings-panel-content--fill' : ''}`}>
+        <div className={`settings-panel-content${mainTab === 'prompts' || mainTab === 'general' ? ' settings-panel-content--fill' : ''}`}>
         {mainTab === 'profile' && <ProfilePanel />}
 
         {mainTab === 'credentials' && (
@@ -765,17 +782,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
         {mainTab === 'general' && (
           <GeneralPanel
-            task_configs={localSettings.task_configs}
-            activeTask={activeTask}
-            onTaskChange={setActiveTask}
-            onConfigChange={(taskType, config) =>
-              setLocalSettings({
-                ...localSettings,
-                task_configs: {
-                  ...localSettings.task_configs,
-                  [taskType]: config,
-                },
-              })
+            taskConfigSettings={localSettings.taskConfigSettings}
+            activeTarget={activeGeneralTarget}
+            onTargetChange={setActiveGeneralTarget}
+            onTaskConfigSettingsChange={(taskConfigSettings) =>
+              setLocalSettings((prev) => ({
+                ...prev,
+                taskConfigSettings,
+              }))
             }
             customThinkingTemplates={localSettings.customThinkingTemplates}
             onTemplatesChange={(templates) =>

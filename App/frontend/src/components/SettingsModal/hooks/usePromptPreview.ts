@@ -7,7 +7,7 @@ import { renderTemplate } from '../../../templateEngine/engine';
 
 import { useProjectStore } from '../../../store/projectStore';
 import { useVariableStore } from '../../../store/variableStore';
-import { useSettingsStore } from '../../../store/settingsStore';
+import { useResolvedTaskConfigs } from '../../../store/settingsStore';
 import { useTokenCount } from '../../../hooks/useTokenCount';
 import type { ConfigData } from '../../../templateEngine/schema';
 import type { TaskType } from '../../../types/scenarios';
@@ -73,8 +73,8 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
   const userVariables = useVariableStore(state => state.variables);
 
   // Get task config for token counting
-  const task_configs = useSettingsStore((state) => state.getSettings().task_configs);
-  const taskConfig = task_configs[taskType as keyof typeof task_configs];
+  const taskConfigs = useResolvedTaskConfigs();
+  const taskConfig = taskConfigs[taskType as keyof typeof taskConfigs];
 
   // State
   const [renderedPreview, setRenderedPreview] = useState<string>('');
@@ -193,7 +193,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
     text: renderedPreview,
     provider: taskConfig?.provider || 'openrouter',
     model: taskConfig?.model || '',
-    tokenizer_override: taskConfig?.advanced?.tokenizer_override,
+    tokenizer_override: taskConfig?.advanced?.tokenizer_override ?? undefined,
     enabled: !isLoading && !error,
   });
 

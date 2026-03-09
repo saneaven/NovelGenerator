@@ -7,82 +7,11 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from ..models.db_models import UserSettings
-
-
-DEFAULT_TASK_CONFIGS: dict[str, dict[str, Any]] = {
-    "agent": {
-        "provider": "openrouter",
-        "model": "gpt-4o-mini",
-        "temperature": 0.7,
-        "max_output_tokens": None,
-        "context_window_tokens": 32000,
-        "advanced": {
-            "thinking_mode": "off",
-            "thinking_config": {"effort": "medium"},
-            "request_format": "openai_sdk",
-        },
-    },
-    "subAgent": {
-        "provider": "openrouter",
-        "model": "gpt-4o-mini",
-        "temperature": 0.7,
-        "max_output_tokens": None,
-        "context_window_tokens": 32000,
-        "advanced": {
-            "thinking_mode": "off",
-            "thinking_config": {"effort": "medium"},
-            "request_format": "openai_sdk",
-        },
-    },
-    "translation": {
-        "provider": "openrouter",
-        "model": "gpt-4o",
-        "temperature": 0.2,
-        "max_output_tokens": None,
-        "context_window_tokens": 32000,
-        "advanced": {
-            "thinking_mode": "off",
-            "thinking_config": {"effort": "medium"},
-            "request_format": "openai_sdk",
-        },
-    },
-    "editAssistant": {
-        "provider": "openrouter",
-        "model": "gpt-4o",
-        "temperature": 0.7,
-        "max_output_tokens": None,
-        "context_window_tokens": 32000,
-        "advanced": {
-            "thinking_mode": "off",
-            "thinking_config": {"effort": "medium"},
-            "request_format": "openai_sdk",
-        },
-    },
-    "imagePrompt": {
-        "provider": "openrouter",
-        "model": "gpt-4o",
-        "temperature": 0.7,
-        "max_output_tokens": None,
-        "context_window_tokens": 32000,
-        "advanced": {
-            "thinking_mode": "off",
-            "thinking_config": {"effort": "medium"},
-            "request_format": "openai_sdk",
-        },
-    },
-    "summary": {
-        "provider": "openrouter",
-        "model": "gpt-4o-mini",
-        "temperature": 0.3,
-        "max_output_tokens": 2048,
-        "context_window_tokens": 32000,
-        "advanced": {
-            "thinking_mode": "off",
-            "thinking_config": {"effort": "medium"},
-            "request_format": "openai_sdk",
-        },
-    },
-}
+from .task_config_settings import (
+    make_initial_task_config_settings,
+    resolve_task_config,
+    validate_task_config_settings,
+)
 
 DEFAULT_AUTO_APPROVE: dict[str, bool] = {
     "create": False,
@@ -107,6 +36,7 @@ class TaskConfig:
     provider: str
     model: str
     temperature: float
+    provider_preference: dict[str, Any] | None
     max_output_tokens: int | None
     context_window_tokens: int | None
     advanced: dict[str, Any]
@@ -130,33 +60,45 @@ class RagSettings:
 
 
 class SettingsService:
+    def create_settings_row(self, *, user_id: UUID) -> UserSettings:
+        return UserSettings(
+            user_id=user_id,
+            task_config_settings=make_initial_task_config_settings(),
+            main_language="English",
+            sub_languages=[],
+            default_sub_language=None,
+        )
+
     def _get_settings(self, db: Session, user_id: UUID) -> UserSettings:
         settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
         if settings is None:
-            settings = UserSettings(user_id=user_id)
+            settings = self.create_settings_row(user_id=user_id)
             db.add(settings)
             db.flush()
         return settings
 
-    def get_task_config(self, db: Session, user_id: UUID, task_type: str) -> TaskConfig:
+    def get_or_create_settings(self, db: Session, user_id: UUID) -> UserSettings:
+        return self._get_settings(db, user_id)
+
+    def get_task_config_settings(self, db: Session, user_id: UUID) -> dict[str, Any]:
         settings = self._get_settings(db, user_id)
-        all_configs = settings.task_configs if isinstance(settings.task_configs, dict) else {}
+        raw = getattr(settings, "task_config_settings", None)
+        if not isinstance(raw, dict):
+            raise ValueError("Stored task_config_settings must be an object")
+        return validate_task_config_settings(raw)
 
-        base = DEFAULT_TASK_CONFIGS.get(task_type, DEFAULT_TASK_CONFIGS["agent"])
-        stored = all_configs.get(task_type) if isinstance(all_configs, dict) else None
-        cfg = {**base, **(stored or {})}
-
-        advanced_base = base.get("advanced") if isinstance(base.get("advanced"), dict) else {}
-        advanced_stored = cfg.get("advanced") if isinstance(cfg.get("advanced"), dict) else {}
-        advanced = {**advanced_base, **advanced_stored}
+    def get_task_config(self, db: Session, user_id: UUID, task_type: str) -> TaskConfig:
+        cfg = resolve_task_config(self.get_task_config_settings(db, user_id), task_type)
+        provider_preference = cfg.get("provider_preference")
 
         return TaskConfig(
-            provider=str(cfg.get("provider") or base["provider"]),
-            model=str(cfg.get("model") or base["model"]),
-            temperature=float(cfg.get("temperature") if cfg.get("temperature") is not None else base["temperature"]),
+            provider=str(cfg["provider"]),
+            model=str(cfg["model"]),
+            temperature=float(cfg["temperature"]),
+            provider_preference=provider_preference if isinstance(provider_preference, dict) else None,
             max_output_tokens=cfg.get("max_output_tokens"),
             context_window_tokens=cfg.get("context_window_tokens"),
-            advanced=advanced,
+            advanced=cfg.get("advanced") if isinstance(cfg.get("advanced"), dict) else {},
         )
 
     def get_active_preset_id(self, db: Session, user_id: UUID) -> UUID | None:

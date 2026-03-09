@@ -61,7 +61,7 @@ async def run_summary_model(
             tools=None,
             tool_choice=None,
             max_tokens=summary_cfg.max_output_tokens,
-            provider_preference=summary_cfg.advanced.get("provider_preference") if isinstance(summary_cfg.advanced, dict) else None,
+            provider_preference=getattr(summary_cfg, "provider_preference", None),
             thinking_config=summary_cfg.advanced.get("thinking_config") if isinstance(summary_cfg.advanced, dict) else None,
             thinking_mode=summary_cfg.advanced.get("thinking_mode") if isinstance(summary_cfg.advanced, dict) else "off",
             request_format=summary_cfg.advanced.get("request_format") if isinstance(summary_cfg.advanced, dict) else None,

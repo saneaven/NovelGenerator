@@ -1,5 +1,5 @@
 """Pydantic schemas for user settings"""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Optional, Dict, List, Literal
 from enum import Enum
 
@@ -35,12 +35,16 @@ class AITaskType(str, Enum):
 
 class ProviderPreference(BaseModel):
     """OpenRouter provider filtering"""
+    model_config = ConfigDict(extra="forbid")
+
     only: Optional[List[str]] = None
     ignore: Optional[List[str]] = None
 
 
 class ThinkingConfig(BaseModel):
     """Thinking configuration for model-native thinking"""
+    model_config = ConfigDict(extra="forbid")
+
     effort: Optional[Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]] = None
     max_tokens: Optional[int] = None
     gemini_thinking_level: Optional[str] = None  # 'minimal' | 'low' | 'medium' | 'high'
@@ -68,6 +72,8 @@ class CustomThinkingHistoryField(BaseModel):
 
 class CustomThinkingTemplate(BaseModel):
     """User-defined thinking template for custom providers."""
+    model_config = ConfigDict(extra="forbid")
+
     id: Optional[str] = None
     name: str
     effort_fields: List[CustomThinkingEffortField] = []
@@ -77,29 +83,89 @@ class CustomThinkingTemplate(BaseModel):
 
 class AdvancedTaskSettings(BaseModel):
     """Advanced settings for AI tasks"""
-    thinking_mode: Literal["off", "model", "custom"] = "off"
-    thinking_config: Optional[ThinkingConfig] = Field(default_factory=lambda: ThinkingConfig())
+    model_config = ConfigDict(extra="forbid")
+
+    thinking_mode: Literal["off", "model", "custom"]
+    thinking_config: Optional[ThinkingConfig] = None
     custom_thinking_template_id: Optional[str] = None
     tokenizer_override: Optional[Literal["openai", "claude", "gemini"]] = None
-    request_format: Literal["openai_sdk", "claude_sdk", "openai_responses"] = "openai_sdk"
+    request_format: Optional[Literal["openai_sdk", "claude_sdk", "openai_responses"]] = None
     verbosity: Optional[Literal["low", "medium", "high"]] = None  # GPT-5 output verbosity (text.verbosity in Responses API)
 
 
 class TaskAIConfig(BaseModel):
     """Configuration for a specific AI task"""
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
     provider: ProviderType
     model: str = Field(..., min_length=1, max_length=200)
-    temperature: float = Field(default=0.7, ge=0, le=2)
+    temperature: float = Field(..., ge=0, le=2)
     provider_preference: Optional[ProviderPreference] = None
     # Max output tokens for the response (maps to backend `max_tokens`).
     # Leave unset to use provider defaults.
     max_output_tokens: Optional[int] = Field(default=None, ge=1, le=1000000)
     # Context window upper bound used for local prompt budgeting (e.g. agent memory preflight).
     context_window_tokens: Optional[int] = Field(default=None, ge=1024, le=1000000)
-    advanced: AdvancedTaskSettings = Field(default_factory=AdvancedTaskSettings)
+    advanced: AdvancedTaskSettings
 
-    class Config:
-        use_enum_values = True
+class ProviderPreferenceOverride(BaseModel):
+    """Partial OpenRouter provider filtering override."""
+    model_config = ConfigDict(extra="forbid")
+
+    only: Optional[List[str]] = None
+    ignore: Optional[List[str]] = None
+
+
+class ThinkingConfigOverride(BaseModel):
+    """Partial thinking configuration override."""
+    model_config = ConfigDict(extra="forbid")
+
+    effort: Optional[Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]] = None
+    max_tokens: Optional[int] = Field(default=None, ge=1)
+    gemini_thinking_level: Optional[str] = None
+    gemini_budget_tokens: Optional[int] = Field(default=None, ge=0)
+
+
+class AdvancedTaskSettingsOverride(BaseModel):
+    """Partial advanced task settings override."""
+    model_config = ConfigDict(extra="forbid")
+
+    thinking_mode: Optional[Literal["off", "model", "custom"]] = None
+    thinking_config: Optional[ThinkingConfigOverride] = None
+    custom_thinking_template_id: Optional[str] = None
+    tokenizer_override: Optional[Literal["openai", "claude", "gemini"]] = None
+    request_format: Optional[Literal["openai_sdk", "claude_sdk", "openai_responses"]] = None
+    verbosity: Optional[Literal["low", "medium", "high"]] = None
+
+
+class TaskAIConfigOverride(BaseModel):
+    """Partial AI task configuration override."""
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    provider: Optional[ProviderType] = None
+    model: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    temperature: Optional[float] = Field(default=None, ge=0, le=2)
+    provider_preference: Optional[ProviderPreferenceOverride] = None
+    max_output_tokens: Optional[int] = Field(default=None, ge=1, le=1000000)
+    context_window_tokens: Optional[int] = Field(default=None, ge=1024, le=1000000)
+    advanced: Optional[AdvancedTaskSettingsOverride] = None
+
+
+class TaskConfigSettings(BaseModel):
+    """General task config plus per-task overrides."""
+    model_config = ConfigDict(extra="forbid")
+
+    general: TaskAIConfig
+    overrides: Dict[str, TaskAIConfigOverride] = Field(default_factory=dict)
+
+    @field_validator("overrides")
+    @classmethod
+    def validate_override_keys(cls, value: Dict[str, TaskAIConfigOverride]) -> Dict[str, TaskAIConfigOverride]:
+        allowed = {member.value for member in AITaskType}
+        unknown = [key for key in value.keys() if key not in allowed]
+        if unknown:
+            raise ValueError(f"Unknown task override keys: {', '.join(sorted(unknown))}")
+        return value
 
 
 class OpenRouterCredentials(BaseModel):
@@ -252,7 +318,7 @@ class ImageGenConfig(BaseModel):
 
 class UserSettingsResponse(BaseModel):
     """User settings response"""
-    task_configs: Dict[str, TaskAIConfig]
+    taskConfigSettings: TaskConfigSettings
     mainLanguage: str
     subLanguages: List[str] = []
     defaultSubLanguage: Optional[str] = None
@@ -285,7 +351,7 @@ class UserSettingsResponse(BaseModel):
 
 class UserSettingsUpdate(BaseModel):
     """Update user settings"""
-    task_configs: Optional[Dict[str, TaskAIConfig]] = None
+    taskConfigSettings: Optional[TaskConfigSettings] = None
     mainLanguage: Optional[str] = None
     subLanguages: Optional[List[str]] = None
     defaultSubLanguage: Optional[str] = None

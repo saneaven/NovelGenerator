@@ -377,8 +377,23 @@
       }
     },
     "general": {
-      "description": "각 작업에 대한 AI 모델 설정을 구성합니다.",
+      "title": "일반",
+      "description": "하나의 공통 AI 기본값을 설정하고, 필요한 작업만 override를 켜서 따로 조정합니다.",
       "configuration": "설정",
+      "generalLabel": "General",
+      "generalConfigTitle": "공통 기본 설정",
+      "generalDescription": "별도 override를 켜지 않은 모든 AI 작업은 이 설정을 그대로 사용합니다.",
+      "sidebarTitle": "AI 설정",
+      "baseSectionLabel": "기본 설정",
+      "taskSectionLabel": "작업별 설정",
+      "overrideBadge": "Override",
+      "overrideToggle": "이 작업에만 override 사용",
+      "overrideHint": "켜면 이 작업에서 General과 다른 값만 저장합니다.",
+      "overrideFormHint": "여기서 바꾸지 않은 값은 계속 General 설정을 따릅니다.",
+      "resetOverride": "General로 되돌리기",
+      "inheritedTitle": "General 상속 중",
+      "inheritedBadge": "General 사용 중",
+      "inheritedDescription": "이 작업은 현재 공통 General 설정을 그대로 사용하고 있습니다.",
       "tasks": {
         "agent": {
           "label": "에이전트",
