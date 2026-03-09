@@ -1,6 +1,6 @@
-"""Reconcile asset storage (assets table ↔ files on disk).
+"""Reconcile local asset storage (assets table ↔ files on disk).
 
-This script is intended for ops/dev use.
+This script is intended for ops/dev use when `ASSET_STORAGE_BACKEND=local`.
 
 Capabilities:
 - Detect orphan files on disk (not referenced by any Asset row) and optionally delete them.
@@ -108,7 +108,15 @@ def main() -> int:
     parser.add_argument("--recalc-sizes", action="store_true", help="Recalculate file_size from disk")
     args = parser.parse_args()
 
+    if storage_service.backend_name != "local":
+        raise SystemExit(
+            "reconcile_asset_storage only supports local asset storage. "
+            "Set ASSET_STORAGE_BACKEND=local before running this script."
+        )
+
     base_path = storage_service.base_path
+    if base_path is None:
+        raise SystemExit("Local asset storage base path is not configured.")
     base_path.mkdir(parents=True, exist_ok=True)
 
     print(f"Storage base: {base_path}")

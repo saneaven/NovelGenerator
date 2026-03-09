@@ -43,7 +43,7 @@ from .services.default_preset_seed import validate_default_preset_seed
 from .services.embedding_models_service import list_embedding_models
 from .services.asset_change_events import register_asset_change_event_hooks
 from .services.object_change_events import register_object_change_event_hooks
-from .services.storage_service import AssetFileNotFoundError, AssetStorageUnavailableError, storage_service
+from .services.asset_proxy import build_asset_proxy_response
 
 # Ensure correct Content-Type for AVIF assets when served via StaticFiles.
 mimetypes.add_type("image/avif", ".avif")
@@ -178,32 +178,7 @@ app.include_router(admin_router)
 
 @app.get("/storage/assets/{asset_key:path}", include_in_schema=False)
 async def proxy_asset(asset_key: str):
-    normalized_key = str(asset_key or "").lstrip("/")
-    if not normalized_key:
-        raise HTTPException(status_code=404, detail="Asset not found")
-
-    try:
-        asset_stream = storage_service.open_asset_stream(normalized_key)
-    except AssetFileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Asset not found") from exc
-    except AssetStorageUnavailableError as exc:
-        raise HTTPException(status_code=503, detail="Asset storage unavailable") from exc
-
-    headers = {
-        "cache-control": asset_stream.cache_control,
-    }
-    if asset_stream.content_length is not None:
-        headers["content-length"] = str(asset_stream.content_length)
-    if asset_stream.etag:
-        headers["etag"] = asset_stream.etag
-    if asset_stream.last_modified:
-        headers["last-modified"] = asset_stream.last_modified
-
-    return StreamingResponse(
-        storage_service.iter_asset_stream(asset_stream),
-        media_type=asset_stream.content_type,
-        headers=headers,
-    )
+    return build_asset_proxy_response(asset_key)
 
 # Mount static files for resources (landing page images, etc.)
 resources_path = Path(__file__).parent / "storage" / "resources"

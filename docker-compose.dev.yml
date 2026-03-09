@@ -7,6 +7,7 @@ services:
 
   backend:
     environment:
+      ASSET_STORAGE_BACKEND: "local"
       UVICORN_RELOAD: "1"
       WATCHFILES_FORCE_POLLING: "true"
       SIDECAR_URL: "http://sidecar:3001"
@@ -15,6 +16,8 @@ services:
       - assets_data:/app/App/backend/storage/assets
 
   usage-reconciler:
+    environment:
+      ASSET_STORAGE_BACKEND: "local"
     volumes:
       - ./App/backend:/app/App/backend
 

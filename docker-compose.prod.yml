@@ -1,12 +1,14 @@
 services:
   backend:
     environment:
+      ASSET_STORAGE_BACKEND: "s3"
       UVICORN_RELOAD: "0"
     volumes:
       - assets_data:/app/App/backend/storage/assets
 
   usage-reconciler:
     environment:
+      ASSET_STORAGE_BACKEND: "s3"
       STORAGE_USAGE_RECONCILER_ENABLED: "1"
 
   frontend:

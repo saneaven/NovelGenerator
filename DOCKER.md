@@ -13,7 +13,7 @@
 1. Create env file:
    - Copy `.env.dev.example` -> `.env.dev`
    - Fill `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`
-   - Configure S3 if you need image upload / generation locally
+   - Dev uses local asset storage by default; S3 is not required for image upload / generation
 
 2. Start:
    - `docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml up -d --build`
@@ -59,6 +59,7 @@ Prereqs:
 - DB image is `pgvector/pgvector:pg18` (pgvector extension is required by the baseline schema).
 - For Postgres 18+, mount the DB volume at `/var/lib/postgresql` (not `/var/lib/postgresql/data`).
 - Prod frontend startup runs `vite build` (skips `tsc -b`) then `vite preview` in `docker/frontend/entrypoint.sh`.
-- Image assets are stored in S3 and served through `/storage/assets/*` redirects.
+- In dev, image assets are stored on the backend filesystem by default and served through `/storage/assets/*`.
+- In prod, image assets are stored in S3 and served through `/storage/assets/*`.
 - Recommended production setup: Lightsail static IP + Cloudflare proxied DNS + SSL mode `Full (strict)`.
 - Recommended backups: Lightsail automatic snapshots plus periodic `pg_dump` uploads to S3.
