@@ -4,6 +4,22 @@ import type {
     ImageGenConfig,
     ImageProviderType,
 } from '../../store/settingsStore';
+import {
+    MODEL_OPTIONS,
+    NOVELAI_NOISE_SCHEDULES,
+    NOVELAI_SAMPLERS,
+    OPENAI_BACKGROUND_OPTIONS,
+    OPENAI_INPUT_FIDELITY_OPTIONS,
+    OPENAI_OUTPUT_FORMAT_OPTIONS,
+    OPENAI_QUALITY_OPTIONS,
+    PROVIDER_LABELS,
+    PROVIDER_PROMPT_TYPES,
+    getDefaultModel,
+    getDefaultSize,
+    getGeminiAspectRatioOptions,
+    getGeminiResolutionOptions,
+    getSizeOptions,
+} from '../../imageRun/providerConfig';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import { NumberInput } from '../ui/NumberInput';
@@ -15,73 +31,6 @@ interface ImageGenPanelProps {
     onChange: (config: ImageGenConfig) => void;
 }
 
-// Provider types
-type ProviderPromptType = 'natural' | 'tag_based';
-
-const PROVIDER_PROMPT_TYPES: Record<ImageProviderType, ProviderPromptType> = {
-    openai: 'natural',
-    gemini: 'natural',
-    xai: 'natural',
-    novelai: 'tag_based',
-};
-
-// Model options by provider
-const MODEL_OPTIONS: Record<ImageProviderType, { id: string; name: string }[]> = {
-    openai: [
-        { id: 'gpt-image-1', name: 'GPT Image 1' },
-        { id: 'dall-e-3', name: 'DALL-E 3' },
-        { id: 'dall-e-2', name: 'DALL-E 2' },
-    ],
-    gemini: [
-        { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image Preview' },
-        { id: 'gemini-2.0-flash-preview-image-generation', name: 'Gemini 2.0 Flash Image' },
-    ],
-    xai: [
-        { id: 'grok-2-image', name: 'Grok 2 Image' },
-        { id: 'grok-2-image-1212', name: 'Grok 2 Image 1212' },
-    ],
-    novelai: [
-        { id: 'nai-diffusion-4-5-full', name: 'NAI Diffusion V4.5 Full' },
-        { id: 'nai-diffusion-4-5-curated', name: 'NAI Diffusion V4.5 Curated' },
-    ],
-};
-
-// Size options by provider
-const SIZE_OPTIONS: Record<ImageProviderType, string[]> = {
-    openai: ['1024x1024', '1024x1792', '1792x1024', '512x512', '256x256'],
-    gemini: [], // Gemini uses aspect_ratio + resolution separately
-    xai: ['1024x1024', '1024x1792', '1792x1024'],
-    novelai: ['1024x1024', '1216x832', '832x1216', '1472x704', '704x1472'],
-};
-
-// Gemini-specific options (uses aspect_ratio + image_size, not pixel dimensions)
-const GEMINI_ASPECT_RATIOS = ['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '21:9'];
-const GEMINI_RESOLUTIONS = ['1K', '2K', '4K'];
-
-const PROVIDER_LABELS: Record<ImageProviderType, string> = {
-    openai: 'OpenAI (DALL-E / GPT-Image)',
-    gemini: 'Google Gemini',
-    xai: 'xAI (Grok)',
-    novelai: 'NovelAI',
-};
-
-// NovelAI-specific options
-const NOVELAI_SAMPLERS = [
-    'k_euler_ancestral',
-    'k_euler',
-    'k_dpmpp_2s_ancestral',
-    'k_dpmpp_2m',
-    'k_dpmpp_sde',
-    'ddim_v3',
-];
-
-const NOVELAI_NOISE_SCHEDULES = [
-    'native',
-    'karras',
-    'exponential',
-    'polyexponential',
-];
-
 const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
     const { t } = useTranslation();
     const [showStyleModal, setShowStyleModal] = useState(false);
@@ -92,19 +41,61 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
     const isGemini = config.provider === 'gemini';
 
     const handleProviderChange = (provider: ImageProviderType) => {
-        const defaultModel = MODEL_OPTIONS[provider][0]?.id || '';
-        const defaultSize = SIZE_OPTIONS[provider][0] || '1024x1024';
-
-        onChange({
+        const defaultModel = getDefaultModel(provider);
+        const defaultSize = getDefaultSize(provider, defaultModel);
+        const nextConfig: ImageGenConfig = {
             ...config,
             provider,
             model: defaultModel,
             size: defaultSize,
+        };
+
+        if (provider === 'gemini') {
+            const aspectRatios = getGeminiAspectRatioOptions(defaultModel);
+            const resolutions = getGeminiResolutionOptions(defaultModel);
+            nextConfig.geminiSettings = {
+                ...config.geminiSettings,
+                aspect_ratio: aspectRatios[0] || '1:1',
+                image_resolution: resolutions[0] || '1K',
+            };
+        }
+
+        onChange(nextConfig);
+    };
+
+    const handleModelChange = (model: string) => {
+        if (config.provider === 'gemini') {
+            const aspectRatios = getGeminiAspectRatioOptions(model);
+            const resolutions = getGeminiResolutionOptions(model);
+            onChange({
+                ...config,
+                model,
+                geminiSettings: {
+                    ...config.geminiSettings,
+                    aspect_ratio: aspectRatios.includes(config.geminiSettings.aspect_ratio)
+                        ? config.geminiSettings.aspect_ratio
+                        : (aspectRatios[0] || '1:1'),
+                    image_resolution: resolutions.includes(config.geminiSettings.image_resolution)
+                        ? config.geminiSettings.image_resolution
+                        : (resolutions[0] || '1K'),
+                },
+            });
+            return;
+        }
+
+        const sizeOptions = getSizeOptions(config.provider, model);
+        onChange({
+            ...config,
+            model,
+            size: sizeOptions.includes(config.size) ? config.size : (sizeOptions[0] || '1024x1024'),
         });
     };
 
     const currentModels = MODEL_OPTIONS[config.provider] || [];
-    const currentSizes = SIZE_OPTIONS[config.provider] || ['1024x1024'];
+    const currentSizes = getSizeOptions(config.provider, config.model);
+    const currentGeminiAspectRatios = getGeminiAspectRatioOptions(config.model);
+    const currentGeminiResolutions = getGeminiResolutionOptions(config.model);
+    const compressionEnabled = config.openaiSettings.output_format !== 'png';
 
     return (
         <div className="image-gen-panel">
@@ -140,7 +131,7 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                     </label>
                     <CustomSelect
                         value={config.model}
-                        onChange={(value) => onChange({ ...config, model: value })}
+                        onChange={handleModelChange}
                         options={currentModels.map((m) => ({
                             value: m.id,
                             label: m.name,
@@ -165,7 +156,7 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                         aspect_ratio: value,
                                     },
                                 })}
-                                options={GEMINI_ASPECT_RATIOS.map((ar) => ({
+                                options={currentGeminiAspectRatios.map((ar) => ({
                                     value: ar,
                                     label: ar,
                                 }))}
@@ -185,7 +176,7 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                         image_resolution: value,
                                     },
                                 })}
-                                options={GEMINI_RESOLUTIONS.map((r) => ({
+                                options={currentGeminiResolutions.map((r) => ({
                                     value: r,
                                     label: r,
                                 }))}
@@ -231,33 +222,93 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                     ...config,
                                     openaiSettings: {
                                         ...config.openaiSettings,
-                                        quality: value as 'standard' | 'hd',
+                                        quality: value as 'auto' | 'low' | 'medium' | 'high',
                                     },
                                 })}
-                                options={[
-                                    { value: 'standard', label: t('settings.imageGen.openaiSettings.standard') },
-                                    { value: 'hd', label: t('settings.imageGen.openaiSettings.hd') },
-                                ]}
+                                options={OPENAI_QUALITY_OPTIONS.map((value) => ({
+                                    value,
+                                    label: t(`settings.imageGen.openaiSettings.qualityOptions.${value}`),
+                                }))}
                             />
                         </div>
                         <div className="setting-item">
                             <label className="setting-label">
-                                <span className="label-text">{t('settings.imageGen.openaiSettings.style')}</span>
-                                <span className="label-hint">{t('settings.imageGen.openaiSettings.styleHint')}</span>
+                                <span className="label-text">{t('settings.imageGen.openaiSettings.background')}</span>
+                                <span className="label-hint">{t('settings.imageGen.openaiSettings.backgroundHint')}</span>
                             </label>
                             <CustomSelect
-                                value={config.openaiSettings.style}
+                                value={config.openaiSettings.background}
                                 onChange={(value) => onChange({
                                     ...config,
                                     openaiSettings: {
                                         ...config.openaiSettings,
-                                        style: value as 'natural' | 'vivid',
+                                        background: value as 'auto' | 'opaque' | 'transparent',
                                     },
                                 })}
-                                options={[
-                                    { value: 'natural', label: t('settings.imageGen.openaiSettings.natural') },
-                                    { value: 'vivid', label: t('settings.imageGen.openaiSettings.vivid') },
-                                ]}
+                                options={OPENAI_BACKGROUND_OPTIONS.map((value) => ({
+                                    value,
+                                    label: t(`settings.imageGen.openaiSettings.backgroundOptions.${value}`),
+                                }))}
+                            />
+                        </div>
+                        <div className="setting-item">
+                            <label className="setting-label">
+                                <span className="label-text">{t('settings.imageGen.openaiSettings.format')}</span>
+                                <span className="label-hint">{t('settings.imageGen.openaiSettings.formatHint')}</span>
+                            </label>
+                            <CustomSelect
+                                value={config.openaiSettings.output_format}
+                                onChange={(value) => onChange({
+                                    ...config,
+                                    openaiSettings: {
+                                        ...config.openaiSettings,
+                                        output_format: value as 'png' | 'jpeg' | 'webp',
+                                    },
+                                })}
+                                options={OPENAI_OUTPUT_FORMAT_OPTIONS.map((value) => ({
+                                    value,
+                                    label: t(`settings.imageGen.openaiSettings.formatOptions.${value}`),
+                                }))}
+                            />
+                        </div>
+                        <div className="setting-item">
+                            <label className="setting-label">
+                                <span className="label-text">{t('settings.imageGen.openaiSettings.compression')}</span>
+                                <span className="label-hint">{t('settings.imageGen.openaiSettings.compressionHint')}</span>
+                            </label>
+                            <NumberInput
+                                min={0}
+                                max={100}
+                                value={config.openaiSettings.output_compression}
+                                onValueChange={(v) => onChange({
+                                    ...config,
+                                    openaiSettings: {
+                                        ...config.openaiSettings,
+                                        output_compression: v ?? 90,
+                                    },
+                                })}
+                                className="setting-input"
+                                disabled={!compressionEnabled}
+                            />
+                        </div>
+                        <div className="setting-item">
+                            <label className="setting-label">
+                                <span className="label-text">{t('settings.imageGen.openaiSettings.inputFidelity')}</span>
+                                <span className="label-hint">{t('settings.imageGen.openaiSettings.inputFidelityHint')}</span>
+                            </label>
+                            <CustomSelect
+                                value={config.openaiSettings.input_fidelity}
+                                onChange={(value) => onChange({
+                                    ...config,
+                                    openaiSettings: {
+                                        ...config.openaiSettings,
+                                        input_fidelity: value as 'low' | 'high',
+                                    },
+                                })}
+                                options={OPENAI_INPUT_FIDELITY_OPTIONS.map((value) => ({
+                                    value,
+                                    label: t(`settings.imageGen.openaiSettings.inputFidelityOptions.${value}`),
+                                }))}
                             />
                         </div>
                     </div>

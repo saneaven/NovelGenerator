@@ -57,9 +57,6 @@ class NovelAIImageProvider(BaseImageProvider):
     def get_supported_qualities(self) -> List[str]:
         return ["standard"]
 
-    def get_supported_styles(self) -> List[str]:
-        return ["natural"]
-
     def supports_image_input(self) -> bool:
         """NovelAI supports both i2i and Vibe Transfer"""
         return True
@@ -168,7 +165,6 @@ class NovelAIImageProvider(BaseImageProvider):
         model: str = "nai-diffusion-4-5-full",
         size: str = "832x1216",
         quality: str = "standard",
-        style: str = "natural",
         n: int = 1,
         positive_prompt: Optional[str] = None,
         negative_prompt: Optional[str] = None,

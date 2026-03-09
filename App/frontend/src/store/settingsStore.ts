@@ -175,14 +175,17 @@ export interface NovelAIImageSettings {
 
 // OpenAI-specific settings
 export interface OpenAIImageSettings {
-    quality: 'standard' | 'hd';
-    style: 'natural' | 'vivid';
+    quality: 'auto' | 'low' | 'medium' | 'high';
+    background: 'auto' | 'opaque' | 'transparent';
+    output_format: 'png' | 'jpeg' | 'webp';
+    output_compression: number;
+    input_fidelity: 'low' | 'high';
 }
 
 // Gemini-specific settings (uses aspect_ratio + image_size, not pixel dimensions)
 export interface GeminiImageSettings {
-    aspect_ratio: string;     // "1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9"
-    image_resolution: string; // "1K", "2K", "4K"
+    aspect_ratio: string;
+    image_resolution: string;
 }
 
 // Image generation configuration

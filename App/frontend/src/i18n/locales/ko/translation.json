@@ -478,15 +478,37 @@
       "resolutionHint": "이미지 해상도",
       "openaiSettings": {
         "title": "OpenAI 설정",
-        "description": "OpenAI 전용 이미지 생성 옵션을 구성합니다.",
+        "description": "GPT Image 출력 및 편집 기본값을 구성합니다.",
         "quality": "품질",
         "qualityHint": "이미지 품질 수준",
-        "standard": "표준",
-        "hd": "HD",
-        "style": "스타일",
-        "styleHint": "이미지 스타일 선호",
-        "natural": "자연스러운",
-        "vivid": "생생한"
+        "qualityOptions": {
+          "auto": "자동",
+          "low": "낮음",
+          "medium": "중간",
+          "high": "높음"
+        },
+        "background": "배경",
+        "backgroundHint": "배경 렌더링 방식",
+        "backgroundOptions": {
+          "auto": "자동",
+          "opaque": "불투명",
+          "transparent": "투명"
+        },
+        "format": "형식",
+        "formatHint": "출력 이미지 형식",
+        "formatOptions": {
+          "png": "PNG",
+          "jpeg": "JPEG",
+          "webp": "WebP"
+        },
+        "compression": "압축",
+        "compressionHint": "JPEG/WebP 압축 수준 (0-100)",
+        "inputFidelity": "입력 충실도",
+        "inputFidelityHint": "편집 시 참조 이미지를 얼마나 강하게 유지할지",
+        "inputFidelityOptions": {
+          "low": "낮음",
+          "high": "높음"
+        }
       },
       "novelaiSettings": {
         "title": "NovelAI 설정",

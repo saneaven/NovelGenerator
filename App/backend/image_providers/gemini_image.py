@@ -6,12 +6,15 @@ from google import genai
 from google.genai import types, errors
 
 from .base import BaseImageProvider, ImageGenerationResult, ReferenceImageData
+from .model_capabilities import GEMINI_DEFAULT_MODEL, GEMINI_MODEL_OPTIONS
 from .registry import ImageProviderRegistry
 
 
 @ImageProviderRegistry.register
 class GeminiImageProvider(BaseImageProvider):
-    """Google Gemini image generation provider (gemini-3-pro-image-preview)"""
+    """Google Gemini image generation provider"""
+
+    DEFAULT_MODEL = GEMINI_DEFAULT_MODEL
 
     def __init__(self, config: Dict):
         super().__init__(config)
@@ -33,20 +36,16 @@ class GeminiImageProvider(BaseImageProvider):
 
     @property
     def display_name(self) -> str:
-        return "Gemini (Image Generation)"
+        return "Gemini Image"
 
     def validate_config(self) -> bool:
         return bool(self.api_key)
 
     def get_supported_sizes(self) -> List[str]:
-        # Gemini doesn't specify exact sizes in the same way
-        return ["1024x1024"]
+        return []
 
     def get_supported_qualities(self) -> List[str]:
-        return ["standard"]
-
-    def get_supported_styles(self) -> List[str]:
-        return ["natural"]
+        return []
 
     def supports_image_input(self) -> bool:
         """Gemini supports multimodal input including images"""
@@ -55,19 +54,15 @@ class GeminiImageProvider(BaseImageProvider):
     async def get_models(self) -> Dict:
         """Return available Gemini image models"""
         return {
-            "data": [
-                {"id": "gemini-3-pro-image-preview", "name": "Gemini 3 Pro Image Preview"},
-                {"id": "gemini-2.0-flash-preview-image-generation", "name": "Gemini 2.0 Flash Image Generation"},
-            ]
+            "data": GEMINI_MODEL_OPTIONS
         }
 
     async def generate_image(
         self,
         prompt: Optional[str] = None,
-        model: str = "gemini-3-pro-image-preview",
+        model: str = DEFAULT_MODEL,
         size: str = "1024x1024",
-        quality: str = "standard",
-        style: str = "natural",
+        quality: str = "auto",
         n: int = 1,
         positive_prompt: Optional[str] = None,
         negative_prompt: Optional[str] = None,
@@ -147,49 +142,41 @@ class GeminiImageProvider(BaseImageProvider):
             )
 
             # Extract image from response
-            if response.candidates and len(response.candidates) > 0:
-                candidate = response.candidates[0]
-                if candidate.content and candidate.content.parts:
-                    for part in candidate.content.parts:
-                        # Check if this part contains inline data (image)
-                        if hasattr(part, 'inline_data') and part.inline_data:
-                            inline_data = part.inline_data
-                            image_data = inline_data.data
-                            mime_type = inline_data.mime_type or "image/png"
+            for part in list(getattr(response, "parts", []) or []):
+                if getattr(part, "inline_data", None):
+                    inline_data = part.inline_data
+                    image_data = inline_data.data
+                    mime_type = inline_data.mime_type or "image/png"
 
-                            # Convert to base64 if bytes
-                            if isinstance(image_data, bytes):
-                                image_b64 = base64.b64encode(image_data).decode('utf-8')
-                            else:
-                                image_b64 = image_data
+                    if isinstance(image_data, bytes):
+                        image_b64 = base64.b64encode(image_data).decode('utf-8')
+                    else:
+                        image_b64 = image_data
 
-                            # Determine format from mime type
-                            format_map = {
-                                "image/png": "png",
-                                "image/jpeg": "jpeg",
-                                "image/webp": "webp",
-                            }
-                            img_format = format_map.get(mime_type, "png")
+                    format_map = {
+                        "image/png": "png",
+                        "image/jpeg": "jpeg",
+                        "image/webp": "webp",
+                    }
+                    img_format = format_map.get(mime_type, "png")
 
-                            return ImageGenerationResult(
-                                success=True,
-                                image_b64=image_b64,
-                                width=1024,  # Default size
-                                height=1024,
-                                format=img_format
-                            )
-
-                # No image found, check for text response (might be a rejection)
-                text_content = ""
-                for part in candidate.content.parts if candidate.content else []:
-                    if hasattr(part, 'text') and part.text:
-                        text_content += part.text
-
-                if text_content:
                     return ImageGenerationResult(
-                        success=False,
-                        error=f"No image generated. Model response: {text_content[:500]}"
+                        success=True,
+                        image_b64=image_b64,
+                        width=1024,
+                        height=1024,
+                        format=img_format
                     )
+
+            text_content = "".join(
+                part.text for part in list(getattr(response, "parts", []) or [])
+                if getattr(part, "text", None)
+            )
+            if text_content:
+                return ImageGenerationResult(
+                    success=False,
+                    error=f"No image generated. Model response: {text_content[:500]}"
+                )
 
             return ImageGenerationResult(
                 success=False,

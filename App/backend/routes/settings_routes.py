@@ -1,4 +1,5 @@
 """API routes for user settings"""
+from copy import deepcopy
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -20,6 +21,25 @@ from ..services.embedding_config_service import merge_embedding_configs
 from ..services.rag_index_service import wipe_user_index
 
 router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
+
+DEFAULT_IMAGE_GEN_CONFIG = {
+    "provider": "openai",
+    "model": "gpt-image-1.5",
+    "size": "1024x1024",
+    "naturalStyles": [],
+    "tagBasedStyles": [],
+    "selectedNaturalStyleId": None,
+    "selectedTagBasedStyleId": None,
+    "openaiSettings": {
+        "quality": "auto",
+        "background": "auto",
+        "output_format": "png",
+        "output_compression": 90,
+        "input_fidelity": "high",
+    },
+    "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},
+    "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"},
+}
 
 
 def _assign_template_ids(templates: list) -> list:
@@ -145,18 +165,7 @@ async def get_user_settings(
     }
 
     # Handle image_gen_config with default fallback for existing records
-    image_gen_config_dict = getattr(settings, 'image_gen_config', None) or {
-        "provider": "openai",
-        "model": "gpt-image-1",
-        "size": "1024x1024",
-        "naturalStyles": [],
-        "tagBasedStyles": [],
-        "selectedNaturalStyleId": None,
-        "selectedTagBasedStyleId": None,
-        "openaiSettings": {"quality": "standard", "style": "natural"},
-        "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},
-        "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
-    }
+    image_gen_config_dict = getattr(settings, 'image_gen_config', None) or deepcopy(DEFAULT_IMAGE_GEN_CONFIG)
 
     tool_call_auto_approve_dict = getattr(settings, "tool_call_auto_approve", None) or {
         "create": False,
@@ -343,18 +352,7 @@ async def update_user_settings(
     }
 
     # Handle image_gen_config with default fallback
-    image_gen_config_dict = getattr(settings, 'image_gen_config', None) or {
-        "provider": "openai",
-        "model": "gpt-image-1",
-        "size": "1024x1024",
-        "naturalStyles": [],
-        "tagBasedStyles": [],
-        "selectedNaturalStyleId": None,
-        "selectedTagBasedStyleId": None,
-        "openaiSettings": {"quality": "standard", "style": "natural"},
-        "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},
-        "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
-    }
+    image_gen_config_dict = getattr(settings, 'image_gen_config', None) or deepcopy(DEFAULT_IMAGE_GEN_CONFIG)
 
     tool_call_auto_approve_dict = getattr(settings, "tool_call_auto_approve", None) or {
         "create": False,
@@ -434,18 +432,7 @@ async def update_task_config(
     }
 
     # Handle image_gen_config with default fallback
-    image_gen_config_dict = getattr(settings, 'image_gen_config', None) or {
-        "provider": "openai",
-        "model": "gpt-image-1",
-        "size": "1024x1024",
-        "naturalStyles": [],
-        "tagBasedStyles": [],
-        "selectedNaturalStyleId": None,
-        "selectedTagBasedStyleId": None,
-        "openaiSettings": {"quality": "standard", "style": "natural"},
-        "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},
-        "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
-    }
+    image_gen_config_dict = getattr(settings, 'image_gen_config', None) or deepcopy(DEFAULT_IMAGE_GEN_CONFIG)
 
     tool_call_auto_approve_dict = getattr(settings, "tool_call_auto_approve", None) or {
         "create": False,
@@ -514,18 +501,7 @@ async def sync_settings_from_client(
     }
 
     # Default image gen config
-    default_image_gen_config = {
-        "provider": "openai",
-        "model": "gpt-image-1",
-        "size": "1024x1024",
-        "naturalStyles": [],
-        "tagBasedStyles": [],
-        "selectedNaturalStyleId": None,
-        "selectedTagBasedStyleId": None,
-        "openaiSettings": {"quality": "standard", "style": "natural"},
-        "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},
-        "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
-    }
+    default_image_gen_config = deepcopy(DEFAULT_IMAGE_GEN_CONFIG)
 
     if not settings:
         # Create new settings from client data

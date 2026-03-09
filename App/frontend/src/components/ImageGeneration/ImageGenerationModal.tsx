@@ -5,14 +5,20 @@ import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import {
     PROVIDER_LABELS,
     MODEL_OPTIONS,
-    SIZE_OPTIONS,
-    GEMINI_ASPECT_RATIOS,
-    GEMINI_RESOLUTIONS,
+    OPENAI_BACKGROUND_OPTIONS,
+    OPENAI_INPUT_FIDELITY_OPTIONS,
+    OPENAI_OUTPUT_FORMAT_OPTIONS,
+    OPENAI_QUALITY_OPTIONS,
     NOVELAI_SAMPLERS,
     NOVELAI_NOISE_SCHEDULES,
     NOVELAI_REFERENCE_MODES,
     DEFAULT_NOVELAI_SETTINGS,
     PROVIDER_PROMPT_TYPES,
+    getDefaultModel,
+    getDefaultSize,
+    getGeminiAspectRatioOptions,
+    getGeminiResolutionOptions,
+    getSizeOptions,
     type NovelAIReferenceMode,
     type ImageProviderType,
 } from '../../imageRun/providerConfig';
@@ -142,8 +148,11 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const [geminiResolution, setGeminiResolution] = useState(settings.imageGenConfig.geminiSettings.image_resolution);
 
     // Provider-specific settings (serialized into recipe.providerSettings)
-    const [openaiQuality, setOpenaiQuality] = useState<'standard' | 'hd'>(settings.imageGenConfig.openaiSettings.quality);
-    const [openaiStyle, setOpenaiStyle] = useState<'natural' | 'vivid'>(settings.imageGenConfig.openaiSettings.style);
+    const [openaiQuality, setOpenaiQuality] = useState<'auto' | 'low' | 'medium' | 'high'>(settings.imageGenConfig.openaiSettings.quality);
+    const [openaiBackground, setOpenaiBackground] = useState<'auto' | 'opaque' | 'transparent'>(settings.imageGenConfig.openaiSettings.background);
+    const [openaiOutputFormat, setOpenaiOutputFormat] = useState<'png' | 'jpeg' | 'webp'>(settings.imageGenConfig.openaiSettings.output_format);
+    const [openaiOutputCompression, setOpenaiOutputCompression] = useState(settings.imageGenConfig.openaiSettings.output_compression);
+    const [openaiInputFidelity, setOpenaiInputFidelity] = useState<'low' | 'high'>(settings.imageGenConfig.openaiSettings.input_fidelity);
     const [novelaiSampler, setNovelaiSampler] = useState(settings.imageGenConfig.novelaiSettings.sampler);
     const [novelaiSteps, setNovelaiSteps] = useState(settings.imageGenConfig.novelaiSettings.steps);
     const [novelaiScale, setNovelaiScale] = useState(settings.imageGenConfig.novelaiSettings.scale);
@@ -244,8 +253,17 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         setProviderSettingsBase(s);
 
         // Provider-specific UI restoration from providerSettings
-        if (s.quality === 'standard' || s.quality === 'hd') setOpenaiQuality(s.quality);
-        if (s.style === 'natural' || s.style === 'vivid') setOpenaiStyle(s.style);
+        if (s.quality === 'auto' || s.quality === 'low' || s.quality === 'medium' || s.quality === 'high') {
+            setOpenaiQuality(s.quality);
+        }
+        if (s.background === 'auto' || s.background === 'opaque' || s.background === 'transparent') {
+            setOpenaiBackground(s.background);
+        }
+        if (s.output_format === 'png' || s.output_format === 'jpeg' || s.output_format === 'webp') {
+            setOpenaiOutputFormat(s.output_format);
+        }
+        if (typeof s.output_compression === 'number') setOpenaiOutputCompression(s.output_compression);
+        if (s.input_fidelity === 'low' || s.input_fidelity === 'high') setOpenaiInputFidelity(s.input_fidelity);
         if (typeof s.sampler === 'string') setNovelaiSampler(s.sampler);
         if (typeof s.steps === 'number') setNovelaiSteps(s.steps);
         if (typeof s.scale === 'number') setNovelaiScale(s.scale);
@@ -394,8 +412,8 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
         if (previousProvider.current !== provider) {
             previousProvider.current = provider;
-            const defaultModel = MODEL_OPTIONS[provider]?.[0]?.id || '';
-            const defaultSize = SIZE_OPTIONS[provider]?.[0] || '1024x1024';
+            const defaultModel = getDefaultModel(provider);
+            const defaultSize = getDefaultSize(provider, defaultModel);
             setModel(defaultModel);
             setSize(defaultSize);
             setProviderSettingsBase({});
@@ -406,8 +424,51 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             setCustomPositivePostfix('');
             setCustomNegativePrefix('');
             setCustomNegativePostfix('');
+            if (provider === 'gemini') {
+                setGeminiAspectRatio(getGeminiAspectRatioOptions(defaultModel)[0] || '1:1');
+                setGeminiResolution(getGeminiResolutionOptions(defaultModel)[0] || '1K');
+            }
         }
     }, [provider]);
+
+    const currentGeminiAspectRatios = useMemo(
+        () => getGeminiAspectRatioOptions(model),
+        [model],
+    );
+    const currentGeminiResolutions = useMemo(
+        () => getGeminiResolutionOptions(model),
+        [model],
+    );
+    const currentSizeOptions = useMemo(
+        () => getSizeOptions(provider, model),
+        [provider, model],
+    );
+    const isCompressedFormat = openaiOutputFormat !== 'png';
+
+    useEffect(() => {
+        if (provider === 'gemini') {
+            if (!currentGeminiAspectRatios.includes(geminiAspectRatio)) {
+                setGeminiAspectRatio(currentGeminiAspectRatios[0] || '1:1');
+            }
+            if (!currentGeminiResolutions.includes(geminiResolution)) {
+                setGeminiResolution(currentGeminiResolutions[0] || '1K');
+            }
+            return;
+        }
+
+        if (currentSizeOptions.length > 0 && !currentSizeOptions.includes(size)) {
+            setSize(currentSizeOptions[0]);
+        }
+    }, [
+        provider,
+        model,
+        currentGeminiAspectRatios,
+        currentGeminiResolutions,
+        currentSizeOptions,
+        geminiAspectRatio,
+        geminiResolution,
+        size,
+    ]);
 
     const journeyThreadId = useJourneyStore((state) =>
         streamingSessionId ? state.journeys[streamingSessionId]?.threadId : undefined
@@ -576,7 +637,14 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             providerSettingsBase && Object.keys(providerSettingsBase).length > 0 ? { ...providerSettingsBase } : undefined;
 
         if (provider === 'openai') {
-            providerSettings = { ...(providerSettings ?? {}), quality: openaiQuality, style: openaiStyle };
+            providerSettings = {
+                ...(providerSettings ?? {}),
+                quality: openaiQuality,
+                background: openaiBackground,
+                output_format: openaiOutputFormat,
+                output_compression: openaiOutputCompression,
+                input_fidelity: openaiInputFidelity,
+            };
         } else if (provider === 'gemini') {
             providerSettings = { ...(providerSettings ?? {}), aspect_ratio: geminiAspectRatio, image_resolution: geminiResolution };
         } else if (provider === 'novelai') {
@@ -679,7 +747,6 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     };
 
     const currentModelOptions = MODEL_OPTIONS[provider] || [];
-    const currentSizeOptions = SIZE_OPTIONS[provider] || ['1024x1024'];
 
     return (
         <div className="image-generation-modal">
@@ -838,7 +905,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                                     onChange={(e) => setGeminiAspectRatio(e.target.value)}
                                     className="config-select"
                                 >
-                                    {GEMINI_ASPECT_RATIOS.map((ar) => (
+                                    {currentGeminiAspectRatios.map((ar) => (
                                         <option key={ar} value={ar}>
                                             {ar}
                                         </option>
@@ -852,7 +919,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                                     onChange={(e) => setGeminiResolution(e.target.value)}
                                     className="config-select"
                                 >
-                                    {GEMINI_RESOLUTIONS.map((r) => (
+                                    {currentGeminiResolutions.map((r) => (
                                         <option key={r} value={r}>
                                             {r}
                                         </option>
@@ -921,22 +988,72 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                             <label>Quality</label>
                             <select
                                 value={openaiQuality}
-                                onChange={(e) => setOpenaiQuality(e.target.value as 'standard' | 'hd')}
+                                onChange={(e) => setOpenaiQuality(e.target.value as 'auto' | 'low' | 'medium' | 'high')}
                                 className="config-select"
                             >
-                                <option value="standard">Standard</option>
-                                <option value="hd">HD</option>
+                                {OPENAI_QUALITY_OPTIONS.map((value) => (
+                                    <option key={value} value={value}>
+                                        {value.charAt(0).toUpperCase() + value.slice(1)}
+                                    </option>
+                                ))}
                             </select>
                         </div>
                         <div className="form-field">
-                            <label>Style</label>
+                            <label>Background</label>
                             <select
-                                value={openaiStyle}
-                                onChange={(e) => setOpenaiStyle(e.target.value as 'natural' | 'vivid')}
+                                value={openaiBackground}
+                                onChange={(e) => setOpenaiBackground(e.target.value as 'auto' | 'opaque' | 'transparent')}
                                 className="config-select"
                             >
-                                <option value="natural">Natural</option>
-                                <option value="vivid">Vivid</option>
+                                {OPENAI_BACKGROUND_OPTIONS.map((value) => (
+                                    <option key={value} value={value}>
+                                        {value.charAt(0).toUpperCase() + value.slice(1)}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                )}
+
+                {provider === 'openai' && (
+                    <div className="form-row provider-settings">
+                        <div className="form-field">
+                            <label>Format</label>
+                            <select
+                                value={openaiOutputFormat}
+                                onChange={(e) => setOpenaiOutputFormat(e.target.value as 'png' | 'jpeg' | 'webp')}
+                                className="config-select"
+                            >
+                                {OPENAI_OUTPUT_FORMAT_OPTIONS.map((value) => (
+                                    <option key={value} value={value}>
+                                        {value.toUpperCase()}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="form-field">
+                            <label>Compression</label>
+                            <NumberInput
+                                min={0}
+                                max={100}
+                                value={openaiOutputCompression}
+                                onValueChange={(v) => setOpenaiOutputCompression(v ?? 90)}
+                                className="config-input"
+                                disabled={!isCompressedFormat}
+                            />
+                        </div>
+                        <div className="form-field">
+                            <label>Input Fidelity</label>
+                            <select
+                                value={openaiInputFidelity}
+                                onChange={(e) => setOpenaiInputFidelity(e.target.value as 'low' | 'high')}
+                                className="config-select"
+                            >
+                                {OPENAI_INPUT_FIDELITY_OPTIONS.map((value) => (
+                                    <option key={value} value={value}>
+                                        {value.charAt(0).toUpperCase() + value.slice(1)}
+                                    </option>
+                                ))}
                             </select>
                         </div>
                     </div>

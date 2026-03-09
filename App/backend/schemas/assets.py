@@ -97,7 +97,6 @@ class ImageProviderInfo(BaseModel):
     prompt_type: str = "natural"  # 'natural' or 'tag_based'
     supported_sizes: List[str]
     supported_qualities: List[str]
-    supported_styles: List[str]
     settings_schema: Optional[Dict[str, Any]] = None  # Provider-specific settings schema
     supports_image_input: bool = False  # Whether provider supports image-to-image generation
 

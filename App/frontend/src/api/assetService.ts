@@ -157,7 +157,6 @@ export interface ImageProvider {
     prompt_type: PromptType;
     supported_sizes: string[];
     supported_qualities: string[];
-    supported_styles: string[];
     settings_schema: Record<string, any> | null;
     supports_image_input: boolean;  // Whether provider supports image-to-image generation
 }

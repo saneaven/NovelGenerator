@@ -29,9 +29,8 @@ class ImageGenerationResult:
 class ImageGenerationConfig:
     """Configuration for image generation"""
     prompt: str
-    size: str = "1024x1024"  # Common sizes: 1024x1024, 1792x1024, 1024x1792
-    quality: str = "standard"  # standard, hd
-    style: str = "natural"  # natural, vivid
+    size: str = "1024x1024"
+    quality: str = "auto"
     n: int = 1  # Number of images to generate
 
 
@@ -47,8 +46,7 @@ class BaseImageProvider(ABC):
         prompt: Optional[str] = None,
         model: str = "",
         size: str = "1024x1024",
-        quality: str = "standard",
-        style: str = "natural",
+        quality: str = "auto",
         n: int = 1,
         positive_prompt: Optional[str] = None,
         negative_prompt: Optional[str] = None,
@@ -61,9 +59,8 @@ class BaseImageProvider(ABC):
         Args:
             prompt: Text description for natural language providers
             model: Model identifier
-            size: Image size (e.g., "1024x1024", "1792x1024")
-            quality: Quality level ("standard", "hd")
-            style: Style preset ("natural", "vivid")
+            size: Image size (e.g., "1024x1024", "1536x1024")
+            quality: Quality level
             n: Number of images to generate
             positive_prompt: Positive tags for tag-based providers
             negative_prompt: Negative tags for tag-based providers
@@ -118,11 +115,7 @@ class BaseImageProvider(ABC):
 
     def get_supported_qualities(self) -> List[str]:
         """Get list of supported quality options"""
-        return ["standard"]
-
-    def get_supported_styles(self) -> List[str]:
-        """Get list of supported style options"""
-        return ["natural"]
+        return ["auto"]
 
     def get_prompt_type(self) -> str:
         """

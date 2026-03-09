@@ -38,9 +38,6 @@ class XAIImageProvider(BaseImageProvider):
     def get_supported_qualities(self) -> List[str]:
         return ["standard"]
 
-    def get_supported_styles(self) -> List[str]:
-        return ["natural"]
-
     async def get_models(self) -> Dict:
         """Return available Grok image models"""
         return {
@@ -56,7 +53,6 @@ class XAIImageProvider(BaseImageProvider):
         model: str = "grok-2-image",
         size: str = "1024x1024",
         quality: str = "standard",
-        style: str = "natural",
         n: int = 1,
         positive_prompt: Optional[str] = None,
         negative_prompt: Optional[str] = None,

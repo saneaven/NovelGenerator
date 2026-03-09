@@ -235,7 +235,6 @@ async def list_image_providers():
                 prompt_type=p.get("prompt_type", "natural"),
                 supported_sizes=p["supported_sizes"],
                 supported_qualities=p["supported_qualities"],
-                supported_styles=p["supported_styles"],
                 settings_schema=p.get("settings_schema"),
                 supports_image_input=p.get("supports_image_input", False)
             )

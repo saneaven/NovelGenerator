@@ -377,7 +377,7 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                         <textarea
                             value={naturalPrompt}
                             onChange={(e) => !isStreamingNatural && setNaturalPrompt(e.target.value)}
-                            placeholder="Describe the image in natural language. This works with OpenAI (DALL-E), Gemini, and xAI (Grok)..."
+                            placeholder="Describe the image in natural language. This works with OpenAI, Gemini, and xAI (Grok)..."
                             rows={6}
                             className={`prompt-textarea ${isStreamingNatural ? 'streaming' : ''}`}
                             readOnly={isStreamingNatural}

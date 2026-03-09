@@ -478,15 +478,37 @@
       "resolutionHint": "Image resolution",
       "openaiSettings": {
         "title": "OpenAI Settings",
-        "description": "Configure OpenAI-specific image generation options.",
+        "description": "Configure GPT Image output and editing defaults.",
         "quality": "Quality",
         "qualityHint": "Image quality level",
-        "standard": "Standard",
-        "hd": "HD",
-        "style": "Style",
-        "styleHint": "Image style preference",
-        "natural": "Natural",
-        "vivid": "Vivid"
+        "qualityOptions": {
+          "auto": "Auto",
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High"
+        },
+        "background": "Background",
+        "backgroundHint": "Background rendering mode",
+        "backgroundOptions": {
+          "auto": "Auto",
+          "opaque": "Opaque",
+          "transparent": "Transparent"
+        },
+        "format": "Format",
+        "formatHint": "Output image format",
+        "formatOptions": {
+          "png": "PNG",
+          "jpeg": "JPEG",
+          "webp": "WebP"
+        },
+        "compression": "Compression",
+        "compressionHint": "JPEG/WebP compression level (0-100)",
+        "inputFidelity": "Input Fidelity",
+        "inputFidelityHint": "How strongly edits preserve reference images",
+        "inputFidelityOptions": {
+          "low": "Low",
+          "high": "High"
+        }
       },
       "novelaiSettings": {
         "title": "NovelAI Settings",

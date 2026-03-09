@@ -53,7 +53,6 @@ class ImageProviderRegistry:
                 "prompt_type": instance.get_prompt_type(),
                 "supported_sizes": instance.get_supported_sizes(),
                 "supported_qualities": instance.get_supported_qualities(),
-                "supported_styles": instance.get_supported_styles(),
                 "settings_schema": instance.get_settings_schema(),
                 "supports_image_input": instance.supports_image_input(),
             })

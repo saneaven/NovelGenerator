@@ -80,13 +80,13 @@ class UserSettings(Base):
     # Image generation configuration
     image_gen_config = Column(JSONB, nullable=False, server_default="""{
         "provider": "openai",
-        "model": "gpt-image-1",
+        "model": "gpt-image-1.5",
         "size": "1024x1024",
         "naturalStyles": [],
         "tagBasedStyles": [],
         "selectedNaturalStyleId": null,
         "selectedTagBasedStyleId": null,
-        "openaiSettings": {"quality": "standard", "style": "natural"},
+        "openaiSettings": {"quality": "auto", "background": "auto", "output_format": "png", "output_compression": 90, "input_fidelity": "high"},
         "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},
         "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
     }""")

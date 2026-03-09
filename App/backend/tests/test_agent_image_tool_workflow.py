@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from App.backend.image_providers.model_capabilities import get_gemini_supported_aspect_ratios
 from App.backend.services.image_run_service import (
-    GEMINI_ASPECT_RATIOS,
     IMAGE_OBJECT_TOOL,
     IMAGE_SCENE_TOOL,
     _pick_nearest_ratio_label,
@@ -42,8 +42,10 @@ def test_extract_execution_controls_supports_working_transition() -> None:
 
 
 def test_ratio_resolution_picks_nearest_supported_values() -> None:
-    assert _pick_nearest_ratio_label(GEMINI_ASPECT_RATIOS, 16 / 9) == "16:9"
-    assert _pick_nearest_ratio_label(GEMINI_ASPECT_RATIOS, 0.6) == "9:16"
+    aspect_ratios = get_gemini_supported_aspect_ratios("gemini-3.1-flash-image-preview")
+
+    assert _pick_nearest_ratio_label(aspect_ratios, 16 / 9) == "16:9"
+    assert _pick_nearest_ratio_label(aspect_ratios, 0.6) == "9:16"
     assert _pick_nearest_size(["1024x1024", "1792x1024", "1024x1792"], 16 / 9, "1024x1024") == "1792x1024"
 
 

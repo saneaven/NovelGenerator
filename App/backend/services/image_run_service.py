@@ -11,6 +11,13 @@ from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
 from ..image_providers.base import BaseImageProvider, ImageGenerationResult, ReferenceImageData
+from ..image_providers.model_capabilities import (
+    GEMINI_DEFAULT_MODEL,
+    OPENAI_DEFAULT_MODEL,
+    get_gemini_supported_aspect_ratios,
+    get_gemini_supported_resolutions,
+    get_openai_supported_sizes,
+)
 from ..image_providers.registry import ImageProviderRegistry
 from ..models.db_models import (
     Act,
@@ -66,7 +73,6 @@ from ..utils.object_type_aliases import normalize_object_type
 IMAGE_OBJECT_TOOL = "generate_object_image"
 IMAGE_SCENE_TOOL = "generate_scene_image"
 IMAGE_RUN_ACTIVE_STATUSES = {"queued", "running", "review", "applying"}
-GEMINI_ASPECT_RATIOS = ["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9"]
 OBJECT_IMAGE_TYPES = ("basic_info", "character", "organization", "location", "lorebook")
 OBJECT_BINDING_MODELS = {
     "basic_info": BasicInfo,
@@ -291,7 +297,10 @@ def _build_tool_recipe_snapshot(
     if provider_name == "openai":
         provider_settings = {
             "quality": config.openaiSettings.quality,
-            "style": config.openaiSettings.style,
+            "background": config.openaiSettings.background,
+            "output_format": config.openaiSettings.output_format,
+            "output_compression": config.openaiSettings.output_compression,
+            "input_fidelity": config.openaiSettings.input_fidelity,
         }
     elif provider_name == "gemini":
         provider_settings = {
@@ -872,9 +881,18 @@ class ImageRunService:
             requested_ratio_value = _parse_ratio_value(requested_ratio)
             provider_settings = dict(recipe.get("provider_settings") or {})
             if provider_name == "gemini":
-                resolved_ratio = _pick_nearest_ratio_label(GEMINI_ASPECT_RATIOS, requested_ratio_value)
+                model_name = str(recipe.get("model") or GEMINI_DEFAULT_MODEL)
+                resolved_ratio = _pick_nearest_ratio_label(_get_gemini_supported_aspect_ratios(model_name), requested_ratio_value)
                 provider_settings["aspect_ratio"] = resolved_ratio
-                resolved_size = str(provider_settings.get("image_resolution") or "2K")
+                resolution_candidates = _get_gemini_supported_resolutions(model_name)
+                requested_resolution = str(provider_settings.get("image_resolution") or "").strip()
+                resolved_size = requested_resolution if requested_resolution in resolution_candidates else resolution_candidates[0]
+            elif provider_name == "openai":
+                model_name = str(recipe.get("model") or OPENAI_DEFAULT_MODEL)
+                size_candidates = _get_openai_supported_sizes(model_name)
+                fallback_size = size_candidates[0]
+                resolved_size = _pick_nearest_size(size_candidates, requested_ratio_value, fallback_size)
+                resolved_ratio = _ratio_label_from_size(resolved_size)
             else:
                 size_candidates = provider.get_supported_sizes()
                 fallback_size = size_candidates[0] if size_candidates else "1024x1024"
@@ -947,8 +965,7 @@ class ImageRunService:
                 ),
                 model=str(recipe.get("model") or ""),
                 size=str(row.resolved_size or "1024x1024"),
-                quality=str(provider_settings.get("quality") or "standard"),
-                style=str(provider_settings.get("style") or "natural"),
+                quality=str(provider_settings.get("quality") or "auto"),
                 provider_settings=provider_settings or None,
                 reference_images=reference_image_data,
             )

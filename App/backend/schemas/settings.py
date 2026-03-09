@@ -215,8 +215,11 @@ class TagBasedImageStyle(BaseModel):
 
 class OpenAIImageSettings(BaseModel):
     """OpenAI-specific image settings"""
-    quality: str = "standard"
-    style: str = "natural"
+    quality: Literal["auto", "low", "medium", "high"] = "auto"
+    background: Literal["auto", "opaque", "transparent"] = "auto"
+    output_format: Literal["png", "jpeg", "webp"] = "png"
+    output_compression: int = Field(default=90, ge=0, le=100)
+    input_fidelity: Literal["low", "high"] = "high"
 
 
 class GeminiImageSettings(BaseModel):
@@ -236,7 +239,7 @@ class NovelAIImageSettings(BaseModel):
 class ImageGenConfig(BaseModel):
     """Image generation configuration"""
     provider: str = "openai"
-    model: str = "gpt-image-1"
+    model: str = "gpt-image-1.5"
     size: str = "1024x1024"
     naturalStyles: List[NaturalImageStyle] = []
     tagBasedStyles: List[TagBasedImageStyle] = []
