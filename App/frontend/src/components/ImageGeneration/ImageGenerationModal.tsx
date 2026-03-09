@@ -278,69 +278,22 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         if (typeof s.vibeStrength === 'number') setNovelaiVibeStrength(s.vibeStrength);
         if (typeof s.vibeInfoExtracted === 'number') setNovelaiVibeInfoExtracted(s.vibeInfoExtracted);
 
-        // Prompts + style selection
+        // Retry/regenerate prefills restore prompt content only, never affixes.
+        setSelectedNaturalStyleId(null);
+        setSelectedTagBasedStyleId(null);
+        setCustomNaturalPrefix('');
+        setCustomNaturalPostfix('');
+        setCustomPositivePrefix('');
+        setCustomPositivePostfix('');
+        setCustomNegativePrefix('');
+        setCustomNegativePostfix('');
+
         if (initialRecipe.promptType === 'natural') {
             setPrompt(initialRecipe.prompt.content ?? '');
-
-            const desiredStyleId =
-                initialRecipe.styleId && naturalStyles.some((style: any) => style.id === initialRecipe.styleId)
-                    ? initialRecipe.styleId
-                    : (naturalStyles.find(
-                        (style: any) =>
-                            (style.prefix || '') === (initialRecipe.prompt.prefix || '') &&
-                            (style.postfix || '') === (initialRecipe.prompt.postfix || '')
-                    )?.id ?? null);
-
-            if (desiredStyleId) {
-                setSelectedNaturalStyleId(desiredStyleId);
-                setCustomNaturalPrefix('');
-                setCustomNaturalPostfix('');
-            } else {
-                setSelectedNaturalStyleId(null);
-                setCustomNaturalPrefix(initialRecipe.prompt.prefix || '');
-                setCustomNaturalPostfix(initialRecipe.prompt.postfix || '');
-            }
-
-            setSelectedTagBasedStyleId(null);
-            setCustomPositivePrefix('');
-            setCustomPositivePostfix('');
-            setCustomNegativePrefix('');
-            setCustomNegativePostfix('');
         } else {
             setPositivePrompt(initialRecipe.positive.content ?? '');
             setNegativePrompt(initialRecipe.negative?.content ?? '');
             setActivePromptTab('positive');
-
-            const neg = initialRecipe.negative ?? { prefix: '', content: '', postfix: '' };
-
-            const desiredStyleId =
-                initialRecipe.styleId && tagBasedStyles.some((style: any) => style.id === initialRecipe.styleId)
-                    ? initialRecipe.styleId
-                    : (tagBasedStyles.find(
-                        (style: any) =>
-                            (style.positivePrefix || '') === (initialRecipe.positive.prefix || '') &&
-                            (style.positivePostfix || '') === (initialRecipe.positive.postfix || '') &&
-                            (style.negativePrefix || '') === (neg.prefix || '') &&
-                            (style.negativePostfix || '') === (neg.postfix || '')
-                    )?.id ?? null);
-
-            if (desiredStyleId) {
-                setSelectedTagBasedStyleId(desiredStyleId);
-                setCustomPositivePrefix('');
-                setCustomPositivePostfix('');
-                setCustomNegativePrefix('');
-                setCustomNegativePostfix('');
-            } else {
-                setSelectedTagBasedStyleId(null);
-                setCustomPositivePrefix(initialRecipe.positive.prefix || '');
-                setCustomPositivePostfix(initialRecipe.positive.postfix || '');
-                setCustomNegativePrefix(neg.prefix || '');
-                setCustomNegativePostfix(neg.postfix || '');
-            }
-
-            setSelectedNaturalStyleId(null);
-            setCustomNaturalPrefix('');
-            setCustomNaturalPostfix('');
         }
 
         // Reference images: resolve thumbs by asset_id
@@ -384,7 +337,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         return () => {
             cancelled = true;
         };
-    }, [initialRecipe, currentProjectId, naturalStyles, tagBasedStyles]);
+    }, [initialRecipe, currentProjectId]);
 
     // Auto-load saved prompts from object metadata
     useEffect(() => {
