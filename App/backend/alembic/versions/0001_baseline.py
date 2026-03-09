@@ -1,45 +1,224 @@
-"""Baseline schema for fresh installs.
-This baseline creates the current schema directly from SQLAlchemy models so a
-fresh Postgres database contains required core tables.
-"""
+"""Baseline schema snapshot for fresh installs."""
 
 from __future__ import annotations
 
 from alembic import op
 
 
-# revision identifiers, used by Alembic.
 revision = "0001_baseline"
 down_revision = None
 branch_labels = None
 depends_on = None
 
 
+DDL_STATEMENTS = [
+    'CREATE TABLE users (\n\tid UUID NOT NULL, \n\temail VARCHAR(255) NOT NULL, \n\tusername VARCHAR(100) NOT NULL, \n\tpassword_hash VARCHAR(255) NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tlast_login_at TIMESTAMP WITHOUT TIME ZONE, \n\tis_active BOOLEAN NOT NULL, \n\tis_verified BOOLEAN NOT NULL, \n\tis_admin BOOLEAN NOT NULL, \n\tstorage_quota_bytes BIGINT, \n\tPRIMARY KEY (id)\n);',
+    "CREATE TABLE run_messages (\n\tid UUID NOT NULL, \n\tthread_id UUID NOT NULL, \n\trun_id UUID NOT NULL, \n\tseq BIGINT NOT NULL, \n\tseq_in_thread BIGINT, \n\trole VARCHAR(16) NOT NULL, \n\tdata JSONB NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tparent_tool_call_id UUID, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_run_messages_role CHECK (role IN ('system','user','assistant','tool_call')), \n\tCONSTRAINT uq_run_messages_run_seq UNIQUE (run_id, seq)\n);",
+    "CREATE TABLE run_tool_calls (\n\tid UUID NOT NULL, \n\tthread_id UUID NOT NULL, \n\trun_id UUID NOT NULL, \n\tmessage_id UUID, \n\tassistant_message_id UUID, \n\tcall_seq INTEGER NOT NULL, \n\tllm_call_id VARCHAR(255) NOT NULL, \n\ttool_name VARCHAR(120) NOT NULL, \n\targuments JSONB NOT NULL, \n\textra_content JSONB, \n\tstatus VARCHAR(20) NOT NULL, \n\treason TEXT, \n\tresult JSONB, \n\timage_run_id UUID, \n\tchild_run_id UUID, \n\tchild_thread_id UUID, \n\taccepted_at TIMESTAMP WITHOUT TIME ZONE, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_run_tool_calls_status CHECK (status IN ('streaming','validating','pending','processing','working','failed','rejected','applied')), \n\tCONSTRAINT uq_run_tool_calls_message_llm_call_id UNIQUE (message_id, llm_call_id), \n\tCONSTRAINT uq_run_tool_calls_message_call_seq UNIQUE (message_id, call_seq)\n);",
+    'CREATE TABLE server_credentials (\n\tid UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tprovider VARCHAR(50) NOT NULL, \n\tencrypted_config TEXT NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_server_credentials_user_provider UNIQUE (user_id, provider), \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE prompt_presets (\n\tid UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tname VARCHAR(100) NOT NULL, \n\tdescription TEXT, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_preset_user_name UNIQUE (user_id, name), \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE projects (\n\tid UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tname VARCHAR(255) NOT NULL, \n\tdescription TEXT, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE object_versions (\n\tid UUID NOT NULL, \n\tobject_type VARCHAR(50) NOT NULL, \n\tobject_id UUID NOT NULL, \n\tversion_number INTEGER NOT NULL, \n\tdata JSONB NOT NULL, \n\tuser_request TEXT, \n\tcreated_by UUID, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_object_version_number UNIQUE (object_type, object_id, version_number), \n\tFOREIGN KEY(created_by) REFERENCES users (id) ON DELETE SET NULL\n);',
+    'CREATE TABLE user_settings (\n\tid UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\ttask_configs JSONB DEFAULT \'{\n        "agent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},\n        "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},\n        "editAssistant": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},\n        "imagePrompt": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},\n        "summary": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.2, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}},\n        "subAgent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "max_output_tokens": null, "context_window_tokens": 32000, "advanced": {"thinking_mode": "off", "thinking_config": {"effort": "medium"}, "request_format": "openai_sdk"}}\n    }\' NOT NULL, \n\tmain_language VARCHAR(50) NOT NULL, \n\tsub_languages JSONB DEFAULT \'[]\', \n\tdefault_sub_language VARCHAR(50), \n\ttheme VARCHAR(20) NOT NULL, \n\tretry_config JSONB DEFAULT \'{\n        "enabled": true,\n        "maxRetries": 3,\n        "retryableStatusCodes": [429, 500, 502, 503, 504],\n        "retryDelayMs": 1000\n    }\' NOT NULL, \n\timage_gen_config JSONB DEFAULT \'{\n        "provider": "openai",\n        "model": "gpt-image-1.5",\n        "size": "1024x1024",\n        "naturalStyles": [],\n        "tagBasedStyles": [],\n        "selectedNaturalStyleId": null,\n        "selectedTagBasedStyleId": null,\n        "openaiSettings": {"quality": "auto", "background": "auto", "output_format": "png", "output_compression": 90, "input_fidelity": "high"},\n        "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},\n        "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}\n    }\' NOT NULL, \n\tnative_output_mode BOOLEAN NOT NULL, \n\trag_search_enabled BOOLEAN NOT NULL, \n\tembedding_configs JSONB DEFAULT \'{\n        "ragSearch": {"provider": "openai", "model": "", "dimensions": null},\n        "agentMemory": {"provider": "openai", "model": "", "dimensions": null}\n    }\' NOT NULL, \n\trag_search_top_k_per_query INTEGER NOT NULL, \n\trag_search_neighbor_window INTEGER NOT NULL, \n\trag_search_max_primary_chunks INTEGER NOT NULL, \n\trag_search_max_total_chunks INTEGER NOT NULL, \n\trag_search_keyword_page_size INTEGER NOT NULL, \n\tagent_memory_top_k_per_query INTEGER NOT NULL, \n\tagent_memory_neighbor_window INTEGER NOT NULL, \n\tagent_memory_max_primary_messages INTEGER NOT NULL, \n\tagent_memory_max_total_messages INTEGER NOT NULL, \n\tpatch_auto_retry BOOLEAN NOT NULL, \n\tllm_logging_enabled BOOLEAN NOT NULL, \n\ttool_call_history_limit INTEGER NOT NULL, \n\tthinking_history_limit INTEGER NOT NULL, \n\ttool_call_auto_approve JSONB NOT NULL, \n\tcustom_thinking_templates JSONB DEFAULT \'[]\' NOT NULL, \n\tui_language VARCHAR(10) NOT NULL, \n\tactive_preset_id UUID, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (user_id), \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, \n\tFOREIGN KEY(active_preset_id) REFERENCES prompt_presets (id) ON DELETE SET NULL\n);',
+    'CREATE TABLE prompt_scenario_versions (\n\tid UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tpreset_id UUID NOT NULL, \n\ttask_type VARCHAR(50) NOT NULL, \n\ttask_subtype VARCHAR(50) NOT NULL, \n\tscenario JSONB NOT NULL, \n\tversion_number INTEGER NOT NULL, \n\tis_default BOOLEAN NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tnote TEXT, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_scenario_preset_task_version UNIQUE (preset_id, task_type, task_subtype, version_number), \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, \n\tFOREIGN KEY(preset_id) REFERENCES prompt_presets (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE sub_agent_definitions (\n\tid UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tpreset_id UUID NOT NULL, \n\tagent_name VARCHAR(50) NOT NULL, \n\tdisplay_name VARCHAR(200) NOT NULL, \n\tdescription TEXT NOT NULL, \n\tenabled BOOLEAN NOT NULL, \n\tallowed_invocation_modes JSONB NOT NULL, \n\tallowed_tool_names JSONB NOT NULL, \n\tallowed_sub_agent_ids JSONB NOT NULL, \n\tuse_custom_llm_config BOOLEAN NOT NULL, \n\tllm_config_override JSONB, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_sub_agent_per_preset UNIQUE (preset_id, agent_name), \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, \n\tFOREIGN KEY(preset_id) REFERENCES prompt_presets (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE prompt_folders (\n\tid UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tpreset_id UUID NOT NULL, \n\tname VARCHAR(100) NOT NULL, \n\tparent_id UUID, \n\tdisplay_order INTEGER NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_folder_preset_parent_name UNIQUE (preset_id, parent_id, name), \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, \n\tFOREIGN KEY(preset_id) REFERENCES prompt_presets (id) ON DELETE CASCADE, \n\tFOREIGN KEY(parent_id) REFERENCES prompt_folders (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE prompt_variables (\n\tid UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tpreset_id UUID NOT NULL, \n\tname VARCHAR(100) NOT NULL, \n\tvar_type VARCHAR(20) NOT NULL, \n\tvalue JSONB DEFAULT \'{"value": null}\' NOT NULL, \n\tselect_options JSONB, \n\tnumber_options JSONB, \n\tdescription TEXT, \n\tdisplay_order INTEGER NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_variable_preset_name UNIQUE (preset_id, name), \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, \n\tFOREIGN KEY(preset_id) REFERENCES prompt_presets (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE project_storage_usage (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tproject_meta_bytes BIGINT NOT NULL, \n\tstory_bytes BIGINT NOT NULL, \n\tmanuscript_bytes BIGINT NOT NULL, \n\tchat_bytes BIGINT NOT NULL, \n\tnotification_bytes BIGINT NOT NULL, \n\timage_run_bytes BIGINT NOT NULL, \n\timage_bytes BIGINT NOT NULL, \n\ttotal_bytes BIGINT NOT NULL, \n\tneeds_reconcile BOOLEAN DEFAULT false NOT NULL, \n\tlast_reconciled_at TIMESTAMP WITHOUT TIME ZONE, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (project_id), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE, \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE basic_info (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\timage_prompt TEXT, \n\timage_prompt_positive TEXT, \n\timage_prompt_negative TEXT, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (project_id), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE guidelines (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (project_id), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE characters (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\t"order" INTEGER, \n\timage_prompt TEXT, \n\timage_prompt_positive TEXT, \n\timage_prompt_negative TEXT, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE organizations (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\t"order" INTEGER, \n\timage_prompt TEXT, \n\timage_prompt_positive TEXT, \n\timage_prompt_negative TEXT, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE locations (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\t"order" INTEGER, \n\timage_prompt TEXT, \n\timage_prompt_positive TEXT, \n\timage_prompt_negative TEXT, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE lorebook_entries (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\t"order" INTEGER, \n\timage_prompt TEXT, \n\timage_prompt_positive TEXT, \n\timage_prompt_negative TEXT, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE outlines (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\t"order" INTEGER NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE agents (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\tname VARCHAR(255) NOT NULL, \n\tarchived_until_message_id UUID, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE\n);',
+    "CREATE TABLE threads (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tthread_type VARCHAR(20) NOT NULL, \n\towner_id UUID, \n\tjourney_kind VARCHAR(40), \n\tstatus VARCHAR(20) NOT NULL, \n\tcaptured_history_system_prompt TEXT, \n\tcaptured_history_conversation_json JSONB, \n\tnext_run_seq BIGINT NOT NULL, \n\tnext_message_seq BIGINT NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_threads_type CHECK (thread_type IN ('agent','subAgent','journey')), \n\tCONSTRAINT ck_threads_status CHECK (status IN ('running','waiting','processing','paused','done','error','canceled')), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE, \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE\n);",
+    'CREATE TABLE rag_sources (\n\tid UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\tobject_type VARCHAR(50) NOT NULL, \n\tobject_id UUID NOT NULL, \n\tlanguage VARCHAR(50) NOT NULL, \n\tversion_number INTEGER, \n\tcontent_hash VARCHAR(64), \n\tindex_state VARCHAR(40) NOT NULL, \n\tindexed_at TIMESTAMP WITHOUT TIME ZONE, \n\ttype_group VARCHAR(30) NOT NULL, \n\tstory_object_type VARCHAR(50), \n\tstory_object_order INTEGER, \n\toutline_order INTEGER, \n\tact_order INTEGER, \n\tchapter_order INTEGER, \n\tchapter_id UUID, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_rag_source_identity UNIQUE (user_id, project_id, object_type, object_id, language), \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE prompt_fragments (\n\tid UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tpreset_id UUID NOT NULL, \n\tfolder_id UUID, \n\tfragment_name VARCHAR(100) NOT NULL, \n\tcontent TEXT NOT NULL, \n\tdescription TEXT, \n\tversion_number INTEGER NOT NULL, \n\tnote TEXT, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, \n\tFOREIGN KEY(preset_id) REFERENCES prompt_presets (id) ON DELETE CASCADE, \n\tFOREIGN KEY(folder_id) REFERENCES prompt_folders (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE acts (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\toutline_id UUID NOT NULL, \n\t"order" INTEGER NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE, \n\tFOREIGN KEY(outline_id) REFERENCES outlines (id) ON DELETE CASCADE\n);',
+    "CREATE TABLE runs (\n\tid UUID NOT NULL, \n\tthread_id UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\tstatus VARCHAR(20) NOT NULL, \n\trun_seq BIGINT, \n\tlanguage VARCHAR(50) NOT NULL, \n\terror TEXT, \n\trun_mode VARCHAR(20), \n\tsurface VARCHAR(40), \n\tcontext_object_ids JSONB NOT NULL, \n\tjourney_target_ids JSONB NOT NULL, \n\tinput_payload JSONB NOT NULL, \n\tparent_run_id UUID, \n\tparent_run_message_id UUID, \n\tparent_run_tool_call_id VARCHAR(255), \n\tnext_message_seq BIGINT NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_runs_status CHECK (status IN ('running','waiting','processing','paused','done','error','canceled')), \n\tFOREIGN KEY(thread_id) REFERENCES threads (id) ON DELETE CASCADE, \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE, \n\tFOREIGN KEY(parent_run_id) REFERENCES runs (id) ON DELETE CASCADE\n);",
+    "CREATE TABLE image_runs (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tthread_id UUID, \n\tclient_request_id VARCHAR(128), \n\torigin VARCHAR(20) NOT NULL, \n\treview_mode VARCHAR(16) NOT NULL, \n\tstatus VARCHAR(20) NOT NULL, \n\tstage VARCHAR(20), \n\trequest_snapshot JSONB NOT NULL, \n\tpreview_asset_id UUID, \n\tfinal_asset_id UUID, \n\tprovider VARCHAR(50), \n\tmodel VARCHAR(100), \n\tresolved_ratio VARCHAR(32), \n\tresolved_size VARCHAR(32), \n\trevised_prompt TEXT, \n\tbefore_excerpt TEXT, \n\tafter_excerpt TEXT, \n\tfailure_code VARCHAR(120), \n\terror_message TEXT, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_image_runs_origin CHECK (origin IN ('direct','tool_preview')), \n\tCONSTRAINT ck_image_runs_review_mode CHECK (review_mode IN ('auto','manual')), \n\tCONSTRAINT ck_image_runs_status CHECK (status IN ('queued','running','review','applying','applied','rejected','failed','cancelled')), \n\tCONSTRAINT ck_image_runs_stage CHECK (stage IS NULL OR stage IN ('preparing','generating','saving','binding')), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE, \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, \n\tFOREIGN KEY(thread_id) REFERENCES threads (id) ON DELETE CASCADE\n);",
+    "CREATE TABLE notifications (\n\tid UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\tsource VARCHAR(32) NOT NULL, \n\tsource_ref_id VARCHAR(128) NOT NULL, \n\tthread_id UUID, \n\tstatus VARCHAR(16) NOT NULL, \n\tlabel VARCHAR(255) NOT NULL, \n\tmessage TEXT NOT NULL, \n\twarning TEXT, \n\tprogress_json JSONB, \n\tcustom_slot_json JSONB, \n\tmeta_json JSONB, \n\tis_read BOOLEAN NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_notifications_source CHECK (source IN ('journey','imageRun')), \n\tCONSTRAINT ck_notifications_status CHECK (status IN ('running','pending','success','error','cancelled')), \n\tCONSTRAINT uq_notifications_source_ref UNIQUE (user_id, project_id, source, source_ref_id), \n\tFOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE, \n\tFOREIGN KEY(thread_id) REFERENCES threads (id) ON DELETE SET NULL\n);",
+    'CREATE TABLE rag_chunks (\n\tid UUID NOT NULL, \n\tsource_id UUID NOT NULL, \n\tchunk_index INTEGER NOT NULL, \n\tfield_path TEXT NOT NULL, \n\ttext TEXT NOT NULL, \n\tembedding vector NOT NULL, \n\tembedding_dim INTEGER NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_rag_chunk_index UNIQUE (source_id, chunk_index), \n\tFOREIGN KEY(source_id) REFERENCES rag_sources (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE message_memory_summaries (\n\tid UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\tthread_id UUID NOT NULL, \n\tlanguage VARCHAR(50) NOT NULL, \n\tto_message_id UUID NOT NULL, \n\tto_seq_in_thread BIGINT, \n\tsummary_text TEXT NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(thread_id) REFERENCES threads (id) ON DELETE CASCADE, \n\tFOREIGN KEY(to_message_id) REFERENCES run_messages (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE message_rag_sources (\n\tid UUID NOT NULL, \n\tuser_id UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\tthread_id UUID NOT NULL, \n\tmessage_id UUID NOT NULL, \n\tlanguage VARCHAR(50) NOT NULL, \n\tcontent_hash VARCHAR(64), \n\tindex_state VARCHAR(40) NOT NULL, \n\tindexed_at TIMESTAMP WITHOUT TIME ZONE, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_message_rag_source_identity UNIQUE (user_id, thread_id, message_id, language), \n\tFOREIGN KEY(thread_id) REFERENCES threads (id) ON DELETE CASCADE, \n\tFOREIGN KEY(message_id) REFERENCES run_messages (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE chapters (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\tact_id UUID NOT NULL, \n\t"order" INTEGER NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE, \n\tFOREIGN KEY(act_id) REFERENCES acts (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE message_rag_chunks (\n\tid UUID NOT NULL, \n\tsource_id UUID NOT NULL, \n\tchunk_index INTEGER NOT NULL, \n\tfield_path TEXT NOT NULL, \n\ttext TEXT NOT NULL, \n\tembedding vector NOT NULL, \n\tembedding_dim INTEGER NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_message_rag_chunk_index UNIQUE (source_id, chunk_index), \n\tFOREIGN KEY(source_id) REFERENCES message_rag_sources (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE manuscripts (\n\tid UUID NOT NULL, \n\tchapter_id UUID NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (chapter_id), \n\tFOREIGN KEY(chapter_id) REFERENCES chapters (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE assets (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\tname VARCHAR(255) NOT NULL, \n\tfile_path VARCHAR(500) NOT NULL, \n\tmime_type VARCHAR(50) NOT NULL, \n\tasset_type VARCHAR(20), \n\tmanuscript_id UUID, \n\tpreview_image_run_id UUID, \n\tgeneration_prompt JSONB, \n\tgeneration_positive_prompt JSONB, \n\tgeneration_negative_prompt JSONB, \n\tgeneration_provider VARCHAR(50), \n\tgeneration_model VARCHAR(100), \n\tgeneration_settings JSONB, \n\tgeneration_reference_images JSONB, \n\tgeneration_reference_objects JSONB, \n\twidth INTEGER, \n\theight INTEGER, \n\tfile_size INTEGER, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE, \n\tFOREIGN KEY(manuscript_id) REFERENCES manuscripts (id) ON DELETE CASCADE, \n\tFOREIGN KEY(preview_image_run_id) REFERENCES image_runs (id) ON DELETE SET NULL\n);',
+    'CREATE TABLE story_object_assets (\n\tid UUID NOT NULL, \n\tobject_type VARCHAR(50) NOT NULL, \n\tobject_id UUID NOT NULL, \n\tasset_id UUID NOT NULL, \n\tis_main BOOLEAN NOT NULL, \n\tdisplay_order INTEGER NOT NULL, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_story_object_assets_asset_id UNIQUE (asset_id), \n\tFOREIGN KEY(asset_id) REFERENCES assets (id) ON DELETE CASCADE\n);',
+    'CREATE TABLE manuscript_images (\n\tid UUID NOT NULL, \n\tmanuscript_id UUID NOT NULL, \n\tlanguage VARCHAR(50), \n\tposition INTEGER NOT NULL, \n\tsource_type VARCHAR(20) NOT NULL, \n\tasset_id UUID, \n\tstory_object_type VARCHAR(50), \n\tstory_object_id UUID, \n\tgeneration_prompt TEXT, \n\tdisplay_width INTEGER NOT NULL, \n\tcaption TEXT, \n\tcreated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(manuscript_id) REFERENCES manuscripts (id) ON DELETE CASCADE, \n\tFOREIGN KEY(asset_id) REFERENCES assets (id) ON DELETE CASCADE\n);',
+    'ALTER TABLE run_messages ADD FOREIGN KEY(parent_tool_call_id) REFERENCES run_tool_calls (id) ON DELETE CASCADE;',
+    'ALTER TABLE run_tool_calls ADD FOREIGN KEY(message_id) REFERENCES run_messages (id) ON DELETE SET NULL;',
+    'ALTER TABLE run_tool_calls ADD FOREIGN KEY(child_thread_id) REFERENCES threads (id) ON DELETE SET NULL;',
+    'ALTER TABLE run_messages ADD FOREIGN KEY(thread_id) REFERENCES threads (id) ON DELETE CASCADE;',
+    'ALTER TABLE run_messages ADD FOREIGN KEY(run_id) REFERENCES runs (id) ON DELETE CASCADE;',
+    'ALTER TABLE run_tool_calls ADD FOREIGN KEY(image_run_id) REFERENCES image_runs (id) ON DELETE SET NULL;',
+    'ALTER TABLE run_tool_calls ADD FOREIGN KEY(run_id) REFERENCES runs (id) ON DELETE CASCADE;',
+    'ALTER TABLE run_tool_calls ADD FOREIGN KEY(thread_id) REFERENCES threads (id) ON DELETE CASCADE;',
+    'ALTER TABLE run_tool_calls ADD FOREIGN KEY(child_run_id) REFERENCES runs (id) ON DELETE SET NULL;',
+    'ALTER TABLE run_tool_calls ADD FOREIGN KEY(assistant_message_id) REFERENCES run_messages (id) ON DELETE CASCADE;',
+    'CREATE UNIQUE INDEX ix_users_email ON users (email);',
+    'CREATE UNIQUE INDEX ix_users_username ON users (username);',
+    'CREATE INDEX ix_run_messages_parent_tool_call_id ON run_messages (parent_tool_call_id);',
+    'CREATE INDEX ix_run_messages_run_created ON run_messages (run_id, created_at);',
+    'CREATE INDEX ix_run_messages_run_id ON run_messages (run_id);',
+    'CREATE INDEX ix_run_messages_thread_id ON run_messages (thread_id);',
+    'CREATE INDEX ix_run_messages_thread_seq ON run_messages (thread_id, seq_in_thread);',
+    'CREATE INDEX ix_run_tool_calls_assistant_message ON run_tool_calls (assistant_message_id);',
+    'CREATE INDEX ix_run_tool_calls_assistant_message_id ON run_tool_calls (assistant_message_id);',
+    'CREATE INDEX ix_run_tool_calls_image_run_id ON run_tool_calls (image_run_id);',
+    'CREATE INDEX ix_run_tool_calls_message ON run_tool_calls (message_id);',
+    'CREATE INDEX ix_run_tool_calls_message_id ON run_tool_calls (message_id);',
+    'CREATE INDEX ix_run_tool_calls_name ON run_tool_calls (tool_name);',
+    'CREATE INDEX ix_run_tool_calls_run_id ON run_tool_calls (run_id);',
+    'CREATE INDEX ix_run_tool_calls_thread_id ON run_tool_calls (thread_id);',
+    'CREATE INDEX ix_run_tool_calls_thread_status ON run_tool_calls (thread_id, status);',
+    'CREATE INDEX ix_server_credentials_user_id ON server_credentials (user_id);',
+    'CREATE INDEX idx_preset_user ON prompt_presets (user_id);',
+    'CREATE INDEX ix_prompt_presets_user_id ON prompt_presets (user_id);',
+    'CREATE INDEX ix_projects_user_id ON projects (user_id);',
+    'CREATE INDEX ix_object_versions_created_at ON object_versions (created_at);',
+    'CREATE INDEX ix_object_versions_data ON object_versions USING gin (data);',
+    'CREATE INDEX ix_object_versions_object_id ON object_versions (object_id);',
+    'CREATE INDEX ix_object_versions_object_type ON object_versions (object_type);',
+    'CREATE INDEX ix_object_versions_type_id_num ON object_versions (object_type, object_id, version_number);',
+    'CREATE INDEX idx_scenario_preset_task ON prompt_scenario_versions (preset_id, task_type, task_subtype, version_number);',
+    'CREATE INDEX ix_prompt_scenario_versions_preset_id ON prompt_scenario_versions (preset_id);',
+    'CREATE INDEX ix_prompt_scenario_versions_user_id ON prompt_scenario_versions (user_id);',
+    'CREATE INDEX idx_sub_agent_preset ON sub_agent_definitions (preset_id);',
+    'CREATE INDEX ix_sub_agent_definitions_preset_id ON sub_agent_definitions (preset_id);',
+    'CREATE INDEX ix_sub_agent_definitions_user_id ON sub_agent_definitions (user_id);',
+    'CREATE INDEX idx_folder_preset_parent ON prompt_folders (preset_id, parent_id);',
+    'CREATE INDEX ix_prompt_folders_parent_id ON prompt_folders (parent_id);',
+    'CREATE INDEX ix_prompt_folders_preset_id ON prompt_folders (preset_id);',
+    'CREATE INDEX ix_prompt_folders_user_id ON prompt_folders (user_id);',
+    'CREATE INDEX idx_variable_preset_order ON prompt_variables (preset_id, display_order);',
+    'CREATE INDEX ix_prompt_variables_preset_id ON prompt_variables (preset_id);',
+    'CREATE INDEX ix_prompt_variables_user_id ON prompt_variables (user_id);',
+    'CREATE INDEX ix_project_storage_usage_last_reconciled_at ON project_storage_usage (last_reconciled_at);',
+    'CREATE INDEX ix_project_storage_usage_needs_reconcile ON project_storage_usage (needs_reconcile);',
+    'CREATE INDEX ix_project_storage_usage_user_id ON project_storage_usage (user_id);',
+    'CREATE INDEX ix_characters_project_id ON characters (project_id);',
+    'CREATE INDEX ix_organizations_project_id ON organizations (project_id);',
+    'CREATE INDEX ix_locations_project_id ON locations (project_id);',
+    'CREATE INDEX ix_lorebook_entries_project_id ON lorebook_entries (project_id);',
+    'CREATE INDEX ix_outlines_project_id ON outlines (project_id);',
+    'CREATE INDEX ix_agents_archived_until_message_id ON agents (archived_until_message_id);',
+    'CREATE INDEX ix_agents_project_id ON agents (project_id);',
+    'CREATE INDEX ix_threads_owner ON threads (owner_id);',
+    'CREATE INDEX ix_threads_owner_id ON threads (owner_id);',
+    'CREATE INDEX ix_threads_project_id ON threads (project_id);',
+    'CREATE INDEX ix_threads_project_type ON threads (project_id, thread_type);',
+    'CREATE INDEX ix_threads_user_id ON threads (user_id);',
+    'CREATE INDEX ix_rag_sources_project_group_order ON rag_sources (project_id, type_group, outline_order, act_order, chapter_order, story_object_order);',
+    'CREATE INDEX ix_rag_sources_project_id ON rag_sources (project_id);',
+    'CREATE INDEX ix_rag_sources_user_id ON rag_sources (user_id);',
+    'CREATE INDEX ix_prompt_fragments_folder_id ON prompt_fragments (folder_id);',
+    'CREATE INDEX ix_prompt_fragments_preset_id ON prompt_fragments (preset_id);',
+    'CREATE INDEX ix_prompt_fragments_user_id ON prompt_fragments (user_id);',
+    'CREATE INDEX ix_acts_outline_id ON acts (outline_id);',
+    'CREATE INDEX ix_acts_project_id ON acts (project_id);',
+    'CREATE INDEX ix_runs_parent ON runs (parent_run_id);',
+    'CREATE INDEX ix_runs_parent_run_id ON runs (parent_run_id);',
+    'CREATE INDEX ix_runs_project_id ON runs (project_id);',
+    'CREATE INDEX ix_runs_project_status ON runs (project_id, status);',
+    'CREATE INDEX ix_runs_thread_id ON runs (thread_id);',
+    'CREATE INDEX ix_runs_thread_status ON runs (thread_id, status);',
+    'CREATE INDEX ix_runs_user_id ON runs (user_id);',
+    'CREATE UNIQUE INDEX uq_runs_child_parent_tool ON runs (parent_run_id, parent_run_message_id, parent_run_tool_call_id) WHERE parent_run_id IS NOT NULL;',
+    'CREATE UNIQUE INDEX uq_runs_thread_seq ON runs (thread_id, run_seq) WHERE run_seq IS NOT NULL;',
+    'CREATE INDEX ix_image_runs_client_request_id ON image_runs (client_request_id);',
+    'CREATE INDEX ix_image_runs_final_asset_id ON image_runs (final_asset_id);',
+    'CREATE INDEX ix_image_runs_preview_asset_id ON image_runs (preview_asset_id);',
+    'CREATE INDEX ix_image_runs_project_id ON image_runs (project_id);',
+    'CREATE INDEX ix_image_runs_project_status ON image_runs (project_id, status);',
+    'CREATE INDEX ix_image_runs_thread_created ON image_runs (thread_id, created_at);',
+    'CREATE INDEX ix_image_runs_thread_id ON image_runs (thread_id);',
+    'CREATE INDEX ix_image_runs_user_id ON image_runs (user_id);',
+    'CREATE INDEX ix_notifications_project_id ON notifications (project_id);',
+    'CREATE INDEX ix_notifications_project_order ON notifications (user_id, project_id, updated_at, id);',
+    'CREATE INDEX ix_notifications_project_read ON notifications (user_id, project_id, is_read);',
+    'CREATE INDEX ix_notifications_thread_id ON notifications (thread_id);',
+    'CREATE INDEX ix_notifications_user_id ON notifications (user_id);',
+    'CREATE INDEX ix_rag_chunks_source_id ON rag_chunks (source_id);',
+    'CREATE INDEX ix_message_memory_summaries_created_at ON message_memory_summaries (created_at);',
+    'CREATE INDEX ix_message_memory_summaries_project_id ON message_memory_summaries (project_id);',
+    'CREATE INDEX ix_message_memory_summaries_thread_id ON message_memory_summaries (thread_id);',
+    'CREATE INDEX ix_message_memory_summaries_thread_to_message ON message_memory_summaries (thread_id, to_message_id);',
+    'CREATE INDEX ix_message_memory_summaries_thread_to_seq ON message_memory_summaries (thread_id, to_seq_in_thread);',
+    'CREATE INDEX ix_message_memory_summaries_user_id ON message_memory_summaries (user_id);',
+    'CREATE INDEX ix_message_rag_sources_project_id ON message_rag_sources (project_id);',
+    'CREATE INDEX ix_message_rag_sources_thread_id ON message_rag_sources (thread_id);',
+    'CREATE INDEX ix_message_rag_sources_thread_language ON message_rag_sources (thread_id, language);',
+    'CREATE INDEX ix_message_rag_sources_user_id ON message_rag_sources (user_id);',
+    'CREATE INDEX ix_chapters_act_id ON chapters (act_id);',
+    'CREATE INDEX ix_chapters_project_id ON chapters (project_id);',
+    'CREATE INDEX ix_message_rag_chunks_source_id ON message_rag_chunks (source_id);',
+    'CREATE INDEX ix_assets_asset_type ON assets (asset_type);',
+    'CREATE INDEX ix_assets_manuscript_id ON assets (manuscript_id);',
+    'CREATE INDEX ix_assets_preview_image_run_id ON assets (preview_image_run_id);',
+    'CREATE INDEX ix_assets_project_id ON assets (project_id);',
+    'CREATE INDEX idx_story_object_asset ON story_object_assets (object_type, object_id);',
+    'CREATE INDEX ix_story_object_assets_asset_id ON story_object_assets (asset_id);',
+    'CREATE INDEX ix_story_object_assets_object_id ON story_object_assets (object_id);',
+    'CREATE INDEX ix_manuscript_images_asset_id ON manuscript_images (asset_id);',
+    'CREATE INDEX ix_manuscript_images_manuscript_id ON manuscript_images (manuscript_id);',
+    'CREATE INDEX ix_manuscript_images_manuscript_id_language ON manuscript_images (manuscript_id, language);',
+]
+
+
+DROP_TABLES = [
+    'manuscript_images',
+    'story_object_assets',
+    'assets',
+    'manuscripts',
+    'message_rag_chunks',
+    'chapters',
+    'message_rag_sources',
+    'message_memory_summaries',
+    'rag_chunks',
+    'notifications',
+    'image_runs',
+    'runs',
+    'acts',
+    'prompt_fragments',
+    'rag_sources',
+    'threads',
+    'agents',
+    'outlines',
+    'lorebook_entries',
+    'locations',
+    'organizations',
+    'characters',
+    'guidelines',
+    'basic_info',
+    'project_storage_usage',
+    'prompt_variables',
+    'prompt_folders',
+    'sub_agent_definitions',
+    'prompt_scenario_versions',
+    'user_settings',
+    'object_versions',
+    'projects',
+    'prompt_presets',
+    'server_credentials',
+    'run_tool_calls',
+    'run_messages',
+    'users',
+]
+
+
 def upgrade() -> None:
-    # pgvector is required by `models/rag_models.py` (Vector type).
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
-
     bind = op.get_bind()
-
-    # Import models so they register with Base.metadata before create_all().
-    from database import Base  # noqa: E402
-    from models import db_models  # noqa: F401,E402
-    from models import translation_models  # noqa: F401,E402
-    from models import rag_models  # noqa: F401,E402
-    from models import memory_models  # noqa: F401,E402
-
-    Base.metadata.create_all(bind=bind)
+    bind.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
+    for statement in DDL_STATEMENTS:
+        bind.exec_driver_sql(statement)
 
 
 def downgrade() -> None:
     bind = op.get_bind()
-
-    from database import Base  # noqa: E402
-    from models import db_models  # noqa: F401,E402
-    from models import translation_models  # noqa: F401,E402
-    from models import rag_models  # noqa: F401,E402
-    from models import memory_models  # noqa: F401,E402
-
-    Base.metadata.drop_all(bind=bind)
-    op.execute("DROP EXTENSION IF EXISTS vector")
-
+    for table_name in DROP_TABLES:
+        bind.exec_driver_sql(f'DROP TABLE IF EXISTS "{table_name}" CASCADE')
+    bind.exec_driver_sql("DROP EXTENSION IF EXISTS vector")

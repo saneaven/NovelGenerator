@@ -51,12 +51,10 @@ python init_db.py
 Initialize the database schema using Alembic:
 
 ```bash
-# Create initial migration (first time only)
-alembic revision --autogenerate -m "Initial migration"
-
-# Apply migrations
 alembic upgrade head
 ```
+
+Fresh installs use the checked-in baseline migration. Add new revisions only for schema changes made after that baseline.
 
 ## Database Schema Overview
 

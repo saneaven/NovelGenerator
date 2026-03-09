@@ -7,17 +7,29 @@ Usage: python db_commands.py <command>
 
 import subprocess
 import sys
-from database import engine, Base, DATABASE_URL
-# Import all models so Base.metadata includes every table (core + translation)
-from models import db_models  # noqa: F401
-from models import translation_models  # noqa: F401
-from sqlalchemy import text, inspect, MetaData
+from pathlib import Path
+
+from sqlalchemy import inspect, text
+
+from database import DATABASE_URL, engine
+
+
+BACKEND_DIR = Path(__file__).resolve().parent
+
+
+def _run_alembic(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["alembic", *args],
+        cwd=BACKEND_DIR,
+        capture_output=True,
+        text=True,
+    )
 
 
 def upgrade():
     """Apply all pending migrations"""
     print("Applying migrations...")
-    result = subprocess.run(["alembic", "upgrade", "head"], capture_output=True, text=True)
+    result = _run_alembic("upgrade", "head")
     if result.returncode == 0:
         print("✓ Migrations applied successfully!")
         print(result.stdout)
@@ -30,7 +42,7 @@ def upgrade():
 def downgrade(steps: int = 1):
     """Downgrade migrations"""
     print(f"Downgrading {steps} migration(s)...")
-    result = subprocess.run(["alembic", "downgrade", f"-{steps}"], capture_output=True, text=True)
+    result = _run_alembic("downgrade", f"-{steps}")
     if result.returncode == 0:
         print("✓ Downgrade successful!")
         print(result.stdout)
@@ -42,13 +54,13 @@ def downgrade(steps: int = 1):
 
 def current():
     """Show current migration version"""
-    result = subprocess.run(["alembic", "current"], capture_output=True, text=True)
+    result = _run_alembic("current")
     print(result.stdout)
 
 
 def history():
     """Show migration history"""
-    result = subprocess.run(["alembic", "history", "--verbose"], capture_output=True, text=True)
+    result = _run_alembic("history", "--verbose")
     print(result.stdout)
 
 
@@ -60,34 +72,25 @@ def reset():
         return
 
     print("Dropping all tables...")
-    
+
     try:
-        # Try aggressive schema drop for PostgreSQL (handles all dependencies/leftovers)
         with engine.connect() as conn:
             conn.execute(text("DROP SCHEMA public CASCADE;"))
             conn.execute(text("CREATE SCHEMA public;"))
             conn.execute(text("GRANT ALL ON SCHEMA public TO postgres;"))
             conn.execute(text("GRANT ALL ON SCHEMA public TO public;"))
             conn.commit()
-        print("✓ Schema reset successfully (PostgreSQL optimized)")
+        print("✓ Schema reset successfully")
     except Exception as e:
-        print(f"Note: Schema reset failed ({e}), falling back to table drop...")
-        # Reflect all tables to ensure we drop everything, including orphan tables
-        meta = MetaData()
-        meta.reflect(bind=engine)
-        meta.drop_all(bind=engine)
-        print("✓ All tables dropped")
+        print(f"✗ Schema reset failed: {e}")
+        sys.exit(1)
 
-    print("\nCreating all tables...")
-    Base.metadata.create_all(bind=engine)
-    print("✓ All tables created")
-
-    print("\nStamping database with head revision...")
-    result = subprocess.run(["alembic", "stamp", "head"], capture_output=True, text=True)
+    print("\nRebuilding schema from baseline...")
+    result = _run_alembic("upgrade", "head")
     if result.returncode == 0:
         print("✓ Database reset complete!")
     else:
-        print("✗ Error stamping database:")
+        print("✗ Error rebuilding schema:")
         print(result.stderr)
 
 

@@ -189,7 +189,7 @@ def _asset_to_response(asset: Asset) -> AssetResponse:
         file_size=cast(Optional[int], asset.file_size),
         created_at=cast(datetime, asset.created_at),
         updated_at=cast(datetime, asset.updated_at),
-        file_url=f"/storage/assets/{cast(str, asset.file_path)}",
+        file_url=storage_service.build_public_asset_path(cast(str, asset.file_path)),
     )
 
 
@@ -213,7 +213,7 @@ def _asset_to_scene_response(asset: Asset, used_in_manuscripts: List[ManuscriptI
         file_size=cast(Optional[int], asset.file_size),
         created_at=cast(datetime, asset.created_at),
         updated_at=cast(datetime, asset.updated_at),
-        file_url=f"/storage/assets/{cast(str, asset.file_path)}",
+        file_url=storage_service.build_public_asset_path(cast(str, asset.file_path)),
         used_in_manuscripts=used_in_manuscripts,
         usage_count=len(used_in_manuscripts)
     )
@@ -812,7 +812,7 @@ async def preview_image_cleanup(
                 manuscript_id=str(asset.manuscript_id) if asset.manuscript_id else None,
                 created_at=cast(datetime, asset.created_at),
                 file_size=cast(Optional[int], asset.file_size),
-                file_url=f"/storage/assets/{cast(str, asset.file_path)}",
+                file_url=storage_service.build_public_asset_path(cast(str, asset.file_path)),
                 reasons=reasons,
                 referenced_by_count=referenced_by_count,
             )

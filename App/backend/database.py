@@ -64,17 +64,3 @@ def short_session():
     finally:
         db.close()
 
-
-# Initialize database (create all tables)
-def init_db():
-    """Create all tables in the database"""
-    from models import db_models  # Import models to register them with Base
-    Base.metadata.create_all(bind=engine)
-    print("Database tables created successfully!")
-
-
-# Drop all tables (use with caution!)
-def drop_db():
-    """Drop all tables in the database - USE WITH CAUTION!"""
-    Base.metadata.drop_all(bind=engine)
-    print("All database tables dropped!")

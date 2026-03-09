@@ -30,28 +30,11 @@ def test_default_preset_sub_agents_match_prompt_scenarios() -> None:
     }
 
 
-def test_runtime_sources_no_longer_reference_legacy_default_prompt_paths() -> None:
+def test_alembic_versions_collapse_to_single_baseline() -> None:
     backend_root = Path(__file__).resolve().parents[1]
-    runtime_sources = [
-        backend_root / "services" / "preset_service.py",
-        backend_root / "routes" / "fragment_routes.py",
-        backend_root / "services" / "template_engine.py",
-        backend_root / "main.py",
-    ]
-
-    for path in runtime_sources:
-        source = path.read_text(encoding="utf-8")
-        assert "prompts/default_fragments" not in source
-        assert "prompts/templates" not in source
-        assert "from ..prompts import" not in source
-
-
-def test_migration_0005_is_self_contained() -> None:
-    backend_root = Path(__file__).resolve().parents[1]
-    source = (backend_root / "alembic" / "versions" / "0005_reset_native_output_fragments.py").read_text(
-        encoding="utf-8"
+    version_files = sorted(
+        path.name
+        for path in (backend_root / "alembic" / "versions").glob("*.py")
     )
 
-    assert "FRAGMENT_CONTENTS =" in source
-    assert "default_fragments" not in source
-    assert "read_text(" not in source
+    assert version_files == ["0001_baseline.py"]

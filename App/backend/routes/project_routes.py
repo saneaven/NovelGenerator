@@ -35,6 +35,7 @@ from ..services.storage_usage_service import (
     snapshot_object_version_row,
     snapshot_project_row,
 )
+from ..services.storage_service import storage_service
 
 
 def _get_cover_asset(db: Session, project: Project) -> dict | None:
@@ -61,7 +62,7 @@ def _get_cover_asset(db: Session, project: Project) -> dict | None:
                     "file_size": asset.file_size,
                     "created_at": asset.created_at,
                     "updated_at": asset.updated_at,
-                    "file_url": f"/storage/assets/{asset.file_path}",
+                    "file_url": storage_service.build_public_asset_path(str(asset.file_path)),
                 }
     return None
 

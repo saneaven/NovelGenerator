@@ -1,11 +1,13 @@
 import asyncio
 import mimetypes
+import os
 from pathlib import Path
+
 import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, PlainTextResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from .models.requests import ChatCompletionRequest, ProviderModelsRequest
@@ -41,6 +43,7 @@ from .services.default_preset_seed import validate_default_preset_seed
 from .services.embedding_models_service import list_embedding_models
 from .services.asset_change_events import register_asset_change_event_hooks
 from .services.object_change_events import register_object_change_event_hooks
+from .services.storage_service import storage_service
 
 # Ensure correct Content-Type for AVIF assets when served via StaticFiles.
 mimetypes.add_type("image/avif", ".avif")
@@ -100,6 +103,29 @@ from .routes.admin_routes import router as admin_router
 load_dotenv()
 validate_default_preset_seed()
 
+
+def _normalized_app_domain() -> str:
+    raw = str(os.getenv("APP_DOMAIN") or "").strip()
+    if not raw:
+        return ""
+    normalized = raw.replace("https://", "").replace("http://", "").strip("/")
+    return normalized
+
+
+def _cors_allowed_origins() -> list[str]:
+    origins = {
+        "http://localhost:3000",
+        "http://localhost:5173",
+    }
+    app_domain = _normalized_app_domain()
+    if app_domain:
+        origins.add(f"https://{app_domain}")
+        if app_domain.startswith("www."):
+            origins.add(f"https://{app_domain[4:]}")
+        else:
+            origins.add(f"https://www.{app_domain}")
+    return sorted(origins)
+
 app = FastAPI(
     title="Novel Buds API",
     version="2.0.0",
@@ -150,10 +176,15 @@ app.include_router(token_router)
 app.include_router(account_router)
 app.include_router(admin_router)
 
-# Mount static files for generated and uploaded assets
-storage_path = Path(__file__).parent / "storage" / "assets"
-storage_path.mkdir(parents=True, exist_ok=True)
-app.mount("/storage/assets", StaticFiles(directory=str(storage_path)), name="assets")
+@app.get("/storage/assets/{asset_key:path}", include_in_schema=False)
+async def redirect_asset(asset_key: str):
+    normalized_key = str(asset_key or "").lstrip("/")
+    if not normalized_key:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return RedirectResponse(
+        url=storage_service.build_public_asset_redirect_url(normalized_key),
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+    )
 
 # Mount static files for resources (landing page images, etc.)
 resources_path = Path(__file__).parent / "storage" / "resources"
@@ -166,7 +197,7 @@ app.mount(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
+    allow_origins=_cors_allowed_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )

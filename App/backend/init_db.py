@@ -7,9 +7,15 @@ Usage:
 """
 
 import sys
-from database import engine, Base
-from models import db_models
+import subprocess
+from pathlib import Path
+
 from sqlalchemy import text
+
+from database import engine
+
+
+BACKEND_DIR = Path(__file__).resolve().parent
 
 
 def create_database():
@@ -29,11 +35,19 @@ def create_database():
         print(f"  CREATE DATABASE {engine.url.database};")
 
 
-def init_tables():
-    """Create all tables"""
-    print("\nCreating database tables...")
-    Base.metadata.create_all(bind=engine)
-    print("All tables created successfully!")
+def run_migrations():
+    """Initialize the schema from the Alembic baseline."""
+    print("\nApplying Alembic baseline...")
+    result = subprocess.run(
+        ["alembic", "upgrade", "head"],
+        cwd=BACKEND_DIR,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(result.stderr)
+        raise RuntimeError("Failed to apply migrations")
+    print("Schema initialized successfully!")
 
 
 def verify_connection():
@@ -72,15 +86,15 @@ def main():
     print("Novel Buds - Database Initialization")
     print("=" * 60)
 
-    # Verify connection first
-    if not verify_connection():
-        sys.exit(1)
-
     # Try to create database (if sqlalchemy-utils is installed)
     create_database()
 
-    # Create tables
-    init_tables()
+    # Verify connection after the database exists
+    if not verify_connection():
+        sys.exit(1)
+
+    # Initialize schema
+    run_migrations()
 
     # Show created tables
     show_tables()
@@ -89,9 +103,8 @@ def main():
     print("Database initialization complete!")
     print("=" * 60)
     print("\nNext steps:")
-    print("1. Run migrations: alembic upgrade head")
-    print("2. Create a test user account")
-    print("3. Start the backend server: uvicorn main:app --reload")
+    print("1. Create a test user account")
+    print("2. Start the backend server: uvicorn main:app --reload")
 
 
 if __name__ == "__main__":

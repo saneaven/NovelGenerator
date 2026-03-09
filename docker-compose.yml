@@ -39,6 +39,12 @@ services:
       DB_NAME: ${POSTGRES_DB:?set in .env.dev/.env.prod}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set in .env.dev/.env.prod}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?set in .env.dev/.env.prod}
+      APP_DOMAIN: ${APP_DOMAIN:-}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+      S3_REGION: ${S3_REGION:-}
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       DEFAULT_STORAGE_QUOTA_BYTES: ${DEFAULT_STORAGE_QUOTA_BYTES:?set in .env.dev/.env.prod}
       SIDECAR_URL: http://sidecar:3001
     depends_on:
@@ -68,6 +74,12 @@ services:
       DB_NAME: ${POSTGRES_DB:?set in .env.dev/.env.prod}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set in .env.dev/.env.prod}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?set in .env.dev/.env.prod}
+      APP_DOMAIN: ${APP_DOMAIN:-}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+      S3_REGION: ${S3_REGION:-}
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       DEFAULT_STORAGE_QUOTA_BYTES: ${DEFAULT_STORAGE_QUOTA_BYTES:?set in .env.dev/.env.prod}
       STORAGE_USAGE_RECONCILER_ENABLED: ${STORAGE_USAGE_RECONCILER_ENABLED:-1}
       STORAGE_USAGE_RECONCILER_INTERVAL_SECONDS: ${STORAGE_USAGE_RECONCILER_INTERVAL_SECONDS:-300}
@@ -94,6 +106,8 @@ services:
     depends_on:
       - backend
       - frontend
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-}
     volumes:
       - caddy_data:/data
       - caddy_config:/config

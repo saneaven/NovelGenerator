@@ -6,13 +6,14 @@
 - `docker-compose.dev.yml` (dev: autoreload + bind mounts)
 - `docker-compose.prod.yml` (prod: no autoreload)
 - `docker/Caddyfile.dev` (dev HTTPS with `tls internal` + on-demand certs, e.g. `novelbuds.localhost` / `<desktop-ip>.sslip.io`)
-- `docker/Caddyfile.prod` (`https://novelbuds.com` via Let's Encrypt)
+- `docker/Caddyfile.prod` (`https://{$APP_DOMAIN}` via Let's Encrypt)
 
 ## Dev (local)
 
 1. Create env file:
    - Copy `.env.dev.example` -> `.env.dev`
    - Fill `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`
+   - Configure S3 if you need image upload / generation locally
 
 2. Start:
    - `docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml up -d --build`
@@ -41,12 +42,12 @@ Options:
 ## Prod (VPS)
 
 Prereqs:
-- DNS: `novelbuds.com` A/AAAA record points to the VPS
+- Domain: `APP_DOMAIN` A/AAAA record points to the VPS (typically through Cloudflare DNS)
 - Firewall: allow inbound `80/tcp` + `443/tcp`
 
 1. Create env file on the VPS:
    - Copy `.env.prod.example` -> `.env.prod`
-   - Fill secrets with strong values (must remain stable)
+   - Fill `APP_DOMAIN`, secrets, and S3 settings with strong values
 
 2. Start:
    - `docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
@@ -54,6 +55,10 @@ Prereqs:
 ## Notes
 
 - Backend runs `alembic upgrade head` on container start.
-- DB image is `pgvector/pgvector:pg18` (pgvector extension required by migration `058`).
+- Fresh installs use a single Alembic baseline migration (`0001_baseline`).
+- DB image is `pgvector/pgvector:pg18` (pgvector extension is required by the baseline schema).
 - For Postgres 18+, mount the DB volume at `/var/lib/postgresql` (not `/var/lib/postgresql/data`).
 - Prod frontend startup runs `vite build` (skips `tsc -b`) then `vite preview` in `docker/frontend/entrypoint.sh`.
+- Image assets are stored in S3 and served through `/storage/assets/*` redirects.
+- Recommended production setup: Lightsail static IP + Cloudflare proxied DNS + SSL mode `Full (strict)`.
+- Recommended backups: Lightsail automatic snapshots plus periodic `pg_dump` uploads to S3.

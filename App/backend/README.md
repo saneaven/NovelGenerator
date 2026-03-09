@@ -71,11 +71,11 @@ A comprehensive backend service for the Novel Buds application, featuring:
    python init_db.py
    ```
 
-5. **Create and apply migrations**:
+5. **Schema management**:
    ```bash
-   alembic revision --autogenerate -m "Initial migration"
    alembic upgrade head
    ```
+   Fresh installs use the repository baseline migration. Add new revisions only when the schema changes after that baseline.
 
 6. **Start the server**:
    ```bash

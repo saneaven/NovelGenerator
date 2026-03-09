@@ -1,22 +1,23 @@
-"""Storage service for managing asset files"""
+"""S3-backed storage service for managing asset files."""
+
+from __future__ import annotations
+
+import base64
+import io
 import os
 import uuid
-import base64
-import hashlib
-from pathlib import Path
-from typing import Optional, Tuple
 from datetime import datetime
+from pathlib import Path
+from typing import Any
+from urllib.parse import quote
+
 from PIL import Image, ImageOps
-import io
 
 # Optional: registers AVIF support with Pillow when installed
 try:
     import pillow_avif  # type: ignore  # noqa: F401
 except ImportError:  # pragma: no cover
     pillow_avif = None  # type: ignore
-
-# Storage configuration
-STORAGE_BASE_PATH = Path(__file__).parent.parent / "storage" / "assets"
 
 
 def _int_env(name: str, default: int, *, min_value: int | None = None, max_value: int | None = None) -> int:
@@ -36,31 +37,61 @@ def _int_env(name: str, default: int, *, min_value: int | None = None, max_value
 
 AVIF_QUALITY = _int_env("ASSET_AVIF_QUALITY", 80, min_value=0, max_value=100)
 AVIF_SPEED = _int_env("ASSET_AVIF_SPEED", 6, min_value=0, max_value=10)  # 0 (slow/best) - 10 (fast/worst)
-
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 
 class StorageService:
-    """Service for managing asset file storage"""
+    """Service for managing asset storage in S3."""
 
-    def __init__(self, base_path: Optional[Path] = None):
-        self.base_path = base_path or STORAGE_BASE_PATH
-        self._ensure_storage_directories()
+    def __init__(self) -> None:
+        self._client: Any | None = None
 
-    def _ensure_storage_directories(self) -> None:
-        """Create storage directories if they don't exist"""
-        self.base_path.mkdir(parents=True, exist_ok=True)
-        (self.base_path / "originals").mkdir(exist_ok=True)
+    def _require_env(self, name: str) -> str:
+        value = str(os.getenv(name) or "").strip()
+        if not value:
+            raise RuntimeError(f"{name} must be set for asset storage")
+        return value
+
+    @property
+    def bucket_name(self) -> str:
+        return self._require_env("S3_BUCKET_NAME")
+
+    @property
+    def region(self) -> str:
+        return self._require_env("S3_REGION")
+
+    @property
+    def public_base_url(self) -> str:
+        explicit = str(os.getenv("S3_PUBLIC_BASE_URL") or "").strip().rstrip("/")
+        if explicit:
+            return explicit
+        return f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com"
+
+    def _get_client(self) -> Any:
+        if self._client is None:
+            try:
+                import boto3
+            except ImportError as exc:  # pragma: no cover
+                raise RuntimeError("boto3 is required for S3 asset storage") from exc
+            self._client = boto3.client("s3", region_name=self.region)
+        return self._client
+
+    def _normalize_storage_key(self, storage_key: str) -> str:
+        normalized = str(storage_key or "").lstrip("/")
+        if not normalized:
+            raise ValueError("storage key is required")
+        return normalized
 
     def _generate_filename(self, original_name: str, project_id: uuid.UUID) -> str:
-        """Generate a unique filename preserving the original extension"""
+        """Generate a unique filename preserving the original extension."""
         ext = Path(original_name).suffix.lower() or ".png"
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         unique_id = uuid.uuid4().hex[:8]
         return f"{project_id}_{timestamp}_{unique_id}{ext}"
 
     def _get_mime_type(self, filename: str) -> str:
-        """Get MIME type from filename extension"""
+        """Get MIME type from filename extension."""
         ext = Path(filename).suffix.lower()
         mime_types = {
             ".png": "image/png",
@@ -83,8 +114,6 @@ class StorageService:
         self._ensure_avif_supported()
 
         out = io.BytesIO()
-
-        # Ensure save-compatible mode
         img_for_save = img
         if img_for_save.mode == "P":
             img_for_save = img_for_save.convert("RGBA")
@@ -103,13 +132,28 @@ class StorageService:
 
     def _encode_png(self, img: Image.Image) -> bytes:
         out = io.BytesIO()
-
         img_for_save = img
         if img_for_save.mode == "P":
             img_for_save = img_for_save.convert("RGBA")
 
         img_for_save.save(out, format="PNG", optimize=True)
         return out.getvalue()
+
+    def _upload_asset_bytes(self, *, storage_key: str, body: bytes, mime_type: str) -> None:
+        self._get_client().put_object(
+            Bucket=self.bucket_name,
+            Key=storage_key,
+            Body=body,
+            ContentType=mime_type,
+            CacheControl=_CACHE_CONTROL,
+        )
+
+    def build_public_asset_path(self, storage_key: str) -> str:
+        return f"/storage/assets/{self._normalize_storage_key(storage_key)}"
+
+    def build_public_asset_redirect_url(self, storage_key: str) -> str:
+        normalized = self._normalize_storage_key(storage_key)
+        return f"{self.public_base_url}/{quote(normalized, safe='/')}"
 
     def to_png_bytes(self, image_bytes: bytes) -> bytes:
         """Convert arbitrary image bytes to PNG bytes (for provider reference images)."""
@@ -124,165 +168,81 @@ class StorageService:
         self,
         file_content: bytes,
         original_filename: str,
-        project_id: uuid.UUID
-    ) -> Tuple[str, str, int, int, int]:
-        """
-        Save an uploaded file to storage.
-
-        Args:
-            file_content: Raw file bytes
-            original_filename: Original filename from upload
-            project_id: Project UUID
-
-        Returns:
-            Tuple of (file_path, mime_type, width, height, file_size)
-        """
+        project_id: uuid.UUID,
+    ) -> tuple[str, str, int, int, int]:
+        """Validate an uploaded image, convert it to AVIF, and store it in S3."""
         output_name = f"{Path(original_filename).stem}.avif"
         filename = self._generate_filename(output_name, project_id)
-        file_path = self.base_path / "originals" / filename
+        storage_key = self._normalize_storage_key(f"originals/{filename}")
 
-        # Decode to validate image, fix orientation, and (optionally) transcode to AVIF
         with Image.open(io.BytesIO(file_content)) as img:
             img = ImageOps.exif_transpose(img)
             width, height = img.size
-
             encoded_bytes = self._encode_avif(img)
 
-            # Save original file (possibly transcoded)
-            file_path.write_bytes(encoded_bytes)
-
         mime_type = self._get_mime_type(filename)
-        file_size = len(encoded_bytes)
-
-        # Return relative paths from storage base
-        return (
-            f"originals/{filename}",
-            mime_type,
-            width,
-            height,
-            file_size,
-        )
+        self._upload_asset_bytes(storage_key=storage_key, body=encoded_bytes, mime_type=mime_type)
+        return storage_key, mime_type, width, height, len(encoded_bytes)
 
     def save_generated_image(
         self,
         base64_data: str,
         project_id: uuid.UUID,
-        format: str = "png"
-    ) -> Tuple[str, str, int, int, int]:
-        """
-        Save an AI-generated image from base64 data.
-
-        Args:
-            base64_data: Base64-encoded image data
-            project_id: Project UUID
-            format: Image format (png, jpg, webp)
-
-        Returns:
-            Tuple of (file_path, mime_type, width, height, file_size)
-        """
-        # Decode base64
+        format: str = "png",
+    ) -> tuple[str, str, int, int, int]:
+        """Save an AI-generated image from base64 data to S3."""
+        del format
         image_bytes = base64.b64decode(base64_data)
-
-        # Generate filename
-        output_ext = "avif"
-        filename = self._generate_filename(f"generated.{output_ext}", project_id)
-        file_path = self.base_path / "originals" / filename
-
-        with Image.open(io.BytesIO(image_bytes)) as img:
-            img = ImageOps.exif_transpose(img)
-            width, height = img.size
-
-            encoded_bytes = self._encode_avif(img)
-            file_path.write_bytes(encoded_bytes)
-
-        mime_type = self._get_mime_type(filename)
-        file_size = len(encoded_bytes)
-
-        return (
-            f"originals/{filename}",
-            mime_type,
-            width,
-            height,
-            file_size,
-        )
+        return self.save_generated_image_from_url(image_bytes=image_bytes, project_id=project_id)
 
     def save_generated_image_from_url(
         self,
         image_bytes: bytes,
         project_id: uuid.UUID,
-        format: str = "png"
-    ) -> Tuple[str, str, int, int, int]:
-        """
-        Save an AI-generated image from raw bytes (downloaded from URL).
-
-        Args:
-            image_bytes: Raw image bytes
-            project_id: Project UUID
-            format: Image format (png, jpg, webp)
-
-        Returns:
-            Tuple of (file_path, mime_type, width, height, file_size)
-        """
-        output_ext = "avif"
-        filename = self._generate_filename(f"generated.{output_ext}", project_id)
-        file_path = self.base_path / "originals" / filename
+        format: str = "png",
+    ) -> tuple[str, str, int, int, int]:
+        """Save an AI-generated image from raw bytes to S3."""
+        del format
+        filename = self._generate_filename("generated.avif", project_id)
+        storage_key = self._normalize_storage_key(f"originals/{filename}")
 
         with Image.open(io.BytesIO(image_bytes)) as img:
             img = ImageOps.exif_transpose(img)
             width, height = img.size
-
             encoded_bytes = self._encode_avif(img)
-            file_path.write_bytes(encoded_bytes)
 
         mime_type = self._get_mime_type(filename)
-        file_size = len(encoded_bytes)
+        self._upload_asset_bytes(storage_key=storage_key, body=encoded_bytes, mime_type=mime_type)
+        return storage_key, mime_type, width, height, len(encoded_bytes)
 
-        return (
-            f"originals/{filename}",
-            mime_type,
-            width,
-            height,
-            file_size,
-        )
+    def read_asset_file(self, storage_key: str) -> bytes:
+        """Read an asset file from S3 and return its bytes."""
+        normalized = self._normalize_storage_key(storage_key)
+        try:
+            response = self._get_client().get_object(Bucket=self.bucket_name, Key=normalized)
+        except Exception as exc:
+            error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+            if error_code in {"404", "NoSuchKey", "NotFound"}:
+                raise FileNotFoundError(f"Asset file not found: {normalized}") from exc
+            raise
+        return response["Body"].read()
 
-    def get_file_path(self, relative_path: str) -> Path:
-        """Get the full file path for a relative storage path"""
-        return self.base_path / relative_path
+    def delete_asset_files(self, storage_key: str) -> None:
+        """Delete the stored file for an asset from S3."""
+        normalized = self._normalize_storage_key(storage_key)
+        self._get_client().delete_object(Bucket=self.bucket_name, Key=normalized)
 
-    def read_asset_file(self, relative_path: str) -> bytes:
-        """
-        Read an asset file and return its bytes.
-
-        Args:
-            relative_path: Relative path from storage base (e.g., "originals/filename.png")
-
-        Returns:
-            Raw file bytes
-
-        Raises:
-            FileNotFoundError: If the file doesn't exist
-        """
-        full_path = self.base_path / relative_path
-        if not full_path.exists():
-            raise FileNotFoundError(f"Asset file not found: {relative_path}")
-        return full_path.read_bytes()
-
-    def delete_file(self, relative_path: str) -> bool:
-        """Delete a file from storage"""
-        file_path = self.base_path / relative_path
-        if file_path.exists():
-            file_path.unlink()
+    def file_exists(self, storage_key: str) -> bool:
+        """Check if a file exists in S3."""
+        normalized = self._normalize_storage_key(storage_key)
+        try:
+            self._get_client().head_object(Bucket=self.bucket_name, Key=normalized)
             return True
-        return False
-
-    def delete_asset_files(self, file_path: str) -> None:
-        """Delete the stored file for an asset"""
-        self.delete_file(file_path)
-
-    def file_exists(self, relative_path: str) -> bool:
-        """Check if a file exists in storage"""
-        return (self.base_path / relative_path).exists()
+        except Exception as exc:
+            error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+            if error_code in {"404", "NoSuchKey", "NotFound"}:
+                return False
+            raise
 
 
-# Export singleton instance
 storage_service = StorageService()

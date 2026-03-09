@@ -4,6 +4,7 @@ annotated-types
 anthropic
 anyio
 bcrypt
+boto3
 certifi
 cffi
 charset-normalizer

@@ -277,7 +277,7 @@ class ProjectTransferService:
                 "name": str(asset.name),
                 "asset_type": asset.asset_type,
                 "file_size": asset.file_size,
-                "file_url": f"/storage/assets/{asset.file_path}",
+                "file_url": storage_service.build_public_asset_path(str(asset.file_path)),
                 "used": asset.id in used_ids,
                 "reasons": sorted(reasons.get(asset.id, set())),
             }
@@ -836,7 +836,7 @@ class ProjectTransferService:
                     )
                 )
 
-                new_file_url_by_new_asset_id[str(new_asset_id)] = f"/storage/assets/{file_path}"
+                new_file_url_by_new_asset_id[str(new_asset_id)] = storage_service.build_public_asset_path(file_path)
 
         # Links (filter to mapped assets/objects)
         links_items = links_data.get("links") if isinstance(links_data, dict) else []

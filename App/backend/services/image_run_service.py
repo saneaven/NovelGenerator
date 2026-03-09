@@ -715,7 +715,7 @@ class ImageRunService:
         if row.preview_asset_id:
             preview_asset = db.query(Asset).filter(Asset.id == row.preview_asset_id).first()
             if preview_asset is not None:
-                preview_asset_url = f"/storage/assets/{preview_asset.file_path}"
+                preview_asset_url = storage_service.build_public_asset_path(str(preview_asset.file_path))
 
         snapshot = _json_dict(row.request_snapshot)
         tool_call_id = _tool_call_id_from_snapshot(snapshot)
@@ -792,7 +792,7 @@ class ImageRunService:
                 if final_asset is not None:
                     custom_slot = {
                         "type": "image",
-                        "url": f"/storage/assets/{final_asset.file_path}",
+                        "url": storage_service.build_public_asset_path(str(final_asset.file_path)),
                         "alt": final_asset.name,
                     }
 
@@ -1286,7 +1286,7 @@ class ImageRunService:
         if markdown.count(anchor) != 1:
             raise ValueError("insert_before must still match exactly once before applying")
 
-        image_src = f"/storage/assets/{asset.file_path}"
+        image_src = storage_service.build_public_asset_path(str(asset.file_path))
         next_markdown = markdown.replace(anchor, f"![Generated Image]({image_src})\n\n{anchor}", 1)
         try:
             next_doc = await sidecar.markdown_to_doc(next_markdown)
