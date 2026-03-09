@@ -7,7 +7,7 @@ import io
 import os
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from email.utils import format_datetime
 from pathlib import Path
 from typing import Any, Iterator
@@ -193,7 +193,11 @@ class StorageService:
             content_type=str(response.get("ContentType") or self._get_mime_type(normalized)),
             content_length=content_length,
             etag=str(etag) if etag else None,
-            last_modified=format_datetime(last_modified, usegmt=True) if last_modified is not None else None,
+            last_modified=(
+                format_datetime(last_modified.astimezone(timezone.utc), usegmt=True)
+                if last_modified is not None
+                else None
+            ),
             cache_control=str(response.get("CacheControl") or _CACHE_CONTROL),
         )
 
