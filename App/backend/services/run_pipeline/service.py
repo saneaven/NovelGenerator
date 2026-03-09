@@ -546,6 +546,7 @@ class RunPipeline:
             llm_call_id = str(tc.id or f"tool_call_{idx}")
             tool_name = str(tc.tool_name or "")
             arguments = tc.arguments if isinstance(tc.arguments, dict) else {}
+            parse_error = str(getattr(tc, "parse_error", "") or "").strip() or None
 
             tool_call_text = json.dumps(
                 {
@@ -588,24 +589,28 @@ class RunPipeline:
             # Link the tool_call message back to its parent tool call for cascade deletion.
             tool_msg.parent_tool_call_id = row.id
 
-            validation = await tool_engine.validate_tool_call(
-                db=db,
-                thread=thread,
-                run=run,
-                tool_name=tool_name,
-                args=arguments,
-                offer=offer,
-                user_id=run.user_id,
-                project_id=run.project_id,
-                language=run.language,
-                preset_id=preset_id,
-            )
-            if validation.valid:
-                row.status = "pending"
-                row.reason = None
-            else:
+            if parse_error is not None:
                 row.status = "failed"
-                row.reason = f"[{validation.validator}] {validation.reason}" if validation.validator else validation.reason
+                row.reason = f"[parse_tool_call_arguments] {parse_error}"
+            else:
+                validation = await tool_engine.validate_tool_call(
+                    db=db,
+                    thread=thread,
+                    run=run,
+                    tool_name=tool_name,
+                    args=arguments,
+                    offer=offer,
+                    user_id=run.user_id,
+                    project_id=run.project_id,
+                    language=run.language,
+                    preset_id=preset_id,
+                )
+                if validation.valid:
+                    row.status = "pending"
+                    row.reason = None
+                else:
+                    row.status = "failed"
+                    row.reason = f"[{validation.validator}] {validation.reason}" if validation.validator else validation.reason
 
             deltas.append(build_run_message_delta(None, snapshot_run_message_row(tool_msg)))
             deltas.append(build_tool_call_delta(None, snapshot_tool_call_row(row)))

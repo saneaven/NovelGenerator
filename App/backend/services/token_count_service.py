@@ -9,6 +9,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from ..providers.tool_call_arguments import parse_tool_call_arguments
 from .credential_service import CredentialServiceError, credential_service
 from .token_counting_service import (
     count_tokens_claude,
@@ -231,16 +232,7 @@ def _compact_tool_calls(message: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _parse_tool_arguments(raw: Any) -> dict[str, Any]:
-    if isinstance(raw, dict):
-        return raw
-    if isinstance(raw, str):
-        try:
-            parsed = json.loads(raw)
-            if isinstance(parsed, dict):
-                return parsed
-        except Exception:
-            return {}
-    return {}
+    return parse_tool_call_arguments(raw)[1]
 
 
 def _openai_message_payload_text(message: dict[str, Any]) -> str:

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import copy
-import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional
+
+from .tool_call_arguments import parse_tool_call_arguments
 
 
 ProviderEventKind = Literal["delta", "meta", "final_native", "error"]
@@ -226,18 +227,7 @@ def extract_native_tool_calls_from_snapshot(snapshot: FinalSnapshot) -> FinalSna
     new_tool_calls = list(snapshot.tool_calls)
     for idx in sorted(tool_call_map.keys()):
         entry = tool_call_map[idx]
-        raw = entry["arguments"].strip() or "{}"
-        args: Dict[str, Any] = {}
-        parse_error: Optional[str] = None
-        try:
-            parsed = json.loads(raw)
-            if isinstance(parsed, dict):
-                args = parsed
-            else:
-                args = {}
-                parse_error = "Tool arguments JSON is not an object"
-        except Exception as exc:
-            parse_error = str(exc)
+        raw, args, parse_error = parse_tool_call_arguments(entry["arguments"])
 
         new_tool_calls.append(FinalToolCall(
             id=entry["id"],

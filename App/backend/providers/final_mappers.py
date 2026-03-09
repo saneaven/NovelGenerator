@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
 from typing import Any, Dict, List, Optional
 
 from .contracts import FinalSnapshot, FinalToolCall, normalize_usage_dict
+from .tool_call_arguments import parse_tool_call_arguments
 
 
 def _to_dict(value: Any) -> Dict[str, Any]:
@@ -33,22 +33,6 @@ def _to_raw_dict(value: Any) -> Dict[str, Any]:
         if isinstance(dumped, dict):
             return dumped
     return {}
-
-
-def _parse_arguments(raw: Any) -> tuple[str, Dict[str, Any], Optional[str]]:
-    if isinstance(raw, dict):
-        raw_text = json.dumps(raw, ensure_ascii=False, separators=(",", ":"))
-        return raw_text, raw, None
-    if isinstance(raw, str):
-        raw_text = raw.strip() or "{}"
-        try:
-            parsed = json.loads(raw_text)
-            if isinstance(parsed, dict):
-                return raw_text, parsed, None
-            return raw_text, {}, "Tool arguments JSON is not an object"
-        except Exception as exc:
-            return raw_text, {}, str(exc)
-    return "{}", {}, None
 
 
 def _append_part(parts: List[Dict[str, str]], part_type: str, text: Optional[str]) -> None:
@@ -118,7 +102,7 @@ def map_openai_response_to_snapshot(
             continue
 
         if item_type == "function_call":
-            raw_text, args, parse_error = _parse_arguments(item.get("arguments"))
+            raw_text, args, parse_error = parse_tool_call_arguments(item.get("arguments"))
             tool_calls.append(
                 FinalToolCall(
                     id=str(item.get("call_id") or item.get("id") or f"tool_call_{len(tool_calls)}"),
@@ -210,7 +194,7 @@ def map_chat_completion_to_snapshot(
         if not isinstance(tc, dict):
             continue
         function = tc.get("function") if isinstance(tc.get("function"), dict) else {}
-        raw_text, args, parse_error = _parse_arguments(function.get("arguments"))
+        raw_text, args, parse_error = parse_tool_call_arguments(function.get("arguments"))
         tool_calls.append(
             FinalToolCall(
                 id=str(tc.get("id") or f"tool_call_{len(tool_calls)}"),
@@ -257,7 +241,7 @@ def map_claude_message_to_snapshot(
             _append_part(content_parts, "thinking", block.get("thinking") or block.get("text"))
             reasoning_details.append(block)
         elif block_type == "tool_use":
-            raw_text, args, parse_error = _parse_arguments(block.get("input"))
+            raw_text, args, parse_error = parse_tool_call_arguments(block.get("input"))
             tool_calls.append(
                 FinalToolCall(
                     id=str(block.get("id") or f"tool_call_{len(tool_calls)}"),
@@ -311,7 +295,7 @@ def map_gemini_message_to_snapshot(
         part_data = _to_dict(part)
         if part_data.get("function_call"):
             fc = _to_dict(part_data.get("function_call"))
-            raw_text, args, parse_error = _parse_arguments(fc.get("args"))
+            raw_text, args, parse_error = parse_tool_call_arguments(fc.get("args"))
             tool_calls.append(
                 FinalToolCall(
                     id=str(fc.get("id") or f"tool_call_{len(tool_calls)}"),

@@ -96,6 +96,152 @@ def test_fallback_snapshot_assembler_finalizes_whitespace_only_stream_to_empty_c
     assert snapshot.finish_reason == "stop"
 
 
+def test_fallback_snapshot_assembler_reuses_id_key_for_later_index_only_delta() -> None:
+    assembler = FallbackSnapshotAssembler(provider="test", model="test-model")
+
+    assembler.apply_delta(
+        DeltaPayload(
+            tool_call_deltas=[
+                {
+                    "index": 0,
+                    "id": "call_1",
+                    "function": {
+                        "name": "create_story_object",
+                        "arguments": '{"name":"Elena","type":"character"',
+                    },
+                }
+            ]
+        )
+    )
+    assembler.apply_delta(
+        DeltaPayload(
+            tool_call_deltas=[
+                {
+                    "index": 0,
+                    "function": {
+                        "arguments": ',"content":"Profile"}',
+                    },
+                }
+            ]
+        )
+    )
+
+    snapshot = assembler.finalize_or_raise()
+
+    assert len(snapshot.tool_calls) == 1
+    assert snapshot.tool_calls[0].id == "call_1"
+    assert snapshot.tool_calls[0].tool_name == "create_story_object"
+    assert snapshot.tool_calls[0].arguments == {
+        "name": "Elena",
+        "type": "character",
+        "content": "Profile",
+    }
+
+
+def test_fallback_snapshot_assembler_migrates_index_key_when_id_arrives_later() -> None:
+    assembler = FallbackSnapshotAssembler(provider="test", model="test-model")
+
+    assembler.apply_delta(
+        DeltaPayload(
+            tool_call_deltas=[
+                {
+                    "index": 0,
+                    "function": {
+                        "name": "create_story_object",
+                        "arguments": '{"name":"Elena"',
+                    },
+                }
+            ]
+        )
+    )
+    assembler.apply_delta(
+        DeltaPayload(
+            tool_call_deltas=[
+                {
+                    "index": 0,
+                    "id": "call_1",
+                    "function": {
+                        "arguments": ',"type":"character","content":"Profile"}',
+                    },
+                }
+            ]
+        )
+    )
+
+    snapshot = assembler.finalize_or_raise()
+
+    assert len(snapshot.tool_calls) == 1
+    assert snapshot.tool_calls[0].id == "call_1"
+    assert snapshot.tool_calls[0].tool_name == "create_story_object"
+    assert snapshot.tool_calls[0].arguments == {
+        "name": "Elena",
+        "type": "character",
+        "content": "Profile",
+    }
+
+
+def test_fallback_snapshot_assembler_merges_mixed_id_index_fragments_without_empty_name_duplicate() -> None:
+    assembler = FallbackSnapshotAssembler(provider="test", model="test-model")
+
+    assembler.apply_delta(
+        DeltaPayload(
+            tool_call_deltas=[
+                {
+                    "id": "call_1",
+                    "extra_content": {"source": "initial"},
+                    "function": {
+                        "name": "create_story_object",
+                        "arguments": '{"name":"Elena"',
+                    },
+                }
+            ]
+        )
+    )
+    assembler.apply_delta(
+        DeltaPayload(
+            tool_call_deltas=[
+                {
+                    "index": 0,
+                    "extra_content": {"phase": "middle"},
+                    "function": {
+                        "arguments": ',"type":"character"',
+                    },
+                }
+            ]
+        )
+    )
+    assembler.apply_delta(
+        DeltaPayload(
+            tool_call_deltas=[
+                {
+                    "index": 0,
+                    "id": "call_1",
+                    "extra_content": {"final": True},
+                    "function": {
+                        "arguments": ',"content":"Profile"}',
+                    },
+                }
+            ]
+        )
+    )
+
+    snapshot = assembler.finalize_or_raise()
+
+    assert len(snapshot.tool_calls) == 1
+    assert all(tool_call.tool_name for tool_call in snapshot.tool_calls)
+    assert snapshot.tool_calls[0].tool_name == "create_story_object"
+    assert snapshot.tool_calls[0].extra_content == {
+        "source": "initial",
+        "phase": "middle",
+        "final": True,
+    }
+    assert snapshot.tool_calls[0].arguments == {
+        "name": "Elena",
+        "type": "character",
+        "content": "Profile",
+    }
+
+
 def test_native_tool_call_extraction_happens_before_final_content_trim() -> None:
     snapshot = _snapshot(
         [
