@@ -69,16 +69,12 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     db.flush()  # Flush to get settings ID
 
     # Initialize default preset for new user (includes prompts and fragments)
-    try:
-        default_preset = preset_service.initialize_default_preset(
-            db=db,
-            user_id=new_user.id
-        )
-        # Set the default preset as active
-        default_settings.active_preset_id = default_preset.id
-    except Exception as e:
-        # Log error but don't fail registration - preset can be initialized later
-        print(f"Warning: Failed to initialize default preset for user {new_user.id}: {e}")
+    default_preset = preset_service.initialize_default_preset(
+        db=db,
+        user_id=new_user.id
+    )
+    # Set the default preset as active
+    default_settings.active_preset_id = default_preset.id
 
     db.commit()
     db.refresh(new_user)

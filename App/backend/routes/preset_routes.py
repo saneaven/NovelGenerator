@@ -297,7 +297,7 @@ async def import_preset(
             user_id=current_user.id,
             name=data.name,
             description=data.description,
-            data=data.data.model_dump()
+            data=data.data
         )
     except ValueError as e:
         raise HTTPException(

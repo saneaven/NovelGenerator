@@ -4,7 +4,6 @@ import functools
 import re
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from jinja2 import BaseLoader, StrictUndefined, TemplateNotFound, nodes
@@ -13,10 +12,6 @@ from jinja2.exceptions import TemplateSyntaxError, UndefinedError
 from jinja2.sandbox import ImmutableSandboxedEnvironment, SecurityError
 from jinja2.visitor import NodeVisitor
 
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-TEMPLATES_DIR = BASE_DIR / "prompts" / "templates"
-FRAGMENTS_DIR = BASE_DIR / "prompts" / "default_fragments"
 
 MAX_TEMPLATE_DEPTH = 10
 MAX_TEMPLATE_RESOLUTION_COUNT = 64

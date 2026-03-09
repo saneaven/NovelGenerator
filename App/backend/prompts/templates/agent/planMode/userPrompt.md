@@ -1,4 +1,0 @@
-# User Message
-
-{{ input.userMessage }}
-

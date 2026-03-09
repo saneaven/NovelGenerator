@@ -37,6 +37,7 @@ from .auth import get_current_user
 from .database import get_db
 from .models.db_models import User
 from .services.credential_service import CredentialServiceError, credential_service
+from .services.default_preset_seed import validate_default_preset_seed
 from .services.embedding_models_service import list_embedding_models
 from .services.asset_change_events import register_asset_change_event_hooks
 from .services.object_change_events import register_object_change_event_hooks
@@ -97,6 +98,7 @@ from .routes.account_routes import router as account_router
 from .routes.admin_routes import router as admin_router
 
 load_dotenv()
+validate_default_preset_seed()
 
 app = FastAPI(
     title="Novel Buds API",

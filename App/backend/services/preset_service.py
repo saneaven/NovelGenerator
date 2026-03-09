@@ -1,32 +1,35 @@
 """Preset service for managing prompt presets"""
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, func
-from typing import Optional, List, Dict
+import copy
+from enum import Enum
 from datetime import datetime
 import uuid
 
-from pydantic import ValidationError
+from sqlalchemy.orm import Session
+from sqlalchemy import and_
+from typing import Optional, List
 
 from ..models.db_models import (
     PromptPreset,
     PromptScenarioVersion,
     PromptFragment,
-    PromptFolder,
     PromptVariable,
     UserSettings,
     SubAgentDefinitionModel,
 )
-from ..schemas.settings import TaskAIConfig
 from ..schemas.presets import (
+    PresetExportData,
     PresetListItem,
     PresetResponse,
     PresetDetailResponse,
     ActivePresetResponse
 )
-from ..prompts import get_default_scenarios, get_default_fragments
 from .folder_service import FolderService
-from .prompt_runtime.scenario_validation import normalize_and_validate_scenario
-from .sub_agent_seed_service import seed_default_sub_agents
+from .default_preset_seed import NormalizedPresetSeed, load_default_preset_seed, normalize_preset_seed
+
+
+class SeedApplyMode(str, Enum):
+    SYSTEM_DEFAULT = "system_default"
+    IMPORTED = "imported"
 
 
 class PresetService:
@@ -136,6 +139,140 @@ class PresetService:
         ).distinct().count()
 
     @staticmethod
+    def _create_preset_row(
+        db: Session,
+        user_id: uuid.UUID,
+        *,
+        name: str,
+        description: Optional[str],
+    ) -> PromptPreset:
+        now = datetime.utcnow()
+        preset = PromptPreset(
+            id=uuid.uuid4(),
+            user_id=user_id,
+            name=name,
+            description=description,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(preset)
+        db.flush()
+        return preset
+
+    @staticmethod
+    def _apply_seed_to_preset(
+        db: Session,
+        user_id: uuid.UUID,
+        preset_id: uuid.UUID,
+        seed: NormalizedPresetSeed,
+        *,
+        mode: SeedApplyMode,
+    ) -> tuple[int, int, int]:
+        now = datetime.utcnow()
+        scenario_count = 0
+        fragment_count = 0
+        variable_count = 0
+        folder_cache: dict[str, uuid.UUID] = {}
+
+        is_default = mode == SeedApplyMode.SYSTEM_DEFAULT
+        note = "System default" if is_default else "Imported"
+
+        for item in seed.scenarios:
+            db.add(
+                PromptScenarioVersion(
+                    id=uuid.uuid4(),
+                    user_id=user_id,
+                    preset_id=preset_id,
+                    task_type=item.task_type,
+                    task_subtype=item.task_subtype,
+                    scenario=copy.deepcopy(item.scenario),
+                    version_number=1,
+                    is_default=is_default,
+                    note=note,
+                    created_at=now,
+                )
+            )
+            scenario_count += 1
+
+        for item in seed.fragments:
+            if item.folder_key == "_root":
+                folder_id = None
+            else:
+                folder_id = folder_cache.get(item.folder_key)
+                if folder_id is None:
+                    folder = FolderService.get_or_create_folder_by_path(
+                        db, user_id, preset_id, item.folder_key
+                    )
+                    folder_id = folder.id
+                    folder_cache[item.folder_key] = folder_id
+
+            db.add(
+                PromptFragment(
+                    id=uuid.uuid4(),
+                    user_id=user_id,
+                    preset_id=preset_id,
+                    folder_id=folder_id,
+                    fragment_name=item.fragment_name,
+                    content=item.content,
+                    description=item.description,
+                    version_number=1,
+                    note=note,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            fragment_count += 1
+
+        for item in seed.variables:
+            db.add(
+                PromptVariable(
+                    id=uuid.uuid4(),
+                    user_id=user_id,
+                    preset_id=preset_id,
+                    name=item.name,
+                    var_type=item.var_type,
+                    value={"value": item.value},
+                    select_options=item.select_options,
+                    number_options=item.number_options,
+                    description=item.description,
+                    display_order=item.display_order,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            variable_count += 1
+
+        id_map = {item.id: uuid.uuid4() for item in seed.sub_agents}
+        for item in seed.sub_agents:
+            llm_config_override = (
+                item.llm_config_override.model_dump(exclude_none=True)
+                if item.llm_config_override is not None
+                else None
+            )
+            mapped_allowed = [str(id_map[ref]) for ref in item.allowed_sub_agent_ids if ref in id_map]
+
+            db.add(
+                SubAgentDefinitionModel(
+                    id=id_map[item.id],
+                    user_id=user_id,
+                    preset_id=preset_id,
+                    agent_name=item.agent_name,
+                    display_name=item.display_name,
+                    description=(item.description or item.display_name).strip(),
+                    enabled=item.enabled,
+                    allowed_invocation_modes=list(item.allowed_invocation_modes),
+                    allowed_tool_names=list(item.allowed_tool_names),
+                    allowed_sub_agent_ids=mapped_allowed,
+                    use_custom_llm_config=item.use_custom_llm_config,
+                    llm_config_override=llm_config_override,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+
+        return scenario_count, fragment_count, variable_count
+
+    @staticmethod
     def create_preset(
         db: Session,
         user_id: uuid.UUID,
@@ -156,36 +293,26 @@ class PresetService:
         Returns:
             PresetResponse with new preset details
         """
-        now = datetime.utcnow()
-        preset = PromptPreset(
-            id=uuid.uuid4(),
-            user_id=user_id,
+        preset = PresetService._create_preset_row(
+            db,
+            user_id,
             name=name,
             description=description,
-            created_at=now,
-            updated_at=now
         )
-        db.add(preset)
-        db.flush()  # Get the preset ID
 
         prompt_count = 0
         fragment_count = 0
+        variable_count = 0
 
         if initialize_with_defaults:
-            # Initialize default scenarios
-            default_scenarios = get_default_scenarios()
-            prompt_count = PresetService._initialize_scenarios_for_preset(
-                db, user_id, preset.id, default_scenarios
+            seed = load_default_preset_seed()
+            prompt_count, fragment_count, variable_count = PresetService._apply_seed_to_preset(
+                db,
+                user_id,
+                preset.id,
+                seed,
+                mode=SeedApplyMode.SYSTEM_DEFAULT,
             )
-
-            # Initialize default fragments
-            default_fragments = get_default_fragments()
-            fragment_count = PresetService._initialize_fragments_for_preset(
-                db, user_id, preset.id, default_fragments
-            )
-
-            # Seed default Sub Agents (user-editable, per preset)
-            seed_default_sub_agents(db, user_id=user_id, preset_id=preset.id)
 
         db.commit()
         db.refresh(preset)
@@ -196,89 +323,10 @@ class PresetService:
             description=preset.description,
             prompt_count=prompt_count,
             fragment_count=fragment_count,
-            variable_count=0,
+            variable_count=variable_count,
             created_at=preset.created_at,
             updated_at=preset.updated_at
         )
-
-    @staticmethod
-    def _initialize_scenarios_for_preset(
-        db: Session,
-        user_id: uuid.UUID,
-        preset_id: uuid.UUID,
-        default_scenarios: dict
-    ) -> int:
-        """Initialize default scenarios for a preset. Returns count of scenarios created."""
-        now = datetime.utcnow()
-        count = 0
-
-        for task_type, subtypes in default_scenarios.items():
-            for task_subtype, categories in subtypes.items():
-                if not isinstance(categories, dict) or "system_template" not in categories or "blocks" not in categories:
-                    raise ValueError("Default scenarios must be nested as {task_type: {task_subtype: ScenarioDocument}}.")
-
-                row = PromptScenarioVersion(
-                    id=uuid.uuid4(),
-                    user_id=user_id,
-                    preset_id=preset_id,
-                    task_type=str(task_type),
-                    task_subtype=str(task_subtype),
-                    scenario=categories,
-                    version_number=1,
-                    is_default=True,
-                    note="System default",
-                    created_at=now,
-                )
-                db.add(row)
-                count += 1
-
-        return count
-
-    @staticmethod
-    def _initialize_fragments_for_preset(
-        db: Session,
-        user_id: uuid.UUID,
-        preset_id: uuid.UUID,
-        default_fragments: dict
-    ) -> int:
-        """Initialize default fragments for a preset. Returns count of fragments created."""
-        now = datetime.utcnow()
-        count = 0
-        folder_cache: dict[str, uuid.UUID] = {}
-
-        for path, content in default_fragments.items():
-            if '/' in path:
-                parts = path.rsplit('/', 1)
-                folder_path_str = parts[0]
-                fragment_name = parts[1]
-
-                if folder_path_str not in folder_cache:
-                    folder = FolderService.get_or_create_folder_by_path(
-                        db, user_id, preset_id, folder_path_str
-                    )
-                    folder_cache[folder_path_str] = folder.id
-                folder_id = folder_cache[folder_path_str]
-            else:
-                folder_id = None
-                fragment_name = path
-
-            fragment = PromptFragment(
-                id=uuid.uuid4(),
-                user_id=user_id,
-                preset_id=preset_id,
-                folder_id=folder_id,
-                fragment_name=fragment_name,
-                content=content,
-                description=None,
-                version_number=1,
-                note="System default",
-                created_at=now,
-                updated_at=now
-            )
-            db.add(fragment)
-            count += 1
-
-        return count
 
     @staticmethod
     def duplicate_preset(
@@ -734,7 +782,7 @@ class PresetService:
     def initialize_default_preset(
         db: Session,
         user_id: uuid.UUID,
-        preset_name: str = "Default"
+        preset_name: Optional[str] = None
     ) -> PromptPreset:
         """
         Initialize a default preset for a new user with default prompts and fragments.
@@ -747,30 +795,20 @@ class PresetService:
         Returns:
             The created PromptPreset
         """
-        now = datetime.utcnow()
-
-        # Create the preset
-        preset = PromptPreset(
-            id=uuid.uuid4(),
-            user_id=user_id,
-            name=preset_name,
-            description="Default prompt preset",
-            created_at=now,
-            updated_at=now
+        seed = load_default_preset_seed()
+        preset = PresetService._create_preset_row(
+            db,
+            user_id,
+            name=preset_name or seed.preset_name,
+            description=seed.preset_description,
         )
-        db.add(preset)
-        db.flush()
-
-        # Initialize default scenarios
-        default_scenarios = get_default_scenarios()
-        PresetService._initialize_scenarios_for_preset(db, user_id, preset.id, default_scenarios)
-
-        # Initialize default fragments
-        default_fragments = get_default_fragments()
-        PresetService._initialize_fragments_for_preset(db, user_id, preset.id, default_fragments)
-
-        # Seed default Sub Agents (user-editable, per preset)
-        seed_default_sub_agents(db, user_id=user_id, preset_id=preset.id)
+        PresetService._apply_seed_to_preset(
+            db,
+            user_id,
+            preset.id,
+            seed,
+            mode=SeedApplyMode.SYSTEM_DEFAULT,
+        )
 
         return preset
 
@@ -901,191 +939,29 @@ class PresetService:
         user_id: uuid.UUID,
         name: str,
         description: Optional[str],
-        data: dict
+        data: PresetExportData
     ) -> "PresetResponse":
         """
         Import a preset from export data.
         Creates new preset with all prompts, fragments, and variables.
         """
-        # 1. Validate format version (single current format; no legacy parsing / migrations)
-        if data.get("format_version") != 1:
-            raise ValueError(f"Unsupported format version: {data.get('format_version')}")
+        if data.format_version != 1:
+            raise ValueError(f"Unsupported format version: {data.format_version}")
 
-        # 1.1 Require sub_agents key (can be empty list)
-        if "sub_agents" not in data or not isinstance(data.get("sub_agents"), list):
-            raise ValueError("Invalid preset file: missing sub_agents")
-
-        now = datetime.utcnow()
-
-        # 2. Create preset
-        preset = PromptPreset(
-            id=uuid.uuid4(),
-            user_id=user_id,
+        preset = PresetService._create_preset_row(
+            db,
+            user_id,
             name=name,
             description=description,
-            created_at=now,
-            updated_at=now
         )
-        db.add(preset)
-        db.flush()
-
-        prompt_count = 0
-        fragment_count = 0
-        variable_count = 0
-
-        # 3. Create scenarios from nested structure (single structure only)
-        prompts_data = data.get("prompts", {})
-        if not isinstance(prompts_data, dict):
-            raise ValueError("Invalid preset file: prompts must be an object")
-
-        for task_type, subtypes in prompts_data.items():
-            if not isinstance(subtypes, dict):
-                raise ValueError("Invalid preset file: prompts subtypes must be an object")
-
-            for task_subtype, scenario_doc in subtypes.items():
-                normalized, _warnings = normalize_and_validate_scenario(scenario_doc)
-
-                db.add(
-                    PromptScenarioVersion(
-                        id=uuid.uuid4(),
-                        user_id=user_id,
-                        preset_id=preset.id,
-                        task_type=str(task_type),
-                        task_subtype=str(task_subtype),
-                        scenario=normalized,
-                        version_number=1,
-                        is_default=False,
-                        note="Imported",
-                        created_at=now,
-                    )
-                )
-                prompt_count += 1
-
-        # 4. Create fragments from nested structure
-        fragments_data = data.get("fragments", {})
-        import_folder_cache: dict[str, uuid.UUID] = {}
-
-        for folder_key, fragments in fragments_data.items():
-            if folder_key == "_root":
-                folder_id = None
-            else:
-                if folder_key not in import_folder_cache:
-                    folder = FolderService.get_or_create_folder_by_path(
-                        db, user_id, preset.id, folder_key
-                    )
-                    import_folder_cache[folder_key] = folder.id
-                folder_id = import_folder_cache[folder_key]
-
-            for frag_name, frag_data in fragments.items():
-                fragment = PromptFragment(
-                    id=uuid.uuid4(),
-                    user_id=user_id,
-                    preset_id=preset.id,
-                    folder_id=folder_id,
-                    fragment_name=frag_name,
-                    content=frag_data["content"],
-                    description=frag_data.get("description"),
-                    version_number=1,
-                    note="Imported",
-                    created_at=now,
-                    updated_at=now
-                )
-                db.add(fragment)
-                fragment_count += 1
-
-        # 5. Create variables from array
-        variables_data = data.get("variables", [])
-        for var_data in variables_data:
-            variable = PromptVariable(
-                id=uuid.uuid4(),
-                user_id=user_id,
-                preset_id=preset.id,
-                name=var_data["name"],
-                var_type=var_data["var_type"],
-                value={"value": var_data.get("value")},
-                select_options=var_data.get("select_options"),
-                number_options=var_data.get("number_options"),
-                description=var_data.get("description"),
-                display_order=var_data.get("display_order", 0),
-                created_at=now,
-                updated_at=now
-            )
-            db.add(variable)
-            variable_count += 1
-
-        # 6. Create sub agents (definitions)
-        sub_agents_data = data.get("sub_agents", [])
-
-        id_map: Dict[uuid.UUID, uuid.UUID] = {}
-        for sa_data in sub_agents_data:
-            if not isinstance(sa_data, dict):
-                raise ValueError("Invalid preset file: sub_agents entries must be objects")
-
-            required = [
-                "id",
-                "agent_name",
-                "display_name",
-                "description",
-                "allowed_invocation_modes",
-                "allowed_tool_names",
-                "allowed_sub_agent_ids",
-                "use_custom_llm_config",
-                "llm_config_override",
-                "enabled",
-            ]
-            missing = [k for k in required if k not in sa_data]
-            if missing:
-                raise ValueError(f"Invalid preset file: sub_agents missing fields: {', '.join(missing)}")
-
-            old_id = uuid.UUID(str(sa_data["id"]))
-            id_map[old_id] = uuid.uuid4()
-
-        for sa_data in sub_agents_data:
-            old_id = uuid.UUID(str(sa_data["id"]))
-            new_id = id_map[old_id]
-
-            mapped_allowed: List[str] = []
-            for raw in sa_data.get("allowed_sub_agent_ids", []) or []:
-                try:
-                    ref = uuid.UUID(str(raw))
-                except ValueError:
-                    continue
-                if ref in id_map:
-                    mapped_allowed.append(str(id_map[ref]))
-
-            description = str(sa_data["description"]).strip()
-            if not description:
-                raise ValueError("Invalid preset file: sub_agents.description is required")
-
-            use_custom_llm_config = bool(sa_data.get("use_custom_llm_config", False))
-            llm_config_override = sa_data.get("llm_config_override")
-            if use_custom_llm_config and not llm_config_override:
-                raise ValueError("Invalid preset file: sub_agents.llm_config_override is required when use_custom_llm_config is true")
-
-            if llm_config_override is not None:
-                if not isinstance(llm_config_override, dict):
-                    raise ValueError("Invalid preset file: sub_agents.llm_config_override must be an object or null")
-                try:
-                    TaskAIConfig.model_validate(llm_config_override)
-                except ValidationError as e:
-                    raise ValueError(f"Invalid preset file: sub_agents.llm_config_override is invalid: {e}") from e
-
-            db.add(SubAgentDefinitionModel(
-                id=new_id,
-                user_id=user_id,
-                preset_id=preset.id,
-                agent_name=str(sa_data["agent_name"]),
-                display_name=str(sa_data["display_name"]),
-                description=description,
-                enabled=bool(sa_data.get("enabled", True)),
-                allowed_invocation_modes=sa_data.get("allowed_invocation_modes", []),
-                allowed_tool_names=sa_data.get("allowed_tool_names", []),
-                allowed_sub_agent_ids=mapped_allowed,
-                use_custom_llm_config=use_custom_llm_config,
-                llm_config_override=llm_config_override,
-                created_at=now,
-                updated_at=now,
-            ))
+        seed = normalize_preset_seed(data)
+        prompt_count, fragment_count, variable_count = PresetService._apply_seed_to_preset(
+            db,
+            user_id,
+            preset.id,
+            seed,
+            mode=SeedApplyMode.IMPORTED,
+        )
 
         db.commit()
         db.refresh(preset)

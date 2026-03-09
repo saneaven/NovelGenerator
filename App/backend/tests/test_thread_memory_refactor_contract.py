@@ -1,15 +1,56 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
+import types
+
+from sqlalchemy.orm import declarative_base
+
+
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+
+def _install_import_stubs() -> None:
+    fake_database = types.ModuleType("App.backend.database")
+    fake_database.Base = declarative_base()
+    fake_database.SessionLocal = lambda: None
+    fake_database.get_db = lambda: None
+    sys.modules["App.backend.database"] = fake_database
+    sys.modules["database"] = fake_database
+
+    credential_service = types.ModuleType("App.backend.services.credential_service")
+    credential_service.credential_service = object()
+    sys.modules["App.backend.services.credential_service"] = credential_service
+
+    embedding_config_service = types.ModuleType("App.backend.services.embedding_config_service")
+    embedding_config_service.get_embedding_profile = lambda *_args, **_kwargs: None
+    embedding_config_service.set_embedding_dimensions = lambda *_args, **_kwargs: None
+    sys.modules["App.backend.services.embedding_config_service"] = embedding_config_service
+
+    rag_embedding_service = types.ModuleType("App.backend.services.rag_embedding_service")
+    rag_embedding_service.embed_many = lambda *_args, **_kwargs: None
+    sys.modules["App.backend.services.rag_embedding_service"] = rag_embedding_service
+
+    mistune = types.ModuleType("mistune")
+    mistune.create_markdown = lambda **_kwargs: (lambda _text: [])
+    sys.modules["mistune"] = mistune
+
+
+_install_import_stubs()
 
 from App.backend.schemas.thread_api import ThreadInfoResponse
+from App.backend.services.default_preset_seed import load_default_preset_seed
 from App.backend.services.memory_service import _build_memory_chunks
 
 
 def test_agent_memory_fragment_has_no_rag_texts_section() -> None:
-    backend_root = Path(__file__).resolve().parents[1]
-    fragment = (backend_root / "prompts" / "default_fragments" / "common" / "agentMemory" / "section.md").read_text(
-        encoding="utf-8"
+    seed = load_default_preset_seed()
+    fragment = next(
+        item.content
+        for item in seed.fragments
+        if item.folder_key == "common/agentMemory" and item.fragment_name == "section"
     )
 
     assert "ragTexts" not in fragment

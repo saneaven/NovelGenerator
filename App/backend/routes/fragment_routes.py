@@ -23,7 +23,7 @@ from ..schemas.fragments import (
 )
 from ..services.fragment_service import fragment_service
 from ..services.folder_service import FolderService
-from ..prompts import get_default_fragments
+from ..services.default_preset_seed import load_default_preset_seed
 from ..services.prompt_runtime.template_renderer import load_user_fragment_map
 from ..services.template_engine import format_template_error, validate_template_source
 
@@ -344,32 +344,28 @@ async def initialize_default_fragments(
     """Initialize default fragments for the current user's active preset.
     Only adds fragments that don't already exist."""
     preset_id = get_active_preset_id(current_user)
-    default_fragments = get_default_fragments()
+    default_seed = load_default_preset_seed()
     added_count = 0
     folder_cache: dict[str, uuid.UUID] = {}
 
-    for path, content in default_fragments.items():
-        if '/' in path:
-            parts = path.rsplit('/', 1)
-            folder_path_str = parts[0]
-            fragment_name = parts[1]
-
-            if folder_path_str not in folder_cache:
-                folder = FolderService.get_or_create_folder_by_path(
-                    db, current_user.id, preset_id, folder_path_str
-                )
-                folder_cache[folder_path_str] = folder.id
-            folder_id = folder_cache[folder_path_str]
-        else:
+    for item in default_seed.fragments:
+        if item.folder_key == "_root":
             folder_id = None
-            fragment_name = path
+        else:
+            folder_id = folder_cache.get(item.folder_key)
+            if folder_id is None:
+                folder = FolderService.get_or_create_folder_by_path(
+                    db, current_user.id, preset_id, item.folder_key
+                )
+                folder_cache[item.folder_key] = folder.id
+                folder_id = folder.id
 
         existing = fragment_service.get_active_fragment(
             db=db,
             user_id=current_user.id,
             preset_id=preset_id,
             folder_id=folder_id,
-            fragment_name=fragment_name
+            fragment_name=item.fragment_name
         )
 
         if not existing:
@@ -378,11 +374,11 @@ async def initialize_default_fragments(
                 user_id=current_user.id,
                 preset_id=preset_id,
                 folder_id=folder_id,
-                fragment_name=fragment_name,
-                content=content,
-                description=None,
+                fragment_name=item.fragment_name,
+                content=item.content,
+                description=item.description,
                 note="System default"
             )
             added_count += 1
 
-    return {"success": True, "added_count": added_count, "total_defaults": len(default_fragments)}
+    return {"success": True, "added_count": added_count, "total_defaults": len(default_seed.fragments)}
