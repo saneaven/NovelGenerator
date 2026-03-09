@@ -109,7 +109,7 @@
     --color-info-dark: var(--color-info-900);
 
     /* ===== Brand & Accent Semantic Tokens ===== */
-    --color-brand-primary: var(--color-brand-primary);
+    --color-brand-primary: var(--color-primary-500);
     --color-brand-primary-hover: var(--color-primary-600);
     --color-brand-primary-active: var(--color-primary-700);
     --color-brand-primary-strong: var(--color-primary-800);
@@ -122,7 +122,7 @@
     --color-brand-primary-glow: var(--color-primary-100);
     --color-brand-primary-contrast: var(--color-primary-900);
     --color-brand-primary-contrast-strong: var(--color-primary-950);
-
+    
     --color-brand-accent: var(--color-accent-500);
     --color-brand-accent-hover: var(--color-accent-600);
     --color-brand-accent-contrast: var(--color-accent-700);
