@@ -122,7 +122,7 @@ def _build_settings_response(settings: UserSettings) -> UserSettingsResponse:
         imageGenConfig=image_gen_config_dict,  # type: ignore[arg-type]
         customThinkingTemplates=getattr(settings, "custom_thinking_templates", []) or [],
         nativeOutputMode=settings.native_output_mode,
-        ragSearchEnabled=getattr(settings, "rag_search_enabled", False),
+        vectorStorageEnabled=getattr(settings, "vector_storage_enabled", False),
         embeddingConfigs=embedding_configs_dict,
         ragSearchTopKPerQuery=getattr(settings, "rag_search_top_k_per_query", 20),
         ragSearchNeighborWindow=getattr(settings, "rag_search_neighbor_window", 0),
@@ -220,8 +220,8 @@ async def update_user_settings(
     if not demo_mode_enabled and update_data.nativeOutputMode is not None:
         settings.native_output_mode = update_data.nativeOutputMode  # type: ignore[assignment]
 
-    if not demo_mode_enabled and update_data.ragSearchEnabled is not None:
-        settings.rag_search_enabled = update_data.ragSearchEnabled  # type: ignore[assignment]
+    if not demo_mode_enabled and update_data.vectorStorageEnabled is not None:
+        settings.vector_storage_enabled = update_data.vectorStorageEnabled  # type: ignore[assignment]
 
     if not demo_mode_enabled and update_data.embeddingConfigs is not None:
         prev = merge_embedding_configs(getattr(settings, "embedding_configs", None))

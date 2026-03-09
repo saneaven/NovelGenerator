@@ -21,7 +21,7 @@ class ToolOfferContext:
     user_id: UUID
     project_id: UUID
     input_payload: dict[str, Any]
-    rag_search_enabled: bool
+    vector_storage_enabled: bool
     tool_set_name: ToolSetName
     invocation_mode: str
     allowed_tool_names: set[str] | None = None

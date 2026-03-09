@@ -87,8 +87,8 @@ class UserSettings(Base):
     # Native output mode - use raw LLM output instead of tool calling
     native_output_mode = Column(Boolean, default=False, nullable=False)
 
-    # RAG Search (embeddings + pgvector) enable toggle
-    rag_search_enabled = Column(Boolean, default=False, nullable=False)
+    # Vector storage (embeddings + pgvector) master toggle for runtime features.
+    vector_storage_enabled = Column(Boolean, default=False, nullable=False)
 
     # Embedding profiles (provider/model/dimensions) by feature.
     # Stored as JSONB to keep settings user-managed and avoid creating per-feature profile tables.

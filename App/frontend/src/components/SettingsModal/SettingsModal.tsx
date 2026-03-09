@@ -248,7 +248,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   };
 
   const validateEmbeddings = (): { tab: MainTab; message: string } | null => {
-    if (!localSettings.ragSearchEnabled) return null;
+    if (!localSettings.vectorStorageEnabled) return null;
 
     const checks: Array<{ feature: 'ragSearch' | 'agentMemory'; label: string }> = [
       { feature: 'ragSearch', label: t('settings.ragSearch.title') },
@@ -868,8 +868,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
         {mainTab === 'searchMemory' && !localSettings.demoModeEnabled && (
           <SearchMemoryPanel
-            enabled={localSettings.ragSearchEnabled}
-            onEnabledChange={(enabled) => setLocalSettings(prev => ({ ...prev, ragSearchEnabled: enabled }))}
+            vectorStorageEnabled={localSettings.vectorStorageEnabled}
+            onVectorStorageEnabledChange={(enabled) => setLocalSettings(prev => ({ ...prev, vectorStorageEnabled: enabled }))}
             ragSearchProfile={localSettings.embeddingConfigs.ragSearch}
             onRagSearchProfileChange={(next) =>
               setLocalSettings((prev) => ({

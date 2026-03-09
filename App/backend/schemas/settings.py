@@ -327,7 +327,7 @@ class UserSettingsResponse(BaseModel):
     imageGenConfig: ImageGenConfig = Field(default_factory=ImageGenConfig)
     customThinkingTemplates: List[CustomThinkingTemplate] = []
     nativeOutputMode: bool = False
-    ragSearchEnabled: bool = False
+    vectorStorageEnabled: bool = False
     embeddingConfigs: EmbeddingConfigs = Field(default_factory=EmbeddingConfigs)
     ragSearchTopKPerQuery: int = Field(default=20, ge=1, le=200)
     ragSearchNeighborWindow: int = Field(default=0, ge=0, le=20)
@@ -361,7 +361,7 @@ class UserSettingsUpdate(BaseModel):
     imageGenConfig: Optional[ImageGenConfig] = None
     customThinkingTemplates: Optional[List[CustomThinkingTemplate]] = None
     nativeOutputMode: Optional[bool] = None
-    ragSearchEnabled: Optional[bool] = None
+    vectorStorageEnabled: Optional[bool] = None
     embeddingConfigs: Optional[EmbeddingConfigs] = None
     ragSearchTopKPerQuery: Optional[int] = Field(default=None, ge=1, le=200)
     ragSearchNeighborWindow: Optional[int] = Field(default=None, ge=0, le=20)

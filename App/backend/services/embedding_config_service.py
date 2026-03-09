@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from ..models.db_models import UserSettings
+from .settings_service import settings_service
 
 
 EmbeddingFeature = Literal["ragSearch", "agentMemory"]
@@ -36,8 +37,7 @@ def get_embedding_profile(
     feature: EmbeddingFeature,
 ) -> Optional[Dict[str, Any]]:
     settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
-    # rag_search_enabled only gates the ragSearch feature, not agentMemory.
-    if feature == "ragSearch" and settings and not bool(getattr(settings, "rag_search_enabled", False)):
+    if not settings_service.is_vector_storage_enabled(db, user_id):
         return None
     cfg = merge_embedding_configs(getattr(settings, "embedding_configs", None) if settings else None)
 

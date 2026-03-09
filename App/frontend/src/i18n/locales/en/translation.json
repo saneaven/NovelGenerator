@@ -166,8 +166,8 @@
       "prompts": "Prompts & Templates"
     },
     "embeddings": {
-      "enableLabel": "Enable embeddings",
-      "enableHint": "Turns on/off all embedding-based features (RAG Search tool + Agent Memory retrieval). When disabled, Agent Memory uses summaries only.",
+      "enableLabel": "Enable vector storage",
+      "enableHint": "Turns on/off all vector-storage runtime features (keyword_search, rag_search, RAG indexing, and Agent Memory retrieval). When disabled, Agent Memory uses summaries only.",
       "validation": {
         "missingModel": "Embeddings are enabled, but {{feature}} embedding model is not configured.",
         "missingApiKey": "Embeddings are enabled, but API key for \"{{provider}}\" is missing ({{feature}}).",
@@ -1244,7 +1244,7 @@
     "rag": {
       "title": "RAG Index",
       "hint": "Indexes main language only (excludes images/tables/code blocks). Results are ordered by type and chapter order.",
-      "disabled": "RAG Search is disabled. Enable it in Settings > Search & Memory.",
+      "disabled": "Vector storage is disabled. Enable it in Settings > Search & Memory.",
       "profileMissing": "Embedding profile is not configured. Set it in Settings > Search & Memory.",
       "statusUnavailable": "RAG status is unavailable.",
       "profile": "Profile:",

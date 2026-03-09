@@ -111,8 +111,7 @@ async def _process_pending_rag_op(op: _PendingRagOp) -> None:
 async def _process_pending_rag_op_inner(op: _PendingRagOp) -> None:
     db = SessionLocal()
     try:
-        rag_settings = settings_service.get_rag_settings(db, op.user_id)
-        if not rag_settings.enabled:
+        if not settings_service.is_vector_storage_enabled(db, op.user_id):
             return
 
         embedding_cfg = settings_service.get_embedding_config(db, op.user_id, "ragSearch")

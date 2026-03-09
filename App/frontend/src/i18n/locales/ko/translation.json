@@ -166,8 +166,8 @@
       "prompts": "프롬프트 & 템플릿"
     },
     "embeddings": {
-      "enableLabel": "임베딩 사용",
-      "enableHint": "임베딩 기반 기능 전체(RAG Search 도구 + Agent Memory 검색)를 켜고 끕니다. 비활성화하면 Agent Memory는 요약만 사용합니다.",
+      "enableLabel": "벡터 저장소 사용",
+      "enableHint": "벡터 저장소 기반 런타임 기능 전체(keyword_search, rag_search, RAG 인덱싱, Agent Memory 검색)를 켜고 끕니다. 비활성화하면 Agent Memory는 요약만 사용합니다.",
       "validation": {
         "missingModel": "임베딩이 활성화되어 있지만 {{feature}} 임베딩 모델이 설정되어 있지 않습니다.",
         "missingApiKey": "임베딩이 활성화되어 있지만 \"{{provider}}\" API 키가 없습니다 ({{feature}}).",
@@ -1244,7 +1244,7 @@
     "rag": {
       "title": "RAG Index",
       "hint": "Indexes main language only (excludes images/tables/code blocks). Results are ordered by type and chapter order.",
-      "disabled": "RAG Search가 비활성화되어 있습니다. 설정 > 검색 & 메모리에서 활성화하세요.",
+      "disabled": "벡터 저장소가 비활성화되어 있습니다. 설정 > 검색 & 메모리에서 활성화하세요.",
       "profileMissing": "Embedding profile is not configured. Set it in Settings > Search & Memory.",
       "statusUnavailable": "RAG status is unavailable.",
       "profile": "Profile:",

@@ -13,7 +13,6 @@ from ....services.settings_service import settings_service
 
 
 def _validate_keyword_search(args: dict[str, Any], ctx: ToolValidationContext):
-    _ = ctx
     keyword = args.get("keyword")
     if not isinstance(keyword, str) or not keyword.strip():
         return invalid_result("validate_keyword_search", "keyword must be a non-empty string")
@@ -21,6 +20,9 @@ def _validate_keyword_search(args: dict[str, Any], ctx: ToolValidationContext):
     page = args.get("page")
     if page is not None and (not isinstance(page, int) or page < 1):
         return invalid_result("validate_keyword_search", "page must be a positive integer")
+
+    if not settings_service.is_vector_storage_enabled(ctx.db, ctx.user_id):
+        return invalid_result("validate_keyword_search", "Vector storage is disabled (Settings > Search & Memory)")
 
     return valid_result()
 
@@ -30,9 +32,8 @@ def _validate_rag_search(args: dict[str, Any], ctx: ToolValidationContext):
     if not isinstance(queries, list) or len(queries) == 0 or not all(isinstance(q, str) and q.strip() for q in queries):
         return invalid_result("validate_rag_search", "queries must be non-empty string[]")
 
-    rag_cfg = settings_service.get_rag_settings(ctx.db, ctx.user_id)
-    if not rag_cfg.enabled:
-        return invalid_result("validate_rag_search", "Embeddings are disabled (Settings > Search & Memory)")
+    if not settings_service.is_vector_storage_enabled(ctx.db, ctx.user_id):
+        return invalid_result("validate_rag_search", "Vector storage is disabled (Settings > Search & Memory)")
 
     return valid_result()
 
@@ -94,8 +95,8 @@ async def _execute_rag_search(args: dict[str, Any], ctx: ToolExecutionContext) -
     return make_result(f"Found {len(raw_results)} results", data={"searchPayload": grouped})
 
 
-def _rag_enabled(ctx: ToolOfferContext) -> bool:
-    return bool(ctx.rag_search_enabled)
+def _vector_storage_enabled(ctx: ToolOfferContext) -> bool:
+    return bool(ctx.vector_storage_enabled)
 
 
 def register(registry: ToolRegistry) -> None:
@@ -108,6 +109,7 @@ def register(registry: ToolRegistry) -> None:
             auto_approve_category="search",
             validators=(_validate_keyword_search,),
             executor=_execute_keyword_search,
+            enabled_when=_vector_storage_enabled,
         )
     )
 
@@ -120,6 +122,6 @@ def register(registry: ToolRegistry) -> None:
             auto_approve_category="search",
             validators=(_validate_rag_search,),
             executor=_execute_rag_search,
-            enabled_when=_rag_enabled,
+            enabled_when=_vector_storage_enabled,
         )
     )

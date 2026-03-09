@@ -13,8 +13,8 @@ type SearchSubTab = 'keywordSearch' | 'ragSearch' | 'agentMemory';
 type ModelBrowserTarget = 'ragSearch' | 'agentMemory';
 
 interface SearchMemoryPanelProps {
-  enabled: boolean;
-  onEnabledChange: (enabled: boolean) => void;
+  vectorStorageEnabled: boolean;
+  onVectorStorageEnabledChange: (enabled: boolean) => void;
   ragSearchProfile: EmbeddingProfileConfig;
   onRagSearchProfileChange: (next: EmbeddingProfileConfig) => void;
   agentMemoryProfile: EmbeddingProfileConfig;
@@ -41,8 +41,8 @@ interface SearchMemoryPanelProps {
 }
 
 const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
-  enabled,
-  onEnabledChange,
+  vectorStorageEnabled,
+  onVectorStorageEnabledChange,
   ragSearchProfile,
   onRagSearchProfileChange,
   agentMemoryProfile,
@@ -73,10 +73,10 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
   const [activeModelBrowser, setActiveModelBrowser] = useState<ModelBrowserTarget>('ragSearch');
 
   useEffect(() => {
-    if (!enabled) {
+    if (!vectorStorageEnabled) {
       setShowModelBrowser(false);
     }
-  }, [enabled]);
+  }, [vectorStorageEnabled]);
 
   useEffect(() => {
     setShowModelBrowser(false);
@@ -91,22 +91,24 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
   }, [agentMemoryProfile.dimensions]);
 
   const handleRagProviderChange = (provider: ProviderType) => {
-    if (!enabled) return;
+    if (!vectorStorageEnabled) return;
     setShowModelBrowser(false);
     onRagSearchProfileChange({ provider, model: '', dimensions: null });
   };
 
   const handleRagModelChange = (model: string) => {
-    if (!enabled) return;
+    if (!vectorStorageEnabled) return;
     onRagSearchProfileChange({ ...ragSearchProfile, model, dimensions: null });
   };
 
   const handleMemProviderChange = (provider: ProviderType) => {
+    if (!vectorStorageEnabled) return;
     setShowModelBrowser(false);
     onAgentMemoryProfileChange({ provider, model: '', dimensions: null });
   };
 
   const handleMemModelChange = (model: string) => {
+    if (!vectorStorageEnabled) return;
     onAgentMemoryProfileChange({ ...agentMemoryProfile, model, dimensions: null });
   };
 
@@ -133,8 +135,8 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
       <div className="settings-panel-card">
         <div className="form-field">
           <ToggleSwitch
-            checked={enabled}
-            onChange={onEnabledChange}
+            checked={vectorStorageEnabled}
+            onChange={onVectorStorageEnabledChange}
             label={t('settings.embeddings.enableLabel')}
             icon={<Toggle size="sm" />}
           />
@@ -178,6 +180,7 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
               max={200}
               onValueChange={(v) => onKeywordPageSizeChange(v!)}
               className="config-input"
+              disabled={!vectorStorageEnabled}
             />
             <p className="field-hint">{t('settings.keywordSearch.pageSizeHint')}</p>
           </div>
@@ -198,7 +201,7 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
                   { value: 'openrouter', label: 'OpenRouter' },
                   { value: 'custom', label: t('settings.credentials.custom.title') },
                 ]}
-                disabled={!enabled}
+                disabled={!vectorStorageEnabled}
               />
               <p className="field-hint">{t('settings.ragSearch.providerHint')}</p>
             </div>
@@ -212,7 +215,7 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
                   onChange={(e) => handleRagModelChange(e.target.value)}
                   placeholder={t('settings.ragSearch.modelPlaceholder')}
                   className="config-input"
-                  disabled={!enabled}
+                  disabled={!vectorStorageEnabled}
                 />
                 <TextButton
                   variant={showModelBrowser && activeModelBrowser === 'ragSearch' ? 'primary' : 'secondary'}
@@ -223,14 +226,14 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
                     setShowModelBrowser(!showModelBrowser);
                   }}
                   title={t('settings.ragSearch.browse')}
-                  disabled={!enabled}
+                  disabled={!vectorStorageEnabled}
                 >
                   {showModelBrowser && activeModelBrowser === 'ragSearch' ? t('common.hide') : t('common.browse')}
                 </TextButton>
               </div>
               <p className="field-hint">{t('settings.ragSearch.modelHint')}</p>
 
-              {enabled && showModelBrowser && activeModelBrowser === 'ragSearch' && (
+              {vectorStorageEnabled && showModelBrowser && activeModelBrowser === 'ragSearch' && (
                 <ModelBrowser
                   key={`ragSearch:${ragSearchProfile.provider}`}
                   autoExpand={true}
@@ -272,6 +275,7 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
                 max={200}
                 onValueChange={(v) => onTopKPerQueryChange(v!)}
                 className="config-input"
+                disabled={!vectorStorageEnabled}
               />
               <p className="field-hint">{t('settings.ragSearch.topKPerQueryHint')}</p>
             </div>
@@ -284,6 +288,7 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
                 max={20}
                 onValueChange={(v) => onNeighborWindowChange(v!)}
                 className="config-input"
+                disabled={!vectorStorageEnabled}
               />
               <p className="field-hint">{t('settings.ragSearch.neighborWindowHint')}</p>
             </div>
@@ -296,6 +301,7 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
                 max={200}
                 onValueChange={(v) => onMaxPrimaryChunksChange(v!)}
                 className="config-input"
+                disabled={!vectorStorageEnabled}
               />
               <p className="field-hint">{t('settings.ragSearch.maxPrimaryChunksHint')}</p>
             </div>
@@ -308,6 +314,7 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
                 max={500}
                 onValueChange={(v) => onMaxTotalChunksChange(v!)}
                 className="config-input"
+                disabled={!vectorStorageEnabled}
               />
               <p className="field-hint">{t('settings.ragSearch.maxTotalChunksHint')}</p>
             </div>
@@ -332,14 +339,14 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
             <CustomSelect
               value={agentMemoryProfile.provider}
               onChange={(value) => handleMemProviderChange(value as ProviderType)}
-              options={[
-                { value: 'openai', label: 'OpenAI' },
-                { value: 'gemini', label: 'Gemini' },
-                { value: 'openrouter', label: 'OpenRouter' },
-                { value: 'custom', label: t('settings.credentials.custom.title') },
-              ]}
-              disabled={!enabled}
-            />
+                options={[
+                  { value: 'openai', label: 'OpenAI' },
+                  { value: 'gemini', label: 'Gemini' },
+                  { value: 'openrouter', label: 'OpenRouter' },
+                  { value: 'custom', label: t('settings.credentials.custom.title') },
+                ]}
+                disabled={!vectorStorageEnabled}
+              />
             <p className="field-hint">{t('settings.agentMemory.providerHint')}</p>
           </div>
 
@@ -352,7 +359,7 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
                 onChange={(e) => handleMemModelChange(e.target.value)}
                 placeholder={t('settings.agentMemory.modelPlaceholder')}
                 className="config-input"
-                disabled={!enabled}
+                disabled={!vectorStorageEnabled}
               />
               <TextButton
                 variant={showModelBrowser && activeModelBrowser === 'agentMemory' ? 'primary' : 'secondary'}
@@ -363,14 +370,14 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
                   setShowModelBrowser(!showModelBrowser);
                 }}
                 title={t('settings.agentMemory.browse')}
-                disabled={!enabled}
+                disabled={!vectorStorageEnabled}
               >
                 {showModelBrowser && activeModelBrowser === 'agentMemory' ? t('common.hide') : t('common.browse')}
               </TextButton>
             </div>
             <p className="field-hint">{t('settings.agentMemory.modelHint')}</p>
 
-            {showModelBrowser && activeModelBrowser === 'agentMemory' && (
+            {vectorStorageEnabled && showModelBrowser && activeModelBrowser === 'agentMemory' && (
                 <ModelBrowser
                   key={`agentMemory:${agentMemoryProfile.provider}`}
                   autoExpand={true}
@@ -406,6 +413,7 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
               max={200}
               onValueChange={(v) => onAgentMemoryTopKPerQueryChange(v!)}
               className="config-input"
+              disabled={!vectorStorageEnabled}
             />
             <p className="field-hint">{t('settings.agentMemory.topKPerQueryHint')}</p>
           </div>
@@ -418,6 +426,7 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
               max={20}
               onValueChange={(v) => onAgentMemoryNeighborWindowChange(v!)}
               className="config-input"
+              disabled={!vectorStorageEnabled}
             />
             <p className="field-hint">{t('settings.agentMemory.neighborWindowHint')}</p>
           </div>
@@ -430,6 +439,7 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
               max={200}
               onValueChange={(v) => onAgentMemoryMaxPrimaryMessagesChange(v!)}
               className="config-input"
+              disabled={!vectorStorageEnabled}
             />
             <p className="field-hint">{t('settings.agentMemory.maxPrimaryMessagesHint')}</p>
           </div>
@@ -442,6 +452,7 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
               max={500}
               onValueChange={(v) => onAgentMemoryMaxTotalMessagesChange(v!)}
               className="config-input"
+              disabled={!vectorStorageEnabled}
             />
             <p className="field-hint">{t('settings.agentMemory.maxTotalMessagesHint')}</p>
           </div>

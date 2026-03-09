@@ -24,6 +24,7 @@ from ..schemas.rag import (
 from ..services.embedding_config_service import get_embedding_profile
 from ..services.credential_service import CredentialServiceError, credential_service
 from ..services.ownership import require_owned_object, require_owned_project
+from ..services.settings_service import settings_service
 from ..services.rag_index_service import (
     delete_object_index,
     get_project_status,
@@ -36,14 +37,13 @@ from ..services.rag_search_service import keyword_search_project, search_project
 router = APIRouter(prefix="/api/v1", tags=["rag"])
 
 
-def _is_rag_enabled(db: Session, *, user_id: UUID) -> bool:
-    settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
-    return bool(getattr(settings, "rag_search_enabled", False)) if settings else False
+def _is_vector_storage_enabled(db: Session, *, user_id: UUID) -> bool:
+    return settings_service.is_vector_storage_enabled(db, user_id)
 
 
-def _require_rag_enabled(db: Session, *, user_id: UUID) -> None:
-    if not _is_rag_enabled(db, user_id=user_id):
-        raise HTTPException(status_code=400, detail="Embeddings are disabled (Settings > Search & Memory)")
+def _require_vector_storage_enabled(db: Session, *, user_id: UUID) -> None:
+    if not _is_vector_storage_enabled(db, user_id=user_id):
+        raise HTTPException(status_code=400, detail="Vector storage is disabled (Settings > Search & Memory)")
 
 @router.get("/projects/{project_id}/rag/status", response_model=RagProjectStatusResponse)
 async def get_rag_status(
@@ -52,7 +52,7 @@ async def get_rag_status(
     db: Session = Depends(get_db),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
-    enabled = _is_rag_enabled(db, user_id=current_user.id)
+    enabled = _is_vector_storage_enabled(db, user_id=current_user.id)
     status_data = get_project_status(db, user_id=current_user.id, project_id=project_id)
     status_data["enabled"] = enabled
     return RagProjectStatusResponse(**status_data)
@@ -66,7 +66,7 @@ async def rag_index_object(
     db: Session = Depends(get_db),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
-    _require_rag_enabled(db, user_id=current_user.id)
+    _require_vector_storage_enabled(db, user_id=current_user.id)
     require_owned_object(
         db,
         user_id=current_user.id,
@@ -109,7 +109,7 @@ async def rag_delete_object(
     db: Session = Depends(get_db),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
-    _require_rag_enabled(db, user_id=current_user.id)
+    _require_vector_storage_enabled(db, user_id=current_user.id)
     deleted = delete_object_index(
         db,
         user_id=current_user.id,
@@ -128,7 +128,7 @@ async def rag_reindex_project(
     db: Session = Depends(get_db),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
-    _require_rag_enabled(db, user_id=current_user.id)
+    _require_vector_storage_enabled(db, user_id=current_user.id)
 
     profile = get_embedding_profile(db, user_id=current_user.id, feature="ragSearch")
     if not profile:
@@ -162,7 +162,7 @@ async def rag_search(
     db: Session = Depends(get_db),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
-    _require_rag_enabled(db, user_id=current_user.id)
+    _require_vector_storage_enabled(db, user_id=current_user.id)
 
     profile = get_embedding_profile(db, user_id=current_user.id, feature="ragSearch")
     if not profile:
@@ -199,7 +199,7 @@ async def rag_keyword_search(
     db: Session = Depends(get_db),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
-    _require_rag_enabled(db, user_id=current_user.id)
+    _require_vector_storage_enabled(db, user_id=current_user.id)
 
     kw = (keyword or "").strip()
     if not kw:

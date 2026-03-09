@@ -11,6 +11,7 @@ from ...providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from ...providers.registry import ProviderRegistry
 from ..memory_builder import render_memory_summary_prompt
 from ..memory_service import archive_thread_until, get_thread_memory_status
+from ..embedding_config_service import get_embedding_profile
 from ..prompt_runtime.contracts import ScenarioBundle
 from ..prompt_runtime.scenario_manager import ScenarioManager
 from ..prompt_runtime.template_renderer import TemplateRenderer
@@ -110,6 +111,11 @@ async def prepare_thread_memory_preflight(
     template_renderer: TemplateRenderer,
     preset_id: UUID,
 ) -> None:
+    if not settings_service.is_vector_storage_enabled(db, run.user_id):
+        return
+    if get_embedding_profile(db, user_id=run.user_id, feature="agentMemory") is None:
+        return
+
     context_window_tokens = int(task_config.context_window_tokens or 32000)
     reserved_completion = (
         int(task_config.max_output_tokens)

@@ -208,8 +208,8 @@ export interface Settings {
     // Native output mode - skip tool calling and output raw text/XML
     nativeOutputMode: boolean;
 
-    // RAG Search - enable embeddings-based search/indexing
-    ragSearchEnabled: boolean;
+    // Vector storage - master toggle for runtime embedding-based features
+    vectorStorageEnabled: boolean;
 
     // Embedding profiles by feature
     embeddingConfigs: EmbeddingConfigs;
@@ -256,7 +256,7 @@ export interface SettingsUpdatePayload {
     theme?: ThemeMode;
     retryConfig?: RetryConfig;
     nativeOutputMode?: boolean;
-    ragSearchEnabled?: boolean;
+    vectorStorageEnabled?: boolean;
     embeddingConfigs?: EmbeddingConfigs;
     ragSearchTopKPerQuery?: number;
     ragSearchNeighborWindow?: number;

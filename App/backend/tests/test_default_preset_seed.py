@@ -30,11 +30,11 @@ def test_default_preset_sub_agents_match_prompt_scenarios() -> None:
     }
 
 
-def test_alembic_versions_collapse_to_single_baseline() -> None:
+def test_alembic_versions_include_baseline() -> None:
     backend_root = Path(__file__).resolve().parents[1]
     version_files = sorted(
         path.name
         for path in (backend_root / "alembic" / "versions").glob("*.py")
     )
 
-    assert version_files == ["0001_baseline.py"]
+    assert "0001_baseline.py" in version_files

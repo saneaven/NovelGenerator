@@ -321,7 +321,7 @@ async def run_llm(
         user_id=run.user_id,
         project_id=run.project_id,
         input_payload=input_payload if isinstance(input_payload, dict) else {},
-        rag_search_enabled=bool(getattr(settings, "rag_search_enabled", False)),
+        vector_storage_enabled=settings_service.is_vector_storage_enabled(db, run.user_id),
         tool_set_name=tool_set_name,
     )
 

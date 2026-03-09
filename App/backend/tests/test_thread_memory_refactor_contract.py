@@ -106,6 +106,41 @@ def test_run_pipeline_executes_preflight_before_memory_prompt_build() -> None:
     assert preflight_idx < memory_prompt_idx
 
 
+def test_search_tools_are_offer_gated_by_vector_storage() -> None:
+    backend_root = Path(__file__).resolve().parents[1]
+    source = (backend_root / "services" / "tool_engine" / "modules" / "search_module.py").read_text(encoding="utf-8")
+
+    assert "enabled_when=_vector_storage_enabled" in source
+    assert source.count("enabled_when=_vector_storage_enabled") == 2
+    assert 'settings_service.is_vector_storage_enabled(ctx.db, ctx.user_id)' in source
+
+
+def test_memory_preflight_short_circuits_without_vector_storage() -> None:
+    backend_root = Path(__file__).resolve().parents[1]
+    source = (backend_root / "services" / "run_pipeline" / "memory_preflight.py").read_text(encoding="utf-8")
+
+    vector_gate_idx = source.find("if not settings_service.is_vector_storage_enabled(db, run.user_id):")
+    profile_gate_idx = source.find('if get_embedding_profile(db, user_id=run.user_id, feature="agentMemory") is None:')
+    budget_idx = source.find("context_window_tokens = int(task_config.context_window_tokens or 32000)")
+
+    assert vector_gate_idx != -1
+    assert profile_gate_idx != -1
+    assert budget_idx != -1
+    assert vector_gate_idx < budget_idx
+    assert profile_gate_idx < budget_idx
+
+
+def test_settings_contract_uses_vector_storage_enabled_field() -> None:
+    backend_root = Path(__file__).resolve().parents[1]
+    schema_source = (backend_root / "schemas" / "settings.py").read_text(encoding="utf-8")
+    route_source = (backend_root / "routes" / "settings_routes.py").read_text(encoding="utf-8")
+
+    assert "vectorStorageEnabled" in schema_source
+    assert "ragSearchEnabled" not in schema_source
+    assert "vectorStorageEnabled" in route_source
+    assert "ragSearchEnabled" not in route_source
+
+
 def test_thread_memory_search_query_is_thread_scoped() -> None:
     backend_root = Path(__file__).resolve().parents[1]
     source = (backend_root / "services" / "memory_service.py").read_text(encoding="utf-8")

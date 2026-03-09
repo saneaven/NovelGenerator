@@ -51,7 +51,6 @@ class EmbeddingConfig:
 
 @dataclass
 class RagSettings:
-    enabled: bool
     top_k_per_query: int
     neighbor_window: int
     max_primary_chunks: int
@@ -112,6 +111,10 @@ class SettingsService:
         settings = self._get_settings(db, user_id)
         return settings.active_preset_id
 
+    def is_vector_storage_enabled(self, db: Session, user_id: UUID) -> bool:
+        settings = self._get_settings(db, user_id)
+        return bool(getattr(settings, "vector_storage_enabled", False))
+
     def get_embedding_config(self, db: Session, user_id: UUID, feature: str) -> EmbeddingConfig:
         settings = self._get_settings(db, user_id)
         all_cfg = settings.embedding_configs if isinstance(settings.embedding_configs, dict) else {}
@@ -127,7 +130,6 @@ class SettingsService:
     def get_rag_settings(self, db: Session, user_id: UUID) -> RagSettings:
         settings = self._get_settings(db, user_id)
         return RagSettings(
-            enabled=bool(getattr(settings, "rag_search_enabled", False)),
             top_k_per_query=int(getattr(settings, "rag_search_top_k_per_query", 20)),
             neighbor_window=int(getattr(settings, "rag_search_neighbor_window", 0)),
             max_primary_chunks=int(getattr(settings, "rag_search_max_primary_chunks", 20)),

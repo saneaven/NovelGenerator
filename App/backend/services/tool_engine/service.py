@@ -106,7 +106,7 @@ class ToolEngineService:
         user_id: UUID,
         project_id: UUID,
         input_payload: dict[str, Any],
-        rag_search_enabled: bool,
+        vector_storage_enabled: bool,
         tool_set_name: ToolSetName,
     ) -> ToolOffer:
         invocation_mode = self.invocation_mode_for_run(thread, run)
@@ -125,7 +125,7 @@ class ToolEngineService:
             user_id=user_id,
             project_id=project_id,
             input_payload=input_payload,
-            rag_search_enabled=rag_search_enabled,
+            vector_storage_enabled=vector_storage_enabled,
             tool_set_name=tool_set_name,
             invocation_mode=invocation_mode,
             allowed_tool_names=allowed_tool_names,
@@ -283,7 +283,7 @@ class ToolEngineService:
                     user_id=user_id,
                     project_id=effective_project_id,
                     input_payload={},
-                    rag_search_enabled=bool(getattr(settings, "rag_search_enabled", False)),
+                    vector_storage_enabled=settings_service.is_vector_storage_enabled(db, user_id),
                     tool_set_name=tool_set_name,
                 )
                 spec = offer.specs_by_name.get(tool_name)

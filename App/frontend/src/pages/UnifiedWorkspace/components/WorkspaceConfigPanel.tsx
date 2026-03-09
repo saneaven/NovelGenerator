@@ -364,13 +364,13 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
 
     try {
       if (!ragStatus?.enabled) {
-        showAlert({ title: 'RAG', message: 'RAG Search is disabled. Enable it in Settings > Search & Memory.' });
+        showAlert({ title: 'RAG', message: t('workspaceConfig.rag.disabled') });
         return;
       }
 
       const profile = ragStatus?.profile;
       if (!profile) {
-        showAlert({ title: 'RAG', message: 'Embedding profile is not configured. Set it in Settings > Search & Memory.' });
+        showAlert({ title: 'RAG', message: t('workspaceConfig.rag.profileMissing') });
         return;
       }
       const res = await ragService.reindex(projectId, {});
