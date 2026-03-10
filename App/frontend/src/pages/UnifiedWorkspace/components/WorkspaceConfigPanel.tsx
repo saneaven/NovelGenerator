@@ -18,6 +18,7 @@ import {
 } from '../../../api/projectService';
 import { ragService, type RagProjectStatusResponse } from '../../../api/ragService';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
+import { useProjectStore } from '../../../store/projectStore';
 import { List, Trash, Refresh, Download } from '../../../components/icons';
 import './WorkspaceConfigPanel.css';
 
@@ -79,6 +80,40 @@ function formatBytes(bytes: number): string {
 
 const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }) => {
   const { t } = useTranslation();
+
+  const project = useProjectStore((s) => s.projects.find((p) => p.id === projectId));
+  const updateProject = useProjectStore((s) => s.updateProject);
+  const [projectName, setProjectName] = useState(project?.name ?? '');
+  const [projectDescription, setProjectDescription] = useState(project?.description ?? '');
+  const [isSavingInfo, setIsSavingInfo] = useState(false);
+  const [savedInfo, setSavedInfo] = useState(false);
+
+  useEffect(() => {
+    setProjectName(project?.name ?? '');
+    setProjectDescription(project?.description ?? '');
+    setSavedInfo(false);
+  }, [projectId, project?.name, project?.description]);
+
+  const handleSaveProjectInfo = useCallback(async () => {
+    if (!projectName.trim()) return;
+    setIsSavingInfo(true);
+    setSavedInfo(false);
+    try {
+      await updateProject(projectId, {
+        name: projectName.trim(),
+        description: projectDescription.trim() || undefined,
+      });
+      setSavedInfo(true);
+      setTimeout(() => setSavedInfo(false), 2000);
+    } catch (err: any) {
+      console.error('Failed to update project info:', err);
+      showAlert({ title: 'Project Info', message: 'Failed to save project info.' });
+    } finally {
+      setIsSavingInfo(false);
+    }
+  }, [projectId, projectName, projectDescription, updateProject]);
+
+  const projectInfoDirty = projectName !== (project?.name ?? '') || projectDescription !== (project?.description ?? '');
 
   const [policy, setPolicy] = useState<ImageCleanupPolicy>(() => loadPolicy(projectId));
   const [preview, setPreview] = useState<ImageCleanupPreviewResponse | null>(null);
@@ -393,6 +428,42 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         <p className="workspace-config-hint">
           {t('workspaceConfig.imageCleanupHint')}
         </p>
+      </div>
+
+      <div className="workspace-config-card">
+        <h3>{t('workspaceConfig.projectInfo.title')}</h3>
+        <div className="workspace-config-form">
+          <div className="workspace-config-field">
+            <label>{t('workspaceConfig.projectInfo.name')}</label>
+            <input
+              type="text"
+              className="workspace-config-text-input"
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              placeholder={t('workspaceConfig.projectInfo.namePlaceholder')}
+            />
+          </div>
+          <div className="workspace-config-field">
+            <label>{t('workspaceConfig.projectInfo.description')}</label>
+            <textarea
+              className="workspace-config-textarea"
+              value={projectDescription}
+              onChange={(e) => setProjectDescription(e.target.value)}
+              placeholder={t('workspaceConfig.projectInfo.descriptionPlaceholder')}
+            />
+          </div>
+        </div>
+        <div className="workspace-config-actions">
+          <TextButton
+            onClick={handleSaveProjectInfo}
+            variant="primary"
+            size="sm"
+            loading={isSavingInfo}
+            disabled={!projectInfoDirty || !projectName.trim()}
+          >
+            {savedInfo ? t('workspaceConfig.projectInfo.saved') : t('workspaceConfig.projectInfo.save')}
+          </TextButton>
+        </div>
       </div>
 
       <div className="workspace-config-card">

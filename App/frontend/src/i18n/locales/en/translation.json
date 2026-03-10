@@ -1246,6 +1246,15 @@
   "workspaceConfig": {
     "title": "Config",
     "imageCleanupHint": "Image cleanup uses the last manual-save state. Autosaved (local) edits are not reflected until you save.",
+    "projectInfo": {
+      "title": "Project Info",
+      "name": "Name",
+      "description": "Description",
+      "namePlaceholder": "Project name",
+      "descriptionPlaceholder": "Project description (optional)",
+      "save": "Save",
+      "saved": "Saved"
+    },
     "rag": {
       "title": "RAG Index",
       "hint": "Indexes main language only (excludes images/tables/code blocks). Results are ordered by type and chapter order.",
