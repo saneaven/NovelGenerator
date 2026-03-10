@@ -15,7 +15,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from ..models.db_models import PromptScenarioVersion, SubAgentDefinitionModel
+from ..models.db_models import PromptScenarioVersion, SubAgentDefinitionModel, Thread
 from ..schemas.sub_agents import SubAgentCreate, SubAgentDefinition, SubAgentUpdate
 
 
@@ -90,6 +90,26 @@ class SubAgentService:
                 SubAgentDefinitionModel.agent_name == agent_name,
             )
         ).first()
+
+    @staticmethod
+    def list_sub_agent_threads(
+        db: Session,
+        *,
+        user_id: uuid.UUID,
+        sub_agent_id: uuid.UUID,
+    ) -> List[Thread]:
+        return (
+            db.query(Thread)
+            .filter(
+                and_(
+                    Thread.user_id == user_id,
+                    Thread.thread_type == "subAgent",
+                    Thread.owner_id == sub_agent_id,
+                )
+            )
+            .order_by(Thread.updated_at.desc(), Thread.id.desc())
+            .all()
+        )
 
     @staticmethod
     def create_sub_agent(
@@ -300,7 +320,14 @@ class SubAgentService:
         )
 
     @staticmethod
-    def delete_sub_agent(db: Session, user_id: uuid.UUID, preset_id: uuid.UUID, sub_agent_id: uuid.UUID) -> None:
+    def delete_sub_agent(
+        db: Session,
+        user_id: uuid.UUID,
+        preset_id: uuid.UUID,
+        sub_agent_id: uuid.UUID,
+        *,
+        commit: bool = True,
+    ) -> None:
         model = SubAgentService.get_sub_agent_by_id(db, user_id, preset_id, sub_agent_id)
         if not model:
             raise ValueError(f"Sub agent not found: {sub_agent_id}")
@@ -318,7 +345,10 @@ class SubAgentService:
         ).delete(synchronize_session=False)
 
         db.delete(model)
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
 
 
 sub_agent_service = SubAgentService()

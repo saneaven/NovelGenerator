@@ -402,6 +402,114 @@ def _dedupe_uuid_values(values: Iterable[UUID | None]) -> list[UUID]:
     return ordered
 
 
+def _load_threads_for_delete(
+    db: Session,
+    *,
+    user_id: UUID,
+    thread_ids: Iterable[UUID | None],
+    project_id: UUID | None = None,
+    thread_type: str | None = None,
+) -> list[Thread]:
+    ordered_ids = _dedupe_uuid_values(thread_ids)
+    if not ordered_ids:
+        return []
+
+    q = db.query(Thread).filter(
+        Thread.user_id == user_id,
+        Thread.id.in_(ordered_ids),
+    )
+    if project_id is not None:
+        q = q.filter(Thread.project_id == project_id)
+    if thread_type is not None:
+        q = q.filter(Thread.thread_type == thread_type)
+
+    rows = q.all()
+    rows_by_id = {
+        row.id: row
+        for row in rows
+        if isinstance(getattr(row, "id", None), UUID)
+    }
+    return [rows_by_id[thread_id] for thread_id in ordered_ids if thread_id in rows_by_id]
+
+
+def collect_thread_delete_deltas(
+    db: Session,
+    *,
+    user_id: UUID,
+    thread_ids: Iterable[UUID | None],
+    project_id: UUID | None = None,
+    thread_type: str | None = None,
+) -> dict[UUID, list[StorageUsageDelta]]:
+    thread_rows = _load_threads_for_delete(
+        db,
+        user_id=user_id,
+        thread_ids=thread_ids,
+        project_id=project_id,
+        thread_type=thread_type,
+    )
+    if not thread_rows:
+        return {}
+
+    ordered_ids = [row.id for row in thread_rows]
+    project_id_by_thread_id = {row.id: row.project_id for row in thread_rows}
+    deltas_by_project: dict[UUID, list[StorageUsageDelta]] = {}
+
+    def _append(thread_id: UUID, delta: StorageUsageDelta) -> None:
+        target_project_id = project_id_by_thread_id.get(thread_id)
+        if target_project_id is None:
+            return
+        deltas_by_project.setdefault(target_project_id, []).append(delta)
+
+    for row in thread_rows:
+        _append(row.id, build_thread_delta(snapshot_thread_row(row), None))
+
+    run_rows = db.query(RunModel).filter(RunModel.thread_id.in_(ordered_ids)).all()
+    for row in run_rows:
+        if isinstance(getattr(row, "thread_id", None), UUID):
+            _append(row.thread_id, build_run_delta(snapshot_run_row(row), None))
+
+    image_run_rows = db.query(ImageRunModel).filter(ImageRunModel.thread_id.in_(ordered_ids)).all()
+    for row in image_run_rows:
+        if isinstance(getattr(row, "thread_id", None), UUID):
+            _append(row.thread_id, build_image_run_delta(snapshot_image_run_row(row), None))
+
+    message_rows = db.query(RunMessageModel).filter(RunMessageModel.thread_id.in_(ordered_ids)).all()
+    for row in message_rows:
+        if isinstance(getattr(row, "thread_id", None), UUID):
+            _append(row.thread_id, build_run_message_delta(snapshot_run_message_row(row), None))
+
+    tool_call_rows = db.query(RunToolCallModel).filter(RunToolCallModel.thread_id.in_(ordered_ids)).all()
+    for row in tool_call_rows:
+        if isinstance(getattr(row, "thread_id", None), UUID):
+            _append(row.thread_id, build_tool_call_delta(snapshot_tool_call_row(row), None))
+
+    return deltas_by_project
+
+
+def delete_threads(
+    db: Session,
+    *,
+    user_id: UUID,
+    thread_ids: Iterable[UUID | None],
+    project_id: UUID | None = None,
+    thread_type: str | None = None,
+) -> dict[UUID, list[str]]:
+    thread_rows = _load_threads_for_delete(
+        db,
+        user_id=user_id,
+        thread_ids=thread_ids,
+        project_id=project_id,
+        thread_type=thread_type,
+    )
+    deleted_ids_by_project: dict[UUID, list[str]] = {}
+    for row in thread_rows:
+        deleted_ids_by_project.setdefault(row.project_id, []).append(str(row.id))
+        db.delete(row)
+
+    db.flush()
+    return deleted_ids_by_project
+
+
 def _resolve_linked_journey_thread(
     db: Session,
     *,
@@ -489,7 +597,7 @@ def collect_notification_delete_deltas(
 ) -> list[StorageUsageDelta]:
     target_list = list(targets)
     notification_ids = [target.notification_id for target in target_list]
-    thread_ids = _dedupe_uuid_values(target.linked_thread_id for target in target_list)
+    thread_ids = [target.linked_thread_id for target in target_list]
 
     notification_rows = get_notifications_by_ids(
         db,
@@ -497,53 +605,15 @@ def collect_notification_delete_deltas(
         project_id=project_id,
         notification_ids=notification_ids,
     )
-    thread_rows = (
-        db.query(Thread)
-        .filter(
-            Thread.user_id == user_id,
-            Thread.project_id == project_id,
-            Thread.thread_type == "journey",
-            Thread.id.in_(thread_ids),
-        )
-        .all()
-        if thread_ids
-        else []
-    )
-    run_rows = (
-        db.query(RunModel)
-        .filter(RunModel.thread_id.in_(thread_ids))
-        .all()
-        if thread_ids
-        else []
-    )
-    image_run_rows = (
-        db.query(ImageRunModel)
-        .filter(ImageRunModel.thread_id.in_(thread_ids))
-        .all()
-        if thread_ids
-        else []
-    )
-    message_rows = (
-        db.query(RunMessageModel)
-        .filter(RunMessageModel.thread_id.in_(thread_ids))
-        .all()
-        if thread_ids
-        else []
-    )
-    tool_call_rows = (
-        db.query(RunToolCallModel)
-        .filter(RunToolCallModel.thread_id.in_(thread_ids))
-        .all()
-        if thread_ids
-        else []
-    )
-
     deltas = [build_notification_delta(snapshot_notification_row(row), None) for row in notification_rows]
-    deltas.extend(build_thread_delta(snapshot_thread_row(row), None) for row in thread_rows)
-    deltas.extend(build_run_delta(snapshot_run_row(row), None) for row in run_rows)
-    deltas.extend(build_image_run_delta(snapshot_image_run_row(row), None) for row in image_run_rows)
-    deltas.extend(build_run_message_delta(snapshot_run_message_row(row), None) for row in message_rows)
-    deltas.extend(build_tool_call_delta(snapshot_tool_call_row(row), None) for row in tool_call_rows)
+    for project_deltas in collect_thread_delete_deltas(
+        db,
+        user_id=user_id,
+        project_id=project_id,
+        thread_ids=thread_ids,
+        thread_type="journey",
+    ).values():
+        deltas.extend(project_deltas)
     return deltas
 
 
@@ -555,9 +625,7 @@ def delete_notification_targets(
     targets: Iterable[NotificationDeleteTarget],
 ) -> tuple[list[str], list[str]]:
     deleted_notification_ids: list[str] = []
-    deleted_thread_ids: list[str] = []
-    unique_thread_ids: list[UUID] = []
-    seen_thread_ids: set[UUID] = set()
+    thread_ids: list[UUID | None] = []
 
     target_list = list(targets)
     for target in target_list:
@@ -574,30 +642,18 @@ def delete_notification_targets(
             continue
         db.delete(row)
         deleted_notification_ids.append(str(target.notification_id))
+        thread_ids.append(target.linked_thread_id)
 
-        thread_id = target.linked_thread_id
-        if thread_id is None or thread_id in seen_thread_ids:
-            continue
-        seen_thread_ids.add(thread_id)
-        unique_thread_ids.append(thread_id)
-
-    for thread_id in unique_thread_ids:
-        thread = (
-            db.query(Thread)
-            .filter(
-                Thread.id == thread_id,
-                Thread.user_id == user_id,
-                Thread.project_id == project_id,
-                Thread.thread_type == "journey",
-            )
-            .first()
-        )
-        if thread is None:
-            continue
-        db.delete(thread)
-        deleted_thread_ids.append(str(thread_id))
-
-    db.flush()
+    deleted_ids_by_project = delete_threads(
+        db,
+        user_id=user_id,
+        project_id=project_id,
+        thread_ids=thread_ids,
+        thread_type="journey",
+    )
+    deleted_thread_ids: list[str] = []
+    for project_thread_ids in deleted_ids_by_project.values():
+        deleted_thread_ids.extend(project_thread_ids)
     return deleted_notification_ids, deleted_thread_ids
 
 

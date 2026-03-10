@@ -12,6 +12,10 @@ from ..auth import get_current_user
 from ..models.db_models import User
 from ..schemas.sub_agents import SubAgentCreate, SubAgentDefinition, SubAgentUpdate
 from ..services.demo_policy import require_demo_off
+from ..services.notification_service import ACTIVE_THREAD_DELETE_STATUSES, collect_thread_delete_deltas, delete_threads
+from ..services.run_pipeline import run_pipeline
+from ..services.runtime_event_dispatcher import runtime_event_dispatcher
+from ..services.storage_usage_service import apply_project_usage_deltas
 from ..services.sub_agent_service import sub_agent_service
 from ..services.tool_engine import tool_engine
 
@@ -27,6 +31,25 @@ def get_active_preset_id(current_user: User) -> uuid.UUID:
             detail="No active preset set. Please select or create a preset first."
         )
     return current_user.settings.active_preset_id
+
+
+async def _cancel_linked_sub_agent_threads_for_delete(
+    *,
+    threads: List[object],
+    user_id: uuid.UUID,
+) -> None:
+    seen: set[uuid.UUID] = set()
+    for thread in threads:
+        thread_id = getattr(thread, "id", None)
+        thread_status = getattr(thread, "status", None)
+        if (
+            not isinstance(thread_id, uuid.UUID)
+            or thread_id in seen
+            or thread_status not in ACTIVE_THREAD_DELETE_STATUSES
+        ):
+            continue
+        seen.add(thread_id)
+        await run_pipeline.cancel_run_for_delete(thread_id=thread_id, user_id=user_id)
 
 
 @router.get("", response_model=List[SubAgentDefinition])
@@ -99,8 +122,63 @@ async def delete_sub_agent(
     db: Session = Depends(get_db),
 ):
     preset_id = get_active_preset_id(current_user)
+    deleted_thread_ids_by_project: dict[uuid.UUID, list[str]] = {}
     try:
-        sub_agent_service.delete_sub_agent(db=db, user_id=current_user.id, preset_id=preset_id, sub_agent_id=sub_agent_id)
+        threads = sub_agent_service.list_sub_agent_threads(
+            db,
+            user_id=current_user.id,
+            sub_agent_id=sub_agent_id,
+        )
+        await _cancel_linked_sub_agent_threads_for_delete(threads=threads, user_id=current_user.id)
+        if threads:
+            db.expire_all()
+
+        thread_ids = [getattr(thread, "id", None) for thread in threads]
+        thread_deltas_by_project = collect_thread_delete_deltas(
+            db,
+            user_id=current_user.id,
+            thread_ids=thread_ids,
+            thread_type="subAgent",
+        )
+        deleted_thread_ids_by_project = delete_threads(
+            db,
+            user_id=current_user.id,
+            thread_ids=thread_ids,
+            thread_type="subAgent",
+        )
+
+        sub_agent_service.delete_sub_agent(
+            db=db,
+            user_id=current_user.id,
+            preset_id=preset_id,
+            sub_agent_id=sub_agent_id,
+            commit=False,
+        )
+        for project_id, deltas in thread_deltas_by_project.items():
+            if not deltas:
+                continue
+            apply_project_usage_deltas(
+                db,
+                user_id=current_user.id,
+                project_id=project_id,
+                deltas=deltas,
+                enforce_quota=False,
+            )
+        db.commit()
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    for project_id, deleted_thread_ids in deleted_thread_ids_by_project.items():
+        if len(deleted_thread_ids) == 1:
+            await runtime_event_dispatcher.emit_project_event(
+                project_id=project_id,
+                event_name="thread:delete",
+                data={"id": deleted_thread_ids[0]},
+            )
+            continue
+        if deleted_thread_ids:
+            await runtime_event_dispatcher.emit_project_event(
+                project_id=project_id,
+                event_name="thread:bulk_delete",
+                data={"ids": deleted_thread_ids},
+            )
     return {"success": True}
