@@ -1,11 +1,13 @@
 import React, { useMemo } from 'react';
+import { useSettingsStore } from '../../../store/settingsStore';
+import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
 import { OutlineItemCard, toOutlineItemVariant } from '../../../components/OutlineItemCard';
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
 import { ReadOnlyBasicInfoDisplay } from '../displays/ReadOnlyBasicInfoDisplay';
 import type { ObjectCardProps } from './types';
-import { pickExistingKeys, pickValues } from './helpers';
+import { pickExistingKeys, pickValues, resolveObjectTitle } from './helpers';
 
 function createFieldKeysForObjectType(objectType: ObjectCardProps['operation']['objectType']): string[] {
   switch (objectType) {
@@ -28,20 +30,26 @@ function createFieldKeysForObjectType(objectType: ObjectCardProps['operation']['
 
 export const CreateCallCard: React.FC<ObjectCardProps> = ({
   scopeKey,
+  projectId,
   operation,
   showDecisionButtons,
   decisionDisabled,
   onAccept,
   onReject,
 }) => {
+  const language = useSettingsStore((state) => state.getSettings().mainLanguage);
+  const objects = useUnifiedObjectStore((state) => state.objects);
+
   const fields = useMemo(() => {
     const keys = createFieldKeysForObjectType(operation.objectType).filter((key) => key in operation.args);
     return pickValues(operation.args, keys);
   }, [operation]);
 
-  const titleValue = typeof operation.args.name === 'string' && operation.args.name.trim()
-    ? operation.args.name
-    : operation.targetLabel || operation.title;
+  const { name, type } = useMemo(
+    () => resolveObjectTitle({ operation, objects, projectId, language }),
+    [operation, objects, projectId, language]
+  );
+  const titleValue = name || type;
 
   const renderBody = () => {
     if (operation.objectType === 'outline' || operation.objectType === 'outline_act' || operation.objectType === 'outline_chapter') {

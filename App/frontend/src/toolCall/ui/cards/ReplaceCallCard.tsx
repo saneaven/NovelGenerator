@@ -8,7 +8,7 @@ import { OutlineItemCard, toOutlineItemVariant } from '../../../components/Outli
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
 import { ReadOnlyBasicInfoDisplay } from '../displays/ReadOnlyBasicInfoDisplay';
 import type { ObjectCardProps } from './types';
-import { getObjectSnapshot } from './helpers';
+import { getObjectSnapshot, resolveObjectTitle } from './helpers';
 
 function replaceKeysForObjectType(objectType: ObjectCardProps['operation']['objectType']): string[] {
   switch (objectType) {
@@ -88,8 +88,12 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
     [isFinalized, operation.args, changedFields, replaceKeys]
   );
 
-  const targetLabel = snapshot.displayName || operation.targetLabel;
-  const title = `${operation.title}${changedFields.length > 0 ? ` (${changedFields.length})` : ''}`;
+  const { name: resolvedName, type: resolvedType } = useMemo(
+    () => resolveObjectTitle({ operation, objects, projectId, language }),
+    [operation, objects, projectId, language]
+  );
+  const targetLabel = resolvedName || resolvedType;
+  const title = `${resolvedType}${changedFields.length > 0 ? ` (${changedFields.length})` : ''}`;
 
   const renderBody = () => {
     if (operation.objectType === 'outline' || operation.objectType === 'outline_act' || operation.objectType === 'outline_chapter') {

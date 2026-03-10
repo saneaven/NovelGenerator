@@ -24,19 +24,13 @@ function buildPatchGroupKey(operation: ObjectOperationVM): string {
 }
 
 function buildPatchGroupLabel(operation: ObjectOperationVM): string {
-  if (operation.targetLabel && operation.targetLabel.trim()) {
-    return operation.targetLabel;
-  }
-
   if (operation.objectType === 'basic_info') {
     return 'Project Basic Info';
   }
   if (operation.objectType === 'guidelines') {
     return 'Guidelines';
   }
-
-  const targetId = operation.targetId || (typeof operation.args.id === 'string' ? operation.args.id : undefined);
-  return targetId || operation.title;
+  return operation.title;
 }
 
 export function groupPatchOperations(operations: ObjectOperationVM[]): PatchGroup[] {

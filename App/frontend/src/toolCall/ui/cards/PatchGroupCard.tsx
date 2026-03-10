@@ -8,7 +8,7 @@ import type { ObjectOperationVM, PatchDecision } from '../vmTypes';
 import { useFunctionCallUIStore } from '../store';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import type { PatchGroupCardProps } from './types';
-import { getObjectSnapshot } from './helpers';
+import { resolveObjectTitle } from './helpers';
 
 const EMPTY_PATCH_DECISIONS: Record<string, PatchDecision> = {};
 
@@ -56,8 +56,8 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
   const displayName = useMemo(() => {
     const firstOp = operations[0];
     if (!firstOp) return targetLabel;
-    const snapshot = getObjectSnapshot({ operation: firstOp, objects, projectId, language });
-    return snapshot.displayName || targetLabel;
+    const { name, type } = resolveObjectTitle({ operation: firstOp, objects, projectId, language });
+    return name || type;
   }, [operations, objects, projectId, language, targetLabel]);
 
   const patchDecisions = useFunctionCallUIStore(

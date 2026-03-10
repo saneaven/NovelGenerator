@@ -8,7 +8,7 @@ import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDispl
 import { OutlineItemCard, toOutlineItemVariant } from '../../../components/OutlineItemCard';
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
 import type { ObjectCardProps } from './types';
-import { getObjectSnapshot } from './helpers';
+import { getObjectSnapshot, resolveObjectTitle } from './helpers';
 
 export const DeleteCallCard: React.FC<ObjectCardProps> = ({
   scopeKey,
@@ -40,7 +40,11 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
     : null;
   const imageUrl = getAssetUrl(mainAsset);
 
-  const title = snapshot.displayName || operation.title;
+  const { name, type } = useMemo(
+    () => resolveObjectTitle({ operation, objects, projectId, language }),
+    [operation, objects, projectId, language]
+  );
+  const title = name || type;
 
   const renderBody = () => {
     if (operation.objectType === 'outline' || operation.objectType === 'outline_act' || operation.objectType === 'outline_chapter') {

@@ -21,7 +21,7 @@ const patchSpec: ToolUiSpec = {
     const { objectType, storySubtype } = inferObjectType(params.toolName, args);
     const targetId = getTargetId(params.toolName, args);
 
-    const base = buildOperationBase(params, objectTypeLabel(objectType, storySubtype), targetId, targetId);
+    const base = buildOperationBase(params, objectTypeLabel(objectType, storySubtype), targetId, undefined);
     return {
       ...base,
       category: 'patch',

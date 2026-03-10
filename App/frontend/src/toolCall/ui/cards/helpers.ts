@@ -1,5 +1,6 @@
 import type { UnifiedObject, ObjectType as UnifiedObjectType } from '../../../types/unifiedObject';
 import type { ObjectOperationVM, StoryObjectSubtype } from '../vmTypes';
+import { objectTypeLabel } from '../../registry/specs/objectOpsSpec';
 
 export interface ObjectSnapshot {
   id?: string;
@@ -110,7 +111,7 @@ function resolveDisplayName(
     return data.name;
   }
 
-  return object.id;
+  return undefined;
 }
 
 export function getObjectSnapshot(params: {
@@ -145,6 +146,32 @@ export function getObjectSnapshot(params: {
     displayName: resolveDisplayName(object, data, objects, language) ?? operation.targetLabel,
     object,
   };
+}
+
+export function resolveObjectTitle(params: {
+  operation: ObjectOperationVM;
+  objects: Record<string, UnifiedObject>;
+  projectId?: string;
+  language: string;
+}): { type: string; name: string | undefined } {
+  const { operation, objects, projectId, language } = params;
+  const type = objectTypeLabel(operation.objectType, operation.storySubtype);
+
+  const unifiedType = resolveUnifiedType(operation);
+  if (unifiedType) {
+    const object = resolveByTypeAndId(objects, unifiedType, operation.targetId, projectId);
+    if (object) {
+      const data = dataForLanguage(object, language);
+      const name = resolveDisplayName(object, data, objects, language);
+      if (name) return { type, name };
+    }
+  }
+
+  if (typeof operation.args.name === 'string' && operation.args.name.trim()) {
+    return { type, name: operation.args.name };
+  }
+
+  return { type, name: undefined };
 }
 
 export function pickExistingKeys(
