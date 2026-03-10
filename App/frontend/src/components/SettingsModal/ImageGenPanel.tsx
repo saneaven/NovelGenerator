@@ -59,6 +59,9 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
   const isNovelAI = config.provider === 'novelai';
   const isOpenAI = config.provider === 'openai';
   const compressionEnabled = config.openaiSettings.output_format !== 'png';
+  const currentStyles = isTagBased ? config.tagBasedStyles : config.naturalStyles;
+  const selectedStyleId = isTagBased ? config.selectedTagBasedStyleId : config.selectedNaturalStyleId;
+  const styleKey = isTagBased ? 'settings.imageGen.tagBasedStyles' : 'settings.imageGen.naturalStyles';
 
   return (
     <div className="image-gen-panel">
@@ -299,16 +302,39 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
         </div>
       )}
 
-      <div className="styles-section">
+      <div className="custom-styles-section">
         <div className="section-header">
-          <h4>{isTagBased ? t('settings.imageGen.tagBasedStyles.title') : t('settings.imageGen.naturalStyles.title')}</h4>
-          <TextButton variant="secondary" size="sm" onClick={() => setShowStyleModal(true)}>
-            {t('settings.imageGen.editStyles')}
-          </TextButton>
+          <h4>{t(`${styleKey}.title`)}</h4>
+          <p className="section-description">
+            {t(`${styleKey}.description`)}
+          </p>
         </div>
-        <p className="section-description">
-          {isTagBased ? t('settings.imageGen.tagBasedStyles.description') : t('settings.imageGen.naturalStyles.description')}
-        </p>
+        <div className="setting-item">
+          <label className="setting-label">
+            <span className="label-text">{t(`${styleKey}.defaultStyle`)}</span>
+            <span className="label-hint">{t(`${styleKey}.defaultStyleHint`)}</span>
+          </label>
+          <div className="style-select-row">
+            <CustomSelect
+              value={selectedStyleId ?? ''}
+              onChange={(value) => onChange({
+                ...config,
+                selectedNaturalStyleId: isTagBased ? config.selectedNaturalStyleId : (value || null),
+                selectedTagBasedStyleId: isTagBased ? (value || null) : config.selectedTagBasedStyleId,
+              })}
+              options={[
+                { value: '', label: t(`${styleKey}.none`) },
+                ...currentStyles.map((style) => ({
+                  value: style.id,
+                  label: style.name,
+                })),
+              ]}
+            />
+            <TextButton variant="secondary" size="sm" onClick={() => setShowStyleModal(true)}>
+              {t('settings.imageGen.styleEditor.editStyles')}
+            </TextButton>
+          </div>
+        </div>
       </div>
 
       {showStyleModal && isTagBased ? (

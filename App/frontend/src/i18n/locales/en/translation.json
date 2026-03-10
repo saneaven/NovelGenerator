@@ -575,6 +575,9 @@
       "tagBasedStyles": {
         "title": "Custom Styles (Tag-Based)",
         "description": "Create custom styles with prefix and postfix for both positive and negative prompts.",
+        "defaultStyle": "Default Style",
+        "defaultStyleHint": "Style to apply by default when generating images",
+        "none": "None",
         "positivePrompt": "Positive Prompt",
         "negativePrompt": "Negative Prompt"
       },

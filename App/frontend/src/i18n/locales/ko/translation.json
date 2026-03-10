@@ -575,6 +575,9 @@
       "tagBasedStyles": {
         "title": "사용자 정의 스타일 (태그 기반)",
         "description": "긍정 및 부정 프롬프트 모두에 접두사와 접미사를 사용하여 사용자 정의 스타일을 만듭니다.",
+        "defaultStyle": "기본 스타일",
+        "defaultStyleHint": "이미지 생성 시 기본으로 적용할 스타일",
+        "none": "없음",
         "positivePrompt": "긍정 프롬프트",
         "negativePrompt": "부정 프롬프트"
       },
