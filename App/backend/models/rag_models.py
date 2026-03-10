@@ -53,10 +53,15 @@ class RagSource(Base):
     object_id = Column(UUID(as_uuid=True), nullable=False)
     language = Column(String(50), nullable=False)
 
-    version_number = Column(Integer, nullable=True)
     content_hash = Column(String(64), nullable=True)
-    index_state = Column(String(40), nullable=False, default="ready")  # ready|missing_main_language|error
+    indexed_provider = Column(String(50), nullable=True)
+    indexed_model = Column(String(200), nullable=True)
     indexed_at = Column(DateTime, nullable=True)
+    last_attempted_hash = Column(String(64), nullable=True)
+    last_attempted_provider = Column(String(50), nullable=True)
+    last_attempted_model = Column(String(200), nullable=True)
+    last_error_at = Column(DateTime, nullable=True)
+    last_error_message = Column(Text, nullable=True)
 
     # Ordering metadata
     type_group = Column(String(30), nullable=False)  # story_object|outline|manuscript

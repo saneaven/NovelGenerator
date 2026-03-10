@@ -42,6 +42,7 @@ def _install_import_stubs() -> None:
         return None
 
     rag_index_service.index_object = _index_object
+    rag_index_service.invalidate_object_index = lambda *_args, **_kwargs: None
     sys.modules["App.backend.services.rag_index_service"] = rag_index_service
 
     object_change_events = types.ModuleType("App.backend.services.object_change_events")
@@ -124,6 +125,7 @@ def test_update_object_manuscript_path_uses_manuscript_image_model(monkeypatch) 
     )
 
     usage_calls: list[dict[str, object]] = []
+    invalidations: list[dict[str, object]] = []
 
     monkeypatch.setattr(object_service_module, "_load_owned_object", lambda *_args, **_kwargs: manuscript)
     monkeypatch.setattr(object_service_module, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace())
@@ -133,6 +135,11 @@ def test_update_object_manuscript_path_uses_manuscript_image_model(monkeypatch) 
         object_service_module,
         "rebuild_manuscript_images_for_language",
         lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        object_service_module,
+        "_invalidate_rag_index",
+        lambda *_args, **kwargs: invalidations.append(kwargs),
     )
     monkeypatch.setattr(object_service_module, "_queue_rag_index", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(object_service_module, "queue_object_change", lambda *_args, **_kwargs: None)
@@ -164,3 +171,11 @@ def test_update_object_manuscript_path_uses_manuscript_image_model(monkeypatch) 
     assert result == {"id": str(object_id), "type": "manuscript"}
     assert db.queried_models.count(ManuscriptImage) == 2
     assert len(usage_calls) == 1
+    assert invalidations == [
+        {
+            "user_id": user_id,
+            "project_id": project_id,
+            "object_type": "manuscript",
+            "object_id": object_id,
+        }
+    ]

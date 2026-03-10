@@ -170,16 +170,18 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
     try {
       const status = await ragService.getStatus(projectId);
       setRagStatus(status);
+      return status;
     } catch (err: any) {
       console.error('Failed to load RAG status:', err);
       setRagStatus(null);
+      return null;
     } finally {
       setIsRagLoading(false);
     }
   }, [projectId]);
 
   useEffect(() => {
-    loadRagStatus();
+    void loadRagStatus();
   }, [loadRagStatus]);
 
   const candidates = preview?.candidates ?? [];
@@ -408,11 +410,17 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         showAlert({ title: 'RAG', message: t('workspaceConfig.rag.profileMissing') });
         return;
       }
-      const res = await ragService.reindex(projectId, {});
-      setLastRagSummary(
-        `Reindex complete: rebuilt ${res.rebuilt_sources}/${res.indexed_sources} (missing main_language: ${res.missing_main_language_sources}).`
-      );
-      await loadRagStatus();
+      await ragService.reindex(projectId, {});
+      const refreshed = await loadRagStatus();
+      if (refreshed) {
+        setLastRagSummary(
+          `RAG status: ${refreshed.ready_sources}/${refreshed.total_sources} searchable` +
+          ` · ${refreshed.unindexed_sources} unindexed` +
+          ` · ${refreshed.stale_sources} stale` +
+          ` · ${refreshed.missing_main_language_sources} missing main_language` +
+          ` · ${refreshed.error_sources} errors`
+        );
+      }
     } catch (err: any) {
       console.error('RAG reindex failed:', err);
       showAlert({ title: 'RAG', message: 'Failed to reindex project.' });
@@ -488,6 +496,12 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
             </div>
             <div>
               <strong>{t('workspaceConfig.rag.sources')}</strong> {ragStatus.ready_sources}/{ragStatus.total_sources}
+              {ragStatus.unindexed_sources > 0 && (
+                <span> · {t('workspaceConfig.rag.unindexed', { count: ragStatus.unindexed_sources })}</span>
+              )}
+              {ragStatus.stale_sources > 0 && (
+                <span> · {t('workspaceConfig.rag.stale', { count: ragStatus.stale_sources })}</span>
+              )}
               {ragStatus.missing_main_language_sources > 0 && (
                 <span> · {t('workspaceConfig.rag.missingMainLanguage', { count: ragStatus.missing_main_language_sources })}</span>
               )}

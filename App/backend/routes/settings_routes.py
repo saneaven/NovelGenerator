@@ -154,6 +154,10 @@ async def update_user_settings(
         settings.demo_mode_enabled = update_data.demoModeEnabled  # type: ignore[assignment]
 
     demo_mode_enabled = bool(getattr(settings, "demo_mode_enabled", False))
+    prev_main_language = str(getattr(settings, "main_language", "English") or "English")
+    rag_prev_configs = merge_embedding_configs(getattr(settings, "embedding_configs", None))
+    should_wipe_rag_index = False
+    should_wipe_memory_index = False
 
     if not demo_mode_enabled and update_data.taskConfigSettings is not None:
         raw_task_config_settings = update_data.taskConfigSettings.model_dump(exclude_unset=True)
@@ -164,6 +168,8 @@ async def update_user_settings(
 
     if update_data.mainLanguage is not None:
         settings.main_language = update_data.mainLanguage
+        if update_data.mainLanguage != prev_main_language:
+            should_wipe_rag_index = True
 
     if update_data.subLanguages is not None:
         settings.sub_languages = update_data.subLanguages
@@ -205,19 +211,18 @@ async def update_user_settings(
         settings.vector_storage_enabled = update_data.vectorStorageEnabled  # type: ignore[assignment]
 
     if not demo_mode_enabled and update_data.embeddingConfigs is not None:
-        prev = merge_embedding_configs(getattr(settings, "embedding_configs", None))
         next_cfg = merge_embedding_configs(update_data.embeddingConfigs.model_dump(exclude_none=True))
 
-        rag_prev = prev.get("ragSearch", {})
+        rag_prev = rag_prev_configs.get("ragSearch", {})
         rag_next = next_cfg.get("ragSearch", {})
         if rag_prev.get("provider") != rag_next.get("provider") or rag_prev.get("model") != rag_next.get("model"):
-            wipe_user_index(db, user_id=current_user.id)
+            should_wipe_rag_index = True
             rag_next["dimensions"] = None
 
-        mem_prev = prev.get("agentMemory", {})
+        mem_prev = rag_prev_configs.get("agentMemory", {})
         mem_next = next_cfg.get("agentMemory", {})
         if mem_prev.get("provider") != mem_next.get("provider") or mem_prev.get("model") != mem_next.get("model"):
-            wipe_memory_index(db, user_id=current_user.id)
+            should_wipe_memory_index = True
             mem_next["dimensions"] = None
 
         settings.embedding_configs = next_cfg  # type: ignore[assignment]
@@ -263,6 +268,11 @@ async def update_user_settings(
 
     if not demo_mode_enabled and update_data.toolCallAutoApprove is not None:
         settings.tool_call_auto_approve = update_data.toolCallAutoApprove.model_dump()  # type: ignore[assignment]
+
+    if should_wipe_rag_index:
+        wipe_user_index(db, user_id=current_user.id)
+    if should_wipe_memory_index:
+        wipe_memory_index(db, user_id=current_user.id)
 
     db.commit()
     db.refresh(settings)

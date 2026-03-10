@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
+from datetime import datetime
 import os
 import sys
 import types
-from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -61,6 +62,15 @@ class FakeRagQuery:
     def filter(self, *_args: object, **_kwargs: object) -> "FakeRagQuery":
         return self
 
+    def first(self):
+        return None
+
+    def distinct(self) -> "FakeRagQuery":
+        return self
+
+    def all(self) -> list[object]:
+        return []
+
     def delete(self, **_kwargs: object) -> int:
         if self._model is RagChunk:
             self._session.deleted_chunk_rows += 1
@@ -88,23 +98,49 @@ class FakeRagSession:
         self.connection_checked_out = False
 
 
+def _payload(hash_value: str) -> rag_index_service.CurrentPayload:
+    return rag_index_service.CurrentPayload(
+        has_indexable_text=True,
+        chunks=[{"field_path": "content", "chunk_index": 0, "text": hash_value}],
+        embedding_texts=[hash_value],
+        current_hash=hash_value,
+    )
+
+
 def test_index_object_commits_before_embedding(monkeypatch) -> None:
     db = FakeRagSession()
-    source = SimpleNamespace(id=uuid4(), content_hash=None, index_state="ready", version_number=None, indexed_at=None)
-    latest = SimpleNamespace(version_number=1, data={"English": {"content": "alpha"}})
+    source = SimpleNamespace(
+        id=uuid4(),
+        content_hash=None,
+        indexed_provider=None,
+        indexed_model=None,
+        indexed_at=None,
+        last_attempted_hash=None,
+        last_attempted_provider=None,
+        last_attempted_model=None,
+        last_error_at=None,
+        last_error_message=None,
+    )
 
-    monkeypatch.setattr(rag_index_service, "get_embedding_profile", lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None})
-    monkeypatch.setattr(rag_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
-    monkeypatch.setattr(rag_index_service, "_latest_version", lambda *_args, **_kwargs: latest)
-    monkeypatch.setattr(rag_index_service, "compute_order_meta", lambda *_args, **_kwargs: rag_index_service.OrderMeta(type_group="story_object"))
-    monkeypatch.setattr(rag_index_service, "_upsert_source", lambda *_args, **_kwargs: source)
-    monkeypatch.setattr(rag_index_service, "extract_index_text", lambda *_args, **_kwargs: {"content": "alpha"})
-    monkeypatch.setattr(rag_index_service, "chunk_fields", lambda _text_by_field: [{"field_path": "content", "chunk_index": 0, "text": "alpha"}])
     monkeypatch.setattr(
         rag_index_service,
-        "compute_chunks_hash",
-        lambda chunks: "|".join(str(chunk.get("text") or "") for chunk in chunks),
+        "get_embedding_profile",
+        lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None},
     )
+    monkeypatch.setattr(rag_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
+    monkeypatch.setattr(rag_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
+    monkeypatch.setattr(
+        rag_index_service,
+        "_build_current_payload",
+        lambda **_kwargs: _payload("alpha"),
+    )
+    monkeypatch.setattr(
+        rag_index_service,
+        "compute_order_meta",
+        lambda *_args, **_kwargs: rag_index_service.OrderMeta(type_group="story_object"),
+    )
+    monkeypatch.setattr(rag_index_service, "_find_source", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(rag_index_service, "_upsert_source", lambda *_args, **_kwargs: source)
     monkeypatch.setattr(rag_index_service, "set_embedding_dimensions", lambda *_args, **_kwargs: None)
 
     async def _fake_embed_many(**_kwargs):
@@ -129,36 +165,33 @@ def test_index_object_commits_before_embedding(monkeypatch) -> None:
     assert result == {"rebuilt": True, "skipped": False, "missing_main_language": False}
     assert db.deleted_chunk_rows == 1
     assert len(db.added) == 1
+    assert source.content_hash == "alpha"
+    assert source.indexed_provider == "openai"
+    assert source.indexed_model == "embed"
 
 
-def test_index_object_returns_stale_when_latest_version_changes(monkeypatch) -> None:
+def test_index_object_returns_stale_when_payload_changes_before_apply(monkeypatch) -> None:
     db = FakeRagSession()
-    source = SimpleNamespace(id=uuid4(), content_hash=None, index_state="ready", version_number=None, indexed_at=None)
-    latest_versions = [
-        SimpleNamespace(version_number=1, data={"English": {"content": "alpha"}}),
-        SimpleNamespace(version_number=2, data={"English": {"content": "beta"}}),
-    ]
+    payloads = [_payload("alpha"), _payload("beta")]
 
-    monkeypatch.setattr(rag_index_service, "get_embedding_profile", lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None})
+    monkeypatch.setattr(
+        rag_index_service,
+        "get_embedding_profile",
+        lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None},
+    )
     monkeypatch.setattr(rag_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
-    monkeypatch.setattr(rag_index_service, "_latest_version", lambda *_args, **_kwargs: latest_versions.pop(0))
-    monkeypatch.setattr(rag_index_service, "compute_order_meta", lambda *_args, **_kwargs: rag_index_service.OrderMeta(type_group="story_object"))
-    monkeypatch.setattr(rag_index_service, "_upsert_source", lambda *_args, **_kwargs: source)
+    monkeypatch.setattr(rag_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
     monkeypatch.setattr(
         rag_index_service,
-        "extract_index_text",
-        lambda _object_type, data, _language: {"content": next(iter(data.values())).get("content", "")},
+        "_build_current_payload",
+        lambda **_kwargs: payloads.pop(0),
     )
     monkeypatch.setattr(
         rag_index_service,
-        "chunk_fields",
-        lambda text_by_field: [{"field_path": "content", "chunk_index": 0, "text": text_by_field["content"]}],
+        "compute_order_meta",
+        lambda *_args, **_kwargs: rag_index_service.OrderMeta(type_group="story_object"),
     )
-    monkeypatch.setattr(
-        rag_index_service,
-        "compute_chunks_hash",
-        lambda chunks: "|".join(str(chunk.get("text") or "") for chunk in chunks),
-    )
+    monkeypatch.setattr(rag_index_service, "_find_source", lambda *_args, **_kwargs: None)
 
     async def _fake_embed_many(**_kwargs):
         return [[0.1, 0.2]]
@@ -189,16 +222,31 @@ def test_index_object_returns_stale_when_latest_version_changes(monkeypatch) -> 
 
 def test_index_object_skips_missing_main_language_without_embedding(monkeypatch) -> None:
     db = FakeRagSession()
-    source = SimpleNamespace(id=uuid4(), content_hash="old", index_state="ready", version_number=None, indexed_at=None)
-    latest = SimpleNamespace(version_number=3, data={"English": {"content": "alpha"}})
+    deleted = {"count": 0}
     embed_called = {"value": False}
 
-    monkeypatch.setattr(rag_index_service, "get_embedding_profile", lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None})
+    monkeypatch.setattr(
+        rag_index_service,
+        "get_embedding_profile",
+        lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None},
+    )
     monkeypatch.setattr(rag_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
-    monkeypatch.setattr(rag_index_service, "_latest_version", lambda *_args, **_kwargs: latest)
-    monkeypatch.setattr(rag_index_service, "compute_order_meta", lambda *_args, **_kwargs: rag_index_service.OrderMeta(type_group="story_object"))
-    monkeypatch.setattr(rag_index_service, "_upsert_source", lambda *_args, **_kwargs: source)
-    monkeypatch.setattr(rag_index_service, "extract_index_text", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(rag_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
+    monkeypatch.setattr(
+        rag_index_service,
+        "_build_current_payload",
+        lambda **_kwargs: rag_index_service.CurrentPayload(
+            has_indexable_text=False,
+            chunks=[],
+            embedding_texts=[],
+            current_hash=None,
+        ),
+    )
+    monkeypatch.setattr(
+        rag_index_service,
+        "_delete_source_rows",
+        lambda *_args, **_kwargs: deleted.__setitem__("count", deleted["count"] + 1) or 1,
+    )
 
     async def _fake_embed_many(**_kwargs):
         embed_called["value"] = True
@@ -220,33 +268,35 @@ def test_index_object_skips_missing_main_language_without_embedding(monkeypatch)
 
     assert result == {"rebuilt": False, "skipped": True, "missing_main_language": True}
     assert embed_called["value"] is False
-    assert db.deleted_chunk_rows == 1
-    assert source.content_hash is None
-    assert source.version_number == 3
+    assert deleted["count"] == 1
 
 
-def test_index_object_marks_source_error_when_embedding_raises(monkeypatch) -> None:
+def test_index_object_records_error_when_embedding_raises(monkeypatch) -> None:
     db = FakeRagSession()
-    source = SimpleNamespace(
-        id=uuid4(),
-        content_hash=None,
-        index_state="ready",
-        version_number=None,
-        indexed_at=None,
-    )
-    latest = SimpleNamespace(version_number=4, data={"English": {"content": "alpha"}})
+    captured: dict[str, object] = {}
 
-    monkeypatch.setattr(rag_index_service, "get_embedding_profile", lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None})
-    monkeypatch.setattr(rag_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
-    monkeypatch.setattr(rag_index_service, "_latest_version", lambda *_args, **_kwargs: latest)
-    monkeypatch.setattr(rag_index_service, "compute_order_meta", lambda *_args, **_kwargs: rag_index_service.OrderMeta(type_group="story_object"))
-    monkeypatch.setattr(rag_index_service, "_upsert_source", lambda *_args, **_kwargs: source)
-    monkeypatch.setattr(rag_index_service, "extract_index_text", lambda *_args, **_kwargs: {"content": "alpha"})
-    monkeypatch.setattr(rag_index_service, "chunk_fields", lambda _text_by_field: [{"field_path": "content", "chunk_index": 0, "text": "alpha"}])
     monkeypatch.setattr(
         rag_index_service,
-        "compute_chunks_hash",
-        lambda chunks: "|".join(str(chunk.get("text") or "") for chunk in chunks),
+        "get_embedding_profile",
+        lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None},
+    )
+    monkeypatch.setattr(rag_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
+    monkeypatch.setattr(rag_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
+    monkeypatch.setattr(
+        rag_index_service,
+        "_build_current_payload",
+        lambda **_kwargs: _payload("alpha"),
+    )
+    monkeypatch.setattr(
+        rag_index_service,
+        "compute_order_meta",
+        lambda *_args, **_kwargs: rag_index_service.OrderMeta(type_group="story_object"),
+    )
+    monkeypatch.setattr(rag_index_service, "_find_source", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        rag_index_service,
+        "_record_index_error",
+        lambda *_args, **kwargs: captured.update(kwargs),
     )
 
     async def _raising_embed_many(**_kwargs):
@@ -271,8 +321,111 @@ def test_index_object_marks_source_error_when_embedding_raises(monkeypatch) -> N
     else:
         raise AssertionError("index_object should re-raise embedding failures")
 
-    assert source.index_state == "error"
-    assert db.commits == 2
+    assert captured["message"] == "embedding provider exploded"
+    assert captured["current_hash"] == "alpha"
+    assert captured["preserve_searchable"] is True
+
+
+def test_get_project_status_counts_project_refs_not_existing_rows(monkeypatch) -> None:
+    user_id = uuid4()
+    project_id = uuid4()
+    ready_source = SimpleNamespace(
+        id=uuid4(),
+        object_type="character",
+        object_id=uuid4(),
+        content_hash="ready",
+        indexed_provider="openai",
+        indexed_model="embed",
+        indexed_at=datetime(2026, 1, 2),
+        last_attempted_hash=None,
+        last_attempted_provider=None,
+        last_attempted_model=None,
+        last_error_at=None,
+    )
+    stale_source = SimpleNamespace(
+        id=uuid4(),
+        object_type="organization",
+        object_id=uuid4(),
+        content_hash="old",
+        indexed_provider="openai",
+        indexed_model="embed",
+        indexed_at=datetime(2026, 1, 3),
+        last_attempted_hash=None,
+        last_attempted_provider=None,
+        last_attempted_model=None,
+        last_error_at=None,
+    )
+    error_source = SimpleNamespace(
+        id=uuid4(),
+        object_type="outline",
+        object_id=uuid4(),
+        content_hash=None,
+        indexed_provider=None,
+        indexed_model=None,
+        indexed_at=None,
+        last_attempted_hash="error",
+        last_attempted_provider="openai",
+        last_attempted_model="embed",
+        last_error_at=datetime(2026, 1, 4),
+    )
+
+    refs = [
+        ("character", ready_source.object_id),
+        ("location", uuid4()),
+        ("organization", stale_source.object_id),
+        ("act", uuid4()),
+        ("outline", error_source.object_id),
+    ]
+    payloads = {
+        "character": _payload("ready"),
+        "location": _payload("missing-row"),
+        "organization": _payload("new"),
+        "act": rag_index_service.CurrentPayload(
+            has_indexable_text=False,
+            chunks=[],
+            embedding_texts=[],
+            current_hash=None,
+        ),
+        "outline": _payload("error"),
+    }
+
+    monkeypatch.setattr(rag_index_service, "_project_object_refs", lambda *_args, **_kwargs: refs)
+    monkeypatch.setattr(rag_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
+    monkeypatch.setattr(
+        rag_index_service,
+        "get_embedding_profile",
+        lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": 2},
+    )
+    monkeypatch.setattr(
+        rag_index_service,
+        "_load_project_sources",
+        lambda *_args, **_kwargs: {
+            ("character", ready_source.object_id): ready_source,
+            ("organization", stale_source.object_id): stale_source,
+            ("outline", error_source.object_id): error_source,
+        },
+    )
+    monkeypatch.setattr(
+        rag_index_service,
+        "_load_chunked_source_ids",
+        lambda *_args, **_kwargs: {ready_source.id, stale_source.id},
+    )
+    monkeypatch.setattr(rag_index_service, "_latest_versions_for_refs", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(
+        rag_index_service,
+        "_build_current_payload",
+        lambda *, object_type, **_kwargs: payloads[object_type],
+    )
+
+    status = rag_index_service.get_project_status(SimpleNamespace(), user_id=user_id, project_id=project_id)
+
+    assert status["total_sources"] == 5
+    assert status["ready_sources"] == 1
+    assert status["stale_sources"] == 1
+    assert status["unindexed_sources"] == 1
+    assert status["missing_main_language_sources"] == 1
+    assert status["error_sources"] == 1
+    assert status["last_indexed_at"] == datetime(2026, 1, 3).isoformat()
 
 
 class FakeNestedSession:

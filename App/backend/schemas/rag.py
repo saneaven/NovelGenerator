@@ -17,6 +17,8 @@ class RagProjectStatusResponse(BaseModel):
     profile: Optional[RagEmbeddingProfileResponse] = None
     total_sources: int = 0
     ready_sources: int = 0
+    stale_sources: int = 0
+    unindexed_sources: int = 0
     missing_main_language_sources: int = 0
     error_sources: int = 0
     last_indexed_at: Optional[str] = None

@@ -50,6 +50,10 @@ def keyword_search_project(
     if page_size < 1:
         raise ValueError("page_size must be >= 1")
 
+    profile = get_embedding_profile(db, user_id=user_id, feature="ragSearch")
+    if not profile:
+        raise ValueError("RAG embedding profile is not configured")
+
     language = get_main_language(db, user_id=user_id)
 
     escaped = _escape_like_pattern(kw)
@@ -60,6 +64,8 @@ def keyword_search_project(
         "project_id": project_id,
         "language": language,
         "pattern": pattern,
+        "provider": str(profile["provider"]),
+        "model": str(profile["model"]),
     }
 
     count_stmt = sql_text(
@@ -70,7 +76,8 @@ def keyword_search_project(
         WHERE s.user_id = :user_id
           AND s.project_id = :project_id
           AND s.language = :language
-          AND s.index_state = 'ready'
+          AND s.indexed_provider = :provider
+          AND s.indexed_model = :model
           AND c.text ILIKE :pattern ESCAPE '!'
         """
     )
@@ -105,7 +112,8 @@ def keyword_search_project(
         WHERE s.user_id = :user_id
           AND s.project_id = :project_id
           AND s.language = :language
-          AND s.index_state = 'ready'
+          AND s.indexed_provider = :provider
+          AND s.indexed_model = :model
           AND c.text ILIKE :pattern ESCAPE '!'
         ORDER BY
           CASE s.type_group
@@ -207,7 +215,8 @@ async def search_project(
         WHERE s.user_id = :user_id
           AND s.project_id = :project_id
           AND s.language = :language
-          AND s.index_state = 'ready'
+          AND s.indexed_provider = :provider
+          AND s.indexed_model = :model
         ORDER BY c.embedding <-> (:qv)::vector
         LIMIT :k
         """
@@ -223,6 +232,8 @@ async def search_project(
                     "user_id": user_id,
                     "project_id": project_id,
                     "language": language,
+                    "provider": str(profile["provider"]),
+                    "model": str(profile["model"]),
                     "k": int(top_k_per_query),
                 },
             ).fetchall()

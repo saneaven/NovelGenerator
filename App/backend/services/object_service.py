@@ -39,7 +39,7 @@ from ..services.deletion_service import (
     delete_rag_sources_bulk,
 )
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
-from ..services.rag_index_service import index_object
+from ..services.rag_index_service import index_object, invalidate_object_index
 from ..utils.object_type_aliases import externalize_object_type, normalize_object_type
 from .asset_change_events import queue_scene_assets_change
 from .object_change_events import queue_object_change
@@ -98,6 +98,27 @@ def _queue_rag_index(
     )
     if op not in pending:
         pending.append(op)
+
+
+def _invalidate_rag_index(
+    db: Session,
+    *,
+    user_id: UUID | None,
+    project_id: UUID,
+    object_type: str,
+    object_id: UUID,
+) -> None:
+    if user_id is None:
+        return
+    if object_type in _RAG_EXCLUDED_TYPES:
+        return
+    invalidate_object_index(
+        db,
+        user_id=user_id,
+        project_id=project_id,
+        object_type=object_type,
+        object_id=object_id,
+    )
 
 
 _RAG_SEMAPHORE = asyncio.Semaphore(3)
@@ -822,6 +843,13 @@ class ObjectService:
                     action="updated",
                 )
 
+        _invalidate_rag_index(
+            db,
+            user_id=created_by,
+            project_id=project_id,
+            object_type=t,
+            object_id=object_id,
+        )
         _queue_rag_index(
             db,
             user_id=created_by,
@@ -895,6 +923,13 @@ class ObjectService:
         obj.updated_at = datetime.utcnow()
         db.flush()
 
+        _invalidate_rag_index(
+            db,
+            user_id=created_by,
+            project_id=project_id,
+            object_type=t,
+            object_id=object_id,
+        )
         _queue_rag_index(
             db,
             user_id=created_by,
@@ -1008,6 +1043,13 @@ class ObjectService:
         obj.updated_at = datetime.utcnow()
         db.flush()
 
+        _invalidate_rag_index(
+            db,
+            user_id=created_by,
+            project_id=project_id,
+            object_type=t,
+            object_id=object_id,
+        )
         _queue_rag_index(
             db,
             user_id=created_by,

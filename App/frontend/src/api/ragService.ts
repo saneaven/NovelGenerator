@@ -11,6 +11,8 @@ export interface RagProjectStatusResponse {
   profile?: RagEmbeddingProfile | null;
   total_sources: number;
   ready_sources: number;
+  stale_sources: number;
+  unindexed_sources: number;
   missing_main_language_sources: number;
   error_sources: number;
   last_indexed_at?: string | null;

@@ -4,49 +4,37 @@ from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha256
 import re
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from uuid import UUID
 
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from ..models.db_models import (
-    BasicInfo,
-    Guidelines,
-    Character,
-    Organization,
-    Location,
-    LorebookEntry,
-    Outline,
     Act,
     Chapter,
+    Character,
+    LorebookEntry,
+    Location,
     Manuscript,
-    Project,
+    Organization,
+    Outline,
     UserSettings,
 )
-from ..models.translation_models import ObjectVersion
 from ..models.rag_models import RagChunk, RagSource
+from ..models.translation_models import ObjectVersion
 from .embedding_config_service import get_embedding_profile, set_embedding_dimensions
-from .rag_chunker import (
-    merge_blocks_by_length,
-    split_markdown_blocks,
-    split_plaintext_blocks,
-)
+from .rag_chunker import merge_blocks_by_length, split_markdown_blocks, split_plaintext_blocks
 from .rag_embedding_service import embed_many
 from .rag_text_extractors import extract_index_text
 
 
 STORY_OBJECT_TYPES = {"basic_info", "guidelines", "character", "organization", "location", "lorebook"}
-OUTLINE_TYPES = {"outline", "act", "chapter"}
-MANUSCRIPT_TYPES = {"manuscript"}
-
-TYPE_GROUP_ORDER = ["story_object", "outline", "manuscript"]
-
 EXCLUDED_OBJECT_TYPES = {"basic_info", "guidelines"}
 
 MIN_CHARS = 200
 TARGET_CHARS = 600
 MAX_CHARS = 1200
-
 
 _WS_RE = re.compile(r"[ \t]+")
 _MULTI_NL_RE = re.compile(r"\n{3,}")
@@ -64,6 +52,14 @@ class OrderMeta:
 
 
 @dataclass(frozen=True)
+class CurrentPayload:
+    has_indexable_text: bool
+    chunks: List[Dict[str, Any]]
+    embedding_texts: List[str]
+    current_hash: Optional[str]
+
+
+@dataclass(frozen=True)
 class PreparedIndexJob:
     user_id: UUID
     project_id: UUID
@@ -71,7 +67,6 @@ class PreparedIndexJob:
     object_id: UUID
     language: str
     order_meta: OrderMeta
-    version_number: int
     new_hash: str
     chunks: List[Dict[str, Any]]
     embedding_texts: List[str]
@@ -99,18 +94,17 @@ def normalize_for_hash(text: str) -> str:
 
 def compute_chunks_hash(chunks: List[Dict[str, Any]]) -> str:
     parts: List[str] = []
-    for c in chunks:
-        field_path = c.get("field_path")
-        chunk_index = c.get("chunk_index")
-        text = c.get("text")
+    for chunk in chunks:
+        field_path = chunk.get("field_path")
+        chunk_index = chunk.get("chunk_index")
+        text = chunk.get("text")
         if not isinstance(field_path, str) or not isinstance(chunk_index, int) or not isinstance(text, str):
             continue
-        t = normalize_for_hash(text)
-        if not t:
+        normalized = normalize_for_hash(text)
+        if not normalized:
             continue
-        parts.append(f"[{field_path}:{chunk_index}]\n{t}\n")
-    payload = "\n".join(parts).encode("utf-8")
-    return sha256(payload).hexdigest()
+        parts.append(f"[{field_path}:{chunk_index}]\n{normalized}\n")
+    return sha256("\n".join(parts).encode("utf-8")).hexdigest()
 
 
 def chunk_fields(text_by_field: Dict[str, str]) -> List[Dict[str, Any]]:
@@ -122,11 +116,7 @@ def chunk_fields(text_by_field: Dict[str, str]) -> List[Dict[str, Any]]:
         if not raw:
             continue
 
-        if field_path == "doc":
-            blocks = split_plaintext_blocks(raw)
-        else:
-            blocks = split_markdown_blocks(raw)
-
+        blocks = split_plaintext_blocks(raw) if field_path == "doc" else split_markdown_blocks(raw)
         merged = merge_blocks_by_length(
             blocks,
             min_chars=MIN_CHARS,
@@ -181,14 +171,51 @@ def _latest_version(db: Session, *, object_type: str, object_id: UUID) -> Option
     )
 
 
+def _latest_versions_for_refs(
+    db: Session,
+    *,
+    refs: Sequence[Tuple[str, UUID]],
+) -> Dict[Tuple[str, UUID], ObjectVersion]:
+    by_type: Dict[str, List[UUID]] = {}
+    for object_type, object_id in refs:
+        by_type.setdefault(object_type, []).append(object_id)
+
+    latest_versions: Dict[Tuple[str, UUID], ObjectVersion] = {}
+    for object_type, object_ids in by_type.items():
+        if not object_ids:
+            continue
+        subq = (
+            db.query(
+                ObjectVersion.object_id.label("object_id"),
+                func.max(ObjectVersion.version_number).label("max_version"),
+            )
+            .filter(ObjectVersion.object_type == object_type, ObjectVersion.object_id.in_(object_ids))
+            .group_by(ObjectVersion.object_id)
+            .subquery()
+        )
+
+        rows = (
+            db.query(ObjectVersion)
+            .join(
+                subq,
+                and_(
+                    ObjectVersion.object_id == subq.c.object_id,
+                    ObjectVersion.version_number == subq.c.max_version,
+                ),
+            )
+            .filter(ObjectVersion.object_type == object_type)
+            .all()
+        )
+        for row in rows:
+            latest_versions[(object_type, row.object_id)] = row
+
+    return latest_versions
+
+
 def compute_order_meta(db: Session, *, project_id: UUID, object_type: str, object_id: UUID) -> OrderMeta:
     if object_type in STORY_OBJECT_TYPES:
         story_object_order: Optional[int] = None
-        if object_type == "basic_info":
-            story_object_order = 0
-        elif object_type == "guidelines":
-            story_object_order = 0
-        elif object_type == "character":
+        if object_type == "character":
             row = db.query(Character).filter(Character.id == object_id, Character.project_id == project_id).first()
             story_object_order = (row.order if row else 0) or 0
         elif object_type == "organization":
@@ -200,6 +227,8 @@ def compute_order_meta(db: Session, *, project_id: UUID, object_type: str, objec
         elif object_type == "lorebook":
             row = db.query(LorebookEntry).filter(LorebookEntry.id == object_id, LorebookEntry.project_id == project_id).first()
             story_object_order = (row.order if row else 0) or 0
+        else:
+            story_object_order = 0
 
         return OrderMeta(
             type_group="story_object",
@@ -243,7 +272,7 @@ def compute_order_meta(db: Session, *, project_id: UUID, object_type: str, objec
         )
 
     if object_type == "manuscript":
-        ms = (
+        manuscript = (
             db.query(Manuscript)
             .join(Chapter, Chapter.id == Manuscript.chapter_id)
             .join(Act, Act.id == Chapter.act_id)
@@ -251,18 +280,123 @@ def compute_order_meta(db: Session, *, project_id: UUID, object_type: str, objec
             .filter(Manuscript.id == object_id, Outline.project_id == project_id)
             .first()
         )
-        if not ms or not ms.chapter or not ms.chapter.act or not ms.chapter.act.outline:
+        if not manuscript or not manuscript.chapter or not manuscript.chapter.act or not manuscript.chapter.act.outline:
             return OrderMeta(type_group="manuscript")
         return OrderMeta(
             type_group="manuscript",
-            outline_order=ms.chapter.act.outline.order,
-            act_order=ms.chapter.act.order,
-            chapter_order=ms.chapter.order,
-            chapter_id=ms.chapter_id,
+            outline_order=manuscript.chapter.act.outline.order,
+            act_order=manuscript.chapter.act.order,
+            chapter_order=manuscript.chapter.order,
+            chapter_id=manuscript.chapter_id,
         )
 
-    # Fallback: treat unknown types as story_object
     return OrderMeta(type_group="story_object", story_object_type=object_type, story_object_order=0)
+
+
+def _build_current_payload(
+    *,
+    object_type: str,
+    latest: Optional[ObjectVersion],
+    language: str,
+) -> CurrentPayload:
+    if latest is None or not isinstance(latest.data, dict):
+        return CurrentPayload(has_indexable_text=False, chunks=[], embedding_texts=[], current_hash=None)
+
+    text_by_field = extract_index_text(object_type, latest.data, language)
+    if not text_by_field:
+        return CurrentPayload(has_indexable_text=False, chunks=[], embedding_texts=[], current_hash=None)
+    if not any((value or "").strip() for value in text_by_field.values()):
+        return CurrentPayload(has_indexable_text=False, chunks=[], embedding_texts=[], current_hash=None)
+
+    chunks, embedding_texts, current_hash = _build_embedding_payloads(
+        object_type=object_type,
+        text_by_field=text_by_field,
+    )
+    if not chunks:
+        return CurrentPayload(has_indexable_text=False, chunks=[], embedding_texts=[], current_hash=None)
+
+    return CurrentPayload(
+        has_indexable_text=True,
+        chunks=chunks,
+        embedding_texts=embedding_texts,
+        current_hash=current_hash,
+    )
+
+
+def _find_source(
+    db: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+    object_type: str,
+    object_id: UUID,
+    language: str,
+) -> Optional[RagSource]:
+    return (
+        db.query(RagSource)
+        .filter(
+            RagSource.user_id == user_id,
+            RagSource.project_id == project_id,
+            RagSource.object_type == object_type,
+            RagSource.object_id == object_id,
+            RagSource.language == language,
+        )
+        .first()
+    )
+
+
+def _delete_source_rows(
+    db: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+    object_type: str,
+    object_id: UUID,
+    language: str,
+) -> int:
+    deleted = (
+        db.query(RagSource)
+        .filter(
+            RagSource.user_id == user_id,
+            RagSource.project_id == project_id,
+            RagSource.object_type == object_type,
+            RagSource.object_id == object_id,
+            RagSource.language == language,
+        )
+        .delete(synchronize_session=False)
+    )
+    return int(deleted or 0)
+
+
+def invalidate_object_index(
+    db: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+    object_type: str,
+    object_id: UUID,
+) -> int:
+    language = get_main_language(db, user_id=user_id)
+    return _delete_source_rows(
+        db,
+        user_id=user_id,
+        project_id=project_id,
+        object_type=object_type,
+        object_id=object_id,
+        language=language,
+    )
+
+
+def _source_has_chunks(db: Session, *, source_id: UUID) -> bool:
+    row = db.query(RagChunk.source_id).filter(RagChunk.source_id == source_id).first()
+    return row is not None
+
+
+def _clear_source_index_payload(source: RagSource) -> None:
+    source.content_hash = None
+    source.indexed_provider = None
+    source.indexed_model = None
+    source.indexed_at = None
 
 
 def _upsert_source(
@@ -275,16 +409,13 @@ def _upsert_source(
     language: str,
     order_meta: OrderMeta,
 ) -> RagSource:
-    source = (
-        db.query(RagSource)
-        .filter(
-            RagSource.user_id == user_id,
-            RagSource.project_id == project_id,
-            RagSource.object_type == object_type,
-            RagSource.object_id == object_id,
-            RagSource.language == language,
-        )
-        .first()
+    source = _find_source(
+        db,
+        user_id=user_id,
+        project_id=project_id,
+        object_type=object_type,
+        object_id=object_id,
+        language=language,
     )
     if not source:
         source = RagSource(
@@ -300,12 +431,10 @@ def _upsert_source(
             act_order=order_meta.act_order,
             chapter_order=order_meta.chapter_order,
             chapter_id=order_meta.chapter_id,
-            index_state="ready",
         )
         db.add(source)
         db.flush()
 
-    # Always refresh ordering metadata
     source.type_group = order_meta.type_group
     source.story_object_type = order_meta.story_object_type
     source.story_object_order = order_meta.story_object_order
@@ -325,20 +454,82 @@ def delete_object_index(
     object_type: str,
     object_id: UUID,
 ) -> int:
-    language = get_main_language(db, user_id=user_id)
-    deleted = (
-        db.query(RagSource)
-        .filter(
-            RagSource.user_id == user_id,
-            RagSource.project_id == project_id,
-            RagSource.object_type == object_type,
-            RagSource.object_id == object_id,
-            RagSource.language == language,
-        )
-        .delete(synchronize_session=False)
+    deleted = invalidate_object_index(
+        db,
+        user_id=user_id,
+        project_id=project_id,
+        object_type=object_type,
+        object_id=object_id,
     )
     db.commit()
-    return int(deleted or 0)
+    return deleted
+
+
+def _source_matches_current_index(
+    source: RagSource,
+    *,
+    current_hash: Optional[str],
+    provider: str,
+    model: str,
+) -> bool:
+    if not current_hash:
+        return False
+    return (
+        source.content_hash == current_hash
+        and source.indexed_provider == provider
+        and source.indexed_model == model
+    )
+
+
+def _record_index_error(
+    db: Session,
+    *,
+    prepared: PreparedIndexJob,
+    message: str,
+    current_hash: Optional[str],
+    preserve_searchable: bool,
+) -> None:
+    source = _find_source(
+        db,
+        user_id=prepared.user_id,
+        project_id=prepared.project_id,
+        object_type=prepared.object_type,
+        object_id=prepared.object_id,
+        language=prepared.language,
+    )
+
+    should_preserve = False
+    if source and preserve_searchable and _source_has_chunks(db, source_id=source.id):
+        should_preserve = _source_matches_current_index(
+            source,
+            current_hash=current_hash,
+            provider=prepared.provider,
+            model=prepared.model,
+        )
+
+    if not should_preserve:
+        source = _upsert_source(
+            db,
+            user_id=prepared.user_id,
+            project_id=prepared.project_id,
+            object_type=prepared.object_type,
+            object_id=prepared.object_id,
+            language=prepared.language,
+            order_meta=prepared.order_meta,
+        )
+        db.query(RagChunk).filter(RagChunk.source_id == source.id).delete(synchronize_session=False)
+        _clear_source_index_payload(source)
+
+    if source is None:
+        db.commit()
+        return
+
+    source.last_attempted_hash = current_hash
+    source.last_attempted_provider = prepared.provider
+    source.last_attempted_model = prepared.model
+    source.last_error_at = datetime.utcnow()
+    source.last_error_message = message
+    db.commit()
 
 
 def _prepare_index_job(
@@ -359,55 +550,43 @@ def _prepare_index_job(
 
     language = get_main_language(db, user_id=user_id)
     latest = _latest_version(db, object_type=object_type, object_id=object_id)
-    order_meta = compute_order_meta(db, project_id=project_id, object_type=object_type, object_id=object_id)
-    source = _upsert_source(
+    payload = _build_current_payload(object_type=object_type, latest=latest, language=language)
+
+    if not payload.has_indexable_text:
+        _delete_source_rows(
+            db,
+            user_id=user_id,
+            project_id=project_id,
+            object_type=object_type,
+            object_id=object_id,
+            language=language,
+        )
+        db.commit()
+        return None, {"rebuilt": False, "skipped": True, "missing_main_language": True}
+
+    existing_source = _find_source(
         db,
         user_id=user_id,
         project_id=project_id,
         object_type=object_type,
         object_id=object_id,
         language=language,
-        order_meta=order_meta,
     )
-
-    if not latest or not isinstance(latest.data, dict):
-        source.index_state = "error"
-        source.indexed_at = datetime.utcnow()
+    if (
+        existing_source
+        and not force
+        and _source_has_chunks(db, source_id=existing_source.id)
+        and _source_matches_current_index(
+            existing_source,
+            current_hash=payload.current_hash,
+            provider=str(profile["provider"]),
+            model=str(profile["model"]),
+        )
+    ):
         db.commit()
         return None, {"rebuilt": False, "skipped": True, "missing_main_language": False}
 
-    text_by_field = extract_index_text(object_type, latest.data, language)
-    lang_blob_missing = not text_by_field
-    has_no_content = lang_blob_missing or not any(v.strip() for v in text_by_field.values())
-    if has_no_content:
-        source.index_state = "missing_main_language" if lang_blob_missing else "ready"
-        source.version_number = latest.version_number
-        source.content_hash = None
-        source.indexed_at = datetime.utcnow()
-        db.query(RagChunk).filter(RagChunk.source_id == source.id).delete(synchronize_session=False)
-        db.commit()
-        return None, {"rebuilt": False, "skipped": True, "missing_main_language": lang_blob_missing}
-
-    chunks, embedding_texts, new_hash = _build_embedding_payloads(
-        object_type=object_type,
-        text_by_field=text_by_field,
-    )
-    if not chunks:
-        source.index_state = "ready"
-        source.version_number = latest.version_number
-        source.content_hash = compute_chunks_hash([])
-        source.indexed_at = datetime.utcnow()
-        db.query(RagChunk).filter(RagChunk.source_id == source.id).delete(synchronize_session=False)
-        db.commit()
-        return None, {"rebuilt": False, "skipped": True, "missing_main_language": False}
-
-    if (not force) and source.content_hash == new_hash:
-        source.index_state = "ready"
-        source.version_number = latest.version_number
-        source.indexed_at = datetime.utcnow()
-        db.commit()
-        return None, {"rebuilt": False, "skipped": True, "missing_main_language": False}
-
+    order_meta = compute_order_meta(db, project_id=project_id, object_type=object_type, object_id=object_id)
     prepared = PreparedIndexJob(
         user_id=user_id,
         project_id=project_id,
@@ -415,15 +594,13 @@ def _prepare_index_job(
         object_id=object_id,
         language=language,
         order_meta=order_meta,
-        version_number=int(latest.version_number),
-        new_hash=new_hash,
-        chunks=chunks,
-        embedding_texts=embedding_texts,
+        new_hash=str(payload.current_hash),
+        chunks=payload.chunks,
+        embedding_texts=payload.embedding_texts,
         provider=str(profile["provider"]),
         model=str(profile["model"]),
         stored_dimensions=profile.get("dimensions"),
     )
-    # End the current transaction before awaiting outbound embedding calls.
     db.commit()
     return prepared, None
 
@@ -434,56 +611,36 @@ def _apply_index_vectors(
     prepared: PreparedIndexJob,
     vectors: List[List[float]],
 ) -> Dict[str, Any]:
-    latest = _latest_version(db, object_type=prepared.object_type, object_id=prepared.object_id)
-    order_meta = compute_order_meta(
-        db,
-        project_id=prepared.project_id,
-        object_type=prepared.object_type,
-        object_id=prepared.object_id,
-    )
-    source = _upsert_source(
-        db,
-        user_id=prepared.user_id,
-        project_id=prepared.project_id,
-        object_type=prepared.object_type,
-        object_id=prepared.object_id,
-        language=prepared.language,
-        order_meta=order_meta,
-    )
-
-    current_text_by_field = (
-        extract_index_text(prepared.object_type, latest.data, prepared.language)
-        if latest and isinstance(latest.data, dict)
-        else {}
-    )
-    current_chunks, _current_embedding_texts, current_hash = _build_embedding_payloads(
-        object_type=prepared.object_type,
-        text_by_field=current_text_by_field,
-    )
-    if (
-        latest is None
-        or not isinstance(latest.data, dict)
-        or int(latest.version_number) != prepared.version_number
-        or current_hash != prepared.new_hash
-        or not current_chunks
-    ):
+    current_profile = get_embedding_profile(db, user_id=prepared.user_id, feature="ragSearch")
+    if not current_profile:
         db.commit()
-        return {
-            "rebuilt": False,
-            "skipped": True,
-            "missing_main_language": False,
-            "stale": True,
-        }
+        return {"rebuilt": False, "skipped": True, "missing_main_language": False, "stale": True}
+    if current_profile.get("provider") != prepared.provider or current_profile.get("model") != prepared.model:
+        db.commit()
+        return {"rebuilt": False, "skipped": True, "missing_main_language": False, "stale": True}
+
+    latest = _latest_version(db, object_type=prepared.object_type, object_id=prepared.object_id)
+    payload = _build_current_payload(
+        object_type=prepared.object_type,
+        latest=latest,
+        language=prepared.language,
+    )
+    if not payload.has_indexable_text or payload.current_hash != prepared.new_hash:
+        db.commit()
+        return {"rebuilt": False, "skipped": True, "missing_main_language": False, "stale": True}
 
     if not vectors:
-        source.index_state = "error"
-        source.version_number = latest.version_number
-        source.indexed_at = datetime.utcnow()
-        db.commit()
+        _record_index_error(
+            db,
+            prepared=prepared,
+            message="Embedding provider returned no vectors",
+            current_hash=payload.current_hash,
+            preserve_searchable=True,
+        )
         return {"rebuilt": False, "skipped": True, "missing_main_language": False}
 
     embedding_dim = len(vectors[0])
-    if any(len(v) != embedding_dim for v in vectors):
+    if any(len(vector) != embedding_dim for vector in vectors):
         raise RuntimeError("Embedding vectors have inconsistent dimensions")
 
     if prepared.stored_dimensions is None:
@@ -492,6 +649,16 @@ def _apply_index_vectors(
         raise RuntimeError(
             f"Embedding dimensions mismatch (profile={prepared.stored_dimensions}, got={embedding_dim})"
         )
+
+    source = _upsert_source(
+        db,
+        user_id=prepared.user_id,
+        project_id=prepared.project_id,
+        object_type=prepared.object_type,
+        object_id=prepared.object_id,
+        language=prepared.language,
+        order_meta=prepared.order_meta,
+    )
 
     db.query(RagChunk).filter(RagChunk.source_id == source.id).delete(synchronize_session=False)
     for chunk, vector in zip(prepared.chunks, vectors):
@@ -506,37 +673,17 @@ def _apply_index_vectors(
             )
         )
 
-    source.index_state = "ready"
-    source.version_number = latest.version_number
     source.content_hash = prepared.new_hash
+    source.indexed_provider = prepared.provider
+    source.indexed_model = prepared.model
     source.indexed_at = datetime.utcnow()
+    source.last_attempted_hash = None
+    source.last_attempted_provider = None
+    source.last_attempted_model = None
+    source.last_error_at = None
+    source.last_error_message = None
     db.commit()
     return {"rebuilt": True, "skipped": False, "missing_main_language": False}
-
-
-def _mark_index_error(
-    db: Session,
-    *,
-    prepared: PreparedIndexJob,
-) -> None:
-    order_meta = compute_order_meta(
-        db,
-        project_id=prepared.project_id,
-        object_type=prepared.object_type,
-        object_id=prepared.object_id,
-    )
-    source = _upsert_source(
-        db,
-        user_id=prepared.user_id,
-        project_id=prepared.project_id,
-        object_type=prepared.object_type,
-        object_id=prepared.object_id,
-        language=prepared.language,
-        order_meta=order_meta,
-    )
-    source.index_state = "error"
-    source.indexed_at = datetime.utcnow()
-    db.commit()
 
 
 async def index_object(
@@ -570,17 +717,27 @@ async def index_object(
             config=provider_config,
             purpose="document",
         )
+        return _apply_index_vectors(db, prepared=prepared, vectors=vectors)
     except Exception as exc:
-        _mark_index_error(db, prepared=prepared)
+        latest = _latest_version(db, object_type=prepared.object_type, object_id=prepared.object_id)
+        payload = _build_current_payload(
+            object_type=prepared.object_type,
+            latest=latest,
+            language=prepared.language,
+        )
+        _record_index_error(
+            db,
+            prepared=prepared,
+            message=str(exc),
+            current_hash=payload.current_hash,
+            preserve_searchable=True,
+        )
         raise
-    return _apply_index_vectors(db, prepared=prepared, vectors=vectors)
 
 
 def _project_object_refs(db: Session, *, project_id: UUID) -> List[Tuple[str, UUID]]:
-    """Return (object_type, object_id) pairs for a project."""
     refs: List[Tuple[str, UUID]] = []
 
-    # Story objects (order within group is deterministic but not critical for indexing)
     for row in db.query(Character).filter(Character.project_id == project_id).order_by(Character.order.asc()).all():
         refs.append(("character", row.id))
     for row in db.query(Organization).filter(Organization.project_id == project_id).order_by(Organization.order.asc()).all():
@@ -590,7 +747,6 @@ def _project_object_refs(db: Session, *, project_id: UUID) -> List[Tuple[str, UU
     for row in db.query(LorebookEntry).filter(LorebookEntry.project_id == project_id).order_by(LorebookEntry.order.asc()).all():
         refs.append(("lorebook", row.id))
 
-    # Outline items
     outlines = db.query(Outline).filter(Outline.project_id == project_id).order_by(Outline.order.asc()).all()
     for outline in outlines:
         refs.append(("outline", outline.id))
@@ -598,12 +754,42 @@ def _project_object_refs(db: Session, *, project_id: UUID) -> List[Tuple[str, UU
             refs.append(("act", act.id))
             for chapter in db.query(Chapter).filter(Chapter.act_id == act.id).order_by(Chapter.order.asc()).all():
                 refs.append(("chapter", chapter.id))
-
-                ms = db.query(Manuscript).filter(Manuscript.chapter_id == chapter.id).first()
-                if ms:
-                    refs.append(("manuscript", ms.id))
+                manuscript = db.query(Manuscript).filter(Manuscript.chapter_id == chapter.id).first()
+                if manuscript:
+                    refs.append(("manuscript", manuscript.id))
 
     return refs
+
+
+def _load_project_sources(
+    db: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+    language: str,
+) -> Dict[Tuple[str, UUID], RagSource]:
+    rows = (
+        db.query(RagSource)
+        .filter(
+            RagSource.user_id == user_id,
+            RagSource.project_id == project_id,
+            RagSource.language == language,
+        )
+        .all()
+    )
+    return {(row.object_type, row.object_id): row for row in rows}
+
+
+def _load_chunked_source_ids(db: Session, *, source_ids: Sequence[UUID]) -> set[UUID]:
+    if not source_ids:
+        return set()
+    rows = (
+        db.query(RagChunk.source_id)
+        .filter(RagChunk.source_id.in_(list(source_ids)))
+        .distinct()
+        .all()
+    )
+    return {row[0] for row in rows if row and isinstance(row[0], UUID)}
 
 
 async def reindex_project(
@@ -619,9 +805,7 @@ async def reindex_project(
         raise ValueError("RAG embedding profile is not configured")
 
     refs = _project_object_refs(db, project_id=project_id)
-
-    # Clean up orphaned sources for objects that no longer exist
-    current_ref_set = {(ot, oid) for ot, oid in refs}
+    current_ref_set = {(object_type, object_id) for object_type, object_id in refs}
     existing_sources = (
         db.query(RagSource)
         .filter(RagSource.user_id == user_id, RagSource.project_id == project_id)
@@ -647,7 +831,6 @@ async def reindex_project(
             provider_config=provider_config,
             force=force,
         )
-
         indexed_sources += 1
         if result.get("missing_main_language"):
             missing_main_language_sources += 1
@@ -665,30 +848,83 @@ async def reindex_project(
 
 
 def get_project_status(db: Session, *, user_id: UUID, project_id: UUID) -> Dict[str, Any]:
-    base_filters = [
-        RagSource.user_id == user_id,
-        RagSource.project_id == project_id,
-    ]
-
-    total_sources = db.query(RagSource).filter(*base_filters).count()
-    ready_sources = db.query(RagSource).filter(*base_filters, RagSource.index_state == "ready").count()
-    missing_sources = db.query(RagSource).filter(*base_filters, RagSource.index_state == "missing_main_language").count()
-    error_sources = db.query(RagSource).filter(*base_filters, RagSource.index_state == "error").count()
-
-    last_indexed = (
-        db.query(RagSource.indexed_at)
-        .filter(*base_filters, RagSource.indexed_at.isnot(None))
-        .order_by(RagSource.indexed_at.desc())
-        .first()
-    )
-
+    refs = _project_object_refs(db, project_id=project_id)
+    total_sources = len(refs)
+    language = get_main_language(db, user_id=user_id)
     profile = get_embedding_profile(db, user_id=user_id, feature="ragSearch")
+
+    sources = _load_project_sources(db, user_id=user_id, project_id=project_id, language=language)
+    chunked_source_ids = _load_chunked_source_ids(
+        db,
+        source_ids=[source.id for source in sources.values()],
+    )
+    latest_versions = _latest_versions_for_refs(db, refs=refs)
+
+    ready_sources = 0
+    stale_sources = 0
+    unindexed_sources = 0
+    missing_sources = 0
+    error_sources = 0
+
+    current_provider = str(profile["provider"]) if profile else None
+    current_model = str(profile["model"]) if profile else None
+
+    for object_type, object_id in refs:
+        payload = _build_current_payload(
+            object_type=object_type,
+            latest=latest_versions.get((object_type, object_id)),
+            language=language,
+        )
+        if not payload.has_indexable_text:
+            missing_sources += 1
+            continue
+
+        if not current_provider or not current_model:
+            unindexed_sources += 1
+            continue
+
+        source = sources.get((object_type, object_id))
+        if source is None:
+            unindexed_sources += 1
+            continue
+
+        has_chunks = source.id in chunked_source_ids
+        provider_match = source.indexed_provider == current_provider and source.indexed_model == current_model
+        content_match = source.content_hash == payload.current_hash
+
+        if has_chunks:
+            if provider_match and content_match:
+                ready_sources += 1
+            else:
+                stale_sources += 1
+            continue
+
+        attempted_match = (
+            source.last_attempted_hash == payload.current_hash
+            and source.last_attempted_provider == current_provider
+            and source.last_attempted_model == current_model
+        )
+        if source.last_error_at is not None and attempted_match:
+            error_sources += 1
+        else:
+            unindexed_sources += 1
+
+    last_indexed = max(
+        (
+            source.indexed_at
+            for source in sources.values()
+            if source.id in chunked_source_ids and source.indexed_at is not None
+        ),
+        default=None,
+    )
 
     return {
         "profile": profile,
         "total_sources": total_sources,
         "ready_sources": ready_sources,
+        "stale_sources": stale_sources,
+        "unindexed_sources": unindexed_sources,
         "missing_main_language_sources": missing_sources,
         "error_sources": error_sources,
-        "last_indexed_at": last_indexed[0].isoformat() if last_indexed and last_indexed[0] else None,
+        "last_indexed_at": last_indexed.isoformat() if last_indexed else None,
     }
