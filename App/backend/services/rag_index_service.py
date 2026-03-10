@@ -63,6 +63,23 @@ class OrderMeta:
     chapter_id: Optional[UUID] = None
 
 
+@dataclass(frozen=True)
+class PreparedIndexJob:
+    user_id: UUID
+    project_id: UUID
+    object_type: str
+    object_id: UUID
+    language: str
+    order_meta: OrderMeta
+    version_number: int
+    new_hash: str
+    chunks: List[Dict[str, Any]]
+    embedding_texts: List[str]
+    provider: str
+    model: str
+    stored_dimensions: int | None
+
+
 def wipe_user_index(db: Session, *, user_id: UUID) -> None:
     db.query(RagSource).filter(RagSource.user_id == user_id).delete(synchronize_session=False)
 
@@ -122,6 +139,37 @@ def chunk_fields(text_by_field: Dict[str, str]) -> List[Dict[str, Any]]:
             chunk_index += 1
 
     return chunks
+
+
+def _build_embedding_payloads(
+    *,
+    object_type: str,
+    text_by_field: Dict[str, str],
+) -> tuple[List[Dict[str, Any]], List[str], str]:
+    chunks = chunk_fields(text_by_field)
+    if not chunks:
+        return [], [], compute_chunks_hash([])
+
+    name_prefix: Optional[str] = None
+    if object_type in STORY_OBJECT_TYPES and object_type not in EXCLUDED_OBJECT_TYPES:
+        name_prefix = (text_by_field.get("name") or "").strip() or None
+
+    embedding_texts: List[str] = []
+    hash_chunks: List[Dict[str, Any]] = []
+    for chunk in chunks:
+        embed_text = chunk["text"]
+        if name_prefix and chunk["field_path"] in ("content", "description"):
+            embed_text = f"{name_prefix}\n\n{embed_text}"
+        embedding_texts.append(embed_text)
+        hash_chunks.append(
+            {
+                "field_path": chunk["field_path"],
+                "chunk_index": chunk["chunk_index"],
+                "text": embed_text,
+            }
+        )
+
+    return chunks, embedding_texts, compute_chunks_hash(hash_chunks)
 
 
 def _latest_version(db: Session, *, object_type: str, object_id: UUID) -> Optional[ObjectVersion]:
@@ -293,18 +341,17 @@ def delete_object_index(
     return int(deleted or 0)
 
 
-async def index_object(
+def _prepare_index_job(
     db: Session,
     *,
     user_id: UUID,
     project_id: UUID,
     object_type: str,
     object_id: UUID,
-    provider_config: Dict[str, Any],
-    force: bool = False,
-) -> Dict[str, Any]:
+    force: bool,
+) -> tuple[PreparedIndexJob | None, Dict[str, Any] | None]:
     if object_type in EXCLUDED_OBJECT_TYPES:
-        return {"rebuilt": False, "skipped": True, "missing_main_language": False}
+        return None, {"rebuilt": False, "skipped": True, "missing_main_language": False}
 
     profile = get_embedding_profile(db, user_id=user_id, feature="ragSearch")
     if not profile:
@@ -312,7 +359,6 @@ async def index_object(
 
     language = get_main_language(db, user_id=user_id)
     latest = _latest_version(db, object_type=object_type, object_id=object_id)
-
     order_meta = compute_order_meta(db, project_id=project_id, object_type=object_type, object_id=object_id)
     source = _upsert_source(
         db,
@@ -328,7 +374,7 @@ async def index_object(
         source.index_state = "error"
         source.indexed_at = datetime.utcnow()
         db.commit()
-        return {"rebuilt": False, "skipped": True, "missing_main_language": False}
+        return None, {"rebuilt": False, "skipped": True, "missing_main_language": False}
 
     text_by_field = extract_index_text(object_type, latest.data, language)
     lang_blob_missing = not text_by_field
@@ -340,9 +386,12 @@ async def index_object(
         source.indexed_at = datetime.utcnow()
         db.query(RagChunk).filter(RagChunk.source_id == source.id).delete(synchronize_session=False)
         db.commit()
-        return {"rebuilt": False, "skipped": True, "missing_main_language": lang_blob_missing}
+        return None, {"rebuilt": False, "skipped": True, "missing_main_language": lang_blob_missing}
 
-    chunks = chunk_fields(text_by_field)
+    chunks, embedding_texts, new_hash = _build_embedding_payloads(
+        object_type=object_type,
+        text_by_field=text_by_field,
+    )
     if not chunks:
         source.index_state = "ready"
         source.version_number = latest.version_number
@@ -350,37 +399,81 @@ async def index_object(
         source.indexed_at = datetime.utcnow()
         db.query(RagChunk).filter(RagChunk.source_id == source.id).delete(synchronize_session=False)
         db.commit()
-        return {"rebuilt": False, "skipped": True, "missing_main_language": False}
-
-    name_prefix: Optional[str] = None
-    if object_type in STORY_OBJECT_TYPES and object_type not in EXCLUDED_OBJECT_TYPES:
-        name_prefix = (text_by_field.get("name") or "").strip() or None
-
-    embedding_texts: List[str] = []
-    hash_chunks: List[Dict[str, Any]] = []
-    for c in chunks:
-        embed_text = c["text"]
-        if name_prefix and c["field_path"] in ("content", "description"):
-            embed_text = f"{name_prefix}\n\n{embed_text}"
-        embedding_texts.append(embed_text)
-        hash_chunks.append({"field_path": c["field_path"], "chunk_index": c["chunk_index"], "text": embed_text})
-
-    new_hash = compute_chunks_hash(hash_chunks)
+        return None, {"rebuilt": False, "skipped": True, "missing_main_language": False}
 
     if (not force) and source.content_hash == new_hash:
         source.index_state = "ready"
         source.version_number = latest.version_number
         source.indexed_at = datetime.utcnow()
         db.commit()
-        return {"rebuilt": False, "skipped": True, "missing_main_language": False}
+        return None, {"rebuilt": False, "skipped": True, "missing_main_language": False}
 
-    vectors = await embed_many(
-        provider=profile["provider"],
-        model=profile["model"],
-        inputs=embedding_texts,
-        config=provider_config,
-        purpose="document",
+    prepared = PreparedIndexJob(
+        user_id=user_id,
+        project_id=project_id,
+        object_type=object_type,
+        object_id=object_id,
+        language=language,
+        order_meta=order_meta,
+        version_number=int(latest.version_number),
+        new_hash=new_hash,
+        chunks=chunks,
+        embedding_texts=embedding_texts,
+        provider=str(profile["provider"]),
+        model=str(profile["model"]),
+        stored_dimensions=profile.get("dimensions"),
     )
+    # End the current transaction before awaiting outbound embedding calls.
+    db.commit()
+    return prepared, None
+
+
+def _apply_index_vectors(
+    db: Session,
+    *,
+    prepared: PreparedIndexJob,
+    vectors: List[List[float]],
+) -> Dict[str, Any]:
+    latest = _latest_version(db, object_type=prepared.object_type, object_id=prepared.object_id)
+    order_meta = compute_order_meta(
+        db,
+        project_id=prepared.project_id,
+        object_type=prepared.object_type,
+        object_id=prepared.object_id,
+    )
+    source = _upsert_source(
+        db,
+        user_id=prepared.user_id,
+        project_id=prepared.project_id,
+        object_type=prepared.object_type,
+        object_id=prepared.object_id,
+        language=prepared.language,
+        order_meta=order_meta,
+    )
+
+    current_text_by_field = (
+        extract_index_text(prepared.object_type, latest.data, prepared.language)
+        if latest and isinstance(latest.data, dict)
+        else {}
+    )
+    current_chunks, _current_embedding_texts, current_hash = _build_embedding_payloads(
+        object_type=prepared.object_type,
+        text_by_field=current_text_by_field,
+    )
+    if (
+        latest is None
+        or not isinstance(latest.data, dict)
+        or int(latest.version_number) != prepared.version_number
+        or current_hash != prepared.new_hash
+        or not current_chunks
+    ):
+        db.commit()
+        return {
+            "rebuilt": False,
+            "skipped": True,
+            "missing_main_language": False,
+            "stale": True,
+        }
 
     if not vectors:
         source.index_state = "error"
@@ -393,34 +486,94 @@ async def index_object(
     if any(len(v) != embedding_dim for v in vectors):
         raise RuntimeError("Embedding vectors have inconsistent dimensions")
 
-    # Auto-fill profile dimensions on first successful embed (stored in user settings)
-    stored_dim = profile.get("dimensions")
-    if stored_dim is None:
-        set_embedding_dimensions(db, user_id=user_id, feature="ragSearch", dimensions=embedding_dim)
-    elif stored_dim != embedding_dim:
-        raise RuntimeError(f"Embedding dimensions mismatch (profile={stored_dim}, got={embedding_dim})")
+    if prepared.stored_dimensions is None:
+        set_embedding_dimensions(db, user_id=prepared.user_id, feature="ragSearch", dimensions=embedding_dim)
+    elif prepared.stored_dimensions != embedding_dim:
+        raise RuntimeError(
+            f"Embedding dimensions mismatch (profile={prepared.stored_dimensions}, got={embedding_dim})"
+        )
 
-    # Rebuild chunks
     db.query(RagChunk).filter(RagChunk.source_id == source.id).delete(synchronize_session=False)
-    for c, vec in zip(chunks, vectors):
+    for chunk, vector in zip(prepared.chunks, vectors):
         db.add(
             RagChunk(
                 source_id=source.id,
-                field_path=c["field_path"],
-                chunk_index=c["chunk_index"],
-                text=c["text"],
-                embedding=vec,
+                field_path=chunk["field_path"],
+                chunk_index=chunk["chunk_index"],
+                text=chunk["text"],
+                embedding=vector,
                 embedding_dim=embedding_dim,
             )
         )
 
     source.index_state = "ready"
     source.version_number = latest.version_number
-    source.content_hash = new_hash
+    source.content_hash = prepared.new_hash
     source.indexed_at = datetime.utcnow()
-
     db.commit()
     return {"rebuilt": True, "skipped": False, "missing_main_language": False}
+
+
+def _mark_index_error(
+    db: Session,
+    *,
+    prepared: PreparedIndexJob,
+) -> None:
+    order_meta = compute_order_meta(
+        db,
+        project_id=prepared.project_id,
+        object_type=prepared.object_type,
+        object_id=prepared.object_id,
+    )
+    source = _upsert_source(
+        db,
+        user_id=prepared.user_id,
+        project_id=prepared.project_id,
+        object_type=prepared.object_type,
+        object_id=prepared.object_id,
+        language=prepared.language,
+        order_meta=order_meta,
+    )
+    source.index_state = "error"
+    source.indexed_at = datetime.utcnow()
+    db.commit()
+
+
+async def index_object(
+    db: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+    object_type: str,
+    object_id: UUID,
+    provider_config: Dict[str, Any],
+    force: bool = False,
+) -> Dict[str, Any]:
+    prepared, immediate_result = _prepare_index_job(
+        db,
+        user_id=user_id,
+        project_id=project_id,
+        object_type=object_type,
+        object_id=object_id,
+        force=force,
+    )
+    if immediate_result is not None:
+        return immediate_result
+    if prepared is None:
+        return {"rebuilt": False, "skipped": True, "missing_main_language": False}
+
+    try:
+        vectors = await embed_many(
+            provider=prepared.provider,
+            model=prepared.model,
+            inputs=prepared.embedding_texts,
+            config=provider_config,
+            purpose="document",
+        )
+    except Exception as exc:
+        _mark_index_error(db, prepared=prepared)
+        raise
+    return _apply_index_vectors(db, prepared=prepared, vectors=vectors)
 
 
 def _project_object_refs(db: Session, *, project_id: UUID) -> List[Tuple[str, UUID]]:

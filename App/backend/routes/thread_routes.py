@@ -769,7 +769,7 @@ def _extract_outline_metadata(object_type: str, args: dict) -> dict | None:
 
 def _mark_tc_failed_by_id(db: Session, tc_id: UUID, reason: str) -> None:
     tc = db.query(RunToolCallModel).filter(RunToolCallModel.id == tc_id).first()
-    if tc and tc.status == "applied":
+    if tc and tc.status in {"applied", "processing"}:
         tc.status = "failed"
         tc.reason = reason
         tc.result = {"success": False, "message": reason, "error": reason}
@@ -795,7 +795,7 @@ async def _execute_batched_patch_group(
 
     manuscript_batch = ManuscriptBatch()
     object_patch_batch = ObjectPatchBatch()
-    results: list[tuple[UUID, dict]] = []
+    result_order: list[UUID] = []
 
     db = SessionLocal()
     try:
@@ -823,7 +823,7 @@ async def _execute_batched_patch_group(
             # --- Reject path ---
             if item.decision == "reject":
                 if tc.status in {"rejected", "applied", "failed"}:
-                    results.append((item.tool_call_id, {"tool_call": _serialize_tool_call(tc)}))
+                    result_order.append(item.tool_call_id)
                     continue
                 if tc.status in {"processing", "working"}:
                     raise HTTPException(status_code=409, detail="Cannot reject in-progress tool call")
@@ -833,7 +833,7 @@ async def _execute_batched_patch_group(
                 tc.reason = item.reason
                 tc.updated_at = datetime.utcnow()
                 db.flush()
-                results.append((item.tool_call_id, {"tool_call": _serialize_tool_call(tc)}))
+                result_order.append(item.tool_call_id)
                 modified_tc_ids.append(item.tool_call_id)
                 continue
 
@@ -841,7 +841,7 @@ async def _execute_batched_patch_group(
             if item.decision != "accept":
                 raise HTTPException(status_code=422, detail="Invalid decision")
             if tc.status in {"applied", "failed", "processing", "working"}:
-                results.append((item.tool_call_id, {"tool_call": _serialize_tool_call(tc)}))
+                result_order.append(item.tool_call_id)
                 continue
             if tc.status not in {"pending", "validating", "streaming"}:
                 raise HTTPException(status_code=409, detail=f"Cannot accept tool call in status={tc.status}")
@@ -934,6 +934,7 @@ async def _execute_batched_patch_group(
                         field=str(args.get("field") or ""),
                         old_text=str(args.get("old") or ""),
                         new_text=str(args.get("new") or ""),
+                        call_id=str(tc.id),
                         create_new_version=create_new_version,
                         user_id=user_id,
                         metadata=metadata,
@@ -968,6 +969,7 @@ async def _execute_batched_patch_group(
                         object_id=obj_id,
                         language=language,
                         fields=fields,
+                        call_id=str(tc.id),
                         create_new_version=create_new_version,
                         user_id=user_id,
                         metadata=metadata,
@@ -991,7 +993,7 @@ async def _execute_batched_patch_group(
 
             tc.updated_at = datetime.utcnow()
             db.flush()
-            results.append((item.tool_call_id, {"tool_call": _serialize_tool_call(tc)}))
+            result_order.append(item.tool_call_id)
 
         # --- Flush batches (1 sidecar roundtrip + 1 DB write per unique object) ---
         if manuscript_batch.has_pending:
@@ -1007,11 +1009,15 @@ async def _execute_batched_patch_group(
                         _mark_tc_failed_by_id(db, UUID(call_id_str), status.reason or "flush failed")
 
         if object_patch_batch.has_pending:
-            object_patch_batch.flush_all(
+            flush_results, key_to_call_ids = object_patch_batch.flush_all(
                 db=db,
                 object_service=object_service,
                 created_by=user_id,
             )
+            for key, status in flush_results.items():
+                if not status.success:
+                    for call_id_str in key_to_call_ids.get(key, set()):
+                        _mark_tc_failed_by_id(db, UUID(call_id_str), status.reason or "flush failed")
 
         # --- Sync run/thread status + commit ---
         if run_id is not None:
@@ -1019,11 +1025,13 @@ async def _execute_batched_patch_group(
         db.commit()
 
         # --- Emit SSE events (final statuses) ---
-        for tc_id, _ in results:
+        final_results: list[tuple[UUID, dict]] = []
+        for tc_id in result_order:
             tc = db.query(RunToolCallModel).filter(RunToolCallModel.id == tc_id).first()
             if tc:
                 db.refresh(tc)
                 await _emit_tool_call_status(thread=thread, tool_call=tc)
+                final_results.append((tc_id, {"tool_call": _serialize_tool_call(tc)}))
         if run_id is not None:
             run = db.query(RunModel).filter(RunModel.id == run_id).first()
             if run:
@@ -1033,7 +1041,7 @@ async def _execute_batched_patch_group(
     finally:
         db.close()
 
-    return results
+    return final_results
 
 
 @router.post("/threads/{thread_id}/tool-calls/decisions", response_model=ToolCallBatchDecisionResponse)

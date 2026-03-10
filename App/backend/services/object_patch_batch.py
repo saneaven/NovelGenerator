@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from .object_service import ObjectService
 from .patch_utils import apply_single_replacement
 from .tool_engine.modules.common_object_helpers import extract_lang_data, read_object
+
+if TYPE_CHECKING:
+    from .object_service import ObjectService
 
 
 @dataclass
@@ -21,6 +23,13 @@ class ObjectPatchState:
     user_id: UUID | None
     data: dict[str, Any]
     metadata: dict[str, Any] | None = None
+    touched_call_ids: set[str] = field(default_factory=set)
+
+
+@dataclass
+class FlushStatus:
+    success: bool
+    reason: str | None = None
 
 
 class ObjectPatchBatch:
@@ -79,6 +88,7 @@ class ObjectPatchBatch:
         field: str,
         old_text: str,
         new_text: str,
+        call_id: str,
         create_new_version: bool,
         user_id: UUID | None,
         metadata: dict[str, Any] | None = None,
@@ -101,6 +111,7 @@ class ObjectPatchBatch:
             return {"success": False, "reason": result.reason or result.code or "Patch failed"}
 
         state.data[field] = result.content
+        state.touched_call_ids.add(call_id)
         return {"success": True}
 
     def apply_replace(
@@ -112,6 +123,7 @@ class ObjectPatchBatch:
         object_id: UUID,
         language: str,
         fields: dict[str, Any],
+        call_id: str,
         create_new_version: bool,
         user_id: UUID | None,
         metadata: dict[str, Any] | None = None,
@@ -130,26 +142,38 @@ class ObjectPatchBatch:
 
         for k, v in fields.items():
             state.data[k] = v
+        state.touched_call_ids.add(call_id)
         return {"success": True}
 
     def flush_all(
         self,
         *,
         db: Session,
-        object_service: ObjectService,
+        object_service: "ObjectService",
         created_by: UUID | None,
-    ) -> None:
-        for state in self._states.values():
-            object_service.update_object(
-                db,
-                project_id=state.project_id,
-                object_type=state.object_type,
-                object_id=state.object_id,
-                data=state.data,
-                language=state.language,
-                metadata=state.metadata,
-                user_request="tool:patch_batch",
-                created_by=created_by,
-                create_new_version=state.create_new_version,
-            )
+    ) -> tuple[dict[str, FlushStatus], dict[str, set[str]]]:
+        results: dict[str, FlushStatus] = {}
+        key_to_call_ids: dict[str, set[str]] = {}
+
+        for key, state in list(self._states.items()):
+            key_to_call_ids[key] = set(state.touched_call_ids)
+            try:
+                with db.begin_nested():
+                    object_service.update_object(
+                        db,
+                        project_id=state.project_id,
+                        object_type=state.object_type,
+                        object_id=state.object_id,
+                        data=state.data,
+                        language=state.language,
+                        metadata=state.metadata,
+                        user_request="tool:patch_batch",
+                        created_by=created_by,
+                        create_new_version=state.create_new_version,
+                    )
+                results[key] = FlushStatus(success=True)
+            except Exception as exc:  # noqa: BLE001
+                results[key] = FlushStatus(success=False, reason=str(exc))
+
         self._states.clear()
+        return results, key_to_call_ids
