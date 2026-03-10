@@ -34,40 +34,9 @@ export interface TaskAIConfig {
   advanced: AdvancedTaskSettings;
 }
 
-export interface ProviderPreferenceOverride {
-  only?: string[] | null;
-  ignore?: string[] | null;
-}
-
-export interface ThinkingConfigOverride {
-  effort?: ThinkingConfig['effort'];
-  max_tokens?: number | null;
-  gemini_thinking_level?: ThinkingConfig['gemini_thinking_level'];
-  gemini_budget_tokens?: number | null;
-}
-
-export interface AdvancedTaskSettingsOverride {
-  thinking_mode?: AdvancedTaskSettings['thinking_mode'] | null;
-  thinking_config?: ThinkingConfigOverride | null;
-  custom_thinking_template_id?: string | null;
-  tokenizer_override?: TokenizerOverride | null;
-  request_format?: RequestFormat | null;
-  verbosity?: 'low' | 'medium' | 'high' | null;
-}
-
-export interface TaskAIConfigOverride {
-  provider?: ProviderType | null;
-  model?: string | null;
-  temperature?: number | null;
-  provider_preference?: ProviderPreferenceOverride | null;
-  max_output_tokens?: number | null;
-  context_window_tokens?: number | null;
-  advanced?: AdvancedTaskSettingsOverride | null;
-}
-
 export interface TaskConfigSettings {
   general: TaskAIConfig;
-  overrides: Partial<Record<AITaskType, TaskAIConfigOverride>>;
+  overrides: Partial<Record<AITaskType, TaskAIConfig>>;
 }
 
 export const TASK_CONFIG_TASK_TYPES: AITaskType[] = [
@@ -78,28 +47,6 @@ export const TASK_CONFIG_TASK_TYPES: AITaskType[] = [
   'summary',
   'subAgent',
 ];
-
-function deepMerge<T>(base: T, override: unknown): T {
-  if (
-    base !== null &&
-    typeof base === 'object' &&
-    !Array.isArray(base) &&
-    override !== null &&
-    typeof override === 'object' &&
-    !Array.isArray(override)
-  ) {
-    const merged: Record<string, unknown> = { ...(base as Record<string, unknown>) };
-    for (const [key, value] of Object.entries(override as Record<string, unknown>)) {
-      if (key in merged) {
-        merged[key] = deepMerge(merged[key], value);
-      } else {
-        merged[key] = cloneValue(value);
-      }
-    }
-    return merged as T;
-  }
-  return cloneValue(override) as T;
-}
 
 function cloneValue<T>(value: T): T {
   if (value === null || value === undefined) return value;
@@ -112,69 +59,14 @@ function cloneValue<T>(value: T): T {
   return value;
 }
 
-function pruneEmptyObjects<T>(value: T): T {
-  if (Array.isArray(value)) {
-    return value.map((item) => pruneEmptyObjects(item)) as T;
-  }
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .map(([key, child]) => [key, pruneEmptyObjects(child)] as const)
-      .filter(([, child]) => !(child && typeof child === 'object' && !Array.isArray(child) && Object.keys(child).length === 0));
-    return Object.fromEntries(entries) as T;
-  }
-  return value;
-}
-
-function diffValues(base: unknown, effective: unknown): unknown {
-  if (
-    base !== null &&
-    typeof base === 'object' &&
-    !Array.isArray(base) &&
-    effective !== null &&
-    typeof effective === 'object' &&
-    !Array.isArray(effective)
-  ) {
-    const patch: Record<string, unknown> = {};
-    const keys = new Set([
-      ...Object.keys(base as Record<string, unknown>),
-      ...Object.keys(effective as Record<string, unknown>),
-    ]);
-
-    for (const key of keys) {
-      const baseRecord = base as Record<string, unknown>;
-      const effectiveRecord = effective as Record<string, unknown>;
-      if (!(key in effectiveRecord)) {
-        patch[key] = null;
-        continue;
-      }
-      if (!(key in baseRecord)) {
-        patch[key] = cloneValue(effectiveRecord[key]);
-        continue;
-      }
-
-      const child = diffValues(baseRecord[key], effectiveRecord[key]);
-      if (child !== NO_DIFF) {
-        patch[key] = child;
-      }
-    }
-
-    return Object.keys(patch).length > 0 ? patch : NO_DIFF;
-  }
-
-  return Object.is(base, effective) ? NO_DIFF : cloneValue(effective);
-}
-
-const NO_DIFF = Symbol('NO_DIFF');
-
 function normalizeTaskConfigSettingsInternal(settings: TaskConfigSettings): TaskConfigSettings {
   const general = normalizeEffectiveTaskConfig(settings.general);
-  const overrides: Partial<Record<AITaskType, TaskAIConfigOverride>> = {};
+  const overrides: Partial<Record<AITaskType, TaskAIConfig>> = {};
 
   for (const taskType of TASK_CONFIG_TASK_TYPES) {
     const override = settings.overrides[taskType];
     if (!override) continue;
-    const effective = normalizeEffectiveTaskConfig(deepMerge(general, override));
-    overrides[taskType] = diffTaskOverride(general, effective);
+    overrides[taskType] = normalizeEffectiveTaskConfig(override);
   }
 
   return {
@@ -215,24 +107,15 @@ export function normalizeEffectiveTaskConfig(config: TaskAIConfig): TaskAIConfig
   return normalized;
 }
 
-export function diffTaskOverride(general: TaskAIConfig, effective: TaskAIConfig): TaskAIConfigOverride {
-  const patch = diffValues(normalizeEffectiveTaskConfig(general), normalizeEffectiveTaskConfig(effective));
-  if (patch === NO_DIFF) {
-    return {};
-  }
-  return pruneEmptyObjects(patch as TaskAIConfigOverride);
-}
-
 export function resolveTaskConfig(settings: TaskConfigSettings, taskType: AITaskType): TaskAIConfig {
   const normalized = normalizeTaskConfigSettingsInternal(settings);
-  const override = normalized.overrides[taskType] ?? {};
-  return normalizeEffectiveTaskConfig(deepMerge(normalized.general, override));
+  return cloneValue(normalized.overrides[taskType] ?? normalized.general);
 }
 
 export function resolveAllTaskConfigs(settings: TaskConfigSettings): Record<AITaskType, TaskAIConfig> {
   const normalized = normalizeTaskConfigSettingsInternal(settings);
   return Object.fromEntries(
-    TASK_CONFIG_TASK_TYPES.map((taskType) => [taskType, resolveTaskConfig(normalized, taskType)])
+    TASK_CONFIG_TASK_TYPES.map((taskType) => [taskType, cloneValue(normalized.overrides[taskType] ?? normalized.general)])
   ) as Record<AITaskType, TaskAIConfig>;
 }
 
@@ -240,6 +123,6 @@ export function hasTaskOverride(settings: TaskConfigSettings, taskType: AITaskTy
   return Object.prototype.hasOwnProperty.call(settings.overrides, taskType);
 }
 
-export function getTaskOverride(settings: TaskConfigSettings, taskType: AITaskType): TaskAIConfigOverride | undefined {
+export function getTaskOverride(settings: TaskConfigSettings, taskType: AITaskType): TaskAIConfig | undefined {
   return settings.overrides[taskType];
 }

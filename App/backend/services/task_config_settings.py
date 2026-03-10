@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from ..schemas.settings import TaskAIConfig, TaskAIConfigOverride, TaskConfigSettings
+from ..schemas.settings import TaskAIConfig, TaskConfigSettings
 
 
 TASK_CONFIG_TASK_TYPES: tuple[str, ...] = (
@@ -35,60 +35,6 @@ INITIAL_TASK_CONFIG_SETTINGS_FOR_NEW_USER: dict[str, Any] = {
 
 def make_initial_task_config_settings() -> dict[str, Any]:
     return deepcopy(INITIAL_TASK_CONFIG_SETTINGS_FOR_NEW_USER)
-
-
-def _deep_merge(base: Any, override: Any) -> Any:
-    if isinstance(base, dict) and isinstance(override, dict):
-        merged = deepcopy(base)
-        for key, value in override.items():
-            if key in merged:
-                merged[key] = _deep_merge(merged[key], value)
-            else:
-                merged[key] = deepcopy(value)
-        return merged
-    return deepcopy(override)
-
-
-def _prune_empty_dicts(value: Any) -> Any:
-    if isinstance(value, dict):
-        pruned: dict[str, Any] = {}
-        for key, child in value.items():
-            child_pruned = _prune_empty_dicts(child)
-            if isinstance(child_pruned, dict) and not child_pruned:
-                continue
-            pruned[key] = child_pruned
-        return pruned
-    if isinstance(value, list):
-        return [deepcopy(item) for item in value]
-    return deepcopy(value)
-
-
-def _diff_values(base: Any, effective: Any) -> Any:
-    if isinstance(base, dict) and isinstance(effective, dict):
-        patch: dict[str, Any] = {}
-        for key in sorted(set(base.keys()) | set(effective.keys())):
-            if key not in effective:
-                patch[key] = None
-                continue
-            if key not in base:
-                patch[key] = deepcopy(effective[key])
-                continue
-
-            child = _diff_values(base[key], effective[key])
-            if child is not _NO_DIFF:
-                patch[key] = child
-        return patch if patch else _NO_DIFF
-
-    if base == effective:
-        return _NO_DIFF
-    return deepcopy(effective)
-
-
-class _NoDiff:
-    pass
-
-
-_NO_DIFF = _NoDiff()
 
 
 def normalize_effective_task_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -128,17 +74,6 @@ def normalize_effective_task_config(config: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def diff_task_override(general: dict[str, Any], effective: dict[str, Any]) -> dict[str, Any]:
-    general_normalized = normalize_effective_task_config(general)
-    effective_normalized = normalize_effective_task_config(effective)
-    patch = _diff_values(general_normalized, effective_normalized)
-    if patch is _NO_DIFF:
-        return {}
-    if not isinstance(patch, dict):
-        raise ValueError("Task config override diff must be an object")
-    return _prune_empty_dicts(patch)
-
-
 def _validate_effective_task_config_semantics(config: dict[str, Any]) -> None:
     provider = config.get("provider")
     advanced = config.get("advanced")
@@ -164,8 +99,8 @@ def validate_task_config_settings(task_config_settings: dict[str, Any]) -> dict[
     _validate_effective_task_config_semantics(normalized["general"])
 
     for task_type in TASK_CONFIG_TASK_TYPES:
+        resolved = resolve_task_config(normalized, task_type)
         try:
-            resolved = resolve_task_config(normalized, task_type)
             TaskAIConfig.model_validate(resolved)
         except ValidationError as exc:
             raise ValueError(f"Invalid task config for {task_type}: {exc}") from exc
@@ -196,12 +131,13 @@ def normalize_task_config_settings(task_config_settings: dict[str, Any]) -> dict
             raise ValueError(f"Override for {task_type} must be an object")
 
         try:
-            TaskAIConfigOverride.model_validate(override)
+            TaskAIConfig.model_validate(override)
         except ValidationError as exc:
             raise ValueError(f"Invalid override for {task_type}: {exc}") from exc
 
-        effective = normalize_effective_task_config(_deep_merge(normalized_general, override))
-        normalized_overrides[task_type] = diff_task_override(normalized_general, effective)
+        normalized_override = normalize_effective_task_config(override)
+        _validate_effective_task_config_semantics(normalized_override)
+        normalized_overrides[task_type] = normalized_override
 
     return {
         "general": normalized_general,
@@ -214,14 +150,15 @@ def resolve_task_config(task_config_settings: dict[str, Any], task_type: str) ->
         raise ValueError(f"Unknown task type: {task_type}")
 
     normalized = normalize_task_config_settings(task_config_settings)
-    override = normalized["overrides"].get(task_type, {})
-    effective = _deep_merge(normalized["general"], override)
-    return normalize_effective_task_config(effective)
+    override = normalized["overrides"].get(task_type)
+    if override is not None:
+        return deepcopy(override)
+    return deepcopy(normalized["general"])
 
 
 def resolve_all_task_configs(task_config_settings: dict[str, Any]) -> dict[str, dict[str, Any]]:
     normalized = normalize_task_config_settings(task_config_settings)
     return {
-        task_type: resolve_task_config(normalized, task_type)
+        task_type: deepcopy(normalized["overrides"].get(task_type, normalized["general"]))
         for task_type in TASK_CONFIG_TASK_TYPES
     }

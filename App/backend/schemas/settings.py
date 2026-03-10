@@ -108,59 +108,16 @@ class TaskAIConfig(BaseModel):
     context_window_tokens: Optional[int] = Field(default=None, ge=1024, le=1000000)
     advanced: AdvancedTaskSettings
 
-class ProviderPreferenceOverride(BaseModel):
-    """Partial OpenRouter provider filtering override."""
-    model_config = ConfigDict(extra="forbid")
-
-    only: Optional[List[str]] = None
-    ignore: Optional[List[str]] = None
-
-
-class ThinkingConfigOverride(BaseModel):
-    """Partial thinking configuration override."""
-    model_config = ConfigDict(extra="forbid")
-
-    effort: Optional[Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]] = None
-    max_tokens: Optional[int] = Field(default=None, ge=1)
-    gemini_thinking_level: Optional[str] = None
-    gemini_budget_tokens: Optional[int] = Field(default=None, ge=0)
-
-
-class AdvancedTaskSettingsOverride(BaseModel):
-    """Partial advanced task settings override."""
-    model_config = ConfigDict(extra="forbid")
-
-    thinking_mode: Optional[Literal["off", "model", "custom"]] = None
-    thinking_config: Optional[ThinkingConfigOverride] = None
-    custom_thinking_template_id: Optional[str] = None
-    tokenizer_override: Optional[Literal["openai", "claude", "gemini"]] = None
-    request_format: Optional[Literal["openai_sdk", "claude_sdk", "openai_responses"]] = None
-    verbosity: Optional[Literal["low", "medium", "high"]] = None
-
-
-class TaskAIConfigOverride(BaseModel):
-    """Partial AI task configuration override."""
-    model_config = ConfigDict(extra="forbid", use_enum_values=True)
-
-    provider: Optional[ProviderType] = None
-    model: Optional[str] = Field(default=None, min_length=1, max_length=200)
-    temperature: Optional[float] = Field(default=None, ge=0, le=2)
-    provider_preference: Optional[ProviderPreferenceOverride] = None
-    max_output_tokens: Optional[int] = Field(default=None, ge=1, le=1000000)
-    context_window_tokens: Optional[int] = Field(default=None, ge=1024, le=1000000)
-    advanced: Optional[AdvancedTaskSettingsOverride] = None
-
-
 class TaskConfigSettings(BaseModel):
     """General task config plus per-task overrides."""
     model_config = ConfigDict(extra="forbid")
 
     general: TaskAIConfig
-    overrides: Dict[str, TaskAIConfigOverride] = Field(default_factory=dict)
+    overrides: Dict[str, TaskAIConfig] = Field(default_factory=dict)
 
     @field_validator("overrides")
     @classmethod
-    def validate_override_keys(cls, value: Dict[str, TaskAIConfigOverride]) -> Dict[str, TaskAIConfigOverride]:
+    def validate_override_keys(cls, value: Dict[str, TaskAIConfig]) -> Dict[str, TaskAIConfig]:
         allowed = {member.value for member in AITaskType}
         unknown = [key for key in value.keys() if key not in allowed]
         if unknown:

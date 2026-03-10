@@ -20,7 +20,6 @@ export type {
     ProviderType,
     RequestFormat,
     TaskAIConfig,
-    TaskAIConfigOverride,
     TaskConfigSettings,
     TokenizerOverride,
     ThinkingConfig,

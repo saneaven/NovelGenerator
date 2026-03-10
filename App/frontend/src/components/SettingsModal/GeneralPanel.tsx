@@ -4,7 +4,6 @@ import { IconButton } from '../IconButton';
 import type { AITaskType, CustomThinkingTemplate, TaskConfigSettings } from '../../store/settingsStore';
 import {
   TASK_CONFIG_TASK_TYPES,
-  diffTaskOverride,
   hasTaskOverride,
   normalizeEffectiveTaskConfig,
   resolveAllTaskConfigs,
@@ -76,24 +75,16 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
   const activeOverrideEnabled = activeTaskType ? hasTaskOverride(taskConfigSettings, activeTaskType) : false;
 
   const handleGeneralChange = (nextGeneralConfig: typeof taskConfigSettings.general) => {
-    const normalizedGeneral = normalizeEffectiveTaskConfig(nextGeneralConfig);
-    const nextOverrides = { ...taskConfigSettings.overrides };
-
-    for (const taskType of TASK_CONFIG_TASK_TYPES) {
-      if (!hasTaskOverride(taskConfigSettings, taskType)) continue;
-      nextOverrides[taskType] = diffTaskOverride(normalizedGeneral, resolvedTaskConfigs[taskType]);
-    }
-
     onTaskConfigSettingsChange({
-      general: normalizedGeneral,
-      overrides: nextOverrides,
+      ...taskConfigSettings,
+      general: normalizeEffectiveTaskConfig(nextGeneralConfig),
     });
   };
 
   const handleOverrideToggle = (taskType: AITaskType, enabled: boolean) => {
     const nextOverrides = { ...taskConfigSettings.overrides };
     if (enabled) {
-      nextOverrides[taskType] = nextOverrides[taskType] ?? {};
+      nextOverrides[taskType] = nextOverrides[taskType] ?? normalizeEffectiveTaskConfig(taskConfigSettings.general);
     } else {
       delete nextOverrides[taskType];
     }
@@ -108,7 +99,7 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
       ...taskConfigSettings,
       overrides: {
         ...taskConfigSettings.overrides,
-        [taskType]: diffTaskOverride(taskConfigSettings.general, normalizeEffectiveTaskConfig(nextEffectiveConfig)),
+        [taskType]: normalizeEffectiveTaskConfig(nextEffectiveConfig),
       },
     });
   };
