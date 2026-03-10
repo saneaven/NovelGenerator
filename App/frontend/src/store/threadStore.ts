@@ -66,17 +66,6 @@ export interface ThreadState {
     entry: ThreadMessage['data'][string],
   ) => void;
 
-  addMessageTranslation: (
-    threadId: string,
-    messageId: string,
-    language: string,
-    entry: ThreadMessage['data'][string],
-  ) => void;
-  clearMessageTranslations: (
-    threadId: string,
-    messageId: string,
-    preserveLanguages: string[],
-  ) => void;
 
   upsertToolCall: (toolCall: ThreadToolCall) => void;
   patchToolCall: (toolCallId: string, partial: Partial<ThreadToolCall>) => void;
@@ -535,40 +524,6 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
           [threadId]: msgs.map((m) =>
             m.id === messageId ? { ...m, data: { ...m.data, [language]: entry } } : m,
           ),
-        },
-      };
-    }),
-
-  addMessageTranslation: (threadId, messageId, language, entry) =>
-    set((s) => {
-      const msgs = s.messagesByThreadId[threadId];
-      if (!msgs) return s;
-      return {
-        messagesByThreadId: {
-          ...s.messagesByThreadId,
-          [threadId]: msgs.map((m) =>
-            m.id === messageId ? { ...m, data: { ...m.data, [language]: entry } } : m,
-          ),
-        },
-      };
-    }),
-
-  clearMessageTranslations: (threadId, messageId, preserveLanguages) =>
-    set((s) => {
-      const msgs = s.messagesByThreadId[threadId];
-      if (!msgs) return s;
-      const preserveSet = new Set(preserveLanguages);
-      return {
-        messagesByThreadId: {
-          ...s.messagesByThreadId,
-          [threadId]: msgs.map((m) => {
-            if (m.id !== messageId) return m;
-            const filtered: typeof m.data = {};
-            for (const [lang, entry] of Object.entries(m.data)) {
-              if (preserveSet.has(lang)) filtered[lang] = entry;
-            }
-            return { ...m, data: filtered };
-          }),
         },
       };
     }),

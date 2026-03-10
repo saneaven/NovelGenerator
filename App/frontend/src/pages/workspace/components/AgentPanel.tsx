@@ -555,6 +555,25 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   }, [selectedAgentId, threadId]);
 
   useEffect(() => {
+    if (!secondaryLanguage) return;
+    setTranslatingByMessageId((prev) => {
+      const keys = Object.keys(prev).filter((k) => prev[k]);
+      if (keys.length === 0) return prev;
+      const next: Record<string, boolean> = {};
+      let changed = false;
+      for (const msgId of keys) {
+        const msg = orderedMessages.find((m) => m.id === msgId);
+        if (msg && msg.data[secondaryLanguage]) {
+          changed = true;
+        } else {
+          next[msgId] = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [orderedMessages, secondaryLanguage]);
+
+  useEffect(() => {
     hydratedThreadIdsRef.current.clear();
   }, [projectId]);
 
@@ -777,9 +796,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     if (!threadId || !secondaryLanguage) return;
     const text = sourceContent.trim();
     if (!text) return;
-    if (translatingByMessageId[message.id]) return;
 
-    setTranslatingByMessageId((prev) => ({ ...prev, [message.id]: true }));
+    let alreadyTranslating = false;
+    setTranslatingByMessageId((prev) => {
+      if (prev[message.id]) {
+        alreadyTranslating = true;
+        return prev;
+      }
+      return { ...prev, [message.id]: true };
+    });
+    if (alreadyTranslating) return;
+
     try {
       await runMessageTranslation({
         projectId,
@@ -791,10 +818,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       });
     } catch (error: any) {
       showAlert({ title: 'Translation Failed', message: error?.message ?? 'Failed to translate message.' });
-    } finally {
       setTranslatingByMessageId((prev) => ({ ...prev, [message.id]: false }));
     }
-  }, [threadId, projectId, primaryLanguage, secondaryLanguage, translatingByMessageId]);
+  }, [threadId, projectId, primaryLanguage, secondaryLanguage]);
 
   const handleDeleteSingleToolCall = useCallback(async (toolCallId: string) => {
     if (!threadId) {
