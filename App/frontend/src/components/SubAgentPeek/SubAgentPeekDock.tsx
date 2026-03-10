@@ -8,7 +8,7 @@ import { useFunctionCallUIStore } from '../../toolCall/ui/store';
 import { TextButton } from '../TextButton';
 import { SubAgentPeekHeader } from './SubAgentPeekHeader';
 import { SubAgentPeekTimeline } from './SubAgentPeekTimeline';
-import { cancelThread, resumeThread } from '../../runtime/threadCommands';
+import { cancelThread, pauseThread, resumeThread } from '../../runtime/threadCommands';
 import './subAgentPeek.css';
 
 interface ChildEntry {
@@ -192,7 +192,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   }, [childEntries, orderedKeys, selectedKey, prioritizedKeys]);
 
   const { t } = useTranslation();
-  const [actionInFlight, setActionInFlight] = useState<'pause' | 'retry' | 'cancel' | null>(null);
+  const [actionInFlight, setActionInFlight] = useState<'pause' | 'resume' | 'retry' | 'cancel' | null>(null);
 
   const selectedChildThreadId = selectedEntry?.childThreadId;
 
@@ -202,14 +202,26 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   }, [selectedChildThreadId]);
 
   const selectedThreadStatus = selectedEntry?.thread.status ?? 'done';
+  const selectedPendingCount = selectedEntry ? (pendingCountByKey[selectedEntry.key] ?? 0) : 0;
   const isBlocking = isBlockingThreadStatus(selectedThreadStatus);
 
   const handlePause = useCallback(() => {
     if (actionInFlight || !selectedChildThreadId) return;
     setActionInFlight('pause');
-    const op = cancelThread({ threadId: selectedChildThreadId });
+    const op = pauseThread({ threadId: selectedChildThreadId });
     void op.finally(() => setActionInFlight(null));
   }, [actionInFlight, selectedChildThreadId]);
+
+  const handleResume = useCallback(() => {
+    if (actionInFlight || !selectedChildThreadId) return;
+    setActionInFlight('resume');
+    const op = resumeThread({
+      threadId: selectedChildThreadId,
+      projectId,
+      threadType: 'subAgent',
+    });
+    void op.finally(() => setActionInFlight(null));
+  }, [actionInFlight, selectedChildThreadId, projectId]);
 
   const handleRetry = useCallback(() => {
     if (actionInFlight || !selectedChildThreadId) return;
@@ -261,7 +273,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
       {showFooter && (
         <div className="sub-agent-peek-dock__footer">
-          {(selectedThreadStatus === 'running' || selectedThreadStatus === 'waiting') && (
+          {(selectedThreadStatus === 'running' || selectedThreadStatus === 'waiting' || selectedThreadStatus === 'processing') && (
             <TextButton
               size="sm"
               variant="secondary"
@@ -272,7 +284,29 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
               {t('subAgent.pause')}
             </TextButton>
           )}
-          {(selectedThreadStatus === 'paused' || selectedThreadStatus === 'error') && (
+          {selectedThreadStatus === 'paused' && (
+            <>
+              <TextButton
+                size="sm"
+                variant="primary"
+                onClick={handleResume}
+                disabled={actionInFlight !== null || selectedPendingCount > 0}
+                loading={actionInFlight === 'resume'}
+              >
+                {t('common.resume')}
+              </TextButton>
+              <TextButton
+                size="sm"
+                variant="warning"
+                onClick={handleCancel}
+                disabled={actionInFlight !== null}
+                loading={actionInFlight === 'cancel'}
+              >
+                {t('common.cancel')}
+              </TextButton>
+            </>
+          )}
+          {selectedThreadStatus === 'error' && (
             <>
               <TextButton
                 size="sm"

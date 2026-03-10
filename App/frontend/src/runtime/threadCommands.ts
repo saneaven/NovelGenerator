@@ -23,6 +23,10 @@ export interface CancelThreadParams {
   threadId: string;
 }
 
+export interface PauseThreadParams {
+  threadId: string;
+}
+
 export interface DecideToolCallParams {
   threadId: string;
   toolCallId: string;
@@ -188,7 +192,25 @@ export async function resumeThread(params: ResumeThreadParams): Promise<boolean>
   return true;
 }
 
+export async function pauseThread(params: PauseThreadParams): Promise<void> {
+  const store = useThreadStore.getState();
+  store.setAutoContinuePaused(params.threadId, true);
+  try {
+    await threadService.pauseThread(params.threadId);
+    store.setThreadRuntime(params.threadId, {
+      status: 'paused',
+      latestRunStatus: 'paused',
+      updatedAt: nowIso(),
+    });
+    store.setThreadStreamActive(params.threadId, false);
+  } catch (error) {
+    store.setAutoContinuePaused(params.threadId, false);
+    throw error;
+  }
+}
+
 export async function cancelThread(params: CancelThreadParams): Promise<void> {
+  useThreadStore.getState().setAutoContinuePaused(params.threadId, false);
   await threadService.cancelThread(params.threadId);
 }
 

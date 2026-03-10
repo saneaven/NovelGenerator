@@ -209,7 +209,8 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
           .filter((tc): tc is ThreadToolCall => Boolean(tc))
           .map(toToolCallMetadata);
         const isLatestAssistant = message.role === 'assistant' && String(message.id) === lastAssistantMessageId;
-        const waitingDecision = isLatestAssistant && threadStatus === 'waiting';
+        const isPendingDecisionState = isLatestAssistant && (threadStatus === 'waiting' || threadStatus === 'paused');
+        const allowApplyAndPause = isLatestAssistant && threadStatus === 'waiting';
         const cards = toolCalls.length > 0 ? buildEditCardsFromToolCallMetadata(toolCalls) : [];
         const hasPendingCards = cards.some((card) => hasPendingStatus(String(card.toolCall.status)));
         const showApplyingBanner = isApplying && isLatestAssistant && hasPendingCards;
@@ -242,15 +243,15 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
                   <FunctionCallsThread
                     threadId={childThreadId}
                     scopeKey={`${childThreadId}:message:${message.id}`}
-                    mode={waitingDecision && hasPendingCards ? 'pending' : 'confirmed'}
+                    mode={isPendingDecisionState && hasPendingCards ? 'pending' : 'confirmed'}
                     cards={cards}
                     onCommitDecisions={
-                      waitingDecision && hasPendingCards
+                      isPendingDecisionState && hasPendingCards
                         ? handleConfirm
                         : undefined
                     }
                     onCommitDecisionsAndPause={
-                      waitingDecision && hasPendingCards
+                      allowApplyAndPause && hasPendingCards
                         ? handleConfirmAndPause
                         : undefined
                     }

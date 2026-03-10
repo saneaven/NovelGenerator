@@ -405,6 +405,57 @@ class RunPipeline:
             await self._spawn_task(run.id)
         return run
 
+    async def pause_run(self, *, thread_id: UUID, user_id: UUID) -> None:
+        async with self._thread_lock(thread_id):
+            db = self._db_factory()
+            run_id: UUID | None = None
+            project_id: UUID | None = None
+            try:
+                thread = (
+                    db.query(Thread)
+                    .filter(Thread.id == thread_id, Thread.user_id == user_id)
+                    .with_for_update()
+                    .first()
+                )
+                if thread is None:
+                    raise HTTPException(status_code=404, detail="Thread not found")
+                if thread.thread_type != "subAgent":
+                    raise HTTPException(status_code=409, detail="Only sub-agent threads can be paused")
+
+                run = (
+                    db.query(RunModel)
+                    .filter(RunModel.thread_id == thread.id)
+                    .order_by(RunModel.run_seq.desc())
+                    .first()
+                )
+                if run is None:
+                    raise HTTPException(status_code=409, detail="No run exists to pause")
+                if run.status == "paused":
+                    return
+                if run.status not in {"running", "waiting", "processing"}:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Run status '{run.status}' is not pausable",
+                    )
+
+                run_id = run.id
+                project_id = run.project_id
+                run.status = "paused"
+                thread.status = "paused"
+                db.commit()
+            finally:
+                db.close()
+
+            await self._cancel_task_and_wait(run_id, timeout_s=5.0)
+
+            if project_id is not None:
+                await self._emit(
+                    project_id=project_id,
+                    thread_id=thread_id,
+                    event_name="run:status",
+                    data={"run_id": str(run_id), "status": "paused"},
+                )
+
     async def cancel_run(self, *, thread_id: UUID, user_id: UUID) -> None:
         async with self._thread_lock(thread_id):
             # Find the latest active run for this thread.
@@ -418,7 +469,7 @@ class RunPipeline:
                     .filter(
                         Thread.id == thread_id,
                         Thread.user_id == user_id,
-                        RunModel.status.in_(["queued", "running", "waiting", "processing"]),
+                        RunModel.status.in_(["queued", "running", "waiting", "processing", "paused"]),
                     )
                     .order_by(RunModel.created_at.desc())
                     .first()
@@ -675,7 +726,7 @@ class RunPipeline:
             if thread is None:
                 return
 
-            if run.status == "canceled":
+            if run.status in {"canceled", "paused"}:
                 return
 
             await self._emit(
@@ -701,7 +752,7 @@ class RunPipeline:
 
             # Re-check cancellation after prompt assembly committed its transaction.
             db.refresh(run)
-            if run.status == "canceled":
+            if run.status in {"canceled", "paused"}:
                 return
 
             await llm_executor.run_llm(
@@ -723,7 +774,7 @@ class RunPipeline:
                 run = db.query(RunModel).filter(RunModel.id == run_id).first()
                 if run is not None:
                     thread = run.thread
-                    if run.status != "canceled":
+                    if run.status not in {"canceled", "paused"}:
                         run.status = "canceled"
                         if thread is not None:
                             thread.status = "canceled"

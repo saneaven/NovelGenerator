@@ -37,6 +37,7 @@ from ..services.notification_service import (
     upsert_notification,
 )
 from ..services.run_pipeline import run_pipeline
+from ..services.run_pipeline.status_logic import derive_run_status
 from ..services.tool_engine import tool_engine
 from ..services.sidecar_client import sidecar_client
 from ..services.reasoning.normalize import normalize_reasoning_detail
@@ -184,16 +185,7 @@ def _sync_run_thread_status(db: Session, *, run_id: UUID) -> tuple[RunModel | No
         .all()
     ]
 
-    if any(s == "pending" for s in statuses):
-        next_status = "waiting"
-    elif any(s in {"streaming", "validating", "processing", "working"} for s in statuses):
-        next_status = "processing"
-    elif any(s == "rejected" for s in statuses):
-        next_status = "paused"
-    elif statuses:
-        next_status = "done"
-    else:
-        next_status = run.status
+    next_status = derive_run_status(current_status=run.status, tool_call_statuses=statuses)
 
     run.status = next_status
     latest_run = (
@@ -1242,6 +1234,15 @@ async def cancel_thread(
     current_user: User = Depends(get_current_user),
 ):
     await run_pipeline.cancel_run(thread_id=thread_id, user_id=current_user.id)
+    return {"success": True}
+
+
+@router.post("/threads/{thread_id}/pause", status_code=200)
+async def pause_thread(
+    thread_id: UUID,
+    current_user: User = Depends(get_current_user),
+):
+    await run_pipeline.pause_run(thread_id=thread_id, user_id=current_user.id)
     return {"success": True}
 
 

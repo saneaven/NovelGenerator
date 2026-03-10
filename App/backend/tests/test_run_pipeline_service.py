@@ -16,6 +16,7 @@ from App.backend.providers.contracts import DeltaPayload, FinalToolCall
 from App.backend.providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from App.backend.services.run_pipeline import service as run_service
 from App.backend.services.run_pipeline.contracts import CreateContext
+from App.backend.services.run_pipeline.status_logic import derive_run_status
 from App.backend.services.template_engine import FragmentNotFoundError, format_template_error
 from App.backend.services.tool_engine.contracts import ToolOffer
 from App.backend.services.tool_engine.result_utils import invalid_result, valid_result
@@ -102,6 +103,48 @@ class FakePersistSession:
                 obj.created_at = datetime.utcnow()
             if getattr(obj, "updated_at", None) is None:
                 obj.updated_at = datetime.utcnow()
+
+
+class FakeActiveRunQuery:
+    def __init__(self, db: "FakeActiveRunDb", model: object) -> None:
+        self._db = db
+        self._model = model
+
+    def join(self, *_args: object, **_kwargs: object) -> "FakeActiveRunQuery":
+        return self
+
+    def filter(self, *_args: object, **_kwargs: object) -> "FakeActiveRunQuery":
+        return self
+
+    def with_for_update(self) -> "FakeActiveRunQuery":
+        return self
+
+    def order_by(self, *_args: object, **_kwargs: object) -> "FakeActiveRunQuery":
+        return self
+
+    def first(self) -> object:
+        if self._model is RunModel:
+            return self._db.run
+        if self._model is Thread:
+            return self._db.thread
+        raise AssertionError(f"Unexpected model query: {self._model!r}")
+
+
+class FakeActiveRunDb:
+    def __init__(self, *, run: RunModel, thread: Thread) -> None:
+        self.run = run
+        self.thread = thread
+        self.commits = 0
+        self.closed = 0
+
+    def query(self, model: object) -> FakeActiveRunQuery:
+        return FakeActiveRunQuery(self, model)
+
+    def commit(self) -> None:
+        self.commits += 1
+
+    def close(self) -> None:
+        self.closed += 1
 
 
 def _make_pipeline() -> tuple[run_service.RunPipeline, FakeEventDispatcher]:
@@ -411,3 +454,156 @@ def test_persist_tool_calls_with_mixed_id_index_deltas_does_not_create_unknown_t
     }
     assert rows[0].status == "pending"
     assert rows[0].reason is None
+
+
+@pytest.mark.parametrize(
+    ("tool_statuses", "expected"),
+    [
+        ([], "paused"),
+        (["applied"], "paused"),
+        (["pending"], "paused"),
+        (["processing"], "paused"),
+        (["rejected"], "paused"),
+        (["failed"], "paused"),
+    ],
+)
+def test_derive_run_status_keeps_paused_sticky(tool_statuses: list[str], expected: str) -> None:
+    assert derive_run_status(current_status="paused", tool_call_statuses=tool_statuses) == expected
+
+
+def test_pause_run_marks_sub_agent_paused_without_parent_completion(monkeypatch: pytest.MonkeyPatch) -> None:
+    thread = Thread(
+        id=uuid4(),
+        project_id=uuid4(),
+        user_id=uuid4(),
+        thread_type="subAgent",
+        status="running",
+    )
+    run = RunModel(
+        id=uuid4(),
+        thread_id=thread.id,
+        user_id=thread.user_id,
+        project_id=thread.project_id,
+        status="running",
+        language="English",
+        input_payload={},
+    )
+    run.thread = thread
+    fake_db = FakeActiveRunDb(run=run, thread=thread)
+    pipeline = run_service.RunPipeline(db_factory=lambda: fake_db, event_dispatcher=SimpleNamespace())  # type: ignore[arg-type]
+
+    canceled_run_ids: list[object] = []
+    emitted: list[tuple[str, dict[str, object]]] = []
+    parent_calls: list[tuple[object, object]] = []
+
+    async def _fake_cancel_task_and_wait(run_id: object, *, timeout_s: float = 5.0) -> bool:
+        _ = timeout_s
+        canceled_run_ids.append(run_id)
+        return True
+
+    async def _fake_emit(*, project_id: object, thread_id: object, event_name: str, data: dict[str, object]) -> None:
+        _ = project_id, thread_id
+        emitted.append((event_name, data))
+
+    async def _fake_complete_parent_tool_call(*args: object, **kwargs: object) -> None:
+        parent_calls.append((args, kwargs))
+
+    pipeline._cancel_task_and_wait = _fake_cancel_task_and_wait  # type: ignore[method-assign]
+    pipeline._emit = _fake_emit  # type: ignore[method-assign]
+    monkeypatch.setattr(run_service.tool_engine, "complete_parent_tool_call", _fake_complete_parent_tool_call)
+
+    asyncio.run(pipeline.pause_run(thread_id=thread.id, user_id=thread.user_id))
+
+    assert run.status == "paused"
+    assert thread.status == "paused"
+    assert canceled_run_ids == [run.id]
+    assert emitted == [("run:status", {"run_id": str(run.id), "status": "paused"})]
+    assert parent_calls == []
+
+
+def test_cancel_run_allows_paused_and_propagates_parent_completion(monkeypatch: pytest.MonkeyPatch) -> None:
+    thread = Thread(
+        id=uuid4(),
+        project_id=uuid4(),
+        user_id=uuid4(),
+        thread_type="subAgent",
+        status="paused",
+    )
+    run = RunModel(
+        id=uuid4(),
+        thread_id=thread.id,
+        user_id=thread.user_id,
+        project_id=thread.project_id,
+        status="paused",
+        language="English",
+        input_payload={},
+    )
+    run.thread = thread
+    fake_db = FakeActiveRunDb(run=run, thread=thread)
+    pipeline = run_service.RunPipeline(db_factory=lambda: fake_db, event_dispatcher=SimpleNamespace())  # type: ignore[arg-type]
+
+    emitted: list[tuple[str, dict[str, object]]] = []
+    parent_calls: list[dict[str, object]] = []
+
+    async def _fake_cancel_task_and_wait(_run_id: object, *, timeout_s: float = 5.0) -> bool:
+        _ = timeout_s
+        return True
+
+    async def _fake_emit(*, project_id: object, thread_id: object, event_name: str, data: dict[str, object]) -> None:
+        _ = project_id, thread_id
+        emitted.append((event_name, data))
+
+    async def _fake_complete_parent_tool_call(_db: object, *, thread: object, run: object, emit: object) -> None:
+        _ = emit
+        parent_calls.append(
+            {
+                "thread_status": getattr(thread, "status", None),
+                "run_status": getattr(run, "status", None),
+            }
+        )
+
+    pipeline._cancel_task_and_wait = _fake_cancel_task_and_wait  # type: ignore[method-assign]
+    pipeline._emit = _fake_emit  # type: ignore[method-assign]
+    monkeypatch.setattr(run_service.tool_engine, "complete_parent_tool_call", _fake_complete_parent_tool_call)
+
+    asyncio.run(pipeline.cancel_run(thread_id=thread.id, user_id=thread.user_id))
+
+    assert run.status == "canceled"
+    assert thread.status == "canceled"
+    assert emitted == [
+        ("run:canceled", {"run_id": str(run.id)}),
+        ("run:status", {"run_id": str(run.id), "status": "canceled"}),
+    ]
+    assert parent_calls == [{"thread_status": "canceled", "run_status": "canceled"}]
+
+
+def test_execute_loop_cancelled_error_preserves_paused_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, thread = _make_run_and_thread()
+    session = FakeSession(run=run, thread=thread)
+    dispatcher = FakeEventDispatcher()
+    pipeline = run_service.RunPipeline(db_factory=lambda: session, event_dispatcher=dispatcher)  # type: ignore[arg-type]
+
+    async def _assemble_create(*_args: object, **_kwargs: object) -> tuple[str, list[dict[str, object]], None]:
+        return "system", [], None
+
+    async def _cancelled_llm(*_args: object, **kwargs: object) -> None:
+        llm_run = kwargs["run"]
+        llm_thread = kwargs["thread"]
+        llm_run.status = "paused"
+        llm_thread.status = "paused"
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(run_service.settings_service, "_get_settings", lambda *_args, **_kwargs: UserSettings())
+    monkeypatch.setattr(run_service.prompt_assembly, "assemble_create", _assemble_create)
+    monkeypatch.setattr(run_service.llm_executor, "run_llm", _cancelled_llm)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(
+            pipeline.execute_loop(
+                run.id,
+                create_ctx=CreateContext(input_text="pause me", input_payload={}),
+            )
+        )
+
+    assert run.status == "paused"
+    assert thread.status == "paused"

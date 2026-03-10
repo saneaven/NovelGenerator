@@ -249,6 +249,10 @@ export const threadService = {
     await apiClient.post(`/api/v1/threads/${threadId}/cancel`);
   },
 
+  async pauseThread(threadId: string): Promise<void> {
+    await apiClient.post(`/api/v1/threads/${threadId}/pause`);
+  },
+
   async createJourneyThread(
     projectId: string,
     journeyKind: 'manuscriptEdit' | 'outlineEdit' | 'storyObjectEdit' | 'objectTranslation' | 'imagePrompt' | 'sceneImagePrompt' | 'messageTranslation',

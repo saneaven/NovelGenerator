@@ -15,6 +15,7 @@ from ..storage_usage_service import (
     build_tool_call_delta,
     snapshot_tool_call_row,
 )
+from ..run_pipeline.status_logic import derive_run_status
 from .contexts import ToolExecutionContext, ToolOfferContext, ToolValidationContext
 from .contracts import ToolOffer, ToolSetName, ValidationResult
 from .registry import ToolRegistry
@@ -433,18 +434,9 @@ class ToolEngineService:
             .all()
         ]
 
-        if any(s == "pending" for s in statuses):
-            parent_run.status = "waiting"
-            parent_thread.status = "waiting"
-        elif any(s in {"streaming", "validating", "processing", "working"} for s in statuses):
-            parent_run.status = "processing"
-            parent_thread.status = "processing"
-        elif any(s == "rejected" for s in statuses):
-            parent_run.status = "paused"
-            parent_thread.status = "paused"
-        else:
-            parent_run.status = "done"
-            parent_thread.status = "done"
+        parent_status = derive_run_status(current_status=parent_run.status, tool_call_statuses=statuses)
+        parent_run.status = parent_status
+        parent_thread.status = parent_status
 
         apply_project_usage_delta(
             db,
