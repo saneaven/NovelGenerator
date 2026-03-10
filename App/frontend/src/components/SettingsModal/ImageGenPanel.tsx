@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ImageGenConfig, ImageProviderType } from '../../store/settingsStore';
 import {
@@ -17,7 +17,6 @@ import {
   resolveImageSize,
   useImageModelCatalog,
 } from '../../imageRun/useImageModelCatalog';
-import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import { NumberInput } from '../ui/NumberInput';
 import ImageModelBrowser from '../ImageGeneration/ImageModelBrowser';
@@ -31,7 +30,6 @@ interface ImageGenPanelProps {
 
 const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
   const { t } = useTranslation();
-  const [showStyleModal, setShowStyleModal] = useState(false);
   const { models, loading, selectedModel } = useImageModelCatalog(config.provider, config.model);
 
   useEffect(() => {
@@ -314,48 +312,41 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
             <span className="label-text">{t(`${styleKey}.defaultStyle`)}</span>
             <span className="label-hint">{t(`${styleKey}.defaultStyleHint`)}</span>
           </label>
-          <div className="style-select-row">
-            <CustomSelect
-              value={selectedStyleId ?? ''}
-              onChange={(value) => onChange({
-                ...config,
-                selectedNaturalStyleId: isTagBased ? config.selectedNaturalStyleId : (value || null),
-                selectedTagBasedStyleId: isTagBased ? (value || null) : config.selectedTagBasedStyleId,
-              })}
-              options={[
-                { value: '', label: t(`${styleKey}.none`) },
-                ...currentStyles.map((style) => ({
-                  value: style.id,
-                  label: style.name,
-                })),
-              ]}
-            />
-            <TextButton variant="secondary" size="sm" onClick={() => setShowStyleModal(true)}>
-              {t('settings.imageGen.styleEditor.editStyles')}
-            </TextButton>
+          <CustomSelect
+            value={selectedStyleId ?? ''}
+            onChange={(value) => onChange({
+              ...config,
+              selectedNaturalStyleId: isTagBased ? config.selectedNaturalStyleId : (value || null),
+              selectedTagBasedStyleId: isTagBased ? (value || null) : config.selectedTagBasedStyleId,
+            })}
+            options={[
+              { value: '', label: t(`${styleKey}.none`) },
+              ...currentStyles.map((style) => ({
+                value: style.id,
+                label: style.name,
+              })),
+            ]}
+          />
+          <div className="style-editor-meta">
+            <h5 className="style-editor-meta-title">{t('settings.imageGen.styleEditor.title')}</h5>
+            <p className="style-editor-meta-description">{t('settings.imageGen.styleEditor.subtitle')}</p>
           </div>
+          {isTagBased ? (
+            <ImageStyleEditorModal
+              mode="tag_based"
+              styles={config.tagBasedStyles}
+              onChange={(styles) => onChange({ ...config, tagBasedStyles: styles })}
+            />
+          ) : null}
+          {!isTagBased ? (
+            <ImageStyleEditorModal
+              mode="natural"
+              styles={config.naturalStyles}
+              onChange={(styles) => onChange({ ...config, naturalStyles: styles })}
+            />
+          ) : null}
         </div>
       </div>
-
-      {showStyleModal && isTagBased ? (
-        <ImageStyleEditorModal
-          isOpen={showStyleModal}
-          onClose={() => setShowStyleModal(false)}
-          mode="tag_based"
-          styles={config.tagBasedStyles}
-          onChange={(styles) => onChange({ ...config, tagBasedStyles: styles })}
-        />
-      ) : null}
-
-      {showStyleModal && !isTagBased ? (
-        <ImageStyleEditorModal
-          isOpen={showStyleModal}
-          onClose={() => setShowStyleModal(false)}
-          mode="natural"
-          styles={config.naturalStyles}
-          onChange={(styles) => onChange({ ...config, naturalStyles: styles })}
-        />
-      ) : null}
     </div>
   );
 };

@@ -583,6 +583,7 @@
       },
       "styleEditor": {
         "title": "이미지 스타일 편집기",
+        "subtitle": "이미지 생성에 재사용할 프롬프트 래퍼 스타일을 여기서 만들고 다듬습니다.",
         "editStyles": "스타일 편집",
         "addStyle": "스타일 추가",
         "deleteStyle": "스타일 삭제",

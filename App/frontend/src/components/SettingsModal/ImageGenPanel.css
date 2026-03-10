@@ -97,6 +97,26 @@
     border-top: 1px solid var(--color-border-subtle);
 }
 
+.style-editor-meta {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    margin-top: var(--spacing-lg);
+}
+
+.style-editor-meta-title {
+    margin: 0;
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-primary);
+}
+
+.style-editor-meta-description {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
 /* Panel Note */
 .panel-note {
     margin-top: var(--spacing-xl);

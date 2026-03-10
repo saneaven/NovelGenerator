@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BaseModal } from '../BaseModal';
 import { CustomSelect } from '../ui/CustomSelect';
 import { TextButton } from '../TextButton';
 import type { NaturalImageStyle, TagBasedImageStyle } from '../../store/settingsStore';
@@ -9,16 +8,12 @@ import { confirm } from '../../store/dialogStore';
 import './ImageStyleEditorModal.css';
 
 interface NaturalProps {
-  isOpen: boolean;
-  onClose: () => void;
   mode: 'natural';
   styles: NaturalImageStyle[];
   onChange: (styles: NaturalImageStyle[]) => void;
 }
 
 interface TagBasedProps {
-  isOpen: boolean;
-  onClose: () => void;
   mode: 'tag_based';
   styles: TagBasedImageStyle[];
   onChange: (styles: TagBasedImageStyle[]) => void;
@@ -27,16 +22,14 @@ interface TagBasedProps {
 type Props = NaturalProps | TagBasedProps;
 
 const ImageStyleEditorModal: React.FC<Props> = (props) => {
-  const { isOpen, onClose, mode } = props;
+  const { mode } = props;
   const { t } = useTranslation();
   const tp = 'settings.imageGen.styleEditor';
   const [selectedStyleId, setSelectedStyleId] = useState<string | null>(null);
 
   const styles = props.styles as (NaturalImageStyle | TagBasedImageStyle)[];
 
-  // Auto-select first style when modal opens
   useEffect(() => {
-    if (!isOpen) return;
     if (styles.length === 0) {
       setSelectedStyleId(null);
       return;
@@ -46,7 +39,7 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
     if (!currentStillExists) {
       setSelectedStyleId(styles[0].id ?? null);
     }
-  }, [isOpen, styles, selectedStyleId]);
+  }, [styles, selectedStyleId]);
 
   const selectedStyle = styles.find((s) => s.id === selectedStyleId) ?? null;
 
@@ -125,8 +118,8 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
       </div>
       <div className="style-editor-field">
         <label>{t('settings.imageGen.naturalStyles.prefix')}</label>
-        <input
-          type="text"
+        <textarea
+          rows={4}
           value={style.prefix}
           onChange={(e) => handleUpdate({ prefix: e.target.value })}
           placeholder={t('settings.imageGen.naturalStyles.prefixPlaceholder')}
@@ -134,8 +127,8 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
       </div>
       <div className="style-editor-field">
         <label>{t('settings.imageGen.naturalStyles.postfix')}</label>
-        <input
-          type="text"
+        <textarea
+          rows={4}
           value={style.postfix}
           onChange={(e) => handleUpdate({ postfix: e.target.value })}
           placeholder={t('settings.imageGen.naturalStyles.postfixPlaceholder')}
@@ -168,8 +161,8 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
         <div className="style-editor-field-row">
           <div className="style-editor-field">
             <label>{t('settings.imageGen.naturalStyles.prefix')}</label>
-            <input
-              type="text"
+            <textarea
+              rows={4}
               value={style.positivePrefix}
               onChange={(e) => handleUpdate({ positivePrefix: e.target.value })}
               placeholder={t('settings.imageGen.naturalStyles.prefixPlaceholder')}
@@ -177,8 +170,8 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
           </div>
           <div className="style-editor-field">
             <label>{t('settings.imageGen.naturalStyles.postfix')}</label>
-            <input
-              type="text"
+            <textarea
+              rows={4}
               value={style.positivePostfix}
               onChange={(e) => handleUpdate({ positivePostfix: e.target.value })}
               placeholder={t('settings.imageGen.naturalStyles.postfixPlaceholder')}
@@ -191,8 +184,8 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
         <div className="style-editor-field-row">
           <div className="style-editor-field">
             <label>{t('settings.imageGen.naturalStyles.prefix')}</label>
-            <input
-              type="text"
+            <textarea
+              rows={4}
               value={style.negativePrefix}
               onChange={(e) => handleUpdate({ negativePrefix: e.target.value })}
               placeholder={t('settings.imageGen.naturalStyles.prefixPlaceholder')}
@@ -200,8 +193,8 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
           </div>
           <div className="style-editor-field">
             <label>{t('settings.imageGen.naturalStyles.postfix')}</label>
-            <input
-              type="text"
+            <textarea
+              rows={4}
               value={style.negativePostfix}
               onChange={(e) => handleUpdate({ negativePostfix: e.target.value })}
               placeholder={t('settings.imageGen.naturalStyles.postfixPlaceholder')}
@@ -229,18 +222,7 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
   );
 
   return (
-    <BaseModal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={t(`${tp}.title`)}
-      size="large"
-      zIndexLayer={1}
-      footer={
-        <TextButton variant="secondary" onClick={onClose}>
-          {t('common.close')}
-        </TextButton>
-      }
-    >
+    <div className="style-editor-inline">
       {/* Toolbar: style selector + create/delete */}
       <div className="style-editor-toolbar">
         <CustomSelect
@@ -253,14 +235,6 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
         <TextButton size="sm" variant="secondary" onClick={handleCreate}>
           + {t(`${tp}.addStyle`)}
         </TextButton>
-        <TextButton
-          size="sm"
-          variant="danger"
-          onClick={handleDelete}
-          disabled={!selectedStyleId}
-        >
-          {t(`${tp}.deleteStyle`)}
-        </TextButton>
       </div>
 
       {/* Style editor or empty state */}
@@ -271,7 +245,18 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
       ) : (
         <div className="style-editor-empty">{t(`${tp}.noStyles`)}</div>
       )}
-    </BaseModal>
+
+      <div className="style-editor-footer">
+        <TextButton
+          size="sm"
+          variant="danger"
+          onClick={handleDelete}
+          disabled={!selectedStyleId}
+        >
+          {t(`${tp}.deleteStyle`)}
+        </TextButton>
+      </div>
+    </div>
   );
 };
 

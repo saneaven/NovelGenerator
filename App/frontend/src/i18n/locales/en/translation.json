@@ -583,6 +583,7 @@
       },
       "styleEditor": {
         "title": "Image Style Editor",
+        "subtitle": "Create and refine reusable prompt wrappers for your image generations here.",
         "editStyles": "Edit Styles",
         "addStyle": "Add Style",
         "deleteStyle": "Delete Style",
