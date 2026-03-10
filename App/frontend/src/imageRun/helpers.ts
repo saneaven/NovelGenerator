@@ -1,29 +1,6 @@
 import type { ImageRun, StyledPrompt } from '../api/assetService';
 import type { ImageGenerationBinding, ImageGenerationRecipe } from './types';
 
-function simplifyRatio(width: number, height: number): string {
-  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
-  const divisor = gcd(width, height) || 1;
-  return `${Math.floor(width / divisor)}:${Math.floor(height / divisor)}`;
-}
-
-function ratioFromSize(size?: string): string {
-  const match = String(size ?? '').trim().match(/^(\d+)\s*x\s*(\d+)$/i);
-  if (!match) return '1:1';
-  return simplifyRatio(Number(match[1]), Number(match[2]));
-}
-
-export function requestedRatioForRecipe(recipe: ImageGenerationRecipe): string {
-  const explicitAspect = recipe.providerSettings?.aspect_ratio;
-  if (typeof explicitAspect === 'string' && explicitAspect.trim()) {
-    return explicitAspect.trim();
-  }
-  if (typeof recipe.size === 'string' && recipe.size.trim()) {
-    return ratioFromSize(recipe.size);
-  }
-  return '1:1';
-}
-
 export function imageRunBindingFromSnapshot(run: ImageRun): ImageGenerationBinding | null {
   const target = run.request_snapshot?.target;
   if (!target || typeof target !== 'object' || Array.isArray(target)) return null;
@@ -53,9 +30,12 @@ export function generationRecipeFromImageRun(run: ImageRun): ImageGenerationReci
   const promptType = recipe.prompt_type;
   const provider = recipe.provider;
   const model = recipe.model;
-  const requestedRatio = typeof recipe.requested_ratio === 'string' && recipe.requested_ratio.trim()
-    ? recipe.requested_ratio.trim()
-    : undefined;
+  const requestedAspectRatio = typeof recipe.requested_aspect_ratio === 'string' && recipe.requested_aspect_ratio.trim()
+    ? recipe.requested_aspect_ratio.trim()
+    : (run.requested_aspect_ratio ?? '1:1');
+  const requestedImageSize = typeof recipe.requested_image_size === 'string' && recipe.requested_image_size.trim()
+    ? recipe.requested_image_size.trim()
+    : (run.requested_image_size ?? '1K');
   const providerSettings = (
     recipe.provider_settings
     && typeof recipe.provider_settings === 'object'
@@ -63,9 +43,6 @@ export function generationRecipeFromImageRun(run: ImageRun): ImageGenerationReci
       ? { ...(recipe.provider_settings as Record<string, unknown>) }
       : {}
   );
-  if (requestedRatio && typeof providerSettings.aspect_ratio !== 'string') {
-    providerSettings.aspect_ratio = requestedRatio;
-  }
 
   if (promptType === 'natural' && typeof provider === 'string' && typeof model === 'string') {
     const prompt = recipe.prompt;
@@ -74,8 +51,9 @@ export function generationRecipeFromImageRun(run: ImageRun): ImageGenerationReci
       promptType: 'natural',
       provider,
       model,
+      aspectRatio: run.resolved_aspect_ratio ?? requestedAspectRatio,
+      imageSize: run.resolved_image_size ?? requestedImageSize,
       prompt: prompt as StyledPrompt,
-      size: run.resolved_size ?? undefined,
       providerSettings: Object.keys(providerSettings).length > 0 ? providerSettings : undefined,
       styleId: null,
       referenceImages: Array.isArray(recipe.reference_images)
@@ -99,9 +77,10 @@ export function generationRecipeFromImageRun(run: ImageRun): ImageGenerationReci
       promptType: 'tag_based',
       provider,
       model,
+      aspectRatio: run.resolved_aspect_ratio ?? requestedAspectRatio,
+      imageSize: run.resolved_image_size ?? requestedImageSize,
       positive: positive as StyledPrompt,
       negative: negative && typeof negative === 'object' && !Array.isArray(negative) ? (negative as StyledPrompt) : undefined,
-      size: run.resolved_size ?? '1024x1024',
       providerSettings: Object.keys(providerSettings).length > 0 ? providerSettings : undefined,
       styleId: null,
       referenceImages: Array.isArray(recipe.reference_images)

@@ -164,6 +164,9 @@ class NovelAIImageProvider(BaseImageProvider):
         prompt: Optional[str] = None,
         model: str = "nai-diffusion-4-5-full",
         size: str = "832x1216",
+        aspect_ratio: str = "13:19",
+        image_size: str = "1K",
+        resolved_native_size: str = "832x1216",
         quality: str = "standard",
         n: int = 1,
         positive_prompt: Optional[str] = None,
@@ -172,6 +175,7 @@ class NovelAIImageProvider(BaseImageProvider):
         reference_images: Optional[List[ReferenceImageData]] = None,
     ) -> ImageGenerationResult:
         """Generate image using NovelAI API"""
+        del aspect_ratio, image_size, resolved_native_size, quality, n
         if not self.api_key:
             return ImageGenerationResult(
                 success=False,

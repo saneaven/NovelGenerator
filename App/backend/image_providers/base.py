@@ -1,6 +1,6 @@
 """Base class for image generation providers"""
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 
 
@@ -46,11 +46,14 @@ class BaseImageProvider(ABC):
         prompt: Optional[str] = None,
         model: str = "",
         size: str = "1024x1024",
+        aspect_ratio: str = "1:1",
+        image_size: str = "1K",
+        resolved_native_size: str = "1024x1024",
         quality: str = "auto",
         n: int = 1,
         positive_prompt: Optional[str] = None,
         negative_prompt: Optional[str] = None,
-        provider_settings: Optional[Dict] = None,
+        provider_settings: Optional[Dict[str, Any]] = None,
         reference_images: Optional[List['ReferenceImageData']] = None,
     ) -> ImageGenerationResult:
         """
@@ -59,7 +62,10 @@ class BaseImageProvider(ABC):
         Args:
             prompt: Text description for natural language providers
             model: Model identifier
-            size: Image size (e.g., "1024x1024", "1536x1024")
+            size: Provider-native size (fixed-size providers only)
+            aspect_ratio: Canonical requested aspect ratio
+            image_size: Canonical requested image size tier
+            resolved_native_size: Provider-native resolved output size
             quality: Quality level
             n: Number of images to generate
             positive_prompt: Positive tags for tag-based providers

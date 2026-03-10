@@ -53,6 +53,9 @@ class OpenAIImageProvider(BaseImageProvider):
         prompt: Optional[str] = None,
         model: str = DEFAULT_MODEL,
         size: str = "1024x1024",
+        aspect_ratio: str = "1:1",
+        image_size: str = "1K",
+        resolved_native_size: str = "1024x1024",
         quality: str = "auto",
         n: int = 1,
         positive_prompt: Optional[str] = None,
@@ -61,6 +64,7 @@ class OpenAIImageProvider(BaseImageProvider):
         reference_images: Optional[List[ReferenceImageData]] = None,
     ) -> ImageGenerationResult:
         """Generate image using OpenAI API"""
+        del aspect_ratio, image_size, resolved_native_size
         if not self._client:
             return ImageGenerationResult(
                 success=False,

@@ -74,13 +74,13 @@ class UserSettings(Base):
     image_gen_config = Column(JSONB, nullable=False, server_default="""{
         "provider": "openai",
         "model": "gpt-image-1.5",
-        "size": "1024x1024",
+        "aspect_ratio": "1:1",
+        "image_size": "1K",
         "naturalStyles": [],
         "tagBasedStyles": [],
         "selectedNaturalStyleId": null,
         "selectedTagBasedStyleId": null,
         "openaiSettings": {"quality": "auto", "background": "auto", "output_format": "png", "output_compression": 90, "input_fidelity": "high"},
-        "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},
         "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
     }""")
 
@@ -953,8 +953,9 @@ class ImageRunModel(Base):
 
     provider = Column(String(50), nullable=True)
     model = Column(String(100), nullable=True)
-    resolved_ratio = Column(String(32), nullable=True)
-    resolved_size = Column(String(32), nullable=True)
+    resolved_aspect_ratio = Column(String(32), nullable=True)
+    resolved_image_size = Column(String(32), nullable=True)
+    resolved_native_size = Column(String(32), nullable=True)
     revised_prompt = Column(Text, nullable=True)
 
     before_excerpt = Column(Text, nullable=True)

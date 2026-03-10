@@ -10,14 +10,8 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
+from ..image_providers import gemini_image, novelai_image, openai_image, openrouter_image, xai_image
 from ..image_providers.base import BaseImageProvider, ImageGenerationResult, ReferenceImageData
-from ..image_providers.model_capabilities import (
-    GEMINI_DEFAULT_MODEL,
-    OPENAI_DEFAULT_MODEL,
-    get_gemini_supported_aspect_ratios,
-    get_gemini_supported_resolutions,
-    get_openai_supported_sizes,
-)
 from ..image_providers.registry import ImageProviderRegistry
 from ..models.db_models import (
     Act,
@@ -41,6 +35,10 @@ from ..schemas.assets import CreateImageRunRequest, ImageRunResponse, StyledProm
 from ..schemas.settings import ImageGenConfig
 from ..services.credential_service import credential_service
 from ..services.deletion_service import delete_assets_with_files
+from ..services.image_model_catalog_service import (
+    image_model_catalog_service,
+    sanitize_generation_settings,
+)
 from ..services.manuscript_image_index_service import restore_image_asset_ids
 from ..services.notification_service import serialize_notification, upsert_notification
 from ..services.object_change_events import queue_object_change
@@ -265,7 +263,8 @@ def _build_tool_recipe_snapshot(
     *,
     settings_row: UserSettings,
     prompt_text: str,
-    requested_ratio: str,
+    requested_aspect_ratio: str,
+    requested_image_size: str | None,
 ) -> dict[str, Any]:
     config = _get_image_settings(settings_row)
     provider_name = config.provider
@@ -302,10 +301,6 @@ def _build_tool_recipe_snapshot(
             "output_compression": config.openaiSettings.output_compression,
             "input_fidelity": config.openaiSettings.input_fidelity,
         }
-    elif provider_name == "gemini":
-        provider_settings = {
-            "image_resolution": config.geminiSettings.image_resolution,
-        }
     elif provider_name == "novelai":
         provider_settings = {
             "sampler": config.novelaiSettings.sampler,
@@ -318,11 +313,12 @@ def _build_tool_recipe_snapshot(
         "prompt_type": prompt_type,
         "provider": provider_name,
         "model": config.model,
-        "requested_ratio": requested_ratio,
+        "requested_aspect_ratio": requested_aspect_ratio,
+        "requested_image_size": str(requested_image_size or config.image_size).strip() or config.image_size,
         "prompt": _styled_prompt_to_dict(prompt_payload),
         "positive_prompt": _styled_prompt_to_dict(positive_payload),
         "negative_prompt": _styled_prompt_to_dict(negative_payload),
-        "provider_settings": provider_settings or None,
+        "provider_settings": sanitize_generation_settings(provider_name, provider_settings),
         "reference_images": None,
         "reference_objects": None,
     }
@@ -576,6 +572,11 @@ class ImageRunService:
     ) -> ImageRunModel:
         target, apply_kind = self._normalize_direct_target(target=request.target.model_dump())
         self._validate_direct_target(db, project_id=project_id, target=target)
+        recipe_snapshot = request.recipe.model_dump()
+        recipe_snapshot["provider_settings"] = sanitize_generation_settings(
+            str(recipe_snapshot.get("provider") or ""),
+            recipe_snapshot.get("provider_settings"),
+        )
 
         row = ImageRunModel(
             id=uuid4(),
@@ -589,7 +590,7 @@ class ImageRunService:
             stage=None,
             request_snapshot={
                 "label": "Image generation",
-                "recipe": request.recipe.model_dump(),
+                "recipe": recipe_snapshot,
                 "target": target,
                 "apply_kind": apply_kind,
             },
@@ -617,17 +618,19 @@ class ImageRunService:
             raise ValueError("Image tool arguments are invalid")
 
         prompt_text = str(tool_call.arguments.get("prompt") or "").strip()
-        requested_ratio = str(tool_call.arguments.get("ratio") or "").strip()
+        requested_aspect_ratio = str(tool_call.arguments.get("ratio") or "").strip()
+        requested_image_size = str(tool_call.arguments.get("image_size") or "").strip() or None
         if not prompt_text:
             raise ValueError("prompt must be a non-empty string")
-        if not requested_ratio:
+        if not requested_aspect_ratio:
             raise ValueError("ratio must be a non-empty string")
 
         settings_row = settings_service._get_settings(db, user_id)  # pylint: disable=protected-access
         recipe = _build_tool_recipe_snapshot(
             settings_row=settings_row,
             prompt_text=prompt_text,
-            requested_ratio=requested_ratio,
+            requested_aspect_ratio=requested_aspect_ratio,
+            requested_image_size=requested_image_size,
         )
 
         before_excerpt: str | None = None
@@ -719,6 +722,7 @@ class ImageRunService:
 
         snapshot = _json_dict(row.request_snapshot)
         tool_call_id = _tool_call_id_from_snapshot(snapshot)
+        recipe = _json_dict(snapshot.get("recipe"))
 
         return ImageRunResponse(
             id=str(row.id),
@@ -737,8 +741,11 @@ class ImageRunService:
             final_asset_id=str(row.final_asset_id) if row.final_asset_id else None,
             provider=row.provider,
             model=row.model,
-            resolved_ratio=row.resolved_ratio,
-            resolved_size=row.resolved_size,
+            requested_aspect_ratio=str(recipe.get("requested_aspect_ratio") or "") or None,
+            requested_image_size=str(recipe.get("requested_image_size") or "") or None,
+            resolved_aspect_ratio=row.resolved_aspect_ratio,
+            resolved_image_size=row.resolved_image_size,
+            resolved_native_size=row.resolved_native_size,
             revised_prompt=row.revised_prompt,
             before_excerpt=row.before_excerpt,
             after_excerpt=row.after_excerpt,
@@ -877,32 +884,26 @@ class ImageRunService:
             if not provider.validate_config():
                 raise ValueError("Invalid provider configuration")
 
-            requested_ratio = str(recipe.get("requested_ratio") or "").strip()
-            requested_ratio_value = _parse_ratio_value(requested_ratio)
-            provider_settings = dict(recipe.get("provider_settings") or {})
-            if provider_name == "gemini":
-                model_name = str(recipe.get("model") or GEMINI_DEFAULT_MODEL)
-                resolved_ratio = _pick_nearest_ratio_label(_get_gemini_supported_aspect_ratios(model_name), requested_ratio_value)
-                provider_settings["aspect_ratio"] = resolved_ratio
-                resolution_candidates = _get_gemini_supported_resolutions(model_name)
-                requested_resolution = str(provider_settings.get("image_resolution") or "").strip()
-                resolved_size = requested_resolution if requested_resolution in resolution_candidates else resolution_candidates[0]
-            elif provider_name == "openai":
-                model_name = str(recipe.get("model") or OPENAI_DEFAULT_MODEL)
-                size_candidates = _get_openai_supported_sizes(model_name)
-                fallback_size = size_candidates[0]
-                resolved_size = _pick_nearest_size(size_candidates, requested_ratio_value, fallback_size)
-                resolved_ratio = _ratio_label_from_size(resolved_size)
-            else:
-                size_candidates = provider.get_supported_sizes()
-                fallback_size = size_candidates[0] if size_candidates else "1024x1024"
-                resolved_size = _pick_nearest_size(size_candidates, requested_ratio_value, fallback_size)
-                resolved_ratio = _ratio_label_from_size(resolved_size)
+            geometry = await image_model_catalog_service.resolve_geometry(
+                provider=provider_name,
+                model=str(recipe.get("model") or "").strip(),
+                requested_aspect_ratio=str(recipe.get("requested_aspect_ratio") or "").strip(),
+                requested_image_size=str(recipe.get("requested_image_size") or "").strip(),
+                provider_config=provider_config,
+            )
+
+            recipe["model"] = geometry.model
+            recipe["requested_aspect_ratio"] = geometry.requested_aspect_ratio
+            recipe["requested_image_size"] = geometry.requested_image_size
+            recipe["provider_settings"] = sanitize_generation_settings(provider_name, recipe.get("provider_settings"))
+            snapshot["recipe"] = recipe
 
             row.provider = provider_name
-            row.model = str(recipe.get("model") or "")
-            row.resolved_ratio = resolved_ratio
-            row.resolved_size = resolved_size
+            row.model = geometry.model
+            row.request_snapshot = snapshot
+            row.resolved_aspect_ratio = geometry.resolved_aspect_ratio
+            row.resolved_image_size = geometry.resolved_image_size
+            row.resolved_native_size = geometry.resolved_native_size
             row.stage = "generating"
             row.updated_at = datetime.utcnow()
             db.commit()
@@ -921,14 +922,21 @@ class ImageRunService:
             provider_name = str(recipe.get("provider") or "").strip()
             provider_config = credential_service.get_provider_config(db, row.user_id, provider_name)
             provider = ImageProviderRegistry.get_provider(provider_name, provider_config)
-            provider_settings = dict(recipe.get("provider_settings") or {})
+            provider_settings = sanitize_generation_settings(provider_name, recipe.get("provider_settings")) or {}
             prompt_payload = _styled_prompt_from_dict(recipe.get("prompt"))
             positive_prompt = _styled_prompt_from_dict(recipe.get("positive_prompt"))
             negative_prompt = _styled_prompt_from_dict(recipe.get("negative_prompt"))
+            geometry = await image_model_catalog_service.resolve_geometry(
+                provider=provider_name,
+                model=str(row.model or recipe.get("model") or "").strip(),
+                requested_aspect_ratio=str(recipe.get("requested_aspect_ratio") or "").strip(),
+                requested_image_size=str(recipe.get("requested_image_size") or "").strip(),
+                provider_config=provider_config,
+            )
 
             reference_image_data: list[ReferenceImageData] | None = None
             raw_refs = recipe.get("reference_images")
-            if isinstance(raw_refs, list) and provider.supports_image_input():
+            if isinstance(raw_refs, list) and geometry.supports_image_input:
                 reference_image_data = []
                 for raw_ref in raw_refs:
                     if not isinstance(raw_ref, dict):
@@ -963,8 +971,11 @@ class ImageRunService:
                     if isinstance(negative_prompt, StyledPrompt)
                     else None
                 ),
-                model=str(recipe.get("model") or ""),
-                size=str(row.resolved_size or "1024x1024"),
+                model=str(row.model or recipe.get("model") or ""),
+                size=str(row.resolved_native_size or "1024x1024"),
+                aspect_ratio=str(row.resolved_aspect_ratio or geometry.resolved_aspect_ratio),
+                image_size=str(row.resolved_image_size or geometry.resolved_image_size),
+                resolved_native_size=str(row.resolved_native_size or geometry.resolved_native_size),
                 quality=str(provider_settings.get("quality") or "auto"),
                 provider_settings=provider_settings or None,
                 reference_images=reference_image_data,
@@ -1103,7 +1114,10 @@ class ImageRunService:
             generation_negative_prompt=_styled_prompt_to_dict(negative_prompt),
             generation_provider=str(recipe.get("provider") or ""),
             generation_model=str(recipe.get("model") or ""),
-            generation_settings=_json_dict(recipe.get("provider_settings")) or None,
+            generation_settings=sanitize_generation_settings(
+                str(recipe.get("provider") or ""),
+                recipe.get("provider_settings"),
+            ),
             generation_reference_images=recipe.get("reference_images") if isinstance(recipe.get("reference_images"), list) else None,
             generation_reference_objects=recipe.get("reference_objects") if isinstance(recipe.get("reference_objects"), list) else None,
             width=width or result.width,

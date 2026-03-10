@@ -128,6 +128,7 @@ def register(registry: ToolRegistry) -> None:
                 {
                     "prompt": {"type": "string", "description": "Image generation prompt."},
                     "ratio": {"type": "string", "description": "Desired aspect ratio such as 1:1 or 16:9."},
+                    "image_size": {"type": "string", "description": "Optional image size tier such as 1K, 2K, or 4K."},
                     "object_id": {"type": "string", "description": "Target object UUID."},
                 },
                 ["prompt", "ratio", "object_id"],
@@ -146,6 +147,7 @@ def register(registry: ToolRegistry) -> None:
                 {
                     "prompt": {"type": "string", "description": "Image generation prompt."},
                     "ratio": {"type": "string", "description": "Desired aspect ratio such as 1:1 or 16:9."},
+                    "image_size": {"type": "string", "description": "Optional image size tier such as 1K, 2K, or 4K."},
                     "manuscript_id": {"type": "string", "description": "Target manuscript UUID."},
                     "insert_before": {"type": "string", "description": "Exact manuscript text anchor to insert the image before."},
                 },

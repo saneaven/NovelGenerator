@@ -29,7 +29,7 @@ from ..schemas.assets import (
     AssetResponse, AssetListResponse, AssetUpdateRequest,
     StoryObjectAssetResponse, StoryObjectAssetsResponse, SetMainAssetRequest,
     ManuscriptImageCreate, ManuscriptImageResponse, ManuscriptImagesResponse, ManuscriptImageUpdateRequest,
-    ImageProvidersResponse, ImageProviderInfo, ImageModelsResponse,
+    ImageProvidersResponse, ImageProviderInfo, ImageModelsResponse, ImageModelInfo,
     SceneAssetResponse, SceneAssetsResponse, ManuscriptInfo,
     ImageCleanupPolicy, ImageCleanupPreviewResponse, ImageCleanupPreviewItem,
     ImageCleanupExecuteRequest, ImageCleanupExecuteResponse, ImageCleanupExecuteSkipped, ImageCleanupExecuteError,
@@ -44,6 +44,7 @@ from ..services.asset_change_events import (
 from ..services.storage_service import storage_service
 from ..services.deletion_service import delete_assets_with_files
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
+from ..services.image_model_catalog_service import image_model_catalog_service
 from ..services.object_change_events import queue_object_change
 from ..services.storage_usage_service import (
     StorageQuotaExceededError,
@@ -62,7 +63,7 @@ from ..image_providers.registry import ImageProviderRegistry
 from ..utils.object_type_aliases import normalize_object_type
 
 # Import providers to register them
-from ..image_providers import openai_image, gemini_image, xai_image, novelai_image
+from ..image_providers import openai_image, gemini_image, xai_image, novelai_image, openrouter_image
 
 router = APIRouter(prefix="/api/v1/assets", tags=["assets"])
 
@@ -233,8 +234,6 @@ async def list_image_providers():
                 name=p["name"],
                 display_name=p["display_name"],
                 prompt_type=p.get("prompt_type", "natural"),
-                supported_sizes=p["supported_sizes"],
-                supported_qualities=p["supported_qualities"],
                 settings_schema=p.get("settings_schema"),
                 supports_image_input=p.get("supports_image_input", False)
             )
@@ -252,15 +251,16 @@ async def get_image_models(
     """Get available models for an image provider"""
     try:
         provider_config = credential_service.get_provider_config(db, current_user.id, provider)
-        provider_instance = ImageProviderRegistry.get_provider(provider, provider_config)
-        if not provider_instance.validate_config():
-            raise HTTPException(status_code=400, detail="Invalid API key")
-        models = await provider_instance.get_models()
-        return ImageModelsResponse(data=models.get("data", []))
+        if not ImageProviderRegistry.has_provider(provider):
+            raise HTTPException(status_code=404, detail=f"Unknown image provider '{provider}'")
+        models = await image_model_catalog_service.list_models(provider, provider_config)
+        return ImageModelsResponse(data=[ImageModelInfo.model_validate(model) for model in models])
     except CredentialServiceError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch models: {str(e)}")
 
 
 # ============================================================================

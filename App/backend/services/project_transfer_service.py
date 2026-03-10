@@ -37,6 +37,7 @@ from ..models.db_models import (
 )
 from ..models.translation_models import ObjectVersion
 from ..schemas.project_transfer import ProjectExportOptions
+from ..services.image_model_catalog_service import sanitize_generation_settings
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.ownership import require_owned_project
 from ..services.storage_service import storage_service
@@ -825,7 +826,10 @@ class ProjectTransferService:
                         generation_negative_prompt=gen.get("negative_prompt"),
                         generation_provider=gen.get("provider"),
                         generation_model=gen.get("model"),
-                        generation_settings=gen.get("settings"),
+                        generation_settings=sanitize_generation_settings(
+                            str(gen.get("provider") or ""),
+                            gen.get("settings"),
+                        ),
                         generation_reference_images=ref_images,
                         generation_reference_objects=ref_objects,
                         width=width,

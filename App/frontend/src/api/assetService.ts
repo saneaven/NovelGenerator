@@ -155,10 +155,31 @@ export interface ImageProvider {
     name: string;
     display_name: string;
     prompt_type: PromptType;
-    supported_sizes: string[];
-    supported_qualities: string[];
     settings_schema: Record<string, any> | null;
     supports_image_input: boolean;  // Whether provider supports image-to-image generation
+}
+
+export interface ImageModelInfo {
+    id: string;
+    name: string;
+    description?: string | null;
+    canonical_slug?: string | null;
+    prompt_type: PromptType;
+    supports_image_input: boolean;
+    supported_aspect_ratios: string[];
+    supported_image_sizes: string[];
+    default_aspect_ratio: string;
+    default_image_size: string;
+    ui_resolution_mode: 'native_tier' | 'translated_fixed';
+    architecture?: {
+        input_modalities?: string[];
+        output_modalities?: string[];
+    } | null;
+    pricing?: {
+        prompt?: string | null;
+        completion?: string | null;
+        image?: string | null;
+    } | null;
 }
 
 // Reference image for image-to-image generation
@@ -176,7 +197,8 @@ export interface ImageRunRecipeRequest {
     prompt_type: 'natural' | 'tag_based';
     provider: string;
     model: string;
-    requested_ratio: string;
+    requested_aspect_ratio: string;
+    requested_image_size: string;
     prompt?: StyledPrompt;
     positive_prompt?: StyledPrompt;
     negative_prompt?: StyledPrompt;
@@ -215,8 +237,11 @@ export interface ImageRun {
     final_asset_id: string | null;
     provider: string | null;
     model: string | null;
-    resolved_ratio: string | null;
-    resolved_size: string | null;
+    requested_aspect_ratio: string | null;
+    requested_image_size: string | null;
+    resolved_aspect_ratio: string | null;
+    resolved_image_size: string | null;
+    resolved_native_size: string | null;
     revised_prompt: string | null;
     before_excerpt: string | null;
     after_excerpt: string | null;
@@ -238,8 +263,8 @@ export const assetService = {
     /**
      * Get available models for a provider
      */
-    async getImageModels(provider: string): Promise<{ id: string; name: string }[]> {
-        const response = await apiClient.post<{ data: { id: string; name: string }[] }>(
+    async getImageModels(provider: string): Promise<ImageModelInfo[]> {
+        const response = await apiClient.post<{ data: ImageModelInfo[] }>(
             `/api/v1/assets/image-providers/${provider}/models`,
             {}
         );

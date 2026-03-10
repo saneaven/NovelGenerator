@@ -1,9 +1,11 @@
 import type { Asset } from '../api/assetService';
 import type { ImageGenerationRecipe, ReferenceImageRef } from './types';
 
-function inferSize(asset: Asset): string | undefined {
-  if (asset.width && asset.height) return `${asset.width}x${asset.height}`;
-  return undefined;
+function inferAspectRatio(asset: Asset): string {
+  if (!asset.width || !asset.height) return '1:1';
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+  const divisor = gcd(asset.width, asset.height) || 1;
+  return `${Math.floor(asset.width / divisor)}:${Math.floor(asset.height / divisor)}`;
 }
 
 function mapReferenceImages(asset: Asset): ReferenceImageRef[] | undefined {
@@ -19,14 +21,16 @@ export function recipeFromAsset(asset: Asset): ImageGenerationRecipe | null {
 
   const providerSettings = asset.generation_settings ?? undefined;
   const referenceImages = mapReferenceImages(asset);
-  const size = inferSize(asset);
+  const aspectRatio = inferAspectRatio(asset);
+  const imageSize = '1K';
 
   if (asset.generation_positive_prompt) {
     return {
       promptType: 'tag_based',
       provider,
       model,
-      size: size ?? '1024x1024',
+      aspectRatio,
+      imageSize,
       positive: asset.generation_positive_prompt,
       negative: asset.generation_negative_prompt ?? undefined,
       providerSettings,
@@ -40,7 +44,8 @@ export function recipeFromAsset(asset: Asset): ImageGenerationRecipe | null {
       promptType: 'natural',
       provider,
       model,
-      size,
+      aspectRatio,
+      imageSize,
       prompt: asset.generation_prompt,
       providerSettings,
       styleId: null,

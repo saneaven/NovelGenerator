@@ -3,8 +3,8 @@ import { useSettings } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import {
+    IMAGE_PROVIDER_ORDER,
     PROVIDER_LABELS,
-    MODEL_OPTIONS,
     OPENAI_BACKGROUND_OPTIONS,
     OPENAI_INPUT_FIDELITY_OPTIONS,
     OPENAI_OUTPUT_FORMAT_OPTIONS,
@@ -14,20 +14,17 @@ import {
     NOVELAI_REFERENCE_MODES,
     DEFAULT_NOVELAI_SETTINGS,
     PROVIDER_PROMPT_TYPES,
-    getDefaultModel,
-    getDefaultSize,
-    getGeminiAspectRatioOptions,
-    getGeminiResolutionOptions,
-    getSizeOptions,
     type NovelAIReferenceMode,
     type ImageProviderType,
 } from '../../imageRun/providerConfig';
-import { assetService, type Asset, type ImageProvider, type StyledPrompt } from '../../api/assetService';
+import { assetService, type Asset, type StyledPrompt } from '../../api/assetService';
 import { getAssetUrl } from '../../utils/assetUrl';
 import type { ImageGenerationBinding, ImageGenerationRecipe } from '../../imageRun';
 import { ImageRunRuntime, useImageRunStore } from '../../imageRun';
+import { resolveAspectRatio, resolveImageSize, useImageModelCatalog } from '../../imageRun/useImageModelCatalog';
 import { UnifiedImageModal } from '../AssetManager';
 import UnifiedImagePromptModal, { type PromptResult, type PromptMode } from './UnifiedImagePromptModal';
+import ImageModelBrowser from './ImageModelBrowser';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
 import { useJourneyStore } from '../../store/journeyStore';
@@ -141,11 +138,9 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
     const [provider, setProvider] = useState<ImageProviderType>(settings.imageGenConfig.provider);
     const [model, setModel] = useState(settings.imageGenConfig.model);
-    const [size, setSize] = useState(settings.imageGenConfig.size);
-
-    // Gemini-specific settings
-    const [geminiAspectRatio, setGeminiAspectRatio] = useState(settings.imageGenConfig.geminiSettings.aspect_ratio);
-    const [geminiResolution, setGeminiResolution] = useState(settings.imageGenConfig.geminiSettings.image_resolution);
+    const [aspectRatio, setAspectRatio] = useState(settings.imageGenConfig.aspect_ratio);
+    const [imageSize, setImageSize] = useState(settings.imageGenConfig.image_size);
+    const { models, loading: modelsLoading, selectedModel } = useImageModelCatalog(provider, model);
 
     // Provider-specific settings (serialized into recipe.providerSettings)
     const [openaiQuality, setOpenaiQuality] = useState<'auto' | 'low' | 'medium' | 'high'>(settings.imageGenConfig.openaiSettings.quality);
@@ -176,7 +171,6 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     // Reference images - available for all providers that support it
     const [referenceImages, setReferenceImages] = useState<ReferenceImageItem[]>([]);
     const [showImagePicker, setShowImagePicker] = useState(false);
-    const [providers, setProviders] = useState<ImageProvider[]>([]);
 
     // NovelAI reference image settings (i2i / Vibe Transfer)
     const [novelaiReferenceMode, setNovelaiReferenceMode] = useState<NovelAIReferenceMode>(DEFAULT_NOVELAI_SETTINGS.referenceMode);
@@ -191,16 +185,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const isInitialMount = useRef(true);
     const previousProvider = useRef(provider);
 
-    // Load providers to check image input support
-    useEffect(() => {
-        assetService.listImageProviders().then(setProviders).catch(console.error);
-    }, []);
-
-    // Check if current provider supports image input
-    const supportsImageInput = useMemo(() => {
-        const currentProvider = providers.find(p => p.name === provider);
-        return currentProvider?.supports_image_input ?? false;
-    }, [providers, provider]);
+    const supportsImageInput = selectedModel?.supports_image_input ?? false;
 
     // Compute effective reference mode for NovelAI (auto mode resolves based on image count)
     const effectiveReferenceMode = useMemo(() => {
@@ -228,7 +213,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         setReferenceImages(prev => prev.filter(img => img.assetId !== assetId));
     }, []);
 
-    const currentPromptType = PROVIDER_PROMPT_TYPES[provider];
+    const currentPromptType = selectedModel?.prompt_type ?? PROVIDER_PROMPT_TYPES[provider];
     const isTagBased = currentPromptType === 'tag_based';
     const naturalStyles = useMemo(
         () => settings.imageGenConfig.naturalStyles ?? [],
@@ -247,7 +232,8 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
         setProvider(initialRecipe.provider as ImageProviderType);
         setModel(initialRecipe.model);
-        if ('size' in initialRecipe && initialRecipe.size) setSize(initialRecipe.size);
+        setAspectRatio(initialRecipe.aspectRatio);
+        setImageSize(initialRecipe.imageSize);
 
         const s = (initialRecipe.providerSettings as Record<string, any> | undefined) ?? {};
         setProviderSettingsBase(s);
@@ -268,8 +254,6 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         if (typeof s.steps === 'number') setNovelaiSteps(s.steps);
         if (typeof s.scale === 'number') setNovelaiScale(s.scale);
         if (typeof s.noise_schedule === 'string') setNovelaiNoiseSchedule(s.noise_schedule);
-        if (typeof s.aspect_ratio === 'string') setGeminiAspectRatio(s.aspect_ratio);
-        if (typeof s.image_resolution === 'string') setGeminiResolution(s.image_resolution);
         if (s.referenceMode === 'auto' || s.referenceMode === 'i2i' || s.referenceMode === 'vibe') {
             setNovelaiReferenceMode(s.referenceMode);
         }
@@ -343,7 +327,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     useEffect(() => {
         if (!savedPrompts || initialRecipe) return;
 
-        const promptType = PROVIDER_PROMPT_TYPES[provider];
+        const promptType = currentPromptType;
         if (promptType === 'natural' && savedPrompts.natural) {
             setPrompt(savedPrompts.natural);
         } else if (promptType === 'tag_based') {
@@ -354,7 +338,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 setNegativePrompt(savedPrompts.negative);
             }
         }
-    }, [provider, savedPrompts, initialRecipe]);
+    }, [currentPromptType, savedPrompts, initialRecipe]);
 
     // Reset model/size when provider changes
     useEffect(() => {
@@ -365,10 +349,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
         if (previousProvider.current !== provider) {
             previousProvider.current = provider;
-            const defaultModel = getDefaultModel(provider);
-            const defaultSize = getDefaultSize(provider, defaultModel);
-            setModel(defaultModel);
-            setSize(defaultSize);
+            setModel('');
             setProviderSettingsBase({});
             setReferenceImages([]);
             setCustomNaturalPrefix('');
@@ -377,51 +358,19 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             setCustomPositivePostfix('');
             setCustomNegativePrefix('');
             setCustomNegativePostfix('');
-            if (provider === 'gemini') {
-                setGeminiAspectRatio(getGeminiAspectRatioOptions(defaultModel)[0] || '1:1');
-                setGeminiResolution(getGeminiResolutionOptions(defaultModel)[0] || '1K');
-            }
         }
     }, [provider]);
-
-    const currentGeminiAspectRatios = useMemo(
-        () => getGeminiAspectRatioOptions(model),
-        [model],
-    );
-    const currentGeminiResolutions = useMemo(
-        () => getGeminiResolutionOptions(model),
-        [model],
-    );
-    const currentSizeOptions = useMemo(
-        () => getSizeOptions(provider, model),
-        [provider, model],
-    );
     const isCompressedFormat = openaiOutputFormat !== 'png';
 
     useEffect(() => {
-        if (provider === 'gemini') {
-            if (!currentGeminiAspectRatios.includes(geminiAspectRatio)) {
-                setGeminiAspectRatio(currentGeminiAspectRatios[0] || '1:1');
-            }
-            if (!currentGeminiResolutions.includes(geminiResolution)) {
-                setGeminiResolution(currentGeminiResolutions[0] || '1K');
-            }
-            return;
-        }
-
-        if (currentSizeOptions.length > 0 && !currentSizeOptions.includes(size)) {
-            setSize(currentSizeOptions[0]);
-        }
-    }, [
-        provider,
-        model,
-        currentGeminiAspectRatios,
-        currentGeminiResolutions,
-        currentSizeOptions,
-        geminiAspectRatio,
-        geminiResolution,
-        size,
-    ]);
+        if (!selectedModel) return;
+        const nextModel = selectedModel.id;
+        const nextAspectRatio = resolveAspectRatio(selectedModel, aspectRatio);
+        const nextImageSize = resolveImageSize(selectedModel, imageSize);
+        if (nextModel !== model) setModel(nextModel);
+        if (nextAspectRatio !== aspectRatio) setAspectRatio(nextAspectRatio);
+        if (nextImageSize !== imageSize) setImageSize(nextImageSize);
+    }, [selectedModel, model, aspectRatio, imageSize]);
 
     const journeyThreadId = useJourneyStore((state) =>
         streamingSessionId ? state.journeys[streamingSessionId]?.threadId : undefined
@@ -580,6 +529,10 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             showAlert({ title: 'Validation Error', message: 'No project selected' });
             return;
         }
+        if (!selectedModel) {
+            showAlert({ title: 'Validation Error', message: 'No image model is available for the selected provider.' });
+            return;
+        }
 
         const referenceImagesData =
             supportsImageInput && referenceImages.length > 0
@@ -598,8 +551,6 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 output_compression: openaiOutputCompression,
                 input_fidelity: openaiInputFidelity,
             };
-        } else if (provider === 'gemini') {
-            providerSettings = { ...(providerSettings ?? {}), aspect_ratio: geminiAspectRatio, image_resolution: geminiResolution };
         } else if (provider === 'novelai') {
             providerSettings = {
                 ...(providerSettings ?? {}),
@@ -640,7 +591,8 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 promptType: 'tag_based',
                 provider,
                 model,
-                size,
+                aspectRatio,
+                imageSize,
                 positive,
                 negative,
                 providerSettings,
@@ -675,7 +627,8 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 promptType: 'natural',
                 provider,
                 model,
-                size: provider === 'gemini' ? undefined : size,
+                aspectRatio,
+                imageSize,
                 prompt: promptObj,
                 providerSettings,
                 styleId: selectedNaturalStyleId,
@@ -698,8 +651,6 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const handlePromptBuilderGenerated = (result: PromptResult) => {
         applyPromptForMode(result.mode, result.prompt);
     };
-
-    const currentModelOptions = MODEL_OPTIONS[provider] || [];
 
     return (
         <div className="image-generation-modal">
@@ -823,7 +774,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                             onChange={(e) => setProvider(e.target.value as ImageProviderType)}
                             className="config-select"
                         >
-                            {(Object.keys(PROVIDER_LABELS) as ImageProviderType[]).map((p) => (
+                            {IMAGE_PROVIDER_ORDER.map((p) => (
                                 <option key={p} value={p}>
                                     {PROVIDER_LABELS[p]}
                                 </option>
@@ -833,69 +784,48 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
                     <div className="form-field">
                         <label>Model</label>
+                        <ImageModelBrowser
+                            provider={provider}
+                            models={models}
+                            currentModel={model}
+                            onSelectModel={setModel}
+                            loading={modelsLoading}
+                        />
+                    </div>
+                </div>
+
+                {/* Geometry and Style Selection */}
+                <div className="form-row">
+                    <div className="form-field">
+                        <label>Aspect Ratio</label>
                         <select
-                            value={model}
-                            onChange={(e) => setModel(e.target.value)}
+                            value={aspectRatio}
+                            onChange={(e) => setAspectRatio(e.target.value)}
                             className="config-select"
+                            disabled={!selectedModel || selectedModel.supported_aspect_ratios.length <= 1}
                         >
-                            {currentModelOptions.map((m) => (
-                                <option key={m.id} value={m.id}>
-                                    {m.name}
+                            {(selectedModel?.supported_aspect_ratios ?? [aspectRatio]).map((ratio) => (
+                                <option key={ratio} value={ratio}>
+                                    {ratio}
                                 </option>
                             ))}
                         </select>
                     </div>
-                </div>
-
-                {/* Size and Style Selection */}
-                <div className="form-row">
-                    {provider === 'gemini' ? (
-                        <>
-                            <div className="form-field">
-                                <label>Aspect Ratio</label>
-                                <select
-                                    value={geminiAspectRatio}
-                                    onChange={(e) => setGeminiAspectRatio(e.target.value)}
-                                    className="config-select"
-                                >
-                                    {currentGeminiAspectRatios.map((ar) => (
-                                        <option key={ar} value={ar}>
-                                            {ar}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="form-field">
-                                <label>Resolution</label>
-                                <select
-                                    value={geminiResolution}
-                                    onChange={(e) => setGeminiResolution(e.target.value)}
-                                    className="config-select"
-                                >
-                                    {currentGeminiResolutions.map((r) => (
-                                        <option key={r} value={r}>
-                                            {r}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="form-field">
-                            <label>Size</label>
-                            <select
-                                value={size}
-                                onChange={(e) => setSize(e.target.value)}
-                                className="config-select"
-                            >
-                                {currentSizeOptions.map((s) => (
-                                    <option key={s} value={s}>
-                                        {s}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
+                    <div className="form-field">
+                        <label>Image Size</label>
+                        <select
+                            value={imageSize}
+                            onChange={(e) => setImageSize(e.target.value)}
+                            className="config-select"
+                            disabled={!selectedModel || selectedModel.supported_image_sizes.length <= 1}
+                        >
+                            {(selectedModel?.supported_image_sizes ?? [imageSize]).map((sizeOption) => (
+                                <option key={sizeOption} value={sizeOption}>
+                                    {sizeOption}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
 
                     {!isTagBased && (
                         <div className="form-field">

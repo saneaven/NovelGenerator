@@ -27,7 +27,7 @@ export type {
 } from './taskConfigSettings';
 
 // Types
-export type ImageProviderType = 'openai' | 'gemini' | 'xai' | 'novelai';
+export type ImageProviderType = 'openai' | 'gemini' | 'xai' | 'novelai' | 'openrouter';
 export type PromptType = 'natural' | 'tag_based';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -159,17 +159,12 @@ export interface OpenAIImageSettings {
     input_fidelity: 'low' | 'high';
 }
 
-// Gemini-specific settings (uses aspect_ratio + image_size, not pixel dimensions)
-export interface GeminiImageSettings {
-    aspect_ratio: string;
-    image_resolution: string;
-}
-
 // Image generation configuration
 export interface ImageGenConfig {
     provider: ImageProviderType;
     model: string;
-    size: string;
+    aspect_ratio: string;
+    image_size: string;
 
     // Separate custom styles per prompt type
     naturalStyles: NaturalImageStyle[];      // For OpenAI, Gemini, xAI
@@ -179,7 +174,6 @@ export interface ImageGenConfig {
 
     // Per-provider settings
     openaiSettings: OpenAIImageSettings;
-    geminiSettings: GeminiImageSettings;
     novelaiSettings: NovelAIImageSettings;
 }
 

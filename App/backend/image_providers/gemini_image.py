@@ -62,6 +62,9 @@ class GeminiImageProvider(BaseImageProvider):
         prompt: Optional[str] = None,
         model: str = DEFAULT_MODEL,
         size: str = "1024x1024",
+        aspect_ratio: str = "1:1",
+        image_size: str = "1K",
+        resolved_native_size: str = "1K",
         quality: str = "auto",
         n: int = 1,
         positive_prompt: Optional[str] = None,
@@ -70,6 +73,7 @@ class GeminiImageProvider(BaseImageProvider):
         reference_images: Optional[List[ReferenceImageData]] = None,
     ) -> ImageGenerationResult:
         """Generate image using Gemini API"""
+        del size, quality, n, positive_prompt, negative_prompt, resolved_native_size
         if not self._client:
             return ImageGenerationResult(
                 success=False,
@@ -86,18 +90,20 @@ class GeminiImageProvider(BaseImageProvider):
             client = self._ensure_client()
 
             # Extract Gemini-specific settings from provider_settings
-            aspect_ratio = None
-            image_resolution = None
+            configured_aspect_ratio = None
+            configured_image_resolution = None
             if provider_settings:
-                aspect_ratio = provider_settings.get('aspect_ratio')
-                image_resolution = provider_settings.get('image_resolution')
+                configured_aspect_ratio = provider_settings.get('aspect_ratio')
+                configured_image_resolution = provider_settings.get('image_resolution')
 
             # Build image config if Gemini-specific settings are provided
             image_config = None
-            if aspect_ratio or image_resolution:
+            effective_aspect_ratio = str(configured_aspect_ratio or aspect_ratio or "1:1")
+            effective_image_size = str(configured_image_resolution or image_size or "1K")
+            if effective_aspect_ratio or effective_image_size:
                 image_config = types.ImageConfig(
-                    aspect_ratio=aspect_ratio or "1:1",
-                    image_size=image_resolution or "2K",
+                    aspect_ratio=effective_aspect_ratio,
+                    image_size=effective_image_size,
                 )
 
             # Build generation config with image modality

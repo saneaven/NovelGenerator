@@ -243,7 +243,7 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
               prompt={operation.prompt}
               targetLabel={operation.targetLabel}
               requestedRatio={operation.requestedRatio}
-              resolvedRatio={imageRun?.resolved_ratio}
+              resolvedRatio={imageRun?.resolved_aspect_ratio}
               provider={imageRun?.provider}
               model={imageRun?.model}
             />
@@ -264,7 +264,7 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
       prompt={operation.prompt}
       targetLabel={operation.targetLabel}
       requestedRatio={operation.requestedRatio}
-      resolvedRatio={imageRun?.resolved_ratio}
+      resolvedRatio={imageRun?.resolved_aspect_ratio}
       provider={imageRun?.provider}
       model={imageRun?.model}
     />

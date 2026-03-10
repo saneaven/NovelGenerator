@@ -2,7 +2,7 @@ import { assetService, type Asset, type CreateImageRunRequest, type ImageRun } f
 import { useImageRunStore } from './store';
 import { generateTempId } from '../utils/tempId';
 import type { ImageGenerationBinding, ImageGenerationRecipe } from './types';
-import { requestedRatioForRecipe, isTerminalImageRunStatus } from './helpers';
+import { isTerminalImageRunStatus } from './helpers';
 
 type ImageRunInput = {
   projectId: string;
@@ -37,7 +37,8 @@ function buildCreateImageRunRequest(input: ImageRunInput, clientRequestId: strin
     prompt_type: input.recipe.promptType,
     provider: input.recipe.provider,
     model: input.recipe.model,
-    requested_ratio: requestedRatioForRecipe(input.recipe),
+    requested_aspect_ratio: input.recipe.aspectRatio,
+    requested_image_size: input.recipe.imageSize,
     provider_settings: input.recipe.providerSettings,
     reference_images: input.recipe.referenceImages?.map((item) => ({
       asset_id: item.assetId,

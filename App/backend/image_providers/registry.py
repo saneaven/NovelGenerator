@@ -51,8 +51,6 @@ class ImageProviderRegistry:
                 "name": instance.name,
                 "display_name": instance.display_name,
                 "prompt_type": instance.get_prompt_type(),
-                "supported_sizes": instance.get_supported_sizes(),
-                "supported_qualities": instance.get_supported_qualities(),
                 "settings_schema": instance.get_settings_schema(),
                 "supports_image_input": instance.supports_image_input(),
             })

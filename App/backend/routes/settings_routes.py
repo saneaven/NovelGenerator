@@ -12,32 +12,13 @@ from ..database import get_db
 from ..models.db_models import User, UserSettings
 from ..schemas.settings import UserSettingsResponse, UserSettingsUpdate
 from ..services.embedding_config_service import merge_embedding_configs
+from ..services.image_model_catalog_service import default_image_gen_config
 from ..services.memory_service import wipe_memory_index
 from ..services.rag_index_service import wipe_user_index
 from ..services.settings_service import settings_service
 from ..services.task_config_settings import validate_task_config_settings
 
 router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
-
-DEFAULT_IMAGE_GEN_CONFIG = {
-    "provider": "openai",
-    "model": "gpt-image-1.5",
-    "size": "1024x1024",
-    "naturalStyles": [],
-    "tagBasedStyles": [],
-    "selectedNaturalStyleId": None,
-    "selectedTagBasedStyleId": None,
-    "openaiSettings": {
-        "quality": "auto",
-        "background": "auto",
-        "output_format": "png",
-        "output_compression": 90,
-        "input_fidelity": "high",
-    },
-    "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},
-    "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"},
-}
-
 
 def _assign_template_ids(templates: list) -> list:
     """Ensure every thinking template dict has an id assigned."""
@@ -100,7 +81,7 @@ def _build_settings_response(settings: UserSettings) -> UserSettingsResponse:
         "retryableStatusCodes": [429, 500, 502, 503, 504],
         "retryDelayMs": 1000,
     }
-    image_gen_config_dict = getattr(settings, "image_gen_config", None) or deepcopy(DEFAULT_IMAGE_GEN_CONFIG)
+    image_gen_config_dict = getattr(settings, "image_gen_config", None) or deepcopy(default_image_gen_config())
     tool_call_auto_approve_dict = getattr(settings, "tool_call_auto_approve", None) or {
         "create": False,
         "delete": False,

@@ -32,7 +32,8 @@ class ImageRunRecipe(BaseModel):
     prompt_type: Literal["natural", "tag_based"]
     provider: str
     model: str
-    requested_ratio: str
+    requested_aspect_ratio: str
+    requested_image_size: str
     prompt: Optional[StyledPrompt] = None
     positive_prompt: Optional[StyledPrompt] = None
     negative_prompt: Optional[StyledPrompt] = None
@@ -75,8 +76,11 @@ class ImageRunResponse(BaseModel):
     final_asset_id: Optional[str] = None
     provider: Optional[str] = None
     model: Optional[str] = None
-    resolved_ratio: Optional[str] = None
-    resolved_size: Optional[str] = None
+    requested_aspect_ratio: Optional[str] = None
+    requested_image_size: Optional[str] = None
+    resolved_aspect_ratio: Optional[str] = None
+    resolved_image_size: Optional[str] = None
+    resolved_native_size: Optional[str] = None
     revised_prompt: Optional[str] = None
     before_excerpt: Optional[str] = None
     after_excerpt: Optional[str] = None
@@ -95,8 +99,6 @@ class ImageProviderInfo(BaseModel):
     name: str
     display_name: str
     prompt_type: str = "natural"  # 'natural' or 'tag_based'
-    supported_sizes: List[str]
-    supported_qualities: List[str]
     settings_schema: Optional[Dict[str, Any]] = None  # Provider-specific settings schema
     supports_image_input: bool = False  # Whether provider supports image-to-image generation
 
@@ -106,9 +108,25 @@ class ImageProvidersResponse(BaseModel):
     providers: List[ImageProviderInfo]
 
 
+class ImageModelInfo(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    canonical_slug: Optional[str] = None
+    prompt_type: Literal["natural", "tag_based"]
+    supports_image_input: bool = False
+    supported_aspect_ratios: List[str]
+    supported_image_sizes: List[str]
+    default_aspect_ratio: str
+    default_image_size: str
+    ui_resolution_mode: Literal["native_tier", "translated_fixed"]
+    architecture: Optional[Dict[str, Any]] = None
+    pricing: Optional[Dict[str, Any]] = None
+
+
 class ImageModelsResponse(BaseModel):
     """Response listing available models for a provider"""
-    data: List[Dict[str, Any]]
+    data: List[ImageModelInfo]
 
 
 # ============================================================================

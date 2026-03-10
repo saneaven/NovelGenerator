@@ -288,12 +288,6 @@ class OpenAIImageSettings(BaseModel):
     input_fidelity: Literal["low", "high"] = "high"
 
 
-class GeminiImageSettings(BaseModel):
-    """Gemini-specific image settings (uses aspect_ratio + image_size)"""
-    aspect_ratio: str = "1:1"
-    image_resolution: str = "2K"
-
-
 class NovelAIImageSettings(BaseModel):
     """NovelAI-specific image settings"""
     sampler: str = "k_euler_ancestral"
@@ -306,13 +300,13 @@ class ImageGenConfig(BaseModel):
     """Image generation configuration"""
     provider: str = "openai"
     model: str = "gpt-image-1.5"
-    size: str = "1024x1024"
+    aspect_ratio: str = "1:1"
+    image_size: str = "1K"
     naturalStyles: List[NaturalImageStyle] = []
     tagBasedStyles: List[TagBasedImageStyle] = []
     selectedNaturalStyleId: Optional[str] = None
     selectedTagBasedStyleId: Optional[str] = None
     openaiSettings: OpenAIImageSettings = Field(default_factory=OpenAIImageSettings)
-    geminiSettings: GeminiImageSettings = Field(default_factory=GeminiImageSettings)
     novelaiSettings: NovelAIImageSettings = Field(default_factory=NovelAIImageSettings)
 
 

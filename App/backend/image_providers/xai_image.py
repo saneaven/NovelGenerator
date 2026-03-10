@@ -52,6 +52,9 @@ class XAIImageProvider(BaseImageProvider):
         prompt: Optional[str] = None,
         model: str = "grok-2-image",
         size: str = "1024x1024",
+        aspect_ratio: str = "1:1",
+        image_size: str = "1K",
+        resolved_native_size: str = "1024x1024",
         quality: str = "standard",
         n: int = 1,
         positive_prompt: Optional[str] = None,
@@ -60,6 +63,7 @@ class XAIImageProvider(BaseImageProvider):
         reference_images: Optional[List[ReferenceImageData]] = None,
     ) -> ImageGenerationResult:
         """Generate image using xAI Grok API (OpenAI-compatible)"""
+        del size, aspect_ratio, image_size, resolved_native_size, quality, positive_prompt, negative_prompt, provider_settings, reference_images
         if not self._client:
             return ImageGenerationResult(
                 success=False,
