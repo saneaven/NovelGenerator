@@ -43,7 +43,7 @@ class PatchTranslationToolCallModule(ToolCallModule):
                 ToolSpec(
                     name="patch_translation_basic_info",
                     description="Patch basic info translation by single replacement.",
-                    parameters=obj_schema({"field": {"type": "string", "enum": ["title", "logline", "genre"]}, **_TEXT_PATCH}, ["field", "old", "new"]),
+                    parameters=obj_schema({"field": {"type": "string", "enum": ["title", "logline"]}, **_TEXT_PATCH}, ["field", "old", "new"]),
                     auto_approve_category="patch_translation",
                 ),
                 ToolSpec(
@@ -83,8 +83,8 @@ class PatchTranslationToolCallModule(ToolCallModule):
         try:
             if tool_name == "patch_translation_basic_info":
                 field = args.get("field")
-                if field not in {"title", "logline", "genre"}:
-                    raise ValueError("field must be one of title|logline|genre")
+                if field not in {"title", "logline"}:
+                    raise ValueError("field must be one of title|logline")
                 object_id = get_primary_object_id(ctx.db, ctx.project_id, "basic_info")
                 current = read_object(ctx.db, project_id=ctx.project_id, object_type="basic_info", object_id=object_id, language=ctx.language)
                 patch_object_field(extract_lang_data(current, ctx.language), field=str(field), old=str(args.get("old") or ""), new=str(args.get("new") or ""))

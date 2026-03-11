@@ -45,7 +45,15 @@ class TranslateToolCallModule(ToolCallModule):
                 ToolSpec(
                     name="translate_basic_info",
                     description="Translate project basic info.",
-                    parameters=obj_schema({"title": {"type": "string"}, "logline": {"type": "string"}, "genre": {"type": "string"}}, []),
+                    parameters=obj_schema(
+                        {
+                            "title": {"type": "string"},
+                            "logline": {"type": "string"},
+                            "genres": {"type": "array", "items": {"type": "string"}},
+                            "tags": {"type": "array", "items": {"type": "string"}},
+                        },
+                        [],
+                    ),
                     auto_approve_category="translate",
                 ),
                 ToolSpec(
@@ -112,7 +120,7 @@ class TranslateToolCallModule(ToolCallModule):
             object_id = get_primary_object_id(ctx.db, ctx.project_id, "basic_info")
             current = read_object(ctx.db, project_id=ctx.project_id, object_type="basic_info", object_id=object_id, language=ctx.language)
             next_data = dict(extract_lang_data(current, ctx.language))
-            for key in ["title", "logline", "genre"]:
+            for key in ["title", "logline", "genres", "tags"]:
                 if key in args:
                     next_data[key] = args[key]
             object_service.update_object(

@@ -41,6 +41,7 @@ from ..services.deletion_service import (
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.rag_index_service import index_object, invalidate_object_index
 from ..utils.object_type_aliases import externalize_object_type, normalize_object_type
+from .basic_info_utils import normalize_basic_info_data
 from .asset_change_events import queue_scene_assets_change
 from .object_change_events import queue_object_change
 from .credential_service import CredentialServiceError, credential_service
@@ -329,6 +330,13 @@ def _serialize_object(db: Session, object_type: str, obj: Any, language: str | N
             "created_at": latest.created_at.isoformat() if latest.created_at else None,
         }
 
+    if object_type == "basic_info":
+        data = {
+            lang: normalize_basic_info_data(lang_data)
+            for lang, lang_data in data.items()
+            if isinstance(lang_data, dict)
+        }
+
     return {
         "id": str(obj.id),
         "type": externalize_object_type(object_type),
@@ -383,6 +391,9 @@ def _create_or_update_version(
     created_by: UUID | None,
     create_new: bool,
 ) -> ObjectVersion:
+    if object_type == "basic_info":
+        new_data = normalize_basic_info_data(new_data)
+
     latest = _latest_version(db, object_type, object_id)
     if latest is None:
         version = ObjectVersion(

@@ -139,7 +139,7 @@ The database is designed with a user-centric architecture:
 - **projects**: Story projects (1:N with users)
 
 ### Story Objects
-- **basic_info**: Project metadata (title, logline, genre)
+- **basic_info**: Project metadata (title, logline, genres, tags)
 - **characters**: Character entities
 - **organizations**: Organization entities
 - **locations**: Location entities

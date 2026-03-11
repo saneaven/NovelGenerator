@@ -1,42 +1,60 @@
 import React from 'react';
+import { normalizeStringList } from '../../../utils/basicInfo';
 import './ReadOnlyBasicInfoDisplay.css';
 
 export interface ReadOnlyBasicInfoDisplayProps {
   title?: string;
   logline?: string;
-  genre?: string;
-  mode: 'create' | 'replace';
+  genres?: string[];
+  tags?: string[];
+  mode: 'create' | 'read' | 'replace';
   changedFields?: string[];
 }
 
 export const ReadOnlyBasicInfoDisplay: React.FC<ReadOnlyBasicInfoDisplayProps> = ({
   title,
   logline,
-  genre,
+  genres,
+  tags,
   mode,
   changedFields,
 }) => {
   const isChanged = (field: string) =>
     mode === 'replace' && changedFields?.includes(field);
 
-  const hasGenre = Boolean(genre?.trim());
+  const genreList = normalizeStringList(genres);
+  const tagList = normalizeStringList(tags);
+  const hasGenres = genreList.length > 0;
+  const hasTags = tagList.length > 0;
   const hasTitle = Boolean(title?.trim());
   const hasLogline = Boolean(logline?.trim());
 
   // In replace mode with changedFields, only show fields that actually changed
-  const showGenre = mode !== 'replace' || !changedFields || changedFields.includes('genre');
+  const showGenres = mode !== 'replace' || !changedFields || changedFields.includes('genres');
+  const showTags = mode !== 'replace' || !changedFields || changedFields.includes('tags');
   const showTitle = mode !== 'replace' || !changedFields || changedFields.includes('title');
   const showLogline = mode !== 'replace' || !changedFields || changedFields.includes('logline');
 
   return (
     <div className="ro-basic-info">
-      {showGenre && (
+      {showGenres && (
         <div className="ro-basic-info__badge-row">
-          <span
-            className={`ro-basic-info__genre-badge${isChanged('genre') ? ' ro-basic-info--changed' : ''}`}
-          >
-            {hasGenre ? genre : 'Uncategorized'}
-          </span>
+          {hasGenres ? (
+            genreList.map((genreValue) => (
+              <span
+                key={genreValue}
+                className={`ro-basic-info__genre-badge${isChanged('genres') ? ' ro-basic-info--changed' : ''}`}
+              >
+                {genreValue}
+              </span>
+            ))
+          ) : (
+            <span
+              className={`ro-basic-info__genre-badge${isChanged('genres') ? ' ro-basic-info--changed' : ''}`}
+            >
+              Uncategorized
+            </span>
+          )}
         </div>
       )}
 
@@ -48,7 +66,24 @@ export const ReadOnlyBasicInfoDisplay: React.FC<ReadOnlyBasicInfoDisplayProps> =
         </h3>
       )}
 
-      {showLogline && (showGenre || showTitle) && (
+      {showTags && (
+        <div className={`ro-basic-info__meta-section${isChanged('tags') ? ' ro-basic-info--changed' : ''}`}>
+          <span className="ro-basic-info__meta-label">Tags</span>
+          {hasTags ? (
+            <div className="ro-basic-info__meta-chip-wrap">
+              {tagList.map((tagValue) => (
+                <span key={tagValue} className="ro-basic-info__meta-chip">
+                  {tagValue}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="ro-basic-info__empty">No tags provided.</span>
+          )}
+        </div>
+      )}
+
+      {showLogline && (showGenres || showTags || showTitle) && (
         <hr className="ro-basic-info__divider" />
       )}
 

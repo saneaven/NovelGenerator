@@ -75,7 +75,12 @@ class ReplaceToolCallModule(ToolCallModule):
                         name="replace_basic_info",
                         description="Replace project basic info.",
                         parameters=obj_schema(
-                            {"title": {"type": "string"}, "logline": {"type": "string"}, "genre": {"type": "string"}},
+                            {
+                                "title": {"type": "string"},
+                                "logline": {"type": "string"},
+                                "genres": {"type": "array", "items": {"type": "string"}},
+                                "tags": {"type": "array", "items": {"type": "string"}},
+                            },
                             [],
                         ),
                         auto_approve_category="replace",
@@ -196,7 +201,7 @@ class ReplaceToolCallModule(ToolCallModule):
                 language=ctx.language,
             )
             next_data = dict(extract_lang_data(current, ctx.language))
-            for key in ["title", "logline", "genre"]:
+            for key in ["title", "logline", "genres", "tags"]:
                 if key in args:
                     next_data[key] = args[key]
             object_service.update_object(

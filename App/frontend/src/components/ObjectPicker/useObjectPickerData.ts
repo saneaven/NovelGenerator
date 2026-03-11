@@ -14,6 +14,7 @@ import type {
 } from './types';
 import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
 import { docToMarkdown } from '../../editor/manuscript/convert';
+import { buildBasicInfoSummary, normalizeBasicInfoData } from '../../utils/basicInfo';
 
 /**
  * Helper to get data for a specific language from an object.
@@ -73,13 +74,10 @@ function objectToItem(obj: UnifiedObject, language: string): ObjectPickerItem {
   let content = (data.content as string) || undefined;
 
   if (obj.type === 'basic_info') {
-    const title = (data as any).title ?? '';
-    const logline = (data as any).logline ?? '';
-    const genre = (data as any).genre ?? '';
-    name = title || fallbackName;
-    description = logline || undefined;
-    const summary = `Title: ${title}\nLogline: ${logline}\nGenre: ${genre}`.trim();
-    content = summary || undefined;
+    const basicInfo = normalizeBasicInfoData(data);
+    name = basicInfo.title || fallbackName;
+    description = basicInfo.logline || undefined;
+    content = buildBasicInfoSummary(basicInfo) || undefined;
   } else if (obj.type === 'guidelines') {
     const authorNote = (data as any).authorNote as string | undefined;
     name = fallbackName;

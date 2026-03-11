@@ -86,14 +86,16 @@ export interface ProjectResponse extends BaseMetadata {
 export interface BasicInfoCreate {
   title: string;
   logline: string;
-  genre: string;
+  genres: string[];
+  tags: string[];
   language?: string;
 }
 
 export interface BasicInfoUpdate {
   title?: string;
   logline?: string;
-  genre?: string;
+  genres?: string[];
+  tags?: string[];
   language?: string;
 }
 
@@ -101,7 +103,8 @@ export interface BasicInfoResponse extends BaseMetadata {
   project_id: string;
   title?: string;
   logline?: string;
-  genre?: string;
+  genres: string[];
+  tags: string[];
 }
 
 // ============================================================================

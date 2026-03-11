@@ -99,7 +99,8 @@ export interface VersionHistoryEntry {
 export interface BasicInfoData {
   title: string;
   logline: string;
-  genre: string;
+  genres: string[];
+  tags: string[];
 }
 
 /**

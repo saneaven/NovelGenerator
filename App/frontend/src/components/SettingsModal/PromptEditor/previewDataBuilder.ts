@@ -66,7 +66,8 @@ export function buildMinimalProjectData(): TemplateData['project'] {
       id: '[ placeholder-project-id ]',
       title: '[ Placeholder for project title ]',
       logline: '[ Placeholder for project logline ]',
-      genre: '[ Placeholder for genre ]',
+      genres: ['[ Placeholder genre ]'],
+      tags: ['[ Placeholder tag ]'],
     },
     objects: [{
       type: 'character' as const,

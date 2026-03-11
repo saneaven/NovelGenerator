@@ -18,6 +18,7 @@ from ...models.db_models import (
     Outline,
 )
 from ...models.translation_models import ObjectVersion
+from ..basic_info_utils import basic_info_summary_text, normalize_basic_info_data
 from ..sidecar_client import SidecarClient
 
 
@@ -105,15 +106,10 @@ async def build_project_data(
 
     # basicInfo
     if basic is not None:
-        basic_data = _lang_data(get_latest("basic_info", basic.id), language)
-        basic_info = {
-            "id": str(basic.id),
-            "title": str(basic_data.get("title") or ""),
-            "logline": str(basic_data.get("logline") or ""),
-            "genre": str(basic_data.get("genre") or ""),
-        }
+        basic_data = normalize_basic_info_data(_lang_data(get_latest("basic_info", basic.id), language))
+        basic_info = {"id": str(basic.id), **basic_data}
     else:
-        basic_info = {"id": "", "title": "", "logline": "", "genre": ""}
+        basic_info = {"id": "", "title": "", "logline": "", "genres": [], "tags": []}
 
     # guidelines
     if guidelines is not None:
@@ -133,7 +129,7 @@ async def build_project_data(
             "id": str(basic.id),
             "name": str(basic_data.get("title") or ""),
             "description": str(basic_data.get("logline") or ""),
-            "content": str(basic_data.get("genre") or ""),
+            "content": basic_info_summary_text(basic_data),
             "imagePrompt": getattr(basic, "image_prompt", None),
             "imagePromptPositive": getattr(basic, "image_prompt_positive", None),
             "imagePromptNegative": getattr(basic, "image_prompt_negative", None),
@@ -268,15 +264,10 @@ async def build_project_data(
     content_by_lang: dict[str, Any] = {}
     for lang in sorted(all_languages):
         if basic is not None:
-            lang_basic = _lang_data(get_latest("basic_info", basic.id), lang)
-            lang_basic_info = {
-                "id": str(basic.id),
-                "title": str(lang_basic.get("title") or ""),
-                "logline": str(lang_basic.get("logline") or ""),
-                "genre": str(lang_basic.get("genre") or ""),
-            }
+            lang_basic = normalize_basic_info_data(_lang_data(get_latest("basic_info", basic.id), lang))
+            lang_basic_info = {"id": str(basic.id), **lang_basic}
         else:
-            lang_basic_info = {"id": "", "title": "", "logline": "", "genre": ""}
+            lang_basic_info = {"id": "", "title": "", "logline": "", "genres": [], "tags": []}
 
         lang_objects: list[dict[str, Any]] = []
         if basic is not None:
@@ -285,7 +276,7 @@ async def build_project_data(
                 "id": str(basic.id),
                 "name": str(lang_basic.get("title") or ""),
                 "description": str(lang_basic.get("logline") or ""),
-                "content": str(lang_basic.get("genre") or ""),
+                "content": basic_info_summary_text(lang_basic),
                 "imagePrompt": getattr(basic, "image_prompt", None),
                 "imagePromptPositive": getattr(basic, "image_prompt_positive", None),
                 "imagePromptNegative": getattr(basic, "image_prompt_negative", None),

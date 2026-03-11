@@ -13,7 +13,7 @@ import { getObjectSnapshot, resolveObjectTitle } from './helpers';
 function replaceKeysForObjectType(objectType: ObjectCardProps['operation']['objectType']): string[] {
   switch (objectType) {
     case 'basic_info':
-      return ['title', 'logline', 'genre'];
+      return ['title', 'logline', 'genres', 'tags'];
     case 'guidelines':
       return ['authorNote'];
     case 'story_object':
@@ -138,7 +138,8 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
         <ReadOnlyBasicInfoDisplay
           title={typeof changedValues.title === 'string' ? changedValues.title : undefined}
           logline={typeof changedValues.logline === 'string' ? changedValues.logline : undefined}
-          genre={typeof changedValues.genre === 'string' ? changedValues.genre : undefined}
+          genres={Array.isArray(changedValues.genres) ? changedValues.genres as string[] : undefined}
+          tags={Array.isArray(changedValues.tags) ? changedValues.tags as string[] : undefined}
           mode="replace"
           changedFields={changedFields}
         />

@@ -119,7 +119,7 @@ async def create_project(
     db.add(basic_info)
 
     # Create initial ObjectVersion for BasicInfo
-    empty_data = {'title': '', 'logline': '', 'genre': ''}
+    empty_data = {'title': '', 'logline': '', 'genres': [], 'tags': []}
     version = ObjectVersion(
         id=uuid.uuid4(),
         object_type='basic_info',

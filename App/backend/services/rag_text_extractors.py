@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict
 
+from .basic_info_utils import join_string_list
+
 
 _FENCED_CODE_BLOCK_RE = re.compile(r"```.*?```", flags=re.DOTALL)
 _MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^\)]*\)")
@@ -147,8 +149,9 @@ def extract_index_text(object_type: str, version_data: Dict[str, Any], language:
     if object_type == "basic_info":
         title = safe_str(lang_blob.get("title", "")).strip()
         logline = safe_str(lang_blob.get("logline", "")).strip()
-        genre = safe_str(lang_blob.get("genre", "")).strip()
-        content = "\n".join([f"Title: {title}", f"Logline: {logline}", f"Genre: {genre}"]).strip()
+        genres = join_string_list(lang_blob.get("genres"))
+        tags = join_string_list(lang_blob.get("tags"))
+        content = "\n".join([f"Title: {title}", f"Logline: {logline}", f"Genres: {genres}", f"Tags: {tags}"]).strip()
         return {"content": content} if content else {}
 
     name = strip_markdown_assets(safe_str(lang_blob.get("name", "")))

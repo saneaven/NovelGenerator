@@ -65,7 +65,7 @@ The database is designed with a user-centric architecture where all data is owne
 1. **users** - User accounts
 2. **user_settings** - User preferences and LLM provider settings
 3. **projects** - Story projects
-4. **basic_info** - Project basic information (title, logline, genre)
+4. **basic_info** - Project basic information (title, logline, genres, tags)
 5. **characters, organizations, locations, lorebook_entries** - Story elements
 6. **outlines, acts, chapters** - Story structure
 7. **story_object_versions** - Version history for all story objects

@@ -128,7 +128,7 @@ export const extractFieldPreviews = (
     return [];
   }
 
-  const preferredKeys = ['name', 'description', 'genre', 'logline', 'content', 'order'];
+  const preferredKeys = ['name', 'description', 'genres', 'tags', 'logline', 'content', 'order'];
   const seen = new Set<string>();
   const result: ToolCallOperationFieldPreview[] = [];
 
@@ -159,6 +159,22 @@ export const extractFieldPreviews = (
         key,
         label: humanizePreviewKey(key),
         value: String(value),
+      });
+      seen.add(key);
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      const items = value
+        .map((item) => String(item ?? '').trim())
+        .filter(Boolean);
+      if (items.length === 0) {
+        return;
+      }
+      result.push({
+        key,
+        label: humanizePreviewKey(key),
+        value: items.join(', '),
       });
       seen.add(key);
     }

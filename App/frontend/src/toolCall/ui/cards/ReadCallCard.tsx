@@ -82,8 +82,9 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
         <ReadOnlyBasicInfoDisplay
           title={typeof snapshot.data.title === 'string' ? snapshot.data.title : undefined}
           logline={typeof snapshot.data.logline === 'string' ? snapshot.data.logline : undefined}
-          genre={typeof snapshot.data.genre === 'string' ? snapshot.data.genre : undefined}
-          mode="create"
+          genres={Array.isArray(snapshot.data.genres) ? snapshot.data.genres as string[] : undefined}
+          tags={Array.isArray(snapshot.data.tags) ? snapshot.data.tags as string[] : undefined}
+          mode="read"
         />
       );
     }

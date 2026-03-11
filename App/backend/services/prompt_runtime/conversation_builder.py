@@ -78,11 +78,33 @@ def _format_read_result_xml(result: dict[str, Any]) -> str:
     )
     data = result.get("data") or {}
     obj = data.get("object") or {}
-    for key in ("name", "title", "logline", "genre", "description", "content", "authorNote"):
+    for key in ("name", "title", "logline", "description", "content", "authorNote"):
         value = obj.get(key)
         if isinstance(value, str) and value.strip():
             child = ET.SubElement(root, key)
             child.text = value
+    genres = obj.get("genres")
+    if isinstance(genres, list):
+        genres_el = ET.SubElement(root, "genres")
+        for value in genres:
+            text = str(value or "").strip()
+            if not text:
+                continue
+            child = ET.SubElement(genres_el, "genre")
+            child.text = text
+        if len(genres_el) == 0:
+            root.remove(genres_el)
+    tags = obj.get("tags")
+    if isinstance(tags, list):
+        tags_el = ET.SubElement(root, "tags")
+        for value in tags:
+            text = str(value or "").strip()
+            if not text:
+                continue
+            child = ET.SubElement(tags_el, "tag")
+            child.text = text
+        if len(tags_el) == 0:
+            root.remove(tags_el)
     return _to_xml_string(root)
 
 

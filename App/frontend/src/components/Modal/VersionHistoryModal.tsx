@@ -7,6 +7,7 @@ import { docToMarkdown } from '../../editor/manuscript/convert';
 import { Scroll, Loading, Mailbox, Check, Globe, Clock, SpeechBubble, DocumentAlt } from '../icons';
 import { TextButton } from '../TextButton';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
+import { formatBasicInfoList, normalizeBasicInfoData } from '../../utils/basicInfo';
 import './VersionHistoryModal.css';
 
 // Unified type for text-based version history (prompts and fragments)
@@ -173,19 +174,24 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     }
 
     if (type === 'basic_info') {
+      const basicInfo = normalizeBasicInfoData(data);
       return (
         <div className="version-data-formatted">
           <div className="data-field">
             <label>Title:</label>
-            <span>{data.title || 'Not set'}</span>
+            <span>{basicInfo.title || 'Not set'}</span>
           </div>
           <div className="data-field">
             <label>Logline:</label>
-            <span>{data.logline || 'Not set'}</span>
+            <span>{basicInfo.logline || 'Not set'}</span>
           </div>
           <div className="data-field">
-            <label>Genre:</label>
-            <span>{data.genre || 'Not set'}</span>
+            <label>Genres:</label>
+            <span>{formatBasicInfoList(basicInfo.genres) || 'Not set'}</span>
+          </div>
+          <div className="data-field">
+            <label>Tags:</label>
+            <span>{formatBasicInfoList(basicInfo.tags) || 'Not set'}</span>
           </div>
         </div>
       );

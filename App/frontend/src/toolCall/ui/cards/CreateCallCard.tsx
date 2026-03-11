@@ -12,7 +12,7 @@ import { pickExistingKeys, pickValues, resolveObjectTitle } from './helpers';
 function createFieldKeysForObjectType(objectType: ObjectCardProps['operation']['objectType']): string[] {
   switch (objectType) {
     case 'basic_info':
-      return ['title', 'logline', 'genre'];
+      return ['title', 'logline', 'genres', 'tags'];
     case 'story_object':
       return ['name', 'description', 'content'];
     case 'outline':
@@ -75,7 +75,8 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
         <ReadOnlyBasicInfoDisplay
           title={typeof fields.title === 'string' ? fields.title : undefined}
           logline={typeof fields.logline === 'string' ? fields.logline : undefined}
-          genre={typeof fields.genre === 'string' ? fields.genre : undefined}
+          genres={Array.isArray(fields.genres) ? fields.genres as string[] : undefined}
+          tags={Array.isArray(fields.tags) ? fields.tags as string[] : undefined}
           mode="create"
         />
       );

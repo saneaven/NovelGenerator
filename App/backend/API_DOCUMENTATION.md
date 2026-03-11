@@ -213,7 +213,8 @@ POST /api/v1/projects/{project_id}/basic-info
 {
   "title": "The Great Adventure",
   "logline": "A hero's journey through unknown lands",
-  "genre": "Fantasy",
+  "genres": ["Fantasy", "Adventure"],
+  "tags": ["epic quest", "coming of age"],
   "language": "English"
 }
 ```
@@ -233,7 +234,8 @@ PUT /api/v1/projects/{project_id}/basic-info
 {
   "title": "Updated Title",
   "logline": "Updated logline",
-  "genre": "Sci-Fi",
+  "genres": ["Sci-Fi"],
+  "tags": ["space opera", "survival"],
   "language": "English"
 }
 ```

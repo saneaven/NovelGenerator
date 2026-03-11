@@ -22,6 +22,7 @@ import type {
   AddTranslationRequest,
   VersionHistoryEntry,
 } from '../types/unifiedObject';
+import { normalizeBasicInfoData } from '../utils/basicInfo';
 
 // ============================================================================
 // STORE INTERFACE
@@ -606,7 +607,8 @@ export interface SimplifiedStoryObjects {
     id: string;
     title: string;
     logline: string;
-    genre: string;
+    genres: string[];
+    tags: string[];
   } | null;
   characters: Array<{ id: string; name: string; description: string; content: string }>;
   organizations: Array<{ id: string; name: string; description: string; content: string }>;
@@ -696,12 +698,13 @@ export function useStoryObjects(projectId: string | undefined, language: string)
 
     // Build basic info - extract data for language
     const basicInfo = basicInfoList.length > 0 ? (() => {
-      const data = getObjectDataForLanguage(basicInfoList[0], language);
+      const data = normalizeBasicInfoData(getObjectDataForLanguage(basicInfoList[0], language));
       return {
         id: basicInfoList[0].id,
-        title: data.title || '',
-        logline: data.logline || '',
-        genre: data.genre || '',
+        title: data.title,
+        logline: data.logline,
+        genres: data.genres,
+        tags: data.tags,
       };
     })() : null;
 

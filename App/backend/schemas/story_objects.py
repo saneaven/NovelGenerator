@@ -14,7 +14,8 @@ class BasicInfoCreate(BaseModel):
     """Create basic info"""
     title: str
     logline: str
-    genre: str
+    genres: List[str] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
     language: str = "English"
 
 
@@ -22,7 +23,8 @@ class BasicInfoUpdate(BaseModel):
     """Update basic info"""
     title: Optional[str] = None
     logline: Optional[str] = None
-    genre: Optional[str] = None
+    genres: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
     language: Optional[str] = None
 
 
@@ -31,7 +33,8 @@ class BasicInfoResponse(BaseMetadata):
     project_id: UUID
     title: Optional[str]
     logline: Optional[str]
-    genre: Optional[str]
+    genres: List[str] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
 
 
 # ============================================================================

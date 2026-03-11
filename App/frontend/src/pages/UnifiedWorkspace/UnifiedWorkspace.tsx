@@ -15,6 +15,7 @@ import { notificationService } from '../../api/notificationService';
 import { translationService } from '../../api/unifiedObjectService';
 import { stopProjectRuntime } from '../../runtime/runtimeStream';
 import { bootstrapProjectRuntime } from '../../runtime/projectRuntimeBootstrap';
+import { normalizeBasicInfoData } from '../../utils/basicInfo';
 
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
 import TranslationModal from '../../components/Modal/TranslationModal';
@@ -302,12 +303,13 @@ const UnifiedWorkspace: React.FC = () => {
         ]);
 
         const basicInfo = basicInfoList.length > 0 ? (() => {
-          const data = getDataForLanguage(basicInfoList[0], mainLanguage);
+          const data = normalizeBasicInfoData(getDataForLanguage(basicInfoList[0], mainLanguage));
           return {
             id: basicInfoList[0].id,
-            title: data.title || '',
-            logline: data.logline || '',
-            genre: data.genre || '',
+            title: data.title,
+            logline: data.logline,
+            genres: data.genres,
+            tags: data.tags,
           };
         })() : null;
 

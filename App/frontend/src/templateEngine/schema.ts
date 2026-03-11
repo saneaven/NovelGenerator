@@ -34,8 +34,9 @@ export const UNIFIED_SCHEMA = {
         id: "proj-123",
         title: "The Last Kingdom",
         logline: "A warrior's journey to reclaim his homeland",
-        genre: "Fantasy"
-      } as { id: string; title: string; logline: string; genre: string }
+        genres: ["Fantasy", "Historical Adventure"],
+        tags: ["warfare", "kingdom politics"]
+      } as { id: string; title: string; logline: string; genres: string[]; tags: string[] }
     },
     objects: {
       desc: "Main language objects array",
@@ -81,19 +82,19 @@ export const UNIFIED_SCHEMA = {
       desc: "All language versions (keyed by language name)",
       example: {
         "English": {
-          basicInfo: { id: "proj-123", title: "The Last Kingdom", logline: "A warrior's journey", genre: "Fantasy" },
+          basicInfo: { id: "proj-123", title: "The Last Kingdom", logline: "A warrior's journey", genres: ["Fantasy"], tags: ["warfare"] },
           objects: [{ type: "character" as const, id: "char-1", name: "Uhtred", description: "Saxon warrior", content: "A Saxon lord..." }],
           outline: { acts: [{ id: "act-1", name: "Act 1", description: "The fall", content: "...", chapters: [] }] },
           manuscripts: [{ id: "ms-1", chapterId: "ch-1", chapterName: "Chapter 1", content: "...", wordCount: 100 }],
         },
         "Korean": {
-          basicInfo: { id: "proj-123", title: "마지막 왕국", logline: "전사의 여정", genre: "판타지" },
+          basicInfo: { id: "proj-123", title: "마지막 왕국", logline: "전사의 여정", genres: ["판타지"], tags: ["전쟁"] },
           objects: [{ type: "character" as const, id: "char-1", name: "우트레드", description: "색슨 전사", content: "색슨 영주..." }],
           outline: { acts: [{ id: "act-1", name: "1막", description: "몰락", content: "...", chapters: [] }] },
           manuscripts: [{ id: "ms-1", chapterId: "ch-1", chapterName: "1장", content: "...", wordCount: 100 }],
         }
       } as Record<string, {
-        basicInfo: { id: string; title: string; logline: string; genre: string };
+        basicInfo: { id: string; title: string; logline: string; genres: string[]; tags: string[] };
         objects: Array<{ type: "basic_info" | "character" | "location" | "organization" | "lorebook"; id: string; name: string; description: string; content: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>;
         outline: { acts: Array<{ id: string; name: string; description: string; content: string; chapters: Array<{ id: string; name: string; description: string; content: string }> }> } | null;
         manuscripts: Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>;

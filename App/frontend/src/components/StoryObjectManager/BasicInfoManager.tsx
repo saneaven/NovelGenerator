@@ -18,15 +18,24 @@ import VersionHistoryModal from '../Modal/VersionHistoryModal';
 import TranslationModal from '../Modal/TranslationModal';
 import { UnifiedImageModal } from '../AssetManager';
 import { DropdownMenu, DropdownItem } from '../ui/DropdownMenu';
+import StringChipInput from '../ui/StringChipInput';
 import { IconButton } from '../IconButton';
 import { TextButton } from '../TextButton';
 import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal, Image, Save, Close } from '../icons';
 import { Loading } from '../common/Loading';
 import type { BasicInfoObject, BasicInfoData } from '../../types/unifiedObject';
+import { normalizeBasicInfoData } from '../../utils/basicInfo';
 
 interface BasicInfoManagerProps {
   globalDisplayLanguage: string;
 }
+
+const EMPTY_BASIC_INFO_DATA: BasicInfoData = {
+  title: '',
+  logline: '',
+  genres: [],
+  tags: [],
+};
 
 const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLanguage }) => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -47,11 +56,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
 
   // Edit state
   const [isEditing, setIsEditing] = useState(false);
-  const [editFormData, setEditFormData] = useState<BasicInfoData>({
-    title: '',
-    logline: '',
-    genre: '',
-  });
+  const [editFormData, setEditFormData] = useState<BasicInfoData>(EMPTY_BASIC_INFO_DATA);
 
   // Modal state
   const [showAIModal, setShowAIModal] = useState(false);
@@ -62,14 +67,14 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
 
   // Helper to get data for a specific language
   const getDataForLanguage = useCallback((lang: string): BasicInfoData => {
-    if (!basicInfo) return { title: '', logline: '', genre: '' };
+    if (!basicInfo) return EMPTY_BASIC_INFO_DATA;
     const data = basicInfo.data[lang];
-    if (data) return data as BasicInfoData;
+    if (data) return normalizeBasicInfoData(data);
     const availableLanguages = Object.keys(basicInfo.data);
     if (availableLanguages.length > 0) {
-      return basicInfo.data[availableLanguages[0]] as BasicInfoData;
+      return normalizeBasicInfoData(basicInfo.data[availableLanguages[0]]);
     }
-    return { title: '', logline: '', genre: '' };
+    return EMPTY_BASIC_INFO_DATA;
   }, [basicInfo]);
 
   // Compute effective display language with fallback
@@ -156,8 +161,12 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     setIsEditing(false);
   };
 
-  const handleChange = (field: keyof BasicInfoData, value: string) => {
+  const handleChange = (field: 'title' | 'logline', value: string) => {
     setEditFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleListChange = (field: 'genres' | 'tags', values: string[]) => {
+    setEditFormData((prev) => ({ ...prev, [field]: values }));
   };
 
   const handleEdit = () => {
@@ -305,15 +314,20 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
           <header className="details-header">
               <div className="meta-badge-group">
                 {isEditing ? (
-                  <input
-                    type="text"
-                    className="genre-input"
-                    value={editFormData.genre}
-                    onChange={(e) => handleChange('genre', e.target.value)}
-                    placeholder="Genre"
+                  <StringChipInput
+                    values={editFormData.genres}
+                    onChange={(values) => handleListChange('genres', values)}
+                    placeholder="Add genres"
+                    ariaLabel="Genres"
                   />
                 ) : (
-                  <span className="genre-badge">{currentData.genre || 'Uncategorized'}</span>
+                  currentData.genres.length > 0 ? (
+                    currentData.genres.map((genreValue) => (
+                      <span key={genreValue} className="genre-badge">{genreValue}</span>
+                    ))
+                  ) : (
+                    <span className="genre-badge">Uncategorized</span>
+                  )
                 )}
                 {isFallback && (
                   <span className="language-badge warning" title={`Showing ${effectiveLanguage}`}>
@@ -338,6 +352,25 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
 
           {/* Body Section: Logline */}
           <div className="details-body">
+            <div className="basic-info-meta-section">
+              <label className="section-label">Tags</label>
+              {isEditing ? (
+                <StringChipInput
+                  values={editFormData.tags}
+                  onChange={(values) => handleListChange('tags', values)}
+                  placeholder="Add tags"
+                  ariaLabel="Tags"
+                />
+              ) : currentData.tags.length > 0 ? (
+                <div className="tag-badge-group">
+                  {currentData.tags.map((tagValue) => (
+                    <span key={tagValue} className="tag-badge">{tagValue}</span>
+                  ))}
+                </div>
+              ) : (
+                <p className="placeholder-text">No tags added yet.</p>
+              )}
+            </div>
             <label className="section-label">Logline</label>
             {isEditing ? (
               <textarea
