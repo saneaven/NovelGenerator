@@ -11,10 +11,15 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..models.db_models import User, UserSettings
 from ..schemas.settings import UserSettingsResponse, UserSettingsUpdate
-from ..services.embedding_config_service import merge_embedding_configs
 from ..services.image_model_catalog_service import default_image_gen_config
 from ..services.memory_service import wipe_memory_index
 from ..services.rag_index_service import wipe_user_index
+from ..services.search_memory_settings import (
+    clear_dimensions_for_target,
+    resolve_memory_settings,
+    resolve_search_settings,
+    validate_search_memory_settings,
+)
 from ..services.settings_service import settings_service
 from ..services.task_config_settings import validate_task_config_settings
 
@@ -93,7 +98,19 @@ def _build_settings_response(settings: UserSettings) -> UserSettingsResponse:
     }
     image_gen_config_dict = getattr(settings, "image_gen_config", None) or deepcopy(default_image_gen_config())
     tool_call_auto_approve_dict = _build_tool_call_auto_approve(getattr(settings, "tool_call_auto_approve", None))
-    embedding_configs_dict = merge_embedding_configs(getattr(settings, "embedding_configs", None))
+    raw_search_memory_settings = getattr(settings, "search_memory_settings", None)
+    if not isinstance(raw_search_memory_settings, dict):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Stored search memory settings are invalid.",
+        )
+    try:
+        search_memory_settings = validate_search_memory_settings(raw_search_memory_settings)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Stored search memory settings are invalid: {exc}",
+        ) from exc
 
     return UserSettingsResponse(
         taskConfigSettings=task_config_settings,
@@ -105,17 +122,7 @@ def _build_settings_response(settings: UserSettings) -> UserSettingsResponse:
         imageGenConfig=image_gen_config_dict,  # type: ignore[arg-type]
         customThinkingTemplates=getattr(settings, "custom_thinking_templates", []) or [],
         nativeOutputMode=settings.native_output_mode,
-        vectorStorageEnabled=getattr(settings, "vector_storage_enabled", False),
-        embeddingConfigs=embedding_configs_dict,
-        ragSearchTopKPerQuery=getattr(settings, "rag_search_top_k_per_query", 20),
-        ragSearchNeighborWindow=getattr(settings, "rag_search_neighbor_window", 0),
-        ragSearchMaxPrimaryChunks=getattr(settings, "rag_search_max_primary_chunks", 20),
-        ragSearchMaxTotalChunks=getattr(settings, "rag_search_max_total_chunks", 60),
-        ragSearchKeywordPageSize=getattr(settings, "rag_search_keyword_page_size", 20),
-        agentMemoryTopKPerQuery=getattr(settings, "agent_memory_top_k_per_query", 20),
-        agentMemoryNeighborWindow=getattr(settings, "agent_memory_neighbor_window", 0),
-        agentMemoryMaxPrimaryMessages=getattr(settings, "agent_memory_max_primary_messages", 20),
-        agentMemoryMaxTotalMessages=getattr(settings, "agent_memory_max_total_messages", 60),
+        searchMemorySettings=search_memory_settings,  # type: ignore[arg-type]
         patchAutoRetry=getattr(settings, "patch_auto_retry", True),
         llmLoggingEnabled=getattr(settings, "llm_logging_enabled", False),
         toolCallHistoryLimit=getattr(settings, "tool_call_history_limit", 5),
@@ -157,7 +164,9 @@ async def update_user_settings(
 
     demo_mode_enabled = bool(getattr(settings, "demo_mode_enabled", False))
     prev_main_language = str(getattr(settings, "main_language", "English") or "English")
-    rag_prev_configs = merge_embedding_configs(getattr(settings, "embedding_configs", None))
+    prev_search_memory_settings = validate_search_memory_settings(getattr(settings, "search_memory_settings", None))
+    prev_search_settings = resolve_search_settings(prev_search_memory_settings)
+    prev_memory_settings = resolve_memory_settings(prev_search_memory_settings)
     should_wipe_rag_index = False
     should_wipe_memory_index = False
 
@@ -209,52 +218,41 @@ async def update_user_settings(
     if not demo_mode_enabled and update_data.nativeOutputMode is not None:
         settings.native_output_mode = update_data.nativeOutputMode  # type: ignore[assignment]
 
-    if not demo_mode_enabled and update_data.vectorStorageEnabled is not None:
-        settings.vector_storage_enabled = update_data.vectorStorageEnabled  # type: ignore[assignment]
+    if not demo_mode_enabled and update_data.searchMemorySettings is not None:
+        try:
+            next_search_memory_settings = validate_search_memory_settings(
+                update_data.searchMemorySettings.model_dump(mode="json")
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        next_search_settings = resolve_search_settings(next_search_memory_settings)
+        next_memory_settings = resolve_memory_settings(next_search_memory_settings)
 
-    if not demo_mode_enabled and update_data.embeddingConfigs is not None:
-        next_cfg = merge_embedding_configs(update_data.embeddingConfigs.model_dump(exclude_none=True))
-
-        rag_prev = rag_prev_configs.get("ragSearch", {})
-        rag_next = next_cfg.get("ragSearch", {})
-        if rag_prev.get("provider") != rag_next.get("provider") or rag_prev.get("model") != rag_next.get("model"):
+        prev_search_signature = (
+            str(prev_search_settings["embedding"].get("provider") or ""),
+            str(prev_search_settings["embedding"].get("model") or ""),
+        )
+        next_search_signature = (
+            str(next_search_settings["embedding"].get("provider") or ""),
+            str(next_search_settings["embedding"].get("model") or ""),
+        )
+        if prev_search_signature != next_search_signature:
             should_wipe_rag_index = True
-            rag_next["dimensions"] = None
+            next_search_memory_settings = clear_dimensions_for_target(next_search_memory_settings, "search")
 
-        mem_prev = rag_prev_configs.get("agentMemory", {})
-        mem_next = next_cfg.get("agentMemory", {})
-        if mem_prev.get("provider") != mem_next.get("provider") or mem_prev.get("model") != mem_next.get("model"):
+        prev_memory_signature = (
+            str(prev_memory_settings["embedding"].get("provider") or ""),
+            str(prev_memory_settings["embedding"].get("model") or ""),
+        )
+        next_memory_signature = (
+            str(next_memory_settings["embedding"].get("provider") or ""),
+            str(next_memory_settings["embedding"].get("model") or ""),
+        )
+        if prev_memory_signature != next_memory_signature:
             should_wipe_memory_index = True
-            mem_next["dimensions"] = None
+            next_search_memory_settings = clear_dimensions_for_target(next_search_memory_settings, "memory")
 
-        settings.embedding_configs = next_cfg  # type: ignore[assignment]
-
-    if not demo_mode_enabled and update_data.ragSearchTopKPerQuery is not None:
-        settings.rag_search_top_k_per_query = update_data.ragSearchTopKPerQuery  # type: ignore[assignment]
-
-    if not demo_mode_enabled and update_data.ragSearchNeighborWindow is not None:
-        settings.rag_search_neighbor_window = update_data.ragSearchNeighborWindow  # type: ignore[assignment]
-
-    if not demo_mode_enabled and update_data.ragSearchMaxPrimaryChunks is not None:
-        settings.rag_search_max_primary_chunks = update_data.ragSearchMaxPrimaryChunks  # type: ignore[assignment]
-
-    if not demo_mode_enabled and update_data.ragSearchMaxTotalChunks is not None:
-        settings.rag_search_max_total_chunks = update_data.ragSearchMaxTotalChunks  # type: ignore[assignment]
-
-    if not demo_mode_enabled and update_data.ragSearchKeywordPageSize is not None:
-        settings.rag_search_keyword_page_size = update_data.ragSearchKeywordPageSize  # type: ignore[assignment]
-
-    if not demo_mode_enabled and update_data.agentMemoryTopKPerQuery is not None:
-        settings.agent_memory_top_k_per_query = update_data.agentMemoryTopKPerQuery  # type: ignore[assignment]
-
-    if not demo_mode_enabled and update_data.agentMemoryNeighborWindow is not None:
-        settings.agent_memory_neighbor_window = update_data.agentMemoryNeighborWindow  # type: ignore[assignment]
-
-    if not demo_mode_enabled and update_data.agentMemoryMaxPrimaryMessages is not None:
-        settings.agent_memory_max_primary_messages = update_data.agentMemoryMaxPrimaryMessages  # type: ignore[assignment]
-
-    if not demo_mode_enabled and update_data.agentMemoryMaxTotalMessages is not None:
-        settings.agent_memory_max_total_messages = update_data.agentMemoryMaxTotalMessages  # type: ignore[assignment]
+        settings.search_memory_settings = next_search_memory_settings  # type: ignore[assignment]
 
     if not demo_mode_enabled and update_data.patchAutoRetry is not None:
         settings.patch_auto_retry = update_data.patchAutoRetry  # type: ignore[assignment]

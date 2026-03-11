@@ -43,7 +43,7 @@ def _is_vector_storage_enabled(db: Session, *, user_id: UUID) -> bool:
 
 def _require_vector_storage_enabled(db: Session, *, user_id: UUID) -> None:
     if not _is_vector_storage_enabled(db, user_id=user_id):
-        raise HTTPException(status_code=400, detail="Vector storage is disabled (Settings > Search & Memory)")
+        raise HTTPException(status_code=400, detail="Search & Memory is disabled (Settings > Search & Memory)")
 
 @router.get("/projects/{project_id}/rag/status", response_model=RagProjectStatusResponse)
 async def get_rag_status(
@@ -75,7 +75,7 @@ async def rag_index_object(
         project_id=project_id,
     )
 
-    profile = get_embedding_profile(db, user_id=current_user.id, feature="ragSearch")
+    profile = get_embedding_profile(db, user_id=current_user.id, feature="search")
     if not profile:
         raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
 
@@ -130,7 +130,7 @@ async def rag_reindex_project(
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
     _require_vector_storage_enabled(db, user_id=current_user.id)
 
-    profile = get_embedding_profile(db, user_id=current_user.id, feature="ragSearch")
+    profile = get_embedding_profile(db, user_id=current_user.id, feature="search")
     if not profile:
         raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
 
@@ -164,7 +164,7 @@ async def rag_search(
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
     _require_vector_storage_enabled(db, user_id=current_user.id)
 
-    profile = get_embedding_profile(db, user_id=current_user.id, feature="ragSearch")
+    profile = get_embedding_profile(db, user_id=current_user.id, feature="search")
     if not profile:
         raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
 
@@ -174,6 +174,7 @@ async def rag_search(
         raise HTTPException(status_code=400, detail=str(exc))
 
     try:
+        search_settings = settings_service.get_search_settings(db, current_user.id)
         results = await search_project(
             db,
             user_id=current_user.id,
@@ -182,6 +183,8 @@ async def rag_search(
             provider_config=cfg,
             top_k_per_query=request.top_k_per_query,
             neighbor_window=request.neighbor_window,
+            max_primary_items=search_settings.retrieval.max_primary_items,
+            max_total_items=search_settings.retrieval.max_total_items,
         )
         return RagSearchResponse(results=[RagSearchResult(**r) for r in results])
     except ValueError as e:
@@ -205,13 +208,7 @@ async def rag_keyword_search(
     if not kw:
         raise HTTPException(status_code=400, detail="Keyword must not be empty")
 
-    settings = db.query(UserSettings).filter(UserSettings.user_id == current_user.id).first()
-    raw_page_size = getattr(settings, "rag_search_keyword_page_size", 20) if settings else 20
-    try:
-        page_size = int(raw_page_size)
-    except Exception:
-        page_size = 20
-    page_size = max(1, min(200, page_size))
+    page_size = settings_service.get_search_settings(db, current_user.id).keyword_page_size
 
     try:
         data = search_project_by_keyword(

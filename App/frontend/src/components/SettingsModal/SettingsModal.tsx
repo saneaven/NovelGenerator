@@ -5,9 +5,10 @@ import { BaseModal } from '../BaseModal';
 import { BaseSidebar } from '../BaseSidebar';
 import { useSettings, useSettingsStore } from '../../store/settingsStore';
 import { useSidebarStore } from '../../store/sidebarStore';
-import type { ProviderCredentials, Settings, AITaskType } from '../../store/settingsStore';
+import type { ProviderCredentials, Settings, AITaskType, SearchMemoryTarget } from '../../store/settingsStore';
 import { buildLockedSectionReset } from '../../store/settingsUpdatePayload';
 import { hasTaskOverride, resolveAllTaskConfigs, TASK_CONFIG_TASK_TYPES } from '../../store/taskConfigSettings';
+import { resolveMemorySettings, resolveSearchSettings } from '../../store/searchMemorySettings';
 import CredentialsPanel from './CredentialsPanel';
 import GeneralPanel from './GeneralPanel';
 import DemoGeneralPanel from './DemoGeneralPanel';
@@ -44,6 +45,7 @@ type MainTab =
   | 'advanced';
 
 type GeneralConfigTarget = 'general' | AITaskType;
+type SearchMemoryConfigTarget = 'general' | SearchMemoryTarget;
 
 type ProviderName = keyof ProviderCredentials;
 
@@ -133,6 +135,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const toastTimeoutRef = useRef<number | null>(null);
   const [mainTab, setMainTab] = useState<MainTab>('profile');
   const [activeGeneralTarget, setActiveGeneralTarget] = useState<GeneralConfigTarget>('general');
+  const [activeSearchMemoryTarget, setActiveSearchMemoryTarget] = useState<SearchMemoryConfigTarget>('general');
   const promptsPanelRef = useRef<PromptsTemplatesPanelHandle | null>(null);
   const settingsSnapshotRef = useRef<string>('');
   const credentialsSnapshotRef = useRef<string>('');
@@ -147,6 +150,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setLocalSettings(settings);
       setLocalCredentials(DEFAULT_CREDENTIAL_DRAFT);
       setActiveGeneralTarget('general');
+      setActiveSearchMemoryTarget('general');
       settingsSnapshotRef.current = JSON.stringify(settings);
       credentialsSnapshotRef.current = JSON.stringify(DEFAULT_CREDENTIAL_DRAFT);
       setPromptUnsavedCount(0);
@@ -247,29 +251,37 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     return null;
   };
 
-  const validateEmbeddings = (): { tab: MainTab; message: string } | null => {
-    if (!localSettings.vectorStorageEnabled) return null;
+  const validateSearchMemorySettings = (): { tab: MainTab; target: SearchMemoryConfigTarget; message: string } | null => {
+    if (!localSettings.searchMemorySettings.enabled) return null;
 
-    const checks: Array<{ feature: 'ragSearch' | 'agentMemory'; label: string }> = [
-      { feature: 'ragSearch', label: t('settings.ragSearch.title') },
-      { feature: 'agentMemory', label: t('settings.agentMemory.title') },
+    const searchSettings = resolveSearchSettings(localSettings.searchMemorySettings);
+    const memorySettings = resolveMemorySettings(localSettings.searchMemorySettings);
+    const checks: Array<{
+      target: SearchMemoryConfigTarget;
+      label: string;
+      provider: string;
+      model: string;
+    }> = [
+      {
+        target: 'search',
+        label: t('settings.searchMemory.targets.search.label'),
+        provider: searchSettings.embedding.provider,
+        model: searchSettings.embedding.model,
+      },
+      {
+        target: 'memory',
+        label: t('settings.searchMemory.targets.memory.label'),
+        provider: memorySettings.embedding.provider,
+        model: memorySettings.embedding.model,
+      },
     ];
 
-    for (const c of checks) {
-      const profile = (localSettings.embeddingConfigs as any)?.[c.feature];
-      const provider = (profile?.provider as string | undefined) ?? '';
-      const model = (profile?.model as string | undefined) ?? '';
-
-      if (!model.trim()) {
+    for (const check of checks) {
+      if (!check.provider.trim() || !check.model.trim()) {
         return {
           tab: 'searchMemory',
-          message: t('settings.embeddings.validation.missingModel', { feature: c.label }),
-        };
-      }
-      if (!provider.trim()) {
-        return {
-          tab: 'searchMemory',
-          message: t('settings.embeddings.validation.missingModel', { feature: c.label }),
+          target: check.target,
+          message: t('settings.searchMemory.validation.missingEmbedding', { target: check.label }),
         };
       }
     }
@@ -394,6 +406,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setHasMountedPromptsPanel(false);
       setPromptsPanelKey((prev) => prev + 1);
       setMainTab('general');
+      setActiveSearchMemoryTarget('general');
     },
     [localCredentials, localSettings, promptUnsavedCount, settings, t]
   );
@@ -418,10 +431,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             return;
           }
 
-          const embeddingError = validateEmbeddings();
-          if (embeddingError) {
-            setMainTab(embeddingError.tab);
-            showToast('error', embeddingError.message);
+          const searchMemoryError = validateSearchMemorySettings();
+          if (searchMemoryError) {
+            setMainTab(searchMemoryError.tab);
+            setActiveSearchMemoryTarget(searchMemoryError.target);
+            showToast('error', searchMemoryError.message);
             return;
           }
 
@@ -854,7 +868,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         </aside>
 
         {/* Panel Content */}
-        <div className={`settings-panel-content${mainTab === 'prompts' || mainTab === 'general' ? ' settings-panel-content--fill' : ''}`}>
+        <div className={`settings-panel-content${mainTab === 'prompts' || mainTab === 'general' || mainTab === 'searchMemory' ? ' settings-panel-content--fill' : ''}`}>
         {mainTab === 'profile' && <ProfilePanel />}
 
         {mainTab === 'credentials' && !localSettings.demoModeEnabled && (
@@ -868,41 +882,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
         {mainTab === 'searchMemory' && !localSettings.demoModeEnabled && (
           <SearchMemoryPanel
-            vectorStorageEnabled={localSettings.vectorStorageEnabled}
-            onVectorStorageEnabledChange={(enabled) => setLocalSettings(prev => ({ ...prev, vectorStorageEnabled: enabled }))}
-            ragSearchProfile={localSettings.embeddingConfigs.ragSearch}
-            onRagSearchProfileChange={(next) =>
+            settings={localSettings.searchMemorySettings}
+            activeTarget={activeSearchMemoryTarget}
+            onTargetChange={setActiveSearchMemoryTarget}
+            onChange={(searchMemorySettings) =>
               setLocalSettings((prev) => ({
                 ...prev,
-                embeddingConfigs: { ...prev.embeddingConfigs, ragSearch: next },
+                searchMemorySettings,
               }))
             }
-            agentMemoryProfile={localSettings.embeddingConfigs.agentMemory}
-            onAgentMemoryProfileChange={(next) =>
-              setLocalSettings((prev) => ({
-                ...prev,
-                embeddingConfigs: { ...prev.embeddingConfigs, agentMemory: next },
-              }))
-            }
-            keywordPageSize={localSettings.ragSearchKeywordPageSize}
-            onKeywordPageSizeChange={(value) => setLocalSettings(prev => ({ ...prev, ragSearchKeywordPageSize: value }))}
             mainLanguage={localSettings.mainLanguage}
-            topKPerQuery={localSettings.ragSearchTopKPerQuery}
-            onTopKPerQueryChange={(value) => setLocalSettings(prev => ({ ...prev, ragSearchTopKPerQuery: value }))}
-            neighborWindow={localSettings.ragSearchNeighborWindow}
-            onNeighborWindowChange={(value) => setLocalSettings(prev => ({ ...prev, ragSearchNeighborWindow: value }))}
-            maxPrimaryChunks={localSettings.ragSearchMaxPrimaryChunks}
-            onMaxPrimaryChunksChange={(value) => setLocalSettings(prev => ({ ...prev, ragSearchMaxPrimaryChunks: value }))}
-            maxTotalChunks={localSettings.ragSearchMaxTotalChunks}
-            onMaxTotalChunksChange={(value) => setLocalSettings(prev => ({ ...prev, ragSearchMaxTotalChunks: value }))}
-            agentMemoryTopKPerQuery={localSettings.agentMemoryTopKPerQuery}
-            onAgentMemoryTopKPerQueryChange={(value) => setLocalSettings(prev => ({ ...prev, agentMemoryTopKPerQuery: value }))}
-            agentMemoryNeighborWindow={localSettings.agentMemoryNeighborWindow}
-            onAgentMemoryNeighborWindowChange={(value) => setLocalSettings(prev => ({ ...prev, agentMemoryNeighborWindow: value }))}
-            agentMemoryMaxPrimaryMessages={localSettings.agentMemoryMaxPrimaryMessages}
-            onAgentMemoryMaxPrimaryMessagesChange={(value) => setLocalSettings(prev => ({ ...prev, agentMemoryMaxPrimaryMessages: value }))}
-            agentMemoryMaxTotalMessages={localSettings.agentMemoryMaxTotalMessages}
-            onAgentMemoryMaxTotalMessagesChange={(value) => setLocalSettings(prev => ({ ...prev, agentMemoryMaxTotalMessages: value }))}
           />
         )}
 

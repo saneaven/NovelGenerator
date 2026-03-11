@@ -45,12 +45,12 @@ from App.backend.services.default_preset_seed import load_default_preset_seed
 from App.backend.services.memory_service import _build_memory_chunks
 
 
-def test_agent_memory_fragment_has_no_rag_texts_section() -> None:
+def test_memory_fragment_has_no_rag_texts_section() -> None:
     seed = load_default_preset_seed()
     fragment = next(
         item.content
         for item in seed.fragments
-        if item.folder_key == "common/agentMemory" and item.fragment_name == "section"
+        if item.folder_key == "common/memory" and item.fragment_name == "section"
     )
 
     assert "ragTexts" not in fragment
@@ -122,7 +122,7 @@ def test_memory_preflight_short_circuits_without_vector_storage() -> None:
     source = (backend_root / "services" / "run_pipeline" / "memory_preflight.py").read_text(encoding="utf-8")
 
     vector_gate_idx = source.find("if not settings_service.is_vector_storage_enabled(db, run.user_id):")
-    profile_gate_idx = source.find('if get_embedding_profile(db, user_id=run.user_id, feature="agentMemory") is None:')
+    profile_gate_idx = source.find('if get_embedding_profile(db, user_id=run.user_id, feature="memory") is None:')
     budget_idx = source.find("context_window_tokens = int(task_config.context_window_tokens or 32000)")
 
     assert vector_gate_idx != -1
@@ -132,15 +132,15 @@ def test_memory_preflight_short_circuits_without_vector_storage() -> None:
     assert profile_gate_idx < budget_idx
 
 
-def test_settings_contract_uses_vector_storage_enabled_field() -> None:
+def test_settings_contract_uses_search_memory_settings_field() -> None:
     backend_root = Path(__file__).resolve().parents[1]
     schema_source = (backend_root / "schemas" / "settings.py").read_text(encoding="utf-8")
     route_source = (backend_root / "routes" / "settings_routes.py").read_text(encoding="utf-8")
 
-    assert "vectorStorageEnabled" in schema_source
-    assert "ragSearchEnabled" not in schema_source
-    assert "vectorStorageEnabled" in route_source
-    assert "ragSearchEnabled" not in route_source
+    assert "searchMemorySettings" in schema_source
+    assert "vectorStorageEnabled" not in schema_source
+    assert "searchMemorySettings" in route_source
+    assert "vectorStorageEnabled" not in route_source
 
 
 def test_thread_memory_search_query_is_thread_scoped() -> None:

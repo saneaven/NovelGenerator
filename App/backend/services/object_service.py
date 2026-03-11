@@ -136,7 +136,7 @@ async def _process_pending_rag_op_inner(op: _PendingRagOp) -> None:
         if not settings_service.is_vector_storage_enabled(db, op.user_id):
             return
 
-        embedding_cfg = settings_service.get_embedding_config(db, op.user_id, "ragSearch")
+        embedding_cfg = settings_service.get_search_embedding_config(db, op.user_id)
         if not embedding_cfg.provider or not embedding_cfg.model:
             return
 

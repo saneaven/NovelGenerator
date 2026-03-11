@@ -6,13 +6,19 @@ from types import SimpleNamespace
 import types
 from uuid import uuid4
 
+import pytest
+from fastapi import HTTPException
+from sqlalchemy.orm import declarative_base
+
 fake_auth = types.ModuleType("App.backend.auth")
 fake_auth.get_current_user = lambda: None
 sys.modules["App.backend.auth"] = fake_auth
 
 fake_database = types.ModuleType("App.backend.database")
+fake_database.Base = declarative_base()
 fake_database.get_db = lambda: None
 sys.modules["App.backend.database"] = fake_database
+sys.modules["database"] = fake_database
 
 fake_memory_service = types.ModuleType("App.backend.services.memory_service")
 fake_memory_service.wipe_memory_index = lambda *_args, **_kwargs: None
@@ -23,7 +29,10 @@ fake_rag_index_service.wipe_user_index = lambda *_args, **_kwargs: None
 sys.modules["App.backend.services.rag_index_service"] = fake_rag_index_service
 
 from App.backend.routes import settings_routes
-from App.backend.schemas.settings import EmbeddingConfigs, EmbeddingProfileConfig, UserSettingsUpdate
+from App.backend.schemas.settings import UserSettingsUpdate
+
+sys.modules.pop("App.backend.services.memory_service", None)
+sys.modules.pop("App.backend.services.rag_index_service", None)
 
 
 class FakeQuery:
@@ -59,9 +68,19 @@ def test_update_user_settings_wipes_rag_index_on_main_language_change(monkeypatc
         user_id=user_id,
         demo_mode_enabled=False,
         main_language="English",
-        embedding_configs={
-            "ragSearch": {"provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536},
-            "agentMemory": {"provider": "openai", "model": "", "dimensions": None},
+        search_memory_settings={
+            "enabled": True,
+            "general": {
+                "embedding": {"provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536},
+                "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
+                "keywordPageSize": 20,
+            },
+            "overrides": {
+                "memory": {
+                    "embedding": {"provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536},
+                    "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
+                }
+            },
         },
     )
     db = FakeDB(settings)
@@ -91,9 +110,19 @@ def test_update_user_settings_wipes_rag_index_once_on_rag_model_change(monkeypat
         user_id=user_id,
         demo_mode_enabled=False,
         main_language="English",
-        embedding_configs={
-            "ragSearch": {"provider": "openai", "model": "old-model", "dimensions": 1536},
-            "agentMemory": {"provider": "openai", "model": "", "dimensions": None},
+        search_memory_settings={
+            "enabled": True,
+            "general": {
+                "embedding": {"provider": "openai", "model": "old-model", "dimensions": 1536},
+                "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
+                "keywordPageSize": 20,
+            },
+            "overrides": {
+                "memory": {
+                    "embedding": {"provider": "openai", "model": "memory-model", "dimensions": 1536},
+                    "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
+                }
+            },
         },
     )
     db = FakeDB(settings)
@@ -104,10 +133,20 @@ def test_update_user_settings_wipes_rag_index_once_on_rag_model_change(monkeypat
     monkeypatch.setattr(settings_routes, "_build_settings_response", lambda current: current)
 
     update = UserSettingsUpdate(
-        embeddingConfigs=EmbeddingConfigs(
-            ragSearch=EmbeddingProfileConfig(provider="openai", model="new-model", dimensions=3072),
-            agentMemory=EmbeddingProfileConfig(provider="openai", model="", dimensions=None),
-        )
+        searchMemorySettings={
+            "enabled": True,
+            "general": {
+                "embedding": {"provider": "openai", "model": "new-model", "dimensions": 3072},
+                "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
+                "keywordPageSize": 20,
+            },
+            "overrides": {
+                "memory": {
+                    "embedding": {"provider": "openai", "model": "memory-model", "dimensions": 1536},
+                    "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
+                }
+            },
+        },
     )
     result = asyncio.run(
         settings_routes.update_user_settings(
@@ -118,5 +157,114 @@ def test_update_user_settings_wipes_rag_index_once_on_rag_model_change(monkeypat
     )
 
     assert wiped == [user_id]
-    assert result.embedding_configs["ragSearch"]["model"] == "new-model"
-    assert result.embedding_configs["ragSearch"]["dimensions"] is None
+    assert result.search_memory_settings["general"]["embedding"]["model"] == "new-model"
+    assert result.search_memory_settings["general"]["embedding"]["dimensions"] is None
+
+
+def test_update_user_settings_accepts_disabled_incomplete_search_memory_settings(monkeypatch) -> None:
+    user_id = uuid4()
+    settings = SimpleNamespace(
+        user_id=user_id,
+        demo_mode_enabled=False,
+        main_language="English",
+        search_memory_settings={
+            "enabled": False,
+            "general": {
+                "embedding": {"provider": "openai", "model": "", "dimensions": None},
+                "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
+                "keywordPageSize": 20,
+            },
+            "overrides": {},
+        },
+    )
+    db = FakeDB(settings)
+
+    monkeypatch.setattr(settings_routes, "wipe_user_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(settings_routes, "wipe_memory_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(settings_routes, "_build_settings_response", lambda current: current)
+
+    result = asyncio.run(
+        settings_routes.update_user_settings(
+            UserSettingsUpdate(
+                searchMemorySettings={
+                    "enabled": False,
+                    "general": {
+                        "embedding": {"provider": "openai", "model": "", "dimensions": None},
+                        "retrieval": {
+                            "topKPerQuery": 4,
+                            "neighborWindow": 1,
+                            "maxPrimaryItems": 5,
+                            "maxTotalItems": 8,
+                        },
+                        "keywordPageSize": 12,
+                    },
+                    "overrides": {},
+                }
+            ),
+            current_user=SimpleNamespace(id=user_id),
+            db=db,
+        )
+    )
+
+    assert result.search_memory_settings["enabled"] is False
+    assert result.search_memory_settings["general"]["embedding"]["model"] == ""
+    assert result.search_memory_settings["general"]["keywordPageSize"] == 12
+
+
+def test_update_user_settings_rejects_enabled_search_memory_without_effective_model(monkeypatch) -> None:
+    user_id = uuid4()
+    settings = SimpleNamespace(
+        user_id=user_id,
+        demo_mode_enabled=False,
+        main_language="English",
+        search_memory_settings={
+            "enabled": False,
+            "general": {
+                "embedding": {"provider": "openai", "model": "", "dimensions": None},
+                "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
+                "keywordPageSize": 20,
+            },
+            "overrides": {},
+        },
+    )
+    db = FakeDB(settings)
+
+    monkeypatch.setattr(settings_routes, "wipe_user_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(settings_routes, "wipe_memory_index", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            settings_routes.update_user_settings(
+                UserSettingsUpdate(
+                    searchMemorySettings={
+                        "enabled": True,
+                        "general": {
+                            "embedding": {"provider": "openai", "model": "", "dimensions": None},
+                            "retrieval": {
+                                "topKPerQuery": 20,
+                                "neighborWindow": 0,
+                                "maxPrimaryItems": 20,
+                                "maxTotalItems": 60,
+                            },
+                            "keywordPageSize": 20,
+                        },
+                        "overrides": {
+                            "memory": {
+                                "embedding": {"provider": "openai", "model": "memory-model", "dimensions": None},
+                                "retrieval": {
+                                    "topKPerQuery": 20,
+                                    "neighborWindow": 0,
+                                    "maxPrimaryItems": 20,
+                                    "maxTotalItems": 60,
+                                },
+                            }
+                        },
+                    }
+                ),
+                current_user=SimpleNamespace(id=user_id),
+                db=db,
+            )
+        )
+
+    assert exc_info.value.status_code == 422
+    assert "Search embedding provider/model is required" in str(exc_info.value.detail)

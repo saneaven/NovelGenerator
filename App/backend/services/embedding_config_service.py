@@ -6,28 +6,14 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from ..models.db_models import UserSettings
+from .search_memory_settings import (
+    has_search_memory_override,
+    validate_search_memory_settings,
+)
 from .settings_service import settings_service
 
 
-EmbeddingFeature = Literal["ragSearch", "agentMemory"]
-
-
-DEFAULT_EMBEDDING_CONFIGS: Dict[str, Dict[str, Any]] = {
-    "ragSearch": {"provider": "openai", "model": "", "dimensions": None},
-    "agentMemory": {"provider": "openai", "model": "", "dimensions": None},
-}
-
-
-def merge_embedding_configs(raw: Any) -> Dict[str, Dict[str, Any]]:
-    if not isinstance(raw, dict):
-        raw = {}
-    merged: Dict[str, Dict[str, Any]] = {}
-    for key, default_cfg in DEFAULT_EMBEDDING_CONFIGS.items():
-        candidate = raw.get(key)
-        if not isinstance(candidate, dict):
-            candidate = {}
-        merged[key] = {**default_cfg, **candidate}
-    return merged
+EmbeddingFeature = Literal["search", "memory"]
 
 
 def get_embedding_profile(
@@ -37,15 +23,16 @@ def get_embedding_profile(
     feature: EmbeddingFeature,
 ) -> Optional[Dict[str, Any]]:
     settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
-    if not settings_service.is_vector_storage_enabled(db, user_id):
+    if settings is None or not settings_service.is_vector_storage_enabled(db, user_id):
         return None
-    cfg = merge_embedding_configs(getattr(settings, "embedding_configs", None) if settings else None)
-
-    profile = cfg.get(feature) or {}
-    provider = (profile.get("provider") or "").strip()
-    model = (profile.get("model") or "").strip()
-    dims = profile.get("dimensions")
-    dimensions = int(dims) if isinstance(dims, int) else None
+    resolved = (
+        settings_service.get_search_settings(db, user_id)
+        if feature == "search"
+        else settings_service.get_memory_settings(db, user_id)
+    )
+    provider = (resolved.embedding.provider or "").strip()
+    model = (resolved.embedding.model or "").strip()
+    dimensions = int(resolved.embedding.dimensions) if isinstance(resolved.embedding.dimensions, int) else None
 
     if not provider or not model:
         return None
@@ -64,16 +51,18 @@ def set_embedding_dimensions(
     if not settings:
         return
 
-    cfg = merge_embedding_configs(getattr(settings, "embedding_configs", None))
-    cfg.setdefault(feature, {})
-    cfg[feature]["dimensions"] = int(dimensions)
-    settings.embedding_configs = cfg  # type: ignore
+    raw = validate_search_memory_settings(getattr(settings, "search_memory_settings", None))
+    if feature == "search" and has_search_memory_override(raw, "search"):
+        raw["overrides"]["search"]["embedding"]["dimensions"] = int(dimensions)
+    elif feature == "memory" and has_search_memory_override(raw, "memory"):
+        raw["overrides"]["memory"]["embedding"]["dimensions"] = int(dimensions)
+    else:
+        raw["general"]["embedding"]["dimensions"] = int(dimensions)
+    settings.search_memory_settings = raw  # type: ignore
 
 
 __all__ = [
     "EmbeddingFeature",
-    "DEFAULT_EMBEDDING_CONFIGS",
     "get_embedding_profile",
-    "merge_embedding_configs",
     "set_embedding_dimensions",
 ]

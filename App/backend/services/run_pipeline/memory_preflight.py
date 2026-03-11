@@ -113,7 +113,7 @@ async def prepare_thread_memory_preflight(
 ) -> None:
     if not settings_service.is_vector_storage_enabled(db, run.user_id):
         return
-    if get_embedding_profile(db, user_id=run.user_id, feature="agentMemory") is None:
+    if get_embedding_profile(db, user_id=run.user_id, feature="memory") is None:
         return
 
     context_window_tokens = int(task_config.context_window_tokens or 32000)

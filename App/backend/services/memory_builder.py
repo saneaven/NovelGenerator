@@ -122,7 +122,7 @@ async def build_memory_data(
 
     history_rows: list[dict[str, Any]] = []
     try:
-        memory_cfg = settings_service._get_settings(db, user_id)  # pylint: disable=protected-access
+        memory_cfg = settings_service.get_memory_settings(db, user_id)
         memory_items = await search_thread_memory(
             db,
             user_id=user_id,
@@ -130,7 +130,7 @@ async def build_memory_data(
             thread_id=thread_id,
             language=language,
             queries=queries,
-            top_k_per_query=int(getattr(memory_cfg, "agent_memory_top_k_per_query", 20)),
+            top_k_per_query=memory_cfg.retrieval.top_k_per_query,
         )
         for item in memory_items[:20]:
             snippet = str(item.get("content") or "").strip()

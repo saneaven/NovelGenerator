@@ -8,9 +8,9 @@ import {
     resolveAllTaskConfigs as resolveStoredTaskConfigs,
     resolveTaskConfig as resolveStoredTaskConfig,
 } from './taskConfigSettings';
+import type { SearchMemorySettings } from './searchMemorySettings';
 import type {
     AITaskType,
-    ProviderType,
     TaskConfigSettings,
 } from './taskConfigSettings';
 export type {
@@ -24,6 +24,24 @@ export type {
     TokenizerOverride,
     ThinkingConfig,
 } from './taskConfigSettings';
+export type {
+    EmbeddingConfig,
+    EmbeddingProviderType,
+    MemoryConfig,
+    RetrievalConfig,
+    SearchGeneralConfig,
+    SearchMemorySettings,
+    SearchMemoryTarget,
+} from './searchMemorySettings';
+export {
+    hasSearchMemoryOverride,
+    makeInitialSearchMemorySettings,
+    makeMemoryOverrideSeed,
+    makeSearchOverrideSeed,
+    resolveMemorySettings,
+    resolveSearchSettings,
+    validateSearchMemorySettings,
+} from './searchMemorySettings';
 
 // Types
 export type ImageProviderType = 'openai' | 'gemini' | 'xai' | 'novelai' | 'openrouter';
@@ -101,18 +119,6 @@ export interface RetryConfig {
 
 // Tool call auto-approve configuration (confirmation bypass)
 export type ToolCallAutoApproveConfig = Record<string, boolean>;
-
-// Embedding profile configuration (used by RAG Search / Agent Memory)
-export interface EmbeddingProfileConfig {
-    provider: ProviderType;
-    model: string;
-    dimensions?: number | null;
-}
-
-export interface EmbeddingConfigs {
-    ragSearch: EmbeddingProfileConfig;
-    agentMemory: EmbeddingProfileConfig;
-}
 
 // Custom image style for natural language providers (prefix/postfix)
 export interface NaturalImageStyle {
@@ -193,24 +199,8 @@ export interface Settings {
     // Native output mode - skip tool calling and output raw text/XML
     nativeOutputMode: boolean;
 
-    // Vector storage - master toggle for runtime embedding-based features
-    vectorStorageEnabled: boolean;
-
-    // Embedding profiles by feature
-    embeddingConfigs: EmbeddingConfigs;
-
-    // RAG Search defaults (tool + formatting)
-    ragSearchTopKPerQuery: number;
-    ragSearchNeighborWindow: number;
-    ragSearchMaxPrimaryChunks: number;
-    ragSearchMaxTotalChunks: number;
-    ragSearchKeywordPageSize: number;
-
-    // Agent Memory search defaults (for relevantChats injection)
-    agentMemoryTopKPerQuery: number;
-    agentMemoryNeighborWindow: number;
-    agentMemoryMaxPrimaryMessages: number;
-    agentMemoryMaxTotalMessages: number;
+    // Search & Memory settings
+    searchMemorySettings: SearchMemorySettings;
 
     // LLM request logging - enable logging of LLM requests for debugging
     llmLoggingEnabled: boolean;
@@ -241,17 +231,7 @@ export interface SettingsUpdatePayload {
     theme?: ThemeMode;
     retryConfig?: RetryConfig;
     nativeOutputMode?: boolean;
-    vectorStorageEnabled?: boolean;
-    embeddingConfigs?: EmbeddingConfigs;
-    ragSearchTopKPerQuery?: number;
-    ragSearchNeighborWindow?: number;
-    ragSearchMaxPrimaryChunks?: number;
-    ragSearchMaxTotalChunks?: number;
-    ragSearchKeywordPageSize?: number;
-    agentMemoryTopKPerQuery?: number;
-    agentMemoryNeighborWindow?: number;
-    agentMemoryMaxPrimaryMessages?: number;
-    agentMemoryMaxTotalMessages?: number;
+    searchMemorySettings?: SearchMemorySettings;
     llmLoggingEnabled?: boolean;
     toolCallHistoryLimit?: number;
     thinkingHistoryLimit?: number;

@@ -158,83 +158,84 @@
 	      "general": "General",
 	      "credentials": "Credentials",
 	      "searchMemory": "Search & Memory",
-	      "keywordSearch": "Keyword Search",
-	      "ragSearch": "RAG Search",
-	      "agentMemory": "Agent Memory",
 	      "theme": "Theme",
 	      "imageGen": "Image Generation",
 	      "advanced": "Advanced",
       "prompts": "Prompts & Templates"
     },
-    "embeddings": {
-      "enableLabel": "Enable vector storage",
-      "enableHint": "Turns on/off all vector-storage runtime features (search_keyword, search_rag, RAG indexing, and Agent Memory retrieval). When disabled, Agent Memory uses summaries only.",
-      "validation": {
-        "missingModel": "Embeddings are enabled, but {{feature}} embedding model is not configured.",
-        "missingApiKey": "Embeddings are enabled, but API key for \"{{provider}}\" is missing ({{feature}}).",
-        "missingBaseUrl": "Embeddings are enabled, but baseUrl for the custom provider is missing ({{feature}})."
-      }
-    },
-    "ragSearch": {
-      "title": "RAG Search",
-      "description": "Configure embedding provider/model for RAG indexing and search.",
-      "enableLabel": "Use RAG Search",
-      "enableHint": "When disabled, indexing and search_rag tool calls are turned off.",
-      "provider": "Provider",
-      "providerHint": "Uses the same credentials you set in Settings > Credentials.",
-      "model": "Embedding Model",
-      "modelPlaceholder": "e.g. text-embedding-3-large",
-      "modelHint": "This model is used for indexing and search (embeddings).",
-      "browse": "Browse models",
-      "indexLanguage": "Index language",
-      "indexLanguageHint": "RAG indexes only main_language.",
-      "dimensions": "Embedding dimensions",
-      "dimensionsUnknown": "Unknown (detected on first index/search)",
-      "dimensionsHint": "Detected automatically from the embedding response.",
-      "topKPerQuery": "Top K per query",
-      "topKPerQueryHint": "Candidate pool size per query (higher = more results, slower).",
-      "neighborWindow": "Neighbor window",
-      "neighborWindowHint": "Include nearby chunks from the same source (chunk_index +/- window).",
-      "maxPrimaryChunks": "Max primary chunks",
-      "maxPrimaryChunksHint": "Max number of ranked (distance-based) chunks returned to the model.",
-      "maxTotalChunks": "Max total chunks",
-      "maxTotalChunksHint": "Hard cap for total returned chunks including neighbor expansion.",
-      "rulesTitle": "Indexing rules",
-      "rules": {
+    "searchMemory": {
+      "title": "Search & Memory",
+      "description": "Configure one shared Search & Memory default, then opt Search or Memory into overrides only when needed.",
+      "sidebarTitle": "Search & Memory Settings",
+      "baseSectionLabel": "Base",
+      "targetsSectionLabel": "Overrides",
+      "enabledLabel": "Enable Search & Memory",
+      "enabledHint": "Turns search and archived thread memory retrieval on or off at runtime. You can still edit the configuration while disabled.",
+      "disabledTitle": "Search & Memory is disabled",
+      "disabledDescription": "Search and memory retrieval are currently off at runtime, but you can still prepare the configuration below.",
+      "overrideBadge": "Override",
+      "overrideToggle": "Use override for this target",
+      "overrideHint": "When enabled, this target starts with a copy of the current General configuration.",
+      "overrideFormHint": "After you enable it, this target is edited independently from General.",
+      "resetOverride": "Reset to General",
+      "inheritedTitle": "Inherited from General",
+      "inheritedBadge": "Following General",
+      "inheritedDescription": "This target is currently using the shared General configuration.",
+      "inheritedShort": "Inherited",
+      "targets": {
+        "general": {
+          "label": "General",
+          "description": "Shared default embedding and retrieval settings used by Search and Memory unless a target enables its own override."
+        },
+        "search": {
+          "label": "Search",
+          "description": "Semantic search and keyword search over indexed project knowledge."
+        },
+        "memory": {
+          "label": "Memory",
+          "description": "Archived thread memory retrieval used as background context for ongoing conversations."
+        }
+      },
+      "fields": {
+        "provider": "Provider",
+        "providerHint": "Uses the same credentials you set in Settings > Credentials.",
+        "model": "Embedding Model",
+        "modelPlaceholder": "e.g. text-embedding-3-large",
+        "browse": "Browse models",
+        "searchModelHint": "This model is used for Search indexing and retrieval.",
+        "memoryModelHint": "This model is used to embed archived thread memory and retrieval queries.",
+        "indexLanguage": "Index language",
+        "indexLanguageHint": "Search indexes only main_language.",
+        "dimensions": "Embedding dimensions",
+        "dimensionsUnknown": "Unknown (detected on first index/search)",
+        "dimensionsHint": "Detected automatically from the embedding response.",
+        "topKPerQuery": "Top K per query",
+        "topKPerQueryHint": "Candidate pool size per query before ranking and caps are applied.",
+        "neighborWindow": "Neighbor window",
+        "neighborWindowHint": "Include nearby chunks or messages around each primary hit.",
+        "maxPrimaryItems": "Max primary items",
+        "maxPrimarySearchHint": "Maximum number of ranked search chunks kept before neighbor expansion.",
+        "maxPrimaryMemoryHint": "Maximum number of ranked memory hits kept before neighbor expansion.",
+        "maxTotalItems": "Max total items",
+        "maxTotalSearchHint": "Hard cap for total Search results after neighbor expansion.",
+        "maxTotalMemoryHint": "Hard cap for total Memory messages after neighbor expansion.",
+        "keywordPageSize": "Keyword results per page",
+        "keywordPageSizeHint": "Number of chunks returned per page for search_keyword."
+      },
+      "searchRulesTitle": "Search rules",
+      "searchRules": {
         "mainLanguageOnly": "Indexes only main_language",
         "excludesMarkdownAssets": "Excludes images, tables, and code blocks",
-        "orderedResults": "Search results are returned by relevance (embedding distance)",
-        "reindexRequired": "Changing provider/model wipes existing vectors; reindex per project"
+        "orderedResults": "Search results are returned by relevance first, then expanded with neighbors",
+        "reindexRequired": "Changing the effective Search embedding provider/model wipes existing vectors; reindex per project"
       },
-	      "loadErrorTitle": "Failed to load RAG profile",
-	      "saveValidationError": "Please set provider and model for RAG Search."
-	    },
-	    "keywordSearch": {
-	      "title": "Keyword Search",
-	      "description": "Configure keyword-based search over indexed chunks (no embeddings).",
-	      "pageSize": "Results per page",
-	      "pageSizeHint": "Number of chunks returned per page for search_keyword."
-	    },
-	    "agentMemory": {
-	      "title": "Agent Memory",
-	      "description": "Configure embedding provider/model and retrieval settings for archived chat memory.",
-	      "provider": "Provider",
-      "providerHint": "Uses the same credentials you set in Settings > Credentials.",
-      "model": "Embedding Model",
-      "modelPlaceholder": "e.g. text-embedding-3-large",
-      "modelHint": "This model is used to embed archived chat messages and search queries.",
-      "browse": "Browse models",
-      "dimensions": "Embedding dimensions",
-      "dimensionsUnknown": "Unknown (detected on first index/search)",
-      "dimensionsHint": "Detected automatically from the embedding response.",
-      "topKPerQuery": "Top K per query",
-      "topKPerQueryHint": "Candidate pool size per query (higher = more results, slower).",
-      "neighborWindow": "Neighbor window",
-      "neighborWindowHint": "Include nearby chat messages around each hit (message_index +/- window).",
-      "maxPrimaryMessages": "Max primary messages",
-      "maxPrimaryMessagesHint": "Max number of ranked (distance-based) messages injected into the prompt (before neighbor expansion).",
-      "maxTotalMessages": "Max total messages",
-      "maxTotalMessagesHint": "Hard cap for total injected messages including neighbor expansion."
+      "memoryRulesTitle": "Memory rules",
+      "memoryRules": {
+        "description": "Memory retrieves archived thread history only within the current thread, then restores chronological order before prompt injection."
+      },
+      "validation": {
+        "missingEmbedding": "{{target}} requires both an embedding provider and model when Search & Memory is enabled."
+      }
     },
     "language": {
       "title": "Language Settings",
@@ -1260,7 +1261,7 @@
     "rag": {
       "title": "RAG Index",
       "hint": "Indexes main language only (excludes images/tables/code blocks). Results are ordered by type and chapter order.",
-      "disabled": "Vector storage is disabled. Enable it in Settings > Search & Memory.",
+      "disabled": "Search & Memory is disabled. Enable it in Settings > Search & Memory.",
       "profileMissing": "Embedding profile is not configured. Set it in Settings > Search & Memory.",
       "statusUnavailable": "RAG status is unavailable.",
       "profile": "Profile:",

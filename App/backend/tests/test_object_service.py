@@ -61,7 +61,7 @@ def _install_import_stubs() -> None:
     settings_service = types.ModuleType("App.backend.services.settings_service")
     settings_service.settings_service = SimpleNamespace(
         is_vector_storage_enabled=lambda *_args, **_kwargs: False,
-        get_embedding_config=lambda *_args, **_kwargs: SimpleNamespace(provider=None, model=None),
+        get_search_embedding_config=lambda *_args, **_kwargs: SimpleNamespace(provider=None, model=None),
     )
     sys.modules["App.backend.services.settings_service"] = settings_service
 

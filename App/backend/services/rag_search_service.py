@@ -50,7 +50,7 @@ def search_project_by_keyword(
     if page_size < 1:
         raise ValueError("page_size must be >= 1")
 
-    profile = get_embedding_profile(db, user_id=user_id, feature="ragSearch")
+    profile = get_embedding_profile(db, user_id=user_id, feature="search")
     if not profile:
         raise ValueError("RAG embedding profile is not configured")
 
@@ -175,8 +175,10 @@ async def search_project(
     provider_config: Dict[str, Any],
     top_k_per_query: int = 20,
     neighbor_window: int = 0,
+    max_primary_items: int = 20,
+    max_total_items: int = 60,
 ) -> List[Dict[str, Any]]:
-    profile = get_embedding_profile(db, user_id=user_id, feature="ragSearch")
+    profile = get_embedding_profile(db, user_id=user_id, feature="search")
     if not profile:
         raise ValueError("RAG embedding profile is not configured")
 
@@ -269,10 +271,31 @@ async def search_project(
                     "distance": float(r.distance) if r.distance is not None else None,
                 }
 
+    def sort_key(r: Dict[str, Any]):
+        dist = r.get("distance")
+        dist_missing = dist is None
+        dist_value = float(dist) if dist is not None else 0.0
+        return (
+            1 if dist_missing else 0,
+            dist_value,
+            str(r.get("object_type") or ""),
+            r.get("object_id"),
+            int(r.get("chunk_index") or 0),
+            str(r.get("field_path") or ""),
+        )
+
+    primary_items = list(best.values())
+    primary_items.sort(key=sort_key)
+    primary_items = primary_items[: max(1, int(max_primary_items))]
+    selected: Dict[str, Dict[str, Any]] = {
+        str(item["chunk_id"]): item
+        for item in primary_items
+    }
+
     # Neighbor expansion (same source_id, chunk_index +/- window)
-    if neighbor_window > 0 and best:
+    if neighbor_window > 0 and primary_items:
         source_to_ranges: Dict[UUID, set[int]] = {}
-        for item in best.values():
+        for item in primary_items:
             sid = item["source_id"]
             idx = int(item["chunk_index"])
             s = source_to_ranges.setdefault(sid, set())
@@ -312,9 +335,9 @@ async def search_project(
                 {"source_id": source_id, "chunk_indices": list(indices)},
             ).fetchall()
             for r in rows:
-                if r.chunk_id in best:
+                if str(r.chunk_id) in selected:
                     continue
-                best[r.chunk_id] = {
+                selected[str(r.chunk_id)] = {
                     "chunk_id": str(r.chunk_id),
                     "source_id": str(r.source_id),
                     "chunk_index": r.chunk_index,
@@ -332,22 +355,9 @@ async def search_project(
                     "distance": None,
                 }
 
-    results = list(best.values())
-
-    def sort_key(r: Dict[str, Any]):
-        dist = r.get("distance")
-        dist_missing = dist is None
-        dist_value = float(dist) if dist is not None else 0.0
-        return (
-            1 if dist_missing else 0,
-            dist_value,
-            str(r.get("object_type") or ""),
-            r.get("object_id"),
-            int(r.get("chunk_index") or 0),
-            str(r.get("field_path") or ""),
-        )
-
+    results = list(selected.values())
     results.sort(key=sort_key)
+    results = results[: max(1, int(max_total_items))]
     return results
 
 

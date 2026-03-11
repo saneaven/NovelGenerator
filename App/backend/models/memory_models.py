@@ -4,7 +4,7 @@ These tables store:
 - Rolling summaries of archived conversations scoped to a thread.
 - Vector index for archived thread messages.
 
-Embedding profile is configured in `user_settings.embedding_configs["agentMemory"]`.
+Embedding profile is configured from the resolved `user_settings.search_memory_settings` Memory target.
 """
 
 from __future__ import annotations

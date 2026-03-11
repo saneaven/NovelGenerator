@@ -40,7 +40,7 @@ class SearchToolCallModule(ToolCallModule):
 
     async def validate(self, tool_name: str, args: dict[str, Any], ctx: ToolValidationContext):
         if not ctx.vector_storage_enabled:
-            return invalid_result(f"validate_{tool_name}", "Vector storage is disabled (Settings > Search & Memory)")
+            return invalid_result(f"validate_{tool_name}", "Search & Memory is disabled (Settings > Search & Memory)")
 
         if tool_name == "search_keyword":
             keyword = args.get("keyword")
@@ -63,7 +63,8 @@ class SearchToolCallModule(ToolCallModule):
         if tool_name == "search_keyword":
             keyword = str(args.get("keyword") or "").strip()
             page = int(args.get("page") or 1)
-            page_size = 20
+            search_cfg = settings_service.get_search_settings(ctx.db, ctx.user_id)
+            page_size = search_cfg.keyword_page_size
             raw = search_project_by_keyword(
                 ctx.db,
                 user_id=ctx.user_id,
@@ -89,17 +90,18 @@ class SearchToolCallModule(ToolCallModule):
             queries = args.get("queries")
             if not isinstance(queries, list) or not all(isinstance(q, str) for q in queries):
                 raise ValueError("search_rag requires queries: string[]")
-            rag_cfg = settings_service.get_rag_settings(ctx.db, ctx.user_id)
-            embed_cfg = settings_service.get_embedding_config(ctx.db, ctx.user_id, "ragSearch")
-            provider_config = credential_service.get_provider_config(ctx.db, ctx.user_id, embed_cfg.provider)
+            search_cfg = settings_service.get_search_settings(ctx.db, ctx.user_id)
+            provider_config = credential_service.get_provider_config(ctx.db, ctx.user_id, search_cfg.embedding.provider)
             raw_results = await search_project(
                 ctx.db,
                 user_id=ctx.user_id,
                 project_id=ctx.project_id,
                 queries=queries,
                 provider_config=provider_config,
-                top_k_per_query=rag_cfg.top_k_per_query,
-                neighbor_window=rag_cfg.neighbor_window,
+                top_k_per_query=search_cfg.retrieval.top_k_per_query,
+                neighbor_window=search_cfg.retrieval.neighbor_window,
+                max_primary_items=search_cfg.retrieval.max_primary_items,
+                max_total_items=search_cfg.retrieval.max_total_items,
             )
             grouped = build_search_payload(
                 ctx.db,

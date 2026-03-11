@@ -87,28 +87,16 @@ class UserSettings(Base):
     # Native output mode - use raw LLM output instead of tool calling
     native_output_mode = Column(Boolean, default=False, nullable=False)
 
-    # Vector storage (embeddings + pgvector) master toggle for runtime features.
-    vector_storage_enabled = Column(Boolean, default=False, nullable=False)
-
-    # Embedding profiles (provider/model/dimensions) by feature.
-    # Stored as JSONB to keep settings user-managed and avoid creating per-feature profile tables.
-    embedding_configs = Column(JSONB, nullable=False, server_default="""{
-        "ragSearch": {"provider": "openai", "model": "", "dimensions": null},
-        "agentMemory": {"provider": "openai", "model": "", "dimensions": null}
+    # Search & Memory settings (master toggle + general config + Search/Memory overrides).
+    search_memory_settings = Column(JSONB, nullable=False, server_default="""{
+        "enabled": false,
+        "general": {
+            "embedding": {"provider": "openai", "model": "", "dimensions": null},
+            "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
+            "keywordPageSize": 20
+        },
+        "overrides": {}
     }""")
-
-    # RAG Search defaults
-    rag_search_top_k_per_query = Column(Integer, default=20, nullable=False)
-    rag_search_neighbor_window = Column(Integer, default=0, nullable=False)
-    rag_search_max_primary_chunks = Column(Integer, default=20, nullable=False)
-    rag_search_max_total_chunks = Column(Integer, default=60, nullable=False)
-    rag_search_keyword_page_size = Column(Integer, default=20, nullable=False)
-
-    # Agent Memory search defaults (relevantChats RAG)
-    agent_memory_top_k_per_query = Column(Integer, default=20, nullable=False)
-    agent_memory_neighbor_window = Column(Integer, default=0, nullable=False)
-    agent_memory_max_primary_messages = Column(Integer, default=20, nullable=False)
-    agent_memory_max_total_messages = Column(Integer, default=60, nullable=False)
 
     # Patch auto-retry - automatically retry with replace mode if patch fails
     patch_auto_retry = Column(Boolean, default=True, nullable=False)

@@ -360,7 +360,7 @@ async def archive_thread_until(
     if archive_until_message_id not in archived_by_id:
         raise ValueError("archived_messages must include archive_until_message_id")
 
-    profile = get_embedding_profile(db, user_id=user_id, feature="agentMemory")
+    profile = get_embedding_profile(db, user_id=user_id, feature="memory")
     if not profile:
         raise ValueError("Missing agent-memory embedding profile")
 
@@ -429,7 +429,7 @@ async def archive_thread_until(
             embedding_dim = len(vectors[0])
             stored_dim = profile.get("dimensions")
             if stored_dim is None:
-                set_embedding_dimensions(db, user_id=user_id, feature="agentMemory", dimensions=embedding_dim)
+                set_embedding_dimensions(db, user_id=user_id, feature="memory", dimensions=embedding_dim)
             elif stored_dim != embedding_dim:
                 raise RuntimeError(f"Embedding dimensions mismatch (profile={stored_dim}, got={embedding_dim})")
 
@@ -533,9 +533,15 @@ async def search_thread_memory(
     if not queries:
         return []
 
-    profile = get_embedding_profile(db, user_id=user_id, feature="agentMemory")
+    profile = get_embedding_profile(db, user_id=user_id, feature="memory")
     if not profile:
         return []
+
+    memory_settings = settings_service.get_memory_settings(db, user_id)
+    top_k_per_query = memory_settings.retrieval.top_k_per_query
+    neighbor_window = memory_settings.retrieval.neighbor_window
+    max_primary_items = memory_settings.retrieval.max_primary_items
+    max_total_items = memory_settings.retrieval.max_total_items
 
     provider_config: Dict[str, Any] = credential_service.get_provider_config(
         db,
@@ -609,14 +615,14 @@ async def search_thread_memory(
         )
         .all()
     )
-    by_id: Dict[UUID, RunMessageModel] = {row.id: row for row in msg_rows}
+    by_row_id: Dict[UUID, RunMessageModel] = {row.id: row for row in msg_rows}
 
-    results: List[Dict[str, Any]] = []
+    primary_results: List[Dict[str, Any]] = []
     for message_id, info in best_by_message.items():
-        row = by_id.get(message_id)
+        row = by_row_id.get(message_id)
         if row is None:
             continue
-        results.append(
+        primary_results.append(
             {
                 "message_id": row.id,
                 "role": row.role,
@@ -629,11 +635,58 @@ async def search_thread_memory(
             }
         )
 
-    results.sort(
+    primary_results.sort(
         key=lambda item: (
             item["distance"] is None,
             item["distance"] if item["distance"] is not None else 0.0,
             item["seq_in_thread"],
         )
     )
-    return results
+    primary_results = primary_results[:max(1, int(max_primary_items))]
+
+    by_message_id: Dict[UUID, Dict[str, Any]] = {
+        item["message_id"]: item
+        for item in primary_results
+    }
+
+    if neighbor_window > 0 and primary_results:
+        target_sequences: set[int] = set()
+        for item in primary_results:
+            seq = int(item["seq_in_thread"])
+            for candidate in range(seq - neighbor_window, seq + neighbor_window + 1):
+                if candidate >= 0:
+                    target_sequences.add(candidate)
+
+        neighbor_rows: List[RunMessageModel] = (
+            db.query(RunMessageModel)
+            .filter(
+                RunMessageModel.thread_id == thread_id,
+                RunMessageModel.seq_in_thread.in_(list(target_sequences)),
+            )
+            .all()
+        )
+        for row in neighbor_rows:
+            if row.id in by_message_id:
+                continue
+            by_message_id[row.id] = {
+                "message_id": row.id,
+                "role": row.role,
+                "content": "",
+                "created_at": row.created_at,
+                "seq_in_thread": int(row.seq_in_thread),
+                "distance": None,
+                "field_path": None,
+                "chunk_index": None,
+            }
+
+    ordered = list(by_message_id.values())
+    ordered.sort(
+        key=lambda item: (
+            item["distance"] is None,
+            item["distance"] if item["distance"] is not None else 0.0,
+            item["seq_in_thread"],
+        )
+    )
+    ordered = ordered[:max(1, int(max_total_items))]
+    ordered.sort(key=lambda item: item["seq_in_thread"])
+    return ordered

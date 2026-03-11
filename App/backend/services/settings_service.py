@@ -7,6 +7,12 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from ..models.db_models import UserSettings
+from .search_memory_settings import (
+    make_initial_search_memory_settings,
+    resolve_memory_settings,
+    resolve_search_settings,
+    validate_search_memory_settings,
+)
 from .task_config_settings import (
     make_initial_task_config_settings,
     resolve_task_config,
@@ -40,12 +46,26 @@ class EmbeddingConfig:
 
 
 @dataclass
-class RagSettings:
+class RetrievalSettings:
     top_k_per_query: int
     neighbor_window: int
-    max_primary_chunks: int
-    max_total_chunks: int
+    max_primary_items: int
+    max_total_items: int
+
+
+@dataclass
+class SearchSettings:
+    enabled: bool
+    embedding: EmbeddingConfig
+    retrieval: RetrievalSettings
     keyword_page_size: int
+
+
+@dataclass
+class MemorySettings:
+    enabled: bool
+    embedding: EmbeddingConfig
+    retrieval: RetrievalSettings
 
 
 class SettingsService:
@@ -53,6 +73,7 @@ class SettingsService:
         return UserSettings(
             user_id=user_id,
             task_config_settings=make_initial_task_config_settings(),
+            search_memory_settings=make_initial_search_memory_settings(),
             main_language="English",
             sub_languages=[],
             default_sub_language=None,
@@ -101,30 +122,72 @@ class SettingsService:
         settings = self._get_settings(db, user_id)
         return settings.active_preset_id
 
-    def is_vector_storage_enabled(self, db: Session, user_id: UUID) -> bool:
+    def get_search_memory_settings(self, db: Session, user_id: UUID) -> dict[str, Any]:
         settings = self._get_settings(db, user_id)
-        return bool(getattr(settings, "vector_storage_enabled", False))
+        raw = getattr(settings, "search_memory_settings", None)
+        if not isinstance(raw, dict):
+            raise ValueError("Stored search_memory_settings must be an object")
+        return validate_search_memory_settings(raw)
 
-    def get_embedding_config(self, db: Session, user_id: UUID, feature: str) -> EmbeddingConfig:
-        settings = self._get_settings(db, user_id)
-        all_cfg = settings.embedding_configs if isinstance(settings.embedding_configs, dict) else {}
-        cfg = all_cfg.get(feature) if isinstance(all_cfg, dict) else None
-        if not isinstance(cfg, dict):
-            cfg = {"provider": "openai", "model": "", "dimensions": None}
-        return EmbeddingConfig(
-            provider=str(cfg.get("provider") or "openai"),
-            model=str(cfg.get("model") or ""),
-            dimensions=cfg.get("dimensions"),
+    def is_vector_storage_enabled(self, db: Session, user_id: UUID) -> bool:
+        settings = self.get_search_memory_settings(db, user_id)
+        return bool(settings.get("enabled"))
+
+    def get_search_settings(self, db: Session, user_id: UUID) -> SearchSettings:
+        settings = self.get_search_memory_settings(db, user_id)
+        resolved = resolve_search_settings(settings)
+        embedding = resolved.get("embedding", {})
+        retrieval = resolved.get("retrieval", {})
+        return SearchSettings(
+            enabled=bool(settings.get("enabled")),
+            embedding=EmbeddingConfig(
+                provider=str(embedding.get("provider") or "openai"),
+                model=str(embedding.get("model") or ""),
+                dimensions=embedding.get("dimensions"),
+            ),
+            retrieval=RetrievalSettings(
+                top_k_per_query=int(retrieval.get("topKPerQuery") or 20),
+                neighbor_window=int(retrieval.get("neighborWindow") or 0),
+                max_primary_items=int(retrieval.get("maxPrimaryItems") or 20),
+                max_total_items=int(retrieval.get("maxTotalItems") or 60),
+            ),
+            keyword_page_size=int(resolved.get("keywordPageSize") or 20),
         )
 
-    def get_rag_settings(self, db: Session, user_id: UUID) -> RagSettings:
-        settings = self._get_settings(db, user_id)
-        return RagSettings(
-            top_k_per_query=int(getattr(settings, "rag_search_top_k_per_query", 20)),
-            neighbor_window=int(getattr(settings, "rag_search_neighbor_window", 0)),
-            max_primary_chunks=int(getattr(settings, "rag_search_max_primary_chunks", 20)),
-            max_total_chunks=int(getattr(settings, "rag_search_max_total_chunks", 60)),
-            keyword_page_size=int(getattr(settings, "rag_search_keyword_page_size", 20)),
+    def get_memory_settings(self, db: Session, user_id: UUID) -> MemorySettings:
+        settings = self.get_search_memory_settings(db, user_id)
+        resolved = resolve_memory_settings(settings)
+        embedding = resolved.get("embedding", {})
+        retrieval = resolved.get("retrieval", {})
+        return MemorySettings(
+            enabled=bool(settings.get("enabled")),
+            embedding=EmbeddingConfig(
+                provider=str(embedding.get("provider") or "openai"),
+                model=str(embedding.get("model") or ""),
+                dimensions=embedding.get("dimensions"),
+            ),
+            retrieval=RetrievalSettings(
+                top_k_per_query=int(retrieval.get("topKPerQuery") or 20),
+                neighbor_window=int(retrieval.get("neighborWindow") or 0),
+                max_primary_items=int(retrieval.get("maxPrimaryItems") or 20),
+                max_total_items=int(retrieval.get("maxTotalItems") or 60),
+            ),
+        )
+
+    def get_search_embedding_config(self, db: Session, user_id: UUID) -> EmbeddingConfig:
+        settings = self.get_search_settings(db, user_id)
+        return EmbeddingConfig(
+            provider=settings.embedding.provider,
+            model=settings.embedding.model,
+            dimensions=settings.embedding.dimensions,
+        )
+
+    def get_memory_embedding_config(self, db: Session, user_id: UUID) -> EmbeddingConfig:
+        settings = self.get_memory_settings(db, user_id)
+        return EmbeddingConfig(
+            provider=settings.embedding.provider,
+            model=settings.embedding.model,
+            dimensions=settings.embedding.dimensions,
         )
 
     def get_retry_config(self, db: Session, user_id: UUID) -> dict[str, Any]:

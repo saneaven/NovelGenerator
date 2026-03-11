@@ -153,10 +153,7 @@
     "savedSuccessfully": "설정이 저장되었습니다",
     "openNavigation": "탐색 메뉴 열기",
 	    "tabs": {
-	      "ragSearch": "RAG Search",
-	      "agentMemory": "Agent Memory",
 	      "searchMemory": "검색 & 메모리",
-	      "keywordSearch": "키워드 검색",
 	      "profile": "프로필",
 	      "language": "언어",
 	      "general": "일반",
@@ -166,75 +163,79 @@
       "advanced": "고급",
       "prompts": "프롬프트 & 템플릿"
     },
-    "embeddings": {
-      "enableLabel": "벡터 저장소 사용",
-      "enableHint": "벡터 저장소 기반 런타임 기능 전체(search_keyword, search_rag, RAG 인덱싱, Agent Memory 검색)를 켜고 끕니다. 비활성화하면 Agent Memory는 요약만 사용합니다.",
-      "validation": {
-        "missingModel": "임베딩이 활성화되어 있지만 {{feature}} 임베딩 모델이 설정되어 있지 않습니다.",
-        "missingApiKey": "임베딩이 활성화되어 있지만 \"{{provider}}\" API 키가 없습니다 ({{feature}}).",
-        "missingBaseUrl": "임베딩이 활성화되어 있지만 custom provider의 baseUrl이 없습니다 ({{feature}})."
-      }
-    },
-    "ragSearch": {
-      "title": "RAG Search",
-      "description": "Configure embedding provider/model for RAG indexing and search.",
-      "enableLabel": "RAG Search 사용",
-      "enableHint": "비활성화하면 인덱싱과 search_rag 도구 호출이 꺼집니다.",
-      "provider": "Provider",
-      "providerHint": "Uses the same credentials you set in Settings > Credentials.",
-      "model": "Embedding Model",
-      "modelPlaceholder": "e.g. text-embedding-3-large",
-      "modelHint": "This model is used for indexing and search (embeddings).",
-      "browse": "Browse models",
-      "indexLanguage": "Index language",
-      "indexLanguageHint": "RAG indexes only main_language.",
-      "dimensions": "Embedding dimensions",
-      "dimensionsUnknown": "Unknown (detected on first index/search)",
-      "dimensionsHint": "Detected automatically from the embedding response.",
-      "topKPerQuery": "Top K per query",
-      "topKPerQueryHint": "Candidate pool size per query (higher = more results, slower).",
-      "neighborWindow": "Neighbor window",
-      "neighborWindowHint": "Include nearby chunks from the same source (chunk_index +/- window).",
-      "maxPrimaryChunks": "Max primary chunks",
-      "maxPrimaryChunksHint": "Max number of ranked (distance-based) chunks returned to the model.",
-      "maxTotalChunks": "Max total chunks",
-      "maxTotalChunksHint": "Hard cap for total returned chunks including neighbor expansion.",
-      "rulesTitle": "Indexing rules",
-      "rules": {
-        "mainLanguageOnly": "Indexes only main_language",
-        "excludesMarkdownAssets": "Excludes images, tables, and code blocks",
-        "orderedResults": "Search results are returned by relevance (embedding distance)",
-        "reindexRequired": "Changing provider/model wipes existing vectors; reindex per project"
+    "searchMemory": {
+      "title": "검색 & 메모리",
+      "description": "하나의 공통 Search & Memory 기본값을 설정하고, 필요한 경우에만 Search 또는 Memory에 override를 적용합니다.",
+      "sidebarTitle": "검색 & 메모리 설정",
+      "baseSectionLabel": "기본",
+      "targetsSectionLabel": "대상별 설정",
+      "enabledLabel": "검색 & 메모리 활성화",
+      "enabledHint": "런타임에서 검색과 아카이브된 스레드 메모리 검색을 켜고 끕니다. 비활성화 상태에서도 아래 설정은 계속 편집할 수 있습니다.",
+      "disabledTitle": "검색 & 메모리가 비활성화되어 있습니다",
+      "disabledDescription": "현재 검색과 메모리 검색 런타임은 꺼져 있지만, 아래 설정은 미리 준비해둘 수 있습니다.",
+      "overrideBadge": "Override",
+      "overrideToggle": "이 대상에만 override 사용",
+      "overrideHint": "켜면 현재 General 설정을 이 대상 전용 설정으로 복사해서 시작합니다.",
+      "overrideFormHint": "한번 켜면 이 대상 설정은 General과 별개로 독립적으로 편집됩니다.",
+      "resetOverride": "General로 되돌리기",
+      "inheritedTitle": "General 상속 중",
+      "inheritedBadge": "General 사용 중",
+      "inheritedDescription": "이 대상은 현재 공통 General 설정을 그대로 사용하고 있습니다.",
+      "inheritedShort": "상속",
+      "targets": {
+        "general": {
+          "label": "General",
+          "description": "Search와 Memory가 별도 override를 켜지 않았을 때 공통으로 사용하는 기본 임베딩/검색 설정입니다."
+        },
+        "search": {
+          "label": "Search",
+          "description": "프로젝트 지식 인덱스를 대상으로 하는 시맨틱 검색과 키워드 검색 설정입니다."
+        },
+        "memory": {
+          "label": "Memory",
+          "description": "진행 중인 대화의 배경 문맥으로 사용하는 아카이브된 스레드 메모리 검색 설정입니다."
+        }
       },
-	      "loadErrorTitle": "Failed to load RAG profile",
-	      "saveValidationError": "Please set provider and model for RAG Search."
-	    },
-	    "keywordSearch": {
-	      "title": "키워드 검색",
-	      "description": "인덱싱된 chunk를 키워드로 검색합니다 (임베딩 불필요).",
-	      "pageSize": "페이지당 결과 수",
-	      "pageSizeHint": "search_keyword에서 페이지당 반환할 chunk 개수입니다."
-	    },
-	    "agentMemory": {
-	      "title": "Agent Memory",
-	      "description": "Configure embedding provider/model and retrieval settings for archived chat memory.",
-	      "provider": "Provider",
-      "providerHint": "Uses the same credentials you set in Settings > Credentials.",
-      "model": "Embedding Model",
-      "modelPlaceholder": "e.g. text-embedding-3-large",
-      "modelHint": "This model is used to embed archived chat messages and search queries.",
-      "browse": "Browse models",
-      "dimensions": "Embedding dimensions",
-      "dimensionsUnknown": "Unknown (detected on first index/search)",
-      "dimensionsHint": "Detected automatically from the embedding response.",
-      "topKPerQuery": "Top K per query",
-      "topKPerQueryHint": "Candidate pool size per query (higher = more results, slower).",
-      "neighborWindow": "Neighbor window",
-      "neighborWindowHint": "Include nearby chat messages around each hit (message_index +/- window).",
-      "maxPrimaryMessages": "Max primary messages",
-      "maxPrimaryMessagesHint": "Max number of ranked (distance-based) messages injected into the prompt (before neighbor expansion).",
-      "maxTotalMessages": "Max total messages",
-      "maxTotalMessagesHint": "Hard cap for total injected messages including neighbor expansion."
+      "fields": {
+        "provider": "Provider",
+        "providerHint": "Settings > Credentials에서 설정한 자격 증명을 그대로 사용합니다.",
+        "model": "임베딩 모델",
+        "modelPlaceholder": "예: text-embedding-3-large",
+        "browse": "모델 찾기",
+        "searchModelHint": "이 모델은 Search 인덱싱과 검색에 사용됩니다.",
+        "memoryModelHint": "이 모델은 아카이브된 스레드 메모리와 검색 질의를 임베딩하는 데 사용됩니다.",
+        "indexLanguage": "인덱스 언어",
+        "indexLanguageHint": "Search는 main_language만 인덱싱합니다.",
+        "dimensions": "임베딩 차원 수",
+        "dimensionsUnknown": "알 수 없음 (첫 인덱싱/검색 시 감지)",
+        "dimensionsHint": "임베딩 응답에서 자동으로 감지됩니다.",
+        "topKPerQuery": "쿼리당 Top K",
+        "topKPerQueryHint": "랭킹과 캡 적용 전에 쿼리당 먼저 뽑아오는 후보 수입니다.",
+        "neighborWindow": "이웃 범위",
+        "neighborWindowHint": "기본 hit 주변의 인접 chunk 또는 메시지를 함께 포함합니다.",
+        "maxPrimaryItems": "기본 항목 최대 수",
+        "maxPrimarySearchHint": "이웃 확장 전에 유지할 랭킹 기반 Search 결과 수입니다.",
+        "maxPrimaryMemoryHint": "이웃 확장 전에 유지할 랭킹 기반 Memory hit 수입니다.",
+        "maxTotalItems": "전체 항목 최대 수",
+        "maxTotalSearchHint": "이웃 확장 후 최종 Search 결과의 최대 수입니다.",
+        "maxTotalMemoryHint": "이웃 확장 후 최종 Memory 메시지의 최대 수입니다.",
+        "keywordPageSize": "키워드 검색 페이지 크기",
+        "keywordPageSizeHint": "search_keyword에서 페이지당 반환할 chunk 개수입니다."
+      },
+      "searchRulesTitle": "Search 규칙",
+      "searchRules": {
+        "mainLanguageOnly": "main_language만 인덱싱합니다",
+        "excludesMarkdownAssets": "이미지, 표, 코드 블록은 제외합니다",
+        "orderedResults": "Search 결과는 관련도 기준으로 정렬한 뒤 이웃 항목을 확장합니다",
+        "reindexRequired": "유효 Search 임베딩 provider/model이 바뀌면 기존 벡터를 지우고 프로젝트별 재색인이 필요합니다"
+      },
+      "memoryRulesTitle": "Memory 규칙",
+      "memoryRules": {
+        "description": "Memory는 현재 스레드 안에서만 아카이브된 히스토리를 검색하고, 프롬프트에 넣기 전에 다시 시간순으로 정렬합니다."
+      },
+      "validation": {
+        "missingEmbedding": "검색 & 메모리가 활성화되어 있으면 {{target}}에 임베딩 provider와 model이 모두 필요합니다."
+      }
     },
     "language": {
       "title": "언어 설정",
@@ -1260,7 +1261,7 @@
     "rag": {
       "title": "RAG Index",
       "hint": "Indexes main language only (excludes images/tables/code blocks). Results are ordered by type and chapter order.",
-      "disabled": "벡터 저장소가 비활성화되어 있습니다. 설정 > 검색 & 메모리에서 활성화하세요.",
+      "disabled": "검색 & 메모리가 비활성화되어 있습니다. 설정 > 검색 & 메모리에서 활성화하세요.",
       "profileMissing": "Embedding profile is not configured. Set it in Settings > Search & Memory.",
       "statusUnavailable": "RAG status is unavailable.",
       "profile": "Profile:",

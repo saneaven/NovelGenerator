@@ -544,7 +544,7 @@ def _prepare_index_job(
     if object_type in EXCLUDED_OBJECT_TYPES:
         return None, {"rebuilt": False, "skipped": True, "missing_main_language": False}
 
-    profile = get_embedding_profile(db, user_id=user_id, feature="ragSearch")
+    profile = get_embedding_profile(db, user_id=user_id, feature="search")
     if not profile:
         raise ValueError("RAG embedding profile is not configured")
 
@@ -611,7 +611,7 @@ def _apply_index_vectors(
     prepared: PreparedIndexJob,
     vectors: List[List[float]],
 ) -> Dict[str, Any]:
-    current_profile = get_embedding_profile(db, user_id=prepared.user_id, feature="ragSearch")
+    current_profile = get_embedding_profile(db, user_id=prepared.user_id, feature="search")
     if not current_profile:
         db.commit()
         return {"rebuilt": False, "skipped": True, "missing_main_language": False, "stale": True}
@@ -644,7 +644,7 @@ def _apply_index_vectors(
         raise RuntimeError("Embedding vectors have inconsistent dimensions")
 
     if prepared.stored_dimensions is None:
-        set_embedding_dimensions(db, user_id=prepared.user_id, feature="ragSearch", dimensions=embedding_dim)
+        set_embedding_dimensions(db, user_id=prepared.user_id, feature="search", dimensions=embedding_dim)
     elif prepared.stored_dimensions != embedding_dim:
         raise RuntimeError(
             f"Embedding dimensions mismatch (profile={prepared.stored_dimensions}, got={embedding_dim})"
@@ -800,7 +800,7 @@ async def reindex_project(
     provider_config: Dict[str, Any],
     force: bool = False,
 ) -> Dict[str, int]:
-    profile = get_embedding_profile(db, user_id=user_id, feature="ragSearch")
+    profile = get_embedding_profile(db, user_id=user_id, feature="search")
     if not profile:
         raise ValueError("RAG embedding profile is not configured")
 
@@ -851,7 +851,7 @@ def get_project_status(db: Session, *, user_id: UUID, project_id: UUID) -> Dict[
     refs = _project_object_refs(db, project_id=project_id)
     total_sources = len(refs)
     language = get_main_language(db, user_id=user_id)
-    profile = get_embedding_profile(db, user_id=user_id, feature="ragSearch")
+    profile = get_embedding_profile(db, user_id=user_id, feature="search")
 
     sources = _load_project_sources(db, user_id=user_id, project_id=project_id, language=language)
     chunked_source_ids = _load_chunked_source_ids(

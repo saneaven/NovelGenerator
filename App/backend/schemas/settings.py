@@ -1,5 +1,5 @@
 """Pydantic schemas for user settings"""
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from typing import Optional, Dict, List, Literal
 from enum import Enum
 
@@ -193,23 +193,63 @@ class RetryConfig(BaseModel):
 ToolCallAutoApprove = Dict[str, bool]
 
 
-# Embedding settings
-class EmbeddingProfileConfig(BaseModel):
-    """Embedding profile configuration used by RAG Search / Agent Memory."""
+class SearchMemoryEmbeddingConfig(BaseModel):
+    """Embedding configuration shared by Search / Memory settings."""
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
     provider: EmbeddingProviderType = EmbeddingProviderType.OPENAI
     model: str = Field(default="", max_length=200)
     dimensions: Optional[int] = None
 
-    class Config:
-        use_enum_values = True
+
+class SearchMemoryRetrievalConfig(BaseModel):
+    """Retrieval settings for Search / Memory."""
+    model_config = ConfigDict(extra="forbid")
+
+    topKPerQuery: int = Field(default=20, ge=1, le=200)
+    neighborWindow: int = Field(default=0, ge=0, le=20)
+    maxPrimaryItems: int = Field(default=20, ge=1, le=200)
+    maxTotalItems: int = Field(default=60, ge=1, le=500)
+
+    @model_validator(mode="after")
+    def validate_caps(self) -> "SearchMemoryRetrievalConfig":
+        if self.maxTotalItems < self.maxPrimaryItems:
+            raise ValueError("maxTotalItems must be greater than or equal to maxPrimaryItems")
+        return self
 
 
-class EmbeddingConfigs(BaseModel):
-    """Embedding profiles by feature."""
+class SearchGeneralConfig(BaseModel):
+    """Search configuration including keyword-search settings."""
+    model_config = ConfigDict(extra="forbid")
 
-    ragSearch: EmbeddingProfileConfig = Field(default_factory=EmbeddingProfileConfig)
-    agentMemory: EmbeddingProfileConfig = Field(default_factory=EmbeddingProfileConfig)
+    embedding: SearchMemoryEmbeddingConfig = Field(default_factory=SearchMemoryEmbeddingConfig)
+    retrieval: SearchMemoryRetrievalConfig = Field(default_factory=SearchMemoryRetrievalConfig)
+    keywordPageSize: int = Field(default=20, ge=1, le=200)
+
+
+class MemoryConfig(BaseModel):
+    """Thread memory embedding + retrieval settings."""
+    model_config = ConfigDict(extra="forbid")
+
+    embedding: SearchMemoryEmbeddingConfig = Field(default_factory=SearchMemoryEmbeddingConfig)
+    retrieval: SearchMemoryRetrievalConfig = Field(default_factory=SearchMemoryRetrievalConfig)
+
+
+class SearchMemoryOverrides(BaseModel):
+    """Optional per-target overrides."""
+    model_config = ConfigDict(extra="forbid")
+
+    search: Optional[SearchGeneralConfig] = None
+    memory: Optional[MemoryConfig] = None
+
+
+class SearchMemorySettings(BaseModel):
+    """General Search & Memory settings plus per-target overrides."""
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    general: SearchGeneralConfig = Field(default_factory=SearchGeneralConfig)
+    overrides: SearchMemoryOverrides = Field(default_factory=SearchMemoryOverrides)
 
 
 # Image generation settings schemas
@@ -273,17 +313,7 @@ class UserSettingsResponse(BaseModel):
     imageGenConfig: ImageGenConfig = Field(default_factory=ImageGenConfig)
     customThinkingTemplates: List[CustomThinkingTemplate] = []
     nativeOutputMode: bool = False
-    vectorStorageEnabled: bool = False
-    embeddingConfigs: EmbeddingConfigs = Field(default_factory=EmbeddingConfigs)
-    ragSearchTopKPerQuery: int = Field(default=20, ge=1, le=200)
-    ragSearchNeighborWindow: int = Field(default=0, ge=0, le=20)
-    ragSearchMaxPrimaryChunks: int = Field(default=20, ge=1, le=200)
-    ragSearchMaxTotalChunks: int = Field(default=60, ge=1, le=500)
-    ragSearchKeywordPageSize: int = Field(default=20, ge=1, le=200)
-    agentMemoryTopKPerQuery: int = Field(default=20, ge=1, le=200)
-    agentMemoryNeighborWindow: int = Field(default=0, ge=0, le=20)
-    agentMemoryMaxPrimaryMessages: int = Field(default=20, ge=1, le=200)
-    agentMemoryMaxTotalMessages: int = Field(default=60, ge=1, le=500)
+    searchMemorySettings: SearchMemorySettings = Field(default_factory=SearchMemorySettings)
     patchAutoRetry: bool = True
     llmLoggingEnabled: bool = False
     toolCallHistoryLimit: int = 5
@@ -307,17 +337,7 @@ class UserSettingsUpdate(BaseModel):
     imageGenConfig: Optional[ImageGenConfig] = None
     customThinkingTemplates: Optional[List[CustomThinkingTemplate]] = None
     nativeOutputMode: Optional[bool] = None
-    vectorStorageEnabled: Optional[bool] = None
-    embeddingConfigs: Optional[EmbeddingConfigs] = None
-    ragSearchTopKPerQuery: Optional[int] = Field(default=None, ge=1, le=200)
-    ragSearchNeighborWindow: Optional[int] = Field(default=None, ge=0, le=20)
-    ragSearchMaxPrimaryChunks: Optional[int] = Field(default=None, ge=1, le=200)
-    ragSearchMaxTotalChunks: Optional[int] = Field(default=None, ge=1, le=500)
-    ragSearchKeywordPageSize: Optional[int] = Field(default=None, ge=1, le=200)
-    agentMemoryTopKPerQuery: Optional[int] = Field(default=None, ge=1, le=200)
-    agentMemoryNeighborWindow: Optional[int] = Field(default=None, ge=0, le=20)
-    agentMemoryMaxPrimaryMessages: Optional[int] = Field(default=None, ge=1, le=200)
-    agentMemoryMaxTotalMessages: Optional[int] = Field(default=None, ge=1, le=500)
+    searchMemorySettings: Optional[SearchMemorySettings] = None
     patchAutoRetry: Optional[bool] = None
     llmLoggingEnabled: Optional[bool] = None
     toolCallHistoryLimit: Optional[int] = None
