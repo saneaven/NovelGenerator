@@ -64,7 +64,13 @@ class ObjectPatchBatch:
     ) -> ObjectPatchState:
         key = self.make_key(object_type, object_id, language)
         if key not in self._states:
-            obj = read_object(db, project_id, object_type, object_id, language)
+            obj = read_object(
+                db,
+                project_id=project_id,
+                object_type=object_type,
+                object_id=object_id,
+                language=language,
+            )
             lang_data = extract_lang_data(obj, language)
             self._states[key] = ObjectPatchState(
                 object_type=object_type,

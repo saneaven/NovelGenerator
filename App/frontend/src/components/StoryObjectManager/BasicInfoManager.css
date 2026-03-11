@@ -19,7 +19,8 @@
 
 .basic-info-manager .basic-info-card {
   display: grid;
-  grid-template-columns: var(--size-sidebar-width) 1fr; /* Fixed width for cover area using sidebar width var as proxy for ~320px */
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
   background-color: var(--color-surface-base);
   border-radius: var(--border-radius-xl);
   box-shadow: var(--shadow-lg);
@@ -315,26 +316,21 @@
    ========================================= */
 
 @media (max-width: 768px) {
-    .basic-info-manager .basic-info-card {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto 1fr; /* Stack vertically, details fills rest */
-    }
-
     .basic-info-manager .basic-info-media {
-        height: 18.75rem; /* 300px - Restrict height on mobile/tablet */
+        height: 18.75rem; /* 300px - Restrict height on mobile */
         min-height: 12.5rem; /* 200px */
     }
 
     .basic-info-manager .book-cover-img {
-        object-position: top center; /* Focus on top part if cropped */
+        object-position: top center;
     }
-    
+
     .basic-info-manager .media-placeholder {
         min-height: 12.5rem; /* 200px */
     }
 
     .basic-info-manager .title-display {
-        font-size: var(--font-size-4xl); /* 2rem approx */
+        font-size: var(--font-size-4xl);
     }
 
     .basic-info-manager .basic-info-details {

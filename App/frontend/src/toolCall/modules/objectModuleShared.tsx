@@ -147,7 +147,6 @@ export function getObjectEditMeta(toolName: string, args: Record<string, unknown
 function renderSingleObjectCard(operation: ObjectOperationVM, ctx: RenderContext): React.ReactElement | null {
   const decisionProps = ctx.getDecisionProps(operation);
   const commonProps = {
-    key: operation.id,
     threadId: ctx.threadId,
     scopeKey: ctx.scopeKey,
     projectId: ctx.projectId,
@@ -160,14 +159,14 @@ function renderSingleObjectCard(operation: ObjectOperationVM, ctx: RenderContext
 
   switch (operation.category) {
     case 'read':
-      return <ReadCallCard {...commonProps} />;
+      return <ReadCallCard key={operation.id} {...commonProps} />;
     case 'create':
-      return <CreateCallCard {...commonProps} />;
+      return <CreateCallCard key={operation.id} {...commonProps} />;
     case 'replace':
     case 'translate':
-      return <ReplaceCallCard {...commonProps} />;
+      return <ReplaceCallCard key={operation.id} {...commonProps} />;
     case 'delete':
-      return <DeleteCallCard {...commonProps} />;
+      return <DeleteCallCard key={operation.id} {...commonProps} />;
     default:
       return null;
   }
