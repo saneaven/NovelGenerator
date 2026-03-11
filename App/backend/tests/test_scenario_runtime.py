@@ -145,7 +145,7 @@ def test_tool_results_attached_only_when_assistant_emitted() -> None:
                 "start_index": 0,
                 "end_index": -1,
                 "user_template": "{{input.userMessage}}",
-                "assistant_template": "",  # assistant render empty -> skip
+                "assistant_template": "",  # metadata-only assistant should still survive
             },
         }
     ]
@@ -157,8 +157,44 @@ def test_tool_results_attached_only_when_assistant_emitted() -> None:
         source_conversation=source,
         template_data=_template_data(),
     )
-    assert [m["role"] for m in convo2] == ["user", "user"]
-    assert all(m["role"] != "tool_results" for m in convo2)
+    assert [m["role"] for m in convo2] == ["user", "assistant", "tool_results", "user"]
+    assert convo2[1]["content_parts"] == []
+    assert convo2[1]["tool_calls"] == tool_calls
+    assert convo2[1]["reasoning_detail"] == reasoning_detail
+
+
+def test_empty_assistant_without_metadata_is_skipped() -> None:
+    renderer = TemplateRenderer(fragment_map={})
+    source = [
+        _msg("user", "u0"),
+        _msg("assistant", "a0"),
+        _msg("user", "u1"),
+    ]
+    blocks = [
+        {
+            "id": "b1",
+            "block_order": 0,
+            "enabled": True,
+            "type": "rangeMapping",
+            "rangeMapping": {
+                "start_index": 0,
+                "end_index": -1,
+                "user_template": "{{input.userMessage}}",
+                "assistant_template": "",
+            },
+        }
+    ]
+
+    _, convo, _ = assemble_scenario(
+        template_renderer=renderer,
+        task_type="agent",
+        system_template="",
+        blocks=blocks,
+        source_conversation=source,
+        template_data=_template_data(),
+    )
+
+    assert [m["role"] for m in convo] == ["user", "user"]
 
 
 def test_subagent_range_mapping_patches_input_keys() -> None:

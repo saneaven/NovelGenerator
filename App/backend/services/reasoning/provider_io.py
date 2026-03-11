@@ -111,6 +111,15 @@ def _first_stream_template_var(template: dict[str, Any] | None) -> str | None:
     return None
 
 
+def _normalize_custom_request_format(advanced: dict[str, Any]) -> str:
+    value = advanced.get("request_format")
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"openai_sdk", "claude_sdk", "openai_responses"}:
+            return normalized
+    return "openai_sdk"
+
+
 class ProviderIO(Protocol):
     def to_provider_messages(self, messages: list[dict[str, Any]], model: str, advanced: dict[str, Any]) -> list[dict[str, Any]]:
         ...
@@ -457,6 +466,11 @@ def get_provider_io(provider: str, advanced: dict[str, Any]) -> ProviderIO:
     if provider_name == "openrouter":
         return OpenRouterIO()
     if provider_name == "custom":
+        request_format = _normalize_custom_request_format(advanced)
+        if request_format == "openai_responses":
+            return OpenAIResponsesIO()
+        if request_format == "claude_sdk":
+            return ClaudeIO()
         return CustomOpenAICompatIO()
     if provider_name == "xai":
         return XaiIO()

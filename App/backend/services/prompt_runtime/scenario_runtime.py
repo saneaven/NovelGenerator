@@ -82,6 +82,18 @@ def _patched_template_data(*, template_data: dict[str, Any], input_key: str, sou
     return root
 
 
+def _assistant_has_structured_payload(message: dict[str, Any], attached_tool_results: Any) -> bool:
+    tool_calls = message.get("tool_calls")
+    if isinstance(tool_calls, list) and tool_calls:
+        return True
+
+    reasoning_detail = message.get("reasoning_detail")
+    if isinstance(reasoning_detail, dict) and reasoning_detail:
+        return True
+
+    return isinstance(attached_tool_results, list) and any(isinstance(item, dict) for item in attached_tool_results)
+
+
 def assemble_scenario(
     *,
     template_renderer: TemplateRenderer,
@@ -272,12 +284,13 @@ def assemble_scenario(
                     source_text=src_text,
                 )
                 rendered = template_renderer.render_text(assistant_template, patched).strip()
-                if not rendered:
+                attached = src_entry.get("tool_results")
+                if not rendered and not _assistant_has_structured_payload(src_msg, attached):
                     continue
 
                 out_msg = {
                     "role": "assistant",
-                    "content_parts": [{"type": "content", "text": rendered}],
+                    "content_parts": [{"type": "content", "text": rendered}] if rendered else [],
                 }
 
                 run_id = src_msg.get("run_id")
@@ -297,7 +310,6 @@ def assemble_scenario(
 
                 rendered_conversation.append(out_msg)
 
-                attached = src_entry.get("tool_results")
                 if isinstance(attached, list) and attached:
                     for tool_msg in attached:
                         if isinstance(tool_msg, dict):

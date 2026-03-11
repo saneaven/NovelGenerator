@@ -1,9 +1,42 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import sys
+import types
 from typing import Any
 
-from App.backend.services.reasoning.provider_io import get_provider_io
+from App.backend.services.reasoning.provider_io import (
+    ClaudeIO,
+    CustomOpenAICompatIO,
+    OpenAIResponsesIO,
+    get_provider_io,
+)
+
+
+def _ensure_openai_stub() -> None:
+    if "openai" in sys.modules:
+        return
+
+    fake_openai = types.ModuleType("openai")
+
+    class _StubOpenAIError(Exception):
+        pass
+
+    fake_openai.AsyncOpenAI = object
+    fake_openai.OpenAIError = _StubOpenAIError
+    fake_openai.APIConnectionError = _StubOpenAIError
+    fake_openai.APIStatusError = _StubOpenAIError
+    fake_openai.AuthenticationError = _StubOpenAIError
+    fake_openai.BadRequestError = _StubOpenAIError
+    fake_openai.RateLimitError = _StubOpenAIError
+    sys.modules["openai"] = fake_openai
+
+
+def _load_openai_responses_provider():
+    _ensure_openai_stub()
+    from App.backend.providers.openai_responses_provider import OpenAIResponsesProvider
+
+    return OpenAIResponsesProvider
 
 
 @dataclass
@@ -22,6 +55,16 @@ def test_provider_stream_thinking_display_paths() -> None:
     assert get_provider_io("openrouter", {}).get_stream_thinking_display_path({}) == "reasoning"
     assert get_provider_io("xai", {}).get_stream_thinking_display_path({}) == "reasoning_text"
     assert get_provider_io("custom", {}).get_stream_thinking_display_path({}) == "text"
+    assert get_provider_io("custom", {"request_format": "openai_responses"}).get_stream_thinking_display_path({}) == "reasoning_text"
+    assert get_provider_io("custom", {"request_format": "claude_sdk"}).get_stream_thinking_display_path({}) == "reasoning_text"
+
+
+def test_custom_provider_io_routes_by_request_format() -> None:
+    assert isinstance(get_provider_io("custom", {}), CustomOpenAICompatIO)
+    assert isinstance(get_provider_io("custom", {"request_format": "openai_sdk"}), CustomOpenAICompatIO)
+    assert isinstance(get_provider_io("custom", {"request_format": "openai_responses"}), OpenAIResponsesIO)
+    assert isinstance(get_provider_io("custom", {"request_format": "claude_sdk"}), ClaudeIO)
+    assert isinstance(get_provider_io("custom", {"request_format": "unknown"}), CustomOpenAICompatIO)
 
 
 def test_custom_template_stream_display_path_and_nested_data() -> None:
@@ -138,11 +181,72 @@ def test_openai_to_provider_messages_preserves_output_msg_id() -> None:
     assert len(rd["data"]["items"]) == 1
 
 
+def test_custom_openai_responses_to_provider_messages_preserves_output_msg_id() -> None:
+    advanced = {"request_format": "openai_responses"}
+    io = get_provider_io("custom", advanced)
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [{"type": "content", "text": "Hello"}],
+            "reasoning_detail": {
+                "type": "openai",
+                "meta": {"provider": "openai"},
+                "data": {
+                    "items": [{"id": "rs_abc", "type": "reasoning", "encrypted_content": "enc123"}],
+                    "output_msg_id": "msg_xyz",
+                },
+                "token_count": 0,
+            },
+        },
+    ]
+    result = io.to_provider_messages(messages, "gpt-5.4", advanced)
+    rd = result[0]["reasoning_detail"]
+    assert rd["data"]["output_msg_id"] == "msg_xyz"
+    assert len(rd["data"]["items"]) == 1
+
+
+def test_custom_openai_responses_convert_messages_keeps_reasoning_items_before_output_and_tool_calls() -> None:
+    advanced = {"request_format": "openai_responses"}
+    io = get_provider_io("custom", advanced)
+    provider_cls = _load_openai_responses_provider()
+    provider = provider_cls.__new__(provider_cls)
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [{"type": "content", "text": "Hello"}],
+            "tool_calls": [
+                {
+                    "id": "call_123",
+                    "type": "function",
+                    "function": {"name": "read_story_object", "arguments": "{\"id\":\"abc\"}"},
+                }
+            ],
+            "reasoning_detail": {
+                "type": "openai",
+                "meta": {"provider": "openai"},
+                "data": {
+                    "items": [{"id": "rs_abc", "type": "reasoning", "encrypted_content": "enc123"}],
+                    "output_msg_id": "msg_xyz",
+                    "function_call_item_ids": {"call_123": "fc_xyz"},
+                },
+                "token_count": 0,
+            },
+        },
+    ]
+    prepared = io.to_provider_messages(messages, "gpt-5.4", advanced)
+    result = provider._convert_messages(prepared)
+    assert [item["type"] for item in result] == ["reasoning", "message", "function_call"]
+    assert result[0]["id"] == "rs_abc"
+    assert result[1]["id"] == "msg_xyz"
+    assert result[1]["status"] == "completed"
+    assert result[2]["id"] == "fc_xyz"
+    assert result[2]["status"] == "completed"
+
+
 def test_openai_convert_messages_includes_id_and_status() -> None:
     """_convert_messages should include id and status on assistant messages following reasoning items."""
-    from App.backend.providers.openai_responses_provider import OpenAIResponsesProvider
-
-    provider = OpenAIResponsesProvider.__new__(OpenAIResponsesProvider)
+    provider_cls = _load_openai_responses_provider()
+    provider = provider_cls.__new__(provider_cls)
     messages = [
         {"role": "user", "content_parts": [{"type": "content", "text": "Hi"}]},
         {
@@ -170,9 +274,8 @@ def test_openai_convert_messages_includes_id_and_status() -> None:
 
 def test_openai_convert_messages_no_reasoning_no_extra_fields() -> None:
     """_convert_messages should NOT add id/status when no reasoning items are present."""
-    from App.backend.providers.openai_responses_provider import OpenAIResponsesProvider
-
-    provider = OpenAIResponsesProvider.__new__(OpenAIResponsesProvider)
+    provider_cls = _load_openai_responses_provider()
+    provider = provider_cls.__new__(provider_cls)
     messages = [
         {
             "role": "assistant",
@@ -184,4 +287,31 @@ def test_openai_convert_messages_no_reasoning_no_extra_fields() -> None:
     assert "id" not in result[0]
     assert "status" not in result[0]
     assert "type" not in result[0]
+
+
+def test_custom_claude_sdk_to_provider_messages_preserves_reasoning_blocks() -> None:
+    advanced = {"request_format": "claude_sdk"}
+    io = get_provider_io("custom", advanced)
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [{"type": "content", "text": "Hello"}],
+            "reasoning_detail": {
+                "type": "claude",
+                "meta": {"provider": "claude", "thinking_display": "reasoning_text"},
+                "data": {
+                    "blocks": [
+                        {"type": "thinking", "thinking": "step one", "signature": "sig_123"},
+                    ],
+                    "reasoning_text": "step one",
+                },
+                "token_count": 0,
+            },
+        },
+    ]
+    result = io.to_provider_messages(messages, "claude-3.7", advanced)
+    rd = result[0]["reasoning_detail"]
+    assert rd["type"] == "claude"
+    assert rd["data"]["blocks"][0]["thinking"] == "step one"
+    assert rd["data"]["blocks"][0]["signature"] == "sig_123"
 
