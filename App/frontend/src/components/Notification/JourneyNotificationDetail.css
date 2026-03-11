@@ -212,6 +212,10 @@
   padding: var(--spacing-sm) 0;
 }
 
+.journey-detail-message--assistant .typing-indicator.inline {
+  margin: var(--spacing-xs) 0 0;
+}
+
 .journey-detail-notice {
   padding: var(--spacing-sm) 0;
 }

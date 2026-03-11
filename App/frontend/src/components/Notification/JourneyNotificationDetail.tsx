@@ -308,6 +308,14 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
           <div className="journey-detail-message-content">{text}</div>
         )}
 
+        {message.isStreaming && (
+          <div className="typing-indicator inline">
+            <div className="loading-track">
+              <div className="loading-bar" />
+            </div>
+          </div>
+        )}
+
         {hasToolCalls && (
           <div className="journey-detail-tool-calls">
             <FunctionCallsThread
