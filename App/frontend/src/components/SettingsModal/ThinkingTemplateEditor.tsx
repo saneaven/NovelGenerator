@@ -1,23 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BaseModal } from '../BaseModal';
 import { CustomSelect } from '../ui/CustomSelect';
 import { TextButton } from '../TextButton';
 import CustomThinkingTemplateManager from './CustomThinkingTemplateManager';
 import type { CustomThinkingTemplate } from '../../store/settingsStore';
 import { confirm } from '../../store/dialogStore';
-import './ThinkingTemplateEditorModal.css';
+import './ThinkingTemplateEditor.css';
 
 interface Props {
-  isOpen: boolean;
-  onClose: () => void;
   templates: CustomThinkingTemplate[];
   onChange: (templates: CustomThinkingTemplate[]) => void;
 }
 
-const ThinkingTemplateEditorModal: React.FC<Props> = ({
-  isOpen,
-  onClose,
+const ThinkingTemplateEditor: React.FC<Props> = ({
   templates,
   onChange,
 }) => {
@@ -25,9 +20,7 @@ const ThinkingTemplateEditorModal: React.FC<Props> = ({
   const tp = 'settings.taskConfig.templateManager';
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
-  // Auto-select first template when modal opens, or keep selection if still valid
   useEffect(() => {
-    if (!isOpen) return;
     if (templates.length === 0) {
       setSelectedTemplateId(null);
       return;
@@ -37,7 +30,7 @@ const ThinkingTemplateEditorModal: React.FC<Props> = ({
     if (!currentStillExists) {
       setSelectedTemplateId(templates[0].id ?? null);
     }
-  }, [isOpen, templates, selectedTemplateId]);
+  }, [templates, selectedTemplateId]);
 
   const selectedTemplate = templates.find((tpl) => tpl.id === selectedTemplateId) ?? null;
 
@@ -77,19 +70,8 @@ const ThinkingTemplateEditorModal: React.FC<Props> = ({
   };
 
   return (
-    <BaseModal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={t(`${tp}.title`)}
-      size="large"
-      zIndexLayer={1}
-      footer={
-        <TextButton variant="secondary" onClick={onClose}>
-          {t('common.close')}
-        </TextButton>
-      }
-    >
-      {/* Toolbar: template selector + create/delete */}
+    <div className="template-editor-inline">
+      {/* Toolbar: template selector + create */}
       <div className="template-editor-toolbar">
         <CustomSelect
           value={selectedTemplateId || ''}
@@ -103,14 +85,6 @@ const ThinkingTemplateEditorModal: React.FC<Props> = ({
         <TextButton size="sm" variant="secondary" onClick={handleCreate}>
           + {t(`${tp}.addTemplate`)}
         </TextButton>
-        <TextButton
-          size="sm"
-          variant="danger"
-          onClick={handleDelete}
-          disabled={!selectedTemplateId}
-        >
-          {t(`${tp}.deleteTemplate`)}
-        </TextButton>
       </div>
 
       {/* Template editor or empty state */}
@@ -122,8 +96,19 @@ const ThinkingTemplateEditorModal: React.FC<Props> = ({
       ) : (
         <div className="template-editor-empty">{t(`${tp}.noTemplates`)}</div>
       )}
-    </BaseModal>
+
+      <div className="template-editor-footer">
+        <TextButton
+          size="sm"
+          variant="danger"
+          onClick={handleDelete}
+          disabled={!selectedTemplateId}
+        >
+          {t(`${tp}.deleteTemplate`)}
+        </TextButton>
+      </div>
+    </div>
   );
 };
 
-export default ThinkingTemplateEditorModal;
+export default ThinkingTemplateEditor;

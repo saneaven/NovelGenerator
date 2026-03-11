@@ -11,7 +11,7 @@ import type {
 } from '../../store/settingsStore';
 import { normalizeEffectiveTaskConfig } from '../../store/taskConfigSettings';
 import ModelBrowser from './ModelBrowser';
-import ThinkingTemplateEditorModal from './ThinkingTemplateEditorModal';
+import ThinkingTemplateEditor from './ThinkingTemplateEditor';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import { Warning, Settings, Advenced } from '../icons';
@@ -36,7 +36,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   const { t } = useTranslation();
   const radioNameKey = formKey ?? taskType;
   const [showModelBrowser, setShowModelBrowser] = useState(false);
-  const [showTemplateEditor, setShowTemplateEditor] = useState(false);
+
 
   const emitChange = (nextConfig: TaskAIConfig) => {
     onChange(normalizeEffectiveTaskConfig(nextConfig));
@@ -513,39 +513,26 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                   <>
                     <div className="form-field">
                       <label>{t('settings.taskConfig.thinkingTemplate')}</label>
-                      <div className="template-selector-row">
-                        <CustomSelect
-                          value={config.advanced.custom_thinking_template_id || ''}
-                          onChange={(value) =>
-                            handleThinkingTemplateChange(value || undefined)
-                          }
-                          options={[
-                            { value: '', label: t('common.none') },
-                            ...customThinkingTemplates
-                              .filter((tpl) => tpl.id)
-                              .map((tpl) => ({
-                                value: tpl.id!,
-                                label: tpl.name,
-                              })),
-                          ]}
-                        />
-                        {onTemplatesChange && (
-                          <TextButton
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => setShowTemplateEditor(true)}
-                          >
-                            {t('settings.taskConfig.manageTemplates')}
-                          </TextButton>
-                        )}
-                      </div>
+                      <CustomSelect
+                        value={config.advanced.custom_thinking_template_id || ''}
+                        onChange={(value) =>
+                          handleThinkingTemplateChange(value || undefined)
+                        }
+                        options={[
+                          { value: '', label: t('common.none') },
+                          ...customThinkingTemplates
+                            .filter((tpl) => tpl.id)
+                            .map((tpl) => ({
+                              value: tpl.id!,
+                              label: tpl.name,
+                            })),
+                        ]}
+                      />
                       <p className="field-hint">{t('settings.taskConfig.thinkingTemplateHint')}</p>
                     </div>
 
                     {onTemplatesChange && (
-                      <ThinkingTemplateEditorModal
-                        isOpen={showTemplateEditor}
-                        onClose={() => setShowTemplateEditor(false)}
+                      <ThinkingTemplateEditor
                         templates={customThinkingTemplates}
                         onChange={onTemplatesChange}
                       />
