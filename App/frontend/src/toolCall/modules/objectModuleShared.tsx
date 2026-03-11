@@ -76,9 +76,6 @@ export function getTargetId(_toolName: string, args: Record<string, unknown>): s
   if (typeof args.id === 'string' && args.id.trim()) return args.id;
   if (typeof args.object_id === 'string' && args.object_id.trim()) return args.object_id;
   if (typeof args.manuscript_id === 'string' && args.manuscript_id.trim()) return args.manuscript_id;
-  if (typeof args.chapterId === 'string' && args.chapterId.trim()) return args.chapterId;
-  if (typeof args.actId === 'string' && args.actId.trim()) return args.actId;
-  if (typeof args.outlineId === 'string' && args.outlineId.trim()) return args.outlineId;
   return undefined;
 }
 

@@ -32,6 +32,10 @@ function storySubtypeToUnifiedType(storySubtype?: StoryObjectSubtype): UnifiedOb
   return undefined;
 }
 
+function isSingletonUnifiedType(type: UnifiedObjectType): boolean {
+  return type === 'basic_info' || type === 'guidelines';
+}
+
 export function resolveUnifiedType(operation: ObjectOperationVM): UnifiedObjectType | undefined {
   switch (operation.objectType) {
     case 'basic_info':
@@ -67,6 +71,10 @@ function resolveByTypeAndId(
     return undefined;
   }
 
+  if (!isSingletonUnifiedType(type)) {
+    return undefined;
+  }
+
   // Fallback for singleton-like objects (basic_info/guidelines)
   const all = Object.values(objects);
   return all.find((object) => {
@@ -74,6 +82,18 @@ function resolveByTypeAndId(
     if (!projectId) return true;
     return object.metadata?.project_id === projectId;
   });
+}
+
+function resolveObjectById(
+  objects: Record<string, UnifiedObject>,
+  id: string | undefined,
+  type?: UnifiedObjectType,
+): UnifiedObject | undefined {
+  if (!id) return undefined;
+  const object = objects[id];
+  if (!object) return undefined;
+  if (type && object.type !== type) return undefined;
+  return object;
 }
 
 function resolveDisplayName(
@@ -158,6 +178,30 @@ export function resolveObjectTitle(params: {
   const type = objectTypeLabel(operation.objectType, operation.storySubtype);
 
   const unifiedType = resolveUnifiedType(operation);
+  if (operation.category === 'create') {
+    const createdObjectId = typeof operation.result?.objectId === 'string'
+      ? operation.result.objectId
+      : undefined;
+    const createdObject = unifiedType
+      ? resolveObjectById(objects, createdObjectId, unifiedType)
+      : undefined;
+    if (createdObject) {
+      const data = dataForLanguage(createdObject, language);
+      const name = resolveDisplayName(createdObject, data, objects, language);
+      if (name) return { type, name };
+    }
+
+    if (typeof operation.args.name === 'string' && operation.args.name.trim()) {
+      return { type, name: operation.args.name };
+    }
+
+    if (typeof operation.args.title === 'string' && operation.args.title.trim()) {
+      return { type, name: operation.args.title };
+    }
+
+    return { type, name: undefined };
+  }
+
   if (unifiedType) {
     const object = resolveByTypeAndId(objects, unifiedType, operation.targetId, projectId);
     if (object) {
@@ -169,6 +213,10 @@ export function resolveObjectTitle(params: {
 
   if (typeof operation.args.name === 'string' && operation.args.name.trim()) {
     return { type, name: operation.args.name };
+  }
+
+  if (typeof operation.args.title === 'string' && operation.args.title.trim()) {
+    return { type, name: operation.args.title };
   }
 
   return { type, name: undefined };
