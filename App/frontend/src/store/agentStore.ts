@@ -134,6 +134,8 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
         isLoading: false,
       }));
 
+      localStorage.setItem(`selectedAgent_${projectId}`, agent.id);
+
       return agent.id;
     } catch (error) {
       set({
@@ -224,6 +226,12 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
         },
         isLoading: false,
       }));
+
+      if (filteredAgents.length > 0) {
+        localStorage.setItem(`selectedAgent_${projectId}`, filteredAgents[0].id);
+      } else {
+        localStorage.removeItem(`selectedAgent_${projectId}`);
+      }
     } catch (error) {
       set({
         isLoading: false,
