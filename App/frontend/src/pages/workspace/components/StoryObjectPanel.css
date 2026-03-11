@@ -130,6 +130,8 @@
     padding: var(--spacing-xl);
     background: var(--color-surface-base);
     position: relative;
+    display: flex;
+    flex-direction: column;
 }
 
 /* Story Object Card Expanded Overlay - State 3 full edit mode */

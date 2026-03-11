@@ -1,11 +1,20 @@
 /* Modern Image Card Layout for BasicInfoManager */
 
+.basic-info-manager {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .basic-info-manager .basic-info-layout {
   display: flex;
   justify-content: center;
   padding: var(--spacing-xl);
   width: 100%;
   box-sizing: border-box;
+  flex: 1;
+  min-height: 0;
 }
 
 .basic-info-manager .basic-info-card {
@@ -17,6 +26,7 @@
   overflow: hidden;
   max-width: var(--container-lg);
   width: 100%;
+  height: 100%;
   border: 1px solid var(--color-border-subtle);
   transition: box-shadow var(--transition-base), transform var(--transition-base);
 }
@@ -41,8 +51,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  /* Aspect ratio roughly 2:3 or manageable height */
-  min-height: 30rem; /* 480px */
+  /* Image fills the grid row height set by the card */
 }
 
 .basic-info-manager .media-preview {
@@ -119,6 +128,8 @@
     gap: var(--spacing-lg);
     background-color: var(--color-surface-base);
     position: relative;
+    min-height: 0;
+    overflow: hidden;
 }
 
 /* Header */
@@ -221,6 +232,8 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
+    min-height: 0;
+    overflow-y: auto;
 }
 
 .basic-info-manager .section-label {
@@ -301,10 +314,10 @@
    Responsive Adjustments
    ========================================= */
 
-@media (max-width: 850px) {
+@media (max-width: 768px) {
     .basic-info-manager .basic-info-card {
         grid-template-columns: 1fr;
-        grid-template-rows: auto auto; /* Stack vertically */
+        grid-template-rows: auto 1fr; /* Stack vertically, details fills rest */
     }
 
     .basic-info-manager .basic-info-media {
