@@ -21,3 +21,4 @@ services:
       - "443:443"
     volumes:
       - ./docker/Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - ./docker/certs-origin:/etc/caddy/certs:ro

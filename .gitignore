@@ -4,6 +4,7 @@
 .env.dev
 .env.prod
 /App/backend/storage/assets
+/docker/certs-origin/
 nul
 /App/backend/__pycache__
 /App/backend/.tmp_pyc/

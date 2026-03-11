@@ -6,7 +6,7 @@
 - `docker-compose.dev.yml` (dev: autoreload + bind mounts)
 - `docker-compose.prod.yml` (prod: no autoreload)
 - `docker/Caddyfile.dev` (dev HTTPS with `tls internal` + on-demand certs, e.g. `novelbuds.localhost` / `<desktop-ip>.sslip.io`)
-- `docker/Caddyfile.prod` (`https://{$APP_DOMAIN}` via Let's Encrypt)
+- `docker/Caddyfile.prod` (`https://{$APP_DOMAIN}` via Cloudflare Origin CA)
 
 ## Dev (local)
 
@@ -44,13 +44,28 @@ Options:
 Prereqs:
 - Domain: `APP_DOMAIN` A/AAAA record points to the VPS (typically through Cloudflare DNS)
 - Firewall: allow inbound `80/tcp` + `443/tcp`
+- Cloudflare DNS record for `APP_DOMAIN` is `Proxied`
+- Cloudflare SSL/TLS mode is `Full (strict)`
 
 1. Create env file on the VPS:
    - Copy `.env.prod.example` -> `.env.prod`
    - Fill `APP_DOMAIN`, secrets, and S3 settings with strong values
 
-2. Start:
+2. Create a Cloudflare Origin CA certificate:
+   - Cloudflare dashboard -> `SSL/TLS` -> `Origin Server` -> `Create Certificate`
+   - Choose `PEM`
+   - Include every proxied hostname served by Caddy (`APP_DOMAIN`, plus `www` if it points at the same origin)
+   - Save the certificate as `docker/certs-origin/cloudflare-origin.crt`
+   - Save the private key as `docker/certs-origin/cloudflare-origin.key`
+
+3. Start:
    - `docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
+
+4. Verify through Cloudflare:
+   - `https://APP_DOMAIN/`
+   - `https://APP_DOMAIN/api/...`
+
+Note: Origin CA certificates are for Cloudflare-to-origin TLS only. Direct browser access to the origin can show a trust warning, which is expected.
 
 ## Notes
 
@@ -62,4 +77,6 @@ Prereqs:
 - In dev, image assets are stored on the backend filesystem by default and served through `/storage/assets/*`.
 - In prod, image assets are stored in S3 and served through `/storage/assets/*`.
 - Recommended production setup: Lightsail static IP + Cloudflare proxied DNS + SSL mode `Full (strict)`.
+- Prod Caddy expects `docker/certs-origin/cloudflare-origin.crt` and `docker/certs-origin/cloudflare-origin.key` to exist before startup.
+- A Cloudflare `524` means the origin did not return an HTTP response before Cloudflare's timeout; changing to Origin CA does not by itself fix slow origin responses.
 - Recommended backups: Lightsail automatic snapshots plus periodic `pg_dump` uploads to S3.

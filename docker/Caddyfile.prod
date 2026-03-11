@@ -1,4 +1,6 @@
 {$APP_DOMAIN} {
+	tls /etc/caddy/certs/cloudflare-origin.crt /etc/caddy/certs/cloudflare-origin.key
+
 	encode zstd gzip
 
 	@api path /api/* /storage/*
