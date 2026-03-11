@@ -38,8 +38,8 @@
     "copyFailed": "Copy failed"
   },
   "streamRecovery": {
-    "title": "Streaming Interrupted",
-    "body": "This task was already running before the app loaded. The final result will appear once it completes."
+    "title": "Live Streaming Reconnecting",
+    "body": "The live connection was interrupted, so intermediate output may be skipped. The final result will appear automatically once recovery completes."
   },
   "landing": {
     "title": "Novel Buds",

@@ -21,3 +21,20 @@ export async function reconcilePreexistingLiveThreads(
     await fetchAndReplaceThreadSnapshot(row.id);
   }
 }
+
+export function suppressRunningThreadStreaming(projectId: string): string[] {
+  const state = useThreadStore.getState();
+  const threadIds = Object.values(state.threadsById)
+    .filter((thread) => thread?.projectId === projectId && thread.status === 'running')
+    .map((thread) => thread!.id);
+
+  if (threadIds.length === 0) {
+    return [];
+  }
+
+  state.markPreexistingLiveThreads(threadIds);
+  for (const threadId of threadIds) {
+    state.clearThreadStreamingState(threadId);
+  }
+  return threadIds;
+}

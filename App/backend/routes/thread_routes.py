@@ -14,7 +14,7 @@ from ..auth import get_current_user
 from ..database import SessionLocal, get_db
 from ..models.db_models import Project, RunMessageModel, RunModel, RunToolCallModel, Thread, User
 from ..models.memory_models import MessageMemorySummary
-from ..providers.sse_encoder import encode_sse
+from ..providers.sse_encoder import encode_sse, iter_sse_with_heartbeat
 from ..schemas.thread_api import (
     ChatRequest,
     ChatResponse,
@@ -60,6 +60,7 @@ from ..services.storage_usage_service import (
 
 
 router = APIRouter(prefix="/api/v1", tags=["threads"])
+PROJECT_STREAM_HEARTBEAT_INTERVAL_SECONDS = 15.0
 
 
 def _serialize_message(row: RunMessageModel) -> dict:
@@ -457,24 +458,15 @@ async def stream_project_events(
     require_owned_project(db, project_id=project_id, user_id=current_user.id)
 
     async def event_gen():
-        async for envelope in run_event_bus.subscribe(
-            f"project:{project_id}",
-            after_event_id=after_event_id,
-            start_from=start_from,
+        async for chunk in iter_sse_with_heartbeat(
+            run_event_bus.subscribe(
+                f"project:{project_id}",
+                after_event_id=after_event_id,
+                start_from=start_from,
+            ),
+            heartbeat_interval=PROJECT_STREAM_HEARTBEAT_INTERVAL_SECONDS,
         ):
-            event_id: int | None = None
-            event: dict[str, Any]
-            if isinstance(envelope, dict) and isinstance(envelope.get("event"), dict):
-                event = envelope.get("event") or {}
-                raw_event_id = envelope.get("event_id")
-                if isinstance(raw_event_id, int):
-                    event_id = raw_event_id
-            else:
-                event = envelope if isinstance(envelope, dict) else {}
-
-            name = str(event.get("event") or "message")
-            data = event.get("data") if isinstance(event.get("data"), dict) else {}
-            yield encode_sse(name, data, event_id=event_id)
+            yield chunk
 
     return StreamingResponse(
         event_gen(),

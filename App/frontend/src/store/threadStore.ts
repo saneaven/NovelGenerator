@@ -82,6 +82,7 @@ export interface ThreadState {
 
   setThreadStreamActive: (threadId: string, active: boolean) => void;
   isThreadStreamActive: (threadId: string) => boolean;
+  clearThreadStreamingState: (threadId: string) => void;
 
   setAutoContinuePaused: (threadId: string, paused: boolean) => void;
   isAutoContinuePaused: (threadId: string) => boolean;
@@ -700,6 +701,36 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
     }),
 
   isThreadStreamActive: (threadId) => Boolean(get().activeStreamByThread[threadId]),
+
+  clearThreadStreamingState: (threadId) =>
+    set((s) => {
+      const messages = s.messagesByThreadId[threadId] ?? [];
+      let changed = false;
+      const nextMessages = messages.map((message) => {
+        if (!message.isStreaming && message.streamingData === undefined) {
+          return message;
+        }
+        changed = true;
+        return {
+          ...message,
+          isStreaming: false,
+          streamingData: undefined,
+        };
+      });
+
+      const streamActive = Boolean(s.activeStreamByThread[threadId]);
+      if (!changed && !streamActive) return s;
+
+      return {
+        messagesByThreadId: changed
+          ? { ...s.messagesByThreadId, [threadId]: nextMessages }
+          : s.messagesByThreadId,
+        activeStreamByThread: {
+          ...s.activeStreamByThread,
+          [threadId]: false,
+        },
+      };
+    }),
 
   setAutoContinuePaused: (threadId, paused) =>
     set((s) => {
