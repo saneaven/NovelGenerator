@@ -741,5 +741,6 @@
     content: '';
     display: block;
     height: var(--size-mobile-footer-height);
+    flex-shrink: 0;
   }
 }
