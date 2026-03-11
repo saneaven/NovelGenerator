@@ -30,10 +30,10 @@ def get_llm_runtime(db: Session, *, user_id: UUID, task_type: str) -> LLMRuntime
     task_config = settings_service.get_task_config(db, user_id, task_type)
     provider_config = credential_service.get_provider_config(db, user_id, task_config.provider)
     if task_config.provider == "custom":
-        request_format = task_config.advanced.get("request_format") if isinstance(task_config.advanced, dict) else None
+        custom_kind = task_config.advanced.get("custom_kind") if isinstance(task_config.advanced, dict) else None
         provider_config = {
             **provider_config,
-            "request_format": request_format or "openai_sdk",
+            "custom_kind": custom_kind or "openai_completion",
         }
 
     return LLMRuntime(

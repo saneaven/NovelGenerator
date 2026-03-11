@@ -1,6 +1,6 @@
 export type ProviderType = 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
 export type AITaskType = 'agent' | 'translation' | 'editAssistant' | 'imagePrompt' | 'summary' | 'subAgent';
-export type RequestFormat = 'openai_sdk' | 'claude_sdk' | 'openai_responses';
+export type CustomKind = 'openai_completion' | 'openai_response' | 'claude';
 export type TokenizerOverride = 'openai' | 'claude' | 'gemini';
 
 export interface ProviderPreference {
@@ -20,7 +20,7 @@ export interface AdvancedTaskSettings {
   thinking_config?: ThinkingConfig | null;
   custom_thinking_template_id?: string | null;
   tokenizer_override?: TokenizerOverride | null;
-  request_format?: RequestFormat | null;
+  custom_kind?: CustomKind | null;
   verbosity?: 'low' | 'medium' | 'high' | null;
 }
 
@@ -88,10 +88,13 @@ export function normalizeEffectiveTaskConfig(config: TaskAIConfig): TaskAIConfig
   }
 
   if (normalized.provider !== 'custom') {
-    delete advanced.request_format;
+    delete advanced.custom_kind;
     delete advanced.custom_thinking_template_id;
-  } else if (advanced.request_format !== 'openai_sdk') {
-    delete advanced.custom_thinking_template_id;
+  } else {
+    advanced.custom_kind = advanced.custom_kind ?? 'openai_completion';
+    if (advanced.custom_kind !== 'openai_completion') {
+      delete advanced.custom_thinking_template_id;
+    }
   }
 
   if (advanced.thinking_mode !== 'model') {
@@ -99,7 +102,7 @@ export function normalizeEffectiveTaskConfig(config: TaskAIConfig): TaskAIConfig
     delete advanced.custom_thinking_template_id;
   }
 
-  if (normalized.provider !== 'openai' && !(normalized.provider === 'custom' && advanced.request_format === 'openai_responses')) {
+  if (normalized.provider !== 'openai' && !(normalized.provider === 'custom' && advanced.custom_kind === 'openai_response')) {
     delete advanced.verbosity;
   }
 

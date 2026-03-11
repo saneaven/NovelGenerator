@@ -116,7 +116,7 @@ def test_resolve_task_config_prefers_override_and_falls_back_to_general() -> Non
                 temperature=0.4,
                 advanced={
                     "thinking_mode": "model",
-                    "request_format": "openai_sdk",
+                    "custom_kind": "openai_completion",
                     "thinking_config": {"effort": "high"},
                     "custom_thinking_template_id": "tpl_123",
                     "tokenizer_override": "openai",
@@ -132,10 +132,36 @@ def test_resolve_task_config_prefers_override_and_falls_back_to_general() -> Non
     assert translation["model"] == "translation-model"
     assert translation["advanced"] == {
         "thinking_mode": "model",
-        "request_format": "openai_sdk",
+        "custom_kind": "openai_completion",
         "thinking_config": {"effort": "high"},
         "custom_thinking_template_id": "tpl_123",
         "tokenizer_override": "openai",
     }
     assert agent["provider"] == "openrouter"
     assert agent["model"] == "general-model"
+
+
+def test_resolve_task_config_defaults_custom_kind_for_custom_provider() -> None:
+    settings = {
+        "general": _task_config(
+            provider="custom",
+            model="gateway-model",
+            advanced={
+                "thinking_mode": "model",
+                "thinking_config": {"effort": "medium"},
+                "custom_thinking_template_id": "tpl_123",
+                "tokenizer_override": "openai",
+            },
+        ),
+        "overrides": {},
+    }
+
+    resolved = resolve_task_config(settings, "agent")
+
+    assert resolved["advanced"] == {
+        "thinking_mode": "model",
+        "thinking_config": {"effort": "medium"},
+        "custom_kind": "openai_completion",
+        "custom_thinking_template_id": "tpl_123",
+        "tokenizer_override": "openai",
+    }

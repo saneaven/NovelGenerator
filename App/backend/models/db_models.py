@@ -129,7 +129,7 @@ class UserSettings(Base):
         default=dict,
     )
 
-    # Custom thinking templates for custom provider (openai_sdk) thinking format
+    # Custom thinking templates for custom provider openai_completion mode.
     custom_thinking_templates = Column(JSONB, nullable=False, server_default='[]')
 
     # UI Language for interface localization (i18next)

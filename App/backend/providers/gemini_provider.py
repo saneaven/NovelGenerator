@@ -266,7 +266,7 @@ class GeminiProvider(BaseProvider):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
-        request_format: Optional[str] = None,
+        custom_kind: Optional[str] = None,
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
     ) -> AsyncGenerator[ProviderEvent, None]:

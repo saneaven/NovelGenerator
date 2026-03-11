@@ -39,7 +39,7 @@ class BaseProvider(ABC):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
-        request_format: Optional[str] = None,
+        custom_kind: Optional[str] = None,
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
@@ -56,7 +56,7 @@ class BaseProvider(ABC):
             provider_preference: Provider-specific preferences (e.g., OpenRouter only/ignore)
             thinking_config: Thinking configuration for model-native thinking (mapped to provider-native thinking field)
             thinking_mode: Thinking mode ('off', 'custom', 'model')
-            request_format: Custom endpoint request format ('openai_sdk', 'claude_sdk')
+            custom_kind: Custom endpoint kind ('openai_completion', 'openai_response', 'claude')
             native_tool_call: If true, provider should parse <tool_call> tags from text and emit tool_calls deltas.
             verbosity: GPT-5 output verbosity ('low', 'medium', 'high'). Maps to text.verbosity in Responses API.
 

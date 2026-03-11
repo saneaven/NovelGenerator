@@ -16,9 +16,9 @@ import type {
 export type {
     AdvancedTaskSettings,
     AITaskType,
+    CustomKind,
     ProviderPreference,
     ProviderType,
-    RequestFormat,
     TaskAIConfig,
     TaskConfigSettings,
     TokenizerOverride,
@@ -175,7 +175,7 @@ export interface Settings {
     // Image generation configuration
     imageGenConfig: ImageGenConfig;
 
-    // Custom thinking templates (for custom provider openai_sdk)
+    // Custom thinking templates (for custom provider openai_completion mode)
     customThinkingTemplates: CustomThinkingTemplate[];
 
     // Language settings

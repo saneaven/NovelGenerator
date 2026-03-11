@@ -33,6 +33,9 @@ class AITaskType(str, Enum):
     SUB_AGENT = "subAgent"
 
 
+CustomKind = Literal["openai_completion", "openai_response", "claude"]
+
+
 class ProviderPreference(BaseModel):
     """OpenRouter provider filtering"""
     model_config = ConfigDict(extra="forbid")
@@ -89,7 +92,7 @@ class AdvancedTaskSettings(BaseModel):
     thinking_config: Optional[ThinkingConfig] = None
     custom_thinking_template_id: Optional[str] = None
     tokenizer_override: Optional[Literal["openai", "claude", "gemini"]] = None
-    request_format: Optional[Literal["openai_sdk", "claude_sdk", "openai_responses"]] = None
+    custom_kind: Optional[CustomKind] = None
     verbosity: Optional[Literal["low", "medium", "high"]] = None  # GPT-5 output verbosity (text.verbosity in Responses API)
 
 

@@ -369,7 +369,7 @@
         "additionalHeadersHint": "Optional HTTP headers added to custom provider requests. Must be a JSON object with string values.",
         "additionalBody": "Custom Body (JSON)",
         "additionalBodyPlaceholder": "{\"reasoning\":{\"effort\":\"high\"}}",
-        "additionalBodyHint": "Optional JSON body merged into custom LLM requests (openai_sdk, claude_sdk, and openai_responses)."
+        "additionalBodyHint": "Optional JSON body merged into custom LLM requests (openai_completion, openai_response, and claude)."
       },
       "validation": {
         "invalidJson": "{{field}} must be valid JSON.",
@@ -632,9 +632,9 @@
         "confirmDelete": "Delete this template? Any task config referencing it will lose the selection.",
         "noTemplates": "No templates yet. Add one to define custom thinking formats."
       },
-      "requestFormat": "Request Format",
-      "requestFormatHint": "Choose the SDK request schema used by your custom endpoint",
-      "requestFormatCustomOnlyHint": "Request format is used only when provider is Custom Endpoint",
+      "customKind": "Custom Kind",
+      "customKindHint": "Choose which request dialect your custom endpoint expects",
+      "customKindCustomOnlyHint": "Custom kind is used only when provider is Custom Endpoint",
       "aiModel": "AI Model",
       "browse": "Browse",
       "hide": "Hide",

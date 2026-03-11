@@ -369,7 +369,7 @@
         "additionalHeadersHint": "커스텀 프로바이더 요청에 추가할 선택 헤더입니다. 문자열 값만 가진 JSON 객체여야 합니다.",
         "additionalBody": "커스텀 바디 (JSON)",
         "additionalBodyPlaceholder": "{\"reasoning\":{\"effort\":\"high\"}}",
-        "additionalBodyHint": "커스텀 LLM 요청(openai_sdk, claude_sdk, openai_responses)에 병합할 선택 JSON 바디입니다."
+        "additionalBodyHint": "커스텀 LLM 요청(openai_completion, openai_response, claude)에 병합할 선택 JSON 바디입니다."
       },
       "validation": {
         "invalidJson": "{{field}}은(는) 올바른 JSON이어야 합니다.",
@@ -632,9 +632,9 @@
         "confirmDelete": "이 템플릿을 삭제하시겠습니까? 참조하는 작업 설정의 선택이 해제됩니다.",
         "noTemplates": "아직 템플릿이 없습니다. 커스텀 사고 형식을 정의하려면 추가하세요."
       },
-      "requestFormat": "요청 형식",
-      "requestFormatHint": "커스텀 엔드포인트가 사용하는 SDK 요청 스키마를 선택하세요",
-      "requestFormatCustomOnlyHint": "요청 형식은 커스텀 엔드포인트 프로바이더에서만 사용됩니다",
+      "customKind": "커스텀 종류",
+      "customKindHint": "커스텀 엔드포인트가 기대하는 요청 종류를 선택하세요",
+      "customKindCustomOnlyHint": "커스텀 종류는 커스텀 엔드포인트 프로바이더에서만 사용됩니다",
       "aiModel": "AI 모델",
       "browse": "찾아보기",
       "hide": "숨기기",

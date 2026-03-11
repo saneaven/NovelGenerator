@@ -5,7 +5,7 @@ import type {
   ProviderType,
   AITaskType,
   ThinkingConfig,
-  RequestFormat,
+  CustomKind,
   TokenizerOverride,
   CustomThinkingTemplate,
 } from '../../store/settingsStore';
@@ -42,32 +42,31 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
     onChange(normalizeEffectiveTaskConfig(nextConfig));
   };
 
-  // Detect if model is GPT-5 family (gpt-5, gpt-5-mini, gpt-5.1, etc.)
-  const isGpt5 = config.provider === 'openai' && /gpt-?5/i.test(config.model);
   const isCustomProvider = config.provider === 'custom';
-  const customRequestFormat: RequestFormat = config.advanced.request_format ?? 'openai_sdk';
-  const isCustomOpenaiSdk = isCustomProvider && customRequestFormat === 'openai_sdk';
-  const isCustomClaudeSdk = isCustomProvider && customRequestFormat === 'claude_sdk';
-  const isCustomOpenaiResponses = isCustomProvider && customRequestFormat === 'openai_responses';
-  const isResponsesReasoningProvider = config.provider === 'openai' || isCustomOpenaiResponses;
+  const customKind: CustomKind = config.advanced.custom_kind ?? 'openai_completion';
+  const isCustomOpenaiCompletion = isCustomProvider && customKind === 'openai_completion';
+  const isCustomClaude = isCustomProvider && customKind === 'claude';
+  const isCustomOpenaiResponse = isCustomProvider && customKind === 'openai_response';
+  const isResponsesReasoningProvider = config.provider === 'openai' || isCustomOpenaiResponse;
+  const isGpt5ResponsesModel = isResponsesReasoningProvider && /gpt-?5/i.test(config.model);
   const responsesEffortOptions = [
     { value: 'none', label: t('settings.taskConfig.thinking_config.effortOptions.none') },
     { value: 'minimal', label: t('settings.taskConfig.thinking_config.effortOptions.minimal') },
     {
       value: 'low',
-      label: isGpt5
+      label: isGpt5ResponsesModel
         ? t('settings.taskConfig.thinking_config.effortOptions.lowPercent')
         : t('settings.taskConfig.thinking_config.effortOptions.low'),
     },
     {
       value: 'medium',
-      label: isGpt5
+      label: isGpt5ResponsesModel
         ? t('settings.taskConfig.thinking_config.effortOptions.mediumPercent')
         : t('settings.taskConfig.thinking_config.effortOptions.medium'),
     },
     {
       value: 'high',
-      label: isGpt5
+      label: isGpt5ResponsesModel
         ? t('settings.taskConfig.thinking_config.effortOptions.highPercent')
         : t('settings.taskConfig.thinking_config.effortOptions.high'),
     },
@@ -112,9 +111,9 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
         ...config.advanced,
         thinking_mode: newThinkingMode,
         thinking_config: getDefaultThinkingConfig(provider),
-        request_format:
+        custom_kind:
           provider === 'custom'
-            ? (config.advanced.request_format ?? 'openai_sdk')
+            ? (config.advanced.custom_kind ?? 'openai_completion')
             : undefined,
         custom_thinking_template_id:
           provider === 'custom'
@@ -176,14 +175,14 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
     });
   };
 
-  const handleRequestFormatChange = (format: RequestFormat) => {
+  const handleCustomKindChange = (kind: CustomKind) => {
     emitChange({
       ...config,
       advanced: {
         ...config.advanced,
-        request_format: format,
-        // Clear template when switching away from openai_sdk
-        ...(format !== 'openai_sdk' ? { custom_thinking_template_id: undefined } : {}),
+        custom_kind: kind,
+        // Clear template when switching away from openai_completion.
+        ...(kind !== 'openai_completion' ? { custom_thinking_template_id: undefined } : {}),
       },
     });
   };
@@ -230,19 +229,19 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
 
         {isCustomProvider && (
           <div className="form-field">
-            <label>{t('settings.taskConfig.requestFormat')}</label>
+            <label>{t('settings.taskConfig.customKind')}</label>
             <CustomSelect
-              value={customRequestFormat}
+              value={customKind}
               onChange={(value) =>
-                handleRequestFormatChange(value as RequestFormat)
+                handleCustomKindChange(value as CustomKind)
               }
               options={[
-                { value: 'openai_sdk', label: 'OpenAI SDK' },
-                { value: 'claude_sdk', label: 'Claude SDK' },
-                { value: 'openai_responses', label: 'OpenAI Responses API' },
+                { value: 'openai_completion', label: 'OpenAI Completion' },
+                { value: 'openai_response', label: 'OpenAI Response' },
+                { value: 'claude', label: 'Claude' },
               ]}
             />
-            <p className="field-hint">{t('settings.taskConfig.requestFormatHint')}</p>
+            <p className="field-hint">{t('settings.taskConfig.customKindHint')}</p>
           </div>
         )}
 
@@ -294,7 +293,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
               key={config.provider}  // Remount when provider changes
               autoExpand={true}
               provider={config.provider}
-              request_format={config.provider === 'custom' ? customRequestFormat : undefined}
+              custom_kind={config.provider === 'custom' ? customKind : undefined}
               currentModel={config.model}
               provider_preference={config.provider_preference ?? undefined}
               onSelectModel={handleModelChange}
@@ -305,7 +304,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
           )}
         </div>
 
-        {isGpt5 ? (
+        {isGpt5ResponsesModel ? (
           <div className="form-field">
             <label>{t('settings.taskConfig.thinking_config.verbosity')}</label>
             <CustomSelect
@@ -483,7 +482,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                     </div>
 
                     {/* Max tokens - not for GPT-5 (uses max_output_tokens automatically) */}
-                    {!isGpt5 && (
+                    {!isGpt5ResponsesModel && (
                       <div className="form-field">
                         <label>{t('settings.taskConfig.thinking_config.maxThinkingTokens')}</label>
                         <input
@@ -509,7 +508,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                 )}
 
                 {/* Custom endpoint + OpenAI SDK: template selector + inline manager */}
-                {isCustomOpenaiSdk && (
+                {isCustomOpenaiCompletion && (
                   <>
                     <div className="form-field">
                       <label>{t('settings.taskConfig.thinkingTemplate')}</label>
@@ -540,8 +539,8 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                   </>
                 )}
 
-                {/* Custom endpoint + Claude SDK: effort dropdown */}
-                {isCustomClaudeSdk && (
+                {/* Custom endpoint + Claude: effort dropdown */}
+                {isCustomClaude && (
                   <div className="form-field">
                     <label>{t('settings.taskConfig.thinking_config.effortLevel')}</label>
                     <CustomSelect
@@ -558,8 +557,8 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                   </div>
                 )}
 
-                {/* Custom endpoint + OpenAI Responses API: effort dropdown (native reasoning) */}
-                {isCustomOpenaiResponses && (
+                {/* Custom endpoint + OpenAI Response: effort dropdown (native reasoning) */}
+                {isCustomOpenaiResponse && (
                   <div className="form-field">
                     <label>{t('settings.taskConfig.thinking_config.reasoningEffort')}</label>
                     <CustomSelect

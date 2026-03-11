@@ -523,7 +523,7 @@ Get available models for a specific provider.
 **Request Body:**
 ```json
 {
-  "request_format": "openai_sdk"
+  "custom_kind": "openai_completion"
 }
 ```
 
@@ -551,7 +551,7 @@ Stream chat completions from a provider.
   ],
   "temperature": 0.7,
   "max_tokens": 2000,
-  "request_format": "openai_sdk",
+  "custom_kind": "openai_completion",
   "thinking_format": "openai"
 }
 ```

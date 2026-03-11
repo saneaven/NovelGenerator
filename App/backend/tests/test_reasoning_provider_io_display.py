@@ -7,7 +7,7 @@ from typing import Any
 
 from App.backend.services.reasoning.provider_io import (
     ClaudeIO,
-    CustomOpenAICompatIO,
+    CustomOpenAICompletionIO,
     OpenAIResponsesIO,
     get_provider_io,
 )
@@ -55,16 +55,16 @@ def test_provider_stream_thinking_display_paths() -> None:
     assert get_provider_io("openrouter", {}).get_stream_thinking_display_path({}) == "reasoning"
     assert get_provider_io("xai", {}).get_stream_thinking_display_path({}) == "reasoning_text"
     assert get_provider_io("custom", {}).get_stream_thinking_display_path({}) == "text"
-    assert get_provider_io("custom", {"request_format": "openai_responses"}).get_stream_thinking_display_path({}) == "reasoning_text"
-    assert get_provider_io("custom", {"request_format": "claude_sdk"}).get_stream_thinking_display_path({}) == "reasoning_text"
+    assert get_provider_io("custom", {"custom_kind": "openai_response"}).get_stream_thinking_display_path({}) == "reasoning_text"
+    assert get_provider_io("custom", {"custom_kind": "claude"}).get_stream_thinking_display_path({}) == "reasoning_text"
 
 
-def test_custom_provider_io_routes_by_request_format() -> None:
-    assert isinstance(get_provider_io("custom", {}), CustomOpenAICompatIO)
-    assert isinstance(get_provider_io("custom", {"request_format": "openai_sdk"}), CustomOpenAICompatIO)
-    assert isinstance(get_provider_io("custom", {"request_format": "openai_responses"}), OpenAIResponsesIO)
-    assert isinstance(get_provider_io("custom", {"request_format": "claude_sdk"}), ClaudeIO)
-    assert isinstance(get_provider_io("custom", {"request_format": "unknown"}), CustomOpenAICompatIO)
+def test_custom_provider_io_routes_by_custom_kind() -> None:
+    assert isinstance(get_provider_io("custom", {}), CustomOpenAICompletionIO)
+    assert isinstance(get_provider_io("custom", {"custom_kind": "openai_completion"}), CustomOpenAICompletionIO)
+    assert isinstance(get_provider_io("custom", {"custom_kind": "openai_response"}), OpenAIResponsesIO)
+    assert isinstance(get_provider_io("custom", {"custom_kind": "claude"}), ClaudeIO)
+    assert isinstance(get_provider_io("custom", {"custom_kind": "unknown"}), CustomOpenAICompletionIO)
 
 
 def test_custom_template_stream_display_path_and_nested_data() -> None:
@@ -181,8 +181,8 @@ def test_openai_to_provider_messages_preserves_output_msg_id() -> None:
     assert len(rd["data"]["items"]) == 1
 
 
-def test_custom_openai_responses_to_provider_messages_preserves_output_msg_id() -> None:
-    advanced = {"request_format": "openai_responses"}
+def test_custom_openai_response_to_provider_messages_preserves_output_msg_id() -> None:
+    advanced = {"custom_kind": "openai_response"}
     io = get_provider_io("custom", advanced)
     messages = [
         {
@@ -205,8 +205,8 @@ def test_custom_openai_responses_to_provider_messages_preserves_output_msg_id() 
     assert len(rd["data"]["items"]) == 1
 
 
-def test_custom_openai_responses_convert_messages_keeps_reasoning_items_before_output_and_tool_calls() -> None:
-    advanced = {"request_format": "openai_responses"}
+def test_custom_openai_response_convert_messages_keeps_reasoning_items_before_output_and_tool_calls() -> None:
+    advanced = {"custom_kind": "openai_response"}
     io = get_provider_io("custom", advanced)
     provider_cls = _load_openai_responses_provider()
     provider = provider_cls.__new__(provider_cls)
@@ -289,8 +289,8 @@ def test_openai_convert_messages_no_reasoning_no_extra_fields() -> None:
     assert "type" not in result[0]
 
 
-def test_custom_claude_sdk_to_provider_messages_preserves_reasoning_blocks() -> None:
-    advanced = {"request_format": "claude_sdk"}
+def test_custom_claude_to_provider_messages_preserves_reasoning_blocks() -> None:
+    advanced = {"custom_kind": "claude"}
     io = get_provider_io("custom", advanced)
     messages = [
         {

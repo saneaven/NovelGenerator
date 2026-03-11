@@ -60,7 +60,7 @@ async def run_summary_model(
             provider_preference=getattr(summary_cfg, "provider_preference", None),
             thinking_config=summary_cfg.advanced.get("thinking_config") if isinstance(summary_cfg.advanced, dict) else None,
             thinking_mode=summary_cfg.advanced.get("thinking_mode") if isinstance(summary_cfg.advanced, dict) else "off",
-            request_format=summary_cfg.advanced.get("request_format") if isinstance(summary_cfg.advanced, dict) else None,
+            custom_kind=summary_cfg.advanced.get("custom_kind") if isinstance(summary_cfg.advanced, dict) else None,
             native_tool_call=False,
         )
 

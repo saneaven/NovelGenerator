@@ -4,7 +4,7 @@
  */
 
 import { apiClient, API_BASE_URL } from './client';
-import type { ProviderType, RequestFormat } from '../store/settingsStore';
+import type { ProviderType, CustomKind } from '../store/settingsStore';
 
 const API_BASE = `${API_BASE_URL}/api/v1`;
 
@@ -15,12 +15,12 @@ function getAuthHeaders(): HeadersInit {
 
 export async function fetchModels(
   provider: ProviderType,
-  request_format?: RequestFormat,
+  custom_kind?: CustomKind,
 ): Promise<any> {
   const endpoint = `${API_BASE}/providers/${provider}/models`;
   const requestBody: Record<string, unknown> = {};
   if (provider === 'custom') {
-    requestBody.request_format = request_format ?? 'openai_sdk';
+    requestBody.custom_kind = custom_kind ?? 'openai_completion';
   }
 
   const response = await fetch(endpoint, {

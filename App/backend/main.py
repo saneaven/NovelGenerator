@@ -249,7 +249,7 @@ async def get_models(
     try:
         provider_config = credential_service.get_provider_config(db, current_user.id, provider)
         if provider == "custom":
-            provider_config["request_format"] = request.request_format or "openai_sdk"
+            provider_config["custom_kind"] = request.custom_kind or "openai_completion"
 
         provider_instance = ProviderRegistry.get_provider(provider, provider_config)
 
@@ -331,7 +331,7 @@ async def stream_chat(
         if provider == "custom":
             provider_config = {
                 **provider_config,
-                "request_format": request.request_format or "openai_sdk",
+                "custom_kind": request.custom_kind or "openai_completion",
             }
 
         provider_instance = ProviderRegistry.get_provider(
@@ -383,7 +383,7 @@ async def stream_chat(
                     provider_preference=provider_pref,
                     thinking_config=thinking_cfg,
                     thinking_mode=request.thinking_mode,
-                    request_format=request.request_format,
+                    custom_kind=request.custom_kind,
                     native_tool_call=request.native_tool_call,
                     verbosity=request.verbosity,
                 )

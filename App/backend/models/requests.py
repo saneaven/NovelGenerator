@@ -1,5 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Any, List, Optional, Dict, Literal
+
+CustomKind = Literal["openai_completion", "openai_response", "claude"]
 
 class ProviderPreference(BaseModel):
     """Provider preference for OpenRouter (only/ignore lists)"""
@@ -59,6 +61,8 @@ class Message(BaseModel):
     tool_results: Optional[List[ToolResult]] = None
 
 class ChatCompletionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     messages: List[Message]
     model: str
     temperature: float = Field(default=0.7, ge=0, le=2)
@@ -68,11 +72,13 @@ class ChatCompletionRequest(BaseModel):
     provider_preference: Optional[ProviderPreference] = None
     thinking_mode: Optional[Literal["off", "custom", "model"]] = "off"
     thinking_config: Optional[ThinkingConfig] = None
-    request_format: Optional[Literal["openai_sdk", "claude_sdk", "openai_responses"]] = "openai_sdk"
+    custom_kind: Optional[CustomKind] = "openai_completion"
     retry_config: Optional[RetryConfig] = None
     native_tool_call: bool = False
     verbosity: Optional[Literal["low", "medium", "high"]] = None  # GPT-5 output verbosity
 
 
 class ProviderModelsRequest(BaseModel):
-    request_format: Optional[Literal["openai_sdk", "claude_sdk", "openai_responses"]] = "openai_sdk"
+    model_config = ConfigDict(extra="forbid")
+
+    custom_kind: Optional[CustomKind] = "openai_completion"

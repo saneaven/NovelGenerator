@@ -48,7 +48,7 @@ def normalize_effective_task_config(config: dict[str, Any]) -> dict[str, Any]:
         advanced = deepcopy(advanced)
 
     thinking_mode = advanced.get("thinking_mode")
-    request_format = advanced.get("request_format")
+    custom_kind = advanced.get("custom_kind")
 
     if provider != "openrouter":
         normalized.pop("provider_preference", None)
@@ -57,17 +57,20 @@ def normalize_effective_task_config(config: dict[str, Any]) -> dict[str, Any]:
         advanced.pop("tokenizer_override", None)
 
     if provider != "custom":
-        advanced.pop("request_format", None)
+        advanced.pop("custom_kind", None)
         advanced.pop("custom_thinking_template_id", None)
     else:
-        if request_format != "openai_sdk":
+        if custom_kind not in {"openai_completion", "openai_response", "claude"}:
+            custom_kind = "openai_completion"
+        advanced["custom_kind"] = custom_kind
+        if custom_kind != "openai_completion":
             advanced.pop("custom_thinking_template_id", None)
 
     if thinking_mode != "model":
         advanced.pop("thinking_config", None)
         advanced.pop("custom_thinking_template_id", None)
 
-    if provider != "openai" and not (provider == "custom" and request_format == "openai_responses"):
+    if provider != "openai" and not (provider == "custom" and custom_kind == "openai_response"):
         advanced.pop("verbosity", None)
 
     normalized["advanced"] = advanced
@@ -79,9 +82,6 @@ def _validate_effective_task_config_semantics(config: dict[str, Any]) -> None:
     advanced = config.get("advanced")
     if not isinstance(advanced, dict):
         raise ValueError("Task config advanced settings must be an object")
-
-    if provider == "custom" and not advanced.get("request_format"):
-        raise ValueError("Custom provider task configs must include advanced.request_format")
 
 
 def validate_task_config_settings(task_config_settings: dict[str, Any]) -> dict[str, Any]:

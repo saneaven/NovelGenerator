@@ -51,7 +51,7 @@ def test_get_llm_runtime_uses_demo_runtime_when_enabled(monkeypatch) -> None:
 def test_get_llm_runtime_uses_user_settings_when_demo_is_disabled(monkeypatch) -> None:
     task_config = SimpleNamespace(
         provider="custom",
-        advanced={"request_format": "claude_sdk"},
+        advanced={"custom_kind": "claude"},
     )
 
     monkeypatch.setattr(
@@ -76,5 +76,5 @@ def test_get_llm_runtime_uses_user_settings_when_demo_is_disabled(monkeypatch) -
     assert result.task_config is task_config
     assert result.provider_config == {
         "api_key": "user-key",
-        "request_format": "claude_sdk",
+        "custom_kind": "claude",
     }

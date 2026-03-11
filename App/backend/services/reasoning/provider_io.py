@@ -111,13 +111,13 @@ def _first_stream_template_var(template: dict[str, Any] | None) -> str | None:
     return None
 
 
-def _normalize_custom_request_format(advanced: dict[str, Any]) -> str:
-    value = advanced.get("request_format")
+def _normalize_custom_kind(advanced: dict[str, Any]) -> str:
+    value = advanced.get("custom_kind")
     if isinstance(value, str):
         normalized = value.strip().lower()
-        if normalized in {"openai_sdk", "claude_sdk", "openai_responses"}:
+        if normalized in {"openai_completion", "openai_response", "claude"}:
             return normalized
-    return "openai_sdk"
+    return "openai_completion"
 
 
 class ProviderIO(Protocol):
@@ -360,7 +360,7 @@ class XaiIO(BaseProviderIO):
         return "reasoning_text"
 
 
-class CustomOpenAICompatIO(BaseProviderIO):
+class CustomOpenAICompletionIO(BaseProviderIO):
     def to_provider_messages(self, messages: list[dict[str, Any]], model: str, advanced: dict[str, Any]) -> list[dict[str, Any]]:
         from .custom_template_runtime import build_history_inject
 
@@ -466,12 +466,12 @@ def get_provider_io(provider: str, advanced: dict[str, Any]) -> ProviderIO:
     if provider_name == "openrouter":
         return OpenRouterIO()
     if provider_name == "custom":
-        request_format = _normalize_custom_request_format(advanced)
-        if request_format == "openai_responses":
+        custom_kind = _normalize_custom_kind(advanced)
+        if custom_kind == "openai_response":
             return OpenAIResponsesIO()
-        if request_format == "claude_sdk":
+        if custom_kind == "claude":
             return ClaudeIO()
-        return CustomOpenAICompatIO()
+        return CustomOpenAICompletionIO()
     if provider_name == "xai":
         return XaiIO()
     return BaseProviderIO()
@@ -484,6 +484,6 @@ __all__ = [
     "GeminiIO",
     "ClaudeIO",
     "OpenRouterIO",
-    "CustomOpenAICompatIO",
+    "CustomOpenAICompletionIO",
     "XaiIO",
 ]

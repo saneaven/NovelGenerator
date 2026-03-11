@@ -1,8 +1,26 @@
 from __future__ import annotations
 
+import sys
+import types
+
+if "openai" not in sys.modules:
+    fake_openai = types.ModuleType("openai")
+
+    class _StubOpenAIError(Exception):
+        pass
+
+    fake_openai.AsyncOpenAI = object
+    fake_openai.OpenAIError = _StubOpenAIError
+    fake_openai.APIConnectionError = _StubOpenAIError
+    fake_openai.APIStatusError = _StubOpenAIError
+    fake_openai.AuthenticationError = _StubOpenAIError
+    fake_openai.BadRequestError = _StubOpenAIError
+    fake_openai.RateLimitError = _StubOpenAIError
+    sys.modules["openai"] = fake_openai
+
 from App.backend.providers.async_openai_provider import AsyncOpenAIProvider
 from App.backend.providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
-from App.backend.services.reasoning.provider_io import CustomOpenAICompatIO
+from App.backend.services.reasoning.provider_io import CustomOpenAICompletionIO
 
 
 def test_chunk_to_events_extracts_reasoning_from_delta_thoughts() -> None:
@@ -45,7 +63,7 @@ def test_chunk_to_events_falls_back_to_choice_thoughts_and_marks_thought_signatu
     assert delta.reasoning_detail_delta == [{"thought_signature": "sig-1", "thought": True}]
 
 
-def test_custom_openai_compat_non_template_ignores_reasoning_detail_items_without_text() -> None:
+def test_custom_openai_completion_non_template_ignores_reasoning_detail_items_without_text() -> None:
     assembler = FallbackSnapshotAssembler(provider="custom", model="gemini-3-flash-preview")
     events = AsyncOpenAIProvider._chunk_to_events(
         {
@@ -66,9 +84,9 @@ def test_custom_openai_compat_non_template_ignores_reasoning_detail_items_withou
             assembler.apply_meta(event.meta)
 
     snapshot = assembler.finalize_or_raise()
-    reasoning_detail = CustomOpenAICompatIO().read_reasoning_detail(
+    reasoning_detail = CustomOpenAICompletionIO().read_reasoning_detail(
         snapshot,
-        {"request_format": "openai_sdk"},
+        {"custom_kind": "openai_completion"},
     )
 
     assert reasoning_detail is None

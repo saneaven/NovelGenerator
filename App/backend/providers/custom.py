@@ -1,9 +1,9 @@
-"""Custom endpoint provider with explicit request format routing.
+"""Custom endpoint provider with explicit custom kind routing.
 
-Supported request formats:
-- openai_sdk: OpenAI-compatible Chat Completions transport + template-based thinking.
-- claude_sdk: Anthropic Messages transport + Claude-native request shape.
-- openai_responses: OpenAI Responses API transport + native reasoning support.
+Supported custom kinds:
+- openai_completion: OpenAI-compatible Chat Completions transport + template-based thinking.
+- openai_response: OpenAI Responses API transport + native reasoning support.
+- claude: Anthropic Messages transport + Claude-native request shape.
 """
 
 from __future__ import annotations
@@ -31,11 +31,11 @@ from ..utils.outbound_http import (
 )
 
 
-RequestFormat = Literal["openai_sdk", "claude_sdk", "openai_responses"]
+CustomKind = Literal["openai_completion", "openai_response", "claude"]
 
 
-class _CustomClaudeSDKProvider(ClaudeProvider):
-    """Internal Claude SDK transport for custom endpoints."""
+class _CustomClaudeProvider(ClaudeProvider):
+    """Internal Claude transport for custom endpoints."""
 
     def __init__(self, config: Dict):
         self._api_key = config.get("api_key")
@@ -48,11 +48,11 @@ class _CustomClaudeSDKProvider(ClaudeProvider):
     @property
     def name(self) -> str:
         # Must start with custom_ to allow base_url override in parent implementation.
-        return "custom_claude_sdk"
+        return "custom_claude"
 
     @property
     def display_name(self) -> str:
-        return "Custom Claude SDK"
+        return "Custom Claude"
 
     @property
     def api_key(self) -> Optional[str]:
@@ -75,7 +75,7 @@ class _CustomClaudeSDKProvider(ClaudeProvider):
         return dict(self._additional_body)
 
 
-class _CustomOpenAIResponsesProvider(OpenAIResponsesProvider):
+class _CustomOpenAIResponseProvider(OpenAIResponsesProvider):
     """Internal OpenAI Responses API transport for custom endpoints."""
 
     def __init__(self, config: Dict):
@@ -88,11 +88,11 @@ class _CustomOpenAIResponsesProvider(OpenAIResponsesProvider):
 
     @property
     def name(self) -> str:
-        return "custom_openai_responses"
+        return "custom_openai_response"
 
     @property
     def display_name(self) -> str:
-        return "Custom OpenAI Responses"
+        return "Custom OpenAI Response"
 
     @property
     def api_key(self) -> Optional[str]:
@@ -131,7 +131,7 @@ class _CustomOpenAIResponsesProvider(OpenAIResponsesProvider):
 
 @ProviderRegistry.register
 class CustomProvider(AsyncOpenAIProvider):
-    """Custom endpoint provider supporting OpenAI/Claude SDK request formats."""
+    """Custom endpoint provider supporting custom transport kinds."""
 
     def __init__(self, config: Dict):
         self._api_key = config.get("api_key")
@@ -139,7 +139,7 @@ class CustomProvider(AsyncOpenAIProvider):
         self._base_url = validate_outbound_base_url(raw_base_url) if raw_base_url else ""
         self._additional_headers = filter_additional_headers(config.get("additional_headers"))
         self._additional_body = filter_additional_body(config.get("additional_body"))
-        self._request_format = self._normalize_request_format(config.get("request_format"))
+        self._custom_kind = self._normalize_custom_kind(config.get("custom_kind"))
         self._current_thinking_template: Optional[Dict] = None
         super().__init__(config)
 
@@ -172,11 +172,11 @@ class CustomProvider(AsyncOpenAIProvider):
         return self._additional_headers
 
     @staticmethod
-    def _normalize_request_format(request_format: Optional[str]) -> RequestFormat:
-        value = (request_format or "openai_sdk").strip().lower()
-        if value not in {"openai_sdk", "claude_sdk", "openai_responses"}:
-            raise ValueError("request_format must be one of: openai_sdk, claude_sdk, openai_responses")
-        return cast(RequestFormat, value)
+    def _normalize_custom_kind(custom_kind: Optional[str]) -> CustomKind:
+        value = (custom_kind or "openai_completion").strip().lower()
+        if value not in {"openai_completion", "openai_response", "claude"}:
+            raise ValueError("custom_kind must be one of: openai_completion, openai_response, claude")
+        return cast(CustomKind, value)
 
     @staticmethod
     def _coerce_extra_body(request: Dict[str, object]) -> Dict[str, object]:
@@ -285,14 +285,14 @@ class CustomProvider(AsyncOpenAIProvider):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
-        request_format: Optional[str] = None,
+        custom_kind: Optional[str] = None,
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
-        effective_request_format = self._normalize_request_format(request_format or self._request_format)
+        effective_custom_kind = self._normalize_custom_kind(custom_kind or self._custom_kind)
 
-        if effective_request_format == "claude_sdk":
-            claude_provider = _CustomClaudeSDKProvider(
+        if effective_custom_kind == "claude":
+            claude_provider = _CustomClaudeProvider(
                 {
                     "api_key": self._api_key,
                     "base_url": self._base_url,
@@ -310,14 +310,14 @@ class CustomProvider(AsyncOpenAIProvider):
                 provider_preference=provider_preference,
                 thinking_config=thinking_config,
                 thinking_mode=thinking_mode,
-                request_format=effective_request_format,
+                custom_kind=effective_custom_kind,
                 native_tool_call=native_tool_call,
             ):
                 yield event
             return
 
-        if effective_request_format == "openai_responses":
-            responses_provider = _CustomOpenAIResponsesProvider(
+        if effective_custom_kind == "openai_response":
+            responses_provider = _CustomOpenAIResponseProvider(
                 {
                     "api_key": self._api_key,
                     "base_url": self._base_url,
@@ -335,14 +335,14 @@ class CustomProvider(AsyncOpenAIProvider):
                 provider_preference=provider_preference,
                 thinking_config=thinking_config if thinking_mode == "model" else None,
                 thinking_mode=thinking_mode,
-                request_format=effective_request_format,
+                custom_kind=effective_custom_kind,
                 native_tool_call=native_tool_call,
                 verbosity=verbosity,
             ):
                 yield event
             return
 
-        # openai_sdk path
+        # openai_completion path
         # Custom dialect-specific thinking fields are only sent in model thinking mode.
         effective_thinking_config = thinking_config if thinking_mode == "model" else None
         async for event in super().stream_chat(
@@ -355,15 +355,15 @@ class CustomProvider(AsyncOpenAIProvider):
             provider_preference=provider_preference,
             thinking_config=effective_thinking_config,
             thinking_mode=thinking_mode,
-            request_format=effective_request_format,
+            custom_kind=effective_custom_kind,
             native_tool_call=native_tool_call,
         ):
             yield event
 
     async def get_models(self) -> Dict:
-        effective_request_format = self._normalize_request_format(self._request_format)
-        if effective_request_format == "claude_sdk":
-            claude_provider = _CustomClaudeSDKProvider(
+        effective_custom_kind = self._normalize_custom_kind(self._custom_kind)
+        if effective_custom_kind == "claude":
+            claude_provider = _CustomClaudeProvider(
                 {
                     "api_key": self._api_key,
                     "base_url": self._base_url,
@@ -373,8 +373,8 @@ class CustomProvider(AsyncOpenAIProvider):
             )
             return await claude_provider.get_models()
 
-        if effective_request_format == "openai_responses":
-            responses_provider = _CustomOpenAIResponsesProvider(
+        if effective_custom_kind == "openai_response":
+            responses_provider = _CustomOpenAIResponseProvider(
                 {
                     "api_key": self._api_key,
                     "base_url": self._base_url,

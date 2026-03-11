@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ProviderType, ProviderPreference, RequestFormat } from '../../store/settingsStore';
+import type { ProviderType, ProviderPreference, CustomKind } from '../../store/settingsStore';
 import { fetchModels, fetchEmbeddingModels, fetchModelEndpoints } from '../../api/providerService';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
@@ -9,7 +9,7 @@ import './ModelBrowser.css';
 
 interface ModelBrowserProps {
   provider: ProviderType;
-  request_format?: RequestFormat;
+  custom_kind?: CustomKind;
   mode?: 'chat' | 'embedding';
   currentModel: string;
   provider_preference?: ProviderPreference;
@@ -235,7 +235,7 @@ const buildOpenAITree = (models: any[]): TreeNode[] => {
 
 const ModelBrowser: React.FC<ModelBrowserProps> = ({
   provider,
-  request_format,
+  custom_kind,
   mode = 'chat',
   currentModel,
   provider_preference,
@@ -271,7 +271,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     try {
       const data = mode === 'embedding'
         ? await fetchEmbeddingModels(provider)
-        : await fetchModels(provider, request_format);
+        : await fetchModels(provider, custom_kind);
       setModelsData(data);
     } catch (error) {
       setModelsError(error instanceof Error ? error.message : 'Failed to fetch models');
