@@ -1,6 +1,6 @@
 import type { UnifiedObject, ObjectType as UnifiedObjectType } from '../../../types/unifiedObject';
 import type { ObjectOperationVM, StoryObjectSubtype } from '../vmTypes';
-import { objectTypeLabel } from '../../registry/specs/objectOpsSpec';
+import { objectTypeLabel } from '../../modules/objectToolMeta';
 
 export interface ObjectSnapshot {
   id?: string;

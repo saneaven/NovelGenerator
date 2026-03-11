@@ -1,47 +1,77 @@
 from __future__ import annotations
 
-from .contexts import ToolOfferContext
-from .contracts import AutoApproveCategory, ToolOffer, ToolProvider, ToolSetName, ToolSpec
+from .contexts import ToolModuleContext
+from .contracts import AutoApproveCategory, ToolCallModule, ToolModuleFactory, ToolOffer, ToolSpec
+
+
+_REGISTERED_MODULE_FACTORIES: list[ToolModuleFactory] = []
+
+
+def tool_call_module(*, prefix: str):
+    def _decorate(cls: type[ToolCallModule]) -> type[ToolCallModule]:
+        cls.prefix = prefix
+        _REGISTERED_MODULE_FACTORIES.append(cls)
+        return cls
+
+    return _decorate
 
 
 class ToolRegistry:
     def __init__(self) -> None:
-        self._tools_by_name: dict[str, ToolSpec] = {}
-        self._providers: list[ToolProvider] = []
+        self._modules_by_prefix: dict[str, ToolCallModule] = {}
 
-    def register_tool(self, spec: ToolSpec) -> None:
-        if spec.name in self._tools_by_name:
-            raise ValueError(f"Duplicate tool registration: {spec.name}")
-        self._tools_by_name[spec.name] = spec
+    def register_module(self, module: ToolCallModule) -> None:
+        prefix = str(getattr(module, "prefix", "") or "")
+        if not prefix:
+            raise ValueError(f"Tool module {module.__class__.__name__} missing prefix")
+        if prefix in self._modules_by_prefix:
+            raise ValueError(f"Duplicate tool module prefix: {prefix}")
+        self._modules_by_prefix[prefix] = module
 
-    def register_provider(self, provider: ToolProvider) -> None:
-        self._providers.append(provider)
+    def list_modules(self) -> list[ToolCallModule]:
+        return [self._modules_by_prefix[prefix] for prefix in sorted(self._modules_by_prefix.keys(), key=len, reverse=True)]
 
-    def get_registered_tool(self, name: str) -> ToolSpec | None:
-        return self._tools_by_name.get(name)
+    def list_auto_approve_categories(self) -> list[AutoApproveCategory]:
+        categories: list[AutoApproveCategory] = []
+        seen: set[AutoApproveCategory] = set()
+        for module in self.list_modules():
+            for category in module.list_auto_approve_categories():
+                if category in seen:
+                    continue
+                categories.append(category)
+                seen.add(category)
+        return categories
 
-    def build_offer(self, ctx: ToolOfferContext) -> ToolOffer:
+    def resolve_module(self, tool_name: str) -> ToolCallModule | None:
+        matched_prefixes = [
+            prefix
+            for prefix in self._modules_by_prefix
+            if tool_name.startswith(prefix)
+        ]
+        if not matched_prefixes:
+            return None
+        prefix = max(matched_prefixes, key=len)
+        return self._modules_by_prefix[prefix]
+
+    def build_offer(self, ctx: ToolModuleContext) -> ToolOffer:
         specs_by_name: dict[str, ToolSpec] = {}
+        auto_categories: dict[str, AutoApproveCategory] = {}
 
-        for spec in self._tools_by_name.values():
-            if ctx.tool_set_name not in spec.tool_sets:
-                continue
-            if spec.enabled_when is not None and not spec.enabled_when(ctx):
-                continue
-            if ctx.allowed_tool_names is not None and spec.name not in ctx.allowed_tool_names:
-                continue
-            specs_by_name[spec.name] = spec
-
-        for provider in self._providers:
-            dynamic_specs = provider.build_specs(ctx)
-            for spec in dynamic_specs:
-                if ctx.tool_set_name not in spec.tool_sets:
-                    continue
-                if spec.enabled_when is not None and not spec.enabled_when(ctx):
-                    continue
+        for module in self.list_modules():
+            module_categories = set(module.list_auto_approve_categories())
+            for spec in module.list_tools(ctx):
+                if not spec.name.startswith(module.prefix):
+                    raise ValueError(f"Tool {spec.name} does not match module prefix {module.prefix}")
                 if spec.name in specs_by_name:
                     raise ValueError(f"Duplicate tool registration in offer: {spec.name}")
+                if spec.auto_approve_category is not None and spec.auto_approve_category not in module_categories:
+                    raise ValueError(
+                        f"Tool {spec.name} auto-approve category {spec.auto_approve_category} "
+                        f"is not declared by module {module.__class__.__name__}"
+                    )
                 specs_by_name[spec.name] = spec
+                if spec.auto_approve_category is not None:
+                    auto_categories[spec.name] = spec.auto_approve_category
 
         provider_tools = [
             {
@@ -52,28 +82,23 @@ class ToolRegistry:
             for spec in specs_by_name.values()
         ]
 
-        auto_categories: dict[str, AutoApproveCategory] = {}
-        for name, spec in specs_by_name.items():
-            if spec.auto_approve_category is not None:
-                auto_categories[name] = spec.auto_approve_category
-
         return ToolOffer(
-            tool_set_name=ctx.tool_set_name,
             specs_by_name=specs_by_name,
             provider_tools=provider_tools,
             auto_approve_category_by_name=auto_categories,
         )
 
-    def resolve_spec(self, name: str, offer: ToolOffer, ctx: ToolOfferContext) -> ToolSpec | None:
-        _ = ctx
-        return offer.specs_by_name.get(name)
-
-    def list_static_tool_names(self, tool_set: ToolSetName) -> list[str]:
-        return sorted(
-            name
-            for name, spec in self._tools_by_name.items()
-            if tool_set in spec.tool_sets
-        )
+    def list_static_tool_names(self, ctx: ToolModuleContext) -> list[str]:
+        out: list[str] = []
+        for module in self.list_modules():
+            if getattr(module, "dynamic", False):
+                continue
+            out.extend(spec.name for spec in module.list_tools(ctx))
+        return sorted(set(out))
 
     def get_auto_approve_category(self, tool_name: str, offer: ToolOffer) -> AutoApproveCategory | None:
         return offer.auto_approve_category_by_name.get(tool_name)
+
+
+def registered_module_factories() -> list[ToolModuleFactory]:
+    return list(_REGISTERED_MODULE_FACTORIES)

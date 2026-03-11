@@ -63,9 +63,11 @@ async def list_sub_agents(
 
 @router.get("/available_tools", response_model=List[str])
 async def list_available_tools(
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    return tool_engine._registry.list_static_tool_names("agent_agent_mode")
+    preset_id = get_active_preset_id(current_user)
+    return tool_engine.list_static_tool_names_for_agent(db, user_id=current_user.id, preset_id=preset_id)
 
 
 @router.post("", response_model=SubAgentDefinition, status_code=status.HTTP_201_CREATED)

@@ -1,8 +1,8 @@
 /**
  * Tool Call System - Core Types
  *
- * This module defines the core types for the unified tool call system.
- * All tool calls are normalized before processing to ensure consistency.
+ * This module defines the core types for the tool call UI.
+ * Tool calls are routed by canonical prefix and then handled by the matching UI module.
  */
 
 import type { ObjectType, UnifiedObject } from '../types/unifiedObject';
@@ -12,10 +12,30 @@ import type { ObjectType, UnifiedObject } from '../types/unifiedObject';
 // ============================================================================
 
 /** Categories of tool operations */
-export type ToolCategory = 'crud' | 'replace' | 'patch' | 'translation' | 'read';
+export type ToolCategory =
+  | 'read'
+  | 'create'
+  | 'replace'
+  | 'patch'
+  | 'delete'
+  | 'translate'
+  | 'patch_translation'
+  | 'search'
+  | 'call'
+  | 'generate';
 
 /** Target types for tool operations */
-export type TargetType = 'basic_info' | 'guidelines' | 'story_object' | 'outline' | 'chapter' | 'manuscript' | 'sub_agent';
+export type TargetType =
+  | 'basic_info'
+  | 'guidelines'
+  | 'story_object'
+  | 'outline'
+  | 'outline_act'
+  | 'outline_chapter'
+  | 'manuscript'
+  | 'sub_agent'
+  | 'scene_image'
+  | 'object_image';
 
 /** Story object subtypes (used in tool arguments) */
 export type StoryObjectSubtype =
@@ -120,14 +140,7 @@ export interface ApplicationResult {
 // ============================================================================
 
 /**
- * Context for tool call execution
- *
- * Note: mode is NOT included here because handlers route by tool name,
- * not by mode. Mode only affects which tool schemas are sent to the LLM
- * (see schemaRegistry.getForMode).
- *
- * For translation operations, pass the target language as `language`.
- * Translation handlers use `create_new_version: false` while CRUD handlers use `true`.
+ * Context for tool call execution.
  */
 export interface ExecutionContext {
   projectId: string;

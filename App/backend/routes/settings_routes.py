@@ -20,6 +20,16 @@ from ..services.task_config_settings import validate_task_config_settings
 
 router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
 
+
+def _build_tool_call_auto_approve(raw: object) -> dict[str, bool]:
+    from ..services.tool_engine.module_loader import list_registered_auto_approve_categories
+
+    stored = raw if isinstance(raw, dict) else {}
+    return {
+        category: bool(stored.get(category, False))
+        for category in list_registered_auto_approve_categories()
+    }
+
 def _assign_template_ids(templates: list) -> list:
     """Ensure every thinking template dict has an id assigned."""
     for template in templates:
@@ -82,15 +92,7 @@ def _build_settings_response(settings: UserSettings) -> UserSettingsResponse:
         "retryDelayMs": 1000,
     }
     image_gen_config_dict = getattr(settings, "image_gen_config", None) or deepcopy(default_image_gen_config())
-    tool_call_auto_approve_dict = getattr(settings, "tool_call_auto_approve", None) or {
-        "create": False,
-        "delete": False,
-        "patch": False,
-        "replace": False,
-        "read": False,
-        "search": False,
-        "subAgent": False,
-    }
+    tool_call_auto_approve_dict = _build_tool_call_auto_approve(getattr(settings, "tool_call_auto_approve", None))
     embedding_configs_dict = merge_embedding_configs(getattr(settings, "embedding_configs", None))
 
     return UserSettingsResponse(
@@ -267,7 +269,7 @@ async def update_user_settings(
         settings.thinking_history_limit = update_data.thinkingHistoryLimit  # type: ignore[assignment]
 
     if not demo_mode_enabled and update_data.toolCallAutoApprove is not None:
-        settings.tool_call_auto_approve = update_data.toolCallAutoApprove.model_dump()  # type: ignore[assignment]
+        settings.tool_call_auto_approve = _build_tool_call_auto_approve(update_data.toolCallAutoApprove)  # type: ignore[assignment]
 
     if should_wipe_rag_index:
         wipe_user_index(db, user_id=current_user.id)

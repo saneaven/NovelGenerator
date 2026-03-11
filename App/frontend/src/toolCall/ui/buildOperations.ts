@@ -1,12 +1,12 @@
 import type { ToolCallProgress } from '../../types/chat';
 import type { EditCard } from '../types';
-import { resolveToolUiSpec } from '../registry';
+import { resolveToolUiModule } from '../registry';
 import type { OperationVM } from './vmTypes';
 
 export function buildStoredOperations(cards: EditCard[]): OperationVM[] {
   return cards.map((card) => {
-    const spec = resolveToolUiSpec(card.toolCall.toolName);
-    return spec.toOperationVM({
+    const module = resolveToolUiModule(card.toolCall.toolName);
+    return module.mapOperation({
       id: card.id,
       toolName: card.toolCall.toolName,
       args: card.data,
@@ -37,21 +37,21 @@ function toArgs(progress: ToolCallProgress): Record<string, unknown> {
 
 export function buildStreamingOperations(progressList: ToolCallProgress[]): OperationVM[] {
   const ordered = [...progressList].sort((a, b) => {
-    const ai = typeof a.draft?.index === 'number' ? a.draft.index : 0;
-    const bi = typeof b.draft?.index === 'number' ? b.draft.index : 0;
+    const ai = a.draft.index;
+    const bi = b.draft.index;
     if (ai !== bi) return ai - bi;
-    return (a.updatedAt ?? 0) - (b.updatedAt ?? 0);
+    return a.updatedAt - b.updatedAt;
   });
 
   return ordered.map((progress) => {
-    const id = progress.draft?.id || `stream-${progress.draft?.index ?? 0}`;
-    const toolName = progress.draft?.toolName || 'unknown';
-    const spec = resolveToolUiSpec(toolName);
-    return spec.toOperationVM({
+    const id = progress.draft.id;
+    const toolName = progress.draft.toolName;
+    const module = resolveToolUiModule(toolName);
+    return module.mapOperation({
       id,
       toolName,
       args: toArgs(progress),
-      extraContent: progress.draft?.extraContent ?? null,
+      extraContent: progress.draft.extraContent ?? null,
       status: progress.status,
       reason: progress.error,
       source: 'streaming',

@@ -168,7 +168,7 @@
     },
     "embeddings": {
       "enableLabel": "벡터 저장소 사용",
-      "enableHint": "벡터 저장소 기반 런타임 기능 전체(keyword_search, rag_search, RAG 인덱싱, Agent Memory 검색)를 켜고 끕니다. 비활성화하면 Agent Memory는 요약만 사용합니다.",
+      "enableHint": "벡터 저장소 기반 런타임 기능 전체(search_keyword, search_rag, RAG 인덱싱, Agent Memory 검색)를 켜고 끕니다. 비활성화하면 Agent Memory는 요약만 사용합니다.",
       "validation": {
         "missingModel": "임베딩이 활성화되어 있지만 {{feature}} 임베딩 모델이 설정되어 있지 않습니다.",
         "missingApiKey": "임베딩이 활성화되어 있지만 \"{{provider}}\" API 키가 없습니다 ({{feature}}).",
@@ -179,7 +179,7 @@
       "title": "RAG Search",
       "description": "Configure embedding provider/model for RAG indexing and search.",
       "enableLabel": "RAG Search 사용",
-      "enableHint": "비활성화하면 인덱싱과 rag_search 도구 호출이 꺼집니다.",
+      "enableHint": "비활성화하면 인덱싱과 search_rag 도구 호출이 꺼집니다.",
       "provider": "Provider",
       "providerHint": "Uses the same credentials you set in Settings > Credentials.",
       "model": "Embedding Model",
@@ -213,7 +213,7 @@
 	      "title": "키워드 검색",
 	      "description": "인덱싱된 chunk를 키워드로 검색합니다 (임베딩 불필요).",
 	      "pageSize": "페이지당 결과 수",
-	      "pageSizeHint": "keyword_search에서 페이지당 반환할 chunk 개수입니다."
+	      "pageSizeHint": "search_keyword에서 페이지당 반환할 chunk 개수입니다."
 	    },
 	    "agentMemory": {
 	      "title": "Agent Memory",
@@ -477,10 +477,12 @@
         "create": "생성(Create) 자동 승인",
         "delete": "삭제(Delete) 자동 승인",
         "patch": "부분 수정(Patch) 자동 승인",
+        "patch_translation": "번역 패치 자동 승인",
         "replace": "전체 교체(Replace) 자동 승인",
         "read": "읽기(Read) 자동 승인",
         "search": "검색(Search) 자동 승인",
-        "subAgent": "서브 에이전트 호출 자동 승인"
+        "translate": "번역(Translate) 자동 승인",
+        "call": "에이전트 호출 자동 승인"
       },
       "toolCallHistory": {
         "title": "도구 호출 기록",

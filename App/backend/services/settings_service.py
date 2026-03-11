@@ -13,16 +13,6 @@ from .task_config_settings import (
     validate_task_config_settings,
 )
 
-DEFAULT_AUTO_APPROVE: dict[str, bool] = {
-    "create": False,
-    "delete": False,
-    "patch": False,
-    "replace": False,
-    "read": False,
-    "search": False,
-    "subAgent": False,
-}
-
 DEFAULT_RETRY_CONFIG: dict[str, Any] = {
     "enabled": True,
     "maxRetries": 3,
@@ -136,15 +126,6 @@ class SettingsService:
             max_total_chunks=int(getattr(settings, "rag_search_max_total_chunks", 60)),
             keyword_page_size=int(getattr(settings, "rag_search_keyword_page_size", 20)),
         )
-
-    def get_tool_auto_approve_policy(self, db: Session, user_id: UUID) -> dict[str, bool]:
-        settings = self._get_settings(db, user_id)
-        policy = settings.tool_call_auto_approve if isinstance(settings.tool_call_auto_approve, dict) else {}
-        merged: dict[str, bool] = {**DEFAULT_AUTO_APPROVE}
-        for key, value in policy.items() if isinstance(policy, dict) else []:
-            if key in merged:
-                merged[key] = bool(value)
-        return merged
 
     def get_retry_config(self, db: Session, user_id: UUID) -> dict[str, Any]:
         settings = self._get_settings(db, user_id)

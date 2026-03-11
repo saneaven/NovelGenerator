@@ -100,15 +100,7 @@ export interface RetryConfig {
 }
 
 // Tool call auto-approve configuration (confirmation bypass)
-export interface ToolCallAutoApproveConfig {
-    create: boolean;
-    delete: boolean;
-    patch: boolean;
-    replace: boolean;
-    read: boolean;
-    search: boolean;
-    subAgent: boolean;
-}
+export type ToolCallAutoApproveConfig = Record<string, boolean>;
 
 // Embedding profile configuration (used by RAG Search / Agent Memory)
 export interface EmbeddingProfileConfig {

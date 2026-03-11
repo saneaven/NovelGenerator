@@ -109,10 +109,12 @@ def test_run_pipeline_executes_preflight_before_memory_prompt_build() -> None:
 def test_search_tools_are_offer_gated_by_vector_storage() -> None:
     backend_root = Path(__file__).resolve().parents[1]
     source = (backend_root / "services" / "tool_engine" / "modules" / "search_module.py").read_text(encoding="utf-8")
+    legacy_gate = "enabled_when" + "=_vector_storage_enabled"
 
-    assert "enabled_when=_vector_storage_enabled" in source
-    assert source.count("enabled_when=_vector_storage_enabled") == 2
-    assert 'settings_service.is_vector_storage_enabled(ctx.db, ctx.user_id)' in source
+    assert "ctx.vector_storage_enabled" in source
+    assert '"search_keyword"' in source
+    assert '"search_rag"' in source
+    assert legacy_gate not in source
 
 
 def test_memory_preflight_short_circuits_without_vector_storage() -> None:

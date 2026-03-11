@@ -74,8 +74,16 @@
   border-left: 4px solid var(--color-brand-secondary);
 }
 
+.function-call-header-island--translate {
+  border-left: 4px solid var(--color-brand-secondary-hover);
+}
+
 .function-call-header-island--patch {
   border-left: 4px solid var(--color-warning);
+}
+
+.function-call-header-island--patch_translation {
+  border-left: 4px solid var(--color-warning-dark);
 }
 
 .function-call-header-island--delete {
@@ -86,11 +94,11 @@
   border-left: 4px solid var(--color-brand-secondary-border);
 }
 
-.function-call-header-island--call_agent {
+.function-call-header-island--call {
   border-left: 4px solid var(--color-brand-secondary-hover);
 }
 
-.function-call-header-island--image {
+.function-call-header-island--generate {
   border-left: 4px solid var(--color-warning-dark);
 }
 

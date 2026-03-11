@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import type { ApplicationResult, ToolCallFailureType } from '../types';
+import type { ToolCallDecisionMap } from '../types';
 import {
   DECISION_ELIGIBLE_STATUSES,
   type HeaderStatus,
@@ -8,7 +9,7 @@ import {
   type OperationVM,
 } from '../ui/vmTypes';
 
-export type AutoApproveCategory = 'read' | 'search' | 'create' | 'delete' | 'replace' | 'patch' | 'subAgent';
+export type AutoApproveCategory = string;
 
 export interface MapToolToVmParams {
   id: string;
@@ -23,25 +24,41 @@ export interface MapToolToVmParams {
   source: OperationSource;
 }
 
-export interface RenderCardParams {
-  threadId: string;
-  scopeKey: string;
-  projectId: string;
-  operation: OperationVM;
+export interface DecisionRenderProps {
   showDecisionButtons: boolean;
   decisionDisabled: boolean;
   onAccept?: () => void;
   onReject?: () => void;
 }
 
-export interface ToolUiSpec {
+export interface RenderContext {
+  threadId: string;
+  scopeKey: string;
+  projectId: string;
+  getDecisionProps: (operation: OperationVM) => DecisionRenderProps;
+  onCommitDecisions: (decisions: ToolCallDecisionMap) => Promise<void>;
+  onCommitDecisionsAndPause?: (decisions: ToolCallDecisionMap) => Promise<void>;
+}
+
+export interface RenderItem {
   id: string;
-  match(toolName: string): boolean;
-  toOperationVM(params: MapToolToVmParams): OperationVM;
-  renderCard(params: RenderCardParams): ReactElement | null;
-  getEditTitle(toolName: string, args: Record<string, unknown>): string;
-  getEditType(toolName: string): string;
-  getAutoApproveCategory(toolName: string): AutoApproveCategory | null;
+  operationIds: string[];
+  element: ReactElement | null;
+  deleteOperationId?: string;
+}
+
+export interface ToolCallUiModule {
+  prefix: string;
+  autoApproveCategories: readonly AutoApproveCategory[];
+  mapOperation(params: MapToolToVmParams): OperationVM;
+  buildRenderItems(operations: OperationVM[], ctx: RenderContext): RenderItem[];
+  getEditMeta(toolName: string, args: Record<string, unknown>): { title: string; type: string };
+}
+
+type ToolCallUiModuleInput = ToolCallUiModule;
+
+export function defineToolCallUiModule(module: ToolCallUiModuleInput): ToolCallUiModule {
+  return module;
 }
 
 export function coerceRecord(value: unknown): Record<string, unknown> {
@@ -67,7 +84,7 @@ export function toApplicationResult(raw: unknown): ApplicationResult | undefined
   };
 }
 
-function normalizeStoredStatus(status?: string): HeaderStatus {
+function resolveStoredStatus(status?: string): HeaderStatus {
   switch (status) {
     case 'streaming':
     case 'validating':
@@ -78,18 +95,14 @@ function normalizeStoredStatus(status?: string): HeaderStatus {
     case 'applied':
     case 'rejected':
       return status;
-    case 'running':
-      return 'streaming';
-    case 'accepted':
-      return 'applied';
     case undefined:
       return 'pending';
     default:
-      return 'pending';
+      throw new Error(`Unsupported stored tool status: ${status}`);
   }
 }
 
-function normalizeStreamingStatus(status?: string): HeaderStatus {
+function resolveStreamingStatus(status?: string): HeaderStatus {
   switch (status) {
     case 'collecting':
       return 'collecting';
@@ -99,13 +112,15 @@ function normalizeStreamingStatus(status?: string): HeaderStatus {
       return 'pending';
     case 'error':
       return 'failed';
-    default:
+    case undefined:
       return 'collecting';
+    default:
+      throw new Error(`Unsupported streaming tool status: ${status}`);
   }
 }
 
-export function normalizeStatus(status: string | undefined, source: OperationSource): HeaderStatus {
-  return source === 'streaming' ? normalizeStreamingStatus(status) : normalizeStoredStatus(status);
+export function resolveStatus(status: string | undefined, source: OperationSource): HeaderStatus {
+  return source === 'streaming' ? resolveStreamingStatus(status) : resolveStoredStatus(status);
 }
 
 export function buildOperationBase(
@@ -115,7 +130,7 @@ export function buildOperationBase(
   targetLabel?: string,
 ): OperationBaseVM {
   const args = coerceRecord(params.args);
-  const status = normalizeStatus(params.status, params.source);
+  const status = resolveStatus(params.status, params.source);
   const reason = typeof params.reason === 'string' ? params.reason : undefined;
   const result = toApplicationResult(params.result);
 

@@ -95,7 +95,7 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
     <FunctionCallCardShell
       scopeKey={scopeKey}
       cardId={operation.id}
-      category="create"
+      category={operation.category}
       status={operation.status}
       title={titleValue}
       subtitle={operation.status === 'failed' && operation.reason ? operation.reason : undefined}

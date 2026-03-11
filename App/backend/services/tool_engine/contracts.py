@@ -1,19 +1,11 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Literal, Protocol
+from typing import Any, Protocol
 
 
-ToolSetName = Literal[
-    "agent_plan_mode",
-    "agent_agent_mode",
-    "manuscript",
-    "storyObject",
-    "outline",
-    "objectTranslation",
-]
-
-AutoApproveCategory = Literal["read", "search", "create", "delete", "replace", "patch", "subAgent"]
+AutoApproveCategory = str
 
 
 @dataclass(frozen=True)
@@ -24,12 +16,7 @@ class ValidationResult:
 
 
 if False:  # pragma: no cover
-    from .contexts import ToolExecutionContext, ToolOfferContext, ToolValidationContext
-
-
-ToolValidator = Callable[[dict[str, Any], "ToolValidationContext"], ValidationResult | Awaitable[ValidationResult]]
-ToolExecutor = Callable[[dict[str, Any], "ToolExecutionContext"], Awaitable[dict[str, Any]]]
-ToolEnabledPredicate = Callable[["ToolOfferContext"], bool]
+    from .contexts import ToolExecutionContext, ToolModuleContext, ToolValidationContext
 
 
 @dataclass(frozen=True)
@@ -37,21 +24,42 @@ class ToolSpec:
     name: str
     description: str
     parameters: dict[str, Any]
-    tool_sets: frozenset[ToolSetName]
     auto_approve_category: AutoApproveCategory | None
-    validators: tuple[ToolValidator, ...]
-    executor: ToolExecutor
-    enabled_when: ToolEnabledPredicate | None = None
 
 
 @dataclass(frozen=True)
 class ToolOffer:
-    tool_set_name: ToolSetName
     specs_by_name: dict[str, ToolSpec]
     provider_tools: list[dict[str, Any]]
     auto_approve_category_by_name: dict[str, AutoApproveCategory]
 
 
-class ToolProvider(Protocol):
-    def build_specs(self, ctx: "ToolOfferContext") -> list[ToolSpec]:
+class ToolCallModule(ABC):
+    prefix: str = ""
+    dynamic: bool = False
+
+    def list_auto_approve_categories(self) -> tuple[AutoApproveCategory, ...]:
+        return ()
+
+    @abstractmethod
+    def list_tools(self, ctx: "ToolModuleContext") -> list[ToolSpec]:
+        raise NotImplementedError
+
+    def resolve_tool(self, tool_name: str, ctx: "ToolModuleContext") -> ToolSpec | None:
+        for spec in self.list_tools(ctx):
+            if spec.name == tool_name:
+                return spec
+        return None
+
+    @abstractmethod
+    async def validate(self, tool_name: str, args: dict[str, Any], ctx: "ToolValidationContext") -> ValidationResult:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def execute(self, tool_name: str, args: dict[str, Any], ctx: "ToolExecutionContext") -> dict[str, Any]:
+        raise NotImplementedError
+
+
+class ToolModuleFactory(Protocol):
+    def __call__(self) -> ToolCallModule:
         ...

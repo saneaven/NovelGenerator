@@ -283,7 +283,7 @@ def test_persist_tool_calls_uses_parsed_arguments_for_validation(monkeypatch: py
     thread = Thread(id=uuid4(), project_id=uuid4(), user_id=uuid4(), thread_type="agent", status="running", next_message_seq=1)
     run = RunModel(id=uuid4(), thread_id=thread.id, user_id=thread.user_id, project_id=thread.project_id, status="running", language="English", next_message_seq=1)
     assistant_message = run_service.RunMessageModel(id=uuid4(), thread_id=thread.id, run_id=run.id, role="assistant", seq=0, seq_in_thread=0, data={})
-    offer = ToolOffer(tool_set_name="agent_agent_mode", specs_by_name={}, provider_tools=[], auto_approve_category_by_name={})
+    offer = ToolOffer(specs_by_name={}, provider_tools=[], auto_approve_category_by_name={})
     seen_args: dict[str, object] = {}
 
     async def _validate_tool_call(*, args, **_kwargs):
@@ -328,7 +328,7 @@ def test_persist_tool_calls_surfaces_parse_error_before_schema_validation(monkey
     thread = Thread(id=uuid4(), project_id=uuid4(), user_id=uuid4(), thread_type="agent", status="running", next_message_seq=1)
     run = RunModel(id=uuid4(), thread_id=thread.id, user_id=thread.user_id, project_id=thread.project_id, status="running", language="English", next_message_seq=1)
     assistant_message = run_service.RunMessageModel(id=uuid4(), thread_id=thread.id, run_id=run.id, role="assistant", seq=0, seq_in_thread=0, data={})
-    offer = ToolOffer(tool_set_name="agent_agent_mode", specs_by_name={}, provider_tools=[], auto_approve_category_by_name={})
+    offer = ToolOffer(specs_by_name={}, provider_tools=[], auto_approve_category_by_name={})
 
     async def _validate_tool_call(**_kwargs):
         raise AssertionError("validate_tool_call should not run when parse_error exists")
@@ -372,7 +372,7 @@ def test_persist_tool_calls_with_mixed_id_index_deltas_does_not_create_unknown_t
     thread = Thread(id=uuid4(), project_id=uuid4(), user_id=uuid4(), thread_type="agent", status="running", next_message_seq=1)
     run = RunModel(id=uuid4(), thread_id=thread.id, user_id=thread.user_id, project_id=thread.project_id, status="running", language="English", next_message_seq=1)
     assistant_message = run_service.RunMessageModel(id=uuid4(), thread_id=thread.id, run_id=run.id, role="assistant", seq=0, seq_in_thread=0, data={})
-    offer = ToolOffer(tool_set_name="agent_agent_mode", specs_by_name={}, provider_tools=[], auto_approve_category_by_name={})
+    offer = ToolOffer(specs_by_name={}, provider_tools=[], auto_approve_category_by_name={})
 
     assembler = FallbackSnapshotAssembler(provider="test", model="test-model")
     assembler.apply_delta(

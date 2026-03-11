@@ -165,7 +165,7 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
     <FunctionCallCardShell
       scopeKey={scopeKey}
       cardId={operation.id}
-      category="replace"
+      category={operation.category}
       status={operation.status}
       title={title}
       subtitle={

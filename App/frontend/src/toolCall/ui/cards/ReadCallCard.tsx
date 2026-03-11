@@ -103,7 +103,7 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
     <FunctionCallCardShell
       scopeKey={scopeKey}
       cardId={operation.id}
-      category="read"
+      category={operation.category}
       status={operation.status}
       title={title}
       subtitle={operation.status === 'failed' && operation.reason ? operation.reason : undefined}

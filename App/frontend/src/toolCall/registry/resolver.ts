@@ -1,26 +1,50 @@
-import type { ToolUiSpec } from './contracts';
-import callAgentSpec from './specs/callAgentSpec';
-import fallbackSpec from './specs/fallbackSpec';
-import imageSpec from './specs/imageSpec';
-import objectOpsSpec from './specs/objectOpsSpec';
-import patchSpec from './specs/patchSpec';
-import searchSpec from './specs/searchSpec';
+import type { ToolCallUiModule } from './contracts';
+import callModule from '../modules/callModule';
+import createModule from '../modules/createModule';
+import deleteModule from '../modules/deleteModule';
+import generateModule from '../modules/generateModule';
+import patchModule from '../modules/patchModule';
+import patchTranslationModule from '../modules/patchTranslationModule';
+import readModule from '../modules/readModule';
+import replaceModule from '../modules/replaceModule';
+import searchModule from '../modules/searchModule';
+import translateModule from '../modules/translateModule';
 
-const SPECS: ToolUiSpec[] = [
-  patchSpec,
-  searchSpec,
-  callAgentSpec,
-  imageSpec,
-  objectOpsSpec,
+const REGISTERED_MODULES: ToolCallUiModule[] = [
+  readModule,
+  searchModule,
+  createModule,
+  replaceModule,
+  patchModule,
+  deleteModule,
+  translateModule,
+  patchTranslationModule,
+  callModule,
+  generateModule,
 ];
 
-export function resolveToolUiSpec(toolName: string): ToolUiSpec {
-  for (const spec of SPECS) {
-    if (spec.match(toolName)) return spec;
+const RESOLUTION_MODULES = [...REGISTERED_MODULES].sort((a, b) => b.prefix.length - a.prefix.length);
+
+export function resolveToolUiModule(toolName: string): ToolCallUiModule {
+  for (const module of RESOLUTION_MODULES) {
+    if (toolName.startsWith(module.prefix)) return module;
   }
-  return fallbackSpec;
+  throw new Error(`Unknown tool UI module for tool: ${toolName}`);
 }
 
-export function getToolUiSpecs(): ToolUiSpec[] {
-  return [...SPECS, fallbackSpec];
+export function getToolUiModules(): ToolCallUiModule[] {
+  return [...REGISTERED_MODULES];
+}
+
+export function listAutoApproveCategories(): string[] {
+  const categories: string[] = [];
+  const seen = new Set<string>();
+  for (const module of REGISTERED_MODULES) {
+    for (const category of module.autoApproveCategories) {
+      if (seen.has(category)) continue;
+      categories.push(category);
+      seen.add(category);
+    }
+  }
+  return categories;
 }

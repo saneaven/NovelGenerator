@@ -38,8 +38,8 @@
     "copyFailed": "Copy failed"
   },
   "streamRecovery": {
-    "title": "Live display skipped",
-    "body": "This task was already in progress before the app loaded. Intermediate generation will not be recovered; the final result will appear when it finishes."
+    "title": "Streaming Interrupted",
+    "body": "This task was already running before the app loaded. The final result will appear once it completes."
   },
   "landing": {
     "title": "Novel Buds",
@@ -168,7 +168,7 @@
     },
     "embeddings": {
       "enableLabel": "Enable vector storage",
-      "enableHint": "Turns on/off all vector-storage runtime features (keyword_search, rag_search, RAG indexing, and Agent Memory retrieval). When disabled, Agent Memory uses summaries only.",
+      "enableHint": "Turns on/off all vector-storage runtime features (search_keyword, search_rag, RAG indexing, and Agent Memory retrieval). When disabled, Agent Memory uses summaries only.",
       "validation": {
         "missingModel": "Embeddings are enabled, but {{feature}} embedding model is not configured.",
         "missingApiKey": "Embeddings are enabled, but API key for \"{{provider}}\" is missing ({{feature}}).",
@@ -179,7 +179,7 @@
       "title": "RAG Search",
       "description": "Configure embedding provider/model for RAG indexing and search.",
       "enableLabel": "Use RAG Search",
-      "enableHint": "When disabled, indexing and rag_search tool calls are turned off.",
+      "enableHint": "When disabled, indexing and search_rag tool calls are turned off.",
       "provider": "Provider",
       "providerHint": "Uses the same credentials you set in Settings > Credentials.",
       "model": "Embedding Model",
@@ -213,7 +213,7 @@
 	      "title": "Keyword Search",
 	      "description": "Configure keyword-based search over indexed chunks (no embeddings).",
 	      "pageSize": "Results per page",
-	      "pageSizeHint": "Number of chunks returned per page for keyword_search."
+	      "pageSizeHint": "Number of chunks returned per page for search_keyword."
 	    },
 	    "agentMemory": {
 	      "title": "Agent Memory",
@@ -477,10 +477,12 @@
         "create": "Auto-approve Create",
         "delete": "Auto-approve Delete",
         "patch": "Auto-approve Patch",
+        "patch_translation": "Auto-approve Translation Patch",
         "replace": "Auto-approve Replace",
         "read": "Auto-approve Read",
         "search": "Auto-approve Search",
-        "subAgent": "Auto-approve Sub-Agent Calls"
+        "translate": "Auto-approve Translate",
+        "call": "Auto-approve Agent Calls"
       },
       "toolCallHistory": {
         "title": "Tool Call History",

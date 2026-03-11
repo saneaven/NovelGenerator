@@ -1,17 +1,30 @@
 from __future__ import annotations
 
-from .registry import ToolRegistry
-from .modules import image_module, manuscript_module, outline_module, project_meta_module, search_module, story_object_module, sub_agent_module, translation_module
+from functools import lru_cache
+
+from .registry import ToolRegistry, registered_module_factories
+from .modules import call_module, create_module, delete_module, generate_module, patch_module, patch_translation_module, read_module, replace_module, search_module, translate_module
 
 
 def build_registry() -> ToolRegistry:
+    _ = (
+        call_module,
+        create_module,
+        delete_module,
+        generate_module,
+        patch_module,
+        patch_translation_module,
+        read_module,
+        replace_module,
+        search_module,
+        translate_module,
+    )
     registry = ToolRegistry()
-    story_object_module.register(registry)
-    project_meta_module.register(registry)
-    outline_module.register(registry)
-    manuscript_module.register(registry)
-    search_module.register(registry)
-    image_module.register(registry)
-    sub_agent_module.register(registry)
-    translation_module.register(registry)
+    for factory in registered_module_factories():
+        registry.register_module(factory())
     return registry
+
+
+@lru_cache(maxsize=1)
+def list_registered_auto_approve_categories() -> tuple[str, ...]:
+    return tuple(build_registry().list_auto_approve_categories())

@@ -1,16 +1,19 @@
 export type {
   AutoApproveCategory,
+  DecisionRenderProps,
   MapToolToVmParams,
-  RenderCardParams,
-  ToolUiSpec,
+  RenderContext,
+  RenderItem,
+  ToolCallUiModule,
 } from './contracts';
 
 export {
   buildOperationBase,
   coerceRecord,
-  normalizeStatus,
+  defineToolCallUiModule,
+  resolveStatus,
   toApplicationResult,
 } from './contracts';
 
-export { getAutoApproveCategory } from './autoApprove';
-export { getToolUiSpecs, resolveToolUiSpec } from './resolver';
+export { getAutoApproveCategory, listAutoApproveCategories } from './autoApprove';
+export { getToolUiModules, listAutoApproveCategories as listRegisteredAutoApproveCategories, resolveToolUiModule } from './resolver';

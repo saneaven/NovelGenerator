@@ -58,7 +58,7 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
     <FunctionCallCardShell
       scopeKey={scopeKey}
       cardId={operation.id}
-      category="search"
+      category={operation.category}
       status={operation.status}
       title={operation.searchType === 'rag' ? 'RAG' : 'Keyword'}
       subtitle={operation.status === 'failed' && operation.reason ? operation.reason : undefined}

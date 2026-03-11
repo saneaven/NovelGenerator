@@ -41,10 +41,10 @@ def _install_import_stubs() -> None:
     rag_embedding_service.embed_many = _embed_many
     sys.modules["App.backend.services.rag_embedding_service"] = rag_embedding_service
 
-    common_object_helpers = types.ModuleType("App.backend.services.tool_engine.modules.common_object_helpers")
-    common_object_helpers.extract_lang_data = lambda obj, _language: obj
-    common_object_helpers.read_object = lambda *_args, **_kwargs: {}
-    sys.modules["App.backend.services.tool_engine.modules.common_object_helpers"] = common_object_helpers
+    object_access = types.ModuleType("App.backend.services.tool_engine.modules.object_access")
+    object_access.extract_lang_data = lambda obj, _language: obj
+    object_access.read_object = lambda *_args, **_kwargs: {}
+    sys.modules["App.backend.services.tool_engine.modules.object_access"] = object_access
 
 
 _install_import_stubs()

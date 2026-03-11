@@ -1,18 +1,9 @@
-import {
-  buildOperationBase,
-  coerceRecord,
-  type AutoApproveCategory,
-  type MapToolToVmParams,
-  type RenderCardParams,
-  type ToolUiSpec,
-} from '../contracts';
-import { useDisplayLanguageStore } from '../../../store/displayLanguageStore';
-import { useSettingsStore } from '../../../store/settingsStore';
-import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
-import { ImageToolCard } from '../../ui/cards/ImageToolCard';
-import type { ImageOperationVM } from '../../ui/vmTypes';
-
-const IMAGE_TOOL_NAMES = new Set(['generate_object_image', 'generate_scene_image']);
+import { buildOperationBase, coerceRecord, defineToolCallUiModule } from '../registry/contracts';
+import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { ImageToolCard } from '../ui/cards/ImageToolCard';
+import type { GenerateOperationVM } from '../ui/vmTypes';
 
 function resolveLanguage(): string {
   const preferred = useDisplayLanguageStore.getState().preferredDisplayLanguage;
@@ -72,8 +63,7 @@ function resolveSceneLabel(manuscriptId: string | undefined, language: string): 
   return 'Manuscript';
 }
 
-function failureCode(params: MapToolToVmParams): string | undefined {
-  const result = params.result;
+function failureCode(result: unknown): string | undefined {
   if (!result || typeof result !== 'object' || Array.isArray(result)) return undefined;
   const data = (result as Record<string, unknown>).data;
   if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
@@ -82,14 +72,10 @@ function failureCode(params: MapToolToVmParams): string | undefined {
     : undefined;
 }
 
-const imageSpec: ToolUiSpec = {
-  id: 'image',
-
-  match(toolName: string): boolean {
-    return IMAGE_TOOL_NAMES.has(toolName);
-  },
-
-  toOperationVM(params: MapToolToVmParams): ImageOperationVM {
+const generateModule = defineToolCallUiModule({
+  prefix: 'generate_',
+  autoApproveCategories: [],
+  mapOperation(params) {
     const args = coerceRecord(params.args);
     const language = resolveLanguage();
     const imageKind = params.toolName === 'generate_scene_image' ? 'scene' : 'object';
@@ -101,55 +87,53 @@ const imageSpec: ToolUiSpec = {
     const title = imageKind === 'scene'
       ? (targetLabel ? `Scene Image: ${targetLabel}` : 'Scene Image')
       : (targetLabel ? `Object Image: ${targetLabel}` : 'Object Image');
-    const resolvedFailureCode = failureCode(params);
-
+    const resolvedFailureCode = failureCode(params.result);
     const base = buildOperationBase(
       params,
       title,
       imageKind === 'scene' ? manuscriptId : objectId,
       targetLabel,
     );
-
     return {
       ...base,
       args,
-      category: 'image',
+      category: 'generate',
       includeInBulkDecision: false,
       imageKind,
       prompt: typeof args.prompt === 'string' ? args.prompt : '',
       requestedRatio: typeof args.ratio === 'string' ? args.ratio : '',
       isUserRejectedFailure: base.status === 'failed' && resolvedFailureCode === 'user_rejected_generated_image',
+    } as GenerateOperationVM;
+  },
+  buildRenderItems(operations, ctx) {
+    return (operations as GenerateOperationVM[]).map((operation) => {
+      const decisionProps = ctx.getDecisionProps(operation);
+      return {
+        id: operation.id,
+        operationIds: [operation.id],
+        deleteOperationId: operation.id,
+        element: (
+          <ImageToolCard
+            key={operation.id}
+            threadId={ctx.threadId}
+            scopeKey={ctx.scopeKey}
+            projectId={ctx.projectId}
+            operation={operation}
+            showDecisionButtons={decisionProps.showDecisionButtons}
+            decisionDisabled={decisionProps.decisionDisabled}
+            onAccept={decisionProps.onAccept}
+            onReject={decisionProps.onReject}
+          />
+        ),
+      };
+    });
+  },
+  getEditMeta(toolName) {
+    return {
+      title: toolName === 'generate_scene_image' ? 'Generate Scene Image' : 'Generate Object Image',
+      type: 'init',
     };
   },
+});
 
-  renderCard(params: RenderCardParams) {
-    const operation = params.operation as ImageOperationVM;
-    return (
-      <ImageToolCard
-        key={operation.id}
-        threadId={params.threadId}
-        scopeKey={params.scopeKey}
-        projectId={params.projectId}
-        operation={operation}
-        showDecisionButtons={params.showDecisionButtons}
-        decisionDisabled={params.decisionDisabled}
-        onAccept={params.onAccept}
-        onReject={params.onReject}
-      />
-    );
-  },
-
-  getEditTitle(toolName: string): string {
-    return toolName === 'generate_scene_image' ? 'Generate Scene Image' : 'Generate Object Image';
-  },
-
-  getEditType(_toolName: string): string {
-    return 'init';
-  },
-
-  getAutoApproveCategory(_toolName: string): AutoApproveCategory | null {
-    return null;
-  },
-};
-
-export default imageSpec;
+export default generateModule;

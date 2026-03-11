@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 from datetime import datetime
 from typing import Any, Awaitable, Callable
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
@@ -16,8 +16,8 @@ from ..storage_usage_service import (
     snapshot_tool_call_row,
 )
 from ..run_pipeline.status_logic import derive_run_status
-from .contexts import ToolExecutionContext, ToolOfferContext, ToolValidationContext
-from .contracts import ToolOffer, ToolSetName, ValidationResult
+from .contexts import ToolExecutionContext, ToolModuleContext, ToolValidationContext
+from .contracts import ToolOffer, ValidationResult
 from .registry import ToolRegistry
 from .result_utils import invalid_result, valid_result
 from .schema_validation import validate_args_is_object, validate_schema_required_enum_additional_properties
@@ -26,30 +26,6 @@ from .schema_validation import validate_args_is_object, validate_schema_required
 class ToolEngineService:
     def __init__(self, registry: ToolRegistry) -> None:
         self._registry = registry
-
-    @staticmethod
-    def tool_set_for_run(
-        thread: Thread,
-        run: RunModel,
-    ) -> ToolSetName:
-        if thread.thread_type == "journey":
-            journey_kind = (thread.journey_kind or "").strip()
-            if journey_kind == "objectTranslation":
-                return "objectTranslation"
-            if journey_kind == "manuscriptEdit":
-                return "manuscript"
-            if journey_kind == "outlineEdit":
-                return "outline"
-            if journey_kind == "storyObjectEdit":
-                return "storyObject"
-            return "storyObject"
-
-        if thread.thread_type == "subAgent":
-            return "agent_agent_mode"
-
-        if run.run_mode == "planMode":
-            return "agent_plan_mode"
-        return "agent_agent_mode"
 
     @staticmethod
     def invocation_mode_for_run(thread: Thread, run: RunModel) -> str:
@@ -96,6 +72,39 @@ class ToolEngineService:
 
         return allowed_tool_names, allowed_sub_agent_ids
 
+    def build_module_context(
+        self,
+        db: Session,
+        *,
+        thread: Thread,
+        run: RunModel,
+        settings: UserSettings,
+        preset_id: UUID,
+        user_id: UUID,
+        project_id: UUID,
+        input_payload: dict[str, Any],
+        vector_storage_enabled: bool,
+    ) -> ToolModuleContext:
+        allowed_tool_names, allowed_sub_agent_ids = self._resolve_sub_agent_permissions(
+            db,
+            thread=thread,
+            user_id=user_id,
+        )
+        return ToolModuleContext(
+            db=db,
+            thread=thread,
+            run=run,
+            settings=settings,
+            preset_id=preset_id,
+            user_id=user_id,
+            project_id=project_id,
+            input_payload=input_payload,
+            vector_storage_enabled=vector_storage_enabled,
+            invocation_mode=self.invocation_mode_for_run(thread, run),
+            allowed_tool_names=allowed_tool_names,
+            allowed_sub_agent_ids=allowed_sub_agent_ids,
+        )
+
     def build_offer_for_run(
         self,
         db: Session,
@@ -108,17 +117,9 @@ class ToolEngineService:
         project_id: UUID,
         input_payload: dict[str, Any],
         vector_storage_enabled: bool,
-        tool_set_name: ToolSetName,
     ) -> ToolOffer:
-        invocation_mode = self.invocation_mode_for_run(thread, run)
-        allowed_tool_names, allowed_sub_agent_ids = self._resolve_sub_agent_permissions(
+        ctx = self.build_module_context(
             db,
-            thread=thread,
-            user_id=user_id,
-        )
-
-        offer_ctx = ToolOfferContext(
-            db=db,
             thread=thread,
             run=run,
             settings=settings,
@@ -127,12 +128,46 @@ class ToolEngineService:
             project_id=project_id,
             input_payload=input_payload,
             vector_storage_enabled=vector_storage_enabled,
-            tool_set_name=tool_set_name,
-            invocation_mode=invocation_mode,
-            allowed_tool_names=allowed_tool_names,
-            allowed_sub_agent_ids=allowed_sub_agent_ids,
         )
-        return self._registry.build_offer(offer_ctx)
+        return self._registry.build_offer(ctx)
+
+    def list_static_tool_names_for_agent(
+        self,
+        db: Session,
+        *,
+        user_id: UUID,
+        preset_id: UUID,
+    ) -> list[str]:
+        settings = settings_service._get_settings(db, user_id)  # pylint: disable=protected-access
+        thread = Thread(
+            id=uuid4(),
+            project_id=uuid4(),
+            user_id=user_id,
+            thread_type="agent",
+            status="waiting",
+        )
+        run = RunModel(
+            id=uuid4(),
+            thread_id=thread.id,
+            user_id=user_id,
+            project_id=thread.project_id,
+            status="waiting",
+            language=str(getattr(settings, "main_language", "English") or "English"),
+            run_mode="agentMode",
+            input_payload={},
+        )
+        ctx = self.build_module_context(
+            db,
+            thread=thread,
+            run=run,
+            settings=settings,
+            preset_id=preset_id,
+            user_id=user_id,
+            project_id=thread.project_id,
+            input_payload={},
+            vector_storage_enabled=True,
+        )
+        return self._registry.list_static_tool_names(ctx)
 
     @staticmethod
     async def _await_if_needed(value: Any) -> Any:
@@ -150,37 +185,13 @@ class ToolEngineService:
         safe_result = {k: v for k, v in result.items() if k not in {"__continue_as", "__extra_content"}}
         return continue_as, extra_patch if isinstance(extra_patch, dict) else None, safe_result
 
-    @staticmethod
-    def _candidate_tool_sets_for_execution(
-        thread: Thread,
-        run: RunModel,
-        *,
-        tool_name: str,
-    ) -> list[ToolSetName]:
-        if tool_name.startswith("call_"):
-            return ["agent_agent_mode", "agent_plan_mode"]
-
-        inferred = ToolEngineService.tool_set_for_run(thread, run)
-        candidates: list[ToolSetName] = [inferred]
-        fallback: tuple[ToolSetName, ...] = (
-            "agent_agent_mode",
-            "agent_plan_mode",
-            "storyObject",
-            "outline",
-            "manuscript",
-            "objectTranslation",
-        )
-        for tool_set_name in fallback:
-            if tool_set_name not in candidates:
-                candidates.append(tool_set_name)
-        return candidates
-
     async def validate_tool_call(
         self,
         *,
         db: Session,
         thread: Thread,
         run: RunModel,
+        settings: UserSettings,
         tool_name: str,
         args: Any,
         offer: ToolOffer,
@@ -188,12 +199,18 @@ class ToolEngineService:
         project_id: UUID,
         language: str,
         preset_id: UUID | None,
+        input_payload: dict[str, Any],
+        vector_storage_enabled: bool,
     ) -> ValidationResult:
         base = validate_args_is_object(args)
         if not base.valid:
             return base
 
         arg_map = args if isinstance(args, dict) else {}
+
+        module = self._registry.resolve_module(tool_name)
+        if module is None:
+            return invalid_result("validate_tool_prefix", f"Unknown tool prefix: {tool_name}")
 
         spec = offer.specs_by_name.get(tool_name)
         if spec is None:
@@ -203,38 +220,29 @@ class ToolEngineService:
         if not schema_result.valid:
             return schema_result
 
-        allowed_tool_names, allowed_sub_agent_ids = self._resolve_sub_agent_permissions(
-            db,
-            thread=thread,
-            user_id=user_id,
-        )
-
         validation_ctx = ToolValidationContext(
             db=db,
             thread=thread,
             run=run,
+            settings=settings,
             user_id=user_id,
             project_id=project_id,
             language=language,
-            offer=offer,
             sidecar=sidecar_client,
             preset_id=preset_id,
+            input_payload=input_payload,
+            vector_storage_enabled=vector_storage_enabled,
             invocation_mode=self.invocation_mode_for_run(thread, run),
-            allowed_tool_names=allowed_tool_names,
-            allowed_sub_agent_ids=allowed_sub_agent_ids,
+            allowed_tool_names=self._resolve_sub_agent_permissions(db, thread=thread, user_id=user_id)[0],
+            allowed_sub_agent_ids=self._resolve_sub_agent_permissions(db, thread=thread, user_id=user_id)[1],
         )
-
-        for validator in spec.validators:
-            outcome = await self._await_if_needed(validator(arg_map, validation_ctx))
-            if not isinstance(outcome, ValidationResult):
-                return invalid_result(
-                    "validate_tool_module_validator",
-                    f"Validator returned invalid type for tool {tool_name}",
-                )
-            if not outcome.valid:
-                return outcome
-
-        return valid_result()
+        outcome = await self._await_if_needed(module.validate(tool_name, arg_map, validation_ctx))
+        if not isinstance(outcome, ValidationResult):
+            return invalid_result(
+                "validate_tool_module_validator",
+                f"Validator returned invalid type for tool {tool_name}",
+            )
+        return outcome if not outcome.valid else valid_result()
 
     async def execute_tool_call_by_id(
         self,
@@ -269,28 +277,24 @@ class ToolEngineService:
                 raise ValueError("No active preset configured")
 
             tool_name = str(tool_call.tool_name)
-            spec = None
-            for tool_set_name in self._candidate_tool_sets_for_execution(
-                thread,
-                run,
-                tool_name=tool_name,
-            ):
-                offer = self.build_offer_for_run(
-                    db,
-                    thread=thread,
-                    run=run,
-                    settings=settings,
-                    preset_id=preset_id,
-                    user_id=user_id,
-                    project_id=effective_project_id,
-                    input_payload={},
-                    vector_storage_enabled=settings_service.is_vector_storage_enabled(db, user_id),
-                    tool_set_name=tool_set_name,
-                )
-                spec = offer.specs_by_name.get(tool_name)
-                if spec is not None:
-                    break
+            module = self._registry.resolve_module(tool_name)
+            if module is None:
+                raise ValueError(f"Unknown tool prefix: {tool_name}")
 
+            vector_storage_enabled = settings_service.is_vector_storage_enabled(db, user_id)
+            input_payload = run.input_payload if isinstance(run.input_payload, dict) else {}
+            offer = self.build_offer_for_run(
+                db,
+                thread=thread,
+                run=run,
+                settings=settings,
+                preset_id=preset_id,
+                user_id=user_id,
+                project_id=effective_project_id,
+                input_payload=input_payload,
+                vector_storage_enabled=vector_storage_enabled,
+            )
+            spec = offer.specs_by_name.get(tool_name)
             if spec is None:
                 raise ValueError(f"Tool not available in this session: {tool_name}")
 
@@ -309,18 +313,21 @@ class ToolEngineService:
                 db=db,
                 thread=thread,
                 run=run,
+                settings=settings,
                 tool_call_row=tool_call,
                 user_id=user_id,
                 project_id=effective_project_id,
                 language=language,
                 sidecar=sidecar_client,
                 preset_id=preset_id,
+                input_payload=input_payload,
+                vector_storage_enabled=vector_storage_enabled,
                 invocation_mode=self.invocation_mode_for_run(thread, run),
                 allowed_tool_names=allowed_tool_names,
                 allowed_sub_agent_ids=allowed_sub_agent_ids,
             )
 
-            raw_result = await spec.executor(args, exec_ctx)
+            raw_result = await module.execute(tool_name, args, exec_ctx)
             continue_as, extra_patch, result = self._extract_execution_controls(raw_result)
             before = snapshot_tool_call_row(tool_call)
 

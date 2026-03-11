@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from App.backend.image_providers.model_capabilities import get_gemini_supported_aspect_ratios
 from App.backend.services.image_run_service import (
     IMAGE_OBJECT_TOOL,
@@ -7,18 +8,50 @@ from App.backend.services.image_run_service import (
     _pick_nearest_ratio_label,
     _pick_nearest_size,
 )
-from App.backend.services.tool_engine.modules import image_module
-from App.backend.services.tool_engine.registry import ToolRegistry
+from App.backend.models.db_models import RunModel, Thread
+from App.backend.services.tool_engine.contexts import ToolModuleContext
+from App.backend.services.tool_engine.modules.generate_module import GenerateToolCallModule
 from App.backend.services.tool_engine.service import ToolEngineService
+from uuid import uuid4
+
+
+def _make_ctx() -> ToolModuleContext:
+    thread = Thread(
+        id=uuid4(),
+        project_id=uuid4(),
+        user_id=uuid4(),
+        thread_type="agent",
+        status="running",
+    )
+    run = RunModel(
+        id=uuid4(),
+        thread_id=thread.id,
+        user_id=thread.user_id,
+        project_id=thread.project_id,
+        status="running",
+        language="English",
+        run_mode="agentMode",
+        input_payload={},
+    )
+    return ToolModuleContext(
+        db=SimpleNamespace(),
+        thread=thread,
+        run=run,
+        settings=SimpleNamespace(),
+        preset_id=uuid4(),
+        user_id=thread.user_id,
+        project_id=thread.project_id,
+        input_payload={},
+        vector_storage_enabled=False,
+        invocation_mode="agentMode",
+    )
 
 
 def test_image_tools_register_without_auto_approve() -> None:
-    registry = ToolRegistry()
-
-    image_module.register(registry)
-
-    object_tool = registry.get_registered_tool(IMAGE_OBJECT_TOOL)
-    scene_tool = registry.get_registered_tool(IMAGE_SCENE_TOOL)
+    module = GenerateToolCallModule()
+    specs = {spec.name: spec for spec in module.list_tools(_make_ctx())}
+    object_tool = specs.get(IMAGE_OBJECT_TOOL)
+    scene_tool = specs.get(IMAGE_SCENE_TOOL)
 
     assert object_tool is not None
     assert scene_tool is not None
@@ -50,11 +83,10 @@ def test_ratio_resolution_picks_nearest_supported_values() -> None:
 
 
 def test_image_tool_schemas_require_explicit_target_ids() -> None:
-    registry = ToolRegistry()
-    image_module.register(registry)
-
-    object_tool = registry.get_registered_tool(IMAGE_OBJECT_TOOL)
-    scene_tool = registry.get_registered_tool(IMAGE_SCENE_TOOL)
+    module = GenerateToolCallModule()
+    specs = {spec.name: spec for spec in module.list_tools(_make_ctx())}
+    object_tool = specs.get(IMAGE_OBJECT_TOOL)
+    scene_tool = specs.get(IMAGE_SCENE_TOOL)
 
     assert object_tool is not None
     assert scene_tool is not None

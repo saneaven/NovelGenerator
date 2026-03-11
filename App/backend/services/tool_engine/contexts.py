@@ -8,11 +8,10 @@ from sqlalchemy.orm import Session
 
 from ...models.db_models import RunModel, RunToolCallModel, Thread, UserSettings
 from ..sidecar_client import SidecarClient
-from .contracts import ToolOffer, ToolSetName
 
 
 @dataclass(frozen=True)
-class ToolOfferContext:
+class ToolModuleContext:
     db: Session
     thread: Thread
     run: RunModel
@@ -22,7 +21,6 @@ class ToolOfferContext:
     project_id: UUID
     input_payload: dict[str, Any]
     vector_storage_enabled: bool
-    tool_set_name: ToolSetName
     invocation_mode: str
     allowed_tool_names: set[str] | None = None
     allowed_sub_agent_ids: set[UUID] | None = None
@@ -33,12 +31,14 @@ class ToolValidationContext:
     db: Session
     thread: Thread
     run: RunModel
+    settings: UserSettings
     user_id: UUID
     project_id: UUID
     language: str
-    offer: ToolOffer
     sidecar: SidecarClient | None = None
     preset_id: UUID | None = None
+    input_payload: dict[str, Any] = field(default_factory=dict)
+    vector_storage_enabled: bool = False
     invocation_mode: str | None = None
     allowed_tool_names: set[str] | None = None
     allowed_sub_agent_ids: set[UUID] | None = None
@@ -49,12 +49,15 @@ class ToolExecutionContext:
     db: Session
     thread: Thread
     run: RunModel
+    settings: UserSettings
     tool_call_row: RunToolCallModel
     user_id: UUID
     project_id: UUID
     language: str
     sidecar: SidecarClient | None = None
     preset_id: UUID | None = None
+    input_payload: dict[str, Any] = field(default_factory=dict)
+    vector_storage_enabled: bool = False
     invocation_mode: str | None = None
     allowed_tool_names: set[str] | None = None
     allowed_sub_agent_ids: set[UUID] | None = None

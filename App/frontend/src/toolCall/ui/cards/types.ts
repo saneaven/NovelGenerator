@@ -3,8 +3,8 @@ import type {
   OperationVM,
   ObjectOperationVM,
   SearchOperationVM,
-  CallAgentOperationVM,
-  ImageOperationVM,
+  CallOperationVM,
+  GenerateOperationVM,
 } from '../vmTypes';
 
 export interface CommonCardProps<T extends OperationVM> {
@@ -20,8 +20,8 @@ export interface CommonCardProps<T extends OperationVM> {
 
 export type ObjectCardProps = CommonCardProps<ObjectOperationVM>;
 export type SearchCardProps = CommonCardProps<SearchOperationVM>;
-export type CallAgentCardProps = CommonCardProps<CallAgentOperationVM>;
-export type ImageCardProps = CommonCardProps<ImageOperationVM>;
+export type CallAgentCardProps = CommonCardProps<CallOperationVM>;
+export type ImageCardProps = CommonCardProps<GenerateOperationVM>;
 
 export interface PatchGroupCardProps {
   scopeKey: string;
@@ -29,6 +29,7 @@ export interface PatchGroupCardProps {
   groupId: string;
   targetLabel: string;
   operations: ObjectOperationVM[];
+  category: 'patch' | 'patch_translation';
   decisionDisabled?: boolean;
   onConfirm: (decisions: ToolCallDecisionMap) => Promise<void>;
   onConfirmAndPause?: (decisions: ToolCallDecisionMap) => Promise<void>;

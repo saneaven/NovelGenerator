@@ -1,12 +1,10 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import type { ToolCallProgress } from '../../types/chat';
 import type { EditCard, ToolCallDecision, ToolCallDecisionMap } from '../types';
-import { resolveToolUiSpec } from '../registry';
+import { resolveToolUiModule, type DecisionRenderProps, type RenderItem } from '../registry';
 import { buildStoredOperations, buildStreamingOperations } from './buildOperations';
-import { groupPatchOperations } from './patchGrouping';
-import type { ObjectOperationVM, OperationVM } from './vmTypes';
+import type { OperationVM } from './vmTypes';
 import { useFunctionCallUIStore } from './store';
-import { PatchGroupCard } from './cards/PatchGroupCard';
 import { StickyDecisionBar } from './StickyDecisionBar';
 import { IconButton } from '../../components/IconButton';
 import { Trash } from '../../components/icons';
@@ -24,10 +22,6 @@ export interface FunctionCallsThreadProps {
   projectId: string;
   isApplyDisabled?: boolean;
   applyDisabledReason?: string;
-}
-
-function isPatchOperation(operation: OperationVM): operation is ObjectOperationVM {
-  return operation.category === 'patch';
 }
 
 export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
@@ -54,21 +48,6 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
   }, [mode, streamingProgress, cards]);
 
   const hasDecisionFlow = mode === 'pending' && Boolean(onCommitDecisions);
-
-  const patchOperations = useMemo(
-    () => operations.filter(isPatchOperation),
-    [operations]
-  );
-
-  const patchGroups = useMemo(
-    () => groupPatchOperations(patchOperations),
-    [patchOperations]
-  );
-
-  const nonPatchOperations = useMemo(
-    () => operations.filter((operation) => operation.category !== 'patch'),
-    [operations]
-  );
 
   const unresolvedIds = useMemo(
     () => operations
@@ -188,10 +167,10 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
     }
   }, [hasDecisionFlow, isApplyDisabled, unresolvedIds, setPatchDecisionsBulk, scopeKey, commitDecisions]);
 
-  const wrapCard = useCallback((element: React.ReactElement, operationId: string) => {
+  const wrapCard = useCallback((element: React.ReactElement, operationId: string, renderItemId: string) => {
     if (!onDeleteCard) return element;
     return (
-      <div className="function-call-card-slot" key={operationId}>
+      <div className="function-call-card-slot" key={renderItemId}>
         {element}
         <div className="function-call-card-slot__actions">
           <div className="action-buttons">
@@ -209,26 +188,52 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
     );
   }, [onDeleteCard]);
 
-  if (operations.length === 0) return null;
-
-  const renderCard = (operation: OperationVM) => {
+  const getDecisionProps = useCallback((operation: OperationVM): DecisionRenderProps => {
     const showDecisionButtons = hasDecisionFlow && operation.decisionEligible;
     const decisionDisabled = isApplyDisabled || committingById[operation.id] === true;
-    const spec = resolveToolUiSpec(operation.toolName);
-    const card = spec.renderCard({
-      threadId,
-      scopeKey,
-      projectId,
-      operation,
+    return {
       showDecisionButtons,
       decisionDisabled,
       onAccept: showDecisionButtons ? () => void handleSingleDecision(operation.id, 'accept') : undefined,
       onReject: showDecisionButtons ? () => void handleSingleDecision(operation.id, 'reject') : undefined,
-    });
+    };
+  }, [committingById, handleSingleDecision, hasDecisionFlow, isApplyDisabled]);
 
-    if (!card) return null;
-    return wrapCard(card, operation.id);
-  };
+  const renderItems = useMemo(() => {
+    const grouped = new Map<string, { module: ReturnType<typeof resolveToolUiModule>; operations: OperationVM[] }>();
+    const order: string[] = [];
+
+    for (const operation of operations) {
+      const module = resolveToolUiModule(operation.toolName);
+      const key = module.prefix;
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.operations.push(operation);
+        continue;
+      }
+      order.push(key);
+      grouped.set(key, { module, operations: [operation] });
+    }
+
+    const out: RenderItem[] = [];
+    for (const key of order) {
+      const entry = grouped.get(key);
+      if (!entry) continue;
+      out.push(
+        ...entry.module.buildRenderItems(entry.operations, {
+          threadId,
+          scopeKey,
+          projectId,
+          getDecisionProps,
+          onCommitDecisions: commitDecisions,
+          onCommitDecisionsAndPause: onCommitDecisionsAndPause ? (decisions) => commitDecisions(decisions, true) : undefined,
+        })
+      );
+    }
+    return out;
+  }, [operations, threadId, scopeKey, projectId, getDecisionProps, commitDecisions, onCommitDecisionsAndPause]);
+
+  if (operations.length === 0) return null;
 
   return (
     <div className={`function-calls-thread function-calls-thread--${mode}`}>
@@ -236,25 +241,13 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
         <div className="function-calls-thread__warning">{applyDisabledReason}</div>
       )}
 
-      {nonPatchOperations.map(renderCard)}
-
-      {patchGroups.length > 0 && (
-        <div className="function-calls-thread__patch-groups">
-          {patchGroups.map((group) => (
-            <PatchGroupCard
-              key={group.id}
-              scopeKey={scopeKey}
-              projectId={projectId}
-              groupId={group.id}
-              targetLabel={group.label}
-              operations={group.operations}
-              decisionDisabled={isApplyDisabled || !hasDecisionFlow}
-              onConfirm={commitDecisions}
-              onConfirmAndPause={onCommitDecisionsAndPause ? (decisions) => commitDecisions(decisions, true) : undefined}
-            />
-          ))}
-        </div>
-      )}
+      {renderItems.map((item) => {
+        if (!item.element) return null;
+        if (!item.deleteOperationId || !onDeleteCard) {
+          return <React.Fragment key={item.id}>{item.element}</React.Fragment>;
+        }
+        return wrapCard(item.element, item.deleteOperationId, item.id);
+      })}
 
       <StickyDecisionBar
         visible={hasDecisionFlow && unresolvedIds.length > 0}

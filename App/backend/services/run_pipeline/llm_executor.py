@@ -311,7 +311,6 @@ async def run_llm(
         native_output_mode=bool(getattr(settings, "native_output_mode", False)),
     )
 
-    tool_set_name = tool_engine.tool_set_for_run(thread, run)
     tool_offer = tool_engine.build_offer_for_run(
         db,
         thread=thread,
@@ -322,7 +321,6 @@ async def run_llm(
         project_id=run.project_id,
         input_payload=input_payload if isinstance(input_payload, dict) else {},
         vector_storage_enabled=settings_service.is_vector_storage_enabled(db, run.user_id),
-        tool_set_name=tool_set_name,
     )
 
     provider = ProviderRegistry.get_provider(task_config.provider, resolved_runtime.provider_config)

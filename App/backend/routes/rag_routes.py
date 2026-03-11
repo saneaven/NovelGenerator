@@ -31,7 +31,7 @@ from ..services.rag_index_service import (
     index_object,
     reindex_project,
 )
-from ..services.rag_search_service import keyword_search_project, search_project
+from ..services.rag_search_service import search_project, search_project_by_keyword
 
 
 router = APIRouter(prefix="/api/v1", tags=["rag"])
@@ -214,7 +214,7 @@ async def rag_keyword_search(
     page_size = max(1, min(200, page_size))
 
     try:
-        data = keyword_search_project(
+        data = search_project_by_keyword(
             db,
             user_id=current_user.id,
             project_id=project_id,

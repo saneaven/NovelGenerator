@@ -18,7 +18,7 @@ export const CallAgentCard: React.FC<CallAgentCardProps> = ({
     <FunctionCallCardShell
       scopeKey={scopeKey}
       cardId={operation.id}
-      category="call_agent"
+      category={operation.category}
       status={operation.status}
       title={title}
       subtitle={operation.status === 'failed' && operation.reason ? operation.reason : undefined}

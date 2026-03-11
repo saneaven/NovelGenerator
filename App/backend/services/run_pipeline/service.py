@@ -648,6 +648,7 @@ class RunPipeline:
                     db=db,
                     thread=thread,
                     run=run,
+                    settings=settings_service._get_settings(db, run.user_id),  # pylint: disable=protected-access
                     tool_name=tool_name,
                     args=arguments,
                     offer=offer,
@@ -655,6 +656,8 @@ class RunPipeline:
                     project_id=run.project_id,
                     language=run.language,
                     preset_id=preset_id,
+                    input_payload=run.input_payload if isinstance(run.input_payload, dict) else {},
+                    vector_storage_enabled=settings_service.is_vector_storage_enabled(db, run.user_id),
                 )
                 if validation.valid:
                     row.status = "pending"

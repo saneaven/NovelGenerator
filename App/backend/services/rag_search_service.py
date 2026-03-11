@@ -32,7 +32,7 @@ def _escape_like_pattern(value: str, *, escape_char: str = "!") -> str:
     return value
 
 
-def keyword_search_project(
+def search_project_by_keyword(
     db: Session,
     *,
     user_id: UUID,

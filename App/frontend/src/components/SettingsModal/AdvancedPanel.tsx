@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RetryConfig, ToolCallAutoApproveConfig } from '../../store/settingsStore';
+import { listAutoApproveCategories } from '../../toolCall/registry';
 
 import ToggleSwitch from '../common/ToggleSwitch';
 import { TextButton } from '../TextButton';
@@ -34,6 +35,7 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     onToolCallAutoApproveChange,
 }) => {
     const [newErrorCode, setNewErrorCode] = useState('');
+    const autoApproveCategories = listAutoApproveCategories();
 
     const handleMaxRetriesChange = (value: number) => {
         onRetryConfigChange({
@@ -213,56 +215,15 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                 <div className="panel-description">
                     <p>{t('settings.advanced.toolCallAutoApprove.hint')}</p>
                 </div>
-
-                <div className="form-field">
-                    <ToggleSwitch
-                        checked={toolCallAutoApprove.read}
-                        onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, read: checked })}
-                        label={t('settings.advanced.toolCallAutoApprove.read')}
-                    />
-                </div>
-                <div className="form-field">
-                    <ToggleSwitch
-                        checked={toolCallAutoApprove.search}
-                        onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, search: checked })}
-                        label={t('settings.advanced.toolCallAutoApprove.search')}
-                    />
-                </div>
-                <div className="form-field">
-                    <ToggleSwitch
-                        checked={toolCallAutoApprove.create}
-                        onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, create: checked })}
-                        label={t('settings.advanced.toolCallAutoApprove.create')}
-                    />
-                </div>
-                <div className="form-field">
-                    <ToggleSwitch
-                        checked={toolCallAutoApprove.patch}
-                        onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, patch: checked })}
-                        label={t('settings.advanced.toolCallAutoApprove.patch')}
-                    />
-                </div>
-                <div className="form-field">
-                    <ToggleSwitch
-                        checked={toolCallAutoApprove.replace}
-                        onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, replace: checked })}
-                        label={t('settings.advanced.toolCallAutoApprove.replace')}
-                    />
-                </div>
-                <div className="form-field">
-                    <ToggleSwitch
-                        checked={toolCallAutoApprove.delete}
-                        onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, delete: checked })}
-                        label={t('settings.advanced.toolCallAutoApprove.delete')}
-                    />
-                </div>
-                <div className="form-field">
-                    <ToggleSwitch
-                        checked={toolCallAutoApprove.subAgent ?? false}
-                        onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, subAgent: checked })}
-                        label={t('settings.advanced.toolCallAutoApprove.subAgent')}
-                    />
-                </div>
+                {autoApproveCategories.map((category) => (
+                    <div className="form-field" key={category}>
+                        <ToggleSwitch
+                            checked={Boolean(toolCallAutoApprove[category])}
+                            onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, [category]: checked })}
+                            label={t(`settings.advanced.toolCallAutoApprove.${category}`)}
+                        />
+                    </div>
+                ))}
             </div>
 
             {/* Tool Call History */}

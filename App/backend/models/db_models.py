@@ -126,15 +126,7 @@ class UserSettings(Base):
     tool_call_auto_approve = Column(
         JSONB,
         nullable=False,
-        default=lambda: {
-            "create": False,
-            "delete": False,
-            "patch": False,
-            "replace": False,
-            "read": False,
-            "search": False,
-            "subAgent": False,
-        },
+        default=dict,
     )
 
     # Custom thinking templates for custom provider (openai_sdk) thinking format

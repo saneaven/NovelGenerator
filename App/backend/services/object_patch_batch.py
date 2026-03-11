@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from .patch_utils import apply_single_replacement
-from .tool_engine.modules.common_object_helpers import extract_lang_data, read_object
+from .tool_engine.modules.object_access import extract_lang_data, read_object
 
 if TYPE_CHECKING:
     from .object_service import ObjectService

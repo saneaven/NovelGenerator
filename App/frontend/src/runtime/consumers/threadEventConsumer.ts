@@ -18,15 +18,7 @@ import {
 } from '../../types/thread';
 import { getByDotPath, setByDotPath } from '../../utils/dotPath';
 
-type AutoApproveConfig = {
-  create: boolean;
-  delete: boolean;
-  patch: boolean;
-  replace: boolean;
-  read: boolean;
-  search: boolean;
-  subAgent: boolean;
-};
+type AutoApproveConfig = Record<string, boolean>;
 
 function isPendingToolStatus(status: ToolCallStatus): boolean {
   return status === 'pending' || status === 'streaming' || status === 'validating' || status === 'processing' || status === 'working';
@@ -489,14 +481,7 @@ export class ThreadEventConsumer {
 
   private isToolAutoApprovable(toolName: string, config: AutoApproveConfig): boolean {
     const category = getAutoApproveCategory(toolName);
-    if (category === 'create') return config.create;
-    if (category === 'delete') return config.delete;
-    if (category === 'patch') return config.patch;
-    if (category === 'replace') return config.replace;
-    if (category === 'read') return config.read;
-    if (category === 'search') return config.search;
-    if (category === 'subAgent') return config.subAgent;
-    return false;
+    return category !== null && Boolean(config[category]);
   }
 
   private async tryAutoAcceptForAssistant(threadId: string, assistantMessageId: string): Promise<void> {

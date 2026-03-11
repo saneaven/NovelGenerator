@@ -46,6 +46,7 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
   groupId,
   targetLabel,
   operations,
+  category,
   decisionDisabled,
   onConfirm,
   onConfirmAndPause,
@@ -76,7 +77,7 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
   const statusSummary = useMemo(() => {
     const summary = buildStatusSummary(operations);
     const firstFailedReason = operations.find((op) => op.status === 'failed' && op.reason)?.reason;
-    return firstFailedReason ? `${summary} — ${firstFailedReason}` : summary;
+    return firstFailedReason ? `${summary} - ${firstFailedReason}` : summary;
   }, [operations]);
 
   const buildDecisionMap = useCallback((): ToolCallDecisionMap => {
@@ -179,7 +180,7 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
     <FunctionCallCardShell
       scopeKey={scopeKey}
       cardId={groupId}
-      category="patch"
+      category={category}
       status={groupStatus}
       title={displayName}
       subtitle={statusSummary}

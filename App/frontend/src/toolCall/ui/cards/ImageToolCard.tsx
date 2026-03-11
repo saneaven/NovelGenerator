@@ -223,7 +223,7 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
       <FunctionCallCardShell
         scopeKey={scopeKey}
         cardId={operation.id}
-        category="image"
+        category={operation.category}
         status={operation.status}
         title={operation.title}
         subtitle={subtitle}
@@ -274,7 +274,7 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
     <FunctionCallCardShell
       scopeKey={scopeKey}
       cardId={operation.id}
-      category="image"
+      category={operation.category}
       status={operation.status}
       title={operation.title}
       subtitle={subtitle}

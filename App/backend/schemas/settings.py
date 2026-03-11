@@ -187,15 +187,7 @@ class RetryConfig(BaseModel):
     retryDelayMs: int = Field(default=1000, ge=100, le=30000)
 
 
-class ToolCallAutoApprove(BaseModel):
-    """Tool call auto-approve configuration (all-or-none per assistant response)."""
-    create: bool = False
-    delete: bool = False
-    patch: bool = False
-    replace: bool = False
-    read: bool = False
-    search: bool = False
-    subAgent: bool = False
+ToolCallAutoApprove = Dict[str, bool]
 
 
 # Embedding settings
@@ -293,7 +285,7 @@ class UserSettingsResponse(BaseModel):
     llmLoggingEnabled: bool = False
     toolCallHistoryLimit: int = 5
     thinkingHistoryLimit: int = 5
-    toolCallAutoApprove: ToolCallAutoApprove = Field(default_factory=ToolCallAutoApprove)
+    toolCallAutoApprove: ToolCallAutoApprove = Field(default_factory=dict)
     uiLanguage: str = "en"
     demoModeEnabled: bool = False
 

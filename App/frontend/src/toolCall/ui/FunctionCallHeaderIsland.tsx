@@ -22,9 +22,11 @@ const CATEGORY_LABELS: Record<OperationCategory, string> = {
   replace: 'REPLACE',
   patch: 'PATCH',
   delete: 'DELETE',
+  translate: 'TRANSLATE',
+  patch_translation: 'PATCH TRANSLATION',
   search: 'SEARCH',
-  call_agent: 'CALL AGENT',
-  image: 'IMAGE',
+  call: 'CALL',
+  generate: 'GENERATE',
 };
 
 export interface FunctionCallHeaderIslandProps {

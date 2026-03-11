@@ -6,9 +6,11 @@ export type OperationCategory =
   | 'replace'
   | 'patch'
   | 'delete'
+  | 'translate'
+  | 'patch_translation'
   | 'search'
-  | 'call_agent'
-  | 'image';
+  | 'call'
+  | 'generate';
 
 export type ObjectType =
   | 'story_object'
@@ -55,7 +57,7 @@ export interface OperationBaseVM {
 }
 
 export interface ObjectOperationVM extends OperationBaseVM {
-  category: Exclude<OperationCategory, 'search' | 'call_agent'>;
+  category: Exclude<OperationCategory, 'search' | 'call' | 'generate'>;
   objectType: ObjectType;
   storySubtype?: StoryObjectSubtype;
 }
@@ -65,15 +67,15 @@ export interface SearchOperationVM extends OperationBaseVM {
   searchType: SearchType;
 }
 
-export interface CallAgentOperationVM extends OperationBaseVM {
-  category: 'call_agent';
+export interface CallOperationVM extends OperationBaseVM {
+  category: 'call';
   agentName: string;
   displayName: string;
   input: string;
 }
 
-export interface ImageOperationVM extends OperationBaseVM {
-  category: 'image';
+export interface GenerateOperationVM extends OperationBaseVM {
+  category: 'generate';
   imageKind: 'object' | 'scene';
   prompt: string;
   requestedRatio: string;
@@ -83,8 +85,8 @@ export interface ImageOperationVM extends OperationBaseVM {
 export type OperationVM =
   | ObjectOperationVM
   | SearchOperationVM
-  | CallAgentOperationVM
-  | ImageOperationVM;
+  | CallOperationVM
+  | GenerateOperationVM;
 
 export type OperationSource = 'stored' | 'streaming';
 

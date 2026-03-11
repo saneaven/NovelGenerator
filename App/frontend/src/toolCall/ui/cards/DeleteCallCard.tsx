@@ -82,7 +82,7 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
     <FunctionCallCardShell
       scopeKey={scopeKey}
       cardId={operation.id}
-      category="delete"
+      category={operation.category}
       status={operation.status}
       title={title}
       subtitle={operation.status === 'failed' && operation.reason ? operation.reason : undefined}

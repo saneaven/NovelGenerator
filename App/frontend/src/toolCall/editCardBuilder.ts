@@ -1,5 +1,5 @@
 import type { ToolCallMetadata } from '../types/chat';
-import { resolveToolUiSpec } from './registry';
+import { resolveToolUiModule } from './registry';
 import type { EditCard, ToolCallStatus, ToolCallWithStatus } from './types';
 
 export function buildEditCardsFromToolCallMetadata(toolCalls: ToolCallMetadata[]): EditCard[] {
@@ -8,7 +8,8 @@ export function buildEditCardsFromToolCallMetadata(toolCalls: ToolCallMetadata[]
       ? (tc.arguments as Record<string, unknown>)
       : {};
 
-    const spec = resolveToolUiSpec(tc.tool_name);
+    const module = resolveToolUiModule(tc.tool_name);
+    const editMeta = module.getEditMeta(tc.tool_name, args);
 
     const toolCallWithStatus: ToolCallWithStatus = {
       id: tc.id,
@@ -30,8 +31,8 @@ export function buildEditCardsFromToolCallMetadata(toolCalls: ToolCallMetadata[]
 
     return {
       id: tc.id,
-      type: spec.getEditType(tc.tool_name),
-      title: spec.getEditTitle(tc.tool_name, args),
+      type: editMeta.type,
+      title: editMeta.title,
       description: tc.tool_name,
       data: args,
       toolCall: toolCallWithStatus,
