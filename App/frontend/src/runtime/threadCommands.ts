@@ -1,4 +1,9 @@
-import { threadService, type ChatRequest, type ToolCallDecisionResponse } from '../api/threadService';
+import {
+  type StartRunCommand,
+  threadService,
+  type ResumeRunRequest,
+  type ToolCallDecisionResponse,
+} from '../api/threadService';
 import { useDisplayLanguageStore } from '../store/displayLanguageStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useThreadStore } from '../store/threadStore';
@@ -13,11 +18,11 @@ interface ThreadContextParams {
 
 export interface SendThreadMessageParams extends ThreadContextParams {
   inputText: string;
-  request?: Omit<ChatRequest, 'input_text'>;
+  request?: Omit<StartRunCommand, 'input_text'>;
 }
 
 export interface ResumeThreadParams extends ThreadContextParams {
-  request?: Omit<ChatRequest, 'input_text'>;
+  request?: ResumeRunRequest;
 }
 
 export interface CancelThreadParams {
@@ -114,18 +119,30 @@ function applyToolDecisionResponse(response: ToolCallDecisionResponse): void {
   refreshUnresolvedCount(response.toolCall.threadId);
 }
 
+function toResumeRunRequest(request?: Omit<StartRunCommand, 'input_text'>): ResumeRunRequest | undefined {
+  if (!request) return undefined;
+  return {
+    run_mode: request.run_mode,
+    surface: request.surface,
+    context_object_ids: request.context_object_ids,
+    journey_target_ids: request.journey_target_ids,
+    language: request.language,
+  };
+}
+
 export async function sendThreadMessage(params: SendThreadMessageParams): Promise<boolean> {
   useThreadStore.getState().setAutoContinuePaused(params.threadId, false);
   useThreadStore.getState().clearPreexistingLiveThread(params.threadId);
 
   const trimmed = params.inputText.trim();
   const requestAttachments = params.request?.attachments ?? [];
-  if (!trimmed && requestAttachments.length === 0) {
+  const hasMcpSelections = (params.request?.mcp_selections?.length ?? 0) > 0;
+  if (!trimmed && requestAttachments.length === 0 && !hasMcpSelections) {
     return await resumeThread({
       threadId: params.threadId,
       projectId: params.projectId,
       threadType: params.threadType,
-      request: params.request,
+      request: toResumeRunRequest(params.request),
     });
   }
 
@@ -161,10 +178,11 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
   });
 
   try {
-    const response = await threadService.chat(params.threadId, {
+    const command: StartRunCommand = {
       input_text: trimmed,
       ...(params.request ?? {}),
-    });
+    };
+    const response = await threadService.startRun(params.threadId, command);
     upsertThreadStatus({
       threadId: params.threadId,
       projectId: params.projectId,
@@ -191,10 +209,7 @@ export async function resumeThread(params: ResumeThreadParams): Promise<boolean>
   useThreadStore.getState().setAutoContinuePaused(params.threadId, false);
   useThreadStore.getState().clearPreexistingLiveThread(params.threadId);
 
-  const response = await threadService.chat(params.threadId, {
-    input_text: '',
-    ...(params.request ?? {}),
-  });
+  const response = await threadService.resumeRun(params.threadId, params.request);
   upsertThreadStatus({
     threadId: params.threadId,
     projectId: params.projectId,

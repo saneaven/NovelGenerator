@@ -9,6 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
@@ -18,13 +19,14 @@ from ..models.db_models import Project, RunMessageAttachmentModel, RunMessageMod
 from ..models.memory_models import MessageMemorySummary
 from ..providers.sse_encoder import encode_sse, iter_sse_with_heartbeat
 from ..schemas.thread_api import (
-    ChatRequest,
-    ChatResponse,
     CreateThreadRequest,
     MessageResponse,
     PatchMessageRequest,
     ProjectThreadRuntimeResponse,
+    ResumeRunRequest,
+    StartRunRequest,
     ThreadMessagesResponse,
+    ThreadRunResponse,
     ToolCallBatchDecisionRequest,
     ToolCallBatchDecisionResponse,
     ToolCallDecisionRequest,
@@ -74,8 +76,8 @@ PROJECT_STREAM_HEARTBEAT_INTERVAL_SECONDS = 15.0
 
 
 @dataclass
-class ParsedChatInput:
-    request: ChatRequest
+class ParsedStartRunInput:
+    request: StartRunRequest
     attachments: list[IncomingMessageAttachment]
 
 
@@ -148,11 +150,34 @@ def _parse_json_field(raw_value: Any, *, default: Any) -> Any:
         raise HTTPException(status_code=422, detail="Invalid JSON form field") from exc
 
 
-async def _parse_chat_input(request: Request) -> ParsedChatInput:
+def _validation_error_to_http_exception(exc: ValidationError) -> HTTPException:
+    detail: list[dict[str, Any]] = []
+    for item in exc.errors(include_url=False):
+        loc = item.get("loc")
+        if isinstance(loc, tuple):
+            loc = ["body", *loc]
+        elif isinstance(loc, list):
+            loc = ["body", *loc]
+        elif loc is None:
+            loc = ["body"]
+        else:
+            loc = ["body", loc]
+        detail.append({**item, "loc": loc})
+    return HTTPException(status_code=422, detail=detail)
+
+
+def _validate_start_run_request(payload: Any) -> StartRunRequest:
+    try:
+        return StartRunRequest.model_validate(payload)
+    except ValidationError as exc:
+        raise _validation_error_to_http_exception(exc) from exc
+
+
+async def _parse_start_run_input(request: Request) -> ParsedStartRunInput:
     content_type = str(request.headers.get("content-type") or "").lower()
     if "multipart/form-data" not in content_type:
-        payload = ChatRequest.model_validate(await request.json())
-        return ParsedChatInput(request=payload, attachments=[])
+        payload = _validate_start_run_request(await request.json())
+        return ParsedStartRunInput(request=payload, attachments=[])
 
     form = await request.form()
     input_payload = _parse_json_field(
@@ -162,15 +187,17 @@ async def _parse_chat_input(request: Request) -> ParsedChatInput:
     context_object_ids = _parse_json_field(form.get("context_object_ids_json"), default=[])
     journey_target_ids = _parse_json_field(form.get("journey_target_ids_json"), default=[])
     mcp_selections = _parse_json_field(form.get("mcp_selections_json"), default=[])
-    payload = ChatRequest(
-        input_text=str(form.get("input_text") or ""),
-        input_payload=input_payload,
-        run_mode=str(form.get("run_mode") or "").strip() or None,
-        surface=str(form.get("surface") or "").strip() or None,
-        context_object_ids=context_object_ids if isinstance(context_object_ids, list) else [],
-        journey_target_ids=journey_target_ids if isinstance(journey_target_ids, list) else [],
-        language=str(form.get("language") or "").strip() or None,
-        mcp_selections=mcp_selections if isinstance(mcp_selections, list) else [],
+    payload = _validate_start_run_request(
+        {
+            "input_text": str(form.get("input_text") or ""),
+            "input_payload": input_payload,
+            "run_mode": str(form.get("run_mode") or "").strip() or None,
+            "surface": str(form.get("surface") or "").strip() or None,
+            "context_object_ids": context_object_ids if isinstance(context_object_ids, list) else [],
+            "journey_target_ids": journey_target_ids if isinstance(journey_target_ids, list) else [],
+            "language": str(form.get("language") or "").strip() or None,
+            "mcp_selections": mcp_selections if isinstance(mcp_selections, list) else [],
+        }
     )
 
     attachments: list[IncomingMessageAttachment] = []
@@ -188,7 +215,16 @@ async def _parse_chat_input(request: Request) -> ParsedChatInput:
             )
         )
 
-    return ParsedChatInput(request=payload, attachments=attachments)
+    return ParsedStartRunInput(request=payload, attachments=attachments)
+
+
+def _serialize_thread_run_response(*, thread_id: UUID, run: RunModel) -> ThreadRunResponse:
+    return ThreadRunResponse(
+        thread_id=thread_id,
+        run_id=run.id,
+        status=run.status,
+        thread_status=run.thread.status if run.thread else run.status,
+    )
 
 
 def _normalize_content_parts(parts: Any) -> list[dict[str, str]]:
@@ -499,49 +535,52 @@ async def _apply_tool_decision(
     return result_payload
 
 
-@router.post("/threads/{thread_id}/chat", response_model=ChatResponse)
-async def chat_thread(
+@router.post("/threads/{thread_id}/start", response_model=ThreadRunResponse)
+async def start_thread_run(
     thread_id: UUID,
     request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     del db
-    parsed = await _parse_chat_input(request)
+    parsed = await _parse_start_run_input(request)
     payload = parsed.request
     text = (payload.input_text or "").strip()
 
-    if text or parsed.attachments or payload.mcp_selections:
-        run = await run_pipeline.start_run(
-            thread_id=thread_id,
-            user_id=current_user.id,
-            input_text=text,
-            input_payload=payload.input_payload,
-            run_mode=payload.run_mode,
-            surface=payload.surface,
-            context_object_ids=payload.context_object_ids,
-            journey_target_ids=payload.journey_target_ids,
-            language=payload.language,
-            attachments=parsed.attachments,
-            mcp_selections=payload.mcp_selections,
-        )
-    else:
-        run = await run_pipeline.resume_run(
-            thread_id=thread_id,
-            user_id=current_user.id,
-            run_mode=payload.run_mode,
-            surface=payload.surface,
-            context_object_ids=payload.context_object_ids,
-            journey_target_ids=payload.journey_target_ids,
-            language=payload.language,
-        )
-
-    return ChatResponse(
+    run = await run_pipeline.start_run(
         thread_id=thread_id,
-        run_id=run.id,
-        status=run.status,
-        thread_status=run.thread.status if run.thread else run.status,
+        user_id=current_user.id,
+        input_text=text,
+        input_payload=payload.input_payload,
+        run_mode=payload.run_mode,
+        surface=payload.surface,
+        context_object_ids=payload.context_object_ids,
+        journey_target_ids=payload.journey_target_ids,
+        language=payload.language,
+        attachments=parsed.attachments,
+        mcp_selections=payload.mcp_selections,
     )
+    return _serialize_thread_run_response(thread_id=thread_id, run=run)
+
+
+@router.post("/threads/{thread_id}/resume", response_model=ThreadRunResponse)
+async def resume_thread_run(
+    thread_id: UUID,
+    payload: ResumeRunRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    del db
+    run = await run_pipeline.resume_run(
+        thread_id=thread_id,
+        user_id=current_user.id,
+        run_mode=payload.run_mode,
+        surface=payload.surface,
+        context_object_ids=payload.context_object_ids,
+        journey_target_ids=payload.journey_target_ids,
+        language=payload.language,
+    )
+    return _serialize_thread_run_response(thread_id=thread_id, run=run)
 
 
 @router.get("/projects/{project_id}/stream")

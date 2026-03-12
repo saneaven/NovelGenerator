@@ -574,7 +574,7 @@ export class ThreadEventConsumer {
       this.inFlightResumeByThread.add(threadId);
       try {
         console.debug('[AutoContinue] Resuming parent thread', { threadId, assistantId: latestAssistant.id, toolCallCount: toolCalls.length });
-        const response = await threadService.chat(threadId, { input_text: '' });
+        const response = await threadService.resumeRun(threadId);
         this.autoContinuedAssistantByThread.set(threadId, latestAssistant.id);
         store.setThreadRuntime(threadId, {
           status: response.threadStatus,

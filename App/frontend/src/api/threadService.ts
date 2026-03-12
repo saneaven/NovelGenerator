@@ -9,7 +9,7 @@ import type {
 } from '../types/thread';
 import { toMessageAttachment, type PendingAttachment } from '../utils/threadAttachments';
 
-export interface ChatRequest {
+export interface StartRunCommand {
   input_text: string;
   input_payload?: Record<string, any>;
   run_mode?: 'planMode' | 'agentMode';
@@ -21,7 +21,30 @@ export interface ChatRequest {
   mcp_selections?: McpSelection[];
 }
 
-export interface ChatResponse {
+export interface StartRunJsonPayload {
+  input_text: string;
+  input_payload?: Record<string, any>;
+  run_mode?: 'planMode' | 'agentMode';
+  surface?: string;
+  context_object_ids?: string[];
+  journey_target_ids?: string[];
+  language?: string;
+  mcp_selections?: McpSelection[];
+}
+
+export type StartRunTransport =
+  | { kind: 'json'; payload: StartRunJsonPayload }
+  | { kind: 'multipart'; formData: FormData };
+
+export interface ResumeRunRequest {
+  run_mode?: 'planMode' | 'agentMode';
+  surface?: string;
+  context_object_ids?: string[];
+  journey_target_ids?: string[];
+  language?: string;
+}
+
+export interface ThreadRunResponse {
   threadId: string;
   runId: string;
   status: ThreadStatus;
@@ -173,55 +196,94 @@ function toDecisionResponse(raw: Record<string, unknown>): ToolCallDecisionRespo
   };
 }
 
-export const threadService = {
-  async chat(threadId: string, req: ChatRequest): Promise<ChatResponse> {
-    let raw: Record<string, unknown>;
-    const attachments = req.attachments ?? [];
+function toThreadRunResponse(raw: Record<string, unknown>): ThreadRunResponse {
+  return {
+    threadId: String(raw.thread_id),
+    runId: String(raw.run_id),
+    status: String(raw.status) as ThreadStatus,
+    threadStatus: String(raw.thread_status) as ThreadStatus,
+  };
+}
 
-    if (attachments.length > 0) {
-      const formData = new FormData();
-      formData.append('input_text', req.input_text ?? '');
-      if (req.input_payload !== undefined) {
-        formData.append('input_payload_json', JSON.stringify(req.input_payload));
-      }
-      if (req.run_mode) {
-        formData.append('run_mode', req.run_mode);
-      }
-      if (req.surface) {
-        formData.append('surface', req.surface);
-      }
-      if (req.context_object_ids) {
-        formData.append('context_object_ids_json', JSON.stringify(req.context_object_ids));
-      }
-      if (req.journey_target_ids) {
-        formData.append('journey_target_ids_json', JSON.stringify(req.journey_target_ids));
-      }
-      if (req.language) {
-        formData.append('language', req.language);
-      }
-      if (req.mcp_selections) {
-        formData.append('mcp_selections_json', JSON.stringify(req.mcp_selections));
-      }
-      for (const attachment of attachments) {
-        formData.append('attachments', attachment.file);
-      }
-      raw = await apiClient.postFormData<Record<string, unknown>>(
-        `/api/v1/threads/${threadId}/chat`,
-        formData,
-      );
-    } else {
-      raw = await apiClient.post<Record<string, unknown>>(
-        `/api/v1/threads/${threadId}/chat`,
-        req,
-      );
-    }
+function buildStartRunJsonPayload(command: StartRunCommand): StartRunJsonPayload {
+  return {
+    input_text: command.input_text,
+    input_payload: command.input_payload,
+    run_mode: command.run_mode,
+    surface: command.surface,
+    context_object_ids: command.context_object_ids,
+    journey_target_ids: command.journey_target_ids,
+    language: command.language,
+    mcp_selections: command.mcp_selections,
+  };
+}
 
+export function buildStartRunTransport(command: StartRunCommand): StartRunTransport {
+  const attachments = command.attachments ?? [];
+  const payload = buildStartRunJsonPayload(command);
+
+  if (attachments.length === 0) {
     return {
-      threadId: String(raw.thread_id),
-      runId: String(raw.run_id),
-      status: String(raw.status) as ThreadStatus,
-      threadStatus: String(raw.thread_status) as ThreadStatus,
+      kind: 'json',
+      payload,
     };
+  }
+
+  const formData = new FormData();
+  formData.append('input_text', payload.input_text ?? '');
+  if (payload.input_payload !== undefined) {
+    formData.append('input_payload_json', JSON.stringify(payload.input_payload));
+  }
+  if (payload.run_mode) {
+    formData.append('run_mode', payload.run_mode);
+  }
+  if (payload.surface) {
+    formData.append('surface', payload.surface);
+  }
+  if (payload.context_object_ids) {
+    formData.append('context_object_ids_json', JSON.stringify(payload.context_object_ids));
+  }
+  if (payload.journey_target_ids) {
+    formData.append('journey_target_ids_json', JSON.stringify(payload.journey_target_ids));
+  }
+  if (payload.language) {
+    formData.append('language', payload.language);
+  }
+  if (payload.mcp_selections) {
+    formData.append('mcp_selections_json', JSON.stringify(payload.mcp_selections));
+  }
+  for (const attachment of attachments) {
+    formData.append('attachments', attachment.file);
+  }
+
+  return {
+    kind: 'multipart',
+    formData,
+  };
+}
+
+export const threadService = {
+  async startRun(threadId: string, command: StartRunCommand): Promise<ThreadRunResponse> {
+    const transport = buildStartRunTransport(command);
+    const raw = transport.kind === 'multipart'
+      ? await apiClient.postFormData<Record<string, unknown>>(
+        `/api/v1/threads/${threadId}/start`,
+        transport.formData,
+      )
+      : await apiClient.post<Record<string, unknown>>(
+        `/api/v1/threads/${threadId}/start`,
+        transport.payload,
+      );
+
+    return toThreadRunResponse(raw);
+  },
+
+  async resumeRun(threadId: string, req: ResumeRunRequest = {}): Promise<ThreadRunResponse> {
+    const raw = await apiClient.post<Record<string, unknown>>(
+      `/api/v1/threads/${threadId}/resume`,
+      req,
+    );
+    return toThreadRunResponse(raw);
   },
 
   async listMessages(threadId: string): Promise<ThreadMessagesResponse> {

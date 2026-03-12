@@ -9,7 +9,7 @@ from .assets import ImageRunResponse
 from .mcp import McpSelection
 
 
-class ChatRequest(BaseModel):
+class StartRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     input_text: str = ""
@@ -22,7 +22,17 @@ class ChatRequest(BaseModel):
     mcp_selections: list[McpSelection] = Field(default_factory=list)
 
 
-class ChatResponse(BaseModel):
+class ResumeRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_mode: Literal["planMode", "agentMode"] | None = None
+    surface: str | None = None
+    context_object_ids: list[UUID] = Field(default_factory=list)
+    journey_target_ids: list[UUID] = Field(default_factory=list)
+    language: str | None = None
+
+
+class ThreadRunResponse(BaseModel):
     thread_id: UUID
     run_id: UUID
     status: str
