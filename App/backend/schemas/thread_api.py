@@ -55,6 +55,20 @@ class CreateThreadRequest(BaseModel):
     notification_meta: dict[str, Any] | None = None
 
 
+class MessageAttachmentResponse(BaseModel):
+    id: UUID
+    message_id: UUID
+    sort_order: int
+    kind: Literal["image", "document"]
+    mime_type: str
+    original_filename: str
+    file_size: int
+    url: str
+    width: int | None = None
+    height: int | None = None
+    created_at: datetime
+
+
 class MessageResponse(BaseModel):
     id: UUID
     thread_id: UUID
@@ -63,6 +77,7 @@ class MessageResponse(BaseModel):
     seq: int
     seq_in_thread: int
     data: dict[str, Any]
+    attachments: list[MessageAttachmentResponse] = Field(default_factory=list)
     created_at: datetime
 
 

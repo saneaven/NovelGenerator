@@ -33,8 +33,11 @@ class RetryConfig(BaseModel):
 
 class ContentPart(BaseModel):
     """A part of message content"""
-    type: Literal["content"]
-    text: str
+    type: Literal["content", "image", "file"]
+    text: Optional[str] = None
+    mime_type: Optional[str] = None
+    filename: Optional[str] = None
+    storage_key: Optional[str] = None
 
 class ToolCallFunction(BaseModel):
     """Function details in a tool call"""

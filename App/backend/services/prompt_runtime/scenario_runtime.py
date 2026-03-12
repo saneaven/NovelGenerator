@@ -20,6 +20,19 @@ def _collapse_content_text(parts: Any) -> str:
     return "".join(chunks)
 
 
+def _non_text_content_parts(parts: Any) -> list[dict[str, Any]]:
+    if not isinstance(parts, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for part in parts:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") == "content":
+            continue
+        out.append(dict(part))
+    return out
+
+
 def _normalize_index(i: int, n: int) -> int | None:
     if n <= 0:
         return None
@@ -257,17 +270,19 @@ def assemble_scenario(
                 src_text = _collapse_content_text(src_msg.get("content_parts"))
 
                 if src_role == "user":
+                    extra_parts = _non_text_content_parts(src_msg.get("content_parts"))
                     patched = _patched_template_data(
                         template_data=template_data,
                         input_key=user_input_key,
                         source_text=src_text,
                     )
                     rendered = template_renderer.render_text(user_template, patched).strip()
-                    if not rendered:
+                    if not rendered and not extra_parts:
                         continue
+                    rendered_parts = ([{"type": "content", "text": rendered}] if rendered else []) + extra_parts
                     out_msg: dict[str, Any] = {
                         "role": "user",
-                        "content_parts": [{"type": "content", "text": rendered}],
+                        "content_parts": rendered_parts,
                     }
                     run_id = src_msg.get("run_id")
                     if isinstance(run_id, str) and run_id:

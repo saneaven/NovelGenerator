@@ -845,12 +845,50 @@ class RunMessageModel(Base):
         order_by="RunToolCallModel.call_seq",
         foreign_keys="RunToolCallModel.message_id",
     )
+    attachments = relationship(
+        "RunMessageAttachmentModel",
+        back_populates="message",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="RunMessageAttachmentModel.sort_order",
+    )
 
     __table_args__ = (
         CheckConstraint("role IN ('system','user','assistant','tool_call')", name='ck_run_messages_role'),
         UniqueConstraint('run_id', 'seq', name='uq_run_messages_run_seq'),
         Index('ix_run_messages_run_created', 'run_id', 'created_at'),
         Index('ix_run_messages_thread_seq', 'thread_id', 'seq_in_thread'),
+    )
+
+
+class RunMessageAttachmentModel(Base):
+    """Binary attachments stored alongside a run message."""
+    __tablename__ = "run_message_attachments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    thread_id = Column(UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False, index=True)
+    run_id = Column(UUID(as_uuid=True), ForeignKey("runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    message_id = Column(UUID(as_uuid=True), ForeignKey("run_messages.id", ondelete="CASCADE"), nullable=False, index=True)
+    sort_order = Column(Integer, nullable=False)
+    kind = Column(String(20), nullable=False)
+    mime_type = Column(String(120), nullable=False)
+    original_filename = Column(String(255), nullable=False)
+    file_size = Column(BigInteger, nullable=False)
+    storage_key = Column(String(512), nullable=False)
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    project = relationship("Project")
+    thread = relationship("Thread")
+    run = relationship("RunModel")
+    message = relationship("RunMessageModel", back_populates="attachments")
+
+    __table_args__ = (
+        CheckConstraint("kind IN ('image','document')", name="ck_run_message_attachments_kind"),
+        UniqueConstraint("message_id", "sort_order", name="uq_run_message_attachments_message_sort"),
+        Index("ix_run_message_attachments_thread_created", "thread_id", "created_at"),
     )
 
 

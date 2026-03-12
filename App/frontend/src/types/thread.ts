@@ -27,6 +27,7 @@ export interface ThreadMessage {
   seqInThread: number;
   role: 'user' | 'assistant' | 'system' | 'tool_call';
   data: Record<string, LangEntry>;
+  attachments: MessageAttachment[];
   /** Transient streaming buffer — only present while `isStreaming` is true. */
   streamingData?: LangEntry;
   isStreaming?: boolean;
@@ -64,6 +65,20 @@ export interface ReasoningDetail {
   };
   data: Record<string, unknown>;
   token_count: number;
+}
+
+export interface MessageAttachment {
+  id: string;
+  messageId: string;
+  sortOrder: number;
+  kind: 'image' | 'document';
+  mimeType: string;
+  originalFilename: string;
+  fileSize: number;
+  url: string;
+  width?: number | null;
+  height?: number | null;
+  createdAt?: string | null;
 }
 
 export interface LangEntry {

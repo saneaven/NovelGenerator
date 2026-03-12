@@ -13,6 +13,7 @@ interface CacheEntry {
 
 const protectedAssetCache = new Map<string, CacheEntry>();
 let cacheGeneration = 0;
+const PROTECTED_STORAGE_PREFIXES = ['/storage/assets/', '/storage/chat-attachments/'];
 
 function getBaseUrl(): string {
   if (API_BASE_URL) return API_BASE_URL;
@@ -26,7 +27,7 @@ function normalizeProtectedAssetRequest(src: string): ProtectedAssetRequest | nu
 
   try {
     const parsed = new URL(raw, getBaseUrl());
-    if (!parsed.pathname.startsWith('/storage/assets/')) {
+    if (!PROTECTED_STORAGE_PREFIXES.some((prefix) => parsed.pathname.startsWith(prefix))) {
       return null;
     }
 
@@ -35,7 +36,7 @@ function normalizeProtectedAssetRequest(src: string): ProtectedAssetRequest | nu
       requestUrl: parsed.href,
     };
   } catch {
-    if (!raw.startsWith('/storage/assets/')) {
+    if (!PROTECTED_STORAGE_PREFIXES.some((prefix) => raw.startsWith(prefix))) {
       return null;
     }
 
@@ -74,13 +75,13 @@ async function fetchProtectedAssetObjectUrl(src: string): Promise<string> {
   })
     .then(async (response) => {
       if (!response.ok) {
-        throw new Error(`Failed to load image (${response.status})`);
+        throw new Error(`Failed to load protected file (${response.status})`);
       }
 
       const objectUrl = URL.createObjectURL(await response.blob());
       if (currentGeneration !== cacheGeneration) {
         URL.revokeObjectURL(objectUrl);
-        throw new Error('Image cache was cleared');
+        throw new Error('Protected file cache was cleared');
       }
 
       protectedAssetCache.set(request.cacheKey, { objectUrl });
@@ -110,7 +111,7 @@ export function clearAuthenticatedImageCache(): void {
   protectedAssetCache.clear();
 }
 
-export function useAuthenticatedImageSrc(src: string | null | undefined): string | null {
+export function useProtectedObjectUrl(src: string | null | undefined): string | null {
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(() => {
     if (!src) return null;
 
@@ -159,4 +160,8 @@ export function useAuthenticatedImageSrc(src: string | null | undefined): string
   }, [src]);
 
   return resolvedSrc;
+}
+
+export function useAuthenticatedImageSrc(src: string | null | undefined): string | null {
+  return useProtectedObjectUrl(src);
 }

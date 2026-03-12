@@ -20,6 +20,7 @@ from .contracts import (
     merge_openai_choice_delta,
 )
 from .native_tool_calls_parser import NativeToolCallsStreamParser
+from .multimodal import build_openai_chat_content, get_canonical_content_parts
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 from ..utils.outbound_http import validate_outbound_base_url
 
@@ -132,6 +133,7 @@ class AsyncOpenAIProvider(BaseProvider):
         converted: List[Dict] = []
         for msg in messages:
             role = msg.get("role", "user")
+            canonical_parts = get_canonical_content_parts(msg)
             reasoning_detail = msg.get("reasoning_detail") if isinstance(msg.get("reasoning_detail"), dict) else None
 
             if role == "tool_results":
@@ -151,7 +153,11 @@ class AsyncOpenAIProvider(BaseProvider):
 
             converted_msg: Dict[str, object] = {
                 "role": role,
-                "content": self._extract_text_content(msg),
+                "content": (
+                    build_openai_chat_content(canonical_parts)
+                    if any(part.get("type") in {"image", "file"} for part in canonical_parts)
+                    else self._extract_text_content(msg)
+                ),
             }
             tool_calls = msg.get("tool_calls")
             if role == "assistant" and isinstance(tool_calls, list) and tool_calls:

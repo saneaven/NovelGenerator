@@ -9,6 +9,7 @@ import type {
   ThreadMessage,
   ThreadToolCall,
 } from '../types/thread';
+import { revokeMessageAttachmentObjectUrls } from '../utils/threadAttachments';
 
 export type { ThreadInfo, ThreadMessage, ThreadToolCall };
 export type { ThreadType, ThreadStatus } from '../types/thread';
@@ -235,6 +236,9 @@ function removeThreadsCascadeState(state: ThreadState, threadIds: string[]): Par
   const nextAutoContinuePausedByThread = { ...state.autoContinuePausedByThread };
 
   for (const threadId of toDelete) {
+    for (const message of nextMessagesByThreadId[threadId] ?? []) {
+      revokeMessageAttachmentObjectUrls(message);
+    }
     delete nextThreadsById[threadId];
     delete nextMessagesByThreadId[threadId];
     delete nextPreexistingLiveThreadsById[threadId];
@@ -334,6 +338,9 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
 
   removeThread: (threadId) =>
     set((s) => {
+      for (const message of s.messagesByThreadId[threadId] ?? []) {
+        revokeMessageAttachmentObjectUrls(message);
+      }
       const { [threadId]: _, ...rest } = s.threadsById;
       const { [threadId]: __, ...restMsgs } = s.messagesByThreadId;
       const { [threadId]: ___, ...restPreexisting } = s.preexistingLiveThreadsById;
@@ -449,6 +456,7 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
             seq: 0,
             seqInThread: Number(params.seqInThread ?? 0),
             data: finalData,
+            attachments: [],
             streamingData: undefined,
             isStreaming: false,
             createdAt: params.ts ?? new Date().toISOString(),
@@ -497,6 +505,10 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
     set((s) => {
       const msgs = s.messagesByThreadId[threadId];
       if (!msgs) return s;
+      const removed = msgs.find((m) => m.id === messageId);
+      if (removed) {
+        revokeMessageAttachmentObjectUrls(removed);
+      }
       return {
         messagesByThreadId: {
           ...s.messagesByThreadId,
@@ -508,12 +520,20 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
   getMessages: (threadId) => get().messagesByThreadId[threadId] ?? [],
 
   replaceThreadMessages: (threadId, messages) =>
-    set((s) => ({
-      messagesByThreadId: {
-        ...s.messagesByThreadId,
-        [threadId]: sortMessages(messages),
-      },
-    })),
+    set((s) => {
+      const incomingIds = new Set(messages.map((message) => message.id));
+      for (const existing of s.messagesByThreadId[threadId] ?? []) {
+        if (!incomingIds.has(existing.id)) {
+          revokeMessageAttachmentObjectUrls(existing);
+        }
+      }
+      return {
+        messagesByThreadId: {
+          ...s.messagesByThreadId,
+          [threadId]: sortMessages(messages),
+        },
+      };
+    }),
 
   updateMessageData: (threadId, messageId, language, entry) =>
     set((s) => {

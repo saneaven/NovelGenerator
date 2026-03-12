@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import SessionLocal, get_db
-from ..models.db_models import Project, RunMessageModel, RunModel, RunToolCallModel, Thread, User
+from ..models.db_models import Project, RunMessageAttachmentModel, RunMessageModel, RunModel, RunToolCallModel, Thread, User
 from ..models.memory_models import MessageMemorySummary
 from ..providers.sse_encoder import encode_sse, iter_sse_with_heartbeat
 from ..schemas.thread_api import (
@@ -28,6 +30,12 @@ from ..schemas.thread_api import (
     ToolCallDecisionRequest,
     ToolCallDecisionResponse,
 )
+from ..services.chat_attachment_service import (
+    ChatAttachmentValidationError,
+    IncomingMessageAttachment,
+    chat_attachment_service,
+)
+from ..services.deletion_service import delete_chat_attachments_with_files
 from ..services.run_event_bus import run_event_bus
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..services.notification_service import (
@@ -48,10 +56,12 @@ from ..services.storage_usage_service import (
     apply_project_usage_deltas,
     build_notification_delta,
     build_run_message_delta,
+    build_run_message_attachment_delta,
     build_thread_delta,
     build_tool_call_delta,
     enforce_user_storage_quota,
     snapshot_notification_row,
+    snapshot_run_message_attachment_row,
     snapshot_run_message_row,
     snapshot_thread_row,
     snapshot_tool_call_row,
@@ -63,7 +73,21 @@ router = APIRouter(prefix="/api/v1", tags=["threads"])
 PROJECT_STREAM_HEARTBEAT_INTERVAL_SECONDS = 15.0
 
 
-def _serialize_message(row: RunMessageModel) -> dict:
+@dataclass
+class ParsedChatInput:
+    request: ChatRequest
+    attachments: list[IncomingMessageAttachment]
+
+
+def _serialize_attachment(row: RunMessageAttachmentModel) -> dict:
+    return dict(chat_attachment_service.serialize_attachment(row))
+
+
+def _serialize_message(
+    row: RunMessageModel,
+    attachments_by_message_id: dict[UUID, list[RunMessageAttachmentModel]] | None = None,
+) -> dict:
+    attachments = attachments_by_message_id.get(row.id, []) if attachments_by_message_id is not None else list(getattr(row, "attachments", []) or [])
     return {
         "id": row.id,
         "thread_id": row.thread_id,
@@ -72,6 +96,7 @@ def _serialize_message(row: RunMessageModel) -> dict:
         "seq": int(row.seq),
         "seq_in_thread": int(row.seq_in_thread),
         "data": row.data if isinstance(row.data, dict) else {},
+        "attachments": [_serialize_attachment(item) for item in attachments],
         "created_at": row.created_at,
     }
 
@@ -97,6 +122,71 @@ def _serialize_tool_call(row: RunToolCallModel) -> dict:
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }
+
+
+def _attachments_by_message_id(rows: list[RunMessageAttachmentModel]) -> dict[UUID, list[RunMessageAttachmentModel]]:
+    grouped: dict[UUID, list[RunMessageAttachmentModel]] = {}
+    for row in rows:
+        grouped.setdefault(row.message_id, []).append(row)
+    for value in grouped.values():
+        value.sort(key=lambda item: (item.sort_order, item.created_at))
+    return grouped
+
+
+def _parse_json_field(raw_value: Any, *, default: Any) -> Any:
+    if raw_value in (None, "", b""):
+        return default
+    if isinstance(raw_value, (dict, list)):
+        return raw_value
+    if isinstance(raw_value, bytes):
+        raw_value = raw_value.decode("utf-8")
+    if not isinstance(raw_value, str):
+        return default
+    try:
+        return json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail="Invalid JSON form field") from exc
+
+
+async def _parse_chat_input(request: Request) -> ParsedChatInput:
+    content_type = str(request.headers.get("content-type") or "").lower()
+    if "multipart/form-data" not in content_type:
+        payload = ChatRequest.model_validate(await request.json())
+        return ParsedChatInput(request=payload, attachments=[])
+
+    form = await request.form()
+    input_payload = _parse_json_field(
+        form.get("input_payload_json", form.get("input_payload")),
+        default=None,
+    )
+    context_object_ids = _parse_json_field(form.get("context_object_ids_json"), default=[])
+    journey_target_ids = _parse_json_field(form.get("journey_target_ids_json"), default=[])
+    payload = ChatRequest(
+        input_text=str(form.get("input_text") or ""),
+        input_payload=input_payload,
+        run_mode=str(form.get("run_mode") or "").strip() or None,
+        surface=str(form.get("surface") or "").strip() or None,
+        context_object_ids=context_object_ids if isinstance(context_object_ids, list) else [],
+        journey_target_ids=journey_target_ids if isinstance(journey_target_ids, list) else [],
+        language=str(form.get("language") or "").strip() or None,
+    )
+
+    attachments: list[IncomingMessageAttachment] = []
+    for item in form.getlist("attachments"):
+        filename = getattr(item, "filename", None)
+        content_type_value = getattr(item, "content_type", None)
+        if filename is None or content_type_value is None or not hasattr(item, "read"):
+            continue
+        content = await item.read()
+        attachments.append(
+            IncomingMessageAttachment(
+                filename=str(filename or "attachment"),
+                mime_type=str(content_type_value or "").strip().lower(),
+                content=content,
+            )
+        )
+
+    return ParsedChatInput(request=payload, attachments=attachments)
 
 
 def _normalize_content_parts(parts: Any) -> list[dict[str, str]]:
@@ -410,13 +500,16 @@ async def _apply_tool_decision(
 @router.post("/threads/{thread_id}/chat", response_model=ChatResponse)
 async def chat_thread(
     thread_id: UUID,
-    payload: ChatRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    del db
+    parsed = await _parse_chat_input(request)
+    payload = parsed.request
     text = (payload.input_text or "").strip()
 
-    if text:
+    if text or parsed.attachments:
         run = await run_pipeline.start_run(
             thread_id=thread_id,
             user_id=current_user.id,
@@ -427,6 +520,7 @@ async def chat_thread(
             context_object_ids=payload.context_object_ids,
             journey_target_ids=payload.journey_target_ids,
             language=payload.language,
+            attachments=parsed.attachments,
         )
     else:
         run = await run_pipeline.resume_run(
@@ -587,6 +681,16 @@ async def list_thread_messages(
         .order_by(RunMessageModel.seq_in_thread.asc())
         .all()
     )
+    message_ids = [row.id for row in messages]
+    attachments = (
+        db.query(RunMessageAttachmentModel)
+        .filter(RunMessageAttachmentModel.message_id.in_(message_ids))
+        .order_by(RunMessageAttachmentModel.message_id.asc(), RunMessageAttachmentModel.sort_order.asc())
+        .all()
+        if message_ids
+        else []
+    )
+    attachments_by_message_id = _attachments_by_message_id(attachments)
 
     tool_calls = (
         db.query(RunToolCallModel)
@@ -635,7 +739,7 @@ async def list_thread_messages(
         }
         if latest_run
         else None,
-        messages=[_serialize_message(m) for m in messages],
+        messages=[_serialize_message(m, attachments_by_message_id) for m in messages],
         tool_calls=[_serialize_tool_call(t) for t in tool_calls],
         image_runs=[image_run_service.serialize(db, row) for row in image_runs],
     )
@@ -1113,17 +1217,26 @@ async def delete_thread_message(
     message_before = snapshot_run_message_row(row)
     tool_calls_before: list[object] = []
     tool_messages_before: list[object] = []
+    attachment_rows = (
+        db.query(RunMessageAttachmentModel)
+        .filter(RunMessageAttachmentModel.message_id == row.id)
+        .order_by(RunMessageAttachmentModel.sort_order.asc())
+        .all()
+    )
+    attachments_before = snapshot_rows(attachment_rows, snapshot_run_message_attachment_row)
     if row.role == "assistant":
         tool_calls_before, tool_messages_before = _snapshot_assistant_tool_call_tree(
             db,
             assistant_message_id=row.id,
         )
+    delete_chat_attachments_with_files(db, attachments=attachment_rows)
     db.delete(row)
     thread.captured_history_conversation_json = None
     deltas = [
         build_run_message_delta(message_before, None),
         build_thread_delta(thread_before, snapshot_thread_row(thread)),
     ]
+    deltas.extend(build_run_message_attachment_delta(attachment_before, None) for attachment_before in attachments_before)
     deltas.extend(build_tool_call_delta(tool_call, None) for tool_call in tool_calls_before)
     deltas.extend(build_run_message_delta(tool_message, None) for tool_message in tool_messages_before)
     apply_project_usage_deltas(

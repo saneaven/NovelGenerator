@@ -101,6 +101,7 @@ class StorageBackendBase(ABC):
             ".gif": "image/gif",
             ".webp": "image/webp",
             ".avif": "image/avif",
+            ".pdf": "application/pdf",
         }
         return mime_types.get(ext, "image/png")
 
@@ -185,6 +186,22 @@ class StorageBackendBase(ABC):
             original_name=original_filename,
             project_id=project_id,
         )
+
+    def save_raw_file(
+        self,
+        file_content: bytes,
+        original_filename: str,
+        project_id: uuid.UUID,
+        *,
+        storage_prefix: str,
+        mime_type: str | None = None,
+    ) -> tuple[str, str, int]:
+        filename = self._generate_filename(original_filename, project_id)
+        normalized_prefix = self._normalize_storage_key(storage_prefix).rstrip("/")
+        storage_key = self._normalize_storage_key(f"{normalized_prefix}/{project_id}/{filename}")
+        resolved_mime_type = str(mime_type or self._get_mime_type(original_filename)).strip() or "application/octet-stream"
+        self._write_asset_bytes(storage_key=storage_key, body=file_content, mime_type=resolved_mime_type)
+        return storage_key, resolved_mime_type, len(file_content)
 
     def save_generated_image(
         self,
@@ -458,6 +475,23 @@ class StorageService:
         project_id: uuid.UUID,
     ) -> tuple[str, str, int, int, int]:
         return self._backend.save_uploaded_file(file_content, original_filename, project_id)
+
+    def save_raw_file(
+        self,
+        file_content: bytes,
+        original_filename: str,
+        project_id: uuid.UUID,
+        *,
+        storage_prefix: str,
+        mime_type: str | None = None,
+    ) -> tuple[str, str, int]:
+        return self._backend.save_raw_file(
+            file_content,
+            original_filename,
+            project_id,
+            storage_prefix=storage_prefix,
+            mime_type=mime_type,
+        )
 
     def save_generated_image(
         self,

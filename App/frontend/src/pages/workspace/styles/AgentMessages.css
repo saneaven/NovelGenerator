@@ -187,6 +187,93 @@
     font-size: var(--font-size-base);
 }
 
+/* ===== Message Attachments ===== */
+.message-attachments {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.message-attachments-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--spacing-sm);
+    width: min(100%, 320px);
+}
+
+.message-attachments-grid.single {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.message-attachment-image-card {
+    overflow: hidden;
+    border-radius: var(--border-radius-xl);
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border-default);
+    box-shadow: var(--shadow-sm);
+}
+
+.message-attachment-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 24rem;
+    object-fit: contain;
+    background: var(--color-surface-subtle);
+}
+
+.message-attachments-documents {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    width: min(100%, 24rem);
+}
+
+.message-attachment-document-card {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    width: 100%;
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius-lg);
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border-default);
+    box-shadow: var(--shadow-sm);
+}
+
+.message-attachment-document-icon {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: var(--border-radius-md);
+    background: var(--color-surface-subtle);
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.message-attachment-document-meta {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.message-attachment-document-name {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.message-attachment-document-size {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+}
+
 /* ===== Assistant Messages ===== */
 .agent-message.assistant {
     align-items: flex-start;
@@ -451,6 +538,15 @@
     .agent-message.assistant .message-content {
         padding: var(--spacing-md) var(--spacing-lg);
         font-size: var(--font-size-sm);
+    }
+
+    .message-attachments-grid,
+    .message-attachments-documents {
+        width: 100%;
+    }
+
+    .message-attachment-document-card {
+        padding: var(--spacing-sm) var(--spacing-md);
     }
 
     .message-edit textarea {

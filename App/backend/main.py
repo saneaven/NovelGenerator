@@ -45,6 +45,7 @@ from .services.embedding_models_service import list_embedding_models
 from .services.asset_change_events import register_asset_change_event_hooks
 from .services.object_change_events import register_object_change_event_hooks
 from .services.asset_proxy import build_asset_proxy_response
+from .services.chat_attachment_proxy import build_chat_attachment_proxy_response
 
 # Ensure correct Content-Type for AVIF assets when served via StaticFiles.
 mimetypes.add_type("image/avif", ".avif")
@@ -185,6 +186,15 @@ async def proxy_asset(
     current_user: User = Depends(get_current_user),
 ):
     return build_asset_proxy_response(asset_key, user_id=current_user.id, db=db)
+
+
+@app.get("/storage/chat-attachments/{attachment_key:path}", include_in_schema=False)
+async def proxy_chat_attachment(
+    attachment_key: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return build_chat_attachment_proxy_response(attachment_key, user_id=current_user.id, db=db)
 
 # Mount static files for resources (landing page images, etc.)
 resources_path = Path(__file__).parent / "storage" / "resources"

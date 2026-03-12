@@ -3,6 +3,7 @@ import { useDisplayLanguageStore } from '../store/displayLanguageStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useThreadStore } from '../store/threadStore';
 import { nowIso, toThreadType, type ThreadInfo, type ThreadStatus } from '../types/thread';
+import { revokeMessageAttachmentObjectUrls, toOptimisticMessageAttachment } from '../utils/threadAttachments';
 
 interface ThreadContextParams {
   threadId: string;
@@ -118,7 +119,8 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
   useThreadStore.getState().clearPreexistingLiveThread(params.threadId);
 
   const trimmed = params.inputText.trim();
-  if (!trimmed) {
+  const requestAttachments = params.request?.attachments ?? [];
+  if (!trimmed && requestAttachments.length === 0) {
     return await resumeThread({
       threadId: params.threadId,
       projectId: params.projectId,
@@ -140,8 +142,9 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
     seq: 0,
     seqInThread: maxSeq + 1,
     data: {
-      [lang]: { contentParts: [{ type: 'content', text: trimmed }] },
+      [lang]: { contentParts: trimmed ? [{ type: 'content', text: trimmed }] : [] },
     },
+    attachments: requestAttachments.map((attachment, index) => toOptimisticMessageAttachment(attachment, index)),
     isStreaming: false,
     createdAt: nowIso(),
   });
@@ -165,6 +168,7 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
     const messages = useThreadStore.getState().getMessages(params.threadId);
     for (const message of messages) {
       if (message.id.startsWith('optimistic:user:')) {
+        revokeMessageAttachmentObjectUrls(message);
         useThreadStore.getState().removeMessage(params.threadId, message.id);
       }
     }

@@ -77,34 +77,134 @@
 
 .input-group {
   display: flex;
+  gap: var(--spacing-sm);
+  align-items: stretch;
+}
+
+.agent-attachment-input {
+  display: none;
+}
+
+.agent-composer-shell {
+  display: flex;
+  flex-direction: column;
   gap: var(--spacing-md);
-  align-items: flex-end;
+  border: 2px solid var(--color-border-default);
+  border-radius: var(--border-radius-xl);
+  background: var(--color-surface-base);
+  padding: var(--spacing-sm) var(--spacing-md);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base), background var(--transition-base);
+  flex: 1;
+  min-width: 0;
+  min-height: 4rem;
+}
+
+.agent-composer-shell:focus-within {
+  border-color: var(--color-brand-accent);
+  box-shadow: var(--shadow-focus);
+}
+
+.agent-composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  padding-bottom: var(--spacing-xs);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.agent-composer-attachment-card {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  max-width: min(100%, 18rem);
+  padding: var(--spacing-xs);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-default);
+}
+
+.agent-composer-attachment-preview {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-elevated);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.agent-composer-attachment-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.agent-composer-attachment-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+}
+
+.agent-composer-attachment-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-composer-attachment-size {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.agent-composer-attachment-remove {
+  flex-shrink: 0;
+}
+
+.agent-input-row {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+  min-height: 2.875rem;
+}
+
+.agent-attachment-menu-trigger {
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .agent-input {
   flex: 1;
-  border: 2px solid var(--color-border-default);
-  border-radius: var(--border-radius-xl);
-  padding: var(--spacing-lg) var(--spacing-xl);
+  border: none;
+  border-radius: var(--border-radius-lg);
+  padding: 0;
   font-size: var(--font-size-base);
   font-family: inherit;
   line-height: var(--line-height-normal);
   resize: none;
   field-sizing: content;
-  min-height: 3rem;
+  min-height: 1.5rem;
   max-height: 10rem;
-  background: var(--color-surface-base);
+  background: transparent;
   color: var(--color-text-primary);
-  transition: all var(--transition-base);
+  transition: color var(--transition-base);
   outline: none;
   box-sizing: border-box;
   overflow-y: auto;
 }
 
 .agent-input:focus {
-  border-color: var(--color-brand-accent);
-  background: var(--color-surface-base);
-  box-shadow: var(--shadow-focus);
+  box-shadow: none;
 }
 
 .agent-input::placeholder {
@@ -122,9 +222,10 @@
 
 /* ===== Agent Submit Button (Send/Stop) ===== */
 .agent-submit-btn {
-  min-width: 3.5rem;
-  height: 3.5rem;
-  border-radius: var(--border-radius-lg);
+  min-width: 4rem;
+  height: auto;
+  align-self: stretch;
+  border-radius: var(--border-radius-xl);
   font-size: var(--font-size-sm);
   box-shadow: var(--shadow-md);
   flex-shrink: 0;
@@ -163,21 +264,46 @@
 
   .input-group {
     gap: var(--spacing-sm);
+    align-items: stretch;
+  }
+
+  .agent-composer-shell {
+    padding: var(--spacing-sm);
+    border-radius: var(--border-radius-lg);
+    min-height: 3.25rem;
+  }
+
+  .agent-composer-attachments {
+    gap: var(--spacing-xs);
+  }
+
+  .agent-composer-attachment-card {
+    max-width: 100%;
+  }
+
+  .agent-composer-attachment-preview {
+    width: 3.75rem;
+    height: 3.75rem;
+  }
+
+  .agent-input-row {
+    gap: var(--spacing-xs);
+    min-height: 2.5rem;
   }
 
   .agent-input {
-    padding: var(--spacing-md) var(--spacing-lg);
+    padding: 0;
     font-size: var(--font-size-sm);
-    min-height: 2.5rem;
+    min-height: 1.375rem;
     max-height: 8rem;
-    border-radius: var(--border-radius-lg);
   }
 
   .agent-submit-btn {
-    min-width: 2.75rem;
-    height: 2.75rem;
+    min-width: 3rem;
+    height: auto;
     font-size: var(--font-size-xs);
     border-radius: var(--border-radius-md);
+    align-self: stretch;
   }
 }
 

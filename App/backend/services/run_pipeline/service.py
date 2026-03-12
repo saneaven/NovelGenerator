@@ -12,6 +12,11 @@ from jinja2.sandbox import SecurityError
 from sqlalchemy.orm import Session
 
 from ...models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thread, UserSettings
+from ..chat_attachment_service import (
+    ChatAttachmentValidationError,
+    IncomingMessageAttachment,
+    chat_attachment_service,
+)
 from ..runtime_event_dispatcher import RuntimeEventDispatcher
 from ..settings_service import settings_service
 from ..storage_usage_service import (
@@ -19,7 +24,9 @@ from ..storage_usage_service import (
     apply_project_usage_deltas,
     build_run_delta,
     build_run_message_delta,
+    build_run_message_attachment_delta,
     build_tool_call_delta,
+    snapshot_run_message_attachment_row,
     snapshot_run_message_row,
     snapshot_run_row,
     snapshot_tool_call_row,
@@ -180,10 +187,12 @@ class RunPipeline:
         context_object_ids: list[UUID],
         journey_target_ids: list[UUID],
         language: str | None,
+        attachments: list[IncomingMessageAttachment] | None = None,
     ) -> RunModel:
         text = (input_text or "").strip()
-        if not text:
-            raise HTTPException(status_code=400, detail="input_text is required for create run")
+        normalized_attachments = list(attachments or [])
+        if not text and not normalized_attachments:
+            raise HTTPException(status_code=400, detail="input_text or attachments are required for create run")
 
         normalized_input_payload = input_payload if isinstance(input_payload, dict) else {}
         latest_active_run_id: UUID | None = None
@@ -280,10 +289,24 @@ class RunPipeline:
                     seq_in_thread=thread.next_message_seq,
                     role="user",
                     data={
-                        resolved_language: {"contentParts": [{"type": "content", "text": text}]},
+                        resolved_language: {
+                            "contentParts": ([{"type": "content", "text": text}] if text else []),
+                        },
                     },
                 )
                 db.add(msg)
+                db.flush()
+
+                attachment_rows = []
+                if normalized_attachments:
+                    attachment_rows = chat_attachment_service.ingest_message_attachments(
+                        db,
+                        project_id=thread.project_id,
+                        thread_id=thread.id,
+                        run_id=run.id,
+                        message_id=msg.id,
+                        attachments=normalized_attachments,
+                    )
 
                 run.next_message_seq += 1
                 thread.next_message_seq += 1
@@ -296,12 +319,18 @@ class RunPipeline:
                     deltas=[
                         build_run_delta(None, snapshot_run_row(run)),
                         build_run_message_delta(None, snapshot_run_message_row(msg)),
+                        *[
+                            build_run_message_attachment_delta(None, snapshot_run_message_attachment_row(row))
+                            for row in attachment_rows
+                        ],
                     ],
                     enforce_quota=True,
                 )
                 db.commit()
                 db.refresh(run)
                 db.refresh(msg)
+                for attachment_row in attachment_rows:
+                    db.refresh(attachment_row)
                 _ = run.thread  # eager-load before session closes
 
                 # Capture user message fields before session closes.
@@ -309,6 +338,16 @@ class RunPipeline:
                 user_msg_seq = msg.seq
                 user_msg_seq_in_thread = msg.seq_in_thread
                 user_msg_data = msg.data
+                user_msg_attachments = [
+                    {
+                        **chat_attachment_service.serialize_attachment(row),
+                        "created_at": row.created_at.isoformat(),
+                    }
+                    for row in attachment_rows
+                ]
+            except ChatAttachmentValidationError as exc:
+                db.rollback()
+                raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
             except StorageQuotaExceededError:
                 db.rollback()
                 raise HTTPException(status_code=413, detail="Storage quota exceeded")
@@ -326,6 +365,7 @@ class RunPipeline:
                     "seq": int(user_msg_seq),
                     "seq_in_thread": int(user_msg_seq_in_thread),
                     "data": user_msg_data,
+                    "attachments": user_msg_attachments,
                 },
             )
             await self._spawn_task(run.id, create_ctx=CreateContext(

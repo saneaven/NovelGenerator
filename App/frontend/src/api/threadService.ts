@@ -6,6 +6,7 @@ import type {
   ThreadStatus,
   ThreadToolCall,
 } from '../types/thread';
+import { toMessageAttachment, type PendingAttachment } from '../utils/threadAttachments';
 
 export interface ChatRequest {
   input_text: string;
@@ -15,6 +16,7 @@ export interface ChatRequest {
   context_object_ids?: string[];
   journey_target_ids?: string[];
   language?: string;
+  attachments?: PendingAttachment[];
 }
 
 export interface ChatResponse {
@@ -132,6 +134,9 @@ function toMessage(raw: Record<string, unknown>): ThreadMessage {
     seq: Number(raw.seq ?? 0),
     seqInThread: Number(raw.seq_in_thread ?? 0),
     data: (raw.data ?? {}) as ThreadMessage['data'],
+    attachments: Array.isArray(raw.attachments)
+      ? raw.attachments.map((item) => toMessageAttachment(item))
+      : [],
     createdAt: String(raw.created_at ?? new Date().toISOString()),
     isStreaming: false,
   };
@@ -168,10 +173,44 @@ function toDecisionResponse(raw: Record<string, unknown>): ToolCallDecisionRespo
 
 export const threadService = {
   async chat(threadId: string, req: ChatRequest): Promise<ChatResponse> {
-    const raw = await apiClient.post<Record<string, unknown>>(
-      `/api/v1/threads/${threadId}/chat`,
-      req,
-    );
+    let raw: Record<string, unknown>;
+    const attachments = req.attachments ?? [];
+
+    if (attachments.length > 0) {
+      const formData = new FormData();
+      formData.append('input_text', req.input_text ?? '');
+      if (req.input_payload !== undefined) {
+        formData.append('input_payload_json', JSON.stringify(req.input_payload));
+      }
+      if (req.run_mode) {
+        formData.append('run_mode', req.run_mode);
+      }
+      if (req.surface) {
+        formData.append('surface', req.surface);
+      }
+      if (req.context_object_ids) {
+        formData.append('context_object_ids_json', JSON.stringify(req.context_object_ids));
+      }
+      if (req.journey_target_ids) {
+        formData.append('journey_target_ids_json', JSON.stringify(req.journey_target_ids));
+      }
+      if (req.language) {
+        formData.append('language', req.language);
+      }
+      for (const attachment of attachments) {
+        formData.append('attachments', attachment.file);
+      }
+      raw = await apiClient.postFormData<Record<string, unknown>>(
+        `/api/v1/threads/${threadId}/chat`,
+        formData,
+      );
+    } else {
+      raw = await apiClient.post<Record<string, unknown>>(
+        `/api/v1/threads/${threadId}/chat`,
+        req,
+      );
+    }
+
     return {
       threadId: String(raw.thread_id),
       runId: String(raw.run_id),

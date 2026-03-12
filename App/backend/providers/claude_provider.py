@@ -7,6 +7,7 @@ from anthropic import AsyncAnthropic
 from .base import BaseProvider
 from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
 from .final_mappers import map_claude_message_to_snapshot
+from .multimodal import build_claude_content, get_canonical_content_parts
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
@@ -101,6 +102,7 @@ class ClaudeProvider(BaseProvider):
 
         for msg in messages:
             role = msg.get("role", "user")
+            canonical_parts = get_canonical_content_parts(msg)
             text = self._extract_text_content(msg)
             tool_calls = msg.get("tool_calls")
             reasoning_detail = msg.get("reasoning_detail") if isinstance(msg.get("reasoning_detail"), dict) else None
@@ -150,8 +152,7 @@ class ClaudeProvider(BaseProvider):
                 content_blocks = []
                 if reasoning_blocks:
                     content_blocks.extend(reasoning_blocks)
-                if text:
-                    content_blocks.append({"type": "text", "text": text})
+                content_blocks.extend(build_claude_content(canonical_parts))
                 for tc in tool_calls:
                     tc_function = tc.get("function", {})
                     args_str = tc_function.get("arguments", "{}")
@@ -169,11 +170,14 @@ class ClaudeProvider(BaseProvider):
             else:
                 if role == "assistant" and reasoning_blocks:
                     content_blocks = list(reasoning_blocks)
-                    if text:
-                        content_blocks.append({"type": "text", "text": text})
-                    anthropic_messages.append({"role": mapped_role, "content": content_blocks})
+                    content_blocks.extend(build_claude_content(canonical_parts))
+                    if content_blocks:
+                        anthropic_messages.append({"role": mapped_role, "content": content_blocks})
                 else:
-                    anthropic_messages.append({"role": mapped_role, "content": text})
+                    content_blocks = build_claude_content(canonical_parts)
+                    if not content_blocks:
+                        continue
+                    anthropic_messages.append({"role": mapped_role, "content": content_blocks})
 
         system_prompt = "\n\n".join(system_parts) if system_parts else None
         return system_prompt, anthropic_messages

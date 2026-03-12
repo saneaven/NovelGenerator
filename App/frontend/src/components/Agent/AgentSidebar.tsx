@@ -7,6 +7,7 @@ import { useSidebarStore } from '../../store/sidebarStore';
 import { useSettings } from '../../store/settingsStore';
 import { useThreadStore } from '../../store/threadStore';
 import { resolveRunMessageDisplay } from '../../types/thread';
+import { buildAttachmentSummary } from '../../utils/threadAttachments';
 import { BaseSidebar } from '../BaseSidebar';
 import { IconButton } from '../IconButton';
 import { SpeechBubble, Plus, Trash, Edit, Close } from '../icons';
@@ -191,8 +192,16 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
       .filter(p => p.type === 'content')
       .map(p => p.text)
       .join(' ');
+    const attachmentSummary = lastMessage.attachments.length > 0
+      ? buildAttachmentSummary(lastMessage.attachments, t)
+      : '';
+    const combinedPreview = content && attachmentSummary
+      ? `${attachmentSummary} + ${content}`
+      : (content || attachmentSummary);
 
-    return content.length > 50 ? `${content.substring(0, 50)}...` : content || t('agent.sidebar.noContent');
+    return combinedPreview.length > 50
+      ? `${combinedPreview.substring(0, 50)}...`
+      : combinedPreview || t('agent.sidebar.noContent');
   };
 
   const formatTime = (date: Date | string): string => {

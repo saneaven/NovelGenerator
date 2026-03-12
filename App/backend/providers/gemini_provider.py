@@ -9,6 +9,7 @@ from google.genai import errors, types
 from .base import BaseProvider
 from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
 from .final_mappers import _to_raw_dict
+from .multimodal import build_gemini_binary_parts, get_canonical_content_parts
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
@@ -158,6 +159,7 @@ class GeminiProvider(BaseProvider):
 
         for msg in messages:
             role = msg.get("role", "user")
+            canonical_parts = get_canonical_content_parts(msg)
             text = self._extract_text_content(msg)
             tool_calls = msg.get("tool_calls")
             reasoning_detail = msg.get("reasoning_detail") if isinstance(msg.get("reasoning_detail"), dict) else None
@@ -217,8 +219,11 @@ class GeminiProvider(BaseProvider):
                 parts = []
                 if reasoning_parts:
                     parts.extend(reasoning_parts)
-                if text:
-                    parts.append(types.Part.from_text(text=text))
+                for part in build_gemini_binary_parts(canonical_parts):
+                    if part.get("type") == "text":
+                        parts.append(types.Part.from_text(text=str(part.get("text") or "")))
+                    elif part.get("type") == "binary":
+                        parts.append(types.Part.from_bytes(data=part.get("data"), mime_type=str(part.get("mime_type") or "")))
                 for tc in tool_calls:
                     tc_function = tc.get("function", {})
                     args_str = tc_function.get("arguments", "{}")
@@ -232,10 +237,14 @@ class GeminiProvider(BaseProvider):
                 if text:
                     parser_messages.append({"role": "assistant", "content": text})
             else:
-                if text or reasoning_parts:
+                converted_parts = build_gemini_binary_parts(canonical_parts)
+                if converted_parts or reasoning_parts:
                     parts = list(reasoning_parts)
-                    if text:
-                        parts.append(types.Part.from_text(text=text))
+                    for part in converted_parts:
+                        if part.get("type") == "text":
+                            parts.append(types.Part.from_text(text=str(part.get("text") or "")))
+                        elif part.get("type") == "binary":
+                            parts.append(types.Part.from_bytes(data=part.get("data"), mime_type=str(part.get("mime_type") or "")))
                     contents.append(types.Content(role=mapped_role, parts=parts))
                     if mapped_role == "model" and text:
                         parser_messages.append({"role": "assistant", "content": text})

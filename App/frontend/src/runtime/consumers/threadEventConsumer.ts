@@ -17,6 +17,7 @@ import {
   type ToolCallStatus,
 } from '../../types/thread';
 import { getByDotPath, setByDotPath } from '../../utils/dotPath';
+import { revokeMessageAttachmentObjectUrls, toMessageAttachment } from '../../utils/threadAttachments';
 
 type AutoApproveConfig = Record<string, boolean>;
 
@@ -140,6 +141,7 @@ export class ThreadEventConsumer {
       seq: params.seq ?? 0,
       seqInThread: params.seqInThread ?? 0,
       data: {},
+      attachments: [],
       streamingData: {
         contentParts: [],
       },
@@ -457,6 +459,7 @@ export class ThreadEventConsumer {
         seq: 0,
         seqInThread: Number(payload.seq_in_thread ?? 0),
         data: {},
+        attachments: [],
         isStreaming: false,
         createdAt: nowIso(),
       });
@@ -694,6 +697,7 @@ export class ThreadEventConsumer {
       const existing = store.getMessages(threadId);
       for (const message of existing) {
         if (message.id.startsWith('optimistic:user:') && message.role === 'user') {
+          revokeMessageAttachmentObjectUrls(message);
           store.removeMessage(threadId, message.id);
         }
       }
@@ -706,6 +710,9 @@ export class ThreadEventConsumer {
         seq: Number(payload.seq ?? 0),
         seqInThread: Number(payload.seq_in_thread ?? 0),
         data: (payload.data ?? {}) as ThreadMessage['data'],
+        attachments: Array.isArray(payload.attachments)
+          ? payload.attachments.map((item) => toMessageAttachment(item))
+          : [],
         isStreaming: false,
         createdAt: nowIso(),
       });
@@ -934,6 +941,7 @@ export class ThreadEventConsumer {
             seq: 0,
             seqInThread: Number(tc.seq_in_thread ?? 0),
             data: {},
+            attachments: [],
             isStreaming: false,
             createdAt: now,
           });

@@ -35,6 +35,7 @@ from ..models.db_models import (
     Project,
     ProjectStorageUsage,
     RunMessageModel,
+    RunMessageAttachmentModel,
     RunModel,
     RunToolCallModel,
     Thread,
@@ -257,6 +258,17 @@ def measure_run_message_row(row: RunMessageModel | object) -> int:
     return _sum_values(getattr(row, "data", None))
 
 
+def measure_run_message_attachment_row(row: RunMessageAttachmentModel | object) -> int:
+    return int(getattr(row, "file_size", 0) or 0) + _sum_values(
+        getattr(row, "kind", None),
+        getattr(row, "mime_type", None),
+        getattr(row, "original_filename", None),
+        getattr(row, "storage_key", None),
+        getattr(row, "width", None),
+        getattr(row, "height", None),
+    )
+
+
 def measure_tool_call_row(row: RunToolCallModel | object) -> int:
     return _sum_values(
         getattr(row, "arguments", None),
@@ -341,6 +353,10 @@ def snapshot_run_row(row: RunModel | object | None) -> object | None:
 
 def snapshot_run_message_row(row: RunMessageModel | object | None) -> object | None:
     return _snapshot_row(row, "data")
+
+
+def snapshot_run_message_attachment_row(row: RunMessageAttachmentModel | object | None) -> object | None:
+    return _snapshot_row(row, "file_size", "kind", "mime_type", "original_filename", "storage_key", "width", "height")
 
 
 def snapshot_tool_call_row(row: RunToolCallModel | object | None) -> object | None:
@@ -529,6 +545,15 @@ def build_run_message_delta(before: object | None, after: object | None) -> Stor
         before=before,
         after=after,
         measure_fn=measure_run_message_row,
+    )
+
+
+def build_run_message_attachment_delta(before: object | None, after: object | None) -> StorageUsageDelta:
+    return build_usage_delta_for_measurement(
+        category="chat",
+        before=before,
+        after=after,
+        measure_fn=measure_run_message_attachment_row,
     )
 
 
@@ -830,6 +855,11 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
         .filter(RunModel.project_id == project_id)
         .all()
     )
+    run_message_attachments = (
+        db.query(RunMessageAttachmentModel)
+        .filter(RunMessageAttachmentModel.project_id == project_id)
+        .all()
+    )
     tool_calls = (
         db.query(RunToolCallModel)
         .join(RunModel, RunModel.id == RunToolCallModel.run_id)
@@ -841,6 +871,7 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
         + sum(measure_thread_row(row) for row in threads)
         + sum(measure_run_row(row) for row in runs)
         + sum(measure_run_message_row(row) for row in run_messages)
+        + sum(measure_run_message_attachment_row(row) for row in run_message_attachments)
         + sum(measure_tool_call_row(row) for row in tool_calls)
     )
 
@@ -1250,6 +1281,7 @@ __all__ = [
     "build_project_delta",
     "build_run_delta",
     "build_run_message_delta",
+    "build_run_message_attachment_delta",
     "build_story_core_delta",
     "build_story_core_rows_delta",
     "build_thread_delta",
@@ -1272,6 +1304,7 @@ __all__ = [
     "measure_object_version_row",
     "measure_project_row",
     "measure_run_message_row",
+    "measure_run_message_attachment_row",
     "measure_run_row",
     "measure_story_core_row",
     "measure_thread_row",
@@ -1293,6 +1326,7 @@ __all__ = [
     "snapshot_project_row",
     "snapshot_rows",
     "snapshot_run_message_row",
+    "snapshot_run_message_attachment_row",
     "snapshot_run_row",
     "snapshot_story_core_row",
     "snapshot_thread_row",

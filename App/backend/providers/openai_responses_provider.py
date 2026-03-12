@@ -29,6 +29,7 @@ from openai import (
 from .base import BaseProvider
 from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
 from .final_mappers import map_openai_response_to_snapshot
+from .multimodal import build_openai_responses_content, get_canonical_content_parts
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 
@@ -93,6 +94,7 @@ class OpenAIResponsesProvider(BaseProvider):
         result = []
         for msg in messages:
             role = msg.get("role", "user")
+            canonical_parts = get_canonical_content_parts(msg)
             text_content = self._extract_text_content(msg)
             tool_calls = msg.get("tool_calls")
             reasoning_detail = msg.get("reasoning_detail") if isinstance(msg.get("reasoning_detail"), dict) else None
@@ -142,8 +144,8 @@ class OpenAIResponsesProvider(BaseProvider):
                 for item in ri:
                     result.append(item)
                 # Add message only if there's text content
-                if text_content:
-                    content_items = [{"type": "output_text", "text": text_content}]
+                content_items = build_openai_responses_content(canonical_parts, role=role)
+                if content_items:
                     msg_dict: Dict = {"role": role, "content": content_items}
                     _apply_output_id(msg_dict, ri)
                     result.append(msg_dict)
@@ -167,12 +169,9 @@ class OpenAIResponsesProvider(BaseProvider):
 
             # Skip empty assistant messages — reasoning items without a
             # following output item would cause a 400 error from the API.
-            if not text_content:
+            content_items = build_openai_responses_content(canonical_parts, role=role)
+            if not content_items:
                 continue
-
-            # Convert text content to Responses content array format.
-            item_type = "output_text" if role == "assistant" else "input_text"
-            content_items = [{"type": item_type, "text": text_content}]
 
             # Reasoning items must precede the output they produced
             ri = _reasoning_items() if role == "assistant" else []

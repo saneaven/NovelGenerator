@@ -30,10 +30,25 @@ import { FunctionCallsThread } from '../../../toolCall/ui';
 import { SubAgentPeekDock } from '../../../components/SubAgentPeek';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
+import AuthenticatedImage from '../../../components/common/AuthenticatedImage';
 import AgentRunModeToggle from '../../../components/ui/AgentRunModeToggle';
+import { DropdownItem, DropdownMenu } from '../../../components/ui/DropdownMenu';
 import { buildEditCardsFromToolCallMetadata } from '../../../toolCall';
-
-import { Settings, Edit, Trash, Globe, CircularArrow, ChevronDown, Send, Stop } from '../../../components/icons';
+import {
+  Settings,
+  Edit,
+  Trash,
+  Globe,
+  CircularArrow,
+  ChevronDown,
+  Send,
+  Stop,
+  Plus,
+  Upload,
+  Document,
+  Image as ImageIcon,
+  Close,
+} from '../../../components/icons';
 import { getByDotPath } from '../../../utils/dotPath';
 import '../../../pages/workspace/styles/AgentPanel.css';
 import '../../../pages/workspace/styles/AgentHeader.css';
@@ -44,6 +59,17 @@ import '../../../pages/workspace/styles/AgentInput.css';
 import { useThreadLiveViewState } from '../../../hooks/useThreadLiveViewState';
 import { hasRenderableAssistantOutput } from '../../../runtime/messageVisibility';
 import { fetchAndReplaceThreadSnapshot } from '../../../runtime/threadHydration';
+import {
+  CHAT_ATTACHMENT_ACCEPT,
+  CHAT_ATTACHMENT_MAX_FILES,
+  CHAT_ATTACHMENT_MAX_FILE_BYTES,
+  CHAT_ATTACHMENT_MAX_TOTAL_BYTES,
+  createPendingAttachment,
+  formatAttachmentSize,
+  isSupportedAttachmentMimeType,
+  revokeAttachmentPreview,
+  type PendingAttachment,
+} from '../../../utils/threadAttachments';
 
 const EMPTY_MESSAGES: ThreadMessage[] = [];
 
@@ -91,6 +117,11 @@ interface AgentInputFormProps {
   isMessageRunActive: boolean;
   isSendBlocked: boolean;
   sendBlockedReason?: string | null;
+  pendingAttachments: PendingAttachment[];
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onOpenAttachmentPicker: () => void;
+  onFileInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onRemoveAttachment: (attachmentId: string) => void;
   onSubmit: (e: React.FormEvent, input: string) => Promise<void>;
   onStop: () => void;
 }
@@ -203,12 +234,109 @@ const AgentContextTrigger: React.FC<AgentContextTriggerProps> = React.memo(({
   );
 });
 
+const PendingAttachmentCard: React.FC<{
+  attachment: PendingAttachment;
+  onRemove: (attachmentId: string) => void;
+}> = React.memo(({ attachment, onRemove }) => {
+  const { t } = useTranslation();
+
+  return (
+    <div className={`agent-composer-attachment-card agent-composer-attachment-card--${attachment.kind}`}>
+      <div className="agent-composer-attachment-preview" aria-hidden="true">
+        {attachment.kind === 'image' && attachment.previewUrl ? (
+          <AuthenticatedImage
+            src={attachment.previewUrl}
+            alt={attachment.name}
+            className="agent-composer-attachment-image"
+          />
+        ) : (
+          attachment.kind === 'image' ? <ImageIcon size="md" /> : <Document size="md" />
+        )}
+      </div>
+      <div className="agent-composer-attachment-meta">
+        <div className="agent-composer-attachment-name" title={attachment.name}>
+          {attachment.name}
+        </div>
+        <div className="agent-composer-attachment-size">
+          {formatAttachmentSize(attachment.size)}
+        </div>
+      </div>
+      <IconButton
+        icon={<Close size="xs" />}
+        variant="ghost"
+        size="xs"
+        onClick={() => onRemove(attachment.clientId)}
+        title={t('agent.removeAttachment')}
+        className="agent-composer-attachment-remove"
+      />
+    </div>
+  );
+});
+
+const MessageAttachmentBlock: React.FC<{
+  attachments: ThreadMessage['attachments'];
+}> = React.memo(({ attachments }) => {
+  const sortedAttachments = [...attachments].sort((a, b) => a.sortOrder - b.sortOrder);
+  const imageAttachments = sortedAttachments.filter((attachment) => attachment.kind === 'image');
+  const documentAttachments = sortedAttachments.filter((attachment) => attachment.kind === 'document');
+
+  if (sortedAttachments.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="message-attachments">
+      {imageAttachments.length > 0 && (
+        <div className={`message-attachments-grid ${imageAttachments.length === 1 ? 'single' : ''}`}>
+          {imageAttachments.map((attachment) => (
+            <div key={attachment.id} className="message-attachment-image-card">
+              <AuthenticatedImage
+                src={attachment.url}
+                alt={attachment.originalFilename}
+                className="message-attachment-image"
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {documentAttachments.length > 0 && (
+        <div className="message-attachments-documents">
+          {documentAttachments.map((attachment) => (
+            <div key={attachment.id} className="message-attachment-document-card">
+              <div className="message-attachment-document-icon" aria-hidden="true">
+                <Document size="md" />
+              </div>
+              <div className="message-attachment-document-meta">
+                <div
+                  className="message-attachment-document-name"
+                  title={attachment.originalFilename}
+                >
+                  {attachment.originalFilename}
+                </div>
+                <div className="message-attachment-document-size">
+                  {formatAttachmentSize(attachment.fileSize)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
 const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
   projectId,
   hasSelectedAgent,
   isMessageRunActive,
   isSendBlocked,
   sendBlockedReason,
+  pendingAttachments,
+  fileInputRef,
+  onOpenAttachmentPicker,
+  onFileInputChange,
+  onRemoveAttachment,
   onSubmit,
   onStop,
 }) => {
@@ -238,15 +366,60 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
           {sendBlockedReason}
         </div>
       )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={CHAT_ATTACHMENT_ACCEPT}
+        multiple
+        className="agent-attachment-input"
+        onChange={onFileInputChange}
+      />
       <div className="input-group">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(projectId, e.target.value)}
-          placeholder={t('agent.enterMessage')}
-          rows={1}
-          className="agent-input"
-          onKeyDown={handleKeyDown}
-        />
+        <div className="agent-composer-shell">
+          {pendingAttachments.length > 0 && (
+            <div className="agent-composer-attachments" aria-label={t('agent.addFiles')}>
+              {pendingAttachments.map((attachment) => (
+                <PendingAttachmentCard
+                  key={attachment.clientId}
+                  attachment={attachment}
+                  onRemove={onRemoveAttachment}
+                />
+              ))}
+            </div>
+          )}
+
+          <div className="agent-input-row">
+            <DropdownMenu
+              align="left"
+              trigger={(
+                <IconButton
+                  icon={<Plus size="sm" />}
+                  variant="ghost"
+                  size="sm"
+                  title={t('agent.addFiles')}
+                  className="agent-attachment-menu-trigger"
+                />
+              )}
+            >
+              <DropdownItem
+                icon={<Upload size="sm" />}
+                label={t('agent.addFiles')}
+                onClick={onOpenAttachmentPicker}
+                disabled={pendingAttachments.length >= CHAT_ATTACHMENT_MAX_FILES}
+              />
+            </DropdownMenu>
+
+            <textarea
+              value={input}
+              onChange={(e) => setInput(projectId, e.target.value)}
+              placeholder={t('agent.enterMessage')}
+              rows={1}
+              className="agent-input"
+              onKeyDown={handleKeyDown}
+            />
+          </div>
+        </div>
+
         {isMessageRunActive ? (
           <IconButton
             key="stop"
@@ -305,12 +478,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   const [editingText, setEditingText] = useState('');
   const [editingSaving, setEditingSaving] = useState(false);
   const [translatingByMessageId, setTranslatingByMessageId] = useState<Record<string, boolean>>({});
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
 
   const contextDropdownRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const isUserNearBottomRef = useRef(true);
   const hydratedThreadIdsRef = useRef<Set<string>>(new Set());
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingAttachmentsRef = useRef<PendingAttachment[]>([]);
 
   const threadId = selectedAgent?.thread_id ?? null;
   const isAgentVisible = isDesktop ? true : agentVisibleState;
@@ -555,6 +731,31 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   }, [selectedAgentId, threadId]);
 
   useEffect(() => {
+    pendingAttachmentsRef.current = pendingAttachments;
+  }, [pendingAttachments]);
+
+  const clearPendingAttachments = useCallback((options?: { revoke?: boolean }) => {
+    const shouldRevoke = options?.revoke !== false;
+    setPendingAttachments((prev) => {
+      if (shouldRevoke) {
+        prev.forEach((attachment) => revokeAttachmentPreview(attachment));
+      }
+      return [];
+    });
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = '';
+    }
+  }, []);
+
+  useEffect(() => () => {
+    pendingAttachmentsRef.current.forEach((attachment) => revokeAttachmentPreview(attachment));
+  }, []);
+
+  useEffect(() => {
+    clearPendingAttachments();
+  }, [selectedAgentId, threadId, clearPendingAttachments]);
+
+  useEffect(() => {
     if (!secondaryLanguage) return;
     setTranslatingByMessageId((prev) => {
       const keys = Object.keys(prev).filter((k) => prev[k]);
@@ -690,8 +891,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     e.preventDefault();
     if (!threadId) return;
 
-    const shouldClear = inputText.trim().length > 0;
-    await sendThreadMessage({
+    const success = await sendThreadMessage({
       threadId,
       projectId,
       threadType: 'agent',
@@ -703,12 +903,24 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         input_payload: focusedManuscriptId
           ? { agent_focus: { manuscript_id: focusedManuscriptId } }
           : undefined,
+        attachments: pendingAttachments,
       },
     });
-    if (shouldClear) {
+    if (success) {
       setInput(projectId, '');
+      clearPendingAttachments();
     }
-  }, [threadId, runMode, surface, selectedContextIds, focusedManuscriptId, setInput, projectId]);
+  }, [
+    threadId,
+    projectId,
+    runMode,
+    surface,
+    selectedContextIds,
+    focusedManuscriptId,
+    pendingAttachments,
+    setInput,
+    clearPendingAttachments,
+  ]);
 
   const handleSubmitFromInput = useCallback(async (e: React.FormEvent, inputText: string) => {
     if (isMessageRunActive) {
@@ -738,6 +950,89 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       console.error('Failed to cancel run:', error);
     });
   }, [threadId]);
+
+  const handleOpenAttachmentPicker = useCallback(() => {
+    attachmentInputRef.current?.click();
+  }, []);
+
+  const handleRemoveAttachment = useCallback((attachmentId: string) => {
+    setPendingAttachments((prev) => {
+      const next: PendingAttachment[] = [];
+      for (const attachment of prev) {
+        if (attachment.clientId === attachmentId) {
+          revokeAttachmentPreview(attachment);
+          continue;
+        }
+        next.push(attachment);
+      }
+      return next;
+    });
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = '';
+    }
+  }, []);
+
+  const handleAttachmentInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0) {
+      return;
+    }
+
+    if (pendingAttachments.length + files.length > CHAT_ATTACHMENT_MAX_FILES) {
+      showAlert({
+        title: t('agent.addFiles'),
+        message: t('agent.tooManyAttachments', { count: CHAT_ATTACHMENT_MAX_FILES }),
+      });
+      event.target.value = '';
+      return;
+    }
+
+    const existingTotalBytes = pendingAttachments.reduce((sum, attachment) => sum + attachment.size, 0);
+    let nextTotalBytes = existingTotalBytes;
+    const nextAttachments: PendingAttachment[] = [];
+
+    for (const file of files) {
+      const mimeType = (file.type || '').toLowerCase();
+      if (!isSupportedAttachmentMimeType(mimeType)) {
+        showAlert({
+          title: t('agent.addFiles'),
+          message: t('agent.unsupportedAttachmentType', { filename: file.name || 'file' }),
+        });
+        continue;
+      }
+
+      if (file.size > CHAT_ATTACHMENT_MAX_FILE_BYTES) {
+        showAlert({
+          title: t('agent.addFiles'),
+          message: t('agent.attachmentTooLarge', {
+            filename: file.name || 'file',
+            size: formatAttachmentSize(CHAT_ATTACHMENT_MAX_FILE_BYTES),
+          }),
+        });
+        continue;
+      }
+
+      nextTotalBytes += file.size;
+      if (nextTotalBytes > CHAT_ATTACHMENT_MAX_TOTAL_BYTES) {
+        nextAttachments.forEach((attachment) => revokeAttachmentPreview(attachment));
+        showAlert({
+          title: t('agent.addFiles'),
+          message: t('agent.attachmentTotalTooLarge', {
+            size: formatAttachmentSize(CHAT_ATTACHMENT_MAX_TOTAL_BYTES),
+          }),
+        });
+        event.target.value = '';
+        return;
+      }
+
+      nextAttachments.push(createPendingAttachment(file));
+    }
+
+    if (nextAttachments.length > 0) {
+      setPendingAttachments((prev) => [...prev, ...nextAttachments]);
+    }
+    event.target.value = '';
+  }, [pendingAttachments, t]);
 
   const { commitDecisions, commitDecisionsAndPause } = useToolCallDecisions(threadId ?? null);
 
@@ -1026,12 +1321,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
             : false;
           const translating = Boolean(translatingByMessageId[message.source.id]);
           const isEditing = editingMessageId === message.source.id;
+          const hasAttachments = message.source.attachments.length > 0;
           const primaryEntry = message.source.data[primaryLanguage];
           const primaryPlainContent = collapseContent(
             primaryEntry?.contentParts ?? message.chatMessage.contentParts,
           );
 
-          if (isSameRoleAsPrevious && !isStreamingMessage && !primaryPlainContent) {
+          if (isSameRoleAsPrevious && !isStreamingMessage && !primaryPlainContent && !hasAttachments) {
             const detail = message.chatMessage.reasoning_detail as { meta?: { thinking_display?: string }; data?: Record<string, unknown> } | undefined;
             const path = detail?.meta?.thinking_display?.trim();
             const thinkingValue = path && detail?.data ? getByDotPath(detail.data, path) : undefined;
@@ -1057,6 +1353,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                       reasoningDetail={message.chatMessage.reasoning_detail as any}
                       isStreaming={isStreamingMessage}
                     />
+                  )}
+
+                  {hasAttachments && (
+                    <MessageAttachmentBlock attachments={message.source.attachments} />
                   )}
 
                   {!isEditing && (primaryPlainContent || isStreamingMessage) && (
@@ -1255,6 +1555,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
           isMessageRunActive={isMessageRunActive}
           isSendBlocked={sendBlockingState.blocked}
           sendBlockedReason={sendBlockedReason}
+          pendingAttachments={pendingAttachments}
+          fileInputRef={attachmentInputRef}
+          onOpenAttachmentPicker={handleOpenAttachmentPicker}
+          onFileInputChange={handleAttachmentInputChange}
+          onRemoveAttachment={handleRemoveAttachment}
           onSubmit={handleSubmitFromInput}
           onStop={handleStop}
         />

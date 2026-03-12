@@ -18,6 +18,7 @@ from ..models.db_models import (
     ManuscriptImage,
     Organization,
     Outline,
+    RunMessageAttachmentModel,
     StoryObjectAsset,
     Character,
 )
@@ -237,6 +238,29 @@ def delete_assets_with_files(
 def delete_project_assets_with_files(db: Session, *, project_id: UUID) -> List[UUID]:
     assets = db.query(Asset).filter(Asset.project_id == project_id).all()
     return delete_assets_with_files(db, assets=assets, scrub_references_in_project_id=project_id)
+
+
+def delete_chat_attachments_with_files(
+    db: Session,
+    *,
+    attachments: Sequence[RunMessageAttachmentModel],
+) -> List[UUID]:
+    deleted_ids: List[UUID] = [attachment.id for attachment in attachments if isinstance(attachment.id, UUID)]
+    for attachment in attachments:
+        storage_key = str(attachment.storage_key or "").strip()
+        if storage_key:
+            storage_service.delete_asset_files(storage_key)
+        db.delete(attachment)
+    return deleted_ids
+
+
+def delete_project_chat_attachments_with_files(db: Session, *, project_id: UUID) -> List[UUID]:
+    attachments = (
+        db.query(RunMessageAttachmentModel)
+        .filter(RunMessageAttachmentModel.project_id == project_id)
+        .all()
+    )
+    return delete_chat_attachments_with_files(db, attachments=attachments)
 
 
 def get_manuscript_indexed_asset_ids(db: Session, *, manuscript_id: UUID) -> Set[UUID]:
