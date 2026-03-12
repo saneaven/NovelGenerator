@@ -31,18 +31,21 @@ async def fit_to_context_window(
     conversation: list[dict],
     context_window_tokens: int,
     rebuild_memory_cb: Callable[[list[dict]], Awaitable[tuple[list[dict], str | None]]] | None = None,
-    count_tokens_cb: Callable[[str], Awaitable[int]] | None = None,
+    count_tokens_cb: Callable[[str, list[dict]], Awaitable[int]] | None = None,
 ) -> tuple[list[dict], str | None]:
     if context_window_tokens <= 0:
         return conversation, None
 
-    counter = count_tokens_cb or _count_tokens_fallback
+    async def _fallback_counter(current_system_prompt: str, current_conversation: list[dict]) -> int:
+        serialized = _conversation_to_text(current_system_prompt, current_conversation)
+        return await _count_tokens_fallback(serialized)
+
+    counter = count_tokens_cb or _fallback_counter
     memory_prompt: str | None = None
     current = list(conversation)
 
     for _ in range(8):
-        serialized = _conversation_to_text(system_prompt, current)
-        total_tokens = await counter(serialized)
+        total_tokens = await counter(system_prompt, current)
         if total_tokens <= context_window_tokens:
             return current, memory_prompt
 

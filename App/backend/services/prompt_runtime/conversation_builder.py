@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from ...models.db_models import RunMessageAttachmentModel, RunMessageModel, RunToolCallModel
+from ...providers.multimodal import attachment_to_content_part
 
 
 TERMINAL_TOOL_STATUSES = {"applied", "failed", "rejected"}
@@ -39,17 +40,6 @@ def _normalize_content_parts(entry: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         out.append({"type": "content", "text": text})
     return out
-
-
-def _attachment_to_content_part(attachment: RunMessageAttachmentModel) -> dict[str, Any]:
-    base = {
-        "mime_type": str(attachment.mime_type or "").strip(),
-        "filename": str(attachment.original_filename or "").strip(),
-        "storage_key": str(attachment.storage_key or "").strip(),
-    }
-    if attachment.kind == "image":
-        return {"type": "image", **base}
-    return {"type": "file", **base}
 
 
 def _to_xml_string(root: ET.Element) -> str:
@@ -230,7 +220,7 @@ def build_from_runs(
         if row.role in {"system", "user", "assistant"}:
             content_parts = _normalize_content_parts(entry)
             content_parts.extend(
-                _attachment_to_content_part(attachment)
+                attachment_to_content_part(attachment)
                 for attachment in attachments_by_message.get(row.id, [])
             )
 

@@ -6,7 +6,8 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from ...models.db_models import RunMessageModel, RunToolCallModel
+from ...models.db_models import RunMessageAttachmentModel, RunMessageModel, RunToolCallModel
+from ...providers.multimodal import attachment_to_content_part
 from ..token_count_service import count_text_tokens
 
 
@@ -118,21 +119,64 @@ def tool_call_result_text(tool_call: RunToolCallModel) -> str:
     return str(tool_call.status or "")
 
 
-def serialize_active_message_for_budget(
+def _tool_result_payload(tool_call: RunToolCallModel) -> dict[str, Any] | None:
+    result_text = tool_call_result_text(tool_call).strip()
+    if not result_text:
+        return None
+    tool_call_id = str(getattr(tool_call, "llm_call_id", "") or "").strip() or str(tool_call.id)
+    return {
+        "tool_call_id": tool_call_id,
+        "tool_name": str(tool_call.tool_name or "").strip() or "tool_result",
+        "content": result_text,
+    }
+
+
+def build_active_messages_for_budget(
     *,
     message: RunMessageModel,
     language: str,
     tool_calls: list[RunToolCallModel],
-) -> str:
+    attachments: list[RunMessageAttachmentModel],
+) -> list[dict[str, Any]]:
     text = extract_message_content_text(message.data if isinstance(message.data, dict) else {}, language)
-    chunks: list[str] = [f"role={message.role}"]
+    content_parts: list[dict[str, Any]] = []
     if text:
-        chunks.append(text)
-    for tool_call in tool_calls:
-        chunks.append(f"tool={tool_call.tool_name}")
-        chunks.append(f"status={tool_call.status}")
-        chunks.append(tool_call_result_text(tool_call))
-    return "\n".join(chunks)
+        content_parts.append({"type": "content", "text": text})
+    content_parts.extend(
+        attachment_to_content_part(attachment)
+        for attachment in attachments
+        if isinstance(attachment, RunMessageAttachmentModel)
+    )
+
+    msg: dict[str, Any] = {
+        "role": str(message.role or ""),
+        "content_parts": content_parts,
+    }
+    if tool_calls:
+        msg["tool_calls"] = [
+            {
+                "id": str(getattr(tool_call, "llm_call_id", "") or tool_call.id),
+                "type": "function",
+                "function": {
+                    "name": str(tool_call.tool_name or ""),
+                    "arguments": json.dumps(
+                        tool_call.arguments if isinstance(tool_call.arguments, dict) else {},
+                        ensure_ascii=False,
+                    ),
+                },
+            }
+            for tool_call in tool_calls
+        ]
+
+    out = [msg]
+    tool_results = [
+        payload
+        for tool_call in tool_calls
+        if (payload := _tool_result_payload(tool_call)) is not None
+    ]
+    if tool_results:
+        out.append({"role": "tool_results", "content_parts": [], "tool_results": tool_results})
+    return out
 
 
 def build_archive_payload_for_message(

@@ -57,6 +57,7 @@ async def count_tokens_claude_messages(
     model: str,
     api_key: str,
     base_url: Optional[str] = None,
+    system: str | None = None,
 ) -> int:
     """Count tokens for Claude models using native Anthropic message blocks."""
     kwargs = {"api_key": api_key}
@@ -69,6 +70,7 @@ async def count_tokens_claude_messages(
         result = await client.messages.count_tokens(
             model=model,
             messages=messages,
+            **({"system": system} if isinstance(system, str) and system.strip() else {}),
         )
         return int(result.input_tokens)
     finally:
@@ -111,6 +113,7 @@ async def count_tokens_gemini_contents(
     model: str,
     api_key: str,
     base_url: Optional[str] = None,
+    config: Any = None,
 ) -> int:
     """Count tokens for Gemini models with native contents payload."""
     http_options = None
@@ -121,6 +124,7 @@ async def count_tokens_gemini_contents(
     result = client.models.count_tokens(
         model=model,
         contents=contents,
+        **({"config": config} if config is not None else {}),
     )
     return int(result.total_tokens)
 

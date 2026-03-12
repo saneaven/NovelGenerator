@@ -42,6 +42,7 @@ pyasn1-modules
 pycparser
 pydantic
 pydantic-core
+pypdf
 pygments
 pytest
 python-dotenv

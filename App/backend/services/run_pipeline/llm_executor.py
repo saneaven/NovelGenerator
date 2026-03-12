@@ -37,12 +37,12 @@ from ..storage_usage_service import (
     snapshot_run_message_row,
 )
 from ...providers.stream_retry import normalize_retry_config, stream_with_retry
-from ..token_count_service import count_message_tokens
+from ..token_count_service import count_conversation_tokens, count_message_tokens
 from ..tool_engine import tool_engine
 from ..tool_engine.contracts import ToolOffer
 from ..context_manager import fit_to_context_window
 from .contracts import ToolDeltaState
-from .text_utils import count_tokens, extract_last_texts
+from .text_utils import extract_last_texts
 from . import memory_preflight as _mem
 from . import raw_output as _raw
 
@@ -231,13 +231,17 @@ async def run_llm(
         }
         conversation.insert(0, memory_message_ref)
 
-    async def _token_counter(text: str) -> int:
-        return await count_tokens(
+    async def _conversation_token_counter(
+        current_system_prompt: str,
+        current_conversation: list[dict[str, Any]],
+    ) -> int:
+        return await count_conversation_tokens(
             db,
             user_id=run.user_id,
             provider=task_config.provider,
             model=task_config.model,
-            text=text,
+            system_prompt=current_system_prompt,
+            conversation=current_conversation,
             tokenizer_override=tokenizer_override,
         )
 
@@ -366,7 +370,7 @@ async def run_llm(
         fit_conversation,
         int(task_config.context_window_tokens or 32000),
         rebuild_memory_cb=_rebuild_memory,
-        count_tokens_cb=_token_counter,
+        count_tokens_cb=_conversation_token_counter,
     )
 
     messages = [{"role": "system", "content_parts": [{"type": "content", "text": fit_system_prompt}]}] + fit_conversation

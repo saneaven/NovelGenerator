@@ -5,7 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from ...models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thread
+from ...models.db_models import RunMessageAttachmentModel, RunMessageModel, RunModel, RunToolCallModel, Thread
 from ...providers.contracts import ProviderErrorPayload, merge_meta_payload, patch_snapshot_with_meta, MetaPayload
 from ...providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from ...providers.registry import ProviderRegistry
@@ -17,12 +17,12 @@ from ..prompt_runtime.scenario_manager import ScenarioManager
 from ..prompt_runtime.template_renderer import TemplateRenderer
 from ..settings_service import settings_service
 from ..llm_runtime_service import get_llm_runtime
+from ..token_count_service import count_message_tokens
 from ...providers.stream_retry import normalize_retry_config, stream_with_retry
 from .text_utils import (
     build_archive_payload_for_message,
-    count_tokens,
+    build_active_messages_for_budget,
     format_summary_message_content,
-    serialize_active_message_for_budget,
 )
 
 MEMORY_PREFLIGHT_MAX_ARCHIVE_LOOPS = 3
@@ -147,7 +147,18 @@ async def prepare_thread_memory_preflight(
             return
 
         assistant_ids = [msg.id for msg in active_messages if msg.role == "assistant"]
+        message_ids = [msg.id for msg in active_messages if isinstance(msg.id, UUID)]
         tool_calls_by_assistant: dict[UUID, list[RunToolCallModel]] = {}
+        attachments_by_message: dict[UUID, list[RunMessageAttachmentModel]] = {}
+        if message_ids:
+            attachment_rows = (
+                db.query(RunMessageAttachmentModel)
+                .filter(RunMessageAttachmentModel.message_id.in_(message_ids))
+                .order_by(RunMessageAttachmentModel.message_id.asc(), RunMessageAttachmentModel.sort_order.asc())
+                .all()
+            )
+            for attachment in attachment_rows:
+                attachments_by_message.setdefault(attachment.message_id, []).append(attachment)
         if assistant_ids:
             tc_rows = (
                 db.query(RunToolCallModel)
@@ -165,20 +176,25 @@ async def prepare_thread_memory_preflight(
 
         token_map: dict[UUID, int] = {}
         active_total_tokens = 0
+        count_cache: dict[str, Any] = {}
         for msg in active_messages:
-            row_text = serialize_active_message_for_budget(
+            budget_messages = build_active_messages_for_budget(
                 message=msg,
                 language=run.language,
                 tool_calls=tool_calls_by_assistant.get(msg.id, []),
+                attachments=attachments_by_message.get(msg.id, []),
             )
-            row_tokens = await count_tokens(
-                db,
-                user_id=run.user_id,
-                provider=task_config.provider,
-                model=task_config.model,
-                text=row_text,
-                tokenizer_override=tokenizer_override,
-            )
+            row_tokens = 0
+            for budget_message in budget_messages:
+                row_tokens += await count_message_tokens(
+                    db,
+                    user_id=run.user_id,
+                    provider=task_config.provider,
+                    model=task_config.model,
+                    message=budget_message,
+                    tokenizer_override=tokenizer_override,
+                    cache=count_cache,
+                )
             token_map[msg.id] = row_tokens
             active_total_tokens += row_tokens
 

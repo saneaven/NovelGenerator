@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..models.db_models import RunMessageAttachmentModel
 from ..services.chat_attachment_service import chat_attachment_service
 
 
@@ -21,6 +22,19 @@ def extract_text_content(parts: list[dict[str, Any]]) -> str:
         if isinstance(text, str) and text:
             chunks.append(text)
     return "".join(chunks)
+
+
+def attachment_to_content_part(attachment: RunMessageAttachmentModel) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "mime_type": str(attachment.mime_type or "").strip(),
+        "filename": str(attachment.original_filename or "").strip(),
+        "storage_key": str(attachment.storage_key or "").strip(),
+    }
+    if attachment.kind == "image":
+        base["width"] = int(attachment.width) if attachment.width is not None else None
+        base["height"] = int(attachment.height) if attachment.height is not None else None
+        return {"type": "image", **base}
+    return {"type": "file", **base}
 
 
 def _load_binary_part(part: dict[str, Any]) -> tuple[str, str, bytes]:
