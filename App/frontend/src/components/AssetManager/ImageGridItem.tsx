@@ -1,6 +1,7 @@
 import { memo, type RefObject } from 'react';
 import { IconButton } from '../IconButton';
 import { Star, Edit, MoreHorizontal, Trash, Info, Close, Refresh } from '../icons';
+import AuthenticatedImage from '../common/AuthenticatedImage';
 import { getAssetUrl } from '../../utils/assetUrl';
 import type { Asset, ImageRunStage, SceneAsset } from '../../api/assetService';
 import type { ImageGenerationBinding, ImageGenerationRecipe } from '../../imageRun';
@@ -181,11 +182,11 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
             )}
 
             <div className="asset-thumbnail">
-                <img
+                <AuthenticatedImage
                     src={getAssetUrl(item.asset) || ''}
                     alt={item.asset.name}
                     loading="lazy"
-                  />
+                />
             </div>
 
             <div className="asset-info">

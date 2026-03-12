@@ -25,6 +25,7 @@ import { resolveAspectRatio, resolveImageSize, useImageModelCatalog } from '../.
 import { UnifiedImageModal } from '../AssetManager';
 import UnifiedImagePromptModal, { type PromptResult, type PromptMode } from './UnifiedImagePromptModal';
 import ImageModelBrowser from './ImageModelBrowser';
+import AuthenticatedImage from '../common/AuthenticatedImage';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
 import { useJourneyStore } from '../../store/journeyStore';
@@ -1024,7 +1025,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                                 {referenceImages.map(img => (
                                     <div key={img.assetId} className="reference-image-item">
                                         {img.previewUrl && !img.missing ? (
-                                            <img src={img.previewUrl} alt="Reference" />
+                                            <AuthenticatedImage src={img.previewUrl} alt="Reference" />
                                         ) : (
                                             <div className="reference-image-missing">Missing</div>
                                         )}
@@ -1232,7 +1233,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     isOpen={showImagePicker}
                     onClose={() => setShowImagePicker(false)}
                     onSelect={(asset: Asset) => {
-                        handleImageSelected(asset.id, getAssetUrl(asset) || '');
+                        handleImageSelected(asset.id, asset.file_url || '');
                     }}
                     title="Select Reference Image"
                 />

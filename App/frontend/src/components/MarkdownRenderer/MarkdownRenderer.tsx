@@ -2,6 +2,7 @@ import React from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import AuthenticatedImage from '../common/AuthenticatedImage';
 import './MarkdownRenderer.css';
 
 interface MarkdownRendererProps {
@@ -18,10 +19,13 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({
       <Markdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
         components={{
-          table: ({ node, ...props }) => (
+          table: ({ node: _node, ...props }) => (
             <div className="md-x-scroll md-x-scroll--table">
               <table {...props} />
             </div>
+          ),
+          img: ({ node: _node, ...props }) => (
+            <AuthenticatedImage {...props} />
           ),
         }}
       >

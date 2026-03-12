@@ -1,5 +1,6 @@
 import React from 'react';
 import { BaseModal } from '../BaseModal';
+import AuthenticatedImage from '../common/AuthenticatedImage';
 import { useNotificationStore } from '../../store/notificationStore';
 import JourneyNotificationDetail from './JourneyNotificationDetail';
 
@@ -25,7 +26,7 @@ const ImageRunNotificationDetail: React.FC<{
         <div style={{ color: 'var(--color-danger, #c0392b)', fontSize: 13 }}>{warning}</div>
       ) : null}
       {imageUrl ? (
-        <img
+        <AuthenticatedImage
           src={imageUrl}
           alt={label}
           style={{ width: '100%', maxHeight: 520, objectFit: 'contain', borderRadius: 10 }}

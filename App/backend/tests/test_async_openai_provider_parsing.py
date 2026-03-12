@@ -90,3 +90,152 @@ def test_custom_openai_completion_non_template_ignores_reasoning_detail_items_wi
     )
 
     assert reasoning_detail is None
+
+
+def test_accumulate_raw_chunk_keeps_multiple_tool_calls_separate() -> None:
+    raw_accumulated: dict[str, object] = {}
+
+    AsyncOpenAIProvider._accumulate_raw_chunk(
+        raw_accumulated,
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call_basic",
+                                "type": "function",
+                                "function": {
+                                    "name": "translate_basic_info",
+                                    "arguments": '{"title":"A"}',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ]
+        },
+    )
+    AsyncOpenAIProvider._accumulate_raw_chunk(
+        raw_accumulated,
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 1,
+                                "id": "call_guidelines",
+                                "type": "function",
+                                "function": {
+                                    "name": "translate_guidelines",
+                                    "arguments": '{"authorNote":"B"}',
+                                },
+                            }
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ]
+        },
+    )
+
+    choices = raw_accumulated["choices"]
+    assert isinstance(choices, list)
+    choice = choices[0]
+    assert isinstance(choice, dict)
+    delta = choice["delta"]
+    assert isinstance(delta, dict)
+    tool_calls = delta["tool_calls"]
+    assert isinstance(tool_calls, list)
+    assert tool_calls == [
+        {
+            "index": 0,
+            "id": "call_basic",
+            "type": "function",
+            "function": {
+                "name": "translate_basic_info",
+                "arguments": '{"title":"A"}',
+            },
+        },
+        {
+            "index": 1,
+            "id": "call_guidelines",
+            "type": "function",
+            "function": {
+                "name": "translate_guidelines",
+                "arguments": '{"authorNote":"B"}',
+            },
+        },
+    ]
+    assert choice["finish_reason"] == "tool_calls"
+
+
+def test_accumulate_raw_chunk_appends_arguments_for_same_tool_call() -> None:
+    raw_accumulated: dict[str, object] = {}
+
+    AsyncOpenAIProvider._accumulate_raw_chunk(
+        raw_accumulated,
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call_character",
+                                "type": "function",
+                                "function": {
+                                    "name": "translate_story_object",
+                                    "arguments": '{"id":"char-1"',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ]
+        },
+    )
+    AsyncOpenAIProvider._accumulate_raw_chunk(
+        raw_accumulated,
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call_character",
+                                "type": "function",
+                                "function": {
+                                    "arguments": ',"type":"character"}',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ]
+        },
+    )
+
+    choices = raw_accumulated["choices"]
+    assert isinstance(choices, list)
+    choice = choices[0]
+    assert isinstance(choice, dict)
+    delta = choice["delta"]
+    assert isinstance(delta, dict)
+    tool_calls = delta["tool_calls"]
+    assert isinstance(tool_calls, list)
+    assert tool_calls == [
+        {
+            "index": 0,
+            "id": "call_character",
+            "type": "function",
+            "function": {
+                "name": "translate_story_object",
+                "arguments": '{"id":"char-1","type":"character"}',
+            },
+        }
+    ]

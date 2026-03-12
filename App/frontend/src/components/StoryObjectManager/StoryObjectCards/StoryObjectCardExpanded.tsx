@@ -7,6 +7,7 @@ import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
 import ImageTabContent from '../../AssetManager/ImageTabContent';
 import { RichTextEditor, type RichTextEditorRef } from '../../RichTextEditor';
+import AuthenticatedImage from '../../common/AuthenticatedImage';
 import type { Asset } from '../../../api/assetService';
 import { getAssetUrl } from '../../../utils/assetUrl';
 import { confirm } from '../../../store/dialogStore';
@@ -289,7 +290,7 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
             {/* Image section - plain div (no layoutId to avoid Framer Motion interference) */}
             {hasImage && mainAsset && (
                 <div className="expanded-image-section">
-                    <img
+                    <AuthenticatedImage
                         src={getAssetUrl(mainAsset) || ''}
                         alt={itemData.name}
                         className="expanded-image"

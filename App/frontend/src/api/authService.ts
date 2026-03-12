@@ -4,6 +4,7 @@
 
 import apiClient from './client';
 import type { UserCreate, UserLogin, AuthResponse, UserResponse, ProfileUpdate, PasswordChange } from './types';
+import { clearAuthenticatedImageCache } from '../utils/authenticatedImage';
 
 export const authService = {
   /**
@@ -11,6 +12,7 @@ export const authService = {
    */
   async register(data: UserCreate): Promise<AuthResponse> {
     const response = await apiClient.post<AuthResponse>('/api/v1/auth/register', data);
+    clearAuthenticatedImageCache();
     // Store the token for automatic login after registration
     apiClient.setAuthToken(response.access_token);
     return response;
@@ -21,6 +23,7 @@ export const authService = {
    */
   async login(data: UserLogin): Promise<AuthResponse> {
     const response = await apiClient.post<AuthResponse>('/api/v1/auth/login', data);
+    clearAuthenticatedImageCache();
     // Store the token
     apiClient.setAuthToken(response.access_token);
     return response;
@@ -38,6 +41,7 @@ export const authService = {
    */
   logout() {
     apiClient.clearAuthToken();
+    clearAuthenticatedImageCache();
   },
 
   /**

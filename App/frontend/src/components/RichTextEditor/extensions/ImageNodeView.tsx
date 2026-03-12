@@ -3,13 +3,13 @@
  * Shows action buttons on hover: Change, Regenerate, Delete
  */
 
-import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { NodeViewWrapper } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/core';
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
 import { Shuffle, Trash, Refresh } from '../../icons';
-import { API_BASE_URL } from '../../../api/client';
+import AuthenticatedImage from '../../common/AuthenticatedImage';
 import './ImageNodeView.css';
 
 // Storage keys for extension callbacks
@@ -36,12 +36,6 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
 
     const src = node.attrs.src as string;
     const alt = node.attrs.alt as string;
-
-    const resolvedSrc = useMemo(() => {
-        if (!src) return src;
-        if (src.startsWith('/')) return `${API_BASE_URL}${src}`;
-        return src;
-    }, [src]);
 
     // Detect touch device
     useEffect(() => {
@@ -132,9 +126,9 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
             onClick={handleClick}
             data-drag-handle
         >
-            <img
+            <AuthenticatedImage
                 ref={imageRef}
-                src={resolvedSrc}
+                src={src}
                 alt={alt || ''}
                 className="novel-inline-image"
                 draggable={false}

@@ -179,8 +179,12 @@ app.include_router(account_router)
 app.include_router(admin_router)
 
 @app.get("/storage/assets/{asset_key:path}", include_in_schema=False)
-async def proxy_asset(asset_key: str):
-    return build_asset_proxy_response(asset_key)
+async def proxy_asset(
+    asset_key: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return build_asset_proxy_response(asset_key, user_id=current_user.id, db=db)
 
 # Mount static files for resources (landing page images, etc.)
 resources_path = Path(__file__).parent / "storage" / "resources"

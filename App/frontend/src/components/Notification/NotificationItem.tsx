@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useMotionTemplate, useTransform, useMotionValue, animate, useDragControls, type MotionValue } from 'motion/react';
 import type { NotificationEntry } from '../../store/notificationStore';
+import AuthenticatedImage from '../common/AuthenticatedImage';
 import { Check, Close, ChevronRight, Trash } from '../icons';
 import { Loading } from '../common/Loading';
 
@@ -229,7 +230,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
       return (
         <div className="notification-item-thumbnail">
           {shouldLoadThumbnail ? (
-            <img
+            <AuthenticatedImage
               src={customSlot.url}
               alt={customSlot.alt || 'Preview'}
               loading="lazy"

@@ -12,7 +12,13 @@ from openai import (
 )
 
 from .base import BaseProvider
-from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent, deep_merge_concat
+from .contracts import (
+    DeltaPayload,
+    MetaPayload,
+    ProviderErrorPayload,
+    ProviderEvent,
+    merge_openai_choice_delta,
+)
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 from ..utils.outbound_http import validate_outbound_base_url
@@ -301,6 +307,40 @@ class AsyncOpenAIProvider(BaseProvider):
                 return True
         return False
 
+    @staticmethod
+    def _merge_raw_choice(target_choice: Dict[str, Any], source_choice: Dict[str, Any]) -> None:
+        delta = source_choice.get("delta")
+        if isinstance(delta, dict):
+            target_delta = target_choice.get("delta")
+            if isinstance(target_delta, dict):
+                merge_openai_choice_delta(target_delta, delta)
+            else:
+                target_choice["delta"] = copy.deepcopy(delta)
+
+        for key, value in source_choice.items():
+            if key == "delta" or value is None:
+                continue
+            target_choice[key] = copy.deepcopy(value)
+
+    @staticmethod
+    def _accumulate_raw_chunk(raw_accumulated: Dict[str, Any], raw_full: Dict[str, Any]) -> None:
+        for key, value in raw_full.items():
+            if key == "choices":
+                continue
+            if value is not None:
+                raw_accumulated[key] = copy.deepcopy(value)
+
+        for index, choice in enumerate(raw_full.get("choices", [])):
+            choices = raw_accumulated.setdefault("choices", [])
+            if index >= len(choices):
+                choices.append(copy.deepcopy(choice))
+                continue
+
+            if isinstance(choice, dict) and isinstance(choices[index], dict):
+                AsyncOpenAIProvider._merge_raw_choice(choices[index], choice)
+            else:
+                choices[index] = copy.deepcopy(choice)
+
     def _apply_thinking_parser(
         self,
         chunk: Optional[Dict],
@@ -527,22 +567,7 @@ class AsyncOpenAIProvider(BaseProvider):
                     # Accumulate full raw chunk (no filtering) for raw response
                     raw_full = chunk.model_dump()
                     if isinstance(raw_full, dict):
-                        for key, value in raw_full.items():
-                            if key == "choices":
-                                continue
-                            if value is not None:
-                                raw_accumulated[key] = value
-                        for i, choice in enumerate(raw_full.get("choices", [])):
-                            choices = raw_accumulated.setdefault("choices", [])
-                            if i >= len(choices):
-                                choices.append(copy.deepcopy(choice))
-                            else:
-                                delta = choice.get("delta")
-                                if isinstance(delta, dict):
-                                    deep_merge_concat(choices[i].setdefault("delta", {}), delta)
-                                for k, v in choice.items():
-                                    if k != "delta" and v is not None:
-                                        choices[i][k] = v
+                        self._accumulate_raw_chunk(raw_accumulated, raw_full)
 
                     _update_meta_from_chunk(chunk_dict)
                     stream_events, should_stop = _collect_events_from_chunk(chunk_dict)

@@ -17,6 +17,7 @@ import AIEditModal from '../Modal/AIEditModal';
 import VersionHistoryModal from '../Modal/VersionHistoryModal';
 import TranslationModal from '../Modal/TranslationModal';
 import { UnifiedImageModal } from '../AssetManager';
+import AuthenticatedImage from '../common/AuthenticatedImage';
 import { DropdownMenu, DropdownItem } from '../ui/DropdownMenu';
 import StringChipInput from '../ui/StringChipInput';
 import { IconButton } from '../IconButton';
@@ -293,7 +294,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
         <div className="basic-info-media">
           {coverImageUrl ? (
             <div className="media-preview">
-              <img src={coverImageUrl || ''} alt="Book Cover" className="book-cover-img" />
+              <AuthenticatedImage src={coverImageUrl || ''} alt="Book Cover" className="book-cover-img" />
               <button className="media-edit-overlay" onClick={() => setShowAssetPicker(true)}>
                 <Image size="md" />
                 <span>Change Cover</span>

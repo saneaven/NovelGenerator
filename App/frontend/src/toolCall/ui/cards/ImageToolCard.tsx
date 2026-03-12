@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import AuthenticatedImage from '../../../components/common/AuthenticatedImage';
 import { TextButton } from '../../../components/TextButton';
 import { assetService } from '../../../api/assetService';
 import { useImageRunStore } from '../../../imageRun';
@@ -64,7 +65,7 @@ function PreviewIsland(props: {
     <div className="function-call-image-panel">
       {imageUrl ? (
         <div className="function-call-image-preview">
-          <img src={imageUrl} alt={alt} />
+          <AuthenticatedImage src={imageUrl} alt={alt} />
         </div>
       ) : (
         <div className="function-call-image-preview function-call-image-preview--placeholder">

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 import importlib
 import os
 import sys
@@ -10,7 +11,11 @@ from uuid import uuid4
 
 import pytest
 from cryptography.fernet import Fernet
+from fastapi import HTTPException
+from fastapi.responses import PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from PIL import Image
+from starlette.requests import Request
 
 os.environ.setdefault("DEFAULT_STORAGE_QUOTA_BYTES", "0")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
@@ -19,6 +24,10 @@ os.environ.setdefault("CREDENTIAL_ENCRYPTION_KEY", Fernet.generate_key().decode(
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+
+from App.backend.auth import security
+from App.backend.models.db_models import Asset, Project, User
 
 
 def _png_bytes(*, size: tuple[int, int] = (4, 3), color: tuple[int, int, int, int] = (12, 34, 56, 255)) -> bytes:
@@ -39,6 +48,108 @@ def _reload_storage_service_module(monkeypatch: pytest.MonkeyPatch, *, backend_n
     import App.backend.services.storage_service as storage_service_module
 
     return importlib.reload(storage_service_module)
+
+
+def _extract_filter_value(criteria: list[object], column_name: str):
+    for criterion in criteria:
+        left = getattr(criterion, "left", None)
+        right = getattr(criterion, "right", None)
+
+        if getattr(left, "name", None) == column_name and hasattr(right, "value"):
+            return right.value
+        if getattr(right, "name", None) == column_name and hasattr(left, "value"):
+            return left.value
+
+    return None
+
+
+class _FakeQuery:
+    def __init__(self, db: "_FakeDb", model: type[object]) -> None:
+        self._db = db
+        self._model = model
+        self._criteria: list[object] = []
+
+    def join(self, *_args, **_kwargs) -> "_FakeQuery":
+        return self
+
+    def filter(self, *criteria) -> "_FakeQuery":
+        self._criteria.extend(criteria)
+        return self
+
+    def first(self):
+        if self._model is User:
+            user_id = _extract_filter_value(self._criteria, "id")
+            return self._db.users_by_id.get(user_id)
+
+        if self._model is Asset:
+            file_path = _extract_filter_value(self._criteria, "file_path")
+            owner_id = _extract_filter_value(self._criteria, "user_id")
+            asset = self._db.assets_by_path.get(file_path)
+            if asset is None:
+                return None
+
+            project_owner = self._db.project_owner_by_id.get(asset.project_id)
+            if project_owner != owner_id:
+                return None
+            return asset
+
+        raise AssertionError(f"Unsupported model query: {self._model!r}")
+
+
+class _FakeDb:
+    def __init__(self, *, users: list[User], projects: list[Project], assets: list[Asset]) -> None:
+        self.users_by_id = {user.id: user for user in users}
+        self.project_owner_by_id = {project.id: project.user_id for project in projects}
+        self.assets_by_path = {str(asset.file_path): asset for asset in assets}
+
+    def query(self, model: type[object]) -> _FakeQuery:
+        return _FakeQuery(self, model)
+
+
+def _make_fake_db(*, asset_path: str) -> tuple[_FakeDb, User, User, Asset]:
+    owner = User(
+        id=uuid4(),
+        email="owner@example.com",
+        username="owner",
+        password_hash="hashed",
+        is_active=True,
+        is_verified=True,
+    )
+    intruder = User(
+        id=uuid4(),
+        email="intruder@example.com",
+        username="intruder",
+        password_hash="hashed",
+        is_active=True,
+        is_verified=True,
+    )
+    project = Project(
+        id=uuid4(),
+        user_id=owner.id,
+        name="Protected Project",
+        description=None,
+    )
+    asset = Asset(
+        id=uuid4(),
+        project_id=project.id,
+        name="scene",
+        file_path=asset_path,
+        mime_type="image/avif",
+    )
+    db = _FakeDb(users=[owner, intruder], projects=[project], assets=[asset])
+    return db, owner, intruder, asset
+
+
+class _TestCachedStaticFiles(StaticFiles):
+    def __init__(self, *args, cache_control: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cache_control = cache_control
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code in (200, 304):
+            response.headers.setdefault("cache-control", self.cache_control)
+        return response
 
 
 def test_storage_service_selects_local_backend_from_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
@@ -127,11 +238,87 @@ def test_proxy_asset_serves_local_storage(monkeypatch: pytest.MonkeyPatch, tmp_p
 
     import App.backend.services.asset_proxy as asset_proxy_module
 
-    response = asset_proxy_module.build_asset_proxy_response(storage_key, storage=storage)
+    fake_db, owner, _intruder, _asset = _make_fake_db(asset_path=storage_key)
+    response = asset_proxy_module.build_asset_proxy_response(
+        storage_key,
+        user_id=owner.id,
+        db=fake_db,
+        storage=storage,
+    )
 
     assert response.status_code == 200
     assert storage.read_asset_file(storage_key)
     assert response.media_type == "image/avif"
     assert response.headers["content-type"].startswith("image/avif")
-    assert response.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert response.headers["cache-control"] == "private, no-store"
+    assert response.headers["vary"] == "Authorization"
     assert int(response.headers["content-length"]) == file_size
+
+
+def test_proxy_asset_hides_unauthorized_asset_as_not_found(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    storage_service_module = _reload_storage_service_module(monkeypatch, backend_name="local", tmp_path=tmp_path)
+    storage = storage_service_module.storage_service
+    storage_key, _mime_type, _width, _height, _file_size = storage.save_uploaded_file(
+        _png_bytes(size=(5, 5)),
+        "scene.png",
+        uuid4(),
+    )
+
+    import App.backend.services.asset_proxy as asset_proxy_module
+
+    fake_db, _owner, intruder, _asset = _make_fake_db(asset_path=storage_key)
+
+    with pytest.raises(asset_proxy_module.HTTPException) as exc_info:
+        asset_proxy_module.build_asset_proxy_response(
+            storage_key,
+            user_id=intruder.id,
+            db=fake_db,
+            storage=storage,
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Asset not found"
+
+
+def test_http_bearer_rejects_missing_authorization_header() -> None:
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/storage/assets/originals/protected.avif",
+            "headers": [],
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(security(request))
+
+    assert exc_info.value.status_code in {401, 403}
+
+
+def test_storage_resources_remain_public(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    static_files = _TestCachedStaticFiles(
+        directory=str(tmp_path),
+        cache_control="public, max-age=1800",
+    )
+
+    async def fake_get_response(self, path: str, scope):
+        del self, path, scope
+        return PlainTextResponse("public resource")
+
+    monkeypatch.setattr(StaticFiles, "get_response", fake_get_response)
+
+    response = asyncio.run(
+        static_files.get_response(
+            "sample.txt",
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/storage/resources/sample.txt",
+                "headers": [],
+            },
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=1800"

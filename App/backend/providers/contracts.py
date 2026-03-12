@@ -33,6 +33,141 @@ def deep_merge_concat(target: Dict[str, Any], source: Dict[str, Any]) -> None:
             target[key] = copy.deepcopy(value)
 
 
+def _tool_call_id(value: Any) -> str | None:
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _tool_call_index(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return int(value)
+    return None
+
+
+def _merge_openai_tool_call(target_call: Dict[str, Any], source_call: Dict[str, Any]) -> None:
+    source_index = _tool_call_index(source_call.get("index"))
+    if source_index is not None:
+        target_call["index"] = source_index
+
+    source_id = _tool_call_id(source_call.get("id"))
+    if source_id is not None:
+        target_call["id"] = source_id
+
+    source_type = source_call.get("type")
+    if source_type is not None:
+        target_call["type"] = copy.deepcopy(source_type)
+
+    source_function = source_call.get("function")
+    if isinstance(source_function, dict):
+        target_function = target_call.get("function")
+        if not isinstance(target_function, dict):
+            target_function = {}
+            target_call["function"] = target_function
+
+        source_name = source_function.get("name")
+        if isinstance(source_name, str) and source_name:
+            target_function["name"] = source_name
+
+        source_arguments = source_function.get("arguments")
+        if isinstance(source_arguments, str) and source_arguments:
+            existing_arguments = target_function.get("arguments")
+            if isinstance(existing_arguments, str):
+                target_function["arguments"] = existing_arguments + source_arguments
+            else:
+                target_function["arguments"] = source_arguments
+
+        for key, value in source_function.items():
+            if key in {"name", "arguments"} or value is None:
+                continue
+            target_function[key] = copy.deepcopy(value)
+
+    for key, value in source_call.items():
+        if key in {"index", "id", "type", "function"} or value is None:
+            continue
+        target_call[key] = copy.deepcopy(value)
+
+
+def merge_openai_tool_call_deltas(target: List[Any], source: List[Any]) -> None:
+    if not isinstance(target, list) or not isinstance(source, list):
+        return
+
+    by_id: Dict[str, Dict[str, Any]] = {}
+    by_index: Dict[int, Dict[str, Any]] = {}
+
+    def _register(call: Dict[str, Any]) -> None:
+        call_id = _tool_call_id(call.get("id"))
+        if call_id is not None:
+            by_id[call_id] = call
+        call_index = _tool_call_index(call.get("index"))
+        if call_index is not None:
+            by_index[call_index] = call
+
+    for existing in target:
+        if isinstance(existing, dict):
+            _register(existing)
+
+    for incoming in source:
+        if not isinstance(incoming, dict):
+            target.append(copy.deepcopy(incoming))
+            continue
+
+        incoming_id = _tool_call_id(incoming.get("id"))
+        incoming_index = _tool_call_index(incoming.get("index"))
+
+        existing_call = None
+        if incoming_id is not None:
+            existing_call = by_id.get(incoming_id)
+        if existing_call is None and incoming_index is not None:
+            existing_call = by_index.get(incoming_index)
+
+        if existing_call is None:
+            copied = copy.deepcopy(incoming)
+            target.append(copied)
+            _register(copied)
+            continue
+
+        _merge_openai_tool_call(existing_call, incoming)
+        _register(existing_call)
+
+    indexed_calls: List[tuple[int, int, Any]] = []
+    trailing_calls: List[tuple[int, Any]] = []
+    for position, item in enumerate(target):
+        if not isinstance(item, dict):
+            trailing_calls.append((position, item))
+            continue
+        item_index = _tool_call_index(item.get("index"))
+        if item_index is None:
+            trailing_calls.append((position, item))
+            continue
+        indexed_calls.append((item_index, position, item))
+
+    target[:] = [item for _, _, item in sorted(indexed_calls, key=lambda entry: (entry[0], entry[1]))]
+    target.extend(item for _, item in trailing_calls)
+
+
+def merge_openai_choice_delta(target: Dict[str, Any], source: Dict[str, Any]) -> None:
+    if not isinstance(source, dict):
+        return
+
+    source_copy = copy.deepcopy(source)
+    source_tool_calls = source_copy.pop("tool_calls", None)
+
+    if isinstance(source_tool_calls, list):
+        target_tool_calls = target.get("tool_calls")
+        if isinstance(target_tool_calls, list):
+            merge_openai_tool_call_deltas(target_tool_calls, source_tool_calls)
+        else:
+            target["tool_calls"] = copy.deepcopy(source_tool_calls)
+    elif source_tool_calls is not None:
+        target["tool_calls"] = copy.deepcopy(source_tool_calls)
+
+    if source_copy:
+        deep_merge_concat(target, source_copy)
+
+
 @dataclass
 class DeltaPayload:
     content_delta: Optional[str] = None

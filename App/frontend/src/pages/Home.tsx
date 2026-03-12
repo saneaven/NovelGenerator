@@ -10,6 +10,7 @@ import SettingsModal from '../components/SettingsModal/SettingsModal';
 import { IconButton } from '../components/IconButton';
 import { Settings, Logout, Close, Plus, Upload } from '../components/icons';
 import { Loading } from '../components/common/Loading';
+import AuthenticatedImage from '../components/common/AuthenticatedImage';
 import BrandLogo from '../components/common/BrandLogo';
 import { confirm, alert as showAlert } from '../store/dialogStore';
 
@@ -198,7 +199,7 @@ const Home: React.FC = () => {
               >
                 <div className="project-card-image-wrapper">
                   {project.cover_asset ? (
-                    <img src={getAssetUrl(project.cover_asset) || ''} alt={project.name} loading="lazy" />
+                    <AuthenticatedImage src={getAssetUrl(project.cover_asset) || ''} alt={project.name} loading="lazy" />
                   ) : (
                     <div className="placeholder-cover" style={{ backgroundColor: 'var(--color-surface-muted)' }}>
                       <span className="project-initial">{project.name.charAt(0)}</span>

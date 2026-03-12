@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ToggleSwitch from '../../../components/common/ToggleSwitch';
+import AuthenticatedImage from '../../../components/common/AuthenticatedImage';
 import { NumberInput } from '../../../components/ui/NumberInput';
 import TextButton from '../../../components/TextButton/TextButton';
 import { getAssetUrl } from '../../../utils/assetUrl';
@@ -673,7 +674,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
                       onChange={(e) => handleExportToggleSelected(a.asset_id, e.target.checked)}
                     />
                   )}
-                  <img
+                  <AuthenticatedImage
                     className="workspace-config-thumb"
                     src={getAssetUrl(a) || ''}
                     alt={a.name}
@@ -839,7 +840,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
                     checked={checked}
                     onChange={(e) => handleToggleSelected(c.asset_id, e.target.checked)}
                   />
-                  <img
+                  <AuthenticatedImage
                     className="workspace-config-thumb"
                     src={getAssetUrl(c) || ''}
                     alt={c.name}

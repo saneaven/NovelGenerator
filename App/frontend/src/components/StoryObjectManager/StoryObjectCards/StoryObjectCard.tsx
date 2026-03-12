@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { MarkdownRenderer } from '../../MarkdownRenderer';
 import { IconButton } from '../../IconButton';
 import { Expand } from '../../icons';
+import AuthenticatedImage from '../../common/AuthenticatedImage';
 import { useFitText } from '../../../hooks/useFitText';
 import type { SpanType } from '../../../hooks/useCardSpanType';
 import './StoryObjectCards.css';
@@ -152,7 +153,7 @@ const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
       {/* Image */}
       {hasImage && (
         <div className="story-object-card__image-container">
-          <img
+          <AuthenticatedImage
             src={imageUrl || ''}
             alt={name}
             className="story-object-card__image"

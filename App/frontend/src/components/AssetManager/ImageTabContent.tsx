@@ -5,6 +5,7 @@ import { ImageGenerationModal } from '../ImageGeneration';
 import ImagePromptManager from './ImagePromptManager';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
+import AuthenticatedImage from '../common/AuthenticatedImage';
 import { assetService, formatStyledPrompt, type Asset, type SceneAsset, type StoryObjectAsset } from '../../api/assetService';
 import { getAssetUrl } from '../../utils/assetUrl';
 import { Folder, AIAssistMini, Close } from '../icons';
@@ -814,7 +815,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                         </div>
                         <div className="success-modal-body">
                             <div className="success-image-preview">
-                                <img
+                                <AuthenticatedImage
                                     src={getAssetUrl(successModalAsset) || ''}
                                     alt="Preview"
                                 />
@@ -851,7 +852,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                         </div>
                         <div className="asset-detail-body">
                             <div className="asset-detail-image">
-                                <img
+                                <AuthenticatedImage
                                     src={getAssetUrl(detailAsset) || ''}
                                     alt={detailAsset.name}
                                 />
