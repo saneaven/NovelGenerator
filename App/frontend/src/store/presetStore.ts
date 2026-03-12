@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { presetService } from '../api/presetService';
+import { useMcpStore } from './mcpStore';
 import { useSettingsStore } from './settingsStore';
 import { useVariableStore } from './variableStore';
 import { useSubAgentStore } from './subAgentStore';
@@ -103,6 +104,7 @@ export const usePresetStore = create<PresetStore>()((set, get) => ({
 
       // 6. Reload sub agents for new preset
       await useSubAgentStore.getState().loadSubAgents();
+      useMcpStore.getState().reset();
 
     } catch (error) {
       set({
@@ -269,11 +271,14 @@ export const usePresetStore = create<PresetStore>()((set, get) => ({
 
   clearError: () => set({ error: null }),
 
-  reset: () => set({
-    presets: [],
-    activePresetId: null,
-    isLoading: false,
-    error: null,
-    isInitialized: false,
-  }),
+  reset: () => {
+    useMcpStore.getState().reset();
+    set({
+      presets: [],
+      activePresetId: null,
+      isLoading: false,
+      error: null,
+      isInitialized: false,
+    });
+  },
 }));

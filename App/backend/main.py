@@ -91,6 +91,7 @@ from .routes.variable_routes import router as variable_router
 
 # Preset management routes
 from .routes.preset_routes import router as preset_router
+from .routes.mcp_routes import router as mcp_router
 from .routes.sub_agent_routes import router as sub_agent_router
 from .routes.thread_routes import router as thread_router
 from .routes.notification_routes import router as notification_router
@@ -168,6 +169,7 @@ app.include_router(variable_router)
 
 # Include preset management router
 app.include_router(preset_router)
+app.include_router(mcp_router)
 app.include_router(sub_agent_router)
 app.include_router(thread_router)
 app.include_router(notification_router)

@@ -29,6 +29,7 @@ jiter
 mako
 markupsafe
 mistune
+mcp
 openai
 packaging
 partial-json-parser

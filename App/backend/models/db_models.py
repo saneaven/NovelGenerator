@@ -185,6 +185,7 @@ class PromptPreset(Base):
     fragments = relationship("PromptFragment", back_populates="preset", cascade="all, delete-orphan")
     variables = relationship("PromptVariable", back_populates="preset", cascade="all, delete-orphan")
     sub_agents = relationship("SubAgentDefinitionModel", back_populates="preset", cascade="all, delete-orphan")
+    mcp_servers = relationship("McpServerModel", back_populates="preset", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint('user_id', 'name', name='uq_preset_user_name'),
@@ -252,6 +253,8 @@ class SubAgentDefinitionModel(Base):
     allowed_tool_names = Column(JSONB, nullable=False)
     # UUID list of sub_agent_definitions.id that this Sub Agent is allowed to call.
     allowed_sub_agent_ids = Column(JSONB, nullable=False)
+    # UUID list of mcp_servers.id that this Sub Agent is allowed to use.
+    allowed_mcp_server_ids = Column(JSONB, nullable=False, default=list)
 
     # If true, use llm_config_override for this Sub Agent; otherwise inherit the global config.
     use_custom_llm_config = Column(Boolean, default=False, nullable=False)
@@ -269,6 +272,79 @@ class SubAgentDefinitionModel(Base):
         UniqueConstraint("preset_id", "agent_name", name="uq_sub_agent_per_preset"),
         Index("idx_sub_agent_preset", "preset_id"),
     )
+
+
+# ============================================================================
+# MCP SERVERS (PER PRESET)
+# ============================================================================
+
+class McpServerModel(Base):
+    """MCP server definition stored per prompt preset."""
+    __tablename__ = "mcp_servers"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    preset_id = Column(UUID(as_uuid=True), ForeignKey("prompt_presets.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    server_key = Column(String(64), nullable=False)
+    display_name = Column(String(200), nullable=False)
+    server_url = Column(Text, nullable=False)
+    enabled = Column(Boolean, default=True, nullable=False)
+    allow_agent_mode = Column(Boolean, default=True, nullable=False)
+    allow_plan_mode = Column(Boolean, default=True, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+    preset = relationship("PromptPreset", back_populates="mcp_servers")
+    secret = relationship(
+        "McpServerSecretModel",
+        back_populates="server",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    snapshot = relationship(
+        "McpServerSnapshotModel",
+        back_populates="server",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("preset_id", "server_key", name="uq_mcp_server_preset_key"),
+        Index("idx_mcp_servers_preset", "preset_id"),
+    )
+
+
+class McpServerSecretModel(Base):
+    """Encrypted auth payload for an MCP server."""
+    __tablename__ = "mcp_server_secrets"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    server_id = Column(UUID(as_uuid=True), ForeignKey("mcp_servers.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    auth_kind = Column(String(20), nullable=False)
+    encrypted_payload = Column(Text, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    server = relationship("McpServerModel", back_populates="secret")
+
+
+class McpServerSnapshotModel(Base):
+    """Latest synced MCP capability snapshot."""
+    __tablename__ = "mcp_server_snapshots"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    server_id = Column(UUID(as_uuid=True), ForeignKey("mcp_servers.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    protocol_version = Column(String(32), nullable=True)
+    server_info_json = Column(JSONB, nullable=False, default=dict)
+    capabilities_raw_json = Column(JSONB, nullable=False, default=dict)
+    catalog_json = Column(JSONB, nullable=False, default=dict)
+    sync_error = Column(Text, nullable=True)
+    synced_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    server = relationship("McpServerModel", back_populates="snapshot")
 
 
 # ============================================================================
@@ -765,6 +841,19 @@ class RunModel(Base):
 
     # Payload sent with the initial user message (journey params, edit targets, etc.)
     input_payload = Column(JSONB, nullable=False, default=dict)
+    mcp_request_json = Column(JSONB, nullable=False, default=lambda: {"selections": []})
+    mcp_resolution_json = Column(
+        JSONB,
+        nullable=False,
+        default=lambda: {
+            "system_overlays": [],
+            "injected_messages": [],
+            "user_message_parts": [],
+            "template_contexts": [],
+            "tool_server_ids": [],
+            "audit": [],
+        },
+    )
 
     # Sub-agent metadata (which parent tool call spawned this run)
     parent_run_id = Column(UUID(as_uuid=True), ForeignKey('runs.id', ondelete='CASCADE'), nullable=True, index=True)

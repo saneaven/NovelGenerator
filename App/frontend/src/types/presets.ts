@@ -2,6 +2,7 @@
  * Types for prompt preset management
  */
 
+import type { McpServerResponse } from './mcp';
 import type { SubAgentDefinition } from './subAgents';
 import type { ScenarioDocument } from './scenarios';
 
@@ -122,6 +123,7 @@ export interface PresetExportData {
   fragments: Record<string, Record<string, ExportFragmentData>>;
   variables: ExportVariableData[];
   sub_agents: SubAgentDefinition[];
+  mcp_servers: McpServerResponse[];
   exported_at: string;
 }
 

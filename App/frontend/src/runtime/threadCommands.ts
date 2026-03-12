@@ -142,7 +142,18 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
     seq: 0,
     seqInThread: maxSeq + 1,
     data: {
-      [lang]: { contentParts: trimmed ? [{ type: 'content', text: trimmed }] : [] },
+      [lang]: {
+        contentParts: trimmed ? [{ type: 'content', text: trimmed }] : [],
+        meta: {
+          mcpSelections: (params.request?.mcp_selections ?? []).map((selection) => ({
+            selection_id: selection.selection_id,
+            server_id: selection.server_id,
+            kind: selection.kind,
+            source_label: selection.server_id,
+            summary_label: selection.kind === 'prompt' ? selection.prompt_name : selection.resource_uri,
+          })),
+        },
+      },
     },
     attachments: requestAttachments.map((attachment, index) => toOptimisticMessageAttachment(attachment, index)),
     isStreaming: false,

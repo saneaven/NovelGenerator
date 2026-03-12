@@ -403,3 +403,53 @@
     right: var(--spacing-sm);
   }
 }
+
+.agent-composer-mcp-chips,
+.agent-message-mcp-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.agent-composer-mcp-chip,
+.agent-message-mcp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-surface-subtle);
+}
+
+.agent-composer-mcp-chip {
+  cursor: pointer;
+}
+
+.agent-composer-mcp-chip__kind,
+.agent-message-mcp-chip__kind {
+  text-transform: uppercase;
+  opacity: 0.7;
+  font-size: 11px;
+}
+
+.agent-composer-mcp-chip__remove {
+  opacity: 0.7;
+}
+
+.agent-mcp-prompt-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agent-mcp-prompt-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-mcp-prompt-modal__field input {
+  width: 100%;
+}

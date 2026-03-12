@@ -8,6 +8,8 @@ import { useSidebarStore } from '../../../store/sidebarStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useDisplayLanguageStore } from '../../../store/displayLanguageStore';
 import { useSettings } from '../../../store/settingsStore';
+import { usePresetStore } from '../../../store/presetStore';
+import { useMcpStore } from '../../../store/mcpStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useThreadStore } from '../../../store/threadStore';
 import { threadService } from '../../../api/threadService';
@@ -33,6 +35,7 @@ import { IconButton } from '../../../components/IconButton';
 import AuthenticatedImage from '../../../components/common/AuthenticatedImage';
 import AgentRunModeToggle from '../../../components/ui/AgentRunModeToggle';
 import { DropdownItem, DropdownMenu } from '../../../components/ui/DropdownMenu';
+import { BaseModal } from '../../../components/BaseModal';
 import { buildEditCardsFromToolCallMetadata } from '../../../toolCall';
 import {
   Settings,
@@ -70,6 +73,7 @@ import {
   revokeAttachmentPreview,
   type PendingAttachment,
 } from '../../../utils/threadAttachments';
+import type { McpCatalogPrompt, McpCatalogResource, McpSelection, McpSelectionAudit, McpServerResponse } from '../../../types/mcp';
 
 const EMPTY_MESSAGES: ThreadMessage[] = [];
 
@@ -104,6 +108,12 @@ interface SendBlockingState {
   unresolvedToolCalls: ToolCallBlockingSummary;
 }
 
+interface PendingPromptSelection {
+  server: McpServerResponse;
+  prompt: McpCatalogPrompt;
+  values: Record<string, string>;
+}
+
 interface AgentContextTriggerProps {
   selectedCount: number;
   totalCount: number;
@@ -118,10 +128,16 @@ interface AgentInputFormProps {
   isSendBlocked: boolean;
   sendBlockedReason?: string | null;
   pendingAttachments: PendingAttachment[];
+  selectedMcpSelections: McpSelection[];
   fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onPrepareMcpMenu: () => void;
   onOpenAttachmentPicker: () => void;
   onFileInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveAttachment: (attachmentId: string) => void;
+  onRemoveMcpSelection: (selectionId: string) => void;
+  onSelectMcpPrompt: (server: McpServerResponse, prompt: McpCatalogPrompt) => void;
+  onSelectMcpResource: (server: McpServerResponse, resource: McpCatalogResource) => void;
+  availableMcpServers: McpServerResponse[];
   onSubmit: (e: React.FormEvent, input: string) => Promise<void>;
   onStop: () => void;
 }
@@ -273,6 +289,60 @@ const PendingAttachmentCard: React.FC<{
   );
 });
 
+function selectionSummaryLabel(selection: McpSelection): string {
+  return selection.kind === 'prompt' ? selection.prompt_name : selection.resource_uri;
+}
+
+function getMessageMcpSelections(message: ThreadMessage): McpSelectionAudit[] {
+  for (const entry of Object.values(message.data)) {
+    const selections = entry.meta?.mcpSelections;
+    if (Array.isArray(selections) && selections.length > 0) {
+      return selections;
+    }
+  }
+  return [];
+}
+
+const ComposerMcpChipRow: React.FC<{
+  selections: McpSelection[];
+  onRemove: (selectionId: string) => void;
+}> = React.memo(({ selections, onRemove }) => {
+  if (selections.length === 0) return null;
+  return (
+    <div className="agent-composer-mcp-chips">
+      {selections.map((selection) => (
+        <button
+          key={selection.selection_id}
+          type="button"
+          className="agent-composer-mcp-chip"
+          onClick={() => onRemove(selection.selection_id)}
+          title="Remove MCP selection"
+        >
+          <span className="agent-composer-mcp-chip__kind">{selection.kind}</span>
+          <span className="agent-composer-mcp-chip__label">{selectionSummaryLabel(selection)}</span>
+          <span className="agent-composer-mcp-chip__remove">x</span>
+        </button>
+      ))}
+    </div>
+  );
+});
+
+const MessageMcpChipRow: React.FC<{
+  selections: McpSelectionAudit[];
+}> = React.memo(({ selections }) => {
+  if (selections.length === 0) return null;
+  return (
+    <div className="agent-message-mcp-chips">
+      {selections.map((selection) => (
+        <div key={selection.selection_id} className="agent-message-mcp-chip">
+          <span className="agent-message-mcp-chip__kind">{selection.kind}</span>
+          <span className="agent-message-mcp-chip__label">{selection.summary_label}</span>
+        </div>
+      ))}
+    </div>
+  );
+});
+
 const MessageAttachmentBlock: React.FC<{
   attachments: ThreadMessage['attachments'];
 }> = React.memo(({ attachments }) => {
@@ -333,10 +403,16 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
   isSendBlocked,
   sendBlockedReason,
   pendingAttachments,
+  selectedMcpSelections,
   fileInputRef,
+  onPrepareMcpMenu,
   onOpenAttachmentPicker,
   onFileInputChange,
   onRemoveAttachment,
+  onRemoveMcpSelection,
+  onSelectMcpPrompt,
+  onSelectMcpResource,
+  availableMcpServers,
   onSubmit,
   onStop,
 }) => {
@@ -388,9 +464,14 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
             </div>
           )}
 
+          <ComposerMcpChipRow selections={selectedMcpSelections} onRemove={onRemoveMcpSelection} />
+
           <div className="agent-input-row">
             <DropdownMenu
               align="left"
+              onOpenChange={(isOpen) => {
+                if (isOpen) onPrepareMcpMenu();
+              }}
               trigger={(
                 <IconButton
                   icon={<Plus size="sm" />}
@@ -407,6 +488,32 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
                 onClick={onOpenAttachmentPicker}
                 disabled={pendingAttachments.length >= CHAT_ATTACHMENT_MAX_FILES}
               />
+              {availableMcpServers.some((server) => server.snapshot.catalog.prompts.length > 0) && (
+                <div className="dropdown-section-label">MCP Prompts</div>
+              )}
+              {availableMcpServers.flatMap((server) => (
+                server.snapshot.catalog.prompts.map((prompt) => (
+                  <DropdownItem
+                    key={`prompt:${server.id}:${prompt.name}`}
+                    icon={<Document size="sm" />}
+                    label={`${server.display_name}: ${prompt.title || prompt.name}`}
+                    onClick={() => onSelectMcpPrompt(server, prompt)}
+                  />
+                ))
+              ))}
+              {availableMcpServers.some((server) => server.snapshot.catalog.resources.length > 0) && (
+                <div className="dropdown-section-label">MCP Resources</div>
+              )}
+              {availableMcpServers.flatMap((server) => (
+                server.snapshot.catalog.resources.map((resource) => (
+                  <DropdownItem
+                    key={`resource:${server.id}:${resource.uri}`}
+                    icon={<Document size="sm" />}
+                    label={`${server.display_name}: ${resource.title || resource.name || resource.uri}`}
+                    onClick={() => onSelectMcpResource(server, resource)}
+                  />
+                ))
+              ))}
             </DropdownMenu>
 
             <textarea
@@ -456,6 +563,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
 
   const selectedAgentId = useAgentStore((state) => state.selectedAgentByProject[projectId]);
   const selectedAgent = useAgentStore((state) => state.getSelectedAgent(projectId));
+  const activePresetId = usePresetStore((state) => state.activePresetId);
+  const { mcpServers, ensureMcpLoaded, syncMcpServer } = useMcpStore(useShallow((state) => ({
+    mcpServers: state.servers,
+    ensureMcpLoaded: state.ensureLoaded,
+    syncMcpServer: state.syncServer,
+  })));
   const markAgentViewed = useAgentUIStore((state) => state.markAgentViewed);
   const setAgentVisible = useAgentUIStore((state) => state.setAgentVisible);
   const agentVisibleState = useAgentUIStore((state) => state.agentVisibleByProject[projectId] ?? false);
@@ -479,6 +592,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   const [editingSaving, setEditingSaving] = useState(false);
   const [translatingByMessageId, setTranslatingByMessageId] = useState<Record<string, boolean>>({});
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [selectedMcpSelections, setSelectedMcpSelections] = useState<McpSelection[]>([]);
+  const [pendingPromptSelection, setPendingPromptSelection] = useState<PendingPromptSelection | null>(null);
 
   const contextDropdownRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -507,6 +622,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     })),
   );
   const liveView = useThreadLiveViewState(threadId);
+
+  const availableMcpServers = useMemo(() => (
+    mcpServers.filter((server) => (
+      server.enabled && (runMode === 'planMode' ? server.allow_plan_mode : server.allow_agent_mode)
+    ))
+  ), [mcpServers, runMode]);
 
   const totalObjectCount = useMemo(() => (
     Object.values(unifiedObjects).filter((obj) => (
@@ -753,7 +874,67 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
 
   useEffect(() => {
     clearPendingAttachments();
+    setSelectedMcpSelections([]);
+    setPendingPromptSelection(null);
   }, [selectedAgentId, threadId, clearPendingAttachments]);
+
+  const prepareMcpMenu = useCallback(() => {
+    if (!activePresetId) return;
+    void ensureMcpLoaded(activePresetId)
+      .then(() => {
+        const now = Date.now();
+        availableMcpServers.forEach((server) => {
+          if (!server.snapshot.synced_at) {
+            void syncMcpServer(activePresetId, server.id).catch(() => {});
+            return;
+          }
+          const ageMs = now - new Date(server.snapshot.synced_at).getTime();
+          if (ageMs > 10 * 60 * 1000) {
+            void syncMcpServer(activePresetId, server.id).catch(() => {});
+          }
+        });
+      })
+      .catch(() => {});
+  }, [activePresetId, availableMcpServers, ensureMcpLoaded, syncMcpServer]);
+
+  const appendMcpSelection = useCallback((selection: McpSelection) => {
+    setSelectedMcpSelections((prev) => [...prev, selection]);
+  }, []);
+
+  const removeMcpSelection = useCallback((selectionId: string) => {
+    setSelectedMcpSelections((prev) => prev.filter((item) => item.selection_id !== selectionId));
+  }, []);
+
+  const handleSelectMcpPrompt = useCallback((server: McpServerResponse, prompt: McpCatalogPrompt) => {
+    const values: Record<string, string> = {};
+    for (const arg of prompt.arguments) {
+      values[arg.name] = '';
+    }
+    if (prompt.arguments.length > 0) {
+      setPendingPromptSelection({ server, prompt, values });
+      return;
+    }
+    appendMcpSelection({
+      selection_id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `mcp-${Date.now()}`,
+      server_id: server.id,
+      kind: 'prompt',
+      prompt_name: prompt.name,
+      arguments: {},
+    });
+  }, [appendMcpSelection]);
+
+  const handleSelectMcpResource = useCallback((server: McpServerResponse, resource: McpCatalogResource) => {
+    appendMcpSelection({
+      selection_id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `mcp-${Date.now()}`,
+      server_id: server.id,
+      kind: 'resource',
+      resource_uri: resource.uri,
+    });
+  }, [appendMcpSelection]);
 
   useEffect(() => {
     if (!secondaryLanguage) return;
@@ -904,11 +1085,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
           ? { agent_focus: { manuscript_id: focusedManuscriptId } }
           : undefined,
         attachments: pendingAttachments,
+        mcp_selections: selectedMcpSelections,
       },
     });
     if (success) {
       setInput(projectId, '');
       clearPendingAttachments();
+      setSelectedMcpSelections([]);
     }
   }, [
     threadId,
@@ -918,9 +1101,43 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     selectedContextIds,
     focusedManuscriptId,
     pendingAttachments,
+    selectedMcpSelections,
     setInput,
     clearPendingAttachments,
   ]);
+
+  const handlePromptDialogValueChange = useCallback((name: string, value: string) => {
+    setPendingPromptSelection((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        values: {
+          ...current.values,
+          [name]: value,
+        },
+      };
+    });
+  }, []);
+
+  const handleConfirmPromptSelection = useCallback(() => {
+    if (!pendingPromptSelection) return;
+    const argumentsPayload: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(pendingPromptSelection.values)) {
+      if (value.trim()) {
+        argumentsPayload[key] = value;
+      }
+    }
+    appendMcpSelection({
+      selection_id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `mcp-${Date.now()}`,
+      server_id: pendingPromptSelection.server.id,
+      kind: 'prompt',
+      prompt_name: pendingPromptSelection.prompt.name,
+      arguments: argumentsPayload,
+    });
+    setPendingPromptSelection(null);
+  }, [appendMcpSelection, pendingPromptSelection]);
 
   const handleSubmitFromInput = useCallback(async (e: React.FormEvent, inputText: string) => {
     if (isMessageRunActive) {
@@ -1326,6 +1543,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
           const primaryPlainContent = collapseContent(
             primaryEntry?.contentParts ?? message.chatMessage.contentParts,
           );
+          const mcpSelections = getMessageMcpSelections(message.source);
 
           if (isSameRoleAsPrevious && !isStreamingMessage && !primaryPlainContent && !hasAttachments) {
             const detail = message.chatMessage.reasoning_detail as { meta?: { thinking_display?: string }; data?: Record<string, unknown> } | undefined;
@@ -1357,6 +1575,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
 
                   {hasAttachments && (
                     <MessageAttachmentBlock attachments={message.source.attachments} />
+                  )}
+
+                  {mcpSelections.length > 0 && (
+                    <MessageMcpChipRow selections={mcpSelections} />
                   )}
 
                   {!isEditing && (primaryPlainContent || isStreamingMessage) && (
@@ -1556,14 +1778,50 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
           isSendBlocked={sendBlockingState.blocked}
           sendBlockedReason={sendBlockedReason}
           pendingAttachments={pendingAttachments}
+          selectedMcpSelections={selectedMcpSelections}
           fileInputRef={attachmentInputRef}
+          onPrepareMcpMenu={prepareMcpMenu}
           onOpenAttachmentPicker={handleOpenAttachmentPicker}
           onFileInputChange={handleAttachmentInputChange}
           onRemoveAttachment={handleRemoveAttachment}
+          onRemoveMcpSelection={removeMcpSelection}
+          onSelectMcpPrompt={handleSelectMcpPrompt}
+          onSelectMcpResource={handleSelectMcpResource}
+          availableMcpServers={availableMcpServers}
           onSubmit={handleSubmitFromInput}
           onStop={handleStop}
         />
       </div>
+
+      <BaseModal
+        isOpen={Boolean(pendingPromptSelection)}
+        onClose={() => setPendingPromptSelection(null)}
+        title={pendingPromptSelection ? `MCP Prompt: ${pendingPromptSelection.prompt.title || pendingPromptSelection.prompt.name}` : 'MCP Prompt'}
+        size="small"
+        footer={(
+          <>
+            <TextButton variant="secondary" onClick={() => setPendingPromptSelection(null)}>
+              Cancel
+            </TextButton>
+            <TextButton variant="primary" onClick={handleConfirmPromptSelection}>
+              Add
+            </TextButton>
+          </>
+        )}
+      >
+        <div className="agent-mcp-prompt-modal">
+          {pendingPromptSelection?.prompt.arguments.map((arg) => (
+            <label key={arg.name} className="agent-mcp-prompt-modal__field">
+              <span>{arg.name}{arg.required ? ' *' : ''}</span>
+              <input
+                value={pendingPromptSelection.values[arg.name] ?? ''}
+                onChange={(event) => handlePromptDialogValueChange(arg.name, event.target.value)}
+                placeholder={arg.description || arg.name}
+              />
+            </label>
+          ))}
+        </div>
+      </BaseModal>
 
       <AgentSidebar
         projectId={projectId}

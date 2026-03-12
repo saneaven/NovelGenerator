@@ -55,6 +55,7 @@ class SubAgentService:
                 allowed_invocation_modes=i.allowed_invocation_modes,
                 allowed_tool_names=i.allowed_tool_names,
                 allowed_sub_agent_ids=i.allowed_sub_agent_ids,
+                allowed_mcp_server_ids=i.allowed_mcp_server_ids,
                 use_custom_llm_config=i.use_custom_llm_config,
                 llm_config_override=i.llm_config_override,
             )
@@ -176,6 +177,7 @@ class SubAgentService:
             allowed_invocation_modes=data.allowed_invocation_modes,
             allowed_tool_names=data.allowed_tool_names,
             allowed_sub_agent_ids=[str(x) for x in data.allowed_sub_agent_ids],
+            allowed_mcp_server_ids=[str(x) for x in data.allowed_mcp_server_ids],
             use_custom_llm_config=use_custom_llm_config,
             llm_config_override=llm_config_override,
             created_at=now,
@@ -232,6 +234,7 @@ class SubAgentService:
             allowed_invocation_modes=model.allowed_invocation_modes,
             allowed_tool_names=model.allowed_tool_names,
             allowed_sub_agent_ids=model.allowed_sub_agent_ids,
+            allowed_mcp_server_ids=model.allowed_mcp_server_ids,
             use_custom_llm_config=model.use_custom_llm_config,
             llm_config_override=model.llm_config_override,
         )
@@ -293,6 +296,8 @@ class SubAgentService:
             model.allowed_tool_names = data.allowed_tool_names
         if data.allowed_sub_agent_ids is not None:
             model.allowed_sub_agent_ids = [str(x) for x in data.allowed_sub_agent_ids]
+        if data.allowed_mcp_server_ids is not None:
+            model.allowed_mcp_server_ids = [str(x) for x in data.allowed_mcp_server_ids]
         if data.use_custom_llm_config is not None:
             model.use_custom_llm_config = bool(data.use_custom_llm_config)
         if data.llm_config_override is not None:
@@ -315,6 +320,7 @@ class SubAgentService:
             allowed_invocation_modes=model.allowed_invocation_modes,
             allowed_tool_names=model.allowed_tool_names,
             allowed_sub_agent_ids=model.allowed_sub_agent_ids,
+            allowed_mcp_server_ids=model.allowed_mcp_server_ids,
             use_custom_llm_config=model.use_custom_llm_config,
             llm_config_override=model.llm_config_override,
         )

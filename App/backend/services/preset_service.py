@@ -24,6 +24,7 @@ from ..schemas.presets import (
     ActivePresetResponse
 )
 from .folder_service import FolderService
+from .mcp import mcp_server_service
 from .default_preset_seed import NormalizedPresetSeed, load_default_preset_seed, normalize_preset_seed
 
 
@@ -173,6 +174,7 @@ class PresetService:
         fragment_count = 0
         variable_count = 0
         folder_cache: dict[str, uuid.UUID] = {}
+        mcp_id_map: dict[uuid.UUID, uuid.UUID] = {}
 
         is_default = mode == SeedApplyMode.SYSTEM_DEFAULT
         note = "System default" if is_default else "Imported"
@@ -242,6 +244,14 @@ class PresetService:
             )
             variable_count += 1
 
+        if seed.mcp_servers:
+            mcp_id_map = mcp_server_service.import_servers(
+                db,
+                user_id=user_id,
+                preset_id=preset_id,
+                items=[item.model_dump(mode="json") for item in seed.mcp_servers],
+            )
+
         id_map = {item.id: uuid.uuid4() for item in seed.sub_agents}
         for item in seed.sub_agents:
             llm_config_override = (
@@ -250,6 +260,7 @@ class PresetService:
                 else None
             )
             mapped_allowed = [str(id_map[ref]) for ref in item.allowed_sub_agent_ids if ref in id_map]
+            mapped_mcp_allowed = [str(mcp_id_map[ref]) for ref in item.allowed_mcp_server_ids if ref in mcp_id_map]
 
             db.add(
                 SubAgentDefinitionModel(
@@ -263,6 +274,7 @@ class PresetService:
                     allowed_invocation_modes=list(item.allowed_invocation_modes),
                     allowed_tool_names=list(item.allowed_tool_names),
                     allowed_sub_agent_ids=mapped_allowed,
+                    allowed_mcp_server_ids=mapped_mcp_allowed,
                     use_custom_llm_config=item.use_custom_llm_config,
                     llm_config_override=llm_config_override,
                     created_at=now,
@@ -383,8 +395,21 @@ class PresetService:
         # Copy variables
         variable_count = PresetService._copy_variables(db, user_id, source_preset_id, new_preset.id)
 
+        mcp_id_map = mcp_server_service.copy_servers(
+            db,
+            user_id=user_id,
+            source_preset_id=source_preset_id,
+            target_preset_id=new_preset.id,
+        )
+
         # Copy sub agents (definitions only; prompts are already duplicated above)
-        PresetService._copy_sub_agents(db, user_id, source_preset_id, new_preset.id)
+        PresetService._copy_sub_agents(
+            db,
+            user_id,
+            source_preset_id,
+            new_preset.id,
+            mcp_id_map=mcp_id_map,
+        )
 
         db.commit()
         db.refresh(new_preset)
@@ -537,7 +562,9 @@ class PresetService:
         db: Session,
         user_id: uuid.UUID,
         source_preset_id: uuid.UUID,
-        target_preset_id: uuid.UUID
+        target_preset_id: uuid.UUID,
+        *,
+        mcp_id_map: dict[uuid.UUID, uuid.UUID] | None = None,
     ) -> int:
         """Copy sub agent definitions to target preset (prompts are copied separately)."""
         subs = db.query(SubAgentDefinitionModel).filter(
@@ -563,6 +590,15 @@ class PresetService:
                 if ref in id_map:
                     mapped_allowed.append(str(id_map[ref]))
 
+            mapped_mcp_allowed: List[str] = []
+            for raw in s.allowed_mcp_server_ids or []:
+                try:
+                    ref = uuid.UUID(str(raw))
+                except ValueError:
+                    continue
+                if mcp_id_map and ref in mcp_id_map:
+                    mapped_mcp_allowed.append(str(mcp_id_map[ref]))
+
             db.add(SubAgentDefinitionModel(
                 id=id_map[s.id],
                 user_id=user_id,
@@ -574,6 +610,7 @@ class PresetService:
                 allowed_invocation_modes=s.allowed_invocation_modes,
                 allowed_tool_names=s.allowed_tool_names,
                 allowed_sub_agent_ids=mapped_allowed,
+                allowed_mcp_server_ids=mapped_mcp_allowed,
                 use_custom_llm_config=s.use_custom_llm_config,
                 llm_config_override=s.llm_config_override,
                 created_at=now,
@@ -913,6 +950,7 @@ class PresetService:
                 "allowed_invocation_modes": s.allowed_invocation_modes,
                 "allowed_tool_names": s.allowed_tool_names,
                 "allowed_sub_agent_ids": s.allowed_sub_agent_ids,
+                "allowed_mcp_server_ids": s.allowed_mcp_server_ids,
                 "use_custom_llm_config": s.use_custom_llm_config,
                 "llm_config_override": s.llm_config_override,
             }
@@ -930,6 +968,7 @@ class PresetService:
             "fragments": fragments_dict,
             "variables": variables_list,
             "sub_agents": sub_agents_list,
+            "mcp_servers": mcp_server_service.export_servers(db, user_id=user_id, preset_id=preset_id),
             "exported_at": datetime.utcnow().isoformat() + "Z"
         }
 

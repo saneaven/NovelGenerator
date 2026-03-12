@@ -19,6 +19,7 @@ from ..chat_attachment_service import (
 )
 from ..runtime_event_dispatcher import RuntimeEventDispatcher
 from ..settings_service import settings_service
+from ..mcp import mcp_policy_service, mcp_resolver
 from ..storage_usage_service import (
     StorageQuotaExceededError,
     apply_project_usage_deltas,
@@ -188,11 +189,13 @@ class RunPipeline:
         journey_target_ids: list[UUID],
         language: str | None,
         attachments: list[IncomingMessageAttachment] | None = None,
+        mcp_selections: list[Any] | None = None,
     ) -> RunModel:
         text = (input_text or "").strip()
         normalized_attachments = list(attachments or [])
-        if not text and not normalized_attachments:
-            raise HTTPException(status_code=400, detail="input_text or attachments are required for create run")
+        normalized_mcp_selections = list(mcp_selections or [])
+        if not text and not normalized_attachments and not normalized_mcp_selections:
+            raise HTTPException(status_code=400, detail="input_text, attachments, or mcp_selections are required for create run")
 
         normalized_input_payload = input_payload if isinstance(input_payload, dict) else {}
         latest_active_run_id: UUID | None = None
@@ -256,6 +259,7 @@ class RunPipeline:
 
                 settings = settings_service._get_settings(db, user_id)  # pylint: disable=protected-access
                 resolved_language = language or settings.main_language
+                preset_id = settings_service.get_active_preset_id(db, user_id)
 
                 latest = (
                     db.query(RunModel)
@@ -278,9 +282,34 @@ class RunPipeline:
                     context_object_ids=[str(x) for x in context_object_ids],
                     journey_target_ids=[str(x) for x in journey_target_ids],
                     input_payload=normalized_input_payload,
+                    mcp_request_json={
+                        "selections": [
+                            item.model_dump(mode="json") if hasattr(item, "model_dump") else item
+                            for item in normalized_mcp_selections
+                        ]
+                    },
                 )
                 db.add(run)
                 db.flush()
+
+                if normalized_mcp_selections:
+                    if preset_id is None:
+                        raise RuntimeError("No active preset selected")
+                    mcp_ctx = mcp_policy_service.build_runtime_context(
+                        db,
+                        user_id=user_id,
+                        preset_id=preset_id,
+                        thread=thread,
+                        run=run,
+                        input_text=text,
+                        input_payload=normalized_input_payload,
+                    )
+                    resolution = await mcp_resolver.resolve_selections(
+                        ctx=mcp_ctx,
+                        selections=normalized_mcp_selections,
+                        project_id=thread.project_id,
+                    )
+                    run.mcp_resolution_json = resolution.model_dump(mode="json")
 
                 msg = RunMessageModel(
                     thread_id=thread.id,
@@ -291,6 +320,13 @@ class RunPipeline:
                     data={
                         resolved_language: {
                             "contentParts": ([{"type": "content", "text": text}] if text else []),
+                            "meta": {
+                                "mcpSelections": (
+                                    run.mcp_resolution_json.get("audit", [])
+                                    if isinstance(run.mcp_resolution_json, dict)
+                                    else []
+                                )
+                            },
                         },
                     },
                 )

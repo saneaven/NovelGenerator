@@ -135,6 +135,14 @@
   padding: 4px;
 }
 
+.dropdown-section-label {
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.65;
+}
+
 /* When sections are used, dropdown-menu becomes a transparent container */
 .dropdown-menu:has(.dropdown-section) {
   background: transparent;

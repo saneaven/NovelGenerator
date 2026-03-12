@@ -4,11 +4,14 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from .assets import ImageRunResponse
+from .mcp import McpSelection
 
 
 class ChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     input_text: str = ""
     input_payload: dict[str, Any] | None = None
     run_mode: Literal["planMode", "agentMode"] | None = None
@@ -16,6 +19,7 @@ class ChatRequest(BaseModel):
     context_object_ids: list[UUID] = Field(default_factory=list)
     journey_target_ids: list[UUID] = Field(default_factory=list)
     language: str | None = None
+    mcp_selections: list[McpSelection] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):

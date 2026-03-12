@@ -21,6 +21,7 @@ from ...providers.content_normalization import (
 from ...providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from ...providers.registry import ProviderRegistry
 from ..memory_builder import build_memory_prompt
+from ..mcp import mcp_sync_service
 from ..prompt_runtime.output_mode import resolve_output_mode
 from ..prompt_runtime.contracts import ScenarioBundle
 from ..prompt_runtime.scenario_manager import ScenarioManager
@@ -313,6 +314,14 @@ async def run_llm(
         journey_kind=thread.journey_kind,
         payload=input_payload if isinstance(input_payload, dict) else {},
         native_output_mode=bool(getattr(settings, "native_output_mode", False)),
+    )
+
+    await mcp_sync_service.sync_stale_tool_servers(
+        db,
+        user_id=run.user_id,
+        preset_id=preset_id,
+        thread=thread,
+        run=run,
     )
 
     tool_offer = tool_engine.build_offer_for_run(

@@ -8,6 +8,7 @@ import uuid
 
 from pydantic import ValidationError
 
+from ..schemas.mcp import McpServerResponse
 from ..schemas.presets import ExportVariableData, PresetExportData
 from ..schemas.sub_agents import SubAgentDefinition
 from .prompt_runtime.scenario_validation import normalize_and_validate_scenario
@@ -39,6 +40,7 @@ class NormalizedPresetSeed:
     fragments: tuple[NormalizedFragmentSeed, ...]
     variables: tuple[ExportVariableData, ...]
     sub_agents: tuple[SubAgentDefinition, ...]
+    mcp_servers: tuple[McpServerResponse, ...]
 
 
 def normalize_preset_seed(data: PresetExportData) -> NormalizedPresetSeed:
@@ -109,6 +111,7 @@ def normalize_preset_seed(data: PresetExportData) -> NormalizedPresetSeed:
         fragments=tuple(fragments),
         variables=tuple(data.variables),
         sub_agents=source_sub_agents,
+        mcp_servers=tuple(data.mcp_servers),
     )
 
 

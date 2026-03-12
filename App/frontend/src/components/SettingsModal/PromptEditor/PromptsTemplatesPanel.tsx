@@ -17,6 +17,8 @@ import CreateVariableModal from './CreateVariableModal';
 import SubAgentListNav from './SubAgentListNav';
 import SubAgentEditor, { type SubAgentDefinitionDraft } from './SubAgentEditor';
 import CreateSubAgentModal from './CreateSubAgentModal';
+import McpServerListNav from './McpServerListNav';
+import McpServersEditor from './McpServersEditor';
 import TemplateEditor from './TemplateEditor';
 import ScenarioBlocksEditor from './ScenarioBlocksEditor';
 import EditorPanelHeader from './EditorPanelHeader';
@@ -52,7 +54,7 @@ import {
   type SaveSummary,
 } from './draftTypes';
 
-type SubTab = 'prompts' | 'fragments' | 'variables' | 'subAgents';
+type SubTab = 'prompts' | 'fragments' | 'variables' | 'subAgents' | 'mcp';
 
 interface SelectedFragment {
   folderId: string | null;
@@ -384,6 +386,8 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   const [selectedFragment, setSelectedFragment] = useState<SelectedFragment | null>(null);
   const [selectedVariableId, setSelectedVariableId] = useState<string | null>(null);
   const [selectedSubAgentId, setSelectedSubAgentId] = useState<string | null>(null);
+  const [selectedMcpServerId, setSelectedMcpServerId] = useState<string | null>(null);
+  const [isCreatingMcpServer, setIsCreatingMcpServer] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCreateVariableModal, setShowCreateVariableModal] = useState(false);
@@ -465,6 +469,8 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     setSelectedFragment(null);
     setSelectedVariableId(null);
     setSelectedSubAgentId(null);
+    setSelectedMcpServerId(null);
+    setIsCreatingMcpServer(false);
     setShowVersionHistory(false);
     setRefreshTrigger((prev) => prev + 1);
     loadFragmentContents().catch(() => undefined);
@@ -621,6 +627,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
             allowed_invocation_modes: [...d.original.allowed_invocation_modes],
             allowed_tool_names: [...d.original.allowed_tool_names],
             allowed_sub_agent_ids: [...d.original.allowed_sub_agent_ids],
+            allowed_mcp_server_ids: [...d.original.allowed_mcp_server_ids],
           },
           dirty: false,
           error: '',
@@ -708,6 +715,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
             allowed_invocation_modes: d.current.allowed_invocation_modes,
             allowed_tool_names: d.current.allowed_tool_names.filter((n) => !n.startsWith('call_')),
             allowed_sub_agent_ids: d.current.allowed_sub_agent_ids,
+            allowed_mcp_server_ids: d.current.allowed_mcp_server_ids,
             use_custom_llm_config: d.current.use_custom_llm_config,
             llm_config_override: d.current.llm_config_override,
           });
@@ -726,6 +734,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
               allowed_invocation_modes: [...updated.allowed_invocation_modes],
               allowed_tool_names: [...updated.allowed_tool_names],
               allowed_sub_agent_ids: [...updated.allowed_sub_agent_ids],
+              allowed_mcp_server_ids: [...updated.allowed_mcp_server_ids],
               use_custom_llm_config: updated.use_custom_llm_config,
               llm_config_override: updated.llm_config_override,
             };
@@ -740,6 +749,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                   allowed_invocation_modes: [...base.allowed_invocation_modes],
                   allowed_tool_names: [...base.allowed_tool_names],
                   allowed_sub_agent_ids: [...base.allowed_sub_agent_ids],
+                  allowed_mcp_server_ids: [...base.allowed_mcp_server_ids],
                 },
                 dirty: false,
                 error: '',
@@ -1094,6 +1104,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         allowed_invocation_modes: [...agent.allowed_invocation_modes],
         allowed_tool_names: [...agent.allowed_tool_names],
         allowed_sub_agent_ids: [...agent.allowed_sub_agent_ids],
+        allowed_mcp_server_ids: [...agent.allowed_mcp_server_ids],
         use_custom_llm_config: agent.use_custom_llm_config,
         llm_config_override: agent.llm_config_override,
       };
@@ -1106,6 +1117,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
           allowed_invocation_modes: [...base.allowed_invocation_modes],
           allowed_tool_names: [...base.allowed_tool_names],
           allowed_sub_agent_ids: [...base.allowed_sub_agent_ids],
+          allowed_mcp_server_ids: [...base.allowed_mcp_server_ids],
         },
         dirty: false,
         error: '',
@@ -1226,17 +1238,26 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       setSelectedFragment(null);
       setSelectedVariableId(null);
       setSelectedSubAgentId(null);
+      setIsCreatingMcpServer(false);
     } else if (newTab === 'fragments') {
       setSelectedPrompt(null);
       setSelectedVariableId(null);
       setSelectedSubAgentId(null);
+      setIsCreatingMcpServer(false);
+    } else if (newTab === 'variables') {
+      setSelectedPrompt(null);
+      setSelectedFragment(null);
+      setSelectedSubAgentId(null);
+      setIsCreatingMcpServer(false);
     } else if (newTab === 'subAgents') {
       setSelectedPrompt(null);
       setSelectedFragment(null);
       setSelectedVariableId(null);
+      setIsCreatingMcpServer(false);
     } else {
       setSelectedPrompt(null);
       setSelectedFragment(null);
+      setSelectedVariableId(null);
       setSelectedSubAgentId(null);
     }
   };
@@ -1279,7 +1300,8 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     (subTab === 'prompts' && selectedPrompt) ||
     (subTab === 'fragments' && selectedFragment) ||
     subTab === 'variables' ||
-    subTab === 'subAgents';
+    subTab === 'subAgents' ||
+    subTab === 'mcp';
 
   const showEditorHeader = subTab === 'prompts' || subTab === 'fragments';
 
@@ -1771,6 +1793,26 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                   />
                 )}
 
+                {subTab === 'mcp' && (
+                  <McpServersEditor
+                    selectedId={selectedMcpServerId}
+                    isCreatingNew={isCreatingMcpServer}
+                    onCreated={(serverId) => {
+                      setSelectedMcpServerId(serverId);
+                      setIsCreatingMcpServer(false);
+                    }}
+                    onDeleted={(serverId) => {
+                      setIsCreatingMcpServer(false);
+                      setSelectedMcpServerId((prev) => (prev === serverId ? null : prev));
+                    }}
+                    onCancelCreate={() => {
+                      setIsCreatingMcpServer(false);
+                    }}
+                    isSidebarCollapsed={isSidebarCollapsed}
+                    onToggleSidebar={toggleSidebar}
+                  />
+                )}
+
                 {!hasSelection && (
                   <div className="empty-state">
                     <div className="empty-state__icon">
@@ -1830,6 +1872,12 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
               >
                 {t('settings.promptEditor.subAgents')}
               </button>
+              <button
+                className={`sidebar-toggle__btn ${subTab === 'mcp' ? 'sidebar-toggle__btn--active' : ''}`}
+                onClick={() => handleSubTabChange('mcp')}
+              >
+                MCP
+              </button>
             </div>
 
             {subTab === 'prompts' && (
@@ -1869,6 +1917,22 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                   if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
                 }}
                 onCreate={() => setShowCreateSubAgentModal(true)}
+                onClose={() => setIsSidebarCollapsed(true)}
+              />
+            )}
+            {subTab === 'mcp' && (
+              <McpServerListNav
+                selectedId={selectedMcpServerId}
+                onSelect={(id) => {
+                  setSelectedMcpServerId(id);
+                  setIsCreatingMcpServer(false);
+                  if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+                }}
+                onCreate={() => {
+                  setSelectedMcpServerId(null);
+                  setIsCreatingMcpServer(true);
+                  if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+                }}
                 onClose={() => setIsSidebarCollapsed(true)}
               />
             )}

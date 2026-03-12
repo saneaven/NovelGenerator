@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ...models.db_models import RunModel, Thread, UserSettings
-from ..prompt_runtime.conversation_builder import build_from_runs
+from ..mcp import McpMessageAssembler
 from ..prompt_runtime.project_data_builder import build_project_data
 from ..prompt_runtime.scenario_manager import ScenarioManager
 from ..prompt_runtime.scenario_runtime import assemble_scenario
@@ -44,6 +44,8 @@ async def assemble_create(
         input_text=create_ctx.input_text,
         input_payload=create_ctx.input_payload,
     )
+    if isinstance(run.mcp_resolution_json, dict):
+        template_data["mcpContexts"] = list(run.mcp_resolution_json.get("template_contexts") or [])
 
     scenario = scenario_manager.load_active_scenario(
         db,
@@ -58,14 +60,23 @@ async def assemble_create(
     fragment_map = load_user_fragment_map(db, run.user_id, preset_id)
     template_renderer = TemplateRenderer(fragment_map=fragment_map)
 
-    canonical = build_from_runs(db, thread_id=thread.id, language=run.language)
+    messages = McpMessageAssembler.build_thread_messages(db, thread_id=thread.id, language=run.language)
+    messages = McpMessageAssembler.merge_run_mcp_content(
+        messages,
+        run_id=run.id,
+        resolution=run.mcp_resolution_json if isinstance(run.mcp_resolution_json, dict) else None,
+    )
     system_prompt, conversation, memory_template = assemble_scenario(
         template_renderer=template_renderer,
         task_type=target.task_type,
         system_template=system_template,
         blocks=blocks,
-        source_conversation=canonical,
+        source_conversation=messages,
         template_data=template_data,
+    )
+    system_prompt = McpMessageAssembler.merge_system_overlays(
+        system_prompt,
+        run.mcp_resolution_json.get("system_overlays") if isinstance(run.mcp_resolution_json, dict) else None,
     )
 
     before = snapshot_thread_row(thread)
@@ -110,7 +121,7 @@ async def assemble_resume(
     system_prompt = thread.captured_history_system_prompt
     conversation = list(thread.captured_history_conversation_json)
 
-    recent = build_from_runs(
+    recent = McpMessageAssembler.build_thread_messages(
         db,
         thread_id=thread.id,
         language=run.language,
@@ -163,6 +174,8 @@ async def assemble_resume(
                     input_text="",
                     input_payload=input_payload,
                 )
+                if isinstance(run.mcp_resolution_json, dict):
+                    template_data["mcpContexts"] = list(run.mcp_resolution_json.get("template_contexts") or [])
                 bundle = ScenarioBundle(
                     task_type=task_type,
                     task_subtype=task_subtype,

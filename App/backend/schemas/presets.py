@@ -4,6 +4,7 @@ from typing import List, Optional, Union, Dict, Any, Literal
 
 from pydantic import BaseModel, Field, ConfigDict
 
+from .mcp import McpServerResponse
 from .sub_agents import SubAgentDefinition
 
 
@@ -110,6 +111,7 @@ class PresetExportData(BaseModel):
     fragments: Dict[str, Dict[str, ExportFragmentData]]
     variables: List[ExportVariableData]
     sub_agents: List[SubAgentDefinition]
+    mcp_servers: List[McpServerResponse]
     exported_at: str
 
 

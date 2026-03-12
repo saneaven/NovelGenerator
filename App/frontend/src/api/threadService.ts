@@ -1,5 +1,6 @@
 import { apiClient } from './client';
 import type { ImageRun } from './assetService';
+import type { McpSelection } from '../types/mcp';
 import type {
   ThreadInfo,
   ThreadMessage,
@@ -17,6 +18,7 @@ export interface ChatRequest {
   journey_target_ids?: string[];
   language?: string;
   attachments?: PendingAttachment[];
+  mcp_selections?: McpSelection[];
 }
 
 export interface ChatResponse {
@@ -196,6 +198,9 @@ export const threadService = {
       }
       if (req.language) {
         formData.append('language', req.language);
+      }
+      if (req.mcp_selections) {
+        formData.append('mcp_selections_json', JSON.stringify(req.mcp_selections));
       }
       for (const attachment of attachments) {
         formData.append('attachments', attachment.file);

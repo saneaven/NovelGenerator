@@ -1,3 +1,5 @@
+import type { McpSelectionAudit } from './mcp';
+
 export type ThreadType = 'agent' | 'subAgent' | 'journey';
 export type ThreadStatus = 'running' | 'waiting' | 'processing' | 'paused' | 'done' | 'error' | 'canceled';
 export type RunStatus = ThreadStatus;
@@ -84,6 +86,9 @@ export interface MessageAttachment {
 export interface LangEntry {
   contentParts: Array<{ type: 'content'; text: string }>;
   reasoningDetail?: ReasoningDetail;
+  meta?: {
+    mcpSelections?: McpSelectionAudit[];
+  };
 }
 
 export interface DisplayMessageResult {

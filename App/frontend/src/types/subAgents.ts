@@ -23,6 +23,9 @@ export interface SubAgentDefinition {
   /** UUID list of other Sub Agents this Sub Agent can call (by id). */
   allowed_sub_agent_ids: string[];
 
+  /** UUID list of MCP servers this Sub Agent can use. */
+  allowed_mcp_server_ids: string[];
+
   /** If true, this Sub Agent uses llm_config_override instead of the global Sub Agent config. */
   use_custom_llm_config: boolean;
 

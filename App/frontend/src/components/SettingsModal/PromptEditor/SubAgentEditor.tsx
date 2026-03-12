@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
+import { useMcpStore } from '../../../store/mcpStore';
+import { usePresetStore } from '../../../store/presetStore';
 import { useResolvedTaskConfig, useSettings } from '../../../store/settingsStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
 import type { SubAgentAllowedInvocation } from '../../../types/subAgents';
@@ -43,6 +46,7 @@ export interface SubAgentDraftData {
   allowed_invocation_modes: SubAgentAllowedInvocation[];
   allowed_tool_names: string[];
   allowed_sub_agent_ids: string[];
+  allowed_mcp_server_ids: string[];
   use_custom_llm_config: boolean;
   llm_config_override: TaskAIConfig | null;
 }
@@ -75,6 +79,7 @@ function snapshotForDraft(data: SubAgentDraftData): string {
     allowed_invocation_modes: [...data.allowed_invocation_modes].sort(),
     allowed_tool_names: [...data.allowed_tool_names].sort(),
     allowed_sub_agent_ids: [...data.allowed_sub_agent_ids].sort(),
+    allowed_mcp_server_ids: [...data.allowed_mcp_server_ids].sort(),
     use_custom_llm_config: data.use_custom_llm_config,
     llm_config_override: data.llm_config_override,
   });
@@ -349,6 +354,11 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   const { t } = useTranslation();
   const settings = useSettings();
   const { subAgents, deleteSubAgent } = useSubAgentStore();
+  const activePresetId = usePresetStore((state) => state.activePresetId);
+  const { servers: mcpServers, ensureLoaded: ensureMcpLoaded } = useMcpStore(useShallow((state) => ({
+    servers: state.servers,
+    ensureLoaded: state.ensureLoaded,
+  })));
   const globalSubAgentConfig = useResolvedTaskConfig('subAgent');
 
   const agent = useMemo(() => {
@@ -359,6 +369,11 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   useEffect(() => {
     subAgentService.listAvailableTools().then(setAllStaticTools).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!activePresetId) return;
+    void ensureMcpLoaded(activePresetId).catch(() => {});
+  }, [activePresetId, ensureMcpLoaded]);
 
   const [toolFilter, setToolFilter] = useState('');
   const [activeTab, setActiveTab] = useState<SubAgentEditorTab>('general');
@@ -413,6 +428,15 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
       const has = prev.includes(subAgentId);
       const nextIds = checked && !has ? [...prev, subAgentId] : !checked && has ? prev.filter((id) => id !== subAgentId) : prev;
       return { ...cur, current: { ...cur.current, allowed_sub_agent_ids: nextIds } };
+    });
+  };
+
+  const setMcpAllowedChecked = (serverId: string, checked: boolean) => {
+    updateDraft((cur) => {
+      const prev = cur.current.allowed_mcp_server_ids;
+      const has = prev.includes(serverId);
+      const nextIds = checked && !has ? [...prev, serverId] : !checked && has ? prev.filter((id) => id !== serverId) : prev;
+      return { ...cur, current: { ...cur.current, allowed_mcp_server_ids: nextIds } };
     });
   };
 
@@ -654,6 +678,26 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
                     disabled={!s.enabled}
                   />
                 ))}
+            </div>
+          </section>
+
+          <section className="sub-agent-editor__section">
+            <h4 className="sub-agent-editor__section-title">Allowed MCP Servers</h4>
+            <div className="sub-agent-editor__sub-agent-grid">
+              {mcpServers
+                .filter((server) => server.enabled)
+                .sort((a, b) => a.display_name.localeCompare(b.display_name))
+                .map((server) => (
+                  <ToggleSwitch
+                    key={server.id}
+                    checked={draft.current.allowed_mcp_server_ids.includes(server.id)}
+                    onChange={(checked) => setMcpAllowedChecked(server.id, checked)}
+                    label={server.display_name}
+                  />
+                ))}
+              {mcpServers.filter((server) => server.enabled).length === 0 && (
+                <div className="sub-agent-editor__hint">No enabled MCP servers.</div>
+              )}
             </div>
           </section>
         </div>

@@ -79,6 +79,7 @@ const CreateSubAgentModal: React.FC<CreateSubAgentModalProps> = ({ isOpen, onClo
       allowed_invocation_modes: DEFAULT_ALLOWED_MODES,
       allowed_tool_names: [],
       allowed_sub_agent_ids: [],
+      allowed_mcp_server_ids: [],
       use_custom_llm_config: false,
       llm_config_override: null,
     };

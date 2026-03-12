@@ -25,6 +25,7 @@ class SubAgentDefinition(BaseModel):
     allowed_tool_names: List[str]
     # UUID list of other Sub Agents that this Sub Agent is allowed to call.
     allowed_sub_agent_ids: List[uuid.UUID]
+    allowed_mcp_server_ids: List[uuid.UUID]
 
     # If true, use llm_config_override for this Sub Agent; otherwise inherit the global config.
     use_custom_llm_config: bool = False
@@ -45,6 +46,7 @@ class SubAgentCreate(BaseModel):
     allowed_invocation_modes: List[str]
     allowed_tool_names: List[str]
     allowed_sub_agent_ids: List[uuid.UUID]
+    allowed_mcp_server_ids: List[uuid.UUID]
 
     use_custom_llm_config: bool = False
     llm_config_override: Optional[TaskAIConfig] = None
@@ -62,5 +64,6 @@ class SubAgentUpdate(BaseModel):
     allowed_invocation_modes: Optional[List[str]] = None
     allowed_tool_names: Optional[List[str]] = None
     allowed_sub_agent_ids: Optional[List[uuid.UUID]] = None
+    allowed_mcp_server_ids: Optional[List[uuid.UUID]] = None
     use_custom_llm_config: Optional[bool] = None
     llm_config_override: Optional[TaskAIConfig] = None

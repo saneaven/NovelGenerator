@@ -161,6 +161,7 @@ async def _parse_chat_input(request: Request) -> ParsedChatInput:
     )
     context_object_ids = _parse_json_field(form.get("context_object_ids_json"), default=[])
     journey_target_ids = _parse_json_field(form.get("journey_target_ids_json"), default=[])
+    mcp_selections = _parse_json_field(form.get("mcp_selections_json"), default=[])
     payload = ChatRequest(
         input_text=str(form.get("input_text") or ""),
         input_payload=input_payload,
@@ -169,6 +170,7 @@ async def _parse_chat_input(request: Request) -> ParsedChatInput:
         context_object_ids=context_object_ids if isinstance(context_object_ids, list) else [],
         journey_target_ids=journey_target_ids if isinstance(journey_target_ids, list) else [],
         language=str(form.get("language") or "").strip() or None,
+        mcp_selections=mcp_selections if isinstance(mcp_selections, list) else [],
     )
 
     attachments: list[IncomingMessageAttachment] = []
@@ -509,7 +511,7 @@ async def chat_thread(
     payload = parsed.request
     text = (payload.input_text or "").strip()
 
-    if text or parsed.attachments:
+    if text or parsed.attachments or payload.mcp_selections:
         run = await run_pipeline.start_run(
             thread_id=thread_id,
             user_id=current_user.id,
@@ -521,6 +523,7 @@ async def chat_thread(
             journey_target_ids=payload.journey_target_ids,
             language=payload.language,
             attachments=parsed.attachments,
+            mcp_selections=payload.mcp_selections,
         )
     else:
         run = await run_pipeline.resume_run(
