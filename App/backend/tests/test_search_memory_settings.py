@@ -30,6 +30,17 @@ def test_resolve_settings_inherit_general_when_overrides_are_missing() -> None:
     assert resolved_memory["retrieval"]["topKPerQuery"] == 12
 
 
+def test_null_override_placeholders_are_not_treated_as_active_overrides() -> None:
+    settings = make_initial_search_memory_settings()
+
+    validated = validate_search_memory_settings(settings)
+
+    assert validated["overrides"]["search"] is None
+    assert validated["overrides"]["memory"] is None
+    assert has_search_memory_override(settings, "search") is False
+    assert has_search_memory_override(settings, "memory") is False
+
+
 def test_override_seed_and_resolution_use_target_specific_values() -> None:
     settings = make_initial_search_memory_settings()
     settings["general"]["embedding"]["model"] = "general-model"

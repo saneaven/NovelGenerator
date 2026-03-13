@@ -173,34 +173,6 @@ const Home: React.FC = () => {
           </div>
         )}
 
-        <div className="controls-bar">
-          <h2 className="section-title">{t('home.library')}</h2>
-          <div className="controls-actions">
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".nbproj"
-              style={{ display: 'none' }}
-              onChange={(e) => {
-                void handleImportFileSelected(e);
-              }}
-            />
-            <button
-              className="btn-import-project"
-              onClick={handleImportClick}
-              disabled={isImporting || isLoading}
-              title={t('home.importProject')}
-            >
-              <Upload size="md" />
-              <span>{isImporting ? t('home.importing') : t('home.importProject')}</span>
-            </button>
-            <button className="btn-create-project" onClick={() => setShowCreateForm(true)} disabled={isLoading}>
-              <Plus size="md" />
-              <span>{t('home.newProject')}</span>
-            </button>
-          </div>
-        </div>
-
         <section className="home-notifications-section">
           <div className="home-notifications-header">
             <h2 className="section-title">Recent Notifications</h2>
@@ -232,6 +204,34 @@ const Home: React.FC = () => {
             </div>
           )}
         </section>
+
+        <div className="controls-bar">
+          <h2 className="section-title">{t('home.library')}</h2>
+          <div className="controls-actions">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".nbproj"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                void handleImportFileSelected(e);
+              }}
+            />
+            <button
+              className="btn-import-project"
+              onClick={handleImportClick}
+              disabled={isImporting || isLoading}
+              title={t('home.importProject')}
+            >
+              <Upload size="md" />
+              <span>{isImporting ? t('home.importing') : t('home.importProject')}</span>
+            </button>
+            <button className="btn-create-project" onClick={() => setShowCreateForm(true)} disabled={isLoading}>
+              <Plus size="md" />
+              <span>{t('home.newProject')}</span>
+            </button>
+          </div>
+        </div>
 
         <div className="projects-grid">
           {isLoading && projects.length === 0 ? (

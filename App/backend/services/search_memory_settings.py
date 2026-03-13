@@ -81,7 +81,7 @@ def make_memory_override_seed(settings: dict[str, Any]) -> dict[str, Any]:
 def has_search_memory_override(settings: dict[str, Any], target: SearchMemoryTarget) -> bool:
     normalized = validate_search_memory_settings(settings)
     overrides = normalized.get("overrides", {})
-    return isinstance(overrides, dict) and target in overrides
+    return isinstance(overrides, dict) and isinstance(overrides.get(target), dict)
 
 
 def _resolve_search_settings_from_validated(settings: dict[str, Any]) -> dict[str, Any]:
