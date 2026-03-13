@@ -655,6 +655,11 @@ export class ThreadEventConsumer {
     }
     this.ensureThread(threadId, threadPartial);
 
+    if (event.event === 'thread:snapshot_invalidated') {
+      void fetchAndReplaceThreadSnapshot(threadId);
+      return;
+    }
+
     if (event.event === 'llm:request') {
       const d = event.data as Record<string, unknown>;
       const runId = d.run_id ? String(d.run_id) : 'n/a';

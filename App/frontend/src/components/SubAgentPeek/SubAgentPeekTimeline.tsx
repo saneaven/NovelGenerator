@@ -19,6 +19,7 @@ import { confirm } from '../../store/dialogStore';
 import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
 import { hasRenderableAssistantOutput } from '../../runtime/messageVisibility';
 import { fetchAndReplaceThreadSnapshot } from '../../runtime/threadHydration';
+import { applyOptimisticDeletePause, getThreadDeletePauseContext } from '../../runtime/threadDeleteState';
 
 function formatRole(role: string, t: (key: string) => string): string {
   if (role === 'user') return t('subAgent.parentAgent');
@@ -182,9 +183,29 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
       confirmLabel: 'Delete',
     });
     if (!confirmed) return;
-    void threadService.deleteMessage(childThreadId, messageId).then(() => {
-      useThreadStore.getState().removeMessage(childThreadId, messageId);
-    });
+    const state = useThreadStore.getState();
+    const deletePauseContext = getThreadDeletePauseContext(childThreadId);
+    const linkedToolCalls = Object.values(state.toolCallsById)
+      .filter((tc): tc is ThreadToolCall => Boolean(tc))
+      .filter((tc) => tc.threadId === childThreadId && (
+        tc.assistantMessageId === messageId
+        || tc.messageId === messageId
+      ));
+
+    for (const tc of linkedToolCalls) {
+      if (tc.messageId) state.removeMessage(childThreadId, tc.messageId);
+      state.removeToolCall(tc.id);
+    }
+    state.removeMessage(childThreadId, messageId);
+    applyOptimisticDeletePause(childThreadId, deletePauseContext);
+
+    try {
+      await threadService.deleteMessage(childThreadId, messageId);
+      await fetchAndReplaceThreadSnapshot(childThreadId);
+    } catch (error) {
+      console.error('Failed to delete sub-agent message:', error);
+      await fetchAndReplaceThreadSnapshot(childThreadId);
+    }
   }, [childThreadId]);
 
   const streamingText = useMemo(

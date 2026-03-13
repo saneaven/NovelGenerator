@@ -62,6 +62,7 @@ import '../../../pages/workspace/styles/AgentInput.css';
 import { useThreadLiveViewState } from '../../../hooks/useThreadLiveViewState';
 import { hasRenderableAssistantOutput } from '../../../runtime/messageVisibility';
 import { fetchAndReplaceThreadSnapshot } from '../../../runtime/threadHydration';
+import { applyOptimisticDeletePause, getThreadDeletePauseContext } from '../../../runtime/threadDeleteState';
 import {
   CHAT_ATTACHMENT_ACCEPT,
   CHAT_ATTACHMENT_MAX_FILES,
@@ -1342,6 +1343,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     if (!await confirm({ title: 'Delete Tool Call', message: 'Are you sure you want to delete this tool call?', variant: 'danger', confirmLabel: 'Delete' })) return;
 
     const state = useThreadStore.getState();
+    const deletePauseContext = getThreadDeletePauseContext(threadId);
     const tc = state.toolCallsById[toolCallId];
     if (!tc) return;
     const assistantMessageId = tc.assistantMessageId;
@@ -1368,12 +1370,16 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       }
     }
 
+    applyOptimisticDeletePause(threadId, deletePauseContext);
+
     // Backend — deleteToolCall cascades to messages via parent_tool_call_id FK
     if (isUuid(toolCallId)) {
       try {
         await threadService.deleteToolCall(threadId, toolCallId);
+        await fetchAndReplaceThreadSnapshot(threadId);
       } catch (error) {
         console.error('Failed to delete tool call:', error);
+        await fetchAndReplaceThreadSnapshot(threadId);
       }
     }
   }, [threadId]);
@@ -1387,6 +1393,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     if (!await confirm({ title: 'Delete Message', message: 'Are you sure you want to delete this message?', variant: 'danger', confirmLabel: 'Delete' })) return;
 
     const state = useThreadStore.getState();
+    const deletePauseContext = getThreadDeletePauseContext(threadId);
 
     // Find all tool calls linked to this message (via any of the three ID fields)
     const linkedToolCalls = Object.values(state.toolCallsById)
@@ -1402,14 +1409,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       state.removeToolCall(tc.id);
     }
     state.removeMessage(threadId, messageId);
+    applyOptimisticDeletePause(threadId, deletePauseContext);
 
     // Backend — for assistant messages, DB cascade handles everything:
     // assistant_message_id CASCADE → deletes tool calls → parent_tool_call_id CASCADE → deletes their messages
     if (isUuid(messageId)) {
       try {
         await threadService.deleteMessage(threadId, messageId);
+        await fetchAndReplaceThreadSnapshot(threadId);
       } catch (error) {
         console.error('Failed to delete message:', error);
+        await fetchAndReplaceThreadSnapshot(threadId);
       }
     }
   }, [threadId]);

@@ -49,6 +49,7 @@ export type AssetChangedEvent = {
 
 export type ThreadRuntimeEvent =
   | { event: 'run:status'; data: RuntimeEventBase & { status: RunStatus; error?: string | null } }
+  | { event: 'thread:snapshot_invalidated'; data: RuntimeEventBase }
   | { event: 'message:user'; data: RuntimeEventBase & { message_id: string; role: 'user'; seq: number; seq_in_thread: number; data: Record<string, unknown>; attachments?: Record<string, unknown>[] } }
   | { event: 'message:start'; data: RuntimeEventBase & { message_id: string; role: 'assistant'; seq: number; seq_in_thread: number } }
   | { event: 'content:delta'; data: RuntimeEventBase & { message_id: string; text: string } }

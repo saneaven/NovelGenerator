@@ -65,6 +65,8 @@ from ..services.storage_usage_service import (
 
 router = APIRouter(prefix="/api/v1", tags=["threads"])
 USER_STREAM_HEARTBEAT_INTERVAL_SECONDS = 15.0
+_DELETE_UNRESOLVED_TOOL_STATUSES = {"streaming", "validating", "pending", "processing", "working"}
+_DELETE_PAUSE_SOURCE_STATUSES = {"waiting", "processing"}
 
 
 @dataclass
@@ -291,6 +293,16 @@ def _snapshot_assistant_tool_call_tree(
     )
 
 
+def _count_unresolved_run_tool_calls(db: Session, *, run_id: UUID) -> int:
+    statuses = [
+        s
+        for (s,) in db.query(RunToolCallModel.status)
+        .filter(RunToolCallModel.run_id == run_id)
+        .all()
+    ]
+    return sum(1 for status in statuses if status in _DELETE_UNRESOLVED_TOOL_STATUSES)
+
+
 def _sync_run_thread_status(db: Session, *, run_id: UUID) -> tuple[RunModel | None, Thread | None, str | None]:
     run = db.query(RunModel).filter(RunModel.id == run_id).first()
     if run is None:
@@ -318,6 +330,41 @@ def _sync_run_thread_status(db: Session, *, run_id: UUID) -> tuple[RunModel | No
     if latest_run is not None and latest_run.id == run.id:
         thread.status = next_status
     return run, thread, next_status
+
+
+def _pause_run_after_delete_if_needed(
+    db: Session,
+    *,
+    run_id: UUID,
+    previous_thread_status: str | None,
+    previous_unresolved_count: int,
+) -> tuple[RunModel | None, Thread | None, bool]:
+    if previous_unresolved_count <= 0 or previous_thread_status not in _DELETE_PAUSE_SOURCE_STATUSES:
+        return None, None, False
+
+    run = db.query(RunModel).filter(RunModel.id == run_id).first()
+    if run is None:
+        return None, None, False
+
+    thread = run.thread
+    if thread is None:
+        return run, None, False
+
+    current_unresolved_count = _count_unresolved_run_tool_calls(db, run_id=run_id)
+    if current_unresolved_count != 0:
+        return run, thread, False
+
+    run.status = "paused"
+    latest_run = (
+        db.query(RunModel)
+        .filter(RunModel.thread_id == thread.id)
+        .order_by(RunModel.run_seq.desc())
+        .first()
+    )
+    if latest_run is not None and latest_run.id == run.id:
+        thread.status = "paused"
+
+    return run, thread, True
 
 
 async def _emit_tool_call_status(*, thread: Thread, tool_call: RunToolCallModel) -> None:
@@ -350,6 +397,24 @@ async def _emit_run_status(*, thread: Thread, run: RunModel) -> None:
             "run_id": str(run.id),
             "status": run.status,
             "error": run.error,
+        },
+    )
+
+
+async def _emit_thread_snapshot_invalidated(
+    *,
+    user_id: UUID | str,
+    project_id: UUID | str,
+    thread_id: UUID | str,
+    run_id: UUID | str | None,
+) -> None:
+    await runtime_event_dispatcher.emit_runtime_event(
+        user_id=user_id,
+        project_id=project_id,
+        thread_id=thread_id,
+        event_name="thread:snapshot_invalidated",
+        data={
+            "run_id": str(run_id) if run_id else None,
         },
     )
 
@@ -1247,6 +1312,10 @@ async def delete_thread_message(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Message not found")
+    run_id = row.run_id
+    project_id = thread.project_id
+    previous_thread_status = thread.status
+    previous_unresolved_count = _count_unresolved_run_tool_calls(db, run_id=run_id)
     thread_before = snapshot_thread_row(thread)
     message_before = snapshot_run_message_row(row)
     tool_calls_before: list[object] = []
@@ -1265,6 +1334,13 @@ async def delete_thread_message(
         )
     delete_chat_attachments_with_files(db, attachments=attachment_rows)
     db.delete(row)
+    db.flush()
+    paused_run, paused_thread, paused_after_delete = _pause_run_after_delete_if_needed(
+        db,
+        run_id=run_id,
+        previous_thread_status=previous_thread_status,
+        previous_unresolved_count=previous_unresolved_count,
+    )
     thread.captured_history_conversation_json = None
     deltas = [
         build_run_message_delta(message_before, None),
@@ -1281,6 +1357,16 @@ async def delete_thread_message(
         enforce_quota=False,
     )
     db.commit()
+    if paused_after_delete and paused_run is not None and paused_thread is not None:
+        refreshed_run = db.query(RunModel).filter(RunModel.id == paused_run.id).first()
+        if refreshed_run is not None and refreshed_run.thread is not None:
+            await _emit_run_status(thread=refreshed_run.thread, run=refreshed_run)
+    await _emit_thread_snapshot_invalidated(
+        user_id=current_user.id,
+        project_id=project_id,
+        thread_id=thread_id,
+        run_id=run_id,
+    )
     return Response(status_code=204)
 
 
@@ -1301,6 +1387,10 @@ async def delete_thread_tool_call(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Tool call not found")
+    run_id = row.run_id
+    project_id = thread.project_id
+    previous_thread_status = thread.status
+    previous_unresolved_count = _count_unresolved_run_tool_calls(db, run_id=run_id)
     thread_before = snapshot_thread_row(thread)
     tool_call_before = snapshot_tool_call_row(row)
     tool_messages_before = snapshot_rows(
@@ -1348,6 +1438,12 @@ async def delete_thread_tool_call(
     else:
         assistant_message_before = None
 
+    paused_run, paused_thread, paused_after_delete = _pause_run_after_delete_if_needed(
+        db,
+        run_id=run_id,
+        previous_thread_status=previous_thread_status,
+        previous_unresolved_count=previous_unresolved_count,
+    )
     thread.captured_history_conversation_json = None
     deltas = [
         build_tool_call_delta(tool_call_before, None),
@@ -1364,6 +1460,16 @@ async def delete_thread_tool_call(
         enforce_quota=False,
     )
     db.commit()
+    if paused_after_delete and paused_run is not None and paused_thread is not None:
+        refreshed_run = db.query(RunModel).filter(RunModel.id == paused_run.id).first()
+        if refreshed_run is not None and refreshed_run.thread is not None:
+            await _emit_run_status(thread=refreshed_run.thread, run=refreshed_run)
+    await _emit_thread_snapshot_invalidated(
+        user_id=current_user.id,
+        project_id=project_id,
+        thread_id=thread_id,
+        run_id=run_id,
+    )
     return Response(status_code=204)
 
 

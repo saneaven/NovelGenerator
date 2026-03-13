@@ -72,6 +72,12 @@ def _install_import_stubs() -> None:
     fake_notification_service.message_from_notification_status = lambda *_args, **_kwargs: ""
     fake_notification_service.serialize_notification = lambda *_args, **_kwargs: {}
     fake_notification_service.upsert_notification = lambda *_args, **_kwargs: None
+    fake_notification_service.ACTIVE_THREAD_DELETE_STATUSES = {"running", "waiting", "processing"}
+    fake_notification_service.NotificationSourceSnapshot = SimpleNamespace
+    fake_notification_service.collect_thread_delete_deltas = lambda *_args, **_kwargs: []
+    fake_notification_service.delete_threads = lambda *_args, **_kwargs: None
+    fake_notification_service.map_run_status_to_notification_status = lambda status: status
+    fake_notification_service.upsert_notification_source = lambda *_args, **_kwargs: None
     sys.modules["App.backend.services.notification_service"] = fake_notification_service
 
     fake_run_pipeline_status_logic = types.ModuleType("App.backend.services.run_pipeline.status_logic")
@@ -403,3 +409,414 @@ def test_resume_thread_run_passes_request_to_resume_run(monkeypatch: pytest.Monk
     assert captured["context_object_ids"] == [context_object_id]
     assert captured["journey_target_ids"] == [journey_target_id]
     assert captured["language"] == "Korean"
+
+
+def _is_column_for(target: object, model: object, key: str) -> bool:
+    return getattr(target, "class_", None) is model and getattr(target, "key", None) == key
+
+
+class FakeDeletePauseQuery:
+    def __init__(self, db: "FakeDeletePauseDb", target: object) -> None:
+        self.db = db
+        self.target = target
+        self._ordered = False
+
+    def filter(self, *_args, **_kwargs) -> "FakeDeletePauseQuery":
+        return self
+
+    def order_by(self, *_args, **_kwargs) -> "FakeDeletePauseQuery":
+        self._ordered = True
+        return self
+
+    def all(self) -> list[tuple[str]]:
+        if _is_column_for(self.target, thread_routes.RunToolCallModel, "status"):
+            return [(status,) for status in self.db.tool_statuses]
+        raise AssertionError(f"Unsupported all() target: {self.target!r}")
+
+    def first(self):
+        if self.target is thread_routes.RunModel:
+            return self.db.latest_run if self._ordered else self.db.run
+        raise AssertionError(f"Unsupported first() target: {self.target!r}")
+
+
+class FakeDeletePauseDb:
+    def __init__(
+        self,
+        *,
+        thread_status: str,
+        run_status: str,
+        tool_statuses: list[str],
+        latest_run_matches: bool = True,
+    ) -> None:
+        self.thread = SimpleNamespace(id=uuid4(), status=thread_status)
+        self.run = SimpleNamespace(
+            id=uuid4(),
+            thread=self.thread,
+            thread_id=self.thread.id,
+            run_seq=1,
+            status=run_status,
+        )
+        self.latest_run = self.run if latest_run_matches else SimpleNamespace(id=uuid4(), thread_id=self.thread.id, run_seq=2)
+        self.tool_statuses = list(tool_statuses)
+
+    def query(self, target: object) -> FakeDeletePauseQuery:
+        return FakeDeletePauseQuery(self, target)
+
+
+@pytest.mark.parametrize(
+    ("thread_status", "run_status", "tool_statuses"),
+    [
+        ("waiting", "waiting", ["applied"]),
+        ("processing", "processing", ["failed"]),
+    ],
+)
+def test_pause_run_after_delete_if_needed_marks_thread_paused_when_last_unresolved_removed(
+    thread_status: str,
+    run_status: str,
+    tool_statuses: list[str],
+) -> None:
+    db = FakeDeletePauseDb(
+        thread_status=thread_status,
+        run_status=run_status,
+        tool_statuses=tool_statuses,
+    )
+
+    run, thread, paused = thread_routes._pause_run_after_delete_if_needed(
+        db,
+        run_id=db.run.id,
+        previous_thread_status=thread_status,
+        previous_unresolved_count=1,
+    )
+
+    assert paused is True
+    assert run is db.run
+    assert thread is db.thread
+    assert db.run.status == "paused"
+    assert db.thread.status == "paused"
+
+
+def test_pause_run_after_delete_if_needed_does_not_pause_when_unresolved_tool_calls_remain() -> None:
+    db = FakeDeletePauseDb(
+        thread_status="waiting",
+        run_status="waiting",
+        tool_statuses=["pending"],
+    )
+
+    run, thread, paused = thread_routes._pause_run_after_delete_if_needed(
+        db,
+        run_id=db.run.id,
+        previous_thread_status="waiting",
+        previous_unresolved_count=2,
+    )
+
+    assert paused is False
+    assert run is db.run
+    assert thread is db.thread
+    assert db.run.status == "waiting"
+    assert db.thread.status == "waiting"
+
+
+def test_pause_run_after_delete_if_needed_does_not_pause_done_thread() -> None:
+    db = FakeDeletePauseDb(
+        thread_status="done",
+        run_status="done",
+        tool_statuses=[],
+    )
+
+    run, thread, paused = thread_routes._pause_run_after_delete_if_needed(
+        db,
+        run_id=db.run.id,
+        previous_thread_status="done",
+        previous_unresolved_count=1,
+    )
+
+    assert paused is False
+    assert run is None
+    assert thread is None
+    assert db.run.status == "done"
+    assert db.thread.status == "done"
+
+
+class FakeDeleteMessageRouteQuery:
+    def __init__(self, db: "FakeDeleteMessageRouteDb", target: object) -> None:
+        self.db = db
+        self.target = target
+        self._ordered = False
+
+    def filter(self, *_args, **_kwargs) -> "FakeDeleteMessageRouteQuery":
+        return self
+
+    def order_by(self, *_args, **_kwargs) -> "FakeDeleteMessageRouteQuery":
+        self._ordered = True
+        return self
+
+    def all(self) -> list[object]:
+        if self.target is thread_routes.RunMessageAttachmentModel:
+            return []
+        raise AssertionError(f"Unsupported all() target: {self.target!r}")
+
+    def first(self):
+        if self.target is thread_routes.RunMessageModel:
+            if self.db.message in self.db.deleted:
+                return None
+            return self.db.message
+        if self.target is thread_routes.RunModel:
+            return self.db.latest_run if self._ordered else self.db.run
+        raise AssertionError(f"Unsupported first() target: {self.target!r}")
+
+
+class FakeDeleteMessageRouteDb:
+    def __init__(self, *, thread: SimpleNamespace, run: SimpleNamespace, message: SimpleNamespace) -> None:
+        self.thread = thread
+        self.run = run
+        self.message = message
+        self.latest_run = run
+        self.deleted: list[object] = []
+        self.committed = False
+        self.flushed = False
+
+    def query(self, target: object) -> FakeDeleteMessageRouteQuery:
+        return FakeDeleteMessageRouteQuery(self, target)
+
+    def delete(self, row: object) -> None:
+        self.deleted.append(row)
+
+    def flush(self) -> None:
+        self.flushed = True
+
+    def commit(self) -> None:
+        self.committed = True
+
+
+def test_delete_thread_message_pauses_thread_and_emits_snapshot_invalidation(monkeypatch: pytest.MonkeyPatch) -> None:
+    thread_id = uuid4()
+    project_id = uuid4()
+    user_id = uuid4()
+    run_id = uuid4()
+    message_id = uuid4()
+    thread = SimpleNamespace(
+        id=thread_id,
+        user_id=user_id,
+        project_id=project_id,
+        status="waiting",
+        captured_history_conversation_json=None,
+    )
+    run = SimpleNamespace(
+        id=run_id,
+        thread=thread,
+        thread_id=thread_id,
+        run_seq=1,
+        status="waiting",
+        error=None,
+    )
+    message = SimpleNamespace(
+        id=message_id,
+        thread_id=thread_id,
+        run_id=run_id,
+        role="assistant",
+        data={},
+    )
+    db = FakeDeleteMessageRouteDb(thread=thread, run=run, message=message)
+    emitted: list[tuple[str, dict[str, object]]] = []
+    unresolved_counts = iter([1, 0])
+
+    monkeypatch.setattr(thread_routes, "require_owned_thread", lambda *_args, **_kwargs: thread)
+    monkeypatch.setattr(thread_routes, "_snapshot_assistant_tool_call_tree", lambda *_args, **_kwargs: ([], []))
+    monkeypatch.setattr(
+        thread_routes,
+        "_count_unresolved_run_tool_calls",
+        lambda *_args, **_kwargs: next(unresolved_counts),
+    )
+    monkeypatch.setattr(thread_routes, "snapshot_thread_row", lambda row: {"status": row.status})
+    monkeypatch.setattr(thread_routes, "snapshot_run_message_row", lambda row: {"id": str(row.id)})
+    monkeypatch.setattr(thread_routes, "build_thread_delta", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(thread_routes, "build_run_message_delta", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(thread_routes, "build_run_message_attachment_delta", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(thread_routes, "build_tool_call_delta", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(thread_routes, "apply_project_usage_deltas", lambda *_args, **_kwargs: None)
+
+    async def _fake_emit_runtime_event(*, event_name: str, data: dict[str, object], **_kwargs):
+        emitted.append((event_name, data))
+        return {"event": event_name, "data": data}
+
+    monkeypatch.setattr(
+        thread_routes.runtime_event_dispatcher,
+        "emit_runtime_event",
+        _fake_emit_runtime_event,
+    )
+
+    response = asyncio.run(
+        thread_routes.delete_thread_message(
+            thread_id=thread_id,
+            message_id=message_id,
+            current_user=SimpleNamespace(id=user_id),
+            db=db,  # type: ignore[arg-type]
+        )
+    )
+
+    assert response.status_code == 204
+    assert db.flushed is True
+    assert db.committed is True
+    assert run.status == "paused"
+    assert thread.status == "paused"
+    assert [name for name, _ in emitted] == ["run:status", "thread:snapshot_invalidated"]
+    assert emitted[0][1]["status"] == "paused"
+    assert emitted[1][1]["run_id"] == str(run_id)
+
+
+class FakeDeleteToolCallRouteQuery:
+    def __init__(self, db: "FakeDeleteToolCallRouteDb", target: object) -> None:
+        self.db = db
+        self.target = target
+        self._ordered = False
+
+    def filter(self, *_args, **_kwargs) -> "FakeDeleteToolCallRouteQuery":
+        return self
+
+    def order_by(self, *_args, **_kwargs) -> "FakeDeleteToolCallRouteQuery":
+        self._ordered = True
+        return self
+
+    def all(self) -> list[object]:
+        if self.target is thread_routes.RunMessageModel:
+            return []
+        raise AssertionError(f"Unsupported all() target: {self.target!r}")
+
+    def first(self):
+        if self.target is thread_routes.RunToolCallModel:
+            if self.db.tool_call in self.db.deleted:
+                return None
+            return self.db.tool_call
+        if _is_column_for(self.target, thread_routes.RunToolCallModel, "id"):
+            remaining = [
+                tc for tc in self.db.tool_calls
+                if tc.assistant_message_id == self.db.tool_call.assistant_message_id and tc not in self.db.deleted
+            ]
+            return SimpleNamespace(id=remaining[0].id) if remaining else None
+        if self.target is thread_routes.RunMessageModel:
+            if self.db.assistant_message in self.db.deleted:
+                return None
+            return self.db.assistant_message
+        if self.target is thread_routes.RunModel:
+            return self.db.latest_run if self._ordered else self.db.run
+        raise AssertionError(f"Unsupported first() target: {self.target!r}")
+
+
+class FakeDeleteToolCallRouteDb:
+    def __init__(
+        self,
+        *,
+        thread: SimpleNamespace,
+        run: SimpleNamespace,
+        tool_call: SimpleNamespace,
+        assistant_message: SimpleNamespace,
+    ) -> None:
+        self.thread = thread
+        self.run = run
+        self.tool_call = tool_call
+        self.assistant_message = assistant_message
+        self.latest_run = run
+        self.tool_calls = [tool_call]
+        self.deleted: list[object] = []
+        self.committed = False
+        self.flushed = False
+
+    def query(self, target: object) -> FakeDeleteToolCallRouteQuery:
+        return FakeDeleteToolCallRouteQuery(self, target)
+
+    def delete(self, row: object) -> None:
+        self.deleted.append(row)
+
+    def flush(self) -> None:
+        self.flushed = True
+
+    def commit(self) -> None:
+        self.committed = True
+
+
+def test_delete_thread_tool_call_pauses_thread_and_emits_snapshot_invalidation(monkeypatch: pytest.MonkeyPatch) -> None:
+    thread_id = uuid4()
+    project_id = uuid4()
+    user_id = uuid4()
+    run_id = uuid4()
+    assistant_message_id = uuid4()
+    tool_call_id = uuid4()
+    thread = SimpleNamespace(
+        id=thread_id,
+        user_id=user_id,
+        project_id=project_id,
+        status="waiting",
+        captured_history_conversation_json=None,
+    )
+    run = SimpleNamespace(
+        id=run_id,
+        thread=thread,
+        thread_id=thread_id,
+        run_seq=1,
+        status="waiting",
+        error=None,
+    )
+    tool_call = SimpleNamespace(
+        id=tool_call_id,
+        thread_id=thread_id,
+        run_id=run_id,
+        assistant_message_id=assistant_message_id,
+        image_run_id=None,
+        data={},
+    )
+    assistant_message = SimpleNamespace(
+        id=assistant_message_id,
+        thread_id=thread_id,
+        role="assistant",
+        data={},
+    )
+    db = FakeDeleteToolCallRouteDb(
+        thread=thread,
+        run=run,
+        tool_call=tool_call,
+        assistant_message=assistant_message,
+    )
+    emitted: list[tuple[str, dict[str, object]]] = []
+    unresolved_counts = iter([1, 0])
+
+    monkeypatch.setattr(thread_routes, "require_owned_thread", lambda *_args, **_kwargs: thread)
+    monkeypatch.setattr(
+        thread_routes,
+        "_count_unresolved_run_tool_calls",
+        lambda *_args, **_kwargs: next(unresolved_counts),
+    )
+    monkeypatch.setattr(thread_routes, "snapshot_thread_row", lambda row: {"status": row.status})
+    monkeypatch.setattr(thread_routes, "snapshot_run_message_row", lambda row: {"id": str(row.id)})
+    monkeypatch.setattr(thread_routes, "snapshot_tool_call_row", lambda row: {"id": str(row.id)})
+    monkeypatch.setattr(thread_routes, "build_thread_delta", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(thread_routes, "build_run_message_delta", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(thread_routes, "build_tool_call_delta", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(thread_routes, "apply_project_usage_deltas", lambda *_args, **_kwargs: None)
+
+    async def _fake_emit_runtime_event(*, event_name: str, data: dict[str, object], **_kwargs):
+        emitted.append((event_name, data))
+        return {"event": event_name, "data": data}
+
+    monkeypatch.setattr(
+        thread_routes.runtime_event_dispatcher,
+        "emit_runtime_event",
+        _fake_emit_runtime_event,
+    )
+
+    response = asyncio.run(
+        thread_routes.delete_thread_tool_call(
+            thread_id=thread_id,
+            tool_call_id=tool_call_id,
+            current_user=SimpleNamespace(id=user_id),
+            db=db,  # type: ignore[arg-type]
+        )
+    )
+
+    assert response.status_code == 204
+    assert db.flushed is True
+    assert db.committed is True
+    assert run.status == "paused"
+    assert thread.status == "paused"
+    assert [name for name, _ in emitted] == ["run:status", "thread:snapshot_invalidated"]
+    assert emitted[0][1]["status"] == "paused"
+    assert emitted[1][1]["run_id"] == str(run_id)
