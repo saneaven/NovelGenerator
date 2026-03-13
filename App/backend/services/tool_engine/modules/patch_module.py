@@ -79,8 +79,8 @@ class PatchToolCallModule(ToolCallModule):
                         name="patch_guidelines",
                         description="Patch guidelines by single replacement.",
                         parameters=obj_schema(
-                            {"id": _ID, "field": {"type": "string", "enum": ["authorNote"]}, **_TEXT_PATCH},
-                            ["id", "field", "old", "new"],
+                            {"field": {"type": "string", "enum": ["authorNote"]}, **_TEXT_PATCH},
+                            ["field", "old", "new"],
                         ),
                         auto_approve_category="patch",
                     ),
@@ -139,6 +139,14 @@ class PatchToolCallModule(ToolCallModule):
                 )
                 return valid_result()
 
+            if tool_name == "patch_guidelines":
+                if args.get("field") != "authorNote":
+                    raise ValueError("field must be authorNote")
+                object_id = get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
+                current = read_object(ctx.db, project_id=ctx.project_id, object_type="guidelines", object_id=object_id, language=ctx.language)
+                patch_object_field(extract_lang_data(current, ctx.language), field="authorNote", old=str(args.get("old") or ""), new=str(args.get("new") or ""))
+                return valid_result()
+
             object_id = to_uuid(args.get("id"), "id")
             if tool_name == "patch_story_object":
                 field = args.get("field")
@@ -147,13 +155,6 @@ class PatchToolCallModule(ToolCallModule):
                 object_type = require_story_object_type(args.get("type"))
                 current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
                 patch_object_field(extract_lang_data(current, ctx.language), field=str(field), old=str(args.get("old") or ""), new=str(args.get("new") or ""))
-                return valid_result()
-
-            if tool_name == "patch_guidelines":
-                if args.get("field") != "authorNote":
-                    raise ValueError("field must be authorNote")
-                current = read_object(ctx.db, project_id=ctx.project_id, object_type="guidelines", object_id=object_id, language=ctx.language)
-                patch_object_field(extract_lang_data(current, ctx.language), field="authorNote", old=str(args.get("old") or ""), new=str(args.get("new") or ""))
                 return valid_result()
 
             if tool_name in {"patch_outline", "patch_outline_act", "patch_outline_chapter"}:
@@ -200,6 +201,28 @@ class PatchToolCallModule(ToolCallModule):
             )
             return make_result("Patched basic_info", object_id=str(object_id), object_type="basic_info")
 
+        if tool_name == "patch_guidelines":
+            object_id = get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
+            current = read_object(ctx.db, project_id=ctx.project_id, object_type="guidelines", object_id=object_id, language=ctx.language)
+            next_data = patch_object_field(
+                extract_lang_data(current, ctx.language),
+                field="authorNote",
+                old=str(args.get("old") or ""),
+                new=str(args.get("new") or ""),
+            )
+            object_service.update_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="guidelines",
+                object_id=object_id,
+                data=next_data,
+                language=ctx.language,
+                user_request="tool:patch_guidelines",
+                created_by=ctx.user_id,
+                create_new_version=True,
+            )
+            return make_result("Patched guidelines", object_id=str(object_id), object_type="guidelines")
+
         object_id = to_uuid(args.get("id"), "id")
 
         if tool_name == "patch_story_object":
@@ -223,27 +246,6 @@ class PatchToolCallModule(ToolCallModule):
                 create_new_version=True,
             )
             return make_result(f"Patched {object_type}", object_id=str(object_id), object_type=object_type)
-
-        if tool_name == "patch_guidelines":
-            current = read_object(ctx.db, project_id=ctx.project_id, object_type="guidelines", object_id=object_id, language=ctx.language)
-            next_data = patch_object_field(
-                extract_lang_data(current, ctx.language),
-                field="authorNote",
-                old=str(args.get("old") or ""),
-                new=str(args.get("new") or ""),
-            )
-            object_service.update_object(
-                ctx.db,
-                project_id=ctx.project_id,
-                object_type="guidelines",
-                object_id=object_id,
-                data=next_data,
-                language=ctx.language,
-                user_request="tool:patch_guidelines",
-                created_by=ctx.user_id,
-                create_new_version=True,
-            )
-            return make_result("Patched guidelines", object_id=str(object_id), object_type="guidelines")
 
         if tool_name in {"patch_outline", "patch_outline_act", "patch_outline_chapter"}:
             object_type = {

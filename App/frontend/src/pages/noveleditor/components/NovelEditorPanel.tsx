@@ -923,7 +923,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               ? availableSourceLanguages[0]
               : manuscriptLanguages[0] || settings.mainLanguage
           }
-          defaultTargetLanguage={globalDisplayLanguage}
+          defaultTargetLanguage={settings.defaultSubLanguage}
         />
       )}
 

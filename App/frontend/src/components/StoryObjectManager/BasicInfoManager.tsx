@@ -131,10 +131,10 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   }, [basicInfoId, fetchObject]);
 
   useEffect(() => {
-    if (currentData) {
+    if (currentData && !isEditing) {
       setEditFormData(currentData);
     }
-  }, [currentData]);
+  }, [currentData, isEditing]);
 
   const handleSave = async () => {
     if (!basicInfo || !basicInfoId) return;
@@ -230,6 +230,19 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
             >
               History
             </TextButton>
+            {settings.defaultSubLanguage &&
+              Object.keys(basicInfo.data).includes(settings.defaultSubLanguage) && (
+                <TextButton
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowRetranslateModal(true)}
+                  disabled={loading}
+                  iconLeft={<Refresh size="xs" />}
+                  className="desktop-only"
+                >
+                  Retranslate
+                </TextButton>
+            )}
             <TextButton
               variant="secondary"
               size="sm"
@@ -450,7 +463,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
           projectId={projectId}
           preSelectedObjectIds={[basicInfoId]}
           defaultSourceLanguage={settings.mainLanguage}
-          defaultTargetLanguage={globalDisplayLanguage}
+          defaultTargetLanguage={settings.defaultSubLanguage}
         />
       )}
 

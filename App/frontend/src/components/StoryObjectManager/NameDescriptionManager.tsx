@@ -626,7 +626,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
           projectId={projectId}
           preSelectedObjectIds={[retranslateTargetId]}
           defaultSourceLanguage={settings.mainLanguage}
-          defaultTargetLanguage={globalDisplayLanguage}
+          defaultTargetLanguage={settings.defaultSubLanguage}
         />
       )}
 

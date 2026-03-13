@@ -49,7 +49,7 @@ class PatchTranslationToolCallModule(ToolCallModule):
                 ToolSpec(
                     name="patch_translation_guidelines",
                     description="Patch guidelines translation by single replacement.",
-                    parameters=obj_schema({"id": _ID, "field": {"type": "string", "enum": ["authorNote"]}, **_TEXT_PATCH}, ["id", "field", "old", "new"]),
+                    parameters=obj_schema({"field": {"type": "string", "enum": ["authorNote"]}, **_TEXT_PATCH}, ["field", "old", "new"]),
                     auto_approve_category="patch_translation",
                 ),
                 ToolSpec(
@@ -90,17 +90,20 @@ class PatchTranslationToolCallModule(ToolCallModule):
                 patch_object_field(extract_lang_data(current, ctx.language), field=str(field), old=str(args.get("old") or ""), new=str(args.get("new") or ""))
                 return valid_result()
 
+            if tool_name == "patch_translation_guidelines":
+                if args.get("field") != "authorNote":
+                    raise ValueError("field must be authorNote")
+                object_id = get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
+                current = read_object(ctx.db, project_id=ctx.project_id, object_type="guidelines", object_id=object_id, language=ctx.language)
+                patch_object_field(extract_lang_data(current, ctx.language), field="authorNote", old=str(args.get("old") or ""), new=str(args.get("new") or ""))
+                return valid_result()
+
             object_id = to_uuid(args.get("id"), "id")
             if tool_name == "patch_translation_story_object":
                 field = args.get("field")
                 if field not in {"name", "description", "content"}:
                     raise ValueError("field must be one of name|description|content")
                 object_type = require_story_object_type(args.get("type"))
-            elif tool_name == "patch_translation_guidelines":
-                field = "authorNote"
-                if args.get("field") != "authorNote":
-                    raise ValueError("field must be authorNote")
-                object_type = "guidelines"
             elif tool_name == "patch_translation_outline":
                 field = args.get("field")
                 if field not in {"name", "description", "content"}:
@@ -152,12 +155,32 @@ class PatchTranslationToolCallModule(ToolCallModule):
             )
             return make_result("Patched translation basic_info", object_id=str(object_id), object_type="basic_info")
 
+        if tool_name == "patch_translation_guidelines":
+            object_id = get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
+            current = read_object(ctx.db, project_id=ctx.project_id, object_type="guidelines", object_id=object_id, language=ctx.language)
+            next_data = patch_object_field(
+                extract_lang_data(current, ctx.language),
+                field="authorNote",
+                old=str(args.get("old") or ""),
+                new=str(args.get("new") or ""),
+            )
+            object_service.update_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="guidelines",
+                object_id=object_id,
+                data=next_data,
+                language=ctx.language,
+                user_request="tool:patch_translation_guidelines",
+                created_by=ctx.user_id,
+                create_new_version=False,
+            )
+            return make_result("Patched translation guidelines", object_id=str(object_id), object_type="guidelines")
+
         object_id = to_uuid(args.get("id"), "id")
 
         if tool_name == "patch_translation_story_object":
             object_type = require_story_object_type(args.get("type"))
-        elif tool_name == "patch_translation_guidelines":
-            object_type = "guidelines"
         elif tool_name == "patch_translation_outline":
             object_type = "outline"
         elif tool_name == "patch_translation_outline_act":
@@ -176,7 +199,7 @@ class PatchTranslationToolCallModule(ToolCallModule):
         else:
             raise ValueError(f"Unsupported patch translation tool: {tool_name}")
 
-        field = "authorNote" if tool_name == "patch_translation_guidelines" else str(args.get("field") or "")
+        field = str(args.get("field") or "")
         current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
         next_data = patch_object_field(
             extract_lang_data(current, ctx.language),

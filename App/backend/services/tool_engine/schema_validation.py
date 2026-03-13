@@ -86,11 +86,6 @@ def validate_schema_required_enum_additional_properties(
                 "validate_schema_required_enum_additional_properties",
                 f"Missing required parameter: {name}",
             )
-        if isinstance(value, str) and not value.strip():
-            return invalid_result(
-                "validate_schema_required_enum_additional_properties",
-                f"Required parameter cannot be empty: {name}",
-            )
 
     if additional is False:
         unknown = [k for k in args.keys() if k not in prop_map]

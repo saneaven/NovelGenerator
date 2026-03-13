@@ -59,7 +59,7 @@ class TranslateToolCallModule(ToolCallModule):
                 ToolSpec(
                     name="translate_guidelines",
                     description="Translate guidelines.",
-                    parameters=obj_schema({"id": _ID, "authorNote": {"type": "string"}}, ["id", "authorNote"]),
+                    parameters=obj_schema({"authorNote": {"type": "string"}}, ["authorNote"]),
                     auto_approve_category="translate",
                 ),
                 ToolSpec(
@@ -94,11 +94,12 @@ class TranslateToolCallModule(ToolCallModule):
             if tool_name == "translate_basic_info":
                 get_primary_object_id(ctx.db, ctx.project_id, "basic_info")
                 return valid_result()
+            if tool_name == "translate_guidelines":
+                get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
+                return valid_result()
             object_id = to_uuid(args.get("id"), "id")
             if tool_name == "translate_story_object":
                 object_type = require_story_object_type(args.get("type"))
-            elif tool_name == "translate_guidelines":
-                object_type = "guidelines"
             elif tool_name == "translate_outline":
                 object_type = "outline"
             elif tool_name == "translate_outline_act":
@@ -136,12 +137,29 @@ class TranslateToolCallModule(ToolCallModule):
             )
             return make_result("Translated basic_info", object_id=str(object_id), object_type="basic_info")
 
+        if tool_name == "translate_guidelines":
+            object_id = get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
+            current = read_object(ctx.db, project_id=ctx.project_id, object_type="guidelines", object_id=object_id, language=ctx.language)
+            next_data = dict(extract_lang_data(current, ctx.language))
+            if "authorNote" in args:
+                next_data["authorNote"] = args.get("authorNote")
+            object_service.update_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="guidelines",
+                object_id=object_id,
+                data=next_data,
+                language=ctx.language,
+                user_request="tool:translate_guidelines",
+                created_by=ctx.user_id,
+                create_new_version=False,
+            )
+            return make_result("Translated guidelines", object_id=str(object_id), object_type="guidelines")
+
         object_id = to_uuid(args.get("id"), "id")
 
         if tool_name == "translate_story_object":
             object_type = require_story_object_type(args.get("type"))
-        elif tool_name == "translate_guidelines":
-            object_type = "guidelines"
         elif tool_name == "translate_outline":
             object_type = "outline"
         elif tool_name == "translate_outline_act":
@@ -162,13 +180,9 @@ class TranslateToolCallModule(ToolCallModule):
 
         current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
         next_data = dict(extract_lang_data(current, ctx.language))
-        if object_type == "guidelines":
-            if "authorNote" in args:
-                next_data["authorNote"] = args.get("authorNote")
-        else:
-            for key in ["name", "description", "content"]:
-                if key in args:
-                    next_data[key] = args[key]
+        for key in ["name", "description", "content"]:
+            if key in args:
+                next_data[key] = args[key]
 
         object_service.update_object(
             ctx.db,

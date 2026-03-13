@@ -88,7 +88,7 @@ class ReplaceToolCallModule(ToolCallModule):
                     ToolSpec(
                         name="replace_guidelines",
                         description="Replace guidelines.",
-                        parameters=obj_schema({"id": _ID, "authorNote": {"type": "string"}}, ["id", "authorNote"]),
+                        parameters=obj_schema({"authorNote": {"type": "string"}}, ["authorNote"]),
                         auto_approve_category="replace",
                     ),
                 ]
@@ -149,11 +149,13 @@ class ReplaceToolCallModule(ToolCallModule):
                 get_primary_object_id(ctx.db, ctx.project_id, "basic_info")
                 return valid_result()
 
+            if tool_name == "replace_guidelines":
+                get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
+                return valid_result()
+
             object_id = to_uuid(args.get("id"), "id")
             if tool_name == "replace_story_object":
                 object_type = require_story_object_type(args.get("type"))
-            elif tool_name == "replace_guidelines":
-                object_type = "guidelines"
             elif tool_name == "replace_outline":
                 object_type = "outline"
             elif tool_name == "replace_outline_act":
@@ -217,6 +219,25 @@ class ReplaceToolCallModule(ToolCallModule):
             )
             return make_result("Replaced basic_info", object_id=str(object_id), object_type="basic_info")
 
+        if tool_name == "replace_guidelines":
+            object_id = get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
+            current = read_object(ctx.db, project_id=ctx.project_id, object_type="guidelines", object_id=object_id, language=ctx.language)
+            next_data = dict(extract_lang_data(current, ctx.language))
+            if "authorNote" in args:
+                next_data["authorNote"] = args.get("authorNote")
+            object_service.update_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="guidelines",
+                object_id=object_id,
+                data=next_data,
+                language=ctx.language,
+                user_request="tool:replace_guidelines",
+                created_by=ctx.user_id,
+                create_new_version=True,
+            )
+            return make_result("Replaced guidelines", object_id=str(object_id), object_type="guidelines")
+
         object_id = to_uuid(args.get("id"), "id")
 
         if tool_name == "replace_story_object":
@@ -238,24 +259,6 @@ class ReplaceToolCallModule(ToolCallModule):
                 create_new_version=True,
             )
             return make_result(f"Replaced {object_type}", object_id=str(object_id), object_type=object_type)
-
-        if tool_name == "replace_guidelines":
-            current = read_object(ctx.db, project_id=ctx.project_id, object_type="guidelines", object_id=object_id, language=ctx.language)
-            next_data = dict(extract_lang_data(current, ctx.language))
-            if "authorNote" in args:
-                next_data["authorNote"] = args.get("authorNote")
-            object_service.update_object(
-                ctx.db,
-                project_id=ctx.project_id,
-                object_type="guidelines",
-                object_id=object_id,
-                data=next_data,
-                language=ctx.language,
-                user_request="tool:replace_guidelines",
-                created_by=ctx.user_id,
-                create_new_version=True,
-            )
-            return make_result("Replaced guidelines", object_id=str(object_id), object_type="guidelines")
 
         if tool_name in {"replace_outline", "replace_outline_act", "replace_outline_chapter"}:
             object_type = {

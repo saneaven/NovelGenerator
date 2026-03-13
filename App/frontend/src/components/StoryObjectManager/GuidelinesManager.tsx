@@ -119,10 +119,10 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
   }, [guidelinesId, fetchObject]);
 
   useEffect(() => {
-    if (currentData) {
+    if (currentData && !isEditing) {
       setEditFormData(currentData);
     }
-  }, [currentData]);
+  }, [currentData, isEditing]);
 
   const handleSave = async () => {
     if (!guidelines || !guidelinesId) return;
@@ -202,6 +202,19 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
             >
               History
             </TextButton>
+            {settings.defaultSubLanguage &&
+              Object.keys(guidelines.data).includes(settings.defaultSubLanguage) && (
+                <TextButton
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowRetranslateModal(true)}
+                  disabled={loading}
+                  iconLeft={<Refresh size="xs" />}
+                  className="desktop-only"
+                >
+                  Retranslate
+                </TextButton>
+            )}
             <TextButton
               variant="secondary"
               size="sm"
@@ -361,7 +374,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
           projectId={projectId}
           preSelectedObjectIds={[guidelinesId]}
           defaultSourceLanguage={settings.mainLanguage}
-          defaultTargetLanguage={globalDisplayLanguage}
+          defaultTargetLanguage={settings.defaultSubLanguage}
         />
       )}
     </div>
