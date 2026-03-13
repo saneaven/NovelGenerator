@@ -77,11 +77,13 @@ class _FakeQuery:
         return self
 
     def first(self):
-        if self._model is User:
+        model_name = getattr(self._model, "__name__", None)
+
+        if model_name == "User":
             user_id = _extract_filter_value(self._criteria, "id")
             return self._db.users_by_id.get(user_id)
 
-        if self._model is Asset:
+        if model_name == "Asset":
             file_path = _extract_filter_value(self._criteria, "file_path")
             owner_id = _extract_filter_value(self._criteria, "user_id")
             asset = self._db.assets_by_path.get(file_path)
