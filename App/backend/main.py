@@ -69,7 +69,7 @@ from .routes.agent_routes import router as agent_router
 from .routes.settings_routes import router as settings_router
 from .routes.credential_routes import router as credential_router
 from .routes.scenario_routes import router as scenario_router
-from .routes.rag_routes import router as rag_router
+from .routes.search_routes import router as search_router
 
 # New unified translation system routes
 from .routes.unified_object_routes import router as unified_object_router
@@ -148,7 +148,7 @@ app.include_router(agent_router)
 app.include_router(settings_router)
 app.include_router(credential_router)
 app.include_router(scenario_router)
-app.include_router(rag_router)
+app.include_router(search_router)
 
 # Include new unified translation system routers
 app.include_router(unified_object_router, prefix="/api/v1", tags=["objects"])

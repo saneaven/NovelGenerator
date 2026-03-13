@@ -7,11 +7,11 @@ from uuid import UUID
 from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
-from ..models.rag_models import RagSource
+from ..models.semantic_models import SemanticSource
 from ..models.translation_models import ObjectVersion
 from .embedding_config_service import get_embedding_profile
-from .rag_embedding_service import embed_many
-from .rag_index_service import get_main_language
+from .semantic_embedding_service import embed_many
+from .semantic_index_service import get_main_language
 
 
 def _vec_to_pg(vec: List[float]) -> str:
@@ -52,7 +52,7 @@ def search_project_by_keyword(
 
     profile = get_embedding_profile(db, user_id=user_id, feature="search")
     if not profile:
-        raise ValueError("RAG embedding profile is not configured")
+        raise ValueError("Semantic embedding profile is not configured")
 
     language = get_main_language(db, user_id=user_id)
 
@@ -71,8 +71,8 @@ def search_project_by_keyword(
     count_stmt = sql_text(
         """
         SELECT COUNT(*) AS total
-        FROM rag_chunks c
-        JOIN rag_sources s ON s.id = c.source_id
+        FROM semantic_chunks c
+        JOIN semantic_sources s ON s.id = c.source_id
         WHERE s.user_id = :user_id
           AND s.project_id = :project_id
           AND s.language = :language
@@ -107,8 +107,8 @@ def search_project_by_keyword(
           s.act_order AS act_order,
           s.chapter_order AS chapter_order,
           s.chapter_id AS chapter_id
-        FROM rag_chunks c
-        JOIN rag_sources s ON s.id = c.source_id
+        FROM semantic_chunks c
+        JOIN semantic_sources s ON s.id = c.source_id
         WHERE s.user_id = :user_id
           AND s.project_id = :project_id
           AND s.language = :language
@@ -180,7 +180,7 @@ async def search_project(
 ) -> List[Dict[str, Any]]:
     profile = get_embedding_profile(db, user_id=user_id, feature="search")
     if not profile:
-        raise ValueError("RAG embedding profile is not configured")
+        raise ValueError("Semantic embedding profile is not configured")
 
     language = get_main_language(db, user_id=user_id)
 
@@ -212,8 +212,8 @@ async def search_project(
           s.chapter_order AS chapter_order,
           s.chapter_id AS chapter_id,
           (c.embedding <-> (:qv)::vector) AS distance
-        FROM rag_chunks c
-        JOIN rag_sources s ON s.id = c.source_id
+        FROM semantic_chunks c
+        JOIN semantic_sources s ON s.id = c.source_id
         WHERE s.user_id = :user_id
           AND s.project_id = :project_id
           AND s.language = :language
@@ -320,8 +320,8 @@ async def search_project(
               s.act_order AS act_order,
               s.chapter_order AS chapter_order,
               s.chapter_id AS chapter_id
-            FROM rag_chunks c
-            JOIN rag_sources s ON s.id = c.source_id
+            FROM semantic_chunks c
+            JOIN semantic_sources s ON s.id = c.source_id
             WHERE c.source_id = :source_id
               AND c.chunk_index = ANY(:chunk_indices)
             """

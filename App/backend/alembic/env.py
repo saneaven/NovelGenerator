@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import Base, DATABASE_URL
 # Import all models to ensure they're registered with Base
 from models import db_models, translation_models
-from models import rag_models
+from models import semantic_models
 from models import memory_models
 
 # this is the Alembic Config object, which provides

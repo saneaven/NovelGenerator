@@ -1,40 +1,39 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import get_db
-from ..models.db_models import User, UserSettings
-from ..schemas.rag import (
-    RagEmbeddingProfileResponse,
-    RagProjectStatusResponse,
-    RagIndexObjectRequest,
-    RagDeleteObjectRequest,
-    RagReindexRequest,
-    RagReindexResponse,
-    RagSearchRequest,
-    RagSearchResponse,
-    RagSearchResult,
-    RagKeywordSearchResponse,
+from ..models.db_models import User
+from ..schemas.search import (
+    VectorStorageStatusResponse,
+    VectorStorageIndexObjectRequest,
+    VectorStorageDeleteObjectRequest,
+    VectorStorageReindexRequest,
+    VectorStorageReindexResponse,
+    SemanticSearchRequest,
+    SemanticSearchResponse,
+    SemanticSearchResult,
+    KeywordSearchResponse,
 )
 from ..services.embedding_config_service import get_embedding_profile
 from ..services.credential_service import CredentialServiceError, credential_service
 from ..services.ownership import require_owned_object, require_owned_project
 from ..services.settings_service import settings_service
-from ..services.rag_index_service import (
+from ..services.semantic_index_service import (
     delete_object_index,
     get_project_status,
     index_object,
     reindex_project,
 )
-from ..services.rag_search_service import search_project, search_project_by_keyword
+from ..services.semantic_search_service import search_project, search_project_by_keyword
 
 
-router = APIRouter(prefix="/api/v1", tags=["rag"])
+router = APIRouter(prefix="/api/v1", tags=["search"])
 
 
 def _is_vector_storage_enabled(db: Session, *, user_id: UUID) -> bool:
@@ -45,8 +44,16 @@ def _require_vector_storage_enabled(db: Session, *, user_id: UUID) -> None:
     if not _is_vector_storage_enabled(db, user_id=user_id):
         raise HTTPException(status_code=400, detail="Search & Memory is disabled (Settings > Search & Memory)")
 
-@router.get("/projects/{project_id}/rag/status", response_model=RagProjectStatusResponse)
-async def get_rag_status(
+
+def _require_search_profile(db: Session, *, user_id: UUID) -> dict[str, Any]:
+    profile = get_embedding_profile(db, user_id=user_id, feature="search")
+    if not profile:
+        raise HTTPException(status_code=400, detail="Semantic embedding profile is not configured")
+    return profile
+
+
+@router.get("/projects/{project_id}/vector-storage/status", response_model=VectorStorageStatusResponse)
+async def get_vector_storage_status(
     project_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -55,13 +62,13 @@ async def get_rag_status(
     enabled = _is_vector_storage_enabled(db, user_id=current_user.id)
     status_data = get_project_status(db, user_id=current_user.id, project_id=project_id)
     status_data["enabled"] = enabled
-    return RagProjectStatusResponse(**status_data)
+    return VectorStorageStatusResponse(**status_data)
 
 
-@router.post("/projects/{project_id}/rag/index-object")
-async def rag_index_object(
+@router.post("/projects/{project_id}/vector-storage/index-object")
+async def vector_storage_index_object(
     project_id: UUID,
-    request: RagIndexObjectRequest,
+    request: VectorStorageIndexObjectRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -75,9 +82,7 @@ async def rag_index_object(
         project_id=project_id,
     )
 
-    profile = get_embedding_profile(db, user_id=current_user.id, feature="search")
-    if not profile:
-        raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
+    profile = _require_search_profile(db, user_id=current_user.id)
 
     try:
         cfg: Dict[str, Any] = credential_service.get_provider_config(db, current_user.id, profile["provider"])
@@ -101,10 +106,10 @@ async def rag_index_object(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/projects/{project_id}/rag/delete-object")
-async def rag_delete_object(
+@router.post("/projects/{project_id}/vector-storage/delete-object")
+async def vector_storage_delete_object(
     project_id: UUID,
-    request: RagDeleteObjectRequest,
+    request: VectorStorageDeleteObjectRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -120,19 +125,17 @@ async def rag_delete_object(
     return {"status": "ok", "deleted_sources": deleted}
 
 
-@router.post("/projects/{project_id}/rag/reindex", response_model=RagReindexResponse)
-async def rag_reindex_project(
+@router.post("/projects/{project_id}/vector-storage/reindex", response_model=VectorStorageReindexResponse)
+async def vector_storage_reindex_project(
     project_id: UUID,
-    request: RagReindexRequest,
+    request: VectorStorageReindexRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
     _require_vector_storage_enabled(db, user_id=current_user.id)
 
-    profile = get_embedding_profile(db, user_id=current_user.id, feature="search")
-    if not profile:
-        raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
+    profile = _require_search_profile(db, user_id=current_user.id)
 
     try:
         cfg: Dict[str, Any] = credential_service.get_provider_config(db, current_user.id, profile["provider"])
@@ -147,26 +150,24 @@ async def rag_reindex_project(
             provider_config=cfg,
             force=request.force,
         )
-        return RagReindexResponse(**summary)
+        return VectorStorageReindexResponse(**summary)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/projects/{project_id}/rag/search", response_model=RagSearchResponse)
-async def rag_search(
+@router.post("/projects/{project_id}/search/semantic", response_model=SemanticSearchResponse)
+async def semantic_search(
     project_id: UUID,
-    request: RagSearchRequest,
+    request: SemanticSearchRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
     _require_vector_storage_enabled(db, user_id=current_user.id)
 
-    profile = get_embedding_profile(db, user_id=current_user.id, feature="search")
-    if not profile:
-        raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
+    profile = _require_search_profile(db, user_id=current_user.id)
 
     try:
         cfg: Dict[str, Any] = credential_service.get_provider_config(db, current_user.id, profile["provider"])
@@ -186,15 +187,15 @@ async def rag_search(
             max_primary_items=search_settings.retrieval.max_primary_items,
             max_total_items=search_settings.retrieval.max_total_items,
         )
-        return RagSearchResponse(results=[RagSearchResult(**r) for r in results])
+        return SemanticSearchResponse(results=[SemanticSearchResult(**r) for r in results])
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/projects/{project_id}/rag/keyword-search", response_model=RagKeywordSearchResponse)
-async def rag_keyword_search(
+@router.get("/projects/{project_id}/search/keyword", response_model=KeywordSearchResponse)
+async def keyword_search(
     project_id: UUID,
     keyword: str = Query(..., min_length=1),
     page: int = Query(1, ge=1),
@@ -219,12 +220,12 @@ async def rag_keyword_search(
             page=page,
             page_size=page_size,
         )
-        return RagKeywordSearchResponse(
+        return KeywordSearchResponse(
             keyword=kw,
             page=page,
             page_size=page_size,
             total=int(data.get("total") or 0),
-            results=[RagSearchResult(**r) for r in (data.get("results") or [])],
+            results=[SemanticSearchResult(**r) for r in (data.get("results") or [])],
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

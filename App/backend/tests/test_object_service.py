@@ -29,21 +29,21 @@ def _install_import_stubs() -> None:
     deletion_service.collect_outline_subtree_object_ids = lambda *_args, **_kwargs: {}
     deletion_service.delete_assets_with_files = lambda *_args, **_kwargs: None
     deletion_service.delete_object_versions_bulk = lambda *_args, **_kwargs: None
-    deletion_service.delete_rag_sources_bulk = lambda *_args, **_kwargs: None
+    deletion_service.delete_semantic_sources_bulk = lambda *_args, **_kwargs: None
     sys.modules["App.backend.services.deletion_service"] = deletion_service
 
     manuscript_image_index_service = types.ModuleType("App.backend.services.manuscript_image_index_service")
     manuscript_image_index_service.rebuild_manuscript_images_for_language = lambda **_kwargs: None
     sys.modules["App.backend.services.manuscript_image_index_service"] = manuscript_image_index_service
 
-    rag_index_service = types.ModuleType("App.backend.services.rag_index_service")
+    semantic_index_service = types.ModuleType("App.backend.services.semantic_index_service")
 
     async def _index_object(*_args, **_kwargs) -> None:
         return None
 
-    rag_index_service.index_object = _index_object
-    rag_index_service.invalidate_object_index = lambda *_args, **_kwargs: None
-    sys.modules["App.backend.services.rag_index_service"] = rag_index_service
+    semantic_index_service.index_object = _index_object
+    semantic_index_service.invalidate_object_index = lambda *_args, **_kwargs: None
+    sys.modules["App.backend.services.semantic_index_service"] = semantic_index_service
 
     object_change_events = types.ModuleType("App.backend.services.object_change_events")
     object_change_events.queue_object_change = lambda *_args, **_kwargs: None
@@ -138,10 +138,10 @@ def test_update_object_manuscript_path_uses_manuscript_image_model(monkeypatch) 
     )
     monkeypatch.setattr(
         object_service_module,
-        "_invalidate_rag_index",
+        "_invalidate_semantic_index",
         lambda *_args, **kwargs: invalidations.append(kwargs),
     )
-    monkeypatch.setattr(object_service_module, "_queue_rag_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(object_service_module, "_queue_semantic_index", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(object_service_module, "queue_object_change", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(object_service_module, "build_object_version_delta", lambda *_args, **_kwargs: "version-delta")
     monkeypatch.setattr(object_service_module, "build_manuscript_images_delta", lambda *_args, **_kwargs: "image-delta")

@@ -36,7 +36,7 @@ function toStringArray(value: unknown): string[] {
 function parseStructuredPayload(value: unknown): SearchPayload | null {
   if (!isRecord(value)) return null;
 
-  const type = value.type === 'keyword' ? 'keyword' : value.type === 'rag' ? 'rag' : null;
+  const type = value.type === 'keyword' ? 'keyword' : value.type === 'semantic' ? 'semantic' : null;
   if (!type) return null;
 
   const rawGroups = Array.isArray(value.groups) ? value.groups : [];

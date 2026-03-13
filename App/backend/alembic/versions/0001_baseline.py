@@ -5,7 +5,7 @@ from __future__ import annotations
 from alembic import op
 
 from database import Base
-from models import db_models, memory_models, rag_models, translation_models  # noqa: F401
+from models import db_models, memory_models, semantic_models, translation_models  # noqa: F401
 
 
 revision = "0001_baseline"

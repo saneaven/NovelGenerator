@@ -13,7 +13,7 @@ from ..models.db_models import User, UserSettings
 from ..schemas.settings import UserSettingsResponse, UserSettingsUpdate
 from ..services.image_model_catalog_service import default_image_gen_config
 from ..services.memory_service import wipe_memory_index
-from ..services.rag_index_service import wipe_user_index
+from ..services.semantic_index_service import wipe_user_semantic_index
 from ..services.search_memory_settings import (
     clear_dimensions_for_target,
     resolve_memory_settings,
@@ -167,7 +167,7 @@ async def update_user_settings(
     prev_search_memory_settings = validate_search_memory_settings(getattr(settings, "search_memory_settings", None))
     prev_search_settings = resolve_search_settings(prev_search_memory_settings)
     prev_memory_settings = resolve_memory_settings(prev_search_memory_settings)
-    should_wipe_rag_index = False
+    should_wipe_semantic_index = False
     should_wipe_memory_index = False
 
     if not demo_mode_enabled and update_data.taskConfigSettings is not None:
@@ -180,7 +180,7 @@ async def update_user_settings(
     if update_data.mainLanguage is not None:
         settings.main_language = update_data.mainLanguage
         if update_data.mainLanguage != prev_main_language:
-            should_wipe_rag_index = True
+            should_wipe_semantic_index = True
 
     if update_data.subLanguages is not None:
         settings.sub_languages = update_data.subLanguages
@@ -237,7 +237,7 @@ async def update_user_settings(
             str(next_search_settings["embedding"].get("model") or ""),
         )
         if prev_search_signature != next_search_signature:
-            should_wipe_rag_index = True
+            should_wipe_semantic_index = True
             next_search_memory_settings = clear_dimensions_for_target(next_search_memory_settings, "search")
 
         prev_memory_signature = (
@@ -269,8 +269,8 @@ async def update_user_settings(
     if not demo_mode_enabled and update_data.toolCallAutoApprove is not None:
         settings.tool_call_auto_approve = _build_tool_call_auto_approve(update_data.toolCallAutoApprove)  # type: ignore[assignment]
 
-    if should_wipe_rag_index:
-        wipe_user_index(db, user_id=current_user.id)
+    if should_wipe_semantic_index:
+        wipe_user_semantic_index(db, user_id=current_user.id)
     if should_wipe_memory_index:
         wipe_memory_index(db, user_id=current_user.id)
 

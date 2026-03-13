@@ -36,10 +36,10 @@ from ..services.deletion_service import (
     collect_outline_subtree_object_ids,
     delete_assets_with_files,
     delete_object_versions_bulk,
-    delete_rag_sources_bulk,
+    delete_semantic_sources_bulk,
 )
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
-from ..services.rag_index_service import index_object, invalidate_object_index
+from ..services.semantic_index_service import index_object, invalidate_object_index
 from ..utils.object_type_aliases import externalize_object_type, normalize_object_type
 from .basic_info_utils import normalize_basic_info_data
 from .asset_change_events import queue_scene_assets_change
@@ -65,20 +65,20 @@ from .storage_usage_service import (
 
 
 LOREBOOK_TYPE = normalize_object_type("lorebook")
-_PENDING_RAG_OPS_KEY = "_pending_rag_ops"
-_RAG_EXCLUDED_TYPES = {"basic_info", "guidelines"}
+_PENDING_SEMANTIC_OPS_KEY = "_pending_semantic_ops"
+_SEMANTIC_EXCLUDED_TYPES = {"basic_info", "guidelines"}
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class _PendingRagOp:
+class _PendingSemanticOp:
     user_id: UUID
     project_id: UUID
     object_type: str
     object_id: UUID
 
 
-def _queue_rag_index(
+def _queue_semantic_index(
     db: Session,
     *,
     user_id: UUID | None,
@@ -88,10 +88,10 @@ def _queue_rag_index(
 ) -> None:
     if user_id is None:
         return
-    if object_type in _RAG_EXCLUDED_TYPES:
+    if object_type in _SEMANTIC_EXCLUDED_TYPES:
         return
-    pending = db.info.setdefault(_PENDING_RAG_OPS_KEY, [])
-    op = _PendingRagOp(
+    pending = db.info.setdefault(_PENDING_SEMANTIC_OPS_KEY, [])
+    op = _PendingSemanticOp(
         user_id=user_id,
         project_id=project_id,
         object_type=object_type,
@@ -101,7 +101,7 @@ def _queue_rag_index(
         pending.append(op)
 
 
-def _invalidate_rag_index(
+def _invalidate_semantic_index(
     db: Session,
     *,
     user_id: UUID | None,
@@ -111,7 +111,7 @@ def _invalidate_rag_index(
 ) -> None:
     if user_id is None:
         return
-    if object_type in _RAG_EXCLUDED_TYPES:
+    if object_type in _SEMANTIC_EXCLUDED_TYPES:
         return
     invalidate_object_index(
         db,
@@ -122,15 +122,15 @@ def _invalidate_rag_index(
     )
 
 
-_RAG_SEMAPHORE = asyncio.Semaphore(3)
+_SEMANTIC_SEMAPHORE = asyncio.Semaphore(3)
 
 
-async def _process_pending_rag_op(op: _PendingRagOp) -> None:
-    async with _RAG_SEMAPHORE:
-        await _process_pending_rag_op_inner(op)
+async def _process_pending_semantic_op(op: _PendingSemanticOp) -> None:
+    async with _SEMANTIC_SEMAPHORE:
+        await _process_pending_semantic_op_inner(op)
 
 
-async def _process_pending_rag_op_inner(op: _PendingRagOp) -> None:
+async def _process_pending_semantic_op_inner(op: _PendingSemanticOp) -> None:
     db = SessionLocal()
     try:
         if not settings_service.is_vector_storage_enabled(db, op.user_id):
@@ -156,7 +156,7 @@ async def _process_pending_rag_op_inner(op: _PendingRagOp) -> None:
         )
     except Exception:
         logger.exception(
-            "RAG indexing hook failed for %s/%s",
+            "Semantic indexing hook failed for %s/%s",
             op.object_type,
             op.object_id,
         )
@@ -165,25 +165,25 @@ async def _process_pending_rag_op_inner(op: _PendingRagOp) -> None:
 
 
 @event.listens_for(Session, "after_commit")
-def _dispatch_pending_rag_ops(session: Session) -> None:
-    pending = session.info.pop(_PENDING_RAG_OPS_KEY, None)
+def _dispatch_pending_semantic_ops(session: Session) -> None:
+    pending = session.info.pop(_PENDING_SEMANTIC_OPS_KEY, None)
     if not pending:
         return
 
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        logger.warning("Skipping queued RAG indexing hooks: no running event loop")
+        logger.warning("Skipping queued semantic indexing hooks: no running event loop")
         return
 
     unique_ops = list(dict.fromkeys(pending))
     for op in unique_ops:
-        loop.create_task(_process_pending_rag_op(op))
+        loop.create_task(_process_pending_semantic_op(op))
 
 
 @event.listens_for(Session, "after_rollback")
-def _clear_pending_rag_ops(session: Session) -> None:
-    session.info.pop(_PENDING_RAG_OPS_KEY, None)
+def _clear_pending_semantic_ops(session: Session) -> None:
+    session.info.pop(_PENDING_SEMANTIC_OPS_KEY, None)
 
 
 def _resolve_project_user_id(db: Session, *, project_id: UUID) -> UUID:
@@ -730,7 +730,7 @@ class ObjectService:
                 .first()
             )
 
-            _queue_rag_index(
+            _queue_semantic_index(
                 db,
                 user_id=created_by,
                 project_id=project_id,
@@ -738,7 +738,7 @@ class ObjectService:
                 object_id=manuscript_id,
             )
 
-        _queue_rag_index(
+        _queue_semantic_index(
             db,
             user_id=created_by,
             project_id=project_id,
@@ -867,14 +867,14 @@ class ObjectService:
                     action="updated",
                 )
 
-        _invalidate_rag_index(
+        _invalidate_semantic_index(
             db,
             user_id=created_by,
             project_id=project_id,
             object_type=t,
             object_id=object_id,
         )
-        _queue_rag_index(
+        _queue_semantic_index(
             db,
             user_id=created_by,
             project_id=project_id,
@@ -949,14 +949,14 @@ class ObjectService:
         obj.updated_at = datetime.utcnow()
         db.flush()
 
-        _invalidate_rag_index(
+        _invalidate_semantic_index(
             db,
             user_id=created_by,
             project_id=project_id,
             object_type=t,
             object_id=object_id,
         )
-        _queue_rag_index(
+        _queue_semantic_index(
             db,
             user_id=created_by,
             project_id=project_id,
@@ -1071,14 +1071,14 @@ class ObjectService:
         obj.updated_at = datetime.utcnow()
         db.flush()
 
-        _invalidate_rag_index(
+        _invalidate_semantic_index(
             db,
             user_id=created_by,
             project_id=project_id,
             object_type=t,
             object_id=object_id,
         )
-        _queue_rag_index(
+        _queue_semantic_index(
             db,
             user_id=created_by,
             project_id=project_id,
@@ -1214,7 +1214,7 @@ class ObjectService:
         if owned_assets:
             delete_assets_with_files(db, assets=owned_assets, scrub_references_in_project_id=resolved_project_id)
 
-        delete_rag_sources_bulk(db, user_id=user_id, project_id=resolved_project_id, ids_by_type=ids_by_type)
+        delete_semantic_sources_bulk(db, user_id=user_id, project_id=resolved_project_id, ids_by_type=ids_by_type)
         delete_object_versions_bulk(db, ids_by_type=ids_by_type)
 
         for deleted_type, deleted_ids in ids_by_type.items():

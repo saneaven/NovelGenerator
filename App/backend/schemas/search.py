@@ -6,15 +6,15 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-class RagEmbeddingProfileResponse(BaseModel):
+class VectorStorageEmbeddingProfileResponse(BaseModel):
     provider: str
     model: str
     dimensions: Optional[int] = None
 
 
-class RagProjectStatusResponse(BaseModel):
+class VectorStorageStatusResponse(BaseModel):
     enabled: bool = False
-    profile: Optional[RagEmbeddingProfileResponse] = None
+    profile: Optional[VectorStorageEmbeddingProfileResponse] = None
     total_sources: int = 0
     ready_sources: int = 0
     stale_sources: int = 0
@@ -24,35 +24,35 @@ class RagProjectStatusResponse(BaseModel):
     last_indexed_at: Optional[str] = None
 
 
-class RagIndexObjectRequest(BaseModel):
+class VectorStorageIndexObjectRequest(BaseModel):
     object_type: str = Field(..., min_length=1, max_length=50)
     object_id: UUID
     force: bool = False
 
 
-class RagDeleteObjectRequest(BaseModel):
+class VectorStorageDeleteObjectRequest(BaseModel):
     object_type: str = Field(..., min_length=1, max_length=50)
     object_id: UUID
 
 
-class RagReindexRequest(BaseModel):
+class VectorStorageReindexRequest(BaseModel):
     force: bool = False
 
 
-class RagReindexResponse(BaseModel):
+class VectorStorageReindexResponse(BaseModel):
     indexed_sources: int
     rebuilt_sources: int
     skipped_sources: int
     missing_main_language_sources: int
 
 
-class RagSearchRequest(BaseModel):
+class SemanticSearchRequest(BaseModel):
     queries: List[str] = Field(..., min_length=1)
     top_k_per_query: int = Field(default=20, ge=1, le=200)
     neighbor_window: int = Field(default=0, ge=0, le=10)
 
 
-class RagSearchResult(BaseModel):
+class SemanticSearchResult(BaseModel):
     chunk_id: UUID
     source_id: UUID
     object_type: str
@@ -73,13 +73,13 @@ class RagSearchResult(BaseModel):
     distance: Optional[float] = None
 
 
-class RagSearchResponse(BaseModel):
-    results: List[RagSearchResult]
+class SemanticSearchResponse(BaseModel):
+    results: List[SemanticSearchResult]
 
 
-class RagKeywordSearchResponse(BaseModel):
+class KeywordSearchResponse(BaseModel):
     keyword: str = Field(..., min_length=1)
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=200)
     total: int = Field(default=0, ge=0)
-    results: List[RagSearchResult]
+    results: List[SemanticSearchResult]

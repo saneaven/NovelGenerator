@@ -21,7 +21,7 @@ export type ObjectType =
   | 'outline_chapter'
   | 'manuscript';
 
-export type SearchType = 'rag' | 'keyword';
+export type SearchType = 'semantic' | 'keyword';
 
 export type StoryObjectSubtype = 'character' | 'location' | 'organization' | 'lorebook';
 

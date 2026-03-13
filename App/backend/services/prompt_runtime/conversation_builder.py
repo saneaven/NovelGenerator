@@ -51,7 +51,7 @@ def _format_search_result_xml(result: dict[str, Any]) -> str:
     data = result.get("data") or {}
     payload = data.get("searchPayload") or {}
 
-    root = ET.Element("search_result", type=str(payload.get("type", "rag")), total=str(payload.get("total", 0)))
+    root = ET.Element("search_result", type=str(payload.get("type", "semantic")), total=str(payload.get("total", 0)))
     for group in payload.get("groups", []):
         if not isinstance(group, dict):
             continue

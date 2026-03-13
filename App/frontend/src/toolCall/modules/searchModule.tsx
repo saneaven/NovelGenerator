@@ -3,7 +3,7 @@ import { SearchCallCard } from '../ui/cards/SearchCallCard';
 import type { SearchOperationVM } from '../ui/vmTypes';
 
 function searchTypeForTool(toolName: string): SearchOperationVM['searchType'] {
-  return toolName === 'search_keyword' ? 'keyword' : 'rag';
+  return toolName === 'search_keyword' ? 'keyword' : 'semantic';
 }
 
 const searchModule = defineToolCallUiModule({
@@ -12,7 +12,7 @@ const searchModule = defineToolCallUiModule({
   mapOperation(params) {
     const args = coerceRecord(params.args);
     const searchType = searchTypeForTool(params.toolName);
-    const title = searchType === 'rag' ? 'RAG' : 'Keyword';
+    const title = searchType === 'semantic' ? 'Semantic Search' : 'Keyword Search';
     const base = buildOperationBase(params, title, undefined, title);
     return {
       ...base,
@@ -46,7 +46,7 @@ const searchModule = defineToolCallUiModule({
   },
   getEditMeta(toolName) {
     return {
-      title: toolName === 'search_keyword' ? 'Keyword Search' : 'RAG Search',
+      title: toolName === 'search_keyword' ? 'Keyword Search' : 'Semantic Search',
       type: 'init',
     };
   },

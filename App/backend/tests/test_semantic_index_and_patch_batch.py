@@ -27,19 +27,19 @@ def _install_import_stubs() -> None:
     sys.modules["App.backend.database"] = fake_database
     sys.modules["database"] = fake_database
 
-    rag_chunker = types.ModuleType("App.backend.services.rag_chunker")
-    rag_chunker.merge_blocks_by_length = lambda blocks, **_kwargs: list(blocks)
-    rag_chunker.split_markdown_blocks = lambda text: [text] if text else []
-    rag_chunker.split_plaintext_blocks = lambda text: [text] if text else []
-    sys.modules["App.backend.services.rag_chunker"] = rag_chunker
+    semantic_chunker = types.ModuleType("App.backend.services.semantic_chunker")
+    semantic_chunker.merge_blocks_by_length = lambda blocks, **_kwargs: list(blocks)
+    semantic_chunker.split_markdown_blocks = lambda text: [text] if text else []
+    semantic_chunker.split_plaintext_blocks = lambda text: [text] if text else []
+    sys.modules["App.backend.services.semantic_chunker"] = semantic_chunker
 
-    rag_embedding_service = types.ModuleType("App.backend.services.rag_embedding_service")
+    semantic_embedding_service = types.ModuleType("App.backend.services.semantic_embedding_service")
 
     async def _embed_many(**_kwargs):
         return []
 
-    rag_embedding_service.embed_many = _embed_many
-    sys.modules["App.backend.services.rag_embedding_service"] = rag_embedding_service
+    semantic_embedding_service.embed_many = _embed_many
+    sys.modules["App.backend.services.semantic_embedding_service"] = semantic_embedding_service
 
     object_access = types.ModuleType("App.backend.services.tool_engine.modules.object_access")
     object_access.extract_lang_data = lambda obj, _language: obj
@@ -49,43 +49,42 @@ def _install_import_stubs() -> None:
 
 _install_import_stubs()
 
-from App.backend.models.rag_models import RagChunk
-from App.backend.services import rag_index_service
+from App.backend.services import semantic_index_service
 from App.backend.services.object_patch_batch import ObjectPatchBatch, ObjectPatchState
 
 
-class FakeRagQuery:
-    def __init__(self, session: "FakeRagSession", model: object) -> None:
+class FakeSemanticQuery:
+    def __init__(self, session: "FakeSemanticSession", model: object) -> None:
         self._session = session
         self._model = model
 
-    def filter(self, *_args: object, **_kwargs: object) -> "FakeRagQuery":
+    def filter(self, *_args: object, **_kwargs: object) -> "FakeSemanticQuery":
         return self
 
     def first(self):
         return None
 
-    def distinct(self) -> "FakeRagQuery":
+    def distinct(self) -> "FakeSemanticQuery":
         return self
 
     def all(self) -> list[object]:
         return []
 
     def delete(self, **_kwargs: object) -> int:
-        if self._model is RagChunk:
+        if self._model is semantic_index_service.SemanticChunk:
             self._session.deleted_chunk_rows += 1
         return 1
 
 
-class FakeRagSession:
+class FakeSemanticSession:
     def __init__(self) -> None:
         self.commits = 0
         self.deleted_chunk_rows = 0
         self.added: list[object] = []
         self.connection_checked_out = True
 
-    def query(self, model: object) -> FakeRagQuery:
-        return FakeRagQuery(self, model)
+    def query(self, model: object) -> FakeSemanticQuery:
+        return FakeSemanticQuery(self, model)
 
     def add(self, obj: object) -> None:
         self.added.append(obj)
@@ -98,8 +97,8 @@ class FakeRagSession:
         self.connection_checked_out = False
 
 
-def _payload(hash_value: str) -> rag_index_service.CurrentPayload:
-    return rag_index_service.CurrentPayload(
+def _payload(hash_value: str) -> semantic_index_service.CurrentPayload:
+    return semantic_index_service.CurrentPayload(
         has_indexable_text=True,
         chunks=[{"field_path": "content", "chunk_index": 0, "text": hash_value}],
         embedding_texts=[hash_value],
@@ -108,7 +107,7 @@ def _payload(hash_value: str) -> rag_index_service.CurrentPayload:
 
 
 def test_index_object_commits_before_embedding(monkeypatch) -> None:
-    db = FakeRagSession()
+    db = FakeSemanticSession()
     source = SimpleNamespace(
         id=uuid4(),
         content_hash=None,
@@ -122,36 +121,48 @@ def test_index_object_commits_before_embedding(monkeypatch) -> None:
         last_error_message=None,
     )
 
+    class FakeSemanticChunk:
+        class _SourceIdColumn:
+            def __eq__(self, _other: object) -> bool:
+                return True
+
+        source_id = _SourceIdColumn()
+
+        def __init__(self, **kwargs: object) -> None:
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "get_embedding_profile",
         lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None},
     )
-    monkeypatch.setattr(rag_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
-    monkeypatch.setattr(rag_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
+    monkeypatch.setattr(semantic_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
+    monkeypatch.setattr(semantic_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "_build_current_payload",
         lambda **_kwargs: _payload("alpha"),
     )
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "compute_order_meta",
-        lambda *_args, **_kwargs: rag_index_service.OrderMeta(type_group="story_object"),
+        lambda *_args, **_kwargs: semantic_index_service.OrderMeta(type_group="story_object"),
     )
-    monkeypatch.setattr(rag_index_service, "_find_source", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(rag_index_service, "_upsert_source", lambda *_args, **_kwargs: source)
-    monkeypatch.setattr(rag_index_service, "set_embedding_dimensions", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(semantic_index_service, "_find_source", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(semantic_index_service, "_upsert_source", lambda *_args, **_kwargs: source)
+    monkeypatch.setattr(semantic_index_service, "set_embedding_dimensions", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(semantic_index_service, "SemanticChunk", FakeSemanticChunk)
 
     async def _fake_embed_many(**_kwargs):
         assert db.commits == 1
         assert db.connection_checked_out is False
         return [[0.1, 0.2]]
 
-    monkeypatch.setattr(rag_index_service, "embed_many", _fake_embed_many)
+    monkeypatch.setattr(semantic_index_service, "embed_many", _fake_embed_many)
 
     result = asyncio.run(
-        rag_index_service.index_object(
+        semantic_index_service.index_object(
             db,
             user_id=uuid4(),
             project_id=uuid4(),
@@ -171,35 +182,35 @@ def test_index_object_commits_before_embedding(monkeypatch) -> None:
 
 
 def test_index_object_returns_stale_when_payload_changes_before_apply(monkeypatch) -> None:
-    db = FakeRagSession()
+    db = FakeSemanticSession()
     payloads = [_payload("alpha"), _payload("beta")]
 
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "get_embedding_profile",
         lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None},
     )
-    monkeypatch.setattr(rag_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
-    monkeypatch.setattr(rag_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
+    monkeypatch.setattr(semantic_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
+    monkeypatch.setattr(semantic_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "_build_current_payload",
         lambda **_kwargs: payloads.pop(0),
     )
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "compute_order_meta",
-        lambda *_args, **_kwargs: rag_index_service.OrderMeta(type_group="story_object"),
+        lambda *_args, **_kwargs: semantic_index_service.OrderMeta(type_group="story_object"),
     )
-    monkeypatch.setattr(rag_index_service, "_find_source", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(semantic_index_service, "_find_source", lambda *_args, **_kwargs: None)
 
     async def _fake_embed_many(**_kwargs):
         return [[0.1, 0.2]]
 
-    monkeypatch.setattr(rag_index_service, "embed_many", _fake_embed_many)
+    monkeypatch.setattr(semantic_index_service, "embed_many", _fake_embed_many)
 
     result = asyncio.run(
-        rag_index_service.index_object(
+        semantic_index_service.index_object(
             db,
             user_id=uuid4(),
             project_id=uuid4(),
@@ -221,21 +232,21 @@ def test_index_object_returns_stale_when_payload_changes_before_apply(monkeypatc
 
 
 def test_index_object_skips_missing_main_language_without_embedding(monkeypatch) -> None:
-    db = FakeRagSession()
+    db = FakeSemanticSession()
     deleted = {"count": 0}
     embed_called = {"value": False}
 
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "get_embedding_profile",
         lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None},
     )
-    monkeypatch.setattr(rag_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
-    monkeypatch.setattr(rag_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
+    monkeypatch.setattr(semantic_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
+    monkeypatch.setattr(semantic_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "_build_current_payload",
-        lambda **_kwargs: rag_index_service.CurrentPayload(
+        lambda **_kwargs: semantic_index_service.CurrentPayload(
             has_indexable_text=False,
             chunks=[],
             embedding_texts=[],
@@ -243,7 +254,7 @@ def test_index_object_skips_missing_main_language_without_embedding(monkeypatch)
         ),
     )
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "_delete_source_rows",
         lambda *_args, **_kwargs: deleted.__setitem__("count", deleted["count"] + 1) or 1,
     )
@@ -252,10 +263,10 @@ def test_index_object_skips_missing_main_language_without_embedding(monkeypatch)
         embed_called["value"] = True
         return [[0.1, 0.2]]
 
-    monkeypatch.setattr(rag_index_service, "embed_many", _fake_embed_many)
+    monkeypatch.setattr(semantic_index_service, "embed_many", _fake_embed_many)
 
     result = asyncio.run(
-        rag_index_service.index_object(
+        semantic_index_service.index_object(
             db,
             user_id=uuid4(),
             project_id=uuid4(),
@@ -272,29 +283,29 @@ def test_index_object_skips_missing_main_language_without_embedding(monkeypatch)
 
 
 def test_index_object_records_error_when_embedding_raises(monkeypatch) -> None:
-    db = FakeRagSession()
+    db = FakeSemanticSession()
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "get_embedding_profile",
         lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None},
     )
-    monkeypatch.setattr(rag_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
-    monkeypatch.setattr(rag_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
+    monkeypatch.setattr(semantic_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
+    monkeypatch.setattr(semantic_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "_build_current_payload",
         lambda **_kwargs: _payload("alpha"),
     )
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "compute_order_meta",
-        lambda *_args, **_kwargs: rag_index_service.OrderMeta(type_group="story_object"),
+        lambda *_args, **_kwargs: semantic_index_service.OrderMeta(type_group="story_object"),
     )
-    monkeypatch.setattr(rag_index_service, "_find_source", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(semantic_index_service, "_find_source", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "_record_index_error",
         lambda *_args, **kwargs: captured.update(kwargs),
     )
@@ -302,11 +313,11 @@ def test_index_object_records_error_when_embedding_raises(monkeypatch) -> None:
     async def _raising_embed_many(**_kwargs):
         raise RuntimeError("embedding provider exploded")
 
-    monkeypatch.setattr(rag_index_service, "embed_many", _raising_embed_many)
+    monkeypatch.setattr(semantic_index_service, "embed_many", _raising_embed_many)
 
     try:
         asyncio.run(
-            rag_index_service.index_object(
+            semantic_index_service.index_object(
                 db,
                 user_id=uuid4(),
                 project_id=uuid4(),
@@ -380,7 +391,7 @@ def test_get_project_status_counts_project_refs_not_existing_rows(monkeypatch) -
         "character": _payload("ready"),
         "location": _payload("missing-row"),
         "organization": _payload("new"),
-        "act": rag_index_service.CurrentPayload(
+        "act": semantic_index_service.CurrentPayload(
             has_indexable_text=False,
             chunks=[],
             embedding_texts=[],
@@ -389,15 +400,15 @@ def test_get_project_status_counts_project_refs_not_existing_rows(monkeypatch) -
         "outline": _payload("error"),
     }
 
-    monkeypatch.setattr(rag_index_service, "_project_object_refs", lambda *_args, **_kwargs: refs)
-    monkeypatch.setattr(rag_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
+    monkeypatch.setattr(semantic_index_service, "_project_object_refs", lambda *_args, **_kwargs: refs)
+    monkeypatch.setattr(semantic_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "get_embedding_profile",
         lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": 2},
     )
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "_load_project_sources",
         lambda *_args, **_kwargs: {
             ("character", ready_source.object_id): ready_source,
@@ -406,18 +417,18 @@ def test_get_project_status_counts_project_refs_not_existing_rows(monkeypatch) -
         },
     )
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "_load_chunked_source_ids",
         lambda *_args, **_kwargs: {ready_source.id, stale_source.id},
     )
-    monkeypatch.setattr(rag_index_service, "_latest_versions_for_refs", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(semantic_index_service, "_latest_versions_for_refs", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(
-        rag_index_service,
+        semantic_index_service,
         "_build_current_payload",
         lambda *, object_type, **_kwargs: payloads[object_type],
     )
 
-    status = rag_index_service.get_project_status(SimpleNamespace(), user_id=user_id, project_id=project_id)
+    status = semantic_index_service.get_project_status(SimpleNamespace(), user_id=user_id, project_id=project_id)
 
     assert status["total_sources"] == 5
     assert status["ready_sources"] == 1

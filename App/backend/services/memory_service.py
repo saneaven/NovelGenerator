@@ -10,16 +10,16 @@ from sqlalchemy import desc, text as sql_text
 from sqlalchemy.orm import Session
 
 from ..models.db_models import RunMessageModel
-from ..models.memory_models import MessageMemorySummary, MessageRagChunk, MessageRagSource
+from ..models.memory_models import MessageMemorySummary, MessageSemanticChunk, MessageSemanticSource
 from .credential_service import credential_service
 from .embedding_config_service import get_embedding_profile, set_embedding_dimensions
-from .rag_chunker import merge_blocks_by_length, split_plaintext_blocks
-from .rag_embedding_service import embed_many
+from .semantic_chunker import merge_blocks_by_length, split_plaintext_blocks
+from .semantic_embedding_service import embed_many
 
 
 def wipe_memory_index(db: Session, *, user_id: UUID) -> None:
     """Delete all message-memory embeddings for a user (sources + chunks via cascade)."""
-    db.query(MessageRagSource).filter(MessageRagSource.user_id == user_id).delete(synchronize_session=False)
+    db.query(MessageSemanticSource).filter(MessageSemanticSource.user_id == user_id).delete(synchronize_session=False)
 
 
 def _extract_message_text(data: Dict[str, Any], language: str) -> str:
@@ -256,11 +256,11 @@ def get_thread_memory_status(
         language=language,
     )
     indexed = (
-        db.query(MessageRagSource)
+        db.query(MessageSemanticSource)
         .filter(
-            MessageRagSource.user_id == user_id,
-            MessageRagSource.project_id == project_id,
-            MessageRagSource.thread_id == thread_id,
+            MessageSemanticSource.user_id == user_id,
+            MessageSemanticSource.project_id == project_id,
+            MessageSemanticSource.thread_id == thread_id,
         )
         .count()
     )
@@ -386,13 +386,13 @@ async def archive_thread_until(
 
             content_hash = _compute_chunks_hash(chunks)
             existing = (
-                db.query(MessageRagSource)
+                db.query(MessageSemanticSource)
                 .filter(
-                    MessageRagSource.user_id == user_id,
-                    MessageRagSource.project_id == project_id,
-                    MessageRagSource.thread_id == thread_id,
-                    MessageRagSource.message_id == message.id,
-                    MessageRagSource.language == language,
+                    MessageSemanticSource.user_id == user_id,
+                    MessageSemanticSource.project_id == project_id,
+                    MessageSemanticSource.thread_id == thread_id,
+                    MessageSemanticSource.message_id == message.id,
+                    MessageSemanticSource.language == language,
                 )
                 .first()
             )
@@ -440,13 +440,13 @@ async def archive_thread_until(
 
         for mid, chunk_pairs in by_mid.items():
             source = (
-                db.query(MessageRagSource)
+                db.query(MessageSemanticSource)
                 .filter(
-                    MessageRagSource.user_id == user_id,
-                    MessageRagSource.project_id == project_id,
-                    MessageRagSource.thread_id == thread_id,
-                    MessageRagSource.message_id == mid,
-                    MessageRagSource.language == language,
+                    MessageSemanticSource.user_id == user_id,
+                    MessageSemanticSource.project_id == project_id,
+                    MessageSemanticSource.thread_id == thread_id,
+                    MessageSemanticSource.message_id == mid,
+                    MessageSemanticSource.language == language,
                 )
                 .first()
             )
@@ -461,7 +461,7 @@ async def archive_thread_until(
                 source.updated_at = now
                 source.chunks = []
             else:
-                source = MessageRagSource(
+                source = MessageSemanticSource(
                     user_id=user_id,
                     project_id=project_id,
                     thread_id=thread_id,
@@ -478,7 +478,7 @@ async def archive_thread_until(
             chunk_pairs.sort(key=lambda pair: int(pair[0].get("chunk_index") or 0))
             for chunk, vec in chunk_pairs:
                 source.chunks.append(
-                    MessageRagChunk(
+                    MessageSemanticChunk(
                         chunk_index=int(chunk["chunk_index"]),
                         field_path=str(chunk["field_path"]),
                         text=str(chunk["text"]),
@@ -566,8 +566,8 @@ async def search_thread_memory(
           c.field_path AS field_path,
           c.text AS text,
           (c.embedding <-> (:qv)::vector) AS distance
-        FROM message_rag_chunks c
-        JOIN message_rag_sources s ON s.id = c.source_id
+        FROM message_semantic_chunks c
+        JOIN message_semantic_sources s ON s.id = c.source_id
         WHERE s.user_id = :user_id
           AND s.project_id = :project_id
           AND s.thread_id = :thread_id

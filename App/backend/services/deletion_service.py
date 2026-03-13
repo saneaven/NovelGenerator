@@ -22,7 +22,7 @@ from ..models.db_models import (
     StoryObjectAsset,
     Character,
 )
-from ..models.rag_models import RagSource
+from ..models.semantic_models import SemanticSource
 from ..models.translation_models import ObjectVersion
 from .storage_service import storage_service
 
@@ -145,16 +145,16 @@ def delete_object_versions_bulk(db: Session, *, ids_by_type: Mapping[str, Sequen
     return int(total)
 
 
-def delete_rag_sources_for_project(db: Session, *, user_id: UUID, project_id: UUID) -> int:
+def delete_semantic_sources_for_project(db: Session, *, user_id: UUID, project_id: UUID) -> int:
     deleted = (
-        db.query(RagSource)
-        .filter(RagSource.user_id == user_id, RagSource.project_id == project_id)
+        db.query(SemanticSource)
+        .filter(SemanticSource.user_id == user_id, SemanticSource.project_id == project_id)
         .delete(synchronize_session=False)
     )
     return int(deleted or 0)
 
 
-def delete_rag_sources_bulk(
+def delete_semantic_sources_bulk(
     db: Session,
     *,
     user_id: UUID,
@@ -166,12 +166,12 @@ def delete_rag_sources_bulk(
         if not object_ids:
             continue
         total += int(
-            db.query(RagSource)
+            db.query(SemanticSource)
             .filter(
-                RagSource.user_id == user_id,
-                RagSource.project_id == project_id,
-                RagSource.object_type == object_type,
-                RagSource.object_id.in_(list(object_ids)),
+                SemanticSource.user_id == user_id,
+                SemanticSource.project_id == project_id,
+                SemanticSource.object_type == object_type,
+                SemanticSource.object_id.in_(list(object_ids)),
             )
             .delete(synchronize_session=False)
             or 0

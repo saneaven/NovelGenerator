@@ -60,7 +60,7 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
       cardId={operation.id}
       category={operation.category}
       status={operation.status}
-      title={operation.searchType === 'rag' ? 'RAG' : 'Keyword'}
+      title={operation.searchType === 'semantic' ? 'Semantic Search' : 'Keyword Search'}
       subtitle={operation.status === 'failed' && operation.reason ? operation.reason : undefined}
       showDecisionButtons={showDecisionButtons}
       decisionDisabled={decisionDisabled}
@@ -70,7 +70,7 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
       islands={[
         <div className="function-call-search-query-island" key="query">
           <div className="function-call-search-query-island__label">Query</div>
-          {operation.searchType === 'rag' ? (
+          {operation.searchType === 'semantic' ? (
             <ul className="function-call-search-query-island__list">
               {(Array.isArray(operation.args.queries)
                 ? operation.args.queries.filter((q): q is string => typeof q === 'string' && q.trim().length > 0)

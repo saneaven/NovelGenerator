@@ -29,9 +29,9 @@ def _install_import_stubs() -> None:
     embedding_config_service.set_embedding_dimensions = lambda *_args, **_kwargs: None
     sys.modules["App.backend.services.embedding_config_service"] = embedding_config_service
 
-    rag_embedding_service = types.ModuleType("App.backend.services.rag_embedding_service")
-    rag_embedding_service.embed_many = lambda *_args, **_kwargs: None
-    sys.modules["App.backend.services.rag_embedding_service"] = rag_embedding_service
+    semantic_embedding_service = types.ModuleType("App.backend.services.semantic_embedding_service")
+    semantic_embedding_service.embed_many = lambda *_args, **_kwargs: None
+    sys.modules["App.backend.services.semantic_embedding_service"] = semantic_embedding_service
 
     mistune = types.ModuleType("mistune")
     mistune.create_markdown = lambda **_kwargs: (lambda _text: [])
@@ -45,7 +45,7 @@ from App.backend.services.default_preset_seed import load_default_preset_seed
 from App.backend.services.memory_service import _build_memory_chunks
 
 
-def test_memory_fragment_has_no_rag_texts_section() -> None:
+def test_memory_fragment_uses_current_memory_sections() -> None:
     seed = load_default_preset_seed()
     fragment = next(
         item.content
@@ -53,8 +53,6 @@ def test_memory_fragment_has_no_rag_texts_section() -> None:
         if item.folder_key == "common/memory" and item.fragment_name == "section"
     )
 
-    assert "ragTexts" not in fragment
-    assert "<rag_text>" not in fragment
     assert "historyChats" in fragment
     assert "summaries" in fragment
 
@@ -113,7 +111,7 @@ def test_search_tools_are_offer_gated_by_vector_storage() -> None:
 
     assert "ctx.vector_storage_enabled" in source
     assert '"search_keyword"' in source
-    assert '"search_rag"' in source
+    assert '"search_semantic"' in source
     assert legacy_gate not in source
 
 

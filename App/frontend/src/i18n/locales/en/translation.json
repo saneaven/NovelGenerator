@@ -1266,12 +1266,12 @@
       "save": "Save",
       "saved": "Saved"
     },
-    "rag": {
-      "title": "RAG Index",
-      "hint": "Indexes main language only (excludes images/tables/code blocks). Results are ordered by type and chapter order.",
+    "vectorStorage": {
+      "title": "Vector Storage",
+      "hint": "Indexes the main language only (excluding images, tables, and code blocks). Results are ordered by type and chapter order.",
       "disabled": "Search & Memory is disabled. Enable it in Settings > Search & Memory.",
-      "profileMissing": "Embedding profile is not configured. Set it in Settings > Search & Memory.",
-      "statusUnavailable": "RAG status is unavailable.",
+      "profileMissing": "Semantic embedding profile is not configured. Set it in Settings > Search & Memory.",
+      "statusUnavailable": "Vector Storage status is unavailable.",
       "profile": "Profile:",
       "dimensions": "Dimensions:",
       "unknown": "unknown",

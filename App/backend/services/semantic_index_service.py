@@ -21,12 +21,12 @@ from ..models.db_models import (
     Outline,
     UserSettings,
 )
-from ..models.rag_models import RagChunk, RagSource
+from ..models.semantic_models import SemanticChunk, SemanticSource
 from ..models.translation_models import ObjectVersion
 from .embedding_config_service import get_embedding_profile, set_embedding_dimensions
-from .rag_chunker import merge_blocks_by_length, split_markdown_blocks, split_plaintext_blocks
-from .rag_embedding_service import embed_many
-from .rag_text_extractors import extract_index_text
+from .semantic_chunker import merge_blocks_by_length, split_markdown_blocks, split_plaintext_blocks
+from .semantic_embedding_service import embed_many
+from .semantic_text_extractors import extract_index_text
 
 
 STORY_OBJECT_TYPES = {"basic_info", "guidelines", "character", "organization", "location", "lorebook"}
@@ -75,8 +75,8 @@ class PreparedIndexJob:
     stored_dimensions: int | None
 
 
-def wipe_user_index(db: Session, *, user_id: UUID) -> None:
-    db.query(RagSource).filter(RagSource.user_id == user_id).delete(synchronize_session=False)
+def wipe_user_semantic_index(db: Session, *, user_id: UUID) -> None:
+    db.query(SemanticSource).filter(SemanticSource.user_id == user_id).delete(synchronize_session=False)
 
 
 def get_main_language(db: Session, *, user_id: UUID) -> str:
@@ -331,15 +331,15 @@ def _find_source(
     object_type: str,
     object_id: UUID,
     language: str,
-) -> Optional[RagSource]:
+) -> Optional[SemanticSource]:
     return (
-        db.query(RagSource)
+        db.query(SemanticSource)
         .filter(
-            RagSource.user_id == user_id,
-            RagSource.project_id == project_id,
-            RagSource.object_type == object_type,
-            RagSource.object_id == object_id,
-            RagSource.language == language,
+            SemanticSource.user_id == user_id,
+            SemanticSource.project_id == project_id,
+            SemanticSource.object_type == object_type,
+            SemanticSource.object_id == object_id,
+            SemanticSource.language == language,
         )
         .first()
     )
@@ -355,13 +355,13 @@ def _delete_source_rows(
     language: str,
 ) -> int:
     deleted = (
-        db.query(RagSource)
+        db.query(SemanticSource)
         .filter(
-            RagSource.user_id == user_id,
-            RagSource.project_id == project_id,
-            RagSource.object_type == object_type,
-            RagSource.object_id == object_id,
-            RagSource.language == language,
+            SemanticSource.user_id == user_id,
+            SemanticSource.project_id == project_id,
+            SemanticSource.object_type == object_type,
+            SemanticSource.object_id == object_id,
+            SemanticSource.language == language,
         )
         .delete(synchronize_session=False)
     )
@@ -388,11 +388,11 @@ def invalidate_object_index(
 
 
 def _source_has_chunks(db: Session, *, source_id: UUID) -> bool:
-    row = db.query(RagChunk.source_id).filter(RagChunk.source_id == source_id).first()
+    row = db.query(SemanticChunk.source_id).filter(SemanticChunk.source_id == source_id).first()
     return row is not None
 
 
-def _clear_source_index_payload(source: RagSource) -> None:
+def _clear_source_index_payload(source: SemanticSource) -> None:
     source.content_hash = None
     source.indexed_provider = None
     source.indexed_model = None
@@ -408,7 +408,7 @@ def _upsert_source(
     object_id: UUID,
     language: str,
     order_meta: OrderMeta,
-) -> RagSource:
+) -> SemanticSource:
     source = _find_source(
         db,
         user_id=user_id,
@@ -418,7 +418,7 @@ def _upsert_source(
         language=language,
     )
     if not source:
-        source = RagSource(
+        source = SemanticSource(
             user_id=user_id,
             project_id=project_id,
             object_type=object_type,
@@ -466,7 +466,7 @@ def delete_object_index(
 
 
 def _source_matches_current_index(
-    source: RagSource,
+    source: SemanticSource,
     *,
     current_hash: Optional[str],
     provider: str,
@@ -517,7 +517,7 @@ def _record_index_error(
             language=prepared.language,
             order_meta=prepared.order_meta,
         )
-        db.query(RagChunk).filter(RagChunk.source_id == source.id).delete(synchronize_session=False)
+        db.query(SemanticChunk).filter(SemanticChunk.source_id == source.id).delete(synchronize_session=False)
         _clear_source_index_payload(source)
 
     if source is None:
@@ -546,7 +546,7 @@ def _prepare_index_job(
 
     profile = get_embedding_profile(db, user_id=user_id, feature="search")
     if not profile:
-        raise ValueError("RAG embedding profile is not configured")
+        raise ValueError("Semantic embedding profile is not configured")
 
     language = get_main_language(db, user_id=user_id)
     latest = _latest_version(db, object_type=object_type, object_id=object_id)
@@ -660,10 +660,10 @@ def _apply_index_vectors(
         order_meta=prepared.order_meta,
     )
 
-    db.query(RagChunk).filter(RagChunk.source_id == source.id).delete(synchronize_session=False)
+    db.query(SemanticChunk).filter(SemanticChunk.source_id == source.id).delete(synchronize_session=False)
     for chunk, vector in zip(prepared.chunks, vectors):
         db.add(
-            RagChunk(
+            SemanticChunk(
                 source_id=source.id,
                 field_path=chunk["field_path"],
                 chunk_index=chunk["chunk_index"],
@@ -767,13 +767,13 @@ def _load_project_sources(
     user_id: UUID,
     project_id: UUID,
     language: str,
-) -> Dict[Tuple[str, UUID], RagSource]:
+) -> Dict[Tuple[str, UUID], SemanticSource]:
     rows = (
-        db.query(RagSource)
+        db.query(SemanticSource)
         .filter(
-            RagSource.user_id == user_id,
-            RagSource.project_id == project_id,
-            RagSource.language == language,
+            SemanticSource.user_id == user_id,
+            SemanticSource.project_id == project_id,
+            SemanticSource.language == language,
         )
         .all()
     )
@@ -784,8 +784,8 @@ def _load_chunked_source_ids(db: Session, *, source_ids: Sequence[UUID]) -> set[
     if not source_ids:
         return set()
     rows = (
-        db.query(RagChunk.source_id)
-        .filter(RagChunk.source_id.in_(list(source_ids)))
+        db.query(SemanticChunk.source_id)
+        .filter(SemanticChunk.source_id.in_(list(source_ids)))
         .distinct()
         .all()
     )
@@ -802,13 +802,13 @@ async def reindex_project(
 ) -> Dict[str, int]:
     profile = get_embedding_profile(db, user_id=user_id, feature="search")
     if not profile:
-        raise ValueError("RAG embedding profile is not configured")
+        raise ValueError("Semantic embedding profile is not configured")
 
     refs = _project_object_refs(db, project_id=project_id)
     current_ref_set = {(object_type, object_id) for object_type, object_id in refs}
     existing_sources = (
-        db.query(RagSource)
-        .filter(RagSource.user_id == user_id, RagSource.project_id == project_id)
+        db.query(SemanticSource)
+        .filter(SemanticSource.user_id == user_id, SemanticSource.project_id == project_id)
         .all()
     )
     for source in existing_sources:

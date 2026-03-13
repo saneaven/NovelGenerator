@@ -22,7 +22,7 @@ from sqlalchemy.orm import relationship
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import Base  # noqa: E402
 
-from .rag_models import Vector  # noqa: E402
+from .semantic_models import Vector  # noqa: E402
 
 
 class MessageMemorySummary(Base):
@@ -46,8 +46,8 @@ class MessageMemorySummary(Base):
     )
 
 
-class MessageRagSource(Base):
-    __tablename__ = "message_rag_sources"
+class MessageSemanticSource(Base):
+    __tablename__ = "message_semantic_sources"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
@@ -64,19 +64,30 @@ class MessageRagSource(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    chunks = relationship("MessageRagChunk", back_populates="source", cascade="all, delete-orphan")
+    chunks = relationship("MessageSemanticChunk", back_populates="source", cascade="all, delete-orphan")
 
     __table_args__ = (
-        UniqueConstraint("user_id", "thread_id", "message_id", "language", name="uq_message_rag_source_identity"),
-        Index("ix_message_rag_sources_thread_language", "thread_id", "language"),
+        UniqueConstraint(
+            "user_id",
+            "thread_id",
+            "message_id",
+            "language",
+            name="uq_message_semantic_source_identity",
+        ),
+        Index("ix_message_semantic_sources_thread_language", "thread_id", "language"),
     )
 
 
-class MessageRagChunk(Base):
-    __tablename__ = "message_rag_chunks"
+class MessageSemanticChunk(Base):
+    __tablename__ = "message_semantic_chunks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    source_id = Column(UUID(as_uuid=True), ForeignKey("message_rag_sources.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("message_semantic_sources.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     chunk_index = Column(Integer, nullable=False)
     field_path = Column(Text, nullable=False)
@@ -87,11 +98,11 @@ class MessageRagChunk(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    source = relationship("MessageRagSource", back_populates="chunks")
+    source = relationship("MessageSemanticSource", back_populates="chunks")
 
     __table_args__ = (
-        UniqueConstraint("source_id", "chunk_index", name="uq_message_rag_chunk_index"),
+        UniqueConstraint("source_id", "chunk_index", name="uq_message_semantic_chunk_index"),
     )
 
 
-__all__ = ["MessageMemorySummary", "MessageRagSource", "MessageRagChunk"]
+__all__ = ["MessageMemorySummary", "MessageSemanticSource", "MessageSemanticChunk"]

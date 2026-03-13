@@ -25,7 +25,7 @@ from ..services.deletion_service import (
     delete_object_versions_bulk,
     delete_project_assets_with_files,
     delete_project_chat_attachments_with_files,
-    delete_rag_sources_for_project,
+    delete_semantic_sources_for_project,
 )
 from ..services.object_change_events import queue_object_change
 from ..services.storage_usage_service import (
@@ -338,8 +338,8 @@ async def delete_project(
     delete_project_assets_with_files(db, project_id=project_id)
     delete_project_chat_attachments_with_files(db, project_id=project_id)
 
-    # Delete RAG sources/chunks for the project (avoid stale search results).
-    delete_rag_sources_for_project(db, user_id=current_user.id, project_id=project_id)
+    # Delete semantic sources/chunks for the project (avoid stale search results).
+    delete_semantic_sources_for_project(db, user_id=current_user.id, project_id=project_id)
 
     # Delete version history rows for all project objects (object_versions has no FK).
     delete_object_versions_bulk(db, ids_by_type=object_ids_by_type)

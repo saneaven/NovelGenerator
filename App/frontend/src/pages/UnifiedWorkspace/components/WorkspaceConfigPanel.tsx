@@ -19,7 +19,7 @@ import {
   type ProjectExportPreviewAssetItem,
 } from '../../../api/projectService';
 import { journeyService, type JourneyDTO } from '../../../api/journeyService';
-import { ragService, type RagProjectStatusResponse } from '../../../api/ragService';
+import { vectorStorageService, type VectorStorageStatusResponse } from '../../../api/vectorStorageService';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import { useProjectStore } from '../../../store/projectStore';
 import { List, Trash, Refresh, Download } from '../../../components/icons';
@@ -134,10 +134,10 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
   const [isExporting, setIsExporting] = useState(false);
   const [lastExportSummary, setLastExportSummary] = useState<string | null>(null);
 
-  const [ragStatus, setRagStatus] = useState<RagProjectStatusResponse | null>(null);
-  const [isRagLoading, setIsRagLoading] = useState(false);
-  const [isRagReindexing, setIsRagReindexing] = useState(false);
-  const [lastRagSummary, setLastRagSummary] = useState<string | null>(null);
+  const [vectorStorageStatus, setVectorStorageStatus] = useState<VectorStorageStatusResponse | null>(null);
+  const [isVectorStorageLoading, setIsVectorStorageLoading] = useState(false);
+  const [isVectorStorageReindexing, setIsVectorStorageReindexing] = useState(false);
+  const [lastVectorStorageSummary, setLastVectorStorageSummary] = useState<string | null>(null);
   const [journeys, setJourneys] = useState<JourneyDTO[]>([]);
   const [isJourneysLoading, setIsJourneysLoading] = useState(false);
   const [selectedJourney, setSelectedJourney] = useState<JourneyDTO | null>(null);
@@ -186,18 +186,18 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
     }
   }, [projectId]);
 
-  const loadRagStatus = useCallback(async () => {
-    setIsRagLoading(true);
+  const loadVectorStorageStatus = useCallback(async () => {
+    setIsVectorStorageLoading(true);
     try {
-      const status = await ragService.getStatus(projectId);
-      setRagStatus(status);
+      const status = await vectorStorageService.getStatus(projectId);
+      setVectorStorageStatus(status);
       return status;
     } catch (err: any) {
-      console.error('Failed to load RAG status:', err);
-      setRagStatus(null);
+      console.error('Failed to load vector storage status:', err);
+      setVectorStorageStatus(null);
       return null;
     } finally {
-      setIsRagLoading(false);
+      setIsVectorStorageLoading(false);
     }
   }, [projectId]);
 
@@ -206,8 +206,8 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
   }, [loadJourneys]);
 
   useEffect(() => {
-    void loadRagStatus();
-  }, [loadRagStatus]);
+    void loadVectorStorageStatus();
+  }, [loadVectorStorageStatus]);
 
   const candidates = preview?.candidates ?? [];
 
@@ -420,26 +420,26 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
     }
   }, [exportPreview, exportSelectedIds, exportOptions, projectId, t]);
 
-  const handleRagReindex = useCallback(async () => {
-    setIsRagReindexing(true);
-    setLastRagSummary(null);
+  const handleVectorStorageReindex = useCallback(async () => {
+    setIsVectorStorageReindexing(true);
+    setLastVectorStorageSummary(null);
 
     try {
-      if (!ragStatus?.enabled) {
-        showAlert({ title: 'RAG', message: t('workspaceConfig.rag.disabled') });
+      if (!vectorStorageStatus?.enabled) {
+        showAlert({ title: 'Vector Storage', message: t('workspaceConfig.vectorStorage.disabled') });
         return;
       }
 
-      const profile = ragStatus?.profile;
+      const profile = vectorStorageStatus?.profile;
       if (!profile) {
-        showAlert({ title: 'RAG', message: t('workspaceConfig.rag.profileMissing') });
+        showAlert({ title: 'Vector Storage', message: t('workspaceConfig.vectorStorage.profileMissing') });
         return;
       }
-      await ragService.reindex(projectId, {});
-      const refreshed = await loadRagStatus();
+      await vectorStorageService.reindex(projectId, {});
+      const refreshed = await loadVectorStorageStatus();
       if (refreshed) {
-        setLastRagSummary(
-          `RAG status: ${refreshed.ready_sources}/${refreshed.total_sources} searchable` +
+        setLastVectorStorageSummary(
+          `Vector Storage status: ${refreshed.ready_sources}/${refreshed.total_sources} searchable` +
           ` · ${refreshed.unindexed_sources} unindexed` +
           ` · ${refreshed.stale_sources} stale` +
           ` · ${refreshed.missing_main_language_sources} missing main_language` +
@@ -447,12 +447,12 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         );
       }
     } catch (err: any) {
-      console.error('RAG reindex failed:', err);
-      showAlert({ title: 'RAG', message: 'Failed to reindex project.' });
+      console.error('Vector storage reindex failed:', err);
+      showAlert({ title: 'Vector Storage', message: 'Failed to reindex project.' });
     } finally {
-      setIsRagReindexing(false);
+      setIsVectorStorageReindexing(false);
     }
-  }, [loadRagStatus, projectId, ragStatus?.profile]);
+  }, [loadVectorStorageStatus, projectId, t, vectorStorageStatus?.enabled, vectorStorageStatus?.profile]);
 
   const handleCancelJourney = useCallback(async (journeyId: string) => {
     if (!await confirm({ title: 'Cancel Journey', message: 'Cancel this running journey?', variant: 'warning', confirmLabel: 'Cancel Journey' })) {
@@ -601,43 +601,43 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       </div>
 
       <div className="workspace-config-card">
-        <h3>{t('workspaceConfig.rag.title')}</h3>
-        <p className="workspace-config-hint">{t('workspaceConfig.rag.hint')}</p>
+        <h3>{t('workspaceConfig.vectorStorage.title')}</h3>
+        <p className="workspace-config-hint">{t('workspaceConfig.vectorStorage.hint')}</p>
 
-        {isRagLoading ? (
+        {isVectorStorageLoading ? (
           <div className="workspace-config-empty">{t('common.loading')}</div>
-        ) : !ragStatus ? (
-          <div className="workspace-config-empty">{t('workspaceConfig.rag.statusUnavailable')}</div>
-        ) : !ragStatus.enabled ? (
-          <div className="workspace-config-empty">{t('workspaceConfig.rag.disabled')}</div>
-        ) : !ragStatus.profile ? (
-          <div className="workspace-config-empty">{t('workspaceConfig.rag.profileMissing')}</div>
+        ) : !vectorStorageStatus ? (
+          <div className="workspace-config-empty">{t('workspaceConfig.vectorStorage.statusUnavailable')}</div>
+        ) : !vectorStorageStatus.enabled ? (
+          <div className="workspace-config-empty">{t('workspaceConfig.vectorStorage.disabled')}</div>
+        ) : !vectorStorageStatus.profile ? (
+          <div className="workspace-config-empty">{t('workspaceConfig.vectorStorage.profileMissing')}</div>
         ) : (
           <div className="workspace-config-preview-summary workspace-config-preview-summary--stack">
             <div>
-              <strong>{t('workspaceConfig.rag.profile')}</strong> {ragStatus.profile.provider} / {ragStatus.profile.model}
+              <strong>{t('workspaceConfig.vectorStorage.profile')}</strong> {vectorStorageStatus.profile.provider} / {vectorStorageStatus.profile.model}
             </div>
             <div>
-              <strong>{t('workspaceConfig.rag.dimensions')}</strong> {ragStatus.profile.dimensions ?? t('workspaceConfig.rag.unknown')}
+              <strong>{t('workspaceConfig.vectorStorage.dimensions')}</strong> {vectorStorageStatus.profile.dimensions ?? t('workspaceConfig.vectorStorage.unknown')}
             </div>
             <div>
-              <strong>{t('workspaceConfig.rag.sources')}</strong> {ragStatus.ready_sources}/{ragStatus.total_sources}
-              {ragStatus.unindexed_sources > 0 && (
-                <span> · {t('workspaceConfig.rag.unindexed', { count: ragStatus.unindexed_sources })}</span>
+              <strong>{t('workspaceConfig.vectorStorage.sources')}</strong> {vectorStorageStatus.ready_sources}/{vectorStorageStatus.total_sources}
+              {vectorStorageStatus.unindexed_sources > 0 && (
+                <span> · {t('workspaceConfig.vectorStorage.unindexed', { count: vectorStorageStatus.unindexed_sources })}</span>
               )}
-              {ragStatus.stale_sources > 0 && (
-                <span> · {t('workspaceConfig.rag.stale', { count: ragStatus.stale_sources })}</span>
+              {vectorStorageStatus.stale_sources > 0 && (
+                <span> · {t('workspaceConfig.vectorStorage.stale', { count: vectorStorageStatus.stale_sources })}</span>
               )}
-              {ragStatus.missing_main_language_sources > 0 && (
-                <span> · {t('workspaceConfig.rag.missingMainLanguage', { count: ragStatus.missing_main_language_sources })}</span>
+              {vectorStorageStatus.missing_main_language_sources > 0 && (
+                <span> · {t('workspaceConfig.vectorStorage.missingMainLanguage', { count: vectorStorageStatus.missing_main_language_sources })}</span>
               )}
-              {ragStatus.error_sources > 0 && (
-                <span> · {t('workspaceConfig.rag.errors', { count: ragStatus.error_sources })}</span>
+              {vectorStorageStatus.error_sources > 0 && (
+                <span> · {t('workspaceConfig.vectorStorage.errors', { count: vectorStorageStatus.error_sources })}</span>
               )}
             </div>
-            {ragStatus.last_indexed_at && (
+            {vectorStorageStatus.last_indexed_at && (
               <div>
-                <strong>{t('workspaceConfig.rag.lastIndexed')}</strong> {ragStatus.last_indexed_at}
+                <strong>{t('workspaceConfig.vectorStorage.lastIndexed')}</strong> {vectorStorageStatus.last_indexed_at}
               </div>
             )}
           </div>
@@ -645,27 +645,27 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
 
         <div className="workspace-config-actions">
           <TextButton
-            onClick={loadRagStatus}
+            onClick={loadVectorStorageStatus}
             variant="secondary"
             size="sm"
             iconLeft={<Refresh size="xs" />}
-            loading={isRagLoading}
+            loading={isVectorStorageLoading}
           >
-            {t('workspaceConfig.rag.refresh')}
+            {t('workspaceConfig.vectorStorage.refresh')}
           </TextButton>
           <TextButton
-            onClick={handleRagReindex}
+            onClick={handleVectorStorageReindex}
             variant="primary"
             size="sm"
             iconLeft={<Refresh size="xs" />}
-            loading={isRagReindexing}
-            disabled={!ragStatus?.enabled || !ragStatus?.profile}
+            loading={isVectorStorageReindexing}
+            disabled={!vectorStorageStatus?.enabled || !vectorStorageStatus?.profile}
           >
-            {t('workspaceConfig.rag.reindex')}
+            {t('workspaceConfig.vectorStorage.reindex')}
           </TextButton>
         </div>
 
-        {lastRagSummary && <div className="workspace-config-result">{lastRagSummary}</div>}
+        {lastVectorStorageSummary && <div className="workspace-config-result">{lastVectorStorageSummary}</div>}
       </div>
 
       <div className="workspace-config-card">

@@ -1,4 +1,4 @@
-"""RAG models (pgvector-backed).
+"""Semantic search models (pgvector-backed).
 
 This project is early-stage; we intentionally keep the schema minimal:
 - Per project/object sources with deterministic ordering metadata.
@@ -42,8 +42,8 @@ class Vector(UserDefinedType):
         return process
 
 
-class RagSource(Base):
-    __tablename__ = "rag_sources"
+class SemanticSource(Base):
+    __tablename__ = "semantic_sources"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -75,19 +75,34 @@ class RagSource(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    chunks = relationship("RagChunk", back_populates="source", cascade="all, delete-orphan")
+    chunks = relationship("SemanticChunk", back_populates="source", cascade="all, delete-orphan")
 
     __table_args__ = (
-        UniqueConstraint("user_id", "project_id", "object_type", "object_id", "language", name="uq_rag_source_identity"),
-        Index("ix_rag_sources_project_group_order", "project_id", "type_group", "outline_order", "act_order", "chapter_order", "story_object_order"),
+        UniqueConstraint(
+            "user_id",
+            "project_id",
+            "object_type",
+            "object_id",
+            "language",
+            name="uq_semantic_source_identity",
+        ),
+        Index(
+            "ix_semantic_sources_project_group_order",
+            "project_id",
+            "type_group",
+            "outline_order",
+            "act_order",
+            "chapter_order",
+            "story_object_order",
+        ),
     )
 
 
-class RagChunk(Base):
-    __tablename__ = "rag_chunks"
+class SemanticChunk(Base):
+    __tablename__ = "semantic_chunks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    source_id = Column(UUID(as_uuid=True), ForeignKey("rag_sources.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_id = Column(UUID(as_uuid=True), ForeignKey("semantic_sources.id", ondelete="CASCADE"), nullable=False, index=True)
 
     chunk_index = Column(Integer, nullable=False)
     field_path = Column(Text, nullable=False)
@@ -98,11 +113,11 @@ class RagChunk(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    source = relationship("RagSource", back_populates="chunks")
+    source = relationship("SemanticSource", back_populates="chunks")
 
     __table_args__ = (
-        UniqueConstraint("source_id", "chunk_index", name="uq_rag_chunk_index"),
+        UniqueConstraint("source_id", "chunk_index", name="uq_semantic_chunk_index"),
     )
 
 
-__all__ = ["RagSource", "RagChunk"]
+__all__ = ["SemanticSource", "SemanticChunk"]

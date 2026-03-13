@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 import sys
 from types import SimpleNamespace
 import types
@@ -9,6 +10,10 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import declarative_base
+
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 fake_auth = types.ModuleType("App.backend.auth")
 fake_auth.get_current_user = lambda: None
@@ -24,15 +29,15 @@ fake_memory_service = types.ModuleType("App.backend.services.memory_service")
 fake_memory_service.wipe_memory_index = lambda *_args, **_kwargs: None
 sys.modules["App.backend.services.memory_service"] = fake_memory_service
 
-fake_rag_index_service = types.ModuleType("App.backend.services.rag_index_service")
-fake_rag_index_service.wipe_user_index = lambda *_args, **_kwargs: None
-sys.modules["App.backend.services.rag_index_service"] = fake_rag_index_service
+fake_semantic_index_service = types.ModuleType("App.backend.services.semantic_index_service")
+fake_semantic_index_service.wipe_user_semantic_index = lambda *_args, **_kwargs: None
+sys.modules["App.backend.services.semantic_index_service"] = fake_semantic_index_service
 
 from App.backend.routes import settings_routes
 from App.backend.schemas.settings import UserSettingsUpdate
 
 sys.modules.pop("App.backend.services.memory_service", None)
-sys.modules.pop("App.backend.services.rag_index_service", None)
+sys.modules.pop("App.backend.services.semantic_index_service", None)
 
 
 class FakeQuery:
@@ -62,7 +67,7 @@ class FakeDB:
         self.refreshed.append(obj)
 
 
-def test_update_user_settings_wipes_rag_index_on_main_language_change(monkeypatch) -> None:
+def test_update_user_settings_wipes_semantic_index_on_main_language_change(monkeypatch) -> None:
     user_id = uuid4()
     settings = SimpleNamespace(
         user_id=user_id,
@@ -86,7 +91,7 @@ def test_update_user_settings_wipes_rag_index_on_main_language_change(monkeypatc
     db = FakeDB(settings)
     wiped: list[object] = []
 
-    monkeypatch.setattr(settings_routes, "wipe_user_index", lambda *_args, **kwargs: wiped.append(kwargs["user_id"]))
+    monkeypatch.setattr(settings_routes, "wipe_user_semantic_index", lambda *_args, **kwargs: wiped.append(kwargs["user_id"]))
     monkeypatch.setattr(settings_routes, "wipe_memory_index", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(settings_routes, "_build_settings_response", lambda current: current)
 
@@ -104,7 +109,7 @@ def test_update_user_settings_wipes_rag_index_on_main_language_change(monkeypatc
     assert db.refreshed == [settings]
 
 
-def test_update_user_settings_wipes_rag_index_once_on_rag_model_change(monkeypatch) -> None:
+def test_update_user_settings_wipes_semantic_index_once_on_search_model_change(monkeypatch) -> None:
     user_id = uuid4()
     settings = SimpleNamespace(
         user_id=user_id,
@@ -128,7 +133,7 @@ def test_update_user_settings_wipes_rag_index_once_on_rag_model_change(monkeypat
     db = FakeDB(settings)
     wiped: list[object] = []
 
-    monkeypatch.setattr(settings_routes, "wipe_user_index", lambda *_args, **kwargs: wiped.append(kwargs["user_id"]))
+    monkeypatch.setattr(settings_routes, "wipe_user_semantic_index", lambda *_args, **kwargs: wiped.append(kwargs["user_id"]))
     monkeypatch.setattr(settings_routes, "wipe_memory_index", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(settings_routes, "_build_settings_response", lambda current: current)
 
@@ -179,7 +184,7 @@ def test_update_user_settings_accepts_disabled_incomplete_search_memory_settings
     )
     db = FakeDB(settings)
 
-    monkeypatch.setattr(settings_routes, "wipe_user_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(settings_routes, "wipe_user_semantic_index", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(settings_routes, "wipe_memory_index", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(settings_routes, "_build_settings_response", lambda current: current)
 
@@ -229,7 +234,7 @@ def test_update_user_settings_rejects_enabled_search_memory_without_effective_mo
     )
     db = FakeDB(settings)
 
-    monkeypatch.setattr(settings_routes, "wipe_user_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(settings_routes, "wipe_user_semantic_index", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(settings_routes, "wipe_memory_index", lambda *_args, **_kwargs: None)
 
     with pytest.raises(HTTPException) as exc_info:
