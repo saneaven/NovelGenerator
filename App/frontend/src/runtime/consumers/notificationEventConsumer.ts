@@ -2,17 +2,9 @@ import type { NotificationSSEEvent } from '../../api/sseClient';
 import { useNotificationStore } from '../../store/notificationStore';
 
 export class NotificationEventConsumer {
-  private readonly projectId: string;
-
-  constructor(projectId: string) {
-    this.projectId = projectId;
-  }
+  constructor() {}
 
   consume(event: NotificationSSEEvent): void {
-    if (event.data.project_id !== this.projectId) {
-      return;
-    }
-
     if (event.event === 'notification:upsert') {
       useNotificationStore.getState().upsertFromServer(event.data);
       return;

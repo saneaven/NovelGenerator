@@ -10,6 +10,7 @@ from ...models.translation_models import ObjectVersion
 from ..manuscript_image_index_service import restore_image_asset_ids
 from ..object_service import object_service
 from ..sidecar_client import sidecar_client
+from ..thread_parent_runtime_service import resolve_parent
 from .text_utils import as_dict, as_str_list, collapse_content_text
 
 EmitFn = Callable[..., Awaitable[None]]
@@ -50,7 +51,7 @@ async def apply_raw_output(
     content_parts: list[dict[str, Any]],
     emit_fn: EmitFn,
 ) -> None:
-    journey_kind = str(thread.journey_kind or "").strip()
+    journey_kind = str(resolve_parent(db, thread).journey_kind or "").strip()
     text = collapse_content_text(content_parts)
     if not text:
         raise RuntimeError("Raw output mode requires non-empty content text")
@@ -101,6 +102,7 @@ async def apply_raw_output(
         db.flush()
 
         await emit_fn(
+            user_id=run.user_id,
             project_id=source_thread.project_id,
             thread_id=source_thread.id,
             event_name="message:update",

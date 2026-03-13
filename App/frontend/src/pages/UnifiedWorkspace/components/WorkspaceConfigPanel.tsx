@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ToggleSwitch from '../../../components/common/ToggleSwitch';
 import AuthenticatedImage from '../../../components/common/AuthenticatedImage';
+import JourneyNotificationDetail from '../../../components/Notification/JourneyNotificationDetail';
 import { NumberInput } from '../../../components/ui/NumberInput';
 import TextButton from '../../../components/TextButton/TextButton';
 import { getAssetUrl } from '../../../utils/assetUrl';
@@ -17,6 +18,7 @@ import {
   type ProjectExportPreviewResponse,
   type ProjectExportPreviewAssetItem,
 } from '../../../api/projectService';
+import { journeyService, type JourneyDTO } from '../../../api/journeyService';
 import { ragService, type RagProjectStatusResponse } from '../../../api/ragService';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import { useProjectStore } from '../../../store/projectStore';
@@ -136,6 +138,9 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
   const [isRagLoading, setIsRagLoading] = useState(false);
   const [isRagReindexing, setIsRagReindexing] = useState(false);
   const [lastRagSummary, setLastRagSummary] = useState<string | null>(null);
+  const [journeys, setJourneys] = useState<JourneyDTO[]>([]);
+  const [isJourneysLoading, setIsJourneysLoading] = useState(false);
+  const [selectedJourney, setSelectedJourney] = useState<JourneyDTO | null>(null);
 
   useEffect(() => {
     setPolicy(loadPolicy(projectId));
@@ -166,6 +171,21 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
     }
   }, [projectId, exportOptions]);
 
+  const loadJourneys = useCallback(async () => {
+    setIsJourneysLoading(true);
+    try {
+      const rows = await journeyService.list(projectId);
+      setJourneys(rows);
+      return rows;
+    } catch (err: any) {
+      console.error('Failed to load journeys:', err);
+      setJourneys([]);
+      return [];
+    } finally {
+      setIsJourneysLoading(false);
+    }
+  }, [projectId]);
+
   const loadRagStatus = useCallback(async () => {
     setIsRagLoading(true);
     try {
@@ -180,6 +200,10 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       setIsRagLoading(false);
     }
   }, [projectId]);
+
+  useEffect(() => {
+    void loadJourneys();
+  }, [loadJourneys]);
 
   useEffect(() => {
     void loadRagStatus();
@@ -430,6 +454,35 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
     }
   }, [loadRagStatus, projectId, ragStatus?.profile]);
 
+  const handleCancelJourney = useCallback(async (journeyId: string) => {
+    if (!await confirm({ title: 'Cancel Journey', message: 'Cancel this running journey?', variant: 'warning', confirmLabel: 'Cancel Journey' })) {
+      return;
+    }
+    try {
+      await journeyService.cancel(journeyId);
+      await loadJourneys();
+    } catch (err: any) {
+      console.error('Failed to cancel journey:', err);
+      showAlert({ title: 'Journeys', message: 'Failed to cancel journey.' });
+    }
+  }, [loadJourneys]);
+
+  const handleDeleteJourney = useCallback(async (journeyId: string) => {
+    if (!await confirm({ title: 'Delete Journey', message: 'Delete this journey and its history?', variant: 'danger', confirmLabel: 'Delete' })) {
+      return;
+    }
+    try {
+      await journeyService.delete(projectId, journeyId);
+      if (selectedJourney?.journey_id === journeyId) {
+        setSelectedJourney(null);
+      }
+      await loadJourneys();
+    } catch (err: any) {
+      console.error('Failed to delete journey:', err);
+      showAlert({ title: 'Journeys', message: 'Failed to delete journey.' });
+    }
+  }, [loadJourneys, projectId, selectedJourney?.journey_id]);
+
   return (
     <div className="workspace-config-panel">
       <div className="workspace-config-card">
@@ -473,6 +526,78 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
             {savedInfo ? t('workspaceConfig.projectInfo.saved') : t('workspaceConfig.projectInfo.save')}
           </TextButton>
         </div>
+      </div>
+
+      <div className="workspace-config-card">
+        <h3>Journeys</h3>
+        <p className="workspace-config-hint">
+          Review background journeys for this project. Notifications are now separate from journey history.
+        </p>
+
+        <div className="workspace-config-actions">
+          <TextButton
+            onClick={() => { void loadJourneys(); }}
+            variant="secondary"
+            size="sm"
+            iconLeft={<Refresh size="xs" />}
+            loading={isJourneysLoading}
+          >
+            Refresh
+          </TextButton>
+        </div>
+
+        {isJourneysLoading ? (
+          <div className="workspace-config-empty">{t('common.loading')}</div>
+        ) : journeys.length === 0 ? (
+          <div className="workspace-config-empty">No journeys yet.</div>
+        ) : (
+          <ul className="workspace-config-candidate-list">
+            {journeys.map((journey) => {
+              const isActive = ['running', 'waiting', 'processing', 'paused'].includes(journey.status);
+              return (
+                <li key={journey.journey_id} className="workspace-config-candidate-item workspace-config-journey-item">
+                  <div className="workspace-config-candidate-meta">
+                    <div className="workspace-config-candidate-title">
+                      {journey.display_label || journey.kind || 'Journey'}
+                    </div>
+                    <div className="workspace-config-candidate-sub">
+                      {journey.status}
+                      {journey.latest_run_id ? ' | active run' : ''}
+                      {journey.last_error ? ` | ${journey.last_error}` : ''}
+                    </div>
+                  </div>
+                  <div className="workspace-config-actions workspace-config-actions--inline">
+                    <TextButton
+                      onClick={() => setSelectedJourney(journey)}
+                      size="sm"
+                      variant="secondary"
+                      iconLeft={<List size="xs" />}
+                    >
+                      Open
+                    </TextButton>
+                    <TextButton
+                      onClick={() => { void handleCancelJourney(journey.journey_id); }}
+                      size="sm"
+                      variant="secondary"
+                      disabled={!isActive}
+                      iconLeft={<Refresh size="xs" />}
+                    >
+                      Cancel
+                    </TextButton>
+                    <TextButton
+                      onClick={() => { void handleDeleteJourney(journey.journey_id); }}
+                      size="sm"
+                      variant="danger"
+                      iconLeft={<Trash size="xs" />}
+                    >
+                      Delete
+                    </TextButton>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
       <div className="workspace-config-card">
@@ -863,6 +988,18 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
           </ul>
         )}
       </div>
+
+      {selectedJourney ? (
+        <JourneyNotificationDetail
+          threadId={selectedJourney.thread_id}
+          projectId={projectId}
+          label={selectedJourney.display_label || selectedJourney.kind || 'Journey'}
+          status={selectedJourney.status}
+          message={selectedJourney.last_error || 'Journey details'}
+          warning={selectedJourney.last_error || undefined}
+          onClose={() => setSelectedJourney(null)}
+        />
+      ) : null}
     </div>
   );
 };

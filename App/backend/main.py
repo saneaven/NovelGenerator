@@ -94,6 +94,7 @@ from .routes.preset_routes import router as preset_router
 from .routes.mcp_routes import router as mcp_router
 from .routes.sub_agent_routes import router as sub_agent_router
 from .routes.thread_routes import router as thread_router
+from .routes.journey_routes import router as journey_router
 from .routes.notification_routes import router as notification_router
 
 # Token counting routes
@@ -172,6 +173,7 @@ app.include_router(preset_router)
 app.include_router(mcp_router)
 app.include_router(sub_agent_router)
 app.include_router(thread_router)
+app.include_router(journey_router)
 app.include_router(notification_router)
 
 # Include token counting router

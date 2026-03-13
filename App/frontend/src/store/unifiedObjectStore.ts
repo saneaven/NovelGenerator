@@ -57,6 +57,7 @@ interface UnifiedObjectStore {
 
   // List & Collection operations
   listObjects: (type: ObjectType, projectId: string) => Promise<UnifiedObject[]>;
+  refreshProjectObjects: (projectId: string, types: ObjectType[]) => Promise<void>;
   createObject: (
     type: ObjectType,
     projectId: string,
@@ -303,6 +304,46 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       console.error('Failed to list objects:', error);
       throw error;
     }
+  },
+
+  refreshProjectObjects: async (projectId: string, types: ObjectType[]) => {
+    if (!projectId || types.length === 0) return;
+
+    const uniqueTypes = [...new Set(types)];
+    const responses = await Promise.all(
+      uniqueTypes.map(async (type) => ({
+        type,
+        response: await unifiedObjectService.listObjects(type, projectId, {}),
+      })),
+    );
+
+    set((state) => {
+      const nextObjects = { ...state.objects };
+      const refreshedIdsByType = new Map<ObjectType, Set<string>>();
+
+      for (const { type, response } of responses) {
+        const ids = new Set<string>();
+        for (const obj of response.objects) {
+          ids.add(obj.id);
+          nextObjects[obj.id] = obj;
+        }
+        refreshedIdsByType.set(type, ids);
+      }
+
+      for (const [objectId, object] of Object.entries(state.objects)) {
+        if (!object) continue;
+        if (object.metadata?.project_id !== projectId) continue;
+        const refreshedIds = refreshedIdsByType.get(object.type);
+        if (!refreshedIds) continue;
+        if (!refreshedIds.has(objectId)) {
+          delete nextObjects[objectId];
+        }
+      }
+
+      return {
+        objects: nextObjects,
+      };
+    });
   },
 
   createObject: async (type: ObjectType, projectId: string, data: any, language: string, metadata?: Record<string, any>, userRequest: string = 'User Creation') => {

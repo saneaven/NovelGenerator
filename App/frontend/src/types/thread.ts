@@ -9,8 +9,9 @@ export interface ThreadInfo {
   id: string;
   projectId: string;
   threadType: ThreadType;
-  ownerId?: string | null;
+  parentId?: string | null;
   journeyKind?: string | null;
+  displayLabel?: string | null;
   status: ThreadStatus;
   memoryBoundaryMessageId?: string | null;
   lastError?: string | null;

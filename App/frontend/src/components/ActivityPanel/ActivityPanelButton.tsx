@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { notificationService } from '../../api/notificationService';
 import { useNotificationStore } from '../../store/notificationStore';
 import { useNotificationToastStore } from '../../store/notificationToastStore';
-import { useProjectStore } from '../../store/projectStore';
 import { Bell } from '../icons';
 import { IconButton } from '../IconButton';
 import ActivityPanelContainer, { type ActivityView } from './ActivityPanelContainer';
@@ -28,7 +27,6 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
   // Subscribe to notification state for indicators
   const notificationsMap = useNotificationStore((state) => state.notifications);
   const markAllReadLocal = useNotificationStore((state) => state.markAllReadLocal);
-  const currentProjectId = useProjectStore((state) => state.currentProjectId);
 
   const hasUnread = useMemo(
     () =>
@@ -59,21 +57,19 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
     if (!isOpen) {
       // Opening the panel - mark all as read
       markAllReadLocal();
-      if (currentProjectId) {
-        void notificationService.markRead(currentProjectId, {
-          mark_all: true,
-          notification_ids: [],
-        }).catch((error) => {
-          console.warn('Failed to mark notifications as read', { currentProjectId, error });
-        });
-      }
+      void notificationService.markRead({
+        mark_all: true,
+        notification_ids: [],
+      }).catch((error) => {
+        console.warn('Failed to mark notifications as read', { error });
+      });
       useNotificationToastStore.getState().setActivityPanelOpen(true);
       setIsOpen(true);
       setActiveView('notifications'); // Reset to notifications on open
     } else {
       handleClose();
     }
-  }, [isOpen, markAllReadLocal, currentProjectId, handleClose]);
+  }, [isOpen, markAllReadLocal, handleClose]);
 
   const handleViewChange = useCallback((view: ActivityView) => {
     setActiveView(view);

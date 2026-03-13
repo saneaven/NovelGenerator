@@ -1,7 +1,8 @@
 import { apiClient } from './client';
 
-export type NotificationSource = 'journey' | 'imageRun';
+export type NotificationSourceKind = 'journey' | 'imageRun' | 'system';
 export type NotificationStatus = 'running' | 'pending' | 'success' | 'error' | 'cancelled';
+export type NotificationTargetKind = 'none' | 'project' | 'thread' | 'journey';
 
 export interface NotificationProgressDTO {
   current?: number | null;
@@ -17,12 +18,24 @@ export interface NotificationCustomSlotDTO {
   alt?: string | null;
 }
 
+export interface NotificationSourceDTO {
+  kind: NotificationSourceKind;
+  id: string;
+}
+
+export interface NotificationTargetDTO {
+  kind: NotificationTargetKind;
+  project_id?: string | null;
+  thread_id?: string | null;
+  journey_id?: string | null;
+}
+
 export interface NotificationDTO {
   id: string;
-  project_id: string;
-  source: NotificationSource;
-  source_ref_id: string;
-  thread_id: string | null;
+  project_id: string | null;
+  source: NotificationSourceDTO;
+  target: NotificationTargetDTO;
+  important: boolean;
   status: NotificationStatus;
   label: string;
   message: string;
@@ -63,52 +76,45 @@ export interface ListNotificationsParams {
   limit?: number;
   offset?: number;
   includeRead?: boolean;
-  source?: NotificationSource;
+  kind?: NotificationSourceKind;
+  projectId?: string;
+  important?: boolean;
 }
 
 const DEFAULT_LIMIT = 50;
 const DEFAULT_OFFSET = 0;
 
 export const notificationService = {
-  async list(
-    projectId: string,
-    params: ListNotificationsParams = {},
-  ): Promise<NotificationListResponseDTO> {
+  async list(params: ListNotificationsParams = {}): Promise<NotificationListResponseDTO> {
     const query = new URLSearchParams();
     query.set('limit', String(params.limit ?? DEFAULT_LIMIT));
     query.set('offset', String(params.offset ?? DEFAULT_OFFSET));
     query.set('include_read', String(params.includeRead ?? true));
-    if (params.source) {
-      query.set('source', params.source);
+    if (params.kind) {
+      query.set('kind', params.kind);
+    }
+    if (params.projectId) {
+      query.set('project_id', params.projectId);
+    }
+    if (typeof params.important === 'boolean') {
+      query.set('important', String(params.important));
     }
     const suffix = query.toString();
-    return apiClient.get<NotificationListResponseDTO>(
-      `/api/v1/projects/${projectId}/notifications${suffix ? `?${suffix}` : ''}`,
-    );
+    return apiClient.get<NotificationListResponseDTO>(`/api/v1/notifications${suffix ? `?${suffix}` : ''}`);
   },
 
-  async markRead(
-    projectId: string,
-    payload: MarkNotificationsReadRequestDTO,
-  ): Promise<MarkNotificationsReadResponseDTO> {
-    return apiClient.patch<MarkNotificationsReadResponseDTO>(
-      `/api/v1/projects/${projectId}/notifications/read`,
-      payload,
-    );
+  async markRead(payload: MarkNotificationsReadRequestDTO): Promise<MarkNotificationsReadResponseDTO> {
+    return apiClient.patch<MarkNotificationsReadResponseDTO>('/api/v1/notifications/read', payload);
   },
 
-  async deleteOne(projectId: string, notificationId: string): Promise<void> {
-    await apiClient.delete<void>(`/api/v1/projects/${projectId}/notifications/${notificationId}`);
+  async deleteOne(notificationId: string): Promise<void> {
+    await apiClient.delete<void>(`/api/v1/notifications/${notificationId}`);
   },
 
   async deleteAll(
-    projectId: string,
     payload: DeleteAllNotificationsRequestDTO,
   ): Promise<DeleteAllNotificationsResponseDTO> {
-    return apiClient.post<DeleteAllNotificationsResponseDTO>(
-      `/api/v1/projects/${projectId}/notifications/delete-all`,
-      payload,
-    );
+    return apiClient.post<DeleteAllNotificationsResponseDTO>('/api/v1/notifications/delete-all', payload);
   },
 };
 

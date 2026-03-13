@@ -308,6 +308,7 @@ async def batch_delete_translations(
             )
             queue_object_change(
                 db,
+                user_id=current_user.id,
                 project_id=project_id,
                 object_type=object_type,
                 object_id=object_id,
@@ -499,6 +500,7 @@ async def delete_translation(
     latest_version.data = next_data
     queue_object_change(
         db,
+        user_id=current_user.id,
         project_id=project_id,
         object_type=object_type,
         object_id=object_id,

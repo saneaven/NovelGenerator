@@ -6,8 +6,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-NotificationSource = Literal["journey", "imageRun"]
+NotificationSourceKind = Literal["journey", "imageRun", "system"]
 NotificationStatus = Literal["running", "pending", "success", "error", "cancelled"]
+NotificationTargetKind = Literal["none", "project", "thread", "journey"]
 
 
 class NotificationProgress(BaseModel):
@@ -24,19 +25,31 @@ class NotificationCustomSlot(BaseModel):
     alt: str | None = None
 
 
+class NotificationSource(BaseModel):
+    kind: NotificationSourceKind
+    id: str
+
+
+class NotificationTarget(BaseModel):
+    kind: NotificationTargetKind = "none"
+    project_id: str | None = None
+    thread_id: str | None = None
+    journey_id: str | None = None
+
+
 class NotificationResponse(BaseModel):
     id: str
-    project_id: str
+    project_id: str | None = None
     source: NotificationSource
-    source_ref_id: str
-    thread_id: str | None = None
     status: NotificationStatus
     label: str
     message: str
     warning: str | None = None
     progress: NotificationProgress | None = None
     custom_slot: NotificationCustomSlot | None = None
+    target: NotificationTarget
     meta: dict[str, Any] | None = None
+    important: bool = False
     is_read: bool
     created_at: datetime
     updated_at: datetime

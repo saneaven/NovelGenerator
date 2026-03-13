@@ -20,6 +20,7 @@ from ..chat_attachment_service import (
 from ..runtime_event_dispatcher import RuntimeEventDispatcher
 from ..settings_service import settings_service
 from ..mcp import mcp_policy_service, mcp_resolver
+from ..notification_service import serialize_notification
 from ..storage_usage_service import (
     StorageQuotaExceededError,
     apply_project_usage_deltas,
@@ -32,6 +33,7 @@ from ..storage_usage_service import (
     snapshot_run_row,
     snapshot_tool_call_row,
 )
+from ..thread_parent_runtime_service import apply_parent_runtime_snapshot
 from ..template_engine import FragmentNotFoundError, TemplateRenderLimitError, format_template_error
 from ..tool_engine import tool_engine
 from ..tool_engine.contracts import ToolOffer
@@ -126,12 +128,14 @@ class RunPipeline:
     async def _emit(
         self,
         *,
+        user_id: UUID,
         project_id: UUID,
         thread_id: UUID,
         event_name: str,
         data: dict[str, Any],
     ) -> None:
         await self._event_dispatcher.emit_runtime_event(
+            user_id=user_id,
             project_id=project_id,
             thread_id=thread_id,
             event_name=event_name,
@@ -153,6 +157,9 @@ class RunPipeline:
 
             task.add_done_callback(_cleanup)
 
+    async def spawn_execute_loop(self, run_id: UUID, *, create_ctx: CreateContext | None = None) -> None:
+        await self._spawn_task(run_id, create_ctx=create_ctx)
+
     async def _cancel_task_and_wait(self, run_id: UUID, *, timeout_s: float = 5.0) -> bool:
         task: asyncio.Task | None = None
         async with self._task_lock:
@@ -171,6 +178,97 @@ class RunPipeline:
             return False
         except Exception:
             return True
+
+    async def _emit_notification_upsert(self, row: Any) -> None:
+        if row is None:
+            return
+        await self._event_dispatcher.emit_project_event(
+            user_id=row.user_id,
+            project_id=row.project_id,
+            event_name="notification:upsert",
+            data=serialize_notification(row),
+        )
+
+    async def _sync_status_side_effects(
+        self,
+        db: Session,
+        *,
+        run: RunModel,
+        thread: Thread,
+        error: str | None,
+        emit_error: bool = False,
+        emit_run_status: bool = True,
+        extra_status_data: dict[str, Any] | None = None,
+    ) -> None:
+        notification_row = apply_parent_runtime_snapshot(
+            db,
+            thread=thread,
+            run=run,
+            error=error,
+        )
+        db.commit()
+        if emit_error and error:
+            await self._emit(
+                user_id=run.user_id,
+                project_id=run.project_id,
+                thread_id=thread.id,
+                event_name="run:error",
+                data={
+                    "run_id": str(run.id),
+                    "error": error,
+                },
+            )
+        if emit_run_status:
+            payload = {
+                "run_id": str(run.id),
+                "status": run.status,
+                "error": run.error,
+            }
+            if extra_status_data:
+                payload.update(extra_status_data)
+            await self._emit(
+                user_id=run.user_id,
+                project_id=run.project_id,
+                thread_id=thread.id,
+                event_name="run:status",
+                data=payload,
+            )
+        if notification_row is not None:
+            await self._emit_notification_upsert(notification_row)
+
+    async def _apply_status_transition(
+        self,
+        db: Session,
+        *,
+        run: RunModel,
+        thread: Thread,
+        status: str,
+        error: str | None,
+        emit_error: bool = False,
+        emit_run_status: bool = True,
+        extra_status_data: dict[str, Any] | None = None,
+    ) -> None:
+        run_before = snapshot_run_row(run)
+        run.status = status
+        run.error = error if status == "error" else None
+        thread.status = status
+        apply_project_usage_deltas(
+            db,
+            user_id=run.user_id,
+            project_id=run.project_id,
+            deltas=[build_run_delta(run_before, snapshot_run_row(run))],
+            enforce_quota=False,
+        )
+        db.flush()
+        await self._sync_status_side_effects(
+            db,
+            run=run,
+            thread=thread,
+            error=error,
+            emit_error=emit_error,
+            emit_run_status=emit_run_status,
+            extra_status_data=extra_status_data,
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -391,6 +489,7 @@ class RunPipeline:
                 db.close()
 
             await self._emit(
+                user_id=run.user_id,
                 project_id=run.project_id,
                 thread_id=run.thread.id,
                 event_name="message:user",
@@ -469,10 +568,14 @@ class RunPipeline:
                 if language is not None:
                     run.language = language
 
-                run.status = "running"
-                run.error = None
-                thread.status = "running"
-                db.commit()
+                await self._apply_status_transition(
+                    db,
+                    run=run,
+                    thread=thread,
+                    status="running",
+                    error=None,
+                    emit_run_status=False,
+                )
                 db.refresh(run)
                 _ = run.thread  # eager-load before session closes
             finally:
@@ -516,21 +619,17 @@ class RunPipeline:
 
                 run_id = run.id
                 project_id = run.project_id
-                run.status = "paused"
-                thread.status = "paused"
-                db.commit()
+                await self._apply_status_transition(
+                    db,
+                    run=run,
+                    thread=thread,
+                    status="paused",
+                    error=None,
+                )
             finally:
                 db.close()
 
             await self._cancel_task_and_wait(run_id, timeout_s=5.0)
-
-            if project_id is not None:
-                await self._emit(
-                    project_id=project_id,
-                    thread_id=thread_id,
-                    event_name="run:status",
-                    data={"run_id": str(run_id), "status": "paused"},
-                )
 
     async def cancel_run(self, *, thread_id: UUID, user_id: UUID) -> None:
         async with self._thread_lock(thread_id):
@@ -554,11 +653,15 @@ class RunPipeline:
                     return  # No active run to cancel
                 run_id = run.id
                 project_id = run.project_id
-                run.status = "canceled"
                 thread_row = run.thread
                 if thread_row is not None:
-                    thread_row.status = "canceled"
-                db.commit()
+                    await self._apply_status_transition(
+                        db,
+                        run=run,
+                        thread=thread_row,
+                        status="canceled",
+                        error=None,
+                    )
             finally:
                 db.close()
 
@@ -567,16 +670,11 @@ class RunPipeline:
 
             if project_id is not None:
                 await self._emit(
+                    user_id=user_id,
                     project_id=project_id,
                     thread_id=thread_id,
                     event_name="run:canceled",
                     data={"run_id": str(run_id)},
-                )
-                await self._emit(
-                    project_id=project_id,
-                    thread_id=thread_id,
-                    event_name="run:status",
-                    data={"run_id": str(run_id), "status": "canceled"},
                 )
 
                 # Propagate cancellation to parent if this is a sub-agent child thread
@@ -622,11 +720,15 @@ class RunPipeline:
                     return
                 run_id = run.id
                 project_id = run.project_id
-                run.status = "canceled"
                 thread_row = run.thread
                 if thread_row is not None:
-                    thread_row.status = "canceled"
-                db.commit()
+                    await self._apply_status_transition(
+                        db,
+                        run=run,
+                        thread=thread_row,
+                        status="canceled",
+                        error=None,
+                    )
             finally:
                 db.close()
 
@@ -639,16 +741,11 @@ class RunPipeline:
 
             if project_id is not None:
                 await self._emit(
+                    user_id=user_id,
                     project_id=project_id,
                     thread_id=thread_id,
                     event_name="run:canceled",
                     data={"run_id": str(run_id)},
-                )
-                await self._emit(
-                    project_id=project_id,
-                    thread_id=thread_id,
-                    event_name="run:status",
-                    data={"run_id": str(run_id), "status": "canceled"},
                 )
 
     # ------------------------------------------------------------------
@@ -747,6 +844,7 @@ class RunPipeline:
             out.append(row)
 
             await self._emit(
+                user_id=run.user_id,
                 project_id=run.project_id,
                 thread_id=thread.id,
                 event_name="tool_call:end",
@@ -764,6 +862,7 @@ class RunPipeline:
                 },
             )
             await self._emit(
+                user_id=run.user_id,
                 project_id=run.project_id,
                 thread_id=thread.id,
                 event_name="tool_call:status",
@@ -809,6 +908,7 @@ class RunPipeline:
                 return
 
             await self._emit(
+                user_id=run.user_id,
                 project_id=run.project_id,
                 thread_id=thread.id,
                 event_name="run:status",
@@ -846,6 +946,7 @@ class RunPipeline:
                 assistant_message_ref_out=assistant_message_ref,
                 emit_fn=self._emit,
                 persist_tool_calls_fn=self._persist_tool_calls,
+                sync_status_fn=self._sync_status_side_effects,
             )
         except asyncio.CancelledError:
             try:
@@ -854,16 +955,18 @@ class RunPipeline:
                 if run is not None:
                     thread = run.thread
                     if run.status not in {"canceled", "paused"}:
-                        run.status = "canceled"
                         if thread is not None:
-                            thread.status = "canceled"
-                        try:
-                            db.commit()
-                        except Exception:
-                            db.rollback()
+                            await self._apply_status_transition(
+                                db,
+                                run=run,
+                                thread=thread,
+                                status="canceled",
+                                error=None,
+                            )
                     if thread is not None and assistant_message_ref[0] is not None:
                         msg_data = assistant_message_ref[0].data
                         await self._emit(
+                            user_id=run.user_id,
                             project_id=run.project_id,
                             thread_id=thread.id,
                             event_name="message:end",
@@ -884,26 +987,19 @@ class RunPipeline:
             run = db.query(RunModel).filter(RunModel.id == run_id).first()
             if run is not None:
                 thread = run.thread
-                run_before = snapshot_run_row(run)
-                run.status = "error"
-                run.error = user_error
                 if thread is not None:
-                    thread.status = "error"
-                apply_project_usage_deltas(
-                    db,
-                    user_id=run.user_id,
-                    project_id=run.project_id,
-                    deltas=[build_run_delta(run_before, snapshot_run_row(run))],
-                    enforce_quota=False,
-                )
-                try:
-                    db.commit()
-                except Exception:
-                    db.rollback()
-                if thread is not None:
+                    await self._apply_status_transition(
+                        db,
+                        run=run,
+                        thread=thread,
+                        status="error",
+                        error=user_error,
+                        emit_error=True,
+                    )
                     if assistant_message_ref[0] is not None:
                         msg_data = assistant_message_ref[0].data
                         await self._emit(
+                            user_id=run.user_id,
                             project_id=run.project_id,
                             thread_id=thread.id,
                             event_name="message:end",
@@ -915,24 +1011,5 @@ class RunPipeline:
                                 "tool_calls": _build_tool_call_summaries(db, assistant_message_ref[0].id),
                             },
                         )
-                    await self._emit(
-                        project_id=run.project_id,
-                        thread_id=thread.id,
-                        event_name="run:error",
-                        data={
-                            "run_id": str(run.id),
-                            "error": user_error,
-                        },
-                    )
-                    await self._emit(
-                        project_id=run.project_id,
-                        thread_id=thread.id,
-                        event_name="run:status",
-                        data={
-                            "run_id": str(run.id),
-                            "status": "error",
-                            "error": user_error,
-                        },
-                    )
         finally:
             db.close()

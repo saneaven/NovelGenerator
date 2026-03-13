@@ -43,7 +43,7 @@ def _find_thread_id(db: Session, agent_id: uuid.UUID) -> uuid.UUID | None:
     """Find the thread for an agent."""
     row = (
         db.query(Thread.id)
-        .filter(Thread.owner_id == agent_id, Thread.thread_type == "agent")
+        .filter(Thread.parent_id == agent_id, Thread.thread_type == "agent")
         .first()
     )
     return row[0] if row else None
@@ -89,7 +89,7 @@ async def create_agent(
         project_id=project_id,
         user_id=current_user.id,
         thread_type="agent",
-        owner_id=agent.id,
+        parent_id=agent.id,
         status="done",
     )
     db.add(thread)
@@ -126,8 +126,8 @@ async def list_agents(
     # Batch-load thread IDs for all agents
     agent_ids = [a.id for a in agents]
     thread_rows = (
-        db.query(Thread.owner_id, Thread.id)
-        .filter(Thread.owner_id.in_(agent_ids), Thread.thread_type == "agent")
+        db.query(Thread.parent_id, Thread.id)
+        .filter(Thread.parent_id.in_(agent_ids), Thread.thread_type == "agent")
         .all()
     ) if agent_ids else []
     thread_id_by_agent = {row[0]: row[1] for row in thread_rows}

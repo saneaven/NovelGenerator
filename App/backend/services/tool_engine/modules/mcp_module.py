@@ -77,7 +77,7 @@ class McpToolModule(ToolCallModule):
             thread_id=ctx.thread.id,
             run_id=ctx.run.id,
             invocation_mode=str(ctx.invocation_mode or "agentMode"),
-            sub_agent_id=ctx.thread.owner_id if ctx.thread.thread_type == "subAgent" else None,
+            sub_agent_id=ctx.thread.parent_id if ctx.thread.thread_type == "subAgent" else None,
             language=ctx.language,
             input_text="",
             input_payload=ctx.input_payload,

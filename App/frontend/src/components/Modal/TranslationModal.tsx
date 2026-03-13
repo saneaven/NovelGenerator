@@ -7,8 +7,7 @@ import { useSettings } from '../../store/settingsStore';
 import type { UnifiedObject, ObjectType } from '../../types/unifiedObject';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import { useJourneyStore } from '../../store/journeyStore';
-import { threadService } from '../../api/threadService';
-import { sendThreadMessage } from '../../runtime/threadCommands';
+import { journeyService } from '../../api/journeyService';
 import { Globe, Swap, Document } from '../icons';
 import { ObjectPicker } from '../ObjectPicker';
 import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
@@ -326,34 +325,17 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     });
 
     try {
-      const created = await threadService.createJourneyThread(
-        projectId,
-        'objectTranslation',
-        {
-          notificationLabel: spec.label(inputPayload),
-          notificationMeta: {
-            journey_kind: 'objectTranslation',
-            project_id: projectId,
-            entry_input: userInput.trim() || null,
-            target_language: targetLanguage,
-            target_ids: selectedObjectIds,
-          },
-        },
-      );
-      useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
-      await sendThreadMessage({
-        threadId: created.thread_id,
-        projectId,
-        threadType: 'journey',
-        inputText: userInput.trim() || 'Translate the selected objects.',
-        request: {
-          input_payload: inputPayload,
-          surface: 'story-object',
-          journey_target_ids: selectedObjectIds,
-          context_object_ids: selectedContext,
-          language: targetLanguage,
-        },
+      const created = await journeyService.create(projectId, {
+        kind: 'objectTranslation',
+        display_label: spec.label(inputPayload),
+        input_text: userInput.trim() || 'Translate the selected objects.',
+        input_payload: inputPayload,
+        surface: 'story-object',
+        journey_target_ids: selectedObjectIds,
+        context_object_ids: selectedContext,
+        language: targetLanguage,
       });
+      useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
     } catch (error: any) {
       useJourneyStore.getState().updateJourney(journeyId, {
         error: error?.message ?? 'Failed to start translation journey',

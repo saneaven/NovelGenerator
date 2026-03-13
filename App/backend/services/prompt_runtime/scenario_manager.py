@@ -8,8 +8,9 @@ from uuid import UUID
 from sqlalchemy import and_, desc
 from sqlalchemy.orm import Session
 
-from ...models.db_models import PromptScenarioVersion, RunModel, SubAgentDefinitionModel, Thread
+from ...models.db_models import PromptScenarioVersion, RunModel, Thread
 from ..settings_service import settings_service
+from ..thread_parent_runtime_service import resolve_parent
 from ..variable_service import variable_service
 from .output_mode import resolve_output_mode
 
@@ -58,8 +59,9 @@ def _find_manuscript_by_chapter(project_data: dict[str, Any], chapter_id: str | 
 
 class ScenarioManager:
     def resolve_target(self, db: Session, *, thread: Thread, run: RunModel, payload: dict[str, Any]) -> ScenarioTarget:
+        parent = resolve_parent(db, thread)
         if thread.thread_type == "journey":
-            journey_kind = str(thread.journey_kind or "").strip()
+            journey_kind = str(parent.journey_kind or "").strip()
 
             if journey_kind == "objectTranslation":
                 return ScenarioTarget(task_type="translation", task_subtype="object")
@@ -81,19 +83,18 @@ class ScenarioManager:
 
         if thread.thread_type == "subAgent":
             task_subtype = "default"
-            if thread.owner_id:
-                defn = db.query(SubAgentDefinitionModel).filter(SubAgentDefinitionModel.id == thread.owner_id).first()
-                if defn is not None and str(defn.agent_name or "").strip():
-                    task_subtype = str(defn.agent_name).strip()
+            defn = parent.sub_agent_definition
+            if defn is not None and str(defn.agent_name or "").strip():
+                task_subtype = str(defn.agent_name).strip()
             return ScenarioTarget(task_type="subAgent", task_subtype=task_subtype)
 
         task_subtype = "planMode" if run.run_mode == "planMode" else "agentMode"
         return ScenarioTarget(task_type="agent", task_subtype=task_subtype)
 
     @staticmethod
-    def resolve_task_type(*, thread: Thread, run: RunModel) -> str:
+    def resolve_task_type(db: Session, *, thread: Thread, run: RunModel) -> str:
         if thread.thread_type == "journey":
-            kind = (thread.journey_kind or "").strip()
+            kind = str(resolve_parent(db, thread).journey_kind or "").strip()
             if kind in {"objectTranslation", "messageTranslation"}:
                 return "translation"
             if kind in {"imagePrompt", "sceneImagePrompt"}:
@@ -251,6 +252,7 @@ class ScenarioManager:
         input_payload: dict[str, Any],
     ) -> dict[str, Any]:
         task_cfg = settings_service.get_task_config(db, user_id, task_type)
+        parent = resolve_parent(db, thread)
 
         payload = input_payload
         language = str(run.language or "English")
@@ -258,7 +260,7 @@ class ScenarioManager:
         journey_target_ids = _as_str_list(run.journey_target_ids)
         native_output_mode = bool(getattr(settings_service._get_settings(db, user_id), "native_output_mode", False))  # pylint: disable=protected-access
         output_mode = resolve_output_mode(
-            journey_kind=thread.journey_kind,
+            journey_kind=parent.journey_kind,
             payload=payload,
             native_output_mode=native_output_mode,
         )
@@ -290,7 +292,7 @@ class ScenarioManager:
                 "contextObjectIds": context_object_ids,
             },
             "journey": {
-                "kind": str(thread.journey_kind or ""),
+                "kind": str(parent.journey_kind or ""),
                 "payload": payload,
                 "targetIds": journey_target_ids,
             },

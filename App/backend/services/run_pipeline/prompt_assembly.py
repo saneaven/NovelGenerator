@@ -131,7 +131,7 @@ async def assemble_resume(
     conversation.extend(m for m in recent if m.get("role") != "user")
 
     bundle: ScenarioBundle | None = None
-    task_type = ScenarioManager.resolve_task_type(thread=thread, run=run)
+    task_type = ScenarioManager.resolve_task_type(db, thread=thread, run=run)
     if task_type == "agent":
         preset_id = settings_service.get_active_preset_id(db, run.user_id)
         if preset_id is not None:

@@ -1,7 +1,6 @@
-import { threadService } from '../api/threadService';
+import { journeyService } from '../api/journeyService';
 import { getJourneySpec } from '../llmTaskJourney/journeySpecs';
 import { useJourneyStore } from '../store/journeyStore';
-import { sendThreadMessage } from '../runtime/threadCommands';
 
 export interface MessageTranslationInput {
   projectId: string;
@@ -59,34 +58,16 @@ export async function runMessageTranslation(
   });
 
   try {
-    const created = await threadService.createJourneyThread(
-      input.projectId,
-      'messageTranslation',
-      {
-        notificationLabel: spec.label(journeyInput),
-        notificationMeta: {
-          journey_kind: 'messageTranslation',
-          project_id: input.projectId,
-          entry_input: input.sourceContent,
-          target_language: input.targetLanguage,
-          target_ids: [input.sourceMessageId],
-        },
-      },
-    );
+    const created = await journeyService.create(input.projectId, {
+      kind: 'messageTranslation',
+      display_label: spec.label(journeyInput),
+      input_text: input.sourceContent,
+      input_payload: payload,
+      surface: 'story-object',
+      language: input.targetLanguage,
+    });
     useJourneyStore.getState().updateJourney(journeyId, {
       threadId: created.thread_id,
-    });
-
-    await sendThreadMessage({
-      threadId: created.thread_id,
-      projectId: input.projectId,
-      threadType: 'journey',
-      inputText: input.sourceContent,
-      request: {
-        input_payload: payload,
-        surface: 'story-object',
-        language: input.targetLanguage,
-      },
     });
 
     return {

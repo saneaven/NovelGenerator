@@ -1,4 +1,5 @@
 import { unifiedObjectService } from '../../api/unifiedObjectService';
+import { useProjectStore } from '../../store/projectStore';
 import type { ObjectChangedEvent } from '../../api/sseClient';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import type { ObjectType, UnifiedObject } from '../../types/unifiedObject';
@@ -19,13 +20,13 @@ const OBJECT_TYPE_SET: ReadonlySet<ObjectType> = new Set([
 ]);
 
 type PendingUpsert = {
+  projectId: string;
   objectType: ObjectType;
   objectId: string;
   revision: number;
 };
 
 export class ObjectEventConsumer {
-  private readonly projectId: string;
   private readonly pendingDeleteIds = new Set<string>();
   private readonly pendingDeleteKeys = new Set<string>();
   private readonly pendingUpserts = new Map<string, PendingUpsert>();
@@ -33,9 +34,7 @@ export class ObjectEventConsumer {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
 
-  constructor(projectId: string) {
-    this.projectId = projectId;
-  }
+  constructor() {}
 
   dispose(): void {
     this.disposed = true;
@@ -52,7 +51,9 @@ export class ObjectEventConsumer {
   consume(event: ObjectChangedEvent): void {
     if (this.disposed) return;
     const payload = event.data;
-    if (!payload || String(payload.project_id ?? '') !== this.projectId) return;
+    const projectId = String(payload?.project_id ?? '');
+    const currentProjectId = useProjectStore.getState().currentProjectId;
+    if (!payload || !projectId || currentProjectId !== projectId) return;
     if (!Array.isArray(payload.changes) || payload.changes.length === 0) return;
 
     for (const change of payload.changes) {
@@ -74,7 +75,7 @@ export class ObjectEventConsumer {
 
       if (action === 'created' || action === 'updated') {
         if (this.pendingDeleteKeys.has(key)) continue;
-        this.pendingUpserts.set(key, { objectType, objectId, revision });
+        this.pendingUpserts.set(key, { projectId, objectType, objectId, revision });
       }
     }
 
@@ -132,7 +133,7 @@ export class ObjectEventConsumer {
           fetched.push(object);
         } catch (error) {
           console.warn('Failed to fetch changed object from SSE event', {
-            projectId: this.projectId,
+            projectId: item.projectId,
             objectType: item.objectType,
             objectId: item.objectId,
             error,

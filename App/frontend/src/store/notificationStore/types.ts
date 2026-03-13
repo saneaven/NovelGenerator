@@ -1,13 +1,17 @@
 import type {
   NotificationDTO,
-  NotificationSource,
+  NotificationSourceDTO,
+  NotificationSourceKind,
   NotificationStatus as ServerNotificationStatus,
+  NotificationTargetDTO,
 } from '../../api/notificationService';
 
 export type NotificationStatus = ServerNotificationStatus | 'idle';
 export type NotificationServerDTO = NotificationDTO;
 export type NotificationMeta = Record<string, unknown> | null;
-export type NotificationSourceType = NotificationSource;
+export type NotificationSourceKindType = NotificationSourceKind;
+export type NotificationSource = NotificationSourceDTO;
+export type NotificationTarget = NotificationTargetDTO;
 
 export interface NotificationProgress {
   current?: number;
@@ -23,10 +27,10 @@ export type NotificationCustomSlot =
 
 export interface NotificationEntry {
   id: string;
-  projectId: string;
-  source: NotificationSourceType;
-  sourceRefId: string;
-  threadId: string | null;
+  projectId: string | null;
+  source: NotificationSource;
+  target: NotificationTarget;
+  important: boolean;
   status: NotificationStatus;
   label: string;
   message: string;

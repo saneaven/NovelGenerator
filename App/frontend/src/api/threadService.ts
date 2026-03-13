@@ -101,8 +101,9 @@ export interface ProjectThreadRuntimeItem {
   id: string;
   projectId: string;
   threadType: ThreadInfo['threadType'];
-  ownerId: string | null;
+  parentId: string | null;
   journeyKind: string | null;
+  displayLabel: string | null;
   status: ThreadStatus;
   lastError: string | null;
   updatedAt: string | null;
@@ -112,18 +113,14 @@ export interface ProjectThreadRuntimeItem {
   unresolvedToolCallCount: number;
 }
 
-export interface CreateJourneyThreadOptions {
-  notificationLabel?: string;
-  notificationMeta?: Record<string, unknown>;
-}
-
 function toThreadInfo(raw: Record<string, unknown>): ThreadInfo {
   const out: ThreadInfo = {
     id: String(raw.id),
     projectId: String(raw.project_id),
     threadType: String(raw.thread_type) as ThreadInfo['threadType'],
-    ownerId: raw.owner_id ? String(raw.owner_id) : null,
+    parentId: raw.parent_id ? String(raw.parent_id) : null,
     journeyKind: raw.journey_kind ? String(raw.journey_kind) : null,
+    displayLabel: raw.display_label ? String(raw.display_label) : null,
     status: String(raw.status) as ThreadStatus,
     memoryBoundaryMessageId: raw.memory_boundary_message_id ? String(raw.memory_boundary_message_id) : null,
   };
@@ -357,19 +354,6 @@ export const threadService = {
 
   async pauseThread(threadId: string): Promise<void> {
     await apiClient.post(`/api/v1/threads/${threadId}/pause`);
-  },
-
-  async createJourneyThread(
-    projectId: string,
-    journeyKind: 'manuscriptEdit' | 'outlineEdit' | 'storyObjectEdit' | 'objectTranslation' | 'imagePrompt' | 'sceneImagePrompt' | 'messageTranslation',
-    options?: CreateJourneyThreadOptions,
-  ): Promise<{ thread_id: string; status: ThreadStatus; notification_id?: string }> {
-    return apiClient.post(`/api/v1/projects/${projectId}/threads`, {
-      thread_type: 'journey',
-      journey_kind: journeyKind,
-      notification_label: options?.notificationLabel ?? undefined,
-      notification_meta: options?.notificationMeta ?? undefined,
-    });
   },
 
   async updateMessage(

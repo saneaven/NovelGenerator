@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { notificationService } from '../../api/notificationService';
-import { useProjectStore } from '../../store/projectStore';
 import { useNotificationStore } from '../../store/notificationStore';
 import NotificationItem from '../Notification/NotificationItem';
 import { useScroll } from 'motion/react';
@@ -12,6 +12,7 @@ interface NotificationsViewProps {
 
 const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobileProp }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const itemsViewportRef = useRef<HTMLDivElement>(null);
   const itemsContainerRef = useRef<HTMLDivElement>(null);
   const { scrollY } = useScroll({ container: itemsViewportRef });
@@ -32,14 +33,19 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobil
   const notificationsMap = useNotificationStore((state) => state.notifications);
   const removeFromServer = useNotificationStore((state) => state.removeFromServer);
   const openDetail = useNotificationStore((state) => state.openDetail);
-  const currentProjectId = useProjectStore((state) => state.currentProjectId);
 
   // Derive sorted notifications from raw state
   const notifications = useMemo(
     () =>
       Object.values(notificationsMap)
         .filter((n): n is NonNullable<typeof n> => n !== undefined && n.status !== 'idle')
-        .sort((a, b) => b.createdAt - a.createdAt),
+        .sort((a, b) => {
+          if (a.important !== b.important) return Number(b.important) - Number(a.important);
+          if (a.isRead !== b.isRead) return Number(a.isRead) - Number(b.isRead);
+          if (a.updatedAt !== b.updatedAt) return b.updatedAt - a.updatedAt;
+          if (a.createdAt !== b.createdAt) return b.createdAt - a.createdAt;
+          return b.id.localeCompare(a.id);
+        }),
     [notificationsMap]
   );
 
@@ -52,23 +58,28 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobil
 
   const handleDismiss = useCallback(
     (id: string) => {
-      if (!currentProjectId) return;
-      void notificationService.deleteOne(currentProjectId, id)
+      void notificationService.deleteOne(id)
         .then(() => {
           removeFromServer(id);
         })
         .catch((error) => {
-          console.warn('Failed to delete notification', { id, currentProjectId, error });
+          console.warn('Failed to delete notification', { id, error });
         });
     },
-    [currentProjectId, removeFromServer]
+    [removeFromServer]
   );
 
   const handleClick = useCallback(
     (id: string) => {
+      const notification = notificationsMap[id];
+      if (!notification) return;
+      if (notification.target.kind === 'project' && notification.target.project_id) {
+        navigate(`/project/${notification.target.project_id}`);
+        return;
+      }
       openDetail(id);
     },
-    [openDetail]
+    [navigate, notificationsMap, openDetail]
   );
 
   // Detect mobile viewport

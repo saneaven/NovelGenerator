@@ -1,7 +1,8 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../store/projectStore';
+import { useNotificationStore } from '../store/notificationStore';
 import './Home.css';
 import { useAuthStore } from '../store/authStore';
 import { useSettings } from '../store/settingsStore';
@@ -12,6 +13,7 @@ import { Settings, Logout, Close, Plus, Upload } from '../components/icons';
 import { Loading } from '../components/common/Loading';
 import AuthenticatedImage from '../components/common/AuthenticatedImage';
 import BrandLogo from '../components/common/BrandLogo';
+import ActivityPanelButton from '../components/ActivityPanel/ActivityPanelButton';
 import { confirm, alert as showAlert } from '../store/dialogStore';
 
 const Home: React.FC = () => {
@@ -27,6 +29,22 @@ const Home: React.FC = () => {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const notificationsMap = useNotificationStore((state) => state.notifications);
+  const openNotificationDetail = useNotificationStore((state) => state.openDetail);
+
+  const recentNotifications = useMemo(
+    () =>
+      Object.values(notificationsMap)
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined && entry.status !== 'idle')
+        .sort((a, b) => {
+          if (a.important !== b.important) return Number(b.important) - Number(a.important);
+          if (a.isRead !== b.isRead) return Number(a.isRead) - Number(b.isRead);
+          if (a.updatedAt !== b.updatedAt) return b.updatedAt - a.updatedAt;
+          return b.createdAt - a.createdAt;
+        })
+        .slice(0, 6),
+    [notificationsMap],
+  );
 
   // Fetch projects on mount and when returning to page
   useEffect(() => {
@@ -82,6 +100,16 @@ const Home: React.FC = () => {
     }
   };
 
+  const handleNotificationClick = (notificationId: string) => {
+    const notification = notificationsMap[notificationId];
+    if (!notification) return;
+    if (notification.target.kind === 'project' && notification.target.project_id) {
+      navigate(`/project/${notification.target.project_id}`);
+      return;
+    }
+    openNotificationDetail(notificationId);
+  };
+
   const handleImportClick = () => {
     importInputRef.current?.click();
   };
@@ -114,6 +142,7 @@ const Home: React.FC = () => {
         <div className="header-content">
           <div className="user-controls">
             <div className="icon-actions">
+              <ActivityPanelButton />
               <IconButton
                 icon={<Settings size="lg" />}
                 onClick={() => setIsSettingsModalOpen(true)}
@@ -171,6 +200,38 @@ const Home: React.FC = () => {
             </button>
           </div>
         </div>
+
+        <section className="home-notifications-section">
+          <div className="home-notifications-header">
+            <h2 className="section-title">Recent Notifications</h2>
+          </div>
+          {recentNotifications.length === 0 ? (
+            <div className="home-notifications-empty">
+              No notifications yet.
+            </div>
+          ) : (
+            <div className="home-notifications-list">
+              {recentNotifications.map((notification) => (
+                <button
+                  key={notification.id}
+                  type="button"
+                  className={`home-notification-card ${notification.important ? 'home-notification-card--important' : ''} ${notification.isRead ? '' : 'home-notification-card--unread'}`}
+                  onClick={() => handleNotificationClick(notification.id)}
+                >
+                  <div className="home-notification-card__top">
+                    <span className="home-notification-card__label">{notification.label}</span>
+                    <span className="home-notification-card__status">{notification.status}</span>
+                  </div>
+                  <div className="home-notification-card__message">{notification.message}</div>
+                  <div className="home-notification-card__meta">
+                    <span>{notification.projectId ? `Project ${notification.projectId.slice(0, 8)}` : 'System'}</span>
+                    <span>{new Date(notification.updatedAt).toLocaleString()}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
 
         <div className="projects-grid">
           {isLoading && projects.length === 0 ? (

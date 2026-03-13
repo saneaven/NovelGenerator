@@ -199,6 +199,84 @@
   box-shadow: none;
 }
 
+.home-notifications-section {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.home-notifications-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.home-notifications-empty {
+  padding: var(--spacing-lg);
+  border-radius: var(--border-radius-xl);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+}
+
+.home-notifications-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.home-notification-card {
+  display: grid;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+  text-align: left;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-xl);
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base), background-color var(--transition-base);
+}
+
+.home-notification-card:hover {
+  transform: translateY(-2px);
+  background: var(--color-surface-subtle);
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-border-medium);
+}
+
+.home-notification-card--unread {
+  border-color: var(--color-brand-primary-border);
+}
+
+.home-notification-card--important {
+  border-color: var(--color-warning);
+}
+
+.home-notification-card__top,
+.home-notification-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.home-notification-card__label {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.home-notification-card__status,
+.home-notification-card__meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.home-notification-card__message {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+}
+
 /* ========================================
    PROJECTS GRID
    ======================================== */

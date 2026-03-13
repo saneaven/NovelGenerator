@@ -1,25 +1,24 @@
-import { connectProjectStream, type ProjectSSEEvent } from '../api/sseClient';
 import { assetService } from '../api/assetService';
+import { connectUserStream, type RuntimeSSEEvent } from '../api/sseClient';
 import { notificationService } from '../api/notificationService';
-import { EventRouter } from './eventRouter';
 import { useImageRunStore } from '../imageRun';
-import { useAssetStore } from '../store/assetStore';
 import { useNotificationStore } from '../store/notificationStore';
+import { useProjectStore } from '../store/projectStore';
+import { useAssetStore } from '../store/assetStore';
+import { EventRouter } from './eventRouter';
 import {
   hydrateProjectRuntimeSummary,
   reconcilePreexistingLiveThreads,
-  suppressRunningThreadStreaming,
 } from './projectRuntimeState';
 
 const STREAM_RECOVERY_ACTIVITY_TIMEOUT_MS = 15_000;
 const LIFECYCLE_RECONNECT_DEBOUNCE_MS = 400;
 
-class ProjectRuntimeConnection {
-  readonly projectId: string;
+class UserRuntimeConnection {
   private refCount = 0;
   private abortController: AbortController | null = null;
   private streamTask: Promise<void> | null = null;
-  private readonly router: EventRouter;
+  private router: EventRouter | null = null;
   private eventChain: Promise<void> = Promise.resolve();
   private disposed = false;
   private connectionGeneration = 0;
@@ -29,16 +28,12 @@ class ProjectRuntimeConnection {
   private recoveryAttemptStartedAt: number | null = null;
   private recoveryCheckTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(projectId: string) {
-    this.projectId = projectId;
-    this.router = new EventRouter(projectId);
-  }
-
   async start(): Promise<void> {
     this.refCount += 1;
     if (this.streamTask) return;
-    if (this.disposed) {
-      this.disposed = false;
+    this.disposed = false;
+    if (this.router === null) {
+      this.router = new EventRouter();
     }
     this.connect();
   }
@@ -54,12 +49,10 @@ class ProjectRuntimeConnection {
     this.reconnectReason = 'reconnect';
     this.abortController?.abort();
     this.abortController = null;
+    this.streamTask = null;
     this.eventChain = Promise.resolve();
-    this.router.dispose();
-  }
-
-  isIdle(): boolean {
-    return this.refCount === 0;
+    this.router?.dispose();
+    this.router = null;
   }
 
   isActive(): boolean {
@@ -101,14 +94,6 @@ class ProjectRuntimeConnection {
         this.recoveryAttemptStartedAt = null;
         return;
       }
-
-      const suppressedThreadIds = suppressRunningThreadStreaming(this.projectId);
-      if (suppressedThreadIds.length > 0) {
-        console.warn('[RuntimeStream] Falling back to suppressed live recovery after inactive reconnect', {
-          projectId: this.projectId,
-          threadIds: suppressedThreadIds,
-        });
-      }
       this.recoveryAttemptStartedAt = null;
     }, STREAM_RECOVERY_ACTIVITY_TIMEOUT_MS);
   }
@@ -125,23 +110,30 @@ class ProjectRuntimeConnection {
   }
 
   private async rehydrateRuntimeState(source: string): Promise<void> {
+    const currentProjectId = useProjectStore.getState().currentProjectId;
+
     try {
-      const [notificationResponse, runtimeRows, imageRuns] = await Promise.all([
-        notificationService.list(this.projectId, {
-          limit: 50,
-          offset: 0,
-          includeRead: true,
-        }),
-        hydrateProjectRuntimeSummary(this.projectId),
-        assetService.listImageRuns(this.projectId, 'active'),
-      ]);
+      const notificationResponse = await notificationService.list({
+        limit: 50,
+        offset: 0,
+        includeRead: true,
+      });
       useNotificationStore.getState().hydrate(notificationResponse.items);
+
+      if (!currentProjectId) {
+        return;
+      }
+
+      const [runtimeRows, imageRuns] = await Promise.all([
+        hydrateProjectRuntimeSummary(currentProjectId),
+        assetService.listImageRuns(currentProjectId, 'active'),
+        useAssetStore.getState().refreshLoadedCaches(currentProjectId),
+      ]).then(([rows, runs]) => [rows, runs] as const);
       useImageRunStore.getState().upsertRuns(imageRuns);
-      await useAssetStore.getState().refreshLoadedCaches(this.projectId);
-      await reconcilePreexistingLiveThreads(this.projectId, runtimeRows);
+      await reconcilePreexistingLiveThreads(currentProjectId, runtimeRows);
     } catch (error) {
       console.warn('Failed to rehydrate runtime state after SSE reconnect', {
-        projectId: this.projectId,
+        currentProjectId,
         source,
         error,
       });
@@ -155,11 +147,12 @@ class ProjectRuntimeConnection {
     const generation = ++this.connectionGeneration;
     this.abortController = controller;
 
-    const task = connectProjectStream(
-      this.projectId,
-      (event: ProjectSSEEvent) => {
+    const task = connectUserStream(
+      (event: RuntimeSSEEvent) => {
+        const router = this.router;
+        if (!router) return;
         this.eventChain = this.eventChain.then(
-          () => this.router.handleEvent(event),
+          () => router.handleEvent(event),
         ).catch((err) => {
           console.error('[RuntimeStream] Event handler error', { event: event.event, error: err });
         });
@@ -177,7 +170,7 @@ class ProjectRuntimeConnection {
       },
     ).catch((error) => {
       if (controller.signal.aborted || this.disposed) return;
-      console.error('Project runtime stream failed', { projectId: this.projectId, reason, error });
+      console.error('User runtime stream failed', { reason, error });
     }).finally(() => {
       if (this.abortController === controller) {
         this.abortController = null;
@@ -193,52 +186,38 @@ class ProjectRuntimeConnection {
       this.reconnectReason = 'reconnect';
       this.connect(nextReason);
     });
+
     this.streamTask = task;
   }
 }
 
 class RuntimeStreamManager {
-  private byProject = new Map<string, ProjectRuntimeConnection>();
+  private readonly connection = new UserRuntimeConnection();
   private reconnectDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private lifecycleListenersAttached = false;
+
   private readonly handleVisibilityChange = () => {
     if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
-    this.scheduleForceReconnectAll('visibilitychange');
+    this.scheduleForceReconnect('visibilitychange');
   };
+
   private readonly handlePageShow = () => {
-    this.scheduleForceReconnectAll('pageshow');
+    this.scheduleForceReconnect('pageshow');
   };
+
   private readonly handleWindowFocus = () => {
-    this.scheduleForceReconnectAll('focus');
+    this.scheduleForceReconnect('focus');
   };
+
   private readonly handleOnline = () => {
-    this.scheduleForceReconnectAll('online');
+    this.scheduleForceReconnect('online');
   };
-
-  private getOrCreate(projectId: string): ProjectRuntimeConnection {
-    const existing = this.byProject.get(projectId);
-    if (existing) return existing;
-    const created = new ProjectRuntimeConnection(projectId);
-    this.byProject.set(projectId, created);
-    return created;
-  }
-
-  private hasActiveConnections(): boolean {
-    for (const connection of this.byProject.values()) {
-      if (connection.isActive()) return true;
-    }
-    return false;
-  }
 
   private syncLifecycleListeners(): void {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      return;
-    }
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
-    const shouldAttach = this.hasActiveConnections();
-    if (shouldAttach === this.lifecycleListenersAttached) {
-      return;
-    }
+    const shouldAttach = this.connection.isActive();
+    if (shouldAttach === this.lifecycleListenersAttached) return;
 
     if (shouldAttach) {
       document.addEventListener('visibilitychange', this.handleVisibilityChange);
@@ -261,48 +240,45 @@ class RuntimeStreamManager {
     }
   }
 
-  private scheduleForceReconnectAll(reason: string): void {
-    if (!this.hasActiveConnections()) return;
+  private scheduleForceReconnect(reason: string): void {
+    if (!this.connection.isActive()) return;
     if (this.reconnectDebounceTimer !== null) {
       clearTimeout(this.reconnectDebounceTimer);
     }
     this.reconnectDebounceTimer = setTimeout(() => {
       this.reconnectDebounceTimer = null;
-      for (const connection of this.byProject.values()) {
-        if (!connection.isActive()) continue;
-        connection.forceReconnect(reason);
-      }
+      if (!this.connection.isActive()) return;
+      this.connection.forceReconnect(reason);
     }, LIFECYCLE_RECONNECT_DEBOUNCE_MS);
   }
 
-  async start(projectId: string): Promise<void> {
-    if (!projectId) return;
-    const conn = this.getOrCreate(projectId);
-    await conn.start();
+  async start(): Promise<void> {
+    await this.connection.start();
     this.syncLifecycleListeners();
   }
 
-  stop(projectId: string): void {
-    if (!projectId) return;
-    const conn = this.byProject.get(projectId);
-    if (!conn) return;
-    conn.stop();
-    if (conn.isIdle()) {
-      this.byProject.delete(projectId);
-    }
+  stop(): void {
+    this.connection.stop();
     this.syncLifecycleListeners();
   }
-
 }
 
 export const runtimeStream = new RuntimeStreamManager();
 
-export async function startProjectRuntime(projectId: string): Promise<void> {
-  await runtimeStream.start(projectId);
+export async function startUserRuntime(): Promise<void> {
+  await runtimeStream.start();
 }
 
-export function stopProjectRuntime(projectId: string): void {
-  runtimeStream.stop(projectId);
+export function stopUserRuntime(): void {
+  runtimeStream.stop();
+}
+
+export async function startProjectRuntime(_projectId: string): Promise<void> {
+  // Deprecated: runtime is now user-scoped and started from ProtectedLayout.
+}
+
+export function stopProjectRuntime(_projectId: string): void {
+  // Deprecated: runtime is now user-scoped and stopped on logout/layout unmount.
 }
 
 export default runtimeStream;

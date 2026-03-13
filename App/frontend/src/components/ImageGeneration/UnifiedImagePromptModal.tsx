@@ -11,8 +11,7 @@ import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useJourneyStore } from '../../store/journeyStore';
 import { useThreadStore } from '../../store/threadStore';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
-import { threadService } from '../../api/threadService';
-import { sendThreadMessage } from '../../runtime/threadCommands';
+import { journeyService } from '../../api/journeyService';
 import { TextButton } from '../TextButton';
 import { ObjectPicker } from '../ObjectPicker';
 import './UnifiedImagePromptModal.css';
@@ -234,35 +233,15 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     onStreamingStart?.(journeyId, promptMode);
 
     try {
-      const notificationTargetIds = contextType === 'object'
-        ? (objectId ? [objectId] : [])
-        : selectedObjectIds;
-      const created = await threadService.createJourneyThread(
-        currentProjectId,
-        journeyKind,
-        {
-          notificationLabel: spec.label(inputPayload),
-          notificationMeta: {
-            journey_kind: journeyKind,
-            project_id: currentProjectId,
-            entry_input: userRequest.trim() || null,
-            target_language: null,
-            target_ids: notificationTargetIds,
-          },
-        },
-      );
-      useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
-      await sendThreadMessage({
-        threadId: created.thread_id,
-        projectId: currentProjectId,
-        threadType: 'journey',
-        inputText: userRequest.trim() || 'Generate an image prompt.',
-        request: {
-          input_payload: inputPayload,
-          surface: 'story-object',
-          context_object_ids: selectedObjectIds,
-        },
+      const created = await journeyService.create(currentProjectId, {
+        kind: journeyKind,
+        display_label: spec.label(inputPayload),
+        input_text: userRequest.trim() || 'Generate an image prompt.',
+        input_payload: inputPayload,
+        surface: 'story-object',
+        context_object_ids: selectedObjectIds,
       });
+      useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
     } catch (error: any) {
       const message = error?.message ?? 'Failed to start image prompt journey.';
       useJourneyStore.getState().updateJourney(journeyId, { error: message });

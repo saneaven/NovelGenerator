@@ -1,11 +1,11 @@
 import { API_BASE_URL, apiClient } from './client';
 import type { RunStatus, ToolCallStatus } from '../types/thread';
 import type { ObjectType } from '../types/unifiedObject';
-import type { NotificationDTO, NotificationSource } from './notificationService';
+import type { NotificationDTO } from './notificationService';
 import type { ImageRun, ImageRunStage, ImageRunStatus } from './assetService';
 
 interface RuntimeEventBase {
-  project_id: string;
+  project_id: string | null;
   thread_id: string;
   run_id: string | null;
   ts: string;
@@ -103,16 +103,14 @@ export type ThreadRuntimeEvent =
 
 export type NotificationUpsertEvent = {
   event: 'notification:upsert';
-  data: NotificationDTO & { project_id: string; ts: string };
+  data: NotificationDTO & { ts: string };
 };
 
 export type NotificationDeleteEvent = {
   event: 'notification:delete';
   data: {
     id: string;
-    source: NotificationSource;
-    source_ref_id: string;
-    project_id: string;
+    project_id?: string | null;
     ts: string;
   };
 };
@@ -121,7 +119,7 @@ export type NotificationBulkDeleteEvent = {
   event: 'notification:bulk_delete';
   data: {
     ids: string[];
-    project_id: string;
+    project_id?: string | null;
     ts: string;
   };
 };
@@ -161,29 +159,26 @@ export type ThreadBulkDeleteEvent = {
 
 export type ThreadDeletionSSEEvent = ThreadDeleteEvent | ThreadBulkDeleteEvent;
 
-export type ProjectSSEEvent =
+export type RuntimeSSEEvent =
   | AssetChangedEvent
   | ObjectChangedEvent
   | ThreadRuntimeEvent
   | NotificationSSEEvent
   | ImageRunUpdateEvent
   | ThreadDeletionSSEEvent;
+export type ProjectSSEEvent = RuntimeSSEEvent;
 
 interface ConnectOptions {
   onReconnect?: () => Promise<void> | void;
   onActivity?: () => void;
 }
 
-const STREAM_CURSOR_KEY_PREFIX = 'projectStreamCursor:';
+const STREAM_CURSOR_KEY = 'userStreamCursor';
 const VISIBLE_STREAM_READ_TIMEOUT_MS = 30_000;
 
-function streamCursorKey(projectId: string): string {
-  return `${STREAM_CURSOR_KEY_PREFIX}${projectId}`;
-}
-
-function readStreamCursor(projectId: string): number | null {
+function readStreamCursor(): number | null {
   try {
-    const raw = sessionStorage.getItem(streamCursorKey(projectId));
+    const raw = sessionStorage.getItem(STREAM_CURSOR_KEY);
     if (!raw) return null;
     const parsed = Number.parseInt(raw, 10);
     return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
@@ -192,27 +187,27 @@ function readStreamCursor(projectId: string): number | null {
   }
 }
 
-function writeStreamCursor(projectId: string, eventId: number): void {
+function writeStreamCursor(eventId: number): void {
   if (!Number.isInteger(eventId) || eventId < 0) return;
   try {
-    sessionStorage.setItem(streamCursorKey(projectId), String(eventId));
+    sessionStorage.setItem(STREAM_CURSOR_KEY, String(eventId));
   } catch {
     // ignore storage errors
   }
 }
 
-function buildStreamUrl(projectId: string, afterEventId: number | null): string {
+function buildStreamUrl(afterEventId: number | null): string {
   const params = new URLSearchParams();
   if (afterEventId !== null) {
     params.set('after_event_id', String(afterEventId));
   } else {
     params.set('start_from', 'latest');
   }
-  return `${API_BASE_URL}/api/v1/projects/${projectId}/stream?${params.toString()}`;
+  return `${API_BASE_URL}/api/v1/stream?${params.toString()}`;
 }
 
 type ParsedSseFrame = {
-  event: ProjectSSEEvent;
+  event: RuntimeSSEEvent;
   eventId: number | null;
 };
 
@@ -250,7 +245,7 @@ function parseSseFrame(frame: string): ParsedSseFrame | null {
   try {
     const parsed = JSON.parse(payload) as Record<string, unknown>;
     return {
-      event: { event: eventName, data: parsed } as ProjectSSEEvent,
+      event: { event: eventName, data: parsed } as RuntimeSSEEvent,
       eventId,
     };
   } catch (error) {
@@ -264,10 +259,10 @@ function reconnectDelayMs(attempt: number): number {
   return 300 * (2 ** capped);
 }
 
-class ProjectStreamReadTimeoutError extends Error {
+class RuntimeStreamReadTimeoutError extends Error {
   constructor(timeoutMs: number) {
     super(`Timed out waiting for SSE activity after ${timeoutMs}ms`);
-    this.name = 'ProjectStreamReadTimeoutError';
+    this.name = 'RuntimeStreamReadTimeoutError';
   }
 }
 
@@ -356,8 +351,8 @@ function readChunkWithVisibleTimeout(
         return;
       }
       if (remainingVisibleMs <= 0) {
-        void reader.cancel('Timed out waiting for project SSE activity');
-        rejectOnce(new ProjectStreamReadTimeoutError(VISIBLE_STREAM_READ_TIMEOUT_MS));
+        void reader.cancel('Timed out waiting for runtime SSE activity');
+        rejectOnce(new RuntimeStreamReadTimeoutError(VISIBLE_STREAM_READ_TIMEOUT_MS));
         return;
       }
 
@@ -369,8 +364,8 @@ function readChunkWithVisibleTimeout(
           return;
         }
         remainingVisibleMs = 0;
-        void reader.cancel('Timed out waiting for project SSE activity');
-        rejectOnce(new ProjectStreamReadTimeoutError(VISIBLE_STREAM_READ_TIMEOUT_MS));
+        void reader.cancel('Timed out waiting for runtime SSE activity');
+        rejectOnce(new RuntimeStreamReadTimeoutError(VISIBLE_STREAM_READ_TIMEOUT_MS));
       }, remainingVisibleMs);
     };
 
@@ -405,7 +400,7 @@ function readChunkWithVisibleTimeout(
 async function openAndReadStream(
   url: string,
   signal: AbortSignal,
-  onEvent: (event: ProjectSSEEvent, eventId: number | null) => void,
+  onEvent: (event: RuntimeSSEEvent, eventId: number | null) => void,
   options?: ConnectOptions,
 ): Promise<void> {
   const token = apiClient.getAuthToken();
@@ -459,26 +454,25 @@ async function openAndReadStream(
   }
 }
 
-export async function connectProjectStream(
-  projectId: string,
-  onEvent: (event: ProjectSSEEvent) => void,
+export async function connectUserStream(
+  onEvent: (event: RuntimeSSEEvent) => void,
   signal: AbortSignal,
   options?: ConnectOptions,
 ): Promise<void> {
-  let lastEventId = readStreamCursor(projectId);
+  let lastEventId = readStreamCursor();
   let attempt = 0;
 
   while (!signal.aborted) {
     try {
       let receivedActivity = false;
-      const streamUrl = buildStreamUrl(projectId, lastEventId);
+      const streamUrl = buildStreamUrl(lastEventId);
       await openAndReadStream(
         streamUrl,
         signal,
         (event, eventId) => {
           if (eventId !== null) {
             lastEventId = eventId;
-            writeStreamCursor(projectId, eventId);
+            writeStreamCursor(eventId);
           }
           onEvent(event);
         },
@@ -502,8 +496,7 @@ export async function connectProjectStream(
       if (signal.aborted || isAbortError(error)) return;
       attempt += 1;
       const delay = reconnectDelayMs(attempt);
-      console.warn('Project SSE disconnected. Reconnecting...', {
-        projectId,
+      console.warn('Runtime SSE disconnected. Reconnecting...', {
         attempt,
         delay,
         error,
@@ -514,5 +507,5 @@ export async function connectProjectStream(
   }
 }
 
-export default connectProjectStream;
+export default connectUserStream;
 

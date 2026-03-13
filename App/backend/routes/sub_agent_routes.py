@@ -172,6 +172,7 @@ async def delete_sub_agent(
     for project_id, deleted_thread_ids in deleted_thread_ids_by_project.items():
         if len(deleted_thread_ids) == 1:
             await runtime_event_dispatcher.emit_project_event(
+                user_id=current_user.id,
                 project_id=project_id,
                 event_name="thread:delete",
                 data={"id": deleted_thread_ids[0]},
@@ -179,6 +180,7 @@ async def delete_sub_agent(
             continue
         if deleted_thread_ids:
             await runtime_event_dispatcher.emit_project_event(
+                user_id=current_user.id,
                 project_id=project_id,
                 event_name="thread:bulk_delete",
                 data={"ids": deleted_thread_ids},

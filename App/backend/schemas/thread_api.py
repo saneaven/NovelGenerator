@@ -53,9 +53,10 @@ class ToolCallBatchDecisionRequest(BaseModel):
     decisions: list[ToolCallBatchDecisionItem]
 
 
-class CreateThreadRequest(BaseModel):
-    thread_type: Literal["journey"] = "journey"
-    journey_kind: Literal[
+class CreateJourneyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal[
         "manuscriptEdit",
         "outlineEdit",
         "storyObjectEdit",
@@ -64,9 +65,15 @@ class CreateThreadRequest(BaseModel):
         "sceneImagePrompt",
         "messageTranslation",
     ]
-    owner_id: UUID | None = None
-    notification_label: str | None = None
-    notification_meta: dict[str, Any] | None = None
+    display_label: str | None = None
+    input_text: str = ""
+    input_payload: dict[str, Any] | None = None
+    run_mode: Literal["planMode", "agentMode"] | None = None
+    surface: str | None = None
+    context_object_ids: list[UUID] = Field(default_factory=list)
+    journey_target_ids: list[UUID] = Field(default_factory=list)
+    language: str | None = None
+    mcp_selections: list[McpSelection] = Field(default_factory=list)
 
 
 class MessageAttachmentResponse(BaseModel):
@@ -131,8 +138,9 @@ class ThreadInfoResponse(BaseModel):
     id: UUID
     project_id: UUID
     thread_type: Literal["agent", "subAgent", "journey"]
-    owner_id: UUID | None
+    parent_id: UUID
     journey_kind: str | None
+    display_label: str | None = None
     status: str
     created_at: datetime
     updated_at: datetime
@@ -151,8 +159,9 @@ class ThreadRuntimeItemResponse(BaseModel):
     id: UUID
     project_id: UUID
     thread_type: Literal["agent", "subAgent", "journey"]
-    owner_id: UUID | None
+    parent_id: UUID
     journey_kind: str | None
+    display_label: str | None = None
     status: str
     last_error: str | None
     updated_at: datetime
@@ -164,6 +173,30 @@ class ThreadRuntimeItemResponse(BaseModel):
 
 class ProjectThreadRuntimeResponse(BaseModel):
     threads: list[ThreadRuntimeItemResponse]
+
+
+class JourneyListResponse(BaseModel):
+    items: list["JourneyResponse"]
+
+
+class CreateJourneyResponse(BaseModel):
+    journey_id: UUID
+    thread_id: UUID
+    run_id: UUID
+    status: str
+
+
+class JourneyResponse(BaseModel):
+    journey_id: UUID
+    project_id: UUID
+    thread_id: UUID
+    latest_run_id: UUID | None
+    latest_message_at: datetime | None
+    kind: str
+    display_label: str
+    status: str
+    last_error: str | None
+    updated_at: datetime
 
 
 class ToolCallDecisionResponse(BaseModel):

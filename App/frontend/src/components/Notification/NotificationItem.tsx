@@ -54,7 +54,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   onDismiss,
   onClick,
 }) => {
-  const { id, label, message, status, updatedAt, isRead, customSlot, warning, source } = notification;
+  const { id, label, message, status, updatedAt, isRead, customSlot, warning, source, important } = notification;
   const itemRef = useRef<HTMLDivElement>(null);
   const [itemTop, setItemTop] = useState(0);
   const [itemHeight, setItemHeight] = useState(0);
@@ -260,7 +260,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   return (
     <motion.div
       ref={itemRef}
-      className={`notification-item notification-item--${status} notification-item--${source} ${isClickable ? 'notification-item--clickable' : ''} ${!isRead ? 'notification-item--unread' : ''}`}
+      className={`notification-item notification-item--${status} notification-item--${source.kind} ${isClickable ? 'notification-item--clickable' : ''} ${!isRead ? 'notification-item--unread' : ''} ${important ? 'notification-item--important' : ''}`}
       style={{ opacity, transform, pointerEvents, zIndex }}
     >
       <div className="notification-item-swipe-container">

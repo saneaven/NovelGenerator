@@ -17,10 +17,12 @@ class FakeBus:
 def test_emit_project_event_publishes_only_project_channel() -> None:
     bus = FakeBus()
     dispatcher = RuntimeEventDispatcher(bus)  # type: ignore[arg-type]
+    user_id = uuid4()
     project_id = uuid4()
 
     async def _runner() -> None:
         await dispatcher.emit_project_event(
+            user_id=user_id,
             project_id=project_id,
             event_name="object:changed",
             data={"batch_id": str(uuid4()), "changes": []},
@@ -28,9 +30,10 @@ def test_emit_project_event_publishes_only_project_channel() -> None:
 
     asyncio.run(_runner())
 
-    assert len(bus.published) == 1
-    channel, event = bus.published[0]
-    assert channel == f"project:{project_id}"
+    assert len(bus.published) == 2
+    channels = [channel for channel, _event in bus.published]
+    assert channels == [f"project:{project_id}", f"user:{user_id}"]
+    _channel, event = bus.published[0]
     assert event["event"] == "object:changed"
     payload = event["data"]
     assert isinstance(payload, dict)
@@ -41,11 +44,13 @@ def test_emit_project_event_publishes_only_project_channel() -> None:
 def test_emit_runtime_event_keeps_thread_and_project_publish() -> None:
     bus = FakeBus()
     dispatcher = RuntimeEventDispatcher(bus)  # type: ignore[arg-type]
+    user_id = uuid4()
     project_id = uuid4()
     thread_id = uuid4()
 
     async def _runner() -> None:
         await dispatcher.emit_runtime_event(
+            user_id=user_id,
             project_id=project_id,
             thread_id=thread_id,
             event_name="run:status",
@@ -55,4 +60,4 @@ def test_emit_runtime_event_keeps_thread_and_project_publish() -> None:
     asyncio.run(_runner())
 
     channels = [channel for channel, _ in bus.published]
-    assert channels == [f"thread:{thread_id}", f"project:{project_id}"]
+    assert channels == [f"thread:{thread_id}", f"project:{project_id}", f"user:{user_id}"]

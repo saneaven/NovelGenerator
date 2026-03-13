@@ -186,6 +186,13 @@ def _clear_pending_rag_ops(session: Session) -> None:
     session.info.pop(_PENDING_RAG_OPS_KEY, None)
 
 
+def _resolve_project_user_id(db: Session, *, project_id: UUID) -> UUID:
+    owner_id = db.query(Project.user_id).filter(Project.id == project_id).scalar()
+    if not isinstance(owner_id, UUID):
+        raise ValueError("Project not found")
+    return owner_id
+
+
 def _model_for_object_type(object_type: str):
     t = normalize_object_type(object_type)
     mapping = {
@@ -553,6 +560,7 @@ class ObjectService:
         project = db.query(Project).filter(Project.id == project_id).first()
         if project is None:
             raise ValueError("Project not found")
+        event_user_id = created_by or project.user_id
 
         if t in {"basic_info", "guidelines"}:
             raise ValueError(f"{t} is auto-created with project and cannot be created manually")
@@ -739,6 +747,7 @@ class ObjectService:
         )
         queue_object_change(
             db,
+            user_id=event_user_id,
             project_id=project_id,
             object_type=t,
             object_id=object_id,
@@ -747,6 +756,7 @@ class ObjectService:
         if manuscript_id is not None:
             queue_object_change(
                 db,
+                user_id=event_user_id,
                 project_id=project_id,
                 object_type="manuscript",
                 object_id=manuscript_id,
@@ -780,6 +790,7 @@ class ObjectService:
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             raise ValueError(f"{t} not found")
+        event_user_id = created_by or _resolve_project_user_id(db, project_id=project_id)
 
         if t == "manuscript":
             doc = data.get("doc")
@@ -843,12 +854,14 @@ class ObjectService:
             if manuscript_images_before != manuscript_images_after:
                 queue_scene_assets_change(
                     db,
+                    user_id=event_user_id,
                     project_id=project_id,
                     manuscript_id=None,
                     action="updated",
                 )
                 queue_scene_assets_change(
                     db,
+                    user_id=event_user_id,
                     project_id=project_id,
                     manuscript_id=object_id,
                     action="updated",
@@ -870,6 +883,7 @@ class ObjectService:
         )
         queue_object_change(
             db,
+            user_id=event_user_id,
             project_id=project_id,
             object_type=t,
             object_id=object_id,
@@ -912,6 +926,7 @@ class ObjectService:
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             raise ValueError(f"{t} not found")
+        event_user_id = created_by or _resolve_project_user_id(db, project_id=project_id)
 
         latest = _latest_version(db, t, object_id)
         if latest is None:
@@ -950,6 +965,7 @@ class ObjectService:
         )
         queue_object_change(
             db,
+            user_id=event_user_id,
             project_id=project_id,
             object_type=t,
             object_id=object_id,
@@ -1016,6 +1032,7 @@ class ObjectService:
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             raise ValueError(f"{t} not found")
+        event_user_id = created_by or _resolve_project_user_id(db, project_id=project_id)
 
         version_to_restore = (
             db.query(ObjectVersion)
@@ -1070,6 +1087,7 @@ class ObjectService:
         )
         queue_object_change(
             db,
+            user_id=event_user_id,
             project_id=project_id,
             object_type=t,
             object_id=object_id,
@@ -1203,6 +1221,7 @@ class ObjectService:
             for deleted_id in set(deleted_ids):
                 queue_object_change(
                     db,
+                    user_id=user_id,
                     project_id=resolved_project_id,
                     object_type=deleted_type,
                     object_id=deleted_id,
@@ -1314,6 +1333,7 @@ class ObjectService:
         db.flush()
         queue_object_change(
             db,
+            user_id=user_id or _resolve_project_user_id(db, project_id=project_id),
             project_id=project_id,
             object_type=t,
             object_id=object_id,
@@ -1342,11 +1362,13 @@ class ObjectService:
         project_id: UUID,
         object_type: str,
         object_ids: list[UUID],
+        user_id: UUID | None = None,
     ) -> int:
         t = normalize_object_type(object_type)
         allowed = {"character", "organization", "location", LOREBOOK_TYPE, "outline", "act", "chapter"}
         if t not in allowed:
             raise ValueError(f"Reordering not supported for {t}")
+        event_user_id = user_id or _resolve_project_user_id(db, project_id=project_id)
 
         model_class = _model_for_object_type(t)
         changed_ids: list[UUID] = []
@@ -1366,6 +1388,7 @@ class ObjectService:
         for changed_id in changed_ids:
             queue_object_change(
                 db,
+                user_id=event_user_id,
                 project_id=project_id,
                 object_type=t,
                 object_id=changed_id,

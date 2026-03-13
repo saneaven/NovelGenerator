@@ -105,7 +105,7 @@ class SubAgentService:
                 and_(
                     Thread.user_id == user_id,
                     Thread.thread_type == "subAgent",
-                    Thread.owner_id == sub_agent_id,
+                    Thread.parent_id == sub_agent_id,
                 )
             )
             .order_by(Thread.updated_at.desc(), Thread.id.desc())

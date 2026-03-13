@@ -618,6 +618,7 @@ async def reorder_objects(
             project_id=project_id,
             object_type=object_type,
             object_ids=object_ids,
+            user_id=current_user.id,
         )
         db.commit()
     except ValueError as exc:

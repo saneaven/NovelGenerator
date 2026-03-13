@@ -19,7 +19,6 @@ from ..models.db_models import Project, RunMessageAttachmentModel, RunMessageMod
 from ..models.memory_models import MessageMemorySummary
 from ..providers.sse_encoder import encode_sse, iter_sse_with_heartbeat
 from ..schemas.thread_api import (
-    CreateThreadRequest,
     MessageResponse,
     PatchMessageRequest,
     ProjectThreadRuntimeResponse,
@@ -40,29 +39,22 @@ from ..services.chat_attachment_service import (
 from ..services.deletion_service import delete_chat_attachments_with_files
 from ..services.run_event_bus import run_event_bus
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
-from ..services.notification_service import (
-    default_journey_label,
-    message_from_notification_status,
-    serialize_notification,
-    upsert_notification,
-)
+from ..services.notification_service import ACTIVE_THREAD_DELETE_STATUSES, collect_thread_delete_deltas, delete_threads
 from ..services.run_pipeline import run_pipeline
 from ..services.run_pipeline.status_logic import derive_run_status
 from ..services.tool_engine import tool_engine
 from ..services.sidecar_client import sidecar_client
 from ..services.reasoning.normalize import normalize_reasoning_detail
+from ..services.thread_parent_runtime_service import resolve_parent, thread_runtime_fields
 from ..services.ownership import require_owned_project, require_owned_thread
 from ..services.image_run_service import image_run_service
 from ..services.storage_usage_service import (
     StorageQuotaExceededError,
     apply_project_usage_deltas,
-    build_notification_delta,
     build_run_message_delta,
     build_run_message_attachment_delta,
     build_thread_delta,
     build_tool_call_delta,
-    enforce_user_storage_quota,
-    snapshot_notification_row,
     snapshot_run_message_attachment_row,
     snapshot_run_message_row,
     snapshot_thread_row,
@@ -72,7 +64,7 @@ from ..services.storage_usage_service import (
 
 
 router = APIRouter(prefix="/api/v1", tags=["threads"])
-PROJECT_STREAM_HEARTBEAT_INTERVAL_SECONDS = 15.0
+USER_STREAM_HEARTBEAT_INTERVAL_SECONDS = 15.0
 
 
 @dataclass
@@ -330,6 +322,7 @@ def _sync_run_thread_status(db: Session, *, run_id: UUID) -> tuple[RunModel | No
 
 async def _emit_tool_call_status(*, thread: Thread, tool_call: RunToolCallModel) -> None:
     await runtime_event_dispatcher.emit_runtime_event(
+        user_id=thread.user_id,
         project_id=thread.project_id,
         thread_id=thread.id,
         event_name="tool_call:status",
@@ -349,6 +342,7 @@ async def _emit_tool_call_status(*, thread: Thread, tool_call: RunToolCallModel)
 
 async def _emit_run_status(*, thread: Thread, run: RunModel) -> None:
     await runtime_event_dispatcher.emit_runtime_event(
+        user_id=thread.user_id,
         project_id=thread.project_id,
         thread_id=thread.id,
         event_name="run:status",
@@ -583,24 +577,20 @@ async def resume_thread_run(
     return _serialize_thread_run_response(thread_id=thread_id, run=run)
 
 
-@router.get("/projects/{project_id}/stream")
-async def stream_project_events(
-    project_id: UUID,
+@router.get("/stream")
+async def stream_user_events(
     after_event_id: int | None = Query(default=None, ge=0),
     start_from: Literal["latest", "history"] = Query(default="latest"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
-    require_owned_project(db, project_id=project_id, user_id=current_user.id)
-
     async def event_gen():
         async for chunk in iter_sse_with_heartbeat(
             run_event_bus.subscribe(
-                f"project:{project_id}",
+                f"user:{current_user.id}",
                 after_event_id=after_event_id,
                 start_from=start_from,
             ),
-            heartbeat_interval=PROJECT_STREAM_HEARTBEAT_INTERVAL_SECONDS,
+            heartbeat_interval=USER_STREAM_HEARTBEAT_INTERVAL_SECONDS,
         ):
             yield chunk
 
@@ -682,13 +672,15 @@ async def list_project_threads_runtime(
     runtime_rows = []
     for thread in threads:
         latest_run = latest_run_by_thread.get(thread.id)
+        runtime_fields = thread_runtime_fields(db, thread)
         runtime_rows.append(
             {
                 "id": thread.id,
                 "project_id": thread.project_id,
                 "thread_type": thread.thread_type,
-                "owner_id": thread.owner_id,
-                "journey_kind": thread.journey_kind,
+                "parent_id": runtime_fields["parent_id"],
+                "journey_kind": runtime_fields["journey_kind"],
+                "display_label": runtime_fields["display_label"],
                 "status": thread.status,
                 "last_error": latest_run.error if latest_run is not None else None,
                 "updated_at": thread.updated_at,
@@ -762,8 +754,7 @@ async def list_thread_messages(
             "id": thread.id,
             "project_id": thread.project_id,
             "thread_type": thread.thread_type,
-            "owner_id": thread.owner_id,
-            "journey_kind": thread.journey_kind,
+            **thread_runtime_fields(db, thread),
             "status": thread.status,
             "created_at": thread.created_at,
             "updated_at": thread.updated_at,
@@ -828,6 +819,7 @@ async def patch_thread_message(
     db.refresh(row)
 
     await runtime_event_dispatcher.emit_runtime_event(
+        user_id=current_user.id,
         project_id=thread.project_id,
         thread_id=thread.id,
         event_name="message:update",
@@ -930,7 +922,7 @@ async def _execute_batched_patch_group(
     db = SessionLocal()
     try:
         thread = require_owned_thread(db, thread_id=thread_id, user_id=user_id)
-        is_translation = getattr(thread, "journey_kind", None) == "objectTranslation"
+        is_translation = str(resolve_parent(db, thread).journey_kind or "").strip() == "objectTranslation"
         create_new_version = not is_translation
         run_id: UUID | None = None
 
@@ -1393,73 +1385,3 @@ async def pause_thread(
     return {"success": True}
 
 
-@router.post("/projects/{project_id}/threads", status_code=201)
-async def create_thread(
-    project_id: UUID,
-    payload: CreateThreadRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    require_owned_project(db, project_id=project_id, user_id=current_user.id)
-
-    notification_label = str(payload.notification_label or "").strip()
-    notification_meta = (
-        dict(payload.notification_meta)
-        if isinstance(payload.notification_meta, dict)
-        else {}
-    )
-
-    thread = Thread(
-        project_id=project_id,
-        user_id=current_user.id,
-        thread_type=payload.thread_type,
-        owner_id=payload.owner_id,
-        journey_kind=payload.journey_kind,
-        status="done",
-    )
-    db.add(thread)
-    db.flush()
-
-    merged_notification_meta = {
-        **notification_meta,
-        "thread_id": str(thread.id),
-        "journey_kind": payload.journey_kind,
-        "project_id": str(project_id),
-    }
-
-    notification_row = upsert_notification(
-        db,
-        user_id=current_user.id,
-        project_id=project_id,
-        source="journey",
-        source_ref_id=str(thread.id),
-        thread_id=thread.id,
-        status="running",
-        label=notification_label or default_journey_label(payload.journey_kind),
-        message=message_from_notification_status(status="running"),
-        warning=None,
-        progress=None,
-        custom_slot={"type": "none"},
-        meta=merged_notification_meta,
-    )
-
-    try:
-        enforce_user_storage_quota(db, user_id=current_user.id)
-    except StorageQuotaExceededError:
-        db.rollback()
-        raise HTTPException(status_code=413, detail="Storage quota exceeded")
-    db.commit()
-    db.refresh(thread)
-    db.refresh(notification_row)
-
-    await runtime_event_dispatcher.emit_project_event(
-        project_id=project_id,
-        event_name="notification:upsert",
-        data=serialize_notification(notification_row),
-    )
-
-    return {
-        "thread_id": str(thread.id),
-        "status": thread.status,
-        "notification_id": str(notification_row.id),
-    }

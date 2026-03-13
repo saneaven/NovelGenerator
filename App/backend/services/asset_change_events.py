@@ -26,11 +26,13 @@ _ACTION_PRIORITY = {
 
 @dataclass(frozen=True)
 class _ProjectAssetsKey:
+    user_id: str
     project_id: str
 
 
 @dataclass(frozen=True)
 class _StoryObjectAssetsKey:
+    user_id: str
     project_id: str
     object_type: str
     object_id: str
@@ -38,6 +40,7 @@ class _StoryObjectAssetsKey:
 
 @dataclass(frozen=True)
 class _SceneAssetsKey:
+    user_id: str
     project_id: str
     manuscript_id: str | None
 
@@ -75,6 +78,7 @@ def _normalize_optional_uuid(value: UUID | str | Any | None, *, field_name: str)
 def queue_asset_change(
     db: Session,
     *,
+    user_id: UUID | str,
     project_id: UUID | str,
     scope: str,
     action: str,
@@ -82,22 +86,25 @@ def queue_asset_change(
     object_id: UUID | str | None = None,
     manuscript_id: UUID | str | None = None,
 ) -> None:
+    user_id_str = _as_non_empty_str(user_id, field_name="user_id")
     project_id_str = _as_non_empty_str(project_id, field_name="project_id")
     normalized_action = _normalize_action(action)
     normalized_scope = str(scope or "").strip().lower()
 
     if normalized_scope == "project_assets":
-        key: AssetChangeKey = _ProjectAssetsKey(project_id=project_id_str)
+        key = _ProjectAssetsKey(user_id=user_id_str, project_id=project_id_str)
     elif normalized_scope == "story_object_assets":
         object_type_text = externalize_object_type(_as_non_empty_str(object_type, field_name="object_type"))
         object_id_text = _as_non_empty_str(object_id, field_name="object_id")
         key = _StoryObjectAssetsKey(
+            user_id=user_id_str,
             project_id=project_id_str,
             object_type=object_type_text,
             object_id=object_id_text,
         )
     elif normalized_scope == "scene_assets":
         key = _SceneAssetsKey(
+            user_id=user_id_str,
             project_id=project_id_str,
             manuscript_id=_normalize_optional_uuid(manuscript_id, field_name="manuscript_id"),
         )
@@ -121,11 +128,13 @@ def queue_asset_change(
 def queue_project_assets_change(
     db: Session,
     *,
+    user_id: UUID | str,
     project_id: UUID | str,
     action: str = "updated",
 ) -> None:
     queue_asset_change(
         db,
+        user_id=user_id,
         project_id=project_id,
         scope="project_assets",
         action=action,
@@ -135,6 +144,7 @@ def queue_project_assets_change(
 def queue_story_object_assets_change(
     db: Session,
     *,
+    user_id: UUID | str,
     project_id: UUID | str,
     object_type: str,
     object_id: UUID | str,
@@ -142,6 +152,7 @@ def queue_story_object_assets_change(
 ) -> None:
     queue_asset_change(
         db,
+        user_id=user_id,
         project_id=project_id,
         scope="story_object_assets",
         action=action,
@@ -153,12 +164,14 @@ def queue_story_object_assets_change(
 def queue_scene_assets_change(
     db: Session,
     *,
+    user_id: UUID | str,
     project_id: UUID | str,
     manuscript_id: UUID | str | None,
     action: str = "updated",
 ) -> None:
     queue_asset_change(
         db,
+        user_id=user_id,
         project_id=project_id,
         scope="scene_assets",
         action=action,
@@ -166,11 +179,12 @@ def queue_scene_assets_change(
     )
 
 
-async def _emit_asset_change_batch(project_id: str, changes: list[dict[str, Any]]) -> None:
+async def _emit_asset_change_batch(user_id: str, project_id: str, changes: list[dict[str, Any]]) -> None:
     try:
         from .runtime_event_dispatcher import runtime_event_dispatcher
 
         await runtime_event_dispatcher.emit_project_event(
+            user_id=user_id,
             project_id=project_id,
             event_name="asset:changed",
             data={
@@ -207,14 +221,14 @@ def _after_commit(session: Session) -> None:
     if not pending or not isinstance(pending, dict):
         return
 
-    grouped_changes: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    grouped_changes: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for key, action in pending.items():
         if not isinstance(key, (_ProjectAssetsKey, _StoryObjectAssetsKey, _SceneAssetsKey)):
             continue
         action_text = str(action or "").strip().lower()
         if action_text not in _ACTION_PRIORITY:
             continue
-        grouped_changes[key.project_id].append(_serialize_change(key, action_text))
+        grouped_changes[(key.user_id, key.project_id)].append(_serialize_change(key, action_text))
 
     if not grouped_changes:
         return
@@ -223,12 +237,12 @@ def _after_commit(session: Session) -> None:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         logger.warning("No running loop for asset:changed dispatch; falling back to sync emit")
-        for project_id, changes in grouped_changes.items():
-            asyncio.run(_emit_asset_change_batch(project_id, changes))
+        for (user_id, project_id), changes in grouped_changes.items():
+            asyncio.run(_emit_asset_change_batch(user_id, project_id, changes))
         return
 
-    for project_id, changes in grouped_changes.items():
-        loop.create_task(_emit_asset_change_batch(project_id, changes))
+    for (user_id, project_id), changes in grouped_changes.items():
+        loop.create_task(_emit_asset_change_batch(user_id, project_id, changes))
 
 
 def _after_rollback(session: Session) -> None:

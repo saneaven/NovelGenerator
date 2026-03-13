@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import importlib
+import os
 import sys
 import types
 from pathlib import Path
@@ -15,6 +16,8 @@ from sqlalchemy.orm import declarative_base
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+os.environ.setdefault("DEFAULT_STORAGE_QUOTA_BYTES", "0")
 
 
 def _install_import_stubs() -> None:
@@ -45,6 +48,13 @@ def _install_import_stubs() -> None:
         markdown_to_doc=lambda *_args, **_kwargs: None
     )
     sys.modules["App.backend.services.sidecar_client"] = sidecar_client_module
+
+    chat_attachment_service_module = types.ModuleType("App.backend.services.chat_attachment_service")
+    chat_attachment_service_module.chat_attachment_service = SimpleNamespace(
+        load_attachment_bytes=lambda *_args, **_kwargs: b"",
+        to_data_url=lambda *_args, **_kwargs: "data:application/octet-stream;base64,",
+    )
+    sys.modules["App.backend.services.chat_attachment_service"] = chat_attachment_service_module
 
     run_pipeline_package = types.ModuleType("App.backend.services.run_pipeline")
     run_pipeline_package.__path__ = [
@@ -86,6 +96,14 @@ class FakeSession:
 
 async def _noop_emit(**_kwargs) -> None:
     return None
+
+
+def _set_object_translation_parent(monkeypatch) -> None:
+    monkeypatch.setattr(
+        raw_output_module,
+        "resolve_parent",
+        lambda *_args, **_kwargs: SimpleNamespace(journey_kind="objectTranslation"),
+    )
 
 
 def test_raw_object_translation_restores_asset_ids_from_source_language(monkeypatch) -> None:
@@ -158,11 +176,12 @@ def test_raw_object_translation_restores_asset_ids_from_source_language(monkeypa
 
     monkeypatch.setattr(raw_output_module, "object_service", DummyObjectService())
     monkeypatch.setattr(raw_output_module, "sidecar_client", DummySidecar())
+    _set_object_translation_parent(monkeypatch)
 
     asyncio.run(
         raw_output_module.apply_raw_output(
             FakeSession("manuscript"),
-            thread=SimpleNamespace(journey_kind="objectTranslation"),
+            thread=SimpleNamespace(parent_id=uuid4(), thread_type="journey"),
             run=SimpleNamespace(id=uuid4(), project_id=project_id, user_id=user_id, language="Korean"),
             input_payload={
                 "translation": {
@@ -256,11 +275,12 @@ def test_raw_object_translation_restores_asset_ids_from_first_available_language
 
     monkeypatch.setattr(raw_output_module, "object_service", DummyObjectService())
     monkeypatch.setattr(raw_output_module, "sidecar_client", DummySidecar())
+    _set_object_translation_parent(monkeypatch)
 
     asyncio.run(
         raw_output_module.apply_raw_output(
             FakeSession("manuscript"),
-            thread=SimpleNamespace(journey_kind="objectTranslation"),
+            thread=SimpleNamespace(parent_id=uuid4(), thread_type="journey"),
             run=SimpleNamespace(id=uuid4(), project_id=project_id, user_id=user_id, language="Korean"),
             input_payload={
                 "translation": {
@@ -317,11 +337,12 @@ def test_raw_object_translation_non_manuscript_path_is_unchanged(monkeypatch) ->
 
     monkeypatch.setattr(raw_output_module, "object_service", DummyObjectService())
     monkeypatch.setattr(raw_output_module, "sidecar_client", DummySidecar())
+    _set_object_translation_parent(monkeypatch)
 
     asyncio.run(
         raw_output_module.apply_raw_output(
             FakeSession("character"),
-            thread=SimpleNamespace(journey_kind="objectTranslation"),
+            thread=SimpleNamespace(parent_id=uuid4(), thread_type="journey"),
             run=SimpleNamespace(id=uuid4(), project_id=project_id, user_id=user_id, language="Korean"),
             input_payload={
                 "translation": {

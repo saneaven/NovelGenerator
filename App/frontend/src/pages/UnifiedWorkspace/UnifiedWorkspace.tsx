@@ -7,13 +7,10 @@ import { useSidebarStore } from '../../store/sidebarStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore, type SimplifiedStoryObjects } from '../../store/unifiedObjectStore';
 import { useNovelEditorStore } from '../../store/novelEditorStore';
-import { useNotificationStore } from '../../store/notificationStore';
 import { useSettings } from '../../store/settingsStore';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { alert as showAlert } from '../../store/dialogStore';
-import { notificationService } from '../../api/notificationService';
 import { translationService } from '../../api/unifiedObjectService';
-import { stopProjectRuntime } from '../../runtime/runtimeStream';
 import { bootstrapProjectRuntime } from '../../runtime/projectRuntimeBootstrap';
 import { normalizeBasicInfoData } from '../../utils/basicInfo';
 
@@ -71,7 +68,7 @@ const UnifiedWorkspace: React.FC = () => {
   const { fetchAgents } = useAgentStore();
   const unifiedObjects = useUnifiedObjectStore(state => state.objects);
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
-  const hydrateNotifications = useNotificationStore((state) => state.hydrate);
+  const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
 
   // NovelEditor specific stores
   const selectedChapterByProject = useNovelEditorStore(state => state.selectedChapterByProject);
@@ -225,26 +222,8 @@ const UnifiedWorkspace: React.FC = () => {
     });
     return () => {
       cancelled = true;
-      stopProjectRuntime(projectId);
     };
   }, [projectId]);
-
-  useEffect(() => {
-    if (!projectId) return;
-    let cancelled = false;
-    void notificationService
-      .list(projectId, { limit: 50, offset: 0, includeRead: true })
-      .then((response) => {
-        if (cancelled) return;
-        hydrateNotifications(response.items);
-      })
-      .catch((error) => {
-        console.warn('Failed to hydrate notifications', { projectId, error });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, hydrateNotifications]);
 
   // Fetch projects if not loaded
   useEffect(() => {
@@ -259,15 +238,15 @@ const UnifiedWorkspace: React.FC = () => {
 
     const populateStoreCache = async () => {
       try {
-        await Promise.all([
-          listObjects('basic_info', projectId),
-          listObjects('character', projectId),
-          listObjects('organization', projectId),
-          listObjects('location', projectId),
-          listObjects('lorebook', projectId),
-          listObjects('outline', projectId),
-          listObjects('act', projectId),
-          listObjects('chapter', projectId),
+        await refreshProjectObjects(projectId, [
+          'basic_info',
+          'character',
+          'organization',
+          'location',
+          'lorebook',
+          'outline',
+          'act',
+          'chapter',
         ]);
       } catch (error) {
         console.error('Failed to load story objects:', error);
@@ -279,7 +258,7 @@ const UnifiedWorkspace: React.FC = () => {
     };
 
     populateStoreCache();
-  }, [projectId, listObjects]);
+  }, [projectId, refreshProjectObjects]);
 
   // Build story objects for NovelEditor (when in novel-editor mode)
   useEffect(() => {

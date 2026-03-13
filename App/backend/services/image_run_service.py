@@ -40,7 +40,11 @@ from ..services.image_model_catalog_service import (
     sanitize_generation_settings,
 )
 from ..services.manuscript_image_index_service import restore_image_asset_ids
-from ..services.notification_service import serialize_notification, upsert_notification
+from ..services.notification_service import (
+    NotificationSourceSnapshot,
+    serialize_notification,
+    upsert_notification_source,
+)
 from ..services.object_change_events import queue_object_change
 from ..services.object_service import object_service
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
@@ -782,6 +786,7 @@ class ImageRunService:
                 return
             payload = self.serialize(db, row).model_dump(mode="json")
             await runtime_event_dispatcher.emit_project_event(
+                user_id=row.user_id,
                 project_id=row.project_id,
                 event_name="image_run:update",
                 data=payload,
@@ -803,32 +808,41 @@ class ImageRunService:
                         "alt": final_asset.name,
                     }
 
-            notification = upsert_notification(
+            notification = upsert_notification_source(
                 db,
-                user_id=row.user_id,
-                project_id=row.project_id,
-                source="imageRun",
-                source_ref_id=str(row.id),
-                status=_notification_status(row.status),
-                label=str(_json_dict(row.request_snapshot).get("label") or "Image generation"),
-                message=_notification_message(row),
-                warning=row.error_message if row.status == "failed" else None,
-                progress={
-                    "stage": row.stage,
-                    "label": _notification_message(row),
-                } if row.status in {"queued", "running", "applying"} else None,
-                custom_slot=custom_slot,
-                meta={
-                    "image_run_id": str(row.id),
-                    "thread_id": str(row.thread_id) if row.thread_id else None,
-                    "tool_call_id": _tool_call_id_from_snapshot(_json_dict(row.request_snapshot)),
-                    "preview_asset_id": payload.get("preview_asset_id"),
-                    "final_asset_id": payload.get("final_asset_id"),
-                },
+                snapshot=NotificationSourceSnapshot(
+                    user_id=row.user_id,
+                    project_id=row.project_id,
+                    source_kind="imageRun",
+                    source_id=str(row.id),
+                    status=_notification_status(row.status),
+                    label=str(_json_dict(row.request_snapshot).get("label") or "Image generation"),
+                    message=_notification_message(row),
+                    warning=row.error_message if row.status == "failed" else None,
+                    progress={
+                        "stage": row.stage,
+                        "label": _notification_message(row),
+                    } if row.status in {"queued", "running", "applying"} else None,
+                    custom_slot=custom_slot,
+                    target={
+                        "kind": "thread" if row.thread_id else "project",
+                        "project_id": str(row.project_id),
+                        "thread_id": str(row.thread_id) if row.thread_id else None,
+                    },
+                    meta={
+                        "image_run_id": str(row.id),
+                        "thread_id": str(row.thread_id) if row.thread_id else None,
+                        "tool_call_id": _tool_call_id_from_snapshot(_json_dict(row.request_snapshot)),
+                        "preview_asset_id": payload.get("preview_asset_id"),
+                        "final_asset_id": payload.get("final_asset_id"),
+                    },
+                    important=_notification_status(row.status) in {"pending", "error"},
+                ),
             )
             db.commit()
             db.refresh(notification)
             await runtime_event_dispatcher.emit_project_event(
+                user_id=row.user_id,
                 project_id=row.project_id,
                 event_name="notification:upsert",
                 data=serialize_notification(notification),
@@ -1205,14 +1219,16 @@ class ImageRunService:
             asset.preview_image_run_id = None
             queue_object_change(
                 db,
+                user_id=row.user_id,
                 project_id=row.project_id,
                 object_type=object_type,
                 object_id=object_id,
                 action="updated",
             )
-            queue_project_assets_change(db, project_id=row.project_id, action="created")
+            queue_project_assets_change(db, user_id=row.user_id, project_id=row.project_id, action="created")
             queue_story_object_assets_change(
                 db,
+                user_id=row.user_id,
                 project_id=row.project_id,
                 object_type=object_type,
                 object_id=object_id,
@@ -1225,15 +1241,17 @@ class ImageRunService:
             manuscript_id = _parse_uuid(target.get("manuscript_id"), field_name="manuscript_id")
             asset.manuscript_id = manuscript_id
             asset.preview_image_run_id = None
-            queue_project_assets_change(db, project_id=row.project_id, action="created")
+            queue_project_assets_change(db, user_id=row.user_id, project_id=row.project_id, action="created")
             queue_scene_assets_change(
                 db,
+                user_id=row.user_id,
                 project_id=row.project_id,
                 manuscript_id=None,
                 action="created",
             )
             queue_scene_assets_change(
                 db,
+                user_id=row.user_id,
                 project_id=row.project_id,
                 manuscript_id=manuscript_id,
                 action="created",
@@ -1267,14 +1285,16 @@ class ImageRunService:
             asset.updated_at = datetime.utcnow()
             queue_object_change(
                 db,
+                user_id=row.user_id,
                 project_id=row.project_id,
                 object_type=object_type,
                 object_id=object_id,
                 action="updated",
             )
-            queue_project_assets_change(db, project_id=row.project_id, action="created")
+            queue_project_assets_change(db, user_id=row.user_id, project_id=row.project_id, action="created")
             queue_story_object_assets_change(
                 db,
+                user_id=row.user_id,
                 project_id=row.project_id,
                 object_type=object_type,
                 object_id=object_id,
@@ -1325,15 +1345,17 @@ class ImageRunService:
         asset.preview_image_run_id = None
         asset.manuscript_id = manuscript_id
         asset.updated_at = datetime.utcnow()
-        queue_project_assets_change(db, project_id=row.project_id, action="created")
+        queue_project_assets_change(db, user_id=row.user_id, project_id=row.project_id, action="created")
         queue_scene_assets_change(
             db,
+            user_id=row.user_id,
             project_id=row.project_id,
             manuscript_id=None,
             action="created",
         )
         queue_scene_assets_change(
             db,
+            user_id=row.user_id,
             project_id=row.project_id,
             manuscript_id=manuscript_id,
             action="created",
@@ -1549,6 +1571,7 @@ class ImageRunService:
             db.commit()
 
             await runtime_event_dispatcher.emit_runtime_event(
+                user_id=image_run.user_id,
                 project_id=image_run.project_id,
                 thread_id=tool_call.thread_id,
                 event_name="tool_call:status",
@@ -1563,9 +1586,10 @@ class ImageRunService:
                     "assistant_message_id": str(tool_call.assistant_message_id) if tool_call.assistant_message_id else None,
                     "child_thread_id": str(tool_call.child_thread_id) if tool_call.child_thread_id else None,
                 },
-            )
+                )
             if run is not None and thread is not None:
                 await runtime_event_dispatcher.emit_runtime_event(
+                    user_id=image_run.user_id,
                     project_id=image_run.project_id,
                     thread_id=thread.id,
                     event_name="run:status",

@@ -21,11 +21,13 @@ def _run_after_commit(session: FakeSession) -> None:
 
 def test_queue_asset_change_deduplicates_by_priority() -> None:
     session = FakeSession()
+    user_id = uuid4()
     project_id = uuid4()
     object_id = uuid4()
 
     asset_change_events.queue_asset_change(
         session,
+        user_id=user_id,
         project_id=project_id,
         scope="story_object_assets",
         action="updated",
@@ -34,6 +36,7 @@ def test_queue_asset_change_deduplicates_by_priority() -> None:
     )
     asset_change_events.queue_asset_change(
         session,
+        user_id=user_id,
         project_id=project_id,
         scope="story_object_assets",
         action="created",
@@ -42,6 +45,7 @@ def test_queue_asset_change_deduplicates_by_priority() -> None:
     )
     asset_change_events.queue_asset_change(
         session,
+        user_id=user_id,
         project_id=project_id,
         scope="story_object_assets",
         action="deleted",
@@ -59,6 +63,7 @@ def test_after_rollback_clears_pending_changes() -> None:
 
     asset_change_events.queue_scene_assets_change(
         session,
+        user_id=uuid4(),
         project_id=uuid4(),
         manuscript_id=uuid4(),
         action="updated",
@@ -72,22 +77,25 @@ def test_after_rollback_clears_pending_changes() -> None:
 
 def test_after_commit_emits_batched_asset_changes_per_project(monkeypatch) -> None:
     session = FakeSession()
+    user_id = uuid4()
     project_id = uuid4()
 
-    emitted: list[tuple[str, list[dict[str, object]]]] = []
+    emitted: list[tuple[str, str, list[dict[str, object]]]] = []
 
-    async def _fake_emit(project_id_text: str, changes: list[dict[str, object]]) -> None:
-        emitted.append((project_id_text, changes))
+    async def _fake_emit(user_id_text: str, project_id_text: str, changes: list[dict[str, object]]) -> None:
+        emitted.append((user_id_text, project_id_text, changes))
 
     monkeypatch.setattr(asset_change_events, "_emit_asset_change_batch", _fake_emit)
 
     asset_change_events.queue_project_assets_change(
         session,
+        user_id=user_id,
         project_id=project_id,
         action="created",
     )
     asset_change_events.queue_story_object_assets_change(
         session,
+        user_id=user_id,
         project_id=project_id,
         object_type="character",
         object_id=uuid4(),
@@ -96,12 +104,14 @@ def test_after_commit_emits_batched_asset_changes_per_project(monkeypatch) -> No
     manuscript_id = uuid4()
     asset_change_events.queue_scene_assets_change(
         session,
+        user_id=user_id,
         project_id=project_id,
         manuscript_id=None,
         action="updated",
     )
     asset_change_events.queue_scene_assets_change(
         session,
+        user_id=user_id,
         project_id=project_id,
         manuscript_id=manuscript_id,
         action="updated",
@@ -112,7 +122,8 @@ def test_after_commit_emits_batched_asset_changes_per_project(monkeypatch) -> No
     assert asset_change_events._PENDING_ASSET_CHANGES_KEY not in session.info  # noqa: SLF001
     assert len(emitted) == 1
 
-    emitted_project_id, changes = emitted[0]
+    emitted_user_id, emitted_project_id, changes = emitted[0]
+    assert emitted_user_id == str(user_id)
     assert emitted_project_id == str(project_id)
     assert {"scope": "project_assets", "action": "created"} in changes
     assert any(

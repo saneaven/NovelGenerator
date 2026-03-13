@@ -755,6 +755,43 @@ class Agent(Base):
 
 
 # ============================================================================
+# JOURNEY (USER-SCOPED WORK UNIT)
+# ============================================================================
+
+class Journey(Base):
+    """User-scoped background work unit whose runtime is stored in a child thread."""
+    __tablename__ = "journeys"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    kind = Column(String(40), nullable=False)
+    display_label = Column(String(255), nullable=False)
+    status = Column(String(20), nullable=False, default="running")
+    last_error = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    project = relationship("Project")
+    user = relationship("User")
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('manuscriptEdit','outlineEdit','storyObjectEdit','objectTranslation','imagePrompt','sceneImagePrompt','messageTranslation')",
+            name="ck_journeys_kind",
+        ),
+        CheckConstraint(
+            "status IN ('running','waiting','processing','paused','done','error','canceled')",
+            name="ck_journeys_status",
+        ),
+        Index("ix_journeys_project_status", "project_id", "status"),
+        Index("ix_journeys_user_project_updated", "user_id", "project_id", "updated_at"),
+    )
+
+
+# ============================================================================
 # THREAD (UNIFIED CONVERSATION CONTAINER)
 # ============================================================================
 
@@ -771,9 +808,8 @@ class Thread(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
 
     thread_type = Column(String(20), nullable=False)  # 'agent' | 'subAgent' | 'journey'
-    # Polymorphic owner: agent.id for agent threads, sub_agent_definitions.id for subAgent, NULL for journey
-    owner_id = Column(UUID(as_uuid=True), nullable=True, index=True)
-    journey_kind = Column(String(40), nullable=True)  # for journey threads only
+    # Polymorphic parent: agents.id | sub_agent_definitions.id | journeys.id
+    parent_id = Column(UUID(as_uuid=True), nullable=False, index=True)
 
     status = Column(String(20), nullable=False, default='done')
 
@@ -804,7 +840,19 @@ class Thread(Base):
             name='ck_threads_status',
         ),
         Index('ix_threads_project_type', 'project_id', 'thread_type'),
-        Index('ix_threads_owner', 'owner_id'),
+        Index('ix_threads_parent', 'parent_id'),
+        Index(
+            "uq_threads_agent_parent",
+            "parent_id",
+            unique=True,
+            postgresql_where=sa_text("thread_type = 'agent'"),
+        ),
+        Index(
+            "uq_threads_journey_parent",
+            "parent_id",
+            unique=True,
+            postgresql_where=sa_text("thread_type = 'journey'"),
+        ),
     )
 
 
@@ -1105,16 +1153,15 @@ class ImageRunModel(Base):
 # ============================================================================
 
 class NotificationModel(Base):
-    """Project-scoped user notifications (single source of truth)."""
+    """User-scoped notifications (single source of truth)."""
     __tablename__ = "notifications"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
 
-    source = Column(String(32), nullable=False)  # 'journey' | 'imageRun'
-    source_ref_id = Column(String(128), nullable=False)
-    thread_id = Column(UUID(as_uuid=True), ForeignKey("threads.id", ondelete="SET NULL"), nullable=True, index=True)
+    source_kind = Column(String(32), nullable=False)  # 'journey' | 'imageRun' | 'system'
+    source_id = Column(String(160), nullable=False)
 
     status = Column(String(16), nullable=False)  # 'running' | 'pending' | 'success' | 'error' | 'cancelled'
     label = Column(String(255), nullable=False)
@@ -1123,7 +1170,9 @@ class NotificationModel(Base):
 
     progress_json = Column(JSONB, nullable=True)
     custom_slot_json = Column(JSONB, nullable=True)
+    target_json = Column(JSONB, nullable=True)
     meta_json = Column(JSONB, nullable=True)
+    important = Column(Boolean, default=False, nullable=False)
 
     is_read = Column(Boolean, default=False, nullable=False)
 
@@ -1131,14 +1180,15 @@ class NotificationModel(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     __table_args__ = (
-        CheckConstraint("source IN ('journey','imageRun')", name="ck_notifications_source"),
+        CheckConstraint("source_kind IN ('journey','imageRun','system')", name="ck_notifications_source_kind"),
         CheckConstraint(
             "status IN ('running','pending','success','error','cancelled')",
             name="ck_notifications_status",
         ),
-        UniqueConstraint("user_id", "project_id", "source", "source_ref_id", name="uq_notifications_source_ref"),
-        Index("ix_notifications_project_order", "user_id", "project_id", "updated_at", "id"),
-        Index("ix_notifications_project_read", "user_id", "project_id", "is_read"),
+        UniqueConstraint("user_id", "source_kind", "source_id", name="uq_notifications_user_source"),
+        Index("ix_notifications_user_order", "user_id", "important", "is_read", "updated_at", "id"),
+        Index("ix_notifications_user_project", "user_id", "project_id", "updated_at", "id"),
+        Index("ix_notifications_source", "source_kind", "source_id"),
     )
 
 

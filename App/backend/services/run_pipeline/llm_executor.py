@@ -39,6 +39,7 @@ from ..storage_usage_service import (
 )
 from ...providers.stream_retry import normalize_retry_config, stream_with_retry
 from ..token_count_service import count_conversation_tokens, count_message_tokens
+from ..thread_parent_runtime_service import resolve_parent
 from ..tool_engine import tool_engine
 from ..tool_engine.contracts import ToolOffer
 from ..context_manager import fit_to_context_window
@@ -49,6 +50,7 @@ from . import raw_output as _raw
 
 EmitFn = Callable[..., Awaitable[None]]
 PersistToolCallsFn = Callable[..., Awaitable[list[RunToolCallModel]]]
+SyncStatusFn = Callable[..., Awaitable[None]]
 
 
 def _strip_internal_message_keys(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -177,6 +179,7 @@ async def run_llm(
     assistant_message_ref_out: list[RunMessageModel | None],
     emit_fn: EmitFn,
     persist_tool_calls_fn: PersistToolCallsFn,
+    sync_status_fn: SyncStatusFn,
 ) -> None:
     preset_id = settings_service.get_active_preset_id(db, run.user_id)
     if preset_id is None:
@@ -187,7 +190,7 @@ async def run_llm(
         fragment_map = load_user_fragment_map(db, run.user_id, preset_id)
         template_renderer = TemplateRenderer(fragment_map=fragment_map)
 
-    task_type = scenario_bundle.task_type if scenario_bundle else ScenarioManager.resolve_task_type(thread=thread, run=run)
+    task_type = scenario_bundle.task_type if scenario_bundle else ScenarioManager.resolve_task_type(db, thread=thread, run=run)
     resolved_runtime = get_llm_runtime(db, user_id=run.user_id, task_type=task_type)
     task_config = resolved_runtime.task_config
     tokenizer_override = task_config.advanced.get("tokenizer_override") if isinstance(task_config.advanced, dict) else None
@@ -297,6 +300,7 @@ async def run_llm(
     db.commit()
 
     await emit_fn(
+        user_id=run.user_id,
         project_id=run.project_id,
         thread_id=thread.id,
         event_name="message:start",
@@ -310,8 +314,9 @@ async def run_llm(
     )
     assistant_message_ref_out[0] = assistant_message
 
+    parent = resolve_parent(db, thread)
     output_mode = resolve_output_mode(
-        journey_kind=thread.journey_kind,
+        journey_kind=parent.journey_kind,
         payload=input_payload if isinstance(input_payload, dict) else {},
         native_output_mode=bool(getattr(settings, "native_output_mode", False)),
     )
@@ -447,6 +452,7 @@ async def run_llm(
     async for event in stream:
         if event.raw_request is not None:
             await emit_fn(
+                user_id=run.user_id,
                 project_id=run.project_id,
                 thread_id=thread.id,
                 event_name="llm:request",
@@ -469,6 +475,7 @@ async def run_llm(
 
             if delta.content_delta:
                 await emit_fn(
+                    user_id=run.user_id,
                     project_id=run.project_id,
                     thread_id=thread.id,
                     event_name="content:delta",
@@ -481,6 +488,7 @@ async def run_llm(
 
             if thinking_mode != "off" and delta.thinking_delta and stream_thinking_display:
                 await emit_fn(
+                    user_id=run.user_id,
                     project_id=run.project_id,
                     thread_id=thread.id,
                     event_name="thinking:delta",
@@ -502,6 +510,7 @@ async def run_llm(
                     state = ToolDeltaState(llm_call_id=init_id, name="", raw_arguments="")
                     delta_state_by_index[idx] = state
                     await emit_fn(
+                        user_id=run.user_id,
                         project_id=run.project_id,
                         thread_id=thread.id,
                         event_name="tool_call:start",
@@ -524,6 +533,7 @@ async def run_llm(
                 if isinstance(fn.get("arguments"), str):
                     state.raw_arguments += fn["arguments"]
                     await emit_fn(
+                        user_id=run.user_id,
                         project_id=run.project_id,
                         thread_id=thread.id,
                         event_name="tool_call:delta",
@@ -612,6 +622,7 @@ async def run_llm(
         assistant_message_delta_applied = True
         db.commit()
         await emit_fn(
+            user_id=run.user_id,
             project_id=run.project_id,
             thread_id=thread.id,
             event_name="run:status",
@@ -619,6 +630,13 @@ async def run_llm(
                 "run_id": str(run.id),
                 "status": "processing",
             },
+        )
+        await sync_status_fn(
+            db=db,
+            run=run,
+            thread=thread,
+            error=None,
+            emit_run_status=False,
         )
         await _raw.apply_raw_output(
             db,
@@ -676,6 +694,7 @@ async def run_llm(
     ]
 
     await emit_fn(
+        user_id=run.user_id,
         project_id=run.project_id,
         thread_id=thread.id,
         event_name="llm:response",
@@ -689,6 +708,7 @@ async def run_llm(
     )
 
     await emit_fn(
+        user_id=run.user_id,
         project_id=run.project_id,
         thread_id=thread.id,
         event_name="message:end",
@@ -701,6 +721,7 @@ async def run_llm(
         },
     )
     await emit_fn(
+        user_id=run.user_id,
         project_id=run.project_id,
         thread_id=thread.id,
         event_name="run:status",
@@ -710,7 +731,15 @@ async def run_llm(
             "error": run.error,
         },
     )
+    await sync_status_fn(
+        db=db,
+        run=run,
+        thread=thread,
+        error=run.error,
+        emit_run_status=False,
+    )
     await emit_fn(
+        user_id=run.user_id,
         project_id=run.project_id,
         thread_id=thread.id,
         event_name="run:done",

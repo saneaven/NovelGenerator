@@ -1,37 +1,72 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import sys
 from datetime import datetime
+from types import ModuleType
 from types import SimpleNamespace
 from uuid import uuid4
 
-import pytest
-from fastapi import HTTPException
+from sqlalchemy.orm import declarative_base
 
-from App.backend.models.db_models import (
-    ImageRunModel,
-    NotificationModel,
-    RunMessageModel,
-    RunModel,
-    RunToolCallModel,
-    Thread,
-)
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
+os.environ.setdefault("DEFAULT_STORAGE_QUOTA_BYTES", str(1024 * 1024 * 1024))
+
+if "jose" not in sys.modules:
+    jose_module = ModuleType("jose")
+
+    class _FakeJWTError(Exception):
+        pass
+
+    class _FakeJWT:
+        @staticmethod
+        def encode(*_args, **_kwargs) -> str:
+            return "token"
+
+        @staticmethod
+        def decode(*_args, **_kwargs) -> dict[str, object]:
+            return {}
+
+    jose_module.JWTError = _FakeJWTError
+    jose_module.jwt = _FakeJWT()
+    sys.modules["jose"] = jose_module
+
+if "App.backend.database" not in sys.modules:
+    database_module = ModuleType("App.backend.database")
+    base = declarative_base()
+
+    def _fake_get_db():
+        return None
+
+    database_module.Base = base
+    database_module.SessionLocal = lambda: None
+    database_module.get_db = _fake_get_db
+    sys.modules["App.backend.database"] = database_module
+
+if "database" not in sys.modules:
+    root_database_module = ModuleType("database")
+    root_database_module.Base = declarative_base()
+    root_database_module.SessionLocal = lambda: None
+    sys.modules["database"] = root_database_module
+
 from App.backend.routes import notification_routes
-from App.backend.services import notification_service as notification_service_service
-from App.backend.services.notification_service import NotificationDeleteTarget
-from App.backend.services.run_pipeline.service import RunPipeline
+from App.backend.services import notification_service
 
 
 class FakeNotificationDb:
     def __init__(self) -> None:
-        self.expired = False
         self.committed = False
-
-    def expire_all(self) -> None:
-        self.expired = True
+        self.deleted: list[object] = []
 
     def commit(self) -> None:
         self.committed = True
+
+    def delete(self, row: object) -> None:
+        self.deleted.append(row)
+
+    def flush(self) -> None:
+        return None
 
 
 class FakeCollectionQuery:
@@ -45,139 +80,160 @@ class FakeCollectionQuery:
         return list(self._rows)
 
 
-class FakeCollectionDb:
-    def __init__(self, rows_by_model: dict[object, list[object]]) -> None:
-        self._rows_by_model = rows_by_model
+class FakeCollectionDb(FakeNotificationDb):
+    def __init__(self, rows: list[object]) -> None:
+        super().__init__()
+        self._rows = rows
 
-    def query(self, model: object) -> FakeCollectionQuery:
-        return FakeCollectionQuery(self._rows_by_model.get(model, []))
+    def query(self, _model: object) -> FakeCollectionQuery:
+        return FakeCollectionQuery(self._rows)
 
 
-def _make_notification_row(
+def _notification_row(
     *,
     notification_id: object,
-    project_id: object,
-    is_read: bool,
+    user_id: object,
+    project_id: object | None,
+    source_kind: str = "journey",
+    source_id: object | None = None,
+    target_json: dict[str, object] | None = None,
+    important: bool = False,
+    is_read: bool = False,
 ) -> SimpleNamespace:
     now = datetime(2026, 3, 8, 12, 0, 0)
     return SimpleNamespace(
         id=notification_id,
+        user_id=user_id,
         project_id=project_id,
-        source="journey",
-        source_ref_id="source-ref",
-        thread_id=None,
+        source_kind=source_kind,
+        source_id=source_id or notification_id,
+        target_json=target_json,
         status="success",
         label="Journey",
         message="Completed",
         warning=None,
         progress_json={"current": 1, "total": 1},
         custom_slot_json={"type": "none"},
-        meta_json={"kind": "journey"},
+        meta_json={"kind": source_kind},
+        important=important,
         is_read=is_read,
         created_at=now,
         updated_at=now,
     )
 
 
-def test_collect_notification_delete_deltas_includes_linked_journey_graph() -> None:
-    user_id = uuid4()
-    project_id = uuid4()
+def test_serialize_notification_includes_target_and_important() -> None:
     notification_id = uuid4()
+    project_id = uuid4()
     thread_id = uuid4()
 
-    db = FakeCollectionDb(
-        {
-            NotificationModel: [
-                _make_notification_row(
-                    notification_id=notification_id,
-                    project_id=project_id,
-                    is_read=False,
-                )
-            ],
-            Thread: [
-                SimpleNamespace(
-                    id=thread_id,
-                    user_id=user_id,
-                    project_id=project_id,
-                    thread_type="journey",
-                    captured_history_system_prompt="system prompt",
-                    captured_history_conversation_json=[{"role": "assistant", "content": "done"}],
-                )
-            ],
-            RunModel: [
-                SimpleNamespace(
-                    thread_id=thread_id,
-                    error="boom",
-                    context_object_ids=["obj-1"],
-                    journey_target_ids=["target-1"],
-                    input_payload={"prompt": "go"},
-                )
-            ],
-            RunMessageModel: [
-                SimpleNamespace(
-                    thread_id=thread_id,
-                    data={"parts": ["message"]},
-                )
-            ],
-            RunToolCallModel: [
-                SimpleNamespace(
-                    thread_id=thread_id,
-                    arguments={"kind": "delete"},
-                    extra_content={"preview": True},
-                    reason="cleanup",
-                    result={"ok": True},
-                )
-            ],
-            ImageRunModel: [
-                SimpleNamespace(
-                    thread_id=thread_id,
-                    request_snapshot={"prompt": "scene"},
-                    revised_prompt="scene revised",
-                    before_excerpt="before",
-                    after_excerpt="after",
-                    failure_code=None,
-                    error_message=None,
-                )
-            ],
-        }
+    payload = notification_service.serialize_notification(
+        _notification_row(
+            notification_id=notification_id,
+            user_id=uuid4(),
+            project_id=project_id,
+            source_kind="journey",
+            source_id=thread_id,
+            target_json={
+                "kind": "thread",
+                "project_id": str(project_id),
+                "thread_id": str(thread_id),
+            },
+            important=True,
+        )
     )
 
-    deltas = notification_service_service.collect_notification_delete_deltas(
-        db,
+    assert payload == {
+        "id": str(notification_id),
+        "project_id": str(project_id),
+        "source": {
+            "kind": "journey",
+            "id": str(thread_id),
+        },
+        "status": "success",
+        "label": "Journey",
+        "message": "Completed",
+        "warning": None,
+        "progress": {"current": 1, "total": 1},
+        "custom_slot": {"type": "none"},
+        "target": {
+            "kind": "thread",
+            "project_id": str(project_id),
+            "thread_id": str(thread_id),
+        },
+        "meta": {"kind": "journey"},
+        "important": True,
+        "is_read": False,
+        "created_at": "2026-03-08T12:00:00Z",
+        "updated_at": "2026-03-08T12:00:00Z",
+    }
+
+
+def test_delete_notifications_for_thread_ids_matches_target_only() -> None:
+    user_id = uuid4()
+    project_id = uuid4()
+    thread_id = uuid4()
+    other_thread_id = uuid4()
+
+    matched_target = _notification_row(
+        notification_id=uuid4(),
         user_id=user_id,
         project_id=project_id,
-        targets=[
-            NotificationDeleteTarget(
-                notification_id=notification_id,
-                source="journey",
-                source_ref_id=str(thread_id),
-                linked_thread_id=thread_id,
-                linked_thread_status="done",
-            )
-        ],
+        target_json={
+            "kind": "thread",
+            "project_id": str(project_id),
+            "thread_id": str(thread_id),
+        },
+    )
+    unmatched_source = _notification_row(
+        notification_id=uuid4(),
+        user_id=user_id,
+        project_id=project_id,
+        source_kind="journey",
+        source_id=thread_id,
+        target_json={"kind": "none"},
+    )
+    untouched = _notification_row(
+        notification_id=uuid4(),
+        user_id=user_id,
+        project_id=project_id,
+        source_kind="journey",
+        source_id=other_thread_id,
+        target_json={
+            "kind": "thread",
+            "project_id": str(project_id),
+            "thread_id": str(other_thread_id),
+        },
     )
 
-    assert len(deltas) == 6
-    assert sum(1 for delta in deltas if delta.notification_bytes < 0) == 1
-    assert sum(1 for delta in deltas if delta.image_run_bytes < 0) == 1
-    assert sum(1 for delta in deltas if delta.chat_bytes < 0) == 4
+    db = FakeCollectionDb([matched_target, unmatched_source, untouched])
+
+    deleted_rows = notification_service.delete_notifications_for_thread_ids(
+        db,
+        user_id=user_id,
+        thread_ids=[thread_id],
+        project_id=project_id,
+    )
+
+    assert {row.id for row in deleted_rows} == {str(matched_target.id)}
+    assert db.deleted == [matched_target]
 
 
-def test_mark_project_notifications_read_emits_upsert_payloads(monkeypatch) -> None:
-    project_id = uuid4()
+def test_mark_user_notifications_read_emits_user_upsert_payloads(monkeypatch) -> None:
     user_id = uuid4()
     notification_id = uuid4()
+    project_id = uuid4()
     db = FakeNotificationDb()
-    emitted: list[tuple[str, dict[str, object]]] = []
+    emitted: list[tuple[str, dict[str, object], object | None]] = []
     reloaded_rows = [
-        _make_notification_row(
+        _notification_row(
             notification_id=notification_id,
+            user_id=user_id,
             project_id=project_id,
             is_read=True,
         )
     ]
 
-    monkeypatch.setattr(notification_routes, "require_owned_project", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
         notification_routes,
         "mark_notifications_read",
@@ -189,14 +245,13 @@ def test_mark_project_notifications_read_emits_upsert_payloads(monkeypatch) -> N
         lambda *_args, **_kwargs: reloaded_rows,
     )
 
-    async def _fake_emit_project_event(*, project_id: object, event_name: str, data: dict[str, object]) -> None:
-        emitted.append((event_name, data))
+    async def _fake_emit_user_event(*, user_id: object, event_name: str, data: dict[str, object], project_id: object | None = None) -> None:
+        emitted.append((event_name, data, project_id))
 
-    monkeypatch.setattr(notification_routes.runtime_event_dispatcher, "emit_project_event", _fake_emit_project_event)
+    monkeypatch.setattr(notification_routes.runtime_event_dispatcher, "emit_user_event", _fake_emit_user_event)
 
     response = asyncio.run(
-        notification_routes.mark_project_notifications_read(
-            project_id=project_id,
+        notification_routes.mark_user_notifications_read(
             payload=SimpleNamespace(notification_ids=[str(notification_id)], mark_all=False),
             current_user=SimpleNamespace(id=user_id),
             db=db,
@@ -209,80 +264,54 @@ def test_mark_project_notifications_read_emits_upsert_payloads(monkeypatch) -> N
     assert emitted == [
         (
             "notification:upsert",
-            {
-                "id": str(notification_id),
-                "project_id": str(project_id),
-                "source": "journey",
-                "source_ref_id": "source-ref",
-                "thread_id": None,
-                "status": "success",
-                "label": "Journey",
-                "message": "Completed",
-                "warning": None,
-                "progress": {"current": 1, "total": 1},
-                "custom_slot": {"type": "none"},
-                "meta": {"kind": "journey"},
-                "is_read": True,
-                "created_at": "2026-03-08T12:00:00Z",
-                "updated_at": "2026-03-08T12:00:00Z",
-            },
+            notification_service.serialize_notification(reloaded_rows[0]),
+            project_id,
         )
     ]
 
 
-def test_delete_project_notification_cancels_and_emits_thread_delete(monkeypatch) -> None:
-    project_id = uuid4()
+def test_delete_notification_only_emits_notification_delete(monkeypatch) -> None:
     user_id = uuid4()
     notification_id = uuid4()
-    thread_id = uuid4()
+    project_id = uuid4()
     db = FakeNotificationDb()
-    emitted: list[tuple[str, dict[str, object]]] = []
-    canceled: list[tuple[object, object]] = []
+    emitted: list[tuple[str, dict[str, object], object | None]] = []
+    applied_deltas: list[tuple[object, list[object]]] = []
 
-    monkeypatch.setattr(notification_routes, "require_owned_project", lambda *_args, **_kwargs: object())
+    existing_row = _notification_row(
+        notification_id=notification_id,
+        user_id=user_id,
+        project_id=project_id,
+    )
+
     monkeypatch.setattr(
         notification_routes,
-        "list_notification_delete_targets",
-        lambda *_args, **_kwargs: [
-            NotificationDeleteTarget(
-                notification_id=notification_id,
-                source="journey",
-                source_ref_id=str(thread_id),
-                linked_thread_id=thread_id,
-                linked_thread_status="running",
-            )
-        ],
+        "get_notifications_by_ids",
+        lambda *_args, **_kwargs: [existing_row],
     )
-    monkeypatch.setattr(
-        notification_routes,
-        "delete_notification_targets",
-        lambda *_args, **_kwargs: ([str(notification_id)], [str(thread_id)]),
-    )
-    helper_deltas = [object()]
-    applied_deltas: list[list[object]] = []
     monkeypatch.setattr(
         notification_routes,
         "collect_notification_delete_deltas",
-        lambda *_args, **_kwargs: helper_deltas,
+        lambda *_args, **_kwargs: {project_id: [object()]},
+    )
+    monkeypatch.setattr(
+        notification_routes,
+        "delete_notifications",
+        lambda *_args, **_kwargs: [notification_service.NotificationDeleteRow(id=str(notification_id), project_id=str(project_id))],
     )
     monkeypatch.setattr(
         notification_routes,
         "apply_project_usage_deltas",
-        lambda *_args, **_kwargs: applied_deltas.append(list(_kwargs["deltas"])),
+        lambda *_args, **_kwargs: applied_deltas.append((_kwargs["project_id"], list(_kwargs["deltas"]))),
     )
 
-    async def _fake_cancel_run_for_delete(*, thread_id: object, user_id: object) -> None:
-        canceled.append((thread_id, user_id))
+    async def _fake_emit_user_event(*, user_id: object, event_name: str, data: dict[str, object], project_id: object | None = None) -> None:
+        emitted.append((event_name, data, project_id))
 
-    async def _fake_emit_project_event(*, project_id: object, event_name: str, data: dict[str, object]) -> None:
-        emitted.append((event_name, data))
-
-    monkeypatch.setattr(notification_routes.run_pipeline, "cancel_run_for_delete", _fake_cancel_run_for_delete)
-    monkeypatch.setattr(notification_routes.runtime_event_dispatcher, "emit_project_event", _fake_emit_project_event)
+    monkeypatch.setattr(notification_routes.runtime_event_dispatcher, "emit_user_event", _fake_emit_user_event)
 
     response = asyncio.run(
-        notification_routes.delete_project_notification(
-            project_id=project_id,
+        notification_routes.delete_notification(
             notification_id=notification_id,
             current_user=SimpleNamespace(id=user_id),
             db=db,
@@ -290,97 +319,53 @@ def test_delete_project_notification_cancels_and_emits_thread_delete(monkeypatch
     )
 
     assert response.status_code == 204
-    assert db.expired is True
     assert db.committed is True
-    assert applied_deltas == [helper_deltas]
-    assert canceled == [(thread_id, user_id)]
+    assert len(applied_deltas) == 1
+    assert applied_deltas[0][0] == project_id
     assert emitted == [
         (
             "notification:delete",
-            {
-                "id": str(notification_id),
-                "source": "journey",
-                "source_ref_id": str(thread_id),
-            },
-        ),
-        (
-            "thread:delete",
-            {
-                "id": str(thread_id),
-            },
-        ),
+            {"id": str(notification_id)},
+            str(project_id),
+        )
     ]
 
 
-def test_delete_all_project_notifications_emits_bulk_thread_delete(monkeypatch) -> None:
-    project_id = uuid4()
+def test_delete_all_notifications_emits_bulk_delete(monkeypatch) -> None:
     user_id = uuid4()
+    project_id = uuid4()
     notif_a = uuid4()
     notif_b = uuid4()
-    thread_a = uuid4()
-    thread_b = uuid4()
-    db = FakeNotificationDb()
-    emitted: list[tuple[str, dict[str, object]]] = []
-    canceled: list[tuple[object, object]] = []
+    db = FakeCollectionDb(
+        [
+            _notification_row(notification_id=notif_a, user_id=user_id, project_id=project_id),
+            _notification_row(notification_id=notif_b, user_id=user_id, project_id=None, source_kind="system"),
+        ]
+    )
+    emitted: list[tuple[str, dict[str, object], object | None]] = []
 
-    monkeypatch.setattr(notification_routes, "require_owned_project", lambda *_args, **_kwargs: object())
-    monkeypatch.setattr(
-        notification_routes,
-        "list_notification_delete_targets",
-        lambda *_args, **_kwargs: [
-            NotificationDeleteTarget(
-                notification_id=notif_a,
-                source="journey",
-                source_ref_id=str(thread_a),
-                linked_thread_id=thread_a,
-                linked_thread_status="processing",
-            ),
-            NotificationDeleteTarget(
-                notification_id=notif_b,
-                source="imageRun",
-                source_ref_id="image-run-1",
-                linked_thread_id=None,
-                linked_thread_status=None,
-            ),
-            NotificationDeleteTarget(
-                notification_id=uuid4(),
-                source="journey",
-                source_ref_id=str(thread_b),
-                linked_thread_id=thread_b,
-                linked_thread_status="done",
-            ),
-        ],
-    )
-    monkeypatch.setattr(
-        notification_routes,
-        "delete_notification_targets",
-        lambda *_args, **_kwargs: ([str(notif_a), str(notif_b)], [str(thread_a), str(thread_b)]),
-    )
-    helper_deltas = [object(), object()]
-    applied_deltas: list[list[object]] = []
     monkeypatch.setattr(
         notification_routes,
         "collect_notification_delete_deltas",
-        lambda *_args, **_kwargs: helper_deltas,
+        lambda *_args, **_kwargs: {project_id: [object()]},
     )
     monkeypatch.setattr(
         notification_routes,
-        "apply_project_usage_deltas",
-        lambda *_args, **_kwargs: applied_deltas.append(list(_kwargs["deltas"])),
+        "delete_notifications",
+        lambda *_args, **_kwargs: [
+            notification_service.NotificationDeleteRow(id=str(notif_a), project_id=str(project_id)),
+            notification_service.NotificationDeleteRow(id=str(notif_b), project_id=None),
+        ],
     )
+    monkeypatch.setattr(notification_routes, "apply_project_usage_deltas", lambda *_args, **_kwargs: None)
 
-    async def _fake_cancel_run_for_delete(*, thread_id: object, user_id: object) -> None:
-        canceled.append((thread_id, user_id))
+    async def _fake_emit_user_event(*, user_id: object, event_name: str, data: dict[str, object], project_id: object | None = None) -> None:
+        emitted.append((event_name, data, project_id))
 
-    async def _fake_emit_project_event(*, project_id: object, event_name: str, data: dict[str, object]) -> None:
-        emitted.append((event_name, data))
-
-    monkeypatch.setattr(notification_routes.run_pipeline, "cancel_run_for_delete", _fake_cancel_run_for_delete)
-    monkeypatch.setattr(notification_routes.runtime_event_dispatcher, "emit_project_event", _fake_emit_project_event)
+    monkeypatch.setattr(notification_routes.runtime_event_dispatcher, "emit_user_event", _fake_emit_user_event)
 
     response = asyncio.run(
-        notification_routes.delete_all_project_notifications(
-            project_id=project_id,
+        notification_routes.delete_all_notifications(
             payload=SimpleNamespace(only_read=False),
             current_user=SimpleNamespace(id=user_id),
             db=db,
@@ -389,135 +374,11 @@ def test_delete_all_project_notifications_emits_bulk_thread_delete(monkeypatch) 
 
     assert response.deleted == 2
     assert response.ids == [str(notif_a), str(notif_b)]
-    assert applied_deltas == [helper_deltas]
-    assert canceled == [(thread_a, user_id)]
+    assert db.committed is True
     assert emitted == [
         (
             "notification:bulk_delete",
-            {
-                "ids": [str(notif_a), str(notif_b)],
-            },
-        ),
-        (
-            "thread:bulk_delete",
-            {
-                "ids": [str(thread_a), str(thread_b)],
-            },
-        ),
-    ]
-
-
-def test_delete_project_notification_raises_404_when_target_missing(monkeypatch) -> None:
-    project_id = uuid4()
-    user_id = uuid4()
-    notification_id = uuid4()
-
-    monkeypatch.setattr(notification_routes, "require_owned_project", lambda *_args, **_kwargs: object())
-    monkeypatch.setattr(
-        notification_routes,
-        "list_notification_delete_targets",
-        lambda *_args, **_kwargs: [],
-    )
-
-    with pytest.raises(HTTPException) as exc:
-        asyncio.run(
-            notification_routes.delete_project_notification(
-                project_id=project_id,
-                notification_id=notification_id,
-                current_user=SimpleNamespace(id=user_id),
-                db=FakeNotificationDb(),
-            )
+            {"ids": [str(notif_a), str(notif_b)]},
+            None,
         )
-
-    assert exc.value.status_code == 404
-
-
-class FakeQuery:
-    def __init__(self, run: object) -> None:
-        self._run = run
-
-    def join(self, *_args, **_kwargs) -> "FakeQuery":
-        return self
-
-    def filter(self, *_args, **_kwargs) -> "FakeQuery":
-        return self
-
-    def order_by(self, *_args, **_kwargs) -> "FakeQuery":
-        return self
-
-    def first(self) -> object:
-        return self._run
-
-
-class FakeRunDb:
-    def __init__(self, run: object) -> None:
-        self._run = run
-        self.committed = False
-        self.closed = False
-
-    def query(self, _model: object) -> FakeQuery:
-        return FakeQuery(self._run)
-
-    def commit(self) -> None:
-        self.committed = True
-
-    def close(self) -> None:
-        self.closed = True
-
-
-def test_cancel_run_for_delete_raises_on_timeout() -> None:
-    thread_id = uuid4()
-    run_id = uuid4()
-    project_id = uuid4()
-    thread = SimpleNamespace(status="running")
-    run = SimpleNamespace(id=run_id, project_id=project_id, status="running", thread=thread)
-    fake_db = FakeRunDb(run)
-    pipeline = RunPipeline(db_factory=lambda: fake_db, event_dispatcher=SimpleNamespace())
-
-    async def _fake_cancel_task_and_wait(_run_id: object, *, timeout_s: float = 5.0) -> bool:
-        return False
-
-    emitted: list[tuple[str, dict[str, object]]] = []
-
-    async def _fake_emit(*, project_id: object, thread_id: object, event_name: str, data: dict[str, object]) -> None:
-        emitted.append((event_name, data))
-
-    pipeline._cancel_task_and_wait = _fake_cancel_task_and_wait  # type: ignore[method-assign]
-    pipeline._emit = _fake_emit  # type: ignore[method-assign]
-
-    with pytest.raises(HTTPException) as exc:
-        asyncio.run(pipeline.cancel_run_for_delete(thread_id=thread_id, user_id=uuid4(), timeout_s=0.1))
-
-    assert exc.value.status_code == 409
-    assert fake_db.committed is True
-    assert run.status == "canceled"
-    assert thread.status == "canceled"
-    assert emitted == []
-
-
-def test_cancel_run_for_delete_emits_canceled_events() -> None:
-    thread_id = uuid4()
-    run_id = uuid4()
-    project_id = uuid4()
-    thread = SimpleNamespace(status="processing")
-    run = SimpleNamespace(id=run_id, project_id=project_id, status="processing", thread=thread)
-    fake_db = FakeRunDb(run)
-    pipeline = RunPipeline(db_factory=lambda: fake_db, event_dispatcher=SimpleNamespace())
-
-    async def _fake_cancel_task_and_wait(_run_id: object, *, timeout_s: float = 5.0) -> bool:
-        return True
-
-    emitted: list[tuple[str, dict[str, object]]] = []
-
-    async def _fake_emit(*, project_id: object, thread_id: object, event_name: str, data: dict[str, object]) -> None:
-        emitted.append((event_name, data))
-
-    pipeline._cancel_task_and_wait = _fake_cancel_task_and_wait  # type: ignore[method-assign]
-    pipeline._emit = _fake_emit  # type: ignore[method-assign]
-
-    asyncio.run(pipeline.cancel_run_for_delete(thread_id=thread_id, user_id=uuid4(), timeout_s=0.1))
-
-    assert emitted == [
-        ("run:canceled", {"run_id": str(run_id)}),
-        ("run:status", {"run_id": str(run_id), "status": "canceled"}),
     ]

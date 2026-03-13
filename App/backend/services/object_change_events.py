@@ -26,6 +26,7 @@ _ACTION_PRIORITY = {
 
 @dataclass(frozen=True)
 class _ChangeKey:
+    user_id: str
     project_id: str
     object_type: str
     object_id: str
@@ -50,11 +51,13 @@ def _normalize_action(action: str) -> str:
 def queue_object_change(
     db: Session,
     *,
+    user_id: UUID | str,
     project_id: UUID | str,
     object_type: str,
     object_id: UUID | str,
     action: str,
 ) -> None:
+    user_id_str = _as_non_empty_str(user_id, field_name="user_id")
     project_id_str = _as_non_empty_str(project_id, field_name="project_id")
     object_id_str = _as_non_empty_str(object_id, field_name="object_id")
     object_type_text = _as_non_empty_str(object_type, field_name="object_type")
@@ -67,6 +70,7 @@ def queue_object_change(
         db.info[_PENDING_OBJECT_CHANGES_KEY] = pending
 
     key = _ChangeKey(
+        user_id=user_id_str,
         project_id=project_id_str,
         object_type=external_type,
         object_id=object_id_str,
@@ -80,11 +84,12 @@ def queue_object_change(
         pending[key] = normalized_action
 
 
-async def _emit_object_change_batch(project_id: str, changes: list[dict[str, str]]) -> None:
+async def _emit_object_change_batch(user_id: str, project_id: str, changes: list[dict[str, str]]) -> None:
     try:
         from .runtime_event_dispatcher import runtime_event_dispatcher
 
         await runtime_event_dispatcher.emit_project_event(
+            user_id=user_id,
             project_id=project_id,
             event_name="object:changed",
             data={
@@ -101,14 +106,14 @@ def _after_commit(session: Session) -> None:
     if not pending or not isinstance(pending, dict):
         return
 
-    grouped_changes: dict[str, list[dict[str, str]]] = defaultdict(list)
+    grouped_changes: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
     for key, action in pending.items():
         if not isinstance(key, _ChangeKey):
             continue
         action_text = str(action or "").strip().lower()
         if action_text not in _ACTION_PRIORITY:
             continue
-        grouped_changes[key.project_id].append(
+        grouped_changes[(key.user_id, key.project_id)].append(
             {
                 "action": action_text,
                 "object_type": key.object_type,
@@ -123,12 +128,12 @@ def _after_commit(session: Session) -> None:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         logger.warning("No running loop for object:changed dispatch; falling back to sync emit")
-        for project_id, changes in grouped_changes.items():
-            asyncio.run(_emit_object_change_batch(project_id, changes))
+        for (user_id, project_id), changes in grouped_changes.items():
+            asyncio.run(_emit_object_change_batch(user_id, project_id, changes))
         return
 
-    for project_id, changes in grouped_changes.items():
-        loop.create_task(_emit_object_change_batch(project_id, changes))
+    for (user_id, project_id), changes in grouped_changes.items():
+        loop.create_task(_emit_object_change_batch(user_id, project_id, changes))
 
 
 def _after_rollback(session: Session) -> None:

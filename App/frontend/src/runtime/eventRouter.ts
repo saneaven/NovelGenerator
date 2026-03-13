@@ -3,7 +3,7 @@ import type {
   ImageRunUpdateEvent,
   NotificationSSEEvent,
   ObjectChangedEvent,
-  ProjectSSEEvent,
+  RuntimeSSEEvent,
   ThreadRuntimeEvent,
 } from '../api/sseClient';
 import { AssetEventConsumer } from './consumers/assetEventConsumer';
@@ -12,7 +12,7 @@ import { ObjectEventConsumer } from './consumers/objectEventConsumer';
 import { NotificationEventConsumer } from './consumers/notificationEventConsumer';
 import { ThreadEventConsumer } from './consumers/threadEventConsumer';
 
-type EventHandler = (event: ProjectSSEEvent) => Promise<void> | void;
+type EventHandler = (event: RuntimeSSEEvent) => Promise<void> | void;
 
 export class EventRouter {
   private readonly assetConsumer: AssetEventConsumer;
@@ -22,11 +22,11 @@ export class EventRouter {
   private readonly imageRunConsumer: ImageRunEventConsumer;
   private readonly routeTable: Record<string, EventHandler>;
 
-  constructor(projectId: string) {
-    this.assetConsumer = new AssetEventConsumer(projectId);
-    this.objectConsumer = new ObjectEventConsumer(projectId);
-    this.threadConsumer = new ThreadEventConsumer(projectId);
-    this.notificationConsumer = new NotificationEventConsumer(projectId);
+  constructor() {
+    this.assetConsumer = new AssetEventConsumer();
+    this.objectConsumer = new ObjectEventConsumer();
+    this.threadConsumer = new ThreadEventConsumer();
+    this.notificationConsumer = new NotificationEventConsumer();
     this.imageRunConsumer = new ImageRunEventConsumer();
     this.routeTable = {
       'asset:changed': (event) => {
@@ -50,7 +50,7 @@ export class EventRouter {
     };
   }
 
-  async handleEvent(event: ProjectSSEEvent): Promise<void> {
+  async handleEvent(event: RuntimeSSEEvent): Promise<void> {
     const handler = this.routeTable[event.event];
     if (handler) {
       await handler(event);

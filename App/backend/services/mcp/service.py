@@ -793,7 +793,7 @@ class McpPolicyService:
         sub_agent_id: uuid.UUID | None = None
         if thread.thread_type == "subAgent":
             invocation_mode = "subAgent"
-            sub_agent_id = thread.owner_id
+            sub_agent_id = thread.parent_id
         elif run.run_mode == "planMode":
             invocation_mode = "planMode"
         else:

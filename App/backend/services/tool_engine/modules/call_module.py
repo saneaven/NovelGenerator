@@ -126,7 +126,7 @@ class CallToolCallModule(ToolCallModule):
             project_id=ctx.project_id,
             user_id=ctx.user_id,
             thread_type="subAgent",
-            owner_id=definition.id,
+            parent_id=definition.id,
             status="waiting",
         )
         ctx.db.add(child_thread)

@@ -21,11 +21,13 @@ def _run_after_commit(session: FakeSession) -> None:
 
 def test_queue_object_change_deduplicates_by_priority() -> None:
     session = FakeSession()
+    user_id = uuid4()
     project_id = uuid4()
     object_id = uuid4()
 
     object_change_events.queue_object_change(
         session,
+        user_id=user_id,
         project_id=project_id,
         object_type="character",
         object_id=object_id,
@@ -33,6 +35,7 @@ def test_queue_object_change_deduplicates_by_priority() -> None:
     )
     object_change_events.queue_object_change(
         session,
+        user_id=user_id,
         project_id=project_id,
         object_type="character",
         object_id=object_id,
@@ -40,6 +43,7 @@ def test_queue_object_change_deduplicates_by_priority() -> None:
     )
     object_change_events.queue_object_change(
         session,
+        user_id=user_id,
         project_id=project_id,
         object_type="character",
         object_id=object_id,
@@ -56,6 +60,7 @@ def test_after_rollback_clears_pending_changes() -> None:
 
     object_change_events.queue_object_change(
         session,
+        user_id=uuid4(),
         project_id=uuid4(),
         object_type="character",
         object_id=uuid4(),
@@ -70,18 +75,20 @@ def test_after_rollback_clears_pending_changes() -> None:
 
 def test_after_commit_emits_single_batch_per_project(monkeypatch) -> None:
     session = FakeSession()
+    user_id = uuid4()
     project_a = uuid4()
     project_b = uuid4()
 
-    emitted: list[tuple[str, list[dict[str, str]]]] = []
+    emitted: list[tuple[str, str, list[dict[str, str]]]] = []
 
-    async def _fake_emit(project_id: str, changes: list[dict[str, str]]) -> None:
-        emitted.append((project_id, changes))
+    async def _fake_emit(user_id_text: str, project_id: str, changes: list[dict[str, str]]) -> None:
+        emitted.append((user_id_text, project_id, changes))
 
     monkeypatch.setattr(object_change_events, "_emit_object_change_batch", _fake_emit)
 
     object_change_events.queue_object_change(
         session,
+        user_id=user_id,
         project_id=project_a,
         object_type="character",
         object_id=uuid4(),
@@ -89,6 +96,7 @@ def test_after_commit_emits_single_batch_per_project(monkeypatch) -> None:
     )
     object_change_events.queue_object_change(
         session,
+        user_id=user_id,
         project_id=project_a,
         object_type="chapter",
         object_id=uuid4(),
@@ -96,6 +104,7 @@ def test_after_commit_emits_single_batch_per_project(monkeypatch) -> None:
     )
     object_change_events.queue_object_change(
         session,
+        user_id=user_id,
         project_id=project_b,
         object_type="manuscript",
         object_id=uuid4(),
@@ -107,7 +116,7 @@ def test_after_commit_emits_single_batch_per_project(monkeypatch) -> None:
     assert object_change_events._PENDING_OBJECT_CHANGES_KEY not in session.info  # noqa: SLF001
     assert len(emitted) == 2
 
-    by_project = {project_id: changes for project_id, changes in emitted}
+    by_project = {project_id: changes for emitted_user_id, project_id, changes in emitted if emitted_user_id == str(user_id)}
     assert str(project_a) in by_project
     assert str(project_b) in by_project
 

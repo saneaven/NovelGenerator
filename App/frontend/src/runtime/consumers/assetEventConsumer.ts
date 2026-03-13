@@ -1,4 +1,5 @@
 import type { AssetChangedChange, AssetChangedEvent } from '../../api/sseClient';
+import { useProjectStore } from '../../store/projectStore';
 import { useAssetStore } from '../../store/assetStore';
 
 const FLUSH_DEBOUNCE_MS = 50;
@@ -13,16 +14,12 @@ type PendingStoryObject = {
 };
 
 export class AssetEventConsumer {
-  private readonly projectId: string;
+  private activeProjectId: string | null = null;
   private pendingProjectAssets = false;
   private readonly pendingStoryObjectKeys = new Map<string, PendingStoryObject>();
   private readonly pendingSceneKeys = new Set<string>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
-
-  constructor(projectId: string) {
-    this.projectId = projectId;
-  }
 
   dispose(): void {
     this.disposed = true;
@@ -31,6 +28,7 @@ export class AssetEventConsumer {
       this.flushTimer = null;
     }
     this.pendingProjectAssets = false;
+    this.activeProjectId = null;
     this.pendingStoryObjectKeys.clear();
     this.pendingSceneKeys.clear();
   }
@@ -38,7 +36,10 @@ export class AssetEventConsumer {
   consume(event: AssetChangedEvent): void {
     if (this.disposed) return;
     const payload = event.data;
-    if (!payload || String(payload.project_id ?? '') !== this.projectId) return;
+    const projectId = String(payload?.project_id ?? '');
+    const currentProjectId = useProjectStore.getState().currentProjectId;
+    if (!payload || !projectId || currentProjectId !== projectId) return;
+    this.activeProjectId = projectId;
     if (!Array.isArray(payload.changes) || payload.changes.length === 0) return;
 
     for (const change of payload.changes) {
@@ -78,6 +79,8 @@ export class AssetEventConsumer {
 
   private async flush(): Promise<void> {
     if (this.disposed) return;
+    const projectId = this.activeProjectId;
+    if (!projectId) return;
 
     const shouldRefreshProjectAssets = this.pendingProjectAssets;
     const storyObjects = [...this.pendingStoryObjectKeys.values()];
@@ -90,19 +93,19 @@ export class AssetEventConsumer {
     const store = useAssetStore.getState();
     const tasks: Promise<void>[] = [];
 
-    if (shouldRefreshProjectAssets && store.isProjectAssetsLoaded(this.projectId)) {
-      tasks.push(store.fetchAssets(this.projectId, true));
+    if (shouldRefreshProjectAssets && store.isProjectAssetsLoaded(projectId)) {
+      tasks.push(store.fetchAssets(projectId, true));
     }
 
     for (const item of storyObjects) {
-      if (!store.isStoryObjectAssetsLoaded(this.projectId, item.objectType, item.objectId)) continue;
-      tasks.push(store.fetchStoryObjectAssets(this.projectId, item.objectType, item.objectId, true));
+      if (!store.isStoryObjectAssetsLoaded(projectId, item.objectType, item.objectId)) continue;
+      tasks.push(store.fetchStoryObjectAssets(projectId, item.objectType, item.objectId, true));
     }
 
     for (const sceneKey of sceneKeys) {
       const manuscriptId = sceneKey === SCENE_ALL_KEY ? undefined : sceneKey;
-      if (!store.isSceneAssetsLoaded(this.projectId, manuscriptId)) continue;
-      tasks.push(store.fetchSceneAssets(this.projectId, manuscriptId, true));
+      if (!store.isSceneAssetsLoaded(projectId, manuscriptId)) continue;
+      tasks.push(store.fetchSceneAssets(projectId, manuscriptId, true));
     }
 
     if (tasks.length > 0) {

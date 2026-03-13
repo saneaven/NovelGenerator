@@ -100,12 +100,14 @@ def _collect_story_object_refs_for_asset_ids(
 def _queue_story_object_updates(
     db: Session,
     *,
+    user_id: UUID,
     project_id: UUID,
     refs: list[tuple[str, UUID]],
 ) -> None:
     for object_type, object_id in set(refs):
         queue_object_change(
             db,
+            user_id=user_id,
             project_id=project_id,
             object_type=object_type,
             object_id=object_id,
@@ -116,6 +118,7 @@ def _queue_story_object_updates(
 def _queue_story_object_asset_updates(
     db: Session,
     *,
+    user_id: UUID,
     project_id: UUID,
     refs: list[tuple[str, UUID]],
     action: str = "updated",
@@ -123,6 +126,7 @@ def _queue_story_object_asset_updates(
     for object_type, object_id in set(refs):
         queue_story_object_assets_change(
             db,
+            user_id=user_id,
             project_id=project_id,
             object_type=object_type,
             object_id=object_id,
@@ -133,6 +137,7 @@ def _queue_story_object_asset_updates(
 def _queue_scene_asset_updates(
     db: Session,
     *,
+    user_id: UUID,
     project_id: UUID,
     manuscript_ids: list[UUID | None],
     action: str = "updated",
@@ -142,6 +147,7 @@ def _queue_scene_asset_updates(
 
     queue_scene_assets_change(
         db,
+        user_id=user_id,
         project_id=project_id,
         manuscript_id=None,
         action=action,
@@ -149,6 +155,7 @@ def _queue_scene_asset_updates(
     for manuscript_id in {value for value in manuscript_ids if isinstance(value, UUID)}:
         queue_scene_assets_change(
             db,
+            user_id=user_id,
             project_id=project_id,
             manuscript_id=manuscript_id,
             action=action,
@@ -489,6 +496,7 @@ async def upload_asset(
             db.add(link)
             queue_object_change(
                 db,
+                user_id=current_user.id,
                 project_id=project_id,
                 object_type=normalized_object_type,
                 object_id=object_id,
@@ -496,16 +504,18 @@ async def upload_asset(
             )
             queue_story_object_assets_change(
                 db,
+                user_id=current_user.id,
                 project_id=project_id,
                 object_type=normalized_object_type,
                 object_id=object_id,
                 action="created",
             )
 
-        queue_project_assets_change(db, project_id=project_id, action="created")
+        queue_project_assets_change(db, user_id=current_user.id, project_id=project_id, action="created")
         if manuscript_id is not None:
             _queue_scene_asset_updates(
                 db,
+                user_id=current_user.id,
                 project_id=project_id,
                 manuscript_ids=[manuscript_id],
                 action="created",
@@ -577,15 +587,17 @@ async def update_asset(
         asset.name = request.name
 
     asset.updated_at = datetime.utcnow()
-    queue_project_assets_change(db, project_id=project_id, action="updated")
+    queue_project_assets_change(db, user_id=current_user.id, project_id=project_id, action="updated")
     _queue_story_object_asset_updates(
         db,
+        user_id=current_user.id,
         project_id=project_id,
         refs=affected_refs,
         action="updated",
     )
     _queue_scene_asset_updates(
         db,
+        user_id=current_user.id,
         project_id=project_id,
         manuscript_ids=scene_manuscript_ids,
         action="updated",
@@ -639,20 +651,22 @@ async def delete_asset(
 
     # Delete from storage + DB, and scrub stale generation_reference_images pointers.
     delete_assets_with_files(db, assets=[asset], scrub_references_in_project_id=project_id)
-    _queue_story_object_updates(db, project_id=project_id, refs=affected_refs)
+    _queue_story_object_updates(db, user_id=current_user.id, project_id=project_id, refs=affected_refs)
     _queue_story_object_asset_updates(
         db,
+        user_id=current_user.id,
         project_id=project_id,
         refs=affected_refs,
         action="deleted",
     )
     _queue_scene_asset_updates(
         db,
+        user_id=current_user.id,
         project_id=project_id,
         manuscript_ids=scene_manuscript_ids,
         action="deleted",
     )
-    queue_project_assets_change(db, project_id=project_id, action="deleted")
+    queue_project_assets_change(db, user_id=current_user.id, project_id=project_id, action="deleted")
     scrubbed_after = snapshot_rows(
         db.query(Asset)
         .filter(
@@ -1002,9 +1016,15 @@ async def execute_image_cleanup(
         db.delete(asset)
         deleted.append(str(asset.id))
 
-    _queue_story_object_updates(db, project_id=project_id, refs=affected_story_object_refs)
+    _queue_story_object_updates(
+        db,
+        user_id=current_user.id,
+        project_id=project_id,
+        refs=affected_story_object_refs,
+    )
     _queue_story_object_asset_updates(
         db,
+        user_id=current_user.id,
         project_id=project_id,
         refs=affected_story_object_refs,
         action="deleted",
@@ -1012,12 +1032,13 @@ async def execute_image_cleanup(
     scene_manuscript_ids = [asset.manuscript_id for asset in to_delete if asset.asset_type == "scene"]
     _queue_scene_asset_updates(
         db,
+        user_id=current_user.id,
         project_id=project_id,
         manuscript_ids=scene_manuscript_ids,
         action="deleted",
     )
     if deleted:
-        queue_project_assets_change(db, project_id=project_id, action="deleted")
+        queue_project_assets_change(db, user_id=current_user.id, project_id=project_id, action="deleted")
     scrubbed_after = snapshot_rows(
         db.query(Asset)
         .filter(
@@ -1255,6 +1276,7 @@ async def set_main_asset(
     link.is_main = True
     queue_object_change(
         db,
+        user_id=current_user.id,
         project_id=project_id,
         object_type=object_type,
         object_id=object_id,
@@ -1262,6 +1284,7 @@ async def set_main_asset(
     )
     queue_story_object_assets_change(
         db,
+        user_id=current_user.id,
         project_id=project_id,
         object_type=object_type,
         object_id=object_id,

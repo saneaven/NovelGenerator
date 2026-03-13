@@ -7,8 +7,7 @@ import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import type { ObjectEditInput } from '../../llmTaskJourney/journeySpecs';
 import type { JourneySpec } from '../../llmTaskJourney/types';
 import { useJourneyStore } from '../../store/journeyStore';
-import { threadService } from '../../api/threadService';
-import { sendThreadMessage } from '../../runtime/threadCommands';
+import { journeyService } from '../../api/journeyService';
 import { Document } from '../icons';
 import { ObjectPicker } from '../ObjectPicker';
 import { TextButton } from '../TextButton';
@@ -172,33 +171,16 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     });
 
     try {
-      const created = await threadService.createJourneyThread(
-        projectId,
-        journeyKind,
-        {
-          notificationLabel: spec.label(inputPayload),
-          notificationMeta: {
-            journey_kind: journeyKind,
-            project_id: projectId,
-            entry_input: trimmedRequest,
-            target_language: null,
-            target_ids: [targetId],
-          },
-        },
-      );
-      useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
-      await sendThreadMessage({
-        threadId: created.thread_id,
-        projectId,
-        threadType: 'journey',
-        inputText: trimmedRequest,
-        request: {
-          input_payload: inputPayload,
-          surface: 'story-object',
-          journey_target_ids: [targetId],
-          context_object_ids: selectedContextIds,
-        },
+      const created = await journeyService.create(projectId, {
+        kind: journeyKind,
+        display_label: spec.label(inputPayload),
+        input_text: trimmedRequest,
+        input_payload: inputPayload,
+        surface: 'story-object',
+        journey_target_ids: [targetId],
+        context_object_ids: selectedContextIds,
       });
+      useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
     } catch (error: any) {
       useJourneyStore.getState().updateJourney(journeyId, {
         error: error?.message ?? 'Failed to start AI edit journey',

@@ -42,13 +42,13 @@ class ToolEngineService:
         thread: Thread,
         user_id: UUID,
     ) -> tuple[set[str] | None, set[UUID] | None]:
-        if thread.thread_type != "subAgent" or thread.owner_id is None:
+        if thread.thread_type != "subAgent":
             return None, None
 
         definition = (
             db.query(SubAgentDefinitionModel)
             .filter(
-                SubAgentDefinitionModel.id == thread.owner_id,
+                SubAgentDefinitionModel.id == thread.parent_id,
                 SubAgentDefinitionModel.user_id == user_id,
                 SubAgentDefinitionModel.enabled == True,  # noqa: E712
             )
@@ -144,6 +144,7 @@ class ToolEngineService:
             project_id=uuid4(),
             user_id=user_id,
             thread_type="agent",
+            parent_id=uuid4(),
             status="waiting",
         )
         run = RunModel(
@@ -455,6 +456,7 @@ class ToolEngineService:
         db.commit()
 
         await emit(
+            user_id=parent_run.user_id,
             project_id=parent_thread.project_id,
             thread_id=parent_thread.id,
             event_name="tool_call:status",
@@ -470,6 +472,7 @@ class ToolEngineService:
             },
         )
         await emit(
+            user_id=parent_run.user_id,
             project_id=parent_thread.project_id,
             thread_id=parent_thread.id,
             event_name="run:status",

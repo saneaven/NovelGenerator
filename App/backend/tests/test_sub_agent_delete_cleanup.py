@@ -50,6 +50,37 @@ def _install_import_stubs() -> None:
     fake_settings_service.settings_service = SimpleNamespace(_get_settings=lambda *_args, **_kwargs: SimpleNamespace())
     sys.modules["App.backend.services.settings_service"] = fake_settings_service
 
+    fake_storage_usage_service = types.ModuleType("App.backend.services.storage_usage_service")
+
+    class _FakeDelta:
+        def __init__(self, *, chat_bytes: int = 0, image_run_bytes: int = 0, notification_bytes: int = 0) -> None:
+            self.chat_bytes = chat_bytes
+            self.image_run_bytes = image_run_bytes
+            self.notification_bytes = notification_bytes
+
+    class StorageQuotaExceededError(Exception):
+        pass
+
+    fake_storage_usage_service.StorageQuotaExceededError = StorageQuotaExceededError
+    fake_storage_usage_service.StorageUsageDelta = _FakeDelta
+    fake_storage_usage_service.apply_project_usage_delta = lambda *_args, **_kwargs: None
+    fake_storage_usage_service.apply_project_usage_deltas = lambda *_args, **_kwargs: None
+    fake_storage_usage_service.build_image_run_delta = lambda *_args, **_kwargs: _FakeDelta(image_run_bytes=-1)
+    fake_storage_usage_service.build_notification_delta = lambda *_args, **_kwargs: _FakeDelta(notification_bytes=-1)
+    fake_storage_usage_service.build_run_delta = lambda *_args, **_kwargs: _FakeDelta(chat_bytes=-1)
+    fake_storage_usage_service.build_run_message_delta = lambda *_args, **_kwargs: _FakeDelta(chat_bytes=-1)
+    fake_storage_usage_service.build_run_message_attachment_delta = lambda *_args, **_kwargs: _FakeDelta(chat_bytes=-1)
+    fake_storage_usage_service.build_thread_delta = lambda *_args, **_kwargs: _FakeDelta(chat_bytes=-1)
+    fake_storage_usage_service.build_tool_call_delta = lambda *_args, **_kwargs: _FakeDelta(chat_bytes=-1)
+    fake_storage_usage_service.snapshot_image_run_row = lambda row: row
+    fake_storage_usage_service.snapshot_notification_row = lambda row: row
+    fake_storage_usage_service.snapshot_run_message_attachment_row = lambda row: row
+    fake_storage_usage_service.snapshot_run_message_row = lambda row: row
+    fake_storage_usage_service.snapshot_run_row = lambda row: row
+    fake_storage_usage_service.snapshot_thread_row = lambda row: row
+    fake_storage_usage_service.snapshot_tool_call_row = lambda row: row
+    sys.modules["App.backend.services.storage_usage_service"] = fake_storage_usage_service
+
     fake_template_engine = types.ModuleType("App.backend.services.template_engine")
 
     class FragmentNotFoundError(RuntimeError):
@@ -246,7 +277,7 @@ def test_delete_sub_agent_without_threads_commits_without_events(monkeypatch) ->
         lambda *_args, **_kwargs: applied.append((_kwargs["project_id"], list(_kwargs["deltas"]))),
     )
 
-    async def _fake_emit_project_event(*, project_id: object, event_name: str, data: dict[str, object]) -> None:
+    async def _fake_emit_project_event(*, user_id: object, project_id: object, event_name: str, data: dict[str, object]) -> None:
         emitted.append((event_name, data))
 
     monkeypatch.setattr(sub_agent_routes.runtime_event_dispatcher, "emit_project_event", _fake_emit_project_event)
@@ -321,7 +352,7 @@ def test_delete_sub_agent_cleans_threads_across_projects_and_emits_grouped_event
     async def _fake_cancel_run_for_delete(*, thread_id: object, user_id: object) -> None:
         operations.append(("cancel", thread_id))
 
-    async def _fake_emit_project_event(*, project_id: object, event_name: str, data: dict[str, object]) -> None:
+    async def _fake_emit_project_event(*, user_id: object, project_id: object, event_name: str, data: dict[str, object]) -> None:
         emitted.append((event_name, data))
 
     monkeypatch.setattr(sub_agent_routes.run_pipeline, "cancel_run_for_delete", _fake_cancel_run_for_delete)

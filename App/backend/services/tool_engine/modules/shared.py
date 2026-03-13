@@ -4,6 +4,7 @@ from typing import Any
 
 from ..contexts import ToolModuleContext
 from ..contracts import ToolSpec
+from ...thread_parent_runtime_service import resolve_parent
 
 
 def obj_schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -28,7 +29,7 @@ def is_non_journey(ctx: ToolModuleContext) -> bool:
 
 
 def journey_kind(ctx: ToolModuleContext) -> str:
-    return str(ctx.thread.journey_kind or "").strip()
+    return str(resolve_parent(ctx.db, ctx.thread).journey_kind or "").strip()
 
 
 def is_story_object_journey(ctx: ToolModuleContext) -> bool:

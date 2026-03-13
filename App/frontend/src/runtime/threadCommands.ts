@@ -79,7 +79,7 @@ function upsertThreadStatus(params: {
     id: params.threadId,
     projectId: params.projectId,
     threadType: toThreadType(params.threadType ?? 'agent'),
-    ownerId: null,
+    parentId: null,
     journeyKind: null,
     status: params.status,
     lastError: params.error,

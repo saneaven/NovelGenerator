@@ -75,15 +75,29 @@ def _install_import_stubs() -> None:
     class StorageQuotaExceededError(Exception):
         pass
 
+    @dataclass(frozen=True)
+    class _FakeDelta:
+        chat_bytes: int = 0
+        image_run_bytes: int = 0
+        notification_bytes: int = 0
+
     fake_storage_usage_service.StorageQuotaExceededError = StorageQuotaExceededError
+    fake_storage_usage_service.StorageUsageDelta = _FakeDelta
+    fake_storage_usage_service.apply_project_usage_delta = lambda *_args, **_kwargs: None
     fake_storage_usage_service.apply_project_usage_deltas = lambda *_args, **_kwargs: None
-    fake_storage_usage_service.build_run_delta = lambda *_args, **_kwargs: None
-    fake_storage_usage_service.build_run_message_delta = lambda *_args, **_kwargs: None
-    fake_storage_usage_service.build_run_message_attachment_delta = lambda *_args, **_kwargs: None
-    fake_storage_usage_service.build_tool_call_delta = lambda *_args, **_kwargs: None
+    fake_storage_usage_service.build_image_run_delta = lambda *_args, **_kwargs: _FakeDelta(image_run_bytes=-1)
+    fake_storage_usage_service.build_notification_delta = lambda *_args, **_kwargs: _FakeDelta(notification_bytes=-1)
+    fake_storage_usage_service.build_run_delta = lambda *_args, **_kwargs: _FakeDelta(chat_bytes=-1)
+    fake_storage_usage_service.build_run_message_delta = lambda *_args, **_kwargs: _FakeDelta(chat_bytes=-1)
+    fake_storage_usage_service.build_thread_delta = lambda *_args, **_kwargs: _FakeDelta(chat_bytes=-1)
+    fake_storage_usage_service.build_run_message_attachment_delta = lambda *_args, **_kwargs: _FakeDelta(chat_bytes=-1)
+    fake_storage_usage_service.build_tool_call_delta = lambda *_args, **_kwargs: _FakeDelta(chat_bytes=-1)
+    fake_storage_usage_service.snapshot_image_run_row = lambda *_args, **_kwargs: None
+    fake_storage_usage_service.snapshot_notification_row = lambda *_args, **_kwargs: None
     fake_storage_usage_service.snapshot_run_message_attachment_row = lambda *_args, **_kwargs: None
     fake_storage_usage_service.snapshot_run_message_row = lambda *_args, **_kwargs: None
     fake_storage_usage_service.snapshot_run_row = lambda *_args, **_kwargs: None
+    fake_storage_usage_service.snapshot_thread_row = lambda *_args, **_kwargs: None
     fake_storage_usage_service.snapshot_tool_call_row = lambda *_args, **_kwargs: None
     sys.modules["App.backend.services.storage_usage_service"] = fake_storage_usage_service
 
@@ -213,6 +227,9 @@ class FakeSession:
     def commit(self) -> None:
         self.commits += 1
 
+    def flush(self) -> None:
+        return None
+
     def close(self) -> None:
         self.closed = True
 
@@ -230,12 +247,14 @@ class FakeEventDispatcher:
     async def emit_runtime_event(
         self,
         *,
+        user_id: object,
         project_id: object,
         thread_id: object,
         event_name: str,
         data: dict[str, object],
     ) -> dict[str, object]:
         event = {
+            "user_id": str(user_id),
             "project_id": str(project_id),
             "thread_id": str(thread_id),
             "event_name": event_name,
@@ -286,6 +305,8 @@ class FakeActiveRunQuery:
             return self._db.run
         if self._model is Thread:
             return self._db.thread
+        if getattr(self._model, "__name__", "") == "SubAgentDefinitionModel":
+            return None
         raise AssertionError(f"Unexpected model query: {self._model!r}")
 
 
@@ -301,6 +322,9 @@ class FakeActiveRunDb:
 
     def commit(self) -> None:
         self.commits += 1
+
+    def flush(self) -> None:
+        return None
 
     def close(self) -> None:
         self.closed += 1
@@ -809,8 +833,8 @@ def test_pause_run_marks_sub_agent_paused_without_parent_completion(monkeypatch:
         canceled_run_ids.append(run_id)
         return True
 
-    async def _fake_emit(*, project_id: object, thread_id: object, event_name: str, data: dict[str, object]) -> None:
-        _ = project_id, thread_id
+    async def _fake_emit(*, user_id: object, project_id: object, thread_id: object, event_name: str, data: dict[str, object]) -> None:
+        _ = user_id, project_id, thread_id
         emitted.append((event_name, data))
 
     async def _fake_complete_parent_tool_call(*args: object, **kwargs: object) -> None:
@@ -825,7 +849,7 @@ def test_pause_run_marks_sub_agent_paused_without_parent_completion(monkeypatch:
     assert run.status == "paused"
     assert thread.status == "paused"
     assert canceled_run_ids == [run.id]
-    assert emitted == [("run:status", {"run_id": str(run.id), "status": "paused"})]
+    assert emitted == [("run:status", {"run_id": str(run.id), "status": "paused", "error": None})]
     assert parent_calls == []
 
 
@@ -857,8 +881,8 @@ def test_cancel_run_allows_paused_and_propagates_parent_completion(monkeypatch: 
         _ = timeout_s
         return True
 
-    async def _fake_emit(*, project_id: object, thread_id: object, event_name: str, data: dict[str, object]) -> None:
-        _ = project_id, thread_id
+    async def _fake_emit(*, user_id: object, project_id: object, thread_id: object, event_name: str, data: dict[str, object]) -> None:
+        _ = user_id, project_id, thread_id
         emitted.append((event_name, data))
 
     async def _fake_complete_parent_tool_call(_db: object, *, thread: object, run: object, emit: object) -> None:
@@ -879,8 +903,8 @@ def test_cancel_run_allows_paused_and_propagates_parent_completion(monkeypatch: 
     assert run.status == "canceled"
     assert thread.status == "canceled"
     assert emitted == [
+        ("run:status", {"run_id": str(run.id), "status": "canceled", "error": None}),
         ("run:canceled", {"run_id": str(run.id)}),
-        ("run:status", {"run_id": str(run.id), "status": "canceled"}),
     ]
     assert parent_calls == [{"thread_status": "canceled", "run_status": "canceled"}]
 

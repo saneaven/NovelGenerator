@@ -159,6 +159,7 @@ async def create_project(
 
     queue_object_change(
         db,
+        user_id=current_user.id,
         project_id=project_id,
         object_type="basic_info",
         object_id=basic_info_id,
@@ -166,6 +167,7 @@ async def create_project(
     )
     queue_object_change(
         db,
+        user_id=current_user.id,
         project_id=project_id,
         object_type="guidelines",
         object_id=guidelines_id,

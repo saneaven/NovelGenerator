@@ -88,7 +88,7 @@ export interface ThreadState {
   setAutoContinuePaused: (threadId: string, paused: boolean) => void;
   isAutoContinuePaused: (threadId: string) => boolean;
 
-  findThreadByOwner: (projectId: string, ownerId: string) => ThreadInfo | undefined;
+  findThreadByParent: (projectId: string, parentId: string) => ThreadInfo | undefined;
 
   clearAll: () => void;
 }
@@ -762,10 +762,10 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
 
   isAutoContinuePaused: (threadId) => Boolean(get().autoContinuePausedByThread[threadId]),
 
-  findThreadByOwner: (projectId, ownerId) => {
+  findThreadByParent: (projectId, parentId) => {
     for (const thread of Object.values(get().threadsById)) {
       if (!thread) continue;
-      if (thread.projectId === projectId && thread.ownerId === ownerId) return thread;
+      if (thread.projectId === projectId && thread.parentId === parentId) return thread;
     }
     return undefined;
   },

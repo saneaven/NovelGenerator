@@ -42,10 +42,18 @@ function toCustomSlot(value: NotificationServerDTO['custom_slot']): Notification
 function toEntry(dto: NotificationServerDTO): NotificationEntry {
   return {
     id: String(dto.id),
-    projectId: String(dto.project_id),
-    source: dto.source,
-    sourceRefId: String(dto.source_ref_id),
-    threadId: dto.thread_id ? String(dto.thread_id) : null,
+    projectId: dto.project_id ? String(dto.project_id) : null,
+    source: {
+      kind: dto.source.kind,
+      id: String(dto.source.id),
+    },
+    target: {
+      kind: dto.target?.kind ?? 'none',
+      project_id: dto.target?.project_id ? String(dto.target.project_id) : null,
+      thread_id: dto.target?.thread_id ? String(dto.target.thread_id) : null,
+      journey_id: dto.target?.journey_id ? String(dto.target.journey_id) : null,
+    },
+    important: Boolean(dto.important),
     status: dto.status,
     label: String(dto.label || 'Notification'),
     message: String(dto.message || ''),
@@ -197,8 +205,11 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
     Object.values(get().notifications)
       .filter((entry): entry is NotificationEntry => entry !== undefined)
       .sort((a, b) => {
+        if (a.important !== b.important) return Number(b.important) - Number(a.important);
+        if (a.isRead !== b.isRead) return Number(a.isRead) - Number(b.isRead);
         if (a.updatedAt !== b.updatedAt) return b.updatedAt - a.updatedAt;
-        return b.createdAt - a.createdAt;
+        if (a.createdAt !== b.createdAt) return b.createdAt - a.createdAt;
+        return b.id.localeCompare(a.id);
       }),
 
   hasUnread: () =>

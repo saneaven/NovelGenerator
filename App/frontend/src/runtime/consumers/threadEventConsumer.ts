@@ -63,7 +63,6 @@ function pickExistingReasoningDetail(message: ThreadMessage): ReasoningDetail | 
 }
 
 export class ThreadEventConsumer {
-  private readonly projectId: string;
   private readonly streamingToolCallsByThread = new Map<string, Map<number, string>>();
   private readonly streamingArgBuffers = new Map<string, string>();
   private readonly autoContinueLockByThread = new Set<string>();
@@ -79,9 +78,7 @@ export class ThreadEventConsumer {
   private static readonly DELTA_FLUSH_INTERVAL_MS = 80;
   private disposed = false;
 
-  constructor(projectId: string) {
-    this.projectId = projectId;
-  }
+  constructor() {}
 
   dispose(): void {
     this.disposed = true;
@@ -105,13 +102,16 @@ export class ThreadEventConsumer {
       if (partial) store.patchThread(threadId, partial);
       return;
     }
+    const projectId = partial?.projectId;
+    if (!projectId) return;
 
     store.upsertThread({
       id: threadId,
-      projectId: this.projectId,
+      projectId,
       threadType: toThreadType(String(partial?.threadType ?? 'agent')),
-      ownerId: null,
+      parentId: null,
       journeyKind: null,
+      displayLabel: partial?.displayLabel ?? null,
       status: partial?.status ?? 'running',
       lastError: partial?.lastError ?? null,
       updatedAt: partial?.updatedAt ?? nowIso(),
@@ -162,22 +162,26 @@ export class ThreadEventConsumer {
 
   private patchThreadFromRunStatus(threadId: string, status: ThreadStatus, error: string | null, payload: Record<string, unknown>): void {
     const store = useThreadStore.getState();
+    const existing = store.threadsById[threadId];
+    const projectId = payload.project_id ? String(payload.project_id) : existing?.projectId;
     const partial: Partial<ThreadInfo> = {
       status,
       lastError: error,
       updatedAt: String(payload.ts ?? nowIso()),
       latestRunId: payload.run_id ? String(payload.run_id) : null,
       latestRunStatus: status,
+      ...(payload.display_label ? { displayLabel: String(payload.display_label) } : {}),
     };
-    const existing = store.threadsById[threadId];
 
     if (!existing) {
+      if (!projectId) return;
       store.upsertThread({
         id: threadId,
-        projectId: this.projectId,
+        projectId,
         threadType: toThreadType(String(payload.thread_type ?? 'agent')),
-        ownerId: null,
+        parentId: null,
         journeyKind: null,
+        displayLabel: payload.display_label ? String(payload.display_label) : null,
         status,
         lastError: error,
         updatedAt: String(payload.ts ?? nowIso()),
@@ -595,7 +599,6 @@ export class ThreadEventConsumer {
   async consume(event: ThreadRuntimeEvent): Promise<void> {
     if (this.disposed) return;
     const payload = (event.data ?? {}) as Record<string, unknown>;
-    if (payload.project_id && String(payload.project_id) !== this.projectId) return;
 
     if (event.event === 'thread:delete') {
       const threadId = payload.id ? String(payload.id) : '';
@@ -642,9 +645,13 @@ export class ThreadEventConsumer {
 
     const threadPartial: Partial<ThreadInfo> = {
       latestRunId: payload.run_id ? String(payload.run_id) : null,
+      ...(payload.project_id ? { projectId: String(payload.project_id) } : {}),
     };
     if (payload.thread_type) {
       threadPartial.threadType = toThreadType(String(payload.thread_type));
+    }
+    if (payload.display_label) {
+      threadPartial.displayLabel = String(payload.display_label);
     }
     this.ensureThread(threadId, threadPartial);
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -8,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import get_db
-from ..models.db_models import User
+from ..models.db_models import NotificationModel, User
 from ..schemas.notifications import (
     DeleteAllNotificationsRequest,
     DeleteAllNotificationsResponse,
@@ -18,19 +17,15 @@ from ..schemas.notifications import (
     NotificationResponse,
 )
 from ..services.notification_service import (
-    ACTIVE_THREAD_DELETE_STATUSES,
-    NOTIFICATION_SOURCE_VALUES,
-    NotificationDeleteTarget,
+    NOTIFICATION_SOURCE_KIND_VALUES,
     collect_notification_delete_deltas,
-    delete_notification_targets,
+    delete_notifications,
     get_notifications_by_ids,
-    list_notification_delete_targets,
     list_notifications,
     mark_notifications_read,
     serialize_notification,
 )
 from ..services.ownership import require_owned_project
-from ..services.run_pipeline import run_pipeline
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..services.storage_usage_service import apply_project_usage_deltas
 
@@ -38,48 +33,33 @@ from ..services.storage_usage_service import apply_project_usage_deltas
 router = APIRouter(prefix="/api/v1", tags=["notifications"])
 
 
-async def _cancel_linked_journey_threads_for_delete(
-    *,
-    targets: Iterable[NotificationDeleteTarget],
-    user_id: UUID,
-) -> None:
-    seen: set[UUID] = set()
-    for target in targets:
-        thread_id = target.linked_thread_id
-        if (
-            thread_id is None
-            or thread_id in seen
-            or target.linked_thread_status not in ACTIVE_THREAD_DELETE_STATUSES
-        ):
-            continue
-        seen.add(thread_id)
-        await run_pipeline.cancel_run_for_delete(thread_id=thread_id, user_id=user_id)
-
-
-@router.get("/projects/{project_id}/notifications", response_model=NotificationListResponse)
-async def get_project_notifications(
-    project_id: UUID,
+@router.get("/notifications", response_model=NotificationListResponse)
+async def get_notifications(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     include_read: bool = Query(True),
-    source: str | None = Query(None),
+    kind: str | None = Query(None),
+    project_id: UUID | None = Query(None),
+    important: bool | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    require_owned_project(db, project_id=project_id, user_id=current_user.id)
+    if project_id is not None:
+        require_owned_project(db, project_id=project_id, user_id=current_user.id)
 
-    normalized_source = str(source).strip() if source is not None else None
-    if normalized_source is not None and normalized_source not in NOTIFICATION_SOURCE_VALUES:
-        raise HTTPException(status_code=422, detail=f"Unsupported source: {normalized_source}")
+    normalized_kind = str(kind).strip() if kind is not None else None
+    if normalized_kind is not None and normalized_kind not in NOTIFICATION_SOURCE_KIND_VALUES:
+        raise HTTPException(status_code=422, detail=f"Unsupported kind: {normalized_kind}")
 
     rows, total = list_notifications(
         db,
         user_id=current_user.id,
-        project_id=project_id,
         limit=limit,
         offset=offset,
         include_read=include_read,
-        source=normalized_source,
+        kind=normalized_kind,
+        project_id=project_id,
+        important=important,
     )
 
     return NotificationListResponse(
@@ -88,19 +68,15 @@ async def get_project_notifications(
     )
 
 
-@router.patch("/projects/{project_id}/notifications/read", response_model=MarkNotificationsReadResponse)
-async def mark_project_notifications_read(
-    project_id: UUID,
+@router.patch("/notifications/read", response_model=MarkNotificationsReadResponse)
+async def mark_user_notifications_read(
     payload: MarkNotificationsReadRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    require_owned_project(db, project_id=project_id, user_id=current_user.id)
-
     updated_ids = mark_notifications_read(
         db,
         user_id=current_user.id,
-        project_id=project_id,
         notification_ids=payload.notification_ids,
         mark_all=payload.mark_all,
     )
@@ -110,135 +86,105 @@ async def mark_project_notifications_read(
         rows = get_notifications_by_ids(
             db,
             user_id=current_user.id,
-            project_id=project_id,
             notification_ids=updated_ids,
         )
         for row in rows:
-            await runtime_event_dispatcher.emit_project_event(
-                project_id=project_id,
+            await runtime_event_dispatcher.emit_user_event(
+                user_id=current_user.id,
                 event_name="notification:upsert",
                 data=serialize_notification(row),
+                project_id=row.project_id,
             )
 
     return MarkNotificationsReadResponse(updated=len(updated_ids), ids=updated_ids)
 
 
-@router.delete("/projects/{project_id}/notifications/{notification_id}", status_code=204)
-async def delete_project_notification(
-    project_id: UUID,
+@router.delete("/notifications/{notification_id}", status_code=204)
+async def delete_notification(
     notification_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    require_owned_project(db, project_id=project_id, user_id=current_user.id)
-
-    targets = list_notification_delete_targets(
+    rows = get_notifications_by_ids(
         db,
         user_id=current_user.id,
-        project_id=project_id,
-        notification_id=notification_id,
+        notification_ids=[notification_id],
     )
-    if not targets:
+    if not rows:
         raise HTTPException(status_code=404, detail="Notification not found")
 
-    await _cancel_linked_journey_threads_for_delete(targets=targets, user_id=current_user.id)
-    db.expire_all()
-
-    deltas = collect_notification_delete_deltas(
+    deltas_by_project = collect_notification_delete_deltas(
         db,
         user_id=current_user.id,
-        project_id=project_id,
-        targets=targets,
+        notification_ids=[notification_id],
     )
-    deleted_ids, deleted_thread_ids = delete_notification_targets(
+    deleted_rows = delete_notifications(
         db,
         user_id=current_user.id,
-        project_id=project_id,
-        targets=targets,
+        notification_ids=[notification_id],
     )
-    if not deleted_ids:
+    if not deleted_rows:
         raise HTTPException(status_code=404, detail="Notification not found")
 
-    target = targets[0]
-    payload = {
-        "id": deleted_ids[0],
-        "source": target.source,
-        "source_ref_id": target.source_ref_id,
-    }
-    apply_project_usage_deltas(
-        db,
-        user_id=current_user.id,
-        project_id=project_id,
-        deltas=deltas,
-        enforce_quota=False,
-    )
+    for project_id, deltas in deltas_by_project.items():
+        apply_project_usage_deltas(
+            db,
+            user_id=current_user.id,
+            project_id=project_id,
+            deltas=deltas,
+            enforce_quota=False,
+        )
     db.commit()
 
-    await runtime_event_dispatcher.emit_project_event(
-        project_id=project_id,
+    deleted = deleted_rows[0]
+    await runtime_event_dispatcher.emit_user_event(
+        user_id=current_user.id,
         event_name="notification:delete",
-        data=payload,
+        data={"id": deleted.id},
+        project_id=deleted.project_id,
     )
-    if deleted_thread_ids:
-        await runtime_event_dispatcher.emit_project_event(
-            project_id=project_id,
-            event_name="thread:delete",
-            data={"id": deleted_thread_ids[0]},
-        )
 
     return Response(status_code=204)
 
 
-@router.post("/projects/{project_id}/notifications/delete-all", response_model=DeleteAllNotificationsResponse)
-async def delete_all_project_notifications(
-    project_id: UUID,
+@router.post("/notifications/delete-all", response_model=DeleteAllNotificationsResponse)
+async def delete_all_notifications(
     payload: DeleteAllNotificationsRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    require_owned_project(db, project_id=project_id, user_id=current_user.id)
-
-    targets = list_notification_delete_targets(
+    q = db.query(NotificationModel).filter(NotificationModel.user_id == current_user.id)
+    if payload.only_read:
+        q = q.filter(NotificationModel.is_read == True)  # noqa: E712
+    target_ids = [row.id for row in q.all()]
+    deltas_by_project = collect_notification_delete_deltas(
         db,
         user_id=current_user.id,
-        project_id=project_id,
+        notification_ids=target_ids,
+    )
+    deleted_rows = delete_notifications(
+        db,
+        user_id=current_user.id,
+        notification_ids=target_ids,
         only_read=payload.only_read,
     )
-    await _cancel_linked_journey_threads_for_delete(targets=targets, user_id=current_user.id)
-    db.expire_all()
 
-    deltas = collect_notification_delete_deltas(
-        db,
-        user_id=current_user.id,
-        project_id=project_id,
-        targets=targets,
-    )
-    deleted_ids, deleted_thread_ids = delete_notification_targets(
-        db,
-        user_id=current_user.id,
-        project_id=project_id,
-        targets=targets,
-    )
-    apply_project_usage_deltas(
-        db,
-        user_id=current_user.id,
-        project_id=project_id,
-        deltas=deltas,
-        enforce_quota=False,
-    )
+    for project_id, deltas in deltas_by_project.items():
+        apply_project_usage_deltas(
+            db,
+            user_id=current_user.id,
+            project_id=project_id,
+            deltas=deltas,
+            enforce_quota=False,
+        )
     db.commit()
 
+    deleted_ids = [row.id for row in deleted_rows]
     if deleted_ids:
-        await runtime_event_dispatcher.emit_project_event(
-            project_id=project_id,
+        await runtime_event_dispatcher.emit_user_event(
+            user_id=current_user.id,
             event_name="notification:bulk_delete",
             data={"ids": deleted_ids},
-        )
-    if deleted_thread_ids:
-        await runtime_event_dispatcher.emit_project_event(
-            project_id=project_id,
-            event_name="thread:bulk_delete",
-            data={"ids": deleted_thread_ids},
         )
 
     return DeleteAllNotificationsResponse(deleted=len(deleted_ids), ids=deleted_ids)
