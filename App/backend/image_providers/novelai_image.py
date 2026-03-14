@@ -2,21 +2,12 @@
 import base64
 import io
 import zipfile
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 
 from .base import BaseImageProvider, ImageGenerationResult, ReferenceImageData
 from .registry import ImageProviderRegistry
-
-
-# Default negative prompt for anime generation
-DEFAULT_NEGATIVE_PROMPT = (
-    "lowres, {bad}, error, fewer, extra, missing, worst quality, "
-    "jpeg artifacts, bad quality, watermark, unfinished, displeasing, "
-    "chromatic aberration, signature, extra digits, artistic error, "
-    "username, scan, [abstract]"
-)
 
 
 @ImageProviderRegistry.register
@@ -190,8 +181,7 @@ class NovelAIImageProvider(BaseImageProvider):
                 error="Positive prompt is required for NovelAI image generation."
             )
 
-        # Use provided negative prompt or default
-        final_negative = negative_prompt if negative_prompt is not None else DEFAULT_NEGATIVE_PROMPT
+        final_negative = negative_prompt or ""
 
         # Parse size
         try:
@@ -219,45 +209,46 @@ class NovelAIImageProvider(BaseImageProvider):
         if has_reference and reference_mode == "i2i":
             action = "img2img"
 
+        parameters: dict[str, Any] = {
+            "params_version": 3,
+            "width": width,
+            "height": height,
+            "scale": scale,
+            "sampler": sampler,
+            "steps": steps,
+            "n_samples": 1,
+            "noise_schedule": noise_schedule,
+            "legacy": False,
+            "add_original_image": True,
+            "cfg_rescale": 0,
+            "dynamic_thresholding": False,
+            "sm": False,
+            "sm_dyn": False,
+            "v4_prompt": {
+                "caption": {
+                    "base_caption": final_positive,
+                    "char_captions": []
+                },
+                "use_coords": False,
+                "use_order": True
+            },
+        }
+        if final_negative.strip():
+            parameters["negative_prompt"] = final_negative
+            parameters["v4_negative_prompt"] = {
+                "caption": {
+                    "base_caption": final_negative,
+                    "char_captions": []
+                },
+                "use_coords": False,
+                "use_order": True
+            }
+
         payload = {
             "input": final_positive,
             "model": model,
             "action": action,
-            "parameters": {
-                "params_version": 3,
-                "width": width,
-                "height": height,
-                "scale": scale,
-                "sampler": sampler,
-                "steps": steps,
-                "n_samples": 1,
-                "negative_prompt": final_negative,
-                "qualityToggle": True,
-                "ucPreset": 0,
-                "noise_schedule": noise_schedule,
-                "legacy": False,
-                "add_original_image": True,
-                "cfg_rescale": 0,
-                "dynamic_thresholding": False,
-                "sm": False,
-                "sm_dyn": False,
-                "v4_prompt": {
-                    "caption": {
-                        "base_caption": final_positive,
-                        "char_captions": []
-                    },
-                    "use_coords": False,
-                    "use_order": True
-                },
-                "v4_negative_prompt": {
-                    "caption": {
-                        "base_caption": final_negative,
-                        "char_captions": []
-                    },
-                    "use_coords": False,
-                    "use_order": True
-                }
-            }
+            "parameters": parameters,
         }
 
         # Add reference image parameters based on mode
