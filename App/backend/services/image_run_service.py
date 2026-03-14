@@ -213,17 +213,17 @@ def _provider_template(provider_name: str) -> BaseImageProvider:
     return ImageProviderRegistry.get_provider(provider_name, {})
 
 
-def _find_style(config: ImageGenConfig) -> dict[str, Any] | None:
+def _selected_style(config: ImageGenConfig) -> tuple[str | None, dict[str, Any] | None]:
     provider = config.provider
     if provider == "novelai":
         selected_id = config.selectedTagBasedStyleId
         if not selected_id:
-            return None
-        return next((style.model_dump() for style in config.tagBasedStyles if style.id == selected_id), None)
+            return None, None
+        return selected_id, next((style.model_dump() for style in config.tagBasedStyles if style.id == selected_id), None)
     selected_id = config.selectedNaturalStyleId
     if not selected_id:
-        return None
-    return next((style.model_dump() for style in config.naturalStyles if style.id == selected_id), None)
+        return None, None
+    return selected_id, next((style.model_dump() for style in config.naturalStyles if style.id == selected_id), None)
 
 
 def _build_tool_recipe_snapshot(
@@ -237,7 +237,8 @@ def _build_tool_recipe_snapshot(
     provider_name = config.provider
     provider = _provider_template(provider_name)
     prompt_type = provider.get_prompt_type()
-    style = _find_style(config) or {}
+    style_id, style = _selected_style(config)
+    style = style or {}
 
     prompt_payload: StyledPrompt | None = None
     positive_payload: StyledPrompt | None = None
@@ -282,6 +283,7 @@ def _build_tool_recipe_snapshot(
         "model": config.model,
         "requested_aspect_ratio": requested_aspect_ratio,
         "requested_image_size": str(requested_image_size or config.image_size).strip() or config.image_size,
+        "style_id": style_id,
         "prompt": _styled_prompt_to_dict(prompt_payload),
         "positive_prompt": _styled_prompt_to_dict(positive_payload),
         "negative_prompt": _styled_prompt_to_dict(negative_payload),
@@ -1068,6 +1070,7 @@ class ImageRunService:
             generation_negative_prompt=_styled_prompt_to_dict(negative_prompt),
             generation_provider=str(recipe.get("provider") or ""),
             generation_model=str(recipe.get("model") or ""),
+            generation_style_id=str(recipe.get("style_id") or "") or None,
             generation_settings=sanitize_generation_settings(
                 str(recipe.get("provider") or ""),
                 recipe.get("provider_settings"),

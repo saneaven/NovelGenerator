@@ -103,7 +103,7 @@ def merge_openai_tool_call_deltas(target: List[Any], source: List[Any]) -> None:
             by_id[call_id] = call
         call_index = _tool_call_index(call.get("index"))
         if call_index is not None:
-            by_index[call_index] = call
+            by_index.setdefault(call_index, call)
 
     for existing in target:
         if isinstance(existing, dict):
@@ -120,7 +120,12 @@ def merge_openai_tool_call_deltas(target: List[Any], source: List[Any]) -> None:
         existing_call = None
         if incoming_id is not None:
             existing_call = by_id.get(incoming_id)
-        if existing_call is None and incoming_index is not None:
+            if existing_call is None and incoming_index is not None:
+                candidate = by_index.get(incoming_index)
+                candidate_id = _tool_call_id(candidate.get("id")) if isinstance(candidate, dict) else None
+                if candidate is not None and candidate_id is None:
+                    existing_call = candidate
+        elif incoming_index is not None:
             existing_call = by_index.get(incoming_index)
 
         if existing_call is None:

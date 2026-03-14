@@ -43,6 +43,7 @@ export interface Asset {
     generation_negative_prompt: StyledPrompt | null;  // Negative prompt for tag-based (NovelAI)
     generation_provider: string | null;
     generation_model: string | null;
+    generation_style_id: string | null;
     generation_settings: Record<string, any> | null;  // Provider-specific settings
     generation_reference_images: ReferenceImage[] | null;  // Reference images used during generation
     generation_reference_objects: ReferenceObjectData[] | null;  // Story objects referenced during generation
@@ -199,6 +200,7 @@ export interface ImageRunRecipeRequest {
     model: string;
     requested_aspect_ratio: string;
     requested_image_size: string;
+    style_id?: string | null;
     prompt?: StyledPrompt;
     positive_prompt?: StyledPrompt;
     negative_prompt?: StyledPrompt;

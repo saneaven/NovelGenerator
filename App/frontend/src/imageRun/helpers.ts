@@ -30,6 +30,7 @@ export function generationRecipeFromImageRun(run: ImageRun): ImageGenerationReci
   const promptType = recipe.prompt_type;
   const provider = recipe.provider;
   const model = recipe.model;
+  const styleId = typeof recipe.style_id === 'string' ? recipe.style_id : null;
   const requestedAspectRatio = typeof recipe.requested_aspect_ratio === 'string' && recipe.requested_aspect_ratio.trim()
     ? recipe.requested_aspect_ratio.trim()
     : (run.requested_aspect_ratio ?? '1:1');
@@ -55,7 +56,7 @@ export function generationRecipeFromImageRun(run: ImageRun): ImageGenerationReci
       imageSize: run.resolved_image_size ?? requestedImageSize,
       prompt: prompt as StyledPrompt,
       providerSettings: Object.keys(providerSettings).length > 0 ? providerSettings : undefined,
-      styleId: null,
+      styleId,
       referenceImages: Array.isArray(recipe.reference_images)
         ? recipe.reference_images
             .filter((item): item is { asset_id: string; strength: number } => (
@@ -82,7 +83,7 @@ export function generationRecipeFromImageRun(run: ImageRun): ImageGenerationReci
       positive: positive as StyledPrompt,
       negative: negative && typeof negative === 'object' && !Array.isArray(negative) ? (negative as StyledPrompt) : undefined,
       providerSettings: Object.keys(providerSettings).length > 0 ? providerSettings : undefined,
-      styleId: null,
+      styleId,
       referenceImages: Array.isArray(recipe.reference_images)
         ? recipe.reference_images
             .filter((item): item is { asset_id: string; strength: number } => (

@@ -34,6 +34,7 @@ class ImageRunRecipe(BaseModel):
     model: str
     requested_aspect_ratio: str
     requested_image_size: str
+    style_id: Optional[str] = None
     prompt: Optional[StyledPrompt] = None
     positive_prompt: Optional[StyledPrompt] = None
     negative_prompt: Optional[StyledPrompt] = None
@@ -159,6 +160,7 @@ class AssetResponse(BaseModel):
     generation_negative_prompt: Optional[StyledPrompt] = None  # Negative prompt for tag-based (NovelAI)
     generation_provider: Optional[str] = None
     generation_model: Optional[str] = None
+    generation_style_id: Optional[str] = None
     generation_settings: Optional[Dict[str, Any]] = None  # Provider-specific settings
     generation_reference_images: Optional[List[ReferenceImage]] = None  # Reference images used during generation
     generation_reference_objects: Optional[List[Dict[str, Any]]] = None  # Story objects referenced
@@ -293,6 +295,7 @@ class SceneAssetResponse(BaseModel):
     generation_negative_prompt: Optional[StyledPrompt] = None
     generation_provider: Optional[str] = None
     generation_model: Optional[str] = None
+    generation_style_id: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
     file_size: Optional[int] = None

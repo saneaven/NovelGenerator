@@ -23,6 +23,7 @@ export function recipeFromAsset(asset: Asset): ImageGenerationRecipe | null {
   const referenceImages = mapReferenceImages(asset);
   const aspectRatio = inferAspectRatio(asset);
   const imageSize = '1K';
+  const styleId = asset.generation_style_id ?? null;
 
   if (asset.generation_positive_prompt) {
     return {
@@ -34,7 +35,7 @@ export function recipeFromAsset(asset: Asset): ImageGenerationRecipe | null {
       positive: asset.generation_positive_prompt,
       negative: asset.generation_negative_prompt ?? undefined,
       providerSettings,
-      styleId: null,
+      styleId,
       referenceImages,
     };
   }
@@ -48,7 +49,7 @@ export function recipeFromAsset(asset: Asset): ImageGenerationRecipe | null {
       imageSize,
       prompt: asset.generation_prompt,
       providerSettings,
-      styleId: null,
+      styleId,
       referenceImages,
     };
   }

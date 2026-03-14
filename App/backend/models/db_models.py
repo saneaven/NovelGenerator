@@ -1230,6 +1230,7 @@ class Asset(Base):
     generation_negative_prompt = Column(JSONB, nullable=True)  # Negative prompt for tag-based (NovelAI)
     generation_provider = Column(String(50), nullable=True)  # 'openai', 'gemini', 'xai', 'novelai'
     generation_model = Column(String(100), nullable=True)
+    generation_style_id = Column(String(255), nullable=True)
     generation_settings = Column(JSONB, nullable=True)  # Provider-specific settings (sampler, steps, etc.)
     generation_reference_images = Column(JSONB, nullable=True)  # Reference images used during generation (asset_id + strength)
     generation_reference_objects = Column(JSONB, nullable=True)  # Story objects referenced during generation

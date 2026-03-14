@@ -47,6 +47,11 @@ interface ReferenceImageItem {
     missing?: boolean;
 }
 
+function normalizeSelectedStyleId<T extends { id: string }>(styles: T[], styleId: string | null | undefined): string | null {
+    if (!styleId) return null;
+    return styles.some((style) => style.id === styleId) ? styleId : null;
+}
+
 interface ImageGenerationModalProps {
     onImageGenerated?: (asset: Asset) => void;
     onClose?: () => void;
@@ -264,19 +269,25 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         if (typeof s.vibeStrength === 'number') setNovelaiVibeStrength(s.vibeStrength);
         if (typeof s.vibeInfoExtracted === 'number') setNovelaiVibeInfoExtracted(s.vibeInfoExtracted);
 
-        // Retry/regenerate prefills restore prompt content only, never affixes.
-        setSelectedNaturalStyleId(null);
-        setSelectedTagBasedStyleId(null);
-        setCustomNaturalPrefix('');
-        setCustomNaturalPostfix('');
-        setCustomPositivePrefix('');
-        setCustomPositivePostfix('');
-        setCustomNegativePrefix('');
-        setCustomNegativePostfix('');
-
         if (initialRecipe.promptType === 'natural') {
+            setSelectedNaturalStyleId(normalizeSelectedStyleId(naturalStyles, initialRecipe.styleId));
+            setSelectedTagBasedStyleId(null);
+            setCustomNaturalPrefix('');
+            setCustomNaturalPostfix('');
+            setCustomPositivePrefix('');
+            setCustomPositivePostfix('');
+            setCustomNegativePrefix('');
+            setCustomNegativePostfix('');
             setPrompt(initialRecipe.prompt.content ?? '');
         } else {
+            setSelectedTagBasedStyleId(normalizeSelectedStyleId(tagBasedStyles, initialRecipe.styleId));
+            setSelectedNaturalStyleId(null);
+            setCustomNaturalPrefix('');
+            setCustomNaturalPostfix('');
+            setCustomPositivePrefix('');
+            setCustomPositivePostfix('');
+            setCustomNegativePrefix('');
+            setCustomNegativePostfix('');
             setPositivePrompt(initialRecipe.positive.content ?? '');
             setNegativePrompt(initialRecipe.negative?.content ?? '');
             setActivePromptTab('positive');
@@ -323,7 +334,19 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         return () => {
             cancelled = true;
         };
-    }, [initialRecipe, currentProjectId]);
+    }, [initialRecipe, currentProjectId, naturalStyles, tagBasedStyles]);
+
+    useEffect(() => {
+        if (!selectedNaturalStyleId) return;
+        if (naturalStyles.some((style) => style.id === selectedNaturalStyleId)) return;
+        setSelectedNaturalStyleId(null);
+    }, [selectedNaturalStyleId, naturalStyles]);
+
+    useEffect(() => {
+        if (!selectedTagBasedStyleId) return;
+        if (tagBasedStyles.some((style) => style.id === selectedTagBasedStyleId)) return;
+        setSelectedTagBasedStyleId(null);
+    }, [selectedTagBasedStyleId, tagBasedStyles]);
 
     // Auto-load saved prompts from object metadata
     useEffect(() => {

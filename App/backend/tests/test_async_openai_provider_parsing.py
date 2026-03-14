@@ -19,6 +19,7 @@ if "openai" not in sys.modules:
     sys.modules["openai"] = fake_openai
 
 from App.backend.providers.async_openai_provider import AsyncOpenAIProvider
+from App.backend.providers.contracts import DeltaPayload, merge_openai_tool_call_deltas
 from App.backend.providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from App.backend.services.reasoning.provider_io import CustomOpenAICompletionIO
 
@@ -238,4 +239,225 @@ def test_accumulate_raw_chunk_appends_arguments_for_same_tool_call() -> None:
                 "arguments": '{"id":"char-1","type":"character"}',
             },
         }
+    ]
+
+
+def test_accumulate_raw_chunk_keeps_id_only_tool_calls_separate() -> None:
+    raw_accumulated: dict[str, object] = {}
+
+    AsyncOpenAIProvider._accumulate_raw_chunk(
+        raw_accumulated,
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_alpha",
+                                "type": "function",
+                                "function": {
+                                    "name": "translate_story_object",
+                                    "arguments": '{"id":"alpha"}',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ]
+        },
+    )
+    AsyncOpenAIProvider._accumulate_raw_chunk(
+        raw_accumulated,
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_beta",
+                                "type": "function",
+                                "function": {
+                                    "name": "translate_story_object",
+                                    "arguments": '{"id":"beta"}',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ]
+        },
+    )
+
+    choices = raw_accumulated["choices"]
+    assert isinstance(choices, list)
+    choice = choices[0]
+    assert isinstance(choice, dict)
+    delta = choice["delta"]
+    assert isinstance(delta, dict)
+    tool_calls = delta["tool_calls"]
+    assert isinstance(tool_calls, list)
+    assert tool_calls == [
+        {
+            "id": "call_alpha",
+            "type": "function",
+            "function": {
+                "name": "translate_story_object",
+                "arguments": '{"id":"alpha"}',
+            },
+        },
+        {
+            "id": "call_beta",
+            "type": "function",
+            "function": {
+                "name": "translate_story_object",
+                "arguments": '{"id":"beta"}',
+            },
+        },
+    ]
+
+
+def test_merge_openai_tool_call_deltas_does_not_merge_conflicting_ids_on_same_index() -> None:
+    target = [
+        {
+            "index": 0,
+            "id": "call_alpha",
+            "type": "function",
+            "function": {
+                "name": "translate_story_object",
+                "arguments": '{"id":"alpha"}',
+            },
+        }
+    ]
+    source = [
+        {
+            "index": 0,
+            "id": "call_beta",
+            "type": "function",
+            "function": {
+                "name": "translate_story_object",
+                "arguments": '{"id":"beta"}',
+            },
+        }
+    ]
+
+    merge_openai_tool_call_deltas(target, source)
+
+    assert target == [
+        {
+            "index": 0,
+            "id": "call_alpha",
+            "type": "function",
+            "function": {
+                "name": "translate_story_object",
+                "arguments": '{"id":"alpha"}',
+            },
+        },
+        {
+            "index": 0,
+            "id": "call_beta",
+            "type": "function",
+            "function": {
+                "name": "translate_story_object",
+                "arguments": '{"id":"beta"}',
+            },
+        },
+    ]
+
+
+def test_merge_openai_tool_call_deltas_keeps_anonymous_calls_separate() -> None:
+    target = [
+        {
+            "type": "function",
+            "function": {
+                "name": "translate_story_object",
+                "arguments": '{"id":"alpha"}',
+            },
+        }
+    ]
+    source = [
+        {
+            "type": "function",
+            "function": {
+                "name": "translate_story_object",
+                "arguments": '{"id":"beta"}',
+            },
+        }
+    ]
+
+    merge_openai_tool_call_deltas(target, source)
+
+    assert target == [
+        {
+            "type": "function",
+            "function": {
+                "name": "translate_story_object",
+                "arguments": '{"id":"alpha"}',
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "translate_story_object",
+                "arguments": '{"id":"beta"}',
+            },
+        },
+    ]
+
+
+def test_fallback_snapshot_assembler_uses_index_key_as_synthetic_id_when_provider_id_missing() -> None:
+    assembler = FallbackSnapshotAssembler(provider="custom", model="gemini-3-flash-preview")
+    assembler.apply_delta(
+        DeltaPayload(
+            tool_call_deltas=[
+                {
+                    "index": 0,
+                    "function": {
+                        "name": "translate_story_object",
+                        "arguments": '{"id":"alpha"}',
+                    },
+                }
+            ]
+        )
+    )
+
+    snapshot = assembler.finalize_or_raise()
+
+    assert len(snapshot.tool_calls) == 1
+    assert snapshot.tool_calls[0].id == "index:0"
+    assert snapshot.tool_calls[0].arguments == {"id": "alpha"}
+
+
+def test_fallback_snapshot_assembler_keeps_anonymous_deltas_separate() -> None:
+    assembler = FallbackSnapshotAssembler(provider="custom", model="gemini-3-flash-preview")
+    assembler.apply_delta(
+        DeltaPayload(
+            tool_call_deltas=[
+                {
+                    "function": {
+                        "name": "translate_story_object",
+                        "arguments": '{"id":"alpha"}',
+                    },
+                }
+            ]
+        )
+    )
+    assembler.apply_delta(
+        DeltaPayload(
+            tool_call_deltas=[
+                {
+                    "function": {
+                        "name": "translate_story_object",
+                        "arguments": '{"id":"beta"}',
+                    },
+                }
+            ]
+        )
+    )
+
+    snapshot = assembler.finalize_or_raise()
+
+    assert [tool_call.id for tool_call in snapshot.tool_calls] == ["anon:0", "anon:1"]
+    assert [tool_call.arguments for tool_call in snapshot.tool_calls] == [
+        {"id": "alpha"},
+        {"id": "beta"},
     ]

@@ -114,7 +114,7 @@ class FallbackSnapshotAssembler:
         if state is None:
             state = _ToolCallState(
                 index=index,
-                id=str(delta.get("id") or f"tool_call_{index}"),
+                id=str(delta.get("id") or key),
             )
             self._tool_calls_by_key[key] = state
             self._tool_call_order.append(key)
@@ -145,26 +145,31 @@ class FallbackSnapshotAssembler:
         if isinstance(call_id, str) and call_id:
             id_key = f"id:{call_id}"
             if mapped_key and mapped_key != id_key:
-                migrated_index = self._migrate_tool_call_state(
-                    from_key=mapped_key,
-                    to_key=id_key,
-                    call_id=call_id,
-                )
-                if migrated_index is not None:
-                    self._tool_call_key_by_index[int(call_index)] = id_key
-                    existing_id_state = self._tool_calls_by_key.get(id_key)
-                    if existing_id_state is not None:
-                        return id_key, existing_id_state.index
-                    return id_key, migrated_index
+                mapped_state = self._tool_calls_by_key.get(mapped_key)
+                if mapped_state is not None and mapped_key.startswith("index:"):
+                    migrated_index = self._migrate_tool_call_state(
+                        from_key=mapped_key,
+                        to_key=id_key,
+                        call_id=call_id,
+                    )
+                    if migrated_index is not None:
+                        self._tool_call_key_by_index[int(call_index)] = id_key
+                        existing_id_state = self._tool_calls_by_key.get(id_key)
+                        if existing_id_state is not None:
+                            return id_key, existing_id_state.index
+                        return id_key, migrated_index
 
             existing_id_state = self._tool_calls_by_key.get(id_key)
             if existing_id_state:
-                if isinstance(call_index, int):
+                if isinstance(call_index, int) and (
+                    mapped_key is None or mapped_key == id_key or mapped_key.startswith("index:")
+                ):
                     self._tool_call_key_by_index[int(call_index)] = id_key
                 return id_key, existing_id_state.index
 
             if isinstance(call_index, int):
-                self._tool_call_key_by_index[int(call_index)] = id_key
+                if mapped_key is None or mapped_key == id_key or mapped_key.startswith("index:"):
+                    self._tool_call_key_by_index[int(call_index)] = id_key
                 return id_key, int(call_index)
             return f"id:{call_id}", len(self._tool_calls_by_key)
 
@@ -178,7 +183,7 @@ class FallbackSnapshotAssembler:
             self._tool_call_key_by_index[int(call_index)] = key
             return key, int(call_index)
 
-        key = f"anonymous:{self._anonymous_tool_counter}"
+        key = f"anon:{self._anonymous_tool_counter}"
         self._anonymous_tool_counter += 1
         return key, len(self._tool_calls_by_key)
 

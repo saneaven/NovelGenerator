@@ -63,8 +63,36 @@ function pickExistingReasoningDetail(message: ThreadMessage): ReasoningDetail | 
   return undefined;
 }
 
+function readOptionalIndex(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isInteger(parsed)) return parsed;
+  }
+  return null;
+}
+
+function readNonEmptyString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function deriveStreamKey(payload: Record<string, unknown>): string | null {
+  const explicit = readNonEmptyString(payload.stream_key);
+  if (explicit) return explicit;
+
+  const toolCallId = readNonEmptyString(payload.tool_call_id);
+  if (toolCallId) return `legacy:id:${toolCallId}`;
+
+  const index = readOptionalIndex(payload.index);
+  if (index !== null) return `legacy:index:${index}`;
+
+  return null;
+}
+
 export class ThreadEventConsumer {
-  private readonly streamingToolCallsByThread = new Map<string, Map<number, string>>();
+  private readonly streamingToolCallsByThread = new Map<string, Map<string, string>>();
   private readonly streamingArgBuffers = new Map<string, string>();
   private readonly autoContinueLockByThread = new Set<string>();
   private readonly inFlightResumeByThread = new Set<string>();
@@ -153,12 +181,64 @@ export class ThreadEventConsumer {
     return message;
   }
 
-  private getStreamingToolMap(threadId: string): Map<number, string> {
+  private getStreamingToolMap(threadId: string): Map<string, string> {
     const existing = this.streamingToolCallsByThread.get(threadId);
     if (existing) return existing;
-    const created = new Map<number, string>();
+    const created = new Map<string, string>();
     this.streamingToolCallsByThread.set(threadId, created);
     return created;
+  }
+
+  private rekeyStreamingTool(threadId: string, fromKey: string, toKey: string, tempId: string): void {
+    if (fromKey === toKey) return;
+    const toolMap = this.getStreamingToolMap(threadId);
+    if (toolMap.get(fromKey) === tempId) {
+      toolMap.delete(fromKey);
+    }
+    toolMap.set(toKey, tempId);
+  }
+
+  private resolveStreamingTempId(
+    threadId: string,
+    payload: Record<string, unknown>,
+  ): { streamKey: string | null; tempId: string | null } {
+    const toolMap = this.getStreamingToolMap(threadId);
+    const desiredKey = deriveStreamKey(payload);
+    if (desiredKey) {
+      const direct = toolMap.get(desiredKey);
+      if (direct) return { streamKey: desiredKey, tempId: direct };
+    }
+
+    const store = useThreadStore.getState();
+    const llmCallId = readNonEmptyString(payload.tool_call_id);
+    if (llmCallId) {
+      for (const [existingKey, tempId] of toolMap) {
+        const existing = store.toolCallsById[tempId];
+        if (!existing || existing.llmCallId !== llmCallId) continue;
+        if (desiredKey) {
+          this.rekeyStreamingTool(threadId, existingKey, desiredKey, tempId);
+          return { streamKey: desiredKey, tempId };
+        }
+        return { streamKey: existingKey, tempId };
+      }
+    }
+
+    const index = readOptionalIndex(payload.index);
+    const assistantMessageId = readNonEmptyString(payload.assistant_message_id);
+    if (index !== null) {
+      for (const [existingKey, tempId] of toolMap) {
+        const existing = store.toolCallsById[tempId];
+        if (!existing || existing.callSeq !== index) continue;
+        if (assistantMessageId && existing.assistantMessageId !== assistantMessageId) continue;
+        if (desiredKey) {
+          this.rekeyStreamingTool(threadId, existingKey, desiredKey, tempId);
+          return { streamKey: desiredKey, tempId };
+        }
+        return { streamKey: existingKey, tempId };
+      }
+    }
+
+    return { streamKey: desiredKey, tempId: null };
   }
 
   private patchThreadFromRunStatus(threadId: string, status: ThreadStatus, error: string | null, payload: Record<string, unknown>): void {
@@ -360,10 +440,15 @@ export class ThreadEventConsumer {
   }
 
   private handleToolCallStart(threadId: string, payload: Record<string, unknown>): void {
-    const index = Number(payload.index ?? 0);
+    const streamKey = deriveStreamKey(payload);
+    if (!streamKey) return;
+    const index = readOptionalIndex(payload.index);
     const assistantMessageId = payload.assistant_message_id ? String(payload.assistant_message_id) : '';
-    const tempId = `streaming:${threadId}:${assistantMessageId}:${index}`;
-    this.getStreamingToolMap(threadId).set(index, tempId);
+    const toolMap = this.getStreamingToolMap(threadId);
+    const existingTempId = toolMap.get(streamKey);
+    if (existingTempId) return;
+    const tempId = `streaming:${threadId}:${assistantMessageId}:${streamKey}`;
+    toolMap.set(streamKey, tempId);
 
     const toolCall: ThreadToolCall = {
       id: tempId,
@@ -371,7 +456,7 @@ export class ThreadEventConsumer {
       runId: payload.run_id ? String(payload.run_id) : '',
       messageId: String(payload.message_id ?? ''),
       assistantMessageId: assistantMessageId || null,
-      callSeq: index,
+      callSeq: index ?? 0,
       llmCallId: String(payload.tool_call_id ?? ''),
       toolName: String(payload.name ?? ''),
       arguments: {},
@@ -388,8 +473,7 @@ export class ThreadEventConsumer {
   }
 
   private handleToolCallDelta(threadId: string, payload: Record<string, unknown>): void {
-    const index = Number(payload.index ?? 0);
-    const tempId = this.getStreamingToolMap(threadId).get(index);
+    const { tempId } = this.resolveStreamingTempId(threadId, payload);
     if (!tempId) return;
 
     const store = useThreadStore.getState();
@@ -422,11 +506,13 @@ export class ThreadEventConsumer {
     const toolCallId = String(payload.tool_call_id ?? '');
     if (!toolCallId) return;
 
-    const index = Number(payload.index ?? 0);
-    const tempId = this.getStreamingToolMap(threadId).get(index);
+    const index = readOptionalIndex(payload.index);
+    const { streamKey, tempId } = this.resolveStreamingTempId(threadId, payload);
     if (tempId) {
       useThreadStore.getState().removeToolCall(tempId);
-      this.getStreamingToolMap(threadId).delete(index);
+      if (streamKey) {
+        this.getStreamingToolMap(threadId).delete(streamKey);
+      }
       this.streamingArgBuffers.delete(tempId);
     }
 
@@ -436,7 +522,7 @@ export class ThreadEventConsumer {
       runId: payload.run_id ? String(payload.run_id) : '',
       messageId: String(payload.message_id ?? ''),
       assistantMessageId: payload.assistant_message_id ? String(payload.assistant_message_id) : null,
-      callSeq: index,
+      callSeq: index ?? 0,
       llmCallId: toolCallId,
       toolName: String(payload.name ?? ''),
       arguments: (payload.arguments ?? {}) as Record<string, unknown>,

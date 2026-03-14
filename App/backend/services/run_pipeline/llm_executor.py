@@ -107,6 +107,73 @@ def _content_only_parts(parts: Any) -> list[dict[str, str]]:
     return out
 
 
+def _tool_delta_id(tc_delta: dict[str, Any]) -> str | None:
+    value = tc_delta.get("id")
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _tool_delta_index(tc_delta: dict[str, Any]) -> int | None:
+    value = tc_delta.get("index")
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return int(value)
+    return None
+
+
+def _resolve_stream_key(
+    tc_delta: dict[str, Any],
+    *,
+    delta_state_by_key: dict[str, ToolDeltaState],
+    state_key_by_index: dict[int, str],
+    anonymous_counter: int,
+) -> tuple[str, str, int | None, int]:
+    call_id = _tool_delta_id(tc_delta)
+    call_index = _tool_delta_index(tc_delta)
+
+    if call_id is not None:
+        id_key = f"id:{call_id}"
+        if id_key in delta_state_by_key:
+            if call_index is not None:
+                state_key_by_index[call_index] = id_key
+            return id_key, call_id, call_index, anonymous_counter
+
+        if call_index is not None:
+            mapped_key = state_key_by_index.get(call_index)
+            if mapped_key is not None:
+                existing_state = delta_state_by_key.get(mapped_key)
+                if existing_state is not None:
+                    if mapped_key.startswith("index:"):
+                        delta_state_by_key.pop(mapped_key, None)
+                        existing_state.stream_key = id_key
+                        existing_state.llm_call_id = call_id
+                        if existing_state.index is None:
+                            existing_state.index = call_index
+                        delta_state_by_key[id_key] = existing_state
+                        state_key_by_index[call_index] = id_key
+                    return id_key, call_id, call_index, anonymous_counter
+                state_key_by_index.pop(call_index, None)
+
+            state_key_by_index[call_index] = id_key
+        return id_key, call_id, call_index, anonymous_counter
+
+    if call_index is not None:
+        mapped_key = state_key_by_index.get(call_index)
+        if mapped_key is not None and mapped_key in delta_state_by_key:
+            state = delta_state_by_key[mapped_key]
+            return mapped_key, state.llm_call_id, call_index, anonymous_counter
+        if mapped_key is not None:
+            state_key_by_index.pop(call_index, None)
+
+        stream_key = f"index:{call_index}"
+        return stream_key, stream_key, call_index, anonymous_counter
+
+    stream_key = f"anon:{anonymous_counter}"
+    return stream_key, stream_key, None, anonymous_counter + 1
+
+
 async def _fill_reasoning_token_count(
     db: Session,
     *,
@@ -447,7 +514,9 @@ async def run_llm(
     merged_meta: MetaPayload | None = None
     raw_response: dict[str, Any] | None = None
 
-    delta_state_by_index: dict[int, ToolDeltaState] = {}
+    delta_state_by_key: dict[str, ToolDeltaState] = {}
+    state_key_by_index: dict[int, str] = {}
+    anonymous_tool_call_counter = 0
 
     async for event in stream:
         if event.raw_request is not None:
@@ -503,12 +572,24 @@ async def run_llm(
             for tc_delta in delta.tool_call_deltas:
                 if not isinstance(tc_delta, dict):
                     continue
-                idx = int(tc_delta.get("index") or 0)
-                state = delta_state_by_index.get(idx)
+                stream_key, llm_call_id, idx, anonymous_tool_call_counter = _resolve_stream_key(
+                    tc_delta,
+                    delta_state_by_key=delta_state_by_key,
+                    state_key_by_index=state_key_by_index,
+                    anonymous_counter=anonymous_tool_call_counter,
+                )
+                state = delta_state_by_key.get(stream_key)
                 if state is None:
-                    init_id = str(tc_delta.get("id") or f"tool-call-{idx}")
-                    state = ToolDeltaState(llm_call_id=init_id, name="", raw_arguments="")
-                    delta_state_by_index[idx] = state
+                    state = ToolDeltaState(
+                        stream_key=stream_key,
+                        llm_call_id=llm_call_id,
+                        name="",
+                        raw_arguments="",
+                        index=idx,
+                    )
+                    delta_state_by_key[stream_key] = state
+                    if idx is not None:
+                        state_key_by_index[idx] = stream_key
                     await emit_fn(
                         user_id=run.user_id,
                         project_id=run.project_id,
@@ -516,7 +597,8 @@ async def run_llm(
                         event_name="tool_call:start",
                         data={
                             "run_id": str(run.id),
-                            "tool_call_id": init_id,
+                            "stream_key": stream_key,
+                            "tool_call_id": llm_call_id,
                             "message_id": "",
                             "assistant_message_id": str(assistant_message.id),
                             "index": idx,
@@ -524,8 +606,11 @@ async def run_llm(
                         },
                     )
 
-                if isinstance(tc_delta.get("id"), str) and tc_delta["id"]:
-                    state.llm_call_id = tc_delta["id"]
+                state.stream_key = stream_key
+                state.llm_call_id = llm_call_id
+                if idx is not None:
+                    state.index = idx
+                    state_key_by_index[idx] = stream_key
 
                 fn = tc_delta.get("function") if isinstance(tc_delta.get("function"), dict) else {}
                 if isinstance(fn.get("name"), str):
@@ -539,6 +624,7 @@ async def run_llm(
                         event_name="tool_call:delta",
                         data={
                             "run_id": str(run.id),
+                            "stream_key": stream_key,
                             "tool_call_id": state.llm_call_id,
                             "index": idx,
                             "name": state.name,

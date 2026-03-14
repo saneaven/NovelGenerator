@@ -39,6 +39,7 @@ function buildCreateImageRunRequest(input: ImageRunInput, clientRequestId: strin
     model: input.recipe.model,
     requested_aspect_ratio: input.recipe.aspectRatio,
     requested_image_size: input.recipe.imageSize,
+    style_id: input.recipe.styleId ?? null,
     provider_settings: input.recipe.providerSettings,
     reference_images: input.recipe.referenceImages?.map((item) => ({
       asset_id: item.assetId,

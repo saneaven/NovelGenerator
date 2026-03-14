@@ -753,6 +753,7 @@ class RunPipeline:
             tool_name = str(tc.tool_name or "")
             arguments = tc.arguments if isinstance(tc.arguments, dict) else {}
             parse_error = str(getattr(tc, "parse_error", "") or "").strip() or None
+            stream_key = llm_call_id if llm_call_id.startswith(("index:", "anon:")) else f"id:{llm_call_id}"
 
             tool_call_text = json.dumps(
                 {
@@ -832,6 +833,7 @@ class RunPipeline:
                 event_name="tool_call:end",
                 data={
                     "run_id": str(run.id),
+                    "stream_key": stream_key,
                     "tool_call_id": str(row.id),
                     "message_id": str(tool_msg.id),
                     "assistant_message_id": str(assistant_message.id),
