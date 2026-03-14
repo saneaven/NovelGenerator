@@ -12,6 +12,7 @@ import { useJourneyStore } from '../../store/journeyStore';
 import { useThreadStore } from '../../store/threadStore';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import { journeyService } from '../../api/journeyService';
+import { isPausedLikeThreadStatus } from '../../types/thread';
 import { TextButton } from '../TextButton';
 import { ObjectPicker } from '../ObjectPicker';
 import './UnifiedImagePromptModal.css';
@@ -128,9 +129,13 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     // Still running
     if (threadStatus === 'running' || isStreamActive) return;
 
-    // Error
-    if (threadStatus === 'error') {
-      onStreamingError?.(threadError || 'Failed to generate prompt.', promptMode);
+    if (isPausedLikeThreadStatus(threadStatus)) {
+      onStreamingError?.(
+        threadStatus === 'paused'
+          ? 'Prompt generation paused.'
+          : (threadError || 'Failed to generate prompt.'),
+        promptMode,
+      );
       setActiveJourneyId(null);
       return;
     }

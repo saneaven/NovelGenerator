@@ -3,7 +3,12 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useThreadStore } from '../../store/threadStore';
 import type { ThreadInfo, ThreadToolCall } from '../../types/thread';
-import { threadPriority, isBlockingThreadStatus } from '../../types/thread';
+import {
+  canPauseThreadStatus,
+  canResumeThreadStatus,
+  isBlockingThreadStatus,
+  threadPriority,
+} from '../../types/thread';
 import { useFunctionCallUIStore } from '../../toolCall/ui/store';
 import { TextButton } from '../TextButton';
 import { SubAgentPeekHeader } from './SubAgentPeekHeader';
@@ -203,7 +208,13 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
   const selectedThreadStatus = selectedEntry?.thread.status ?? 'done';
   const selectedPendingCount = selectedEntry ? (pendingCountByKey[selectedEntry.key] ?? 0) : 0;
+  const runtimeUnresolvedToolCallCount = selectedEntry?.thread.unresolvedToolCallCount ?? 0;
+  const selectedUnresolvedCount = runtimeUnresolvedToolCallCount > 0
+    ? runtimeUnresolvedToolCallCount
+    : selectedPendingCount;
   const isBlocking = isBlockingThreadStatus(selectedThreadStatus);
+  const canPauseSelectedThread = canPauseThreadStatus(selectedThreadStatus);
+  const canResumeSelectedThread = canResumeThreadStatus(selectedThreadStatus);
 
   const handlePause = useCallback(() => {
     if (actionInFlight || !selectedChildThreadId) return;
@@ -262,7 +273,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
       {showFooter && (
         <div className="sub-agent-peek-dock__footer">
-          {(selectedThreadStatus === 'running' || selectedThreadStatus === 'waiting' || selectedThreadStatus === 'processing') && (
+          {canPauseSelectedThread && (
             <TextButton
               size="sm"
               variant="secondary"
@@ -273,35 +284,13 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
               {t('subAgent.pause')}
             </TextButton>
           )}
-          {selectedThreadStatus === 'paused' && (
+          {canResumeSelectedThread && (
             <>
               <TextButton
                 size="sm"
                 variant="primary"
                 onClick={handleResume}
-                disabled={actionInFlight !== null || selectedPendingCount > 0}
-                loading={actionInFlight === 'resume'}
-              >
-                {t('common.resume')}
-              </TextButton>
-              <TextButton
-                size="sm"
-                variant="warning"
-                onClick={handleCancel}
-                disabled={actionInFlight !== null}
-                loading={actionInFlight === 'cancel'}
-              >
-                {t('common.cancel')}
-              </TextButton>
-            </>
-          )}
-          {selectedThreadStatus === 'error' && (
-            <>
-              <TextButton
-                size="sm"
-                variant="primary"
-                onClick={handleResume}
-                disabled={actionInFlight !== null}
+                disabled={actionInFlight !== null || selectedUnresolvedCount > 0}
                 loading={actionInFlight === 'resume'}
               >
                 {t('common.resume')}

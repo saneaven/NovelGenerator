@@ -7,6 +7,7 @@ import { getAutoApproveCategory } from '../../toolCall/registry/autoApprove';
 import { fetchAndReplaceThreadSnapshot } from '../threadHydration';
 import { isLiveThreadStatus, isNonLiveThreadStatus } from '../threadStreamLifecycle';
 import {
+  isPausedLikeThreadStatus,
   toThreadType,
   nowIso,
   type ReasoningDetail,
@@ -557,8 +558,8 @@ export class ThreadEventConsumer {
         return;
       }
 
-      if (thread?.status === 'paused') {
-        console.debug('[AutoContinue] Skipped: thread is paused', { threadId });
+      if (isPausedLikeThreadStatus(thread?.status)) {
+        console.debug('[AutoContinue] Skipped: thread is paused-like', { threadId, status: thread?.status });
         return;
       }
 

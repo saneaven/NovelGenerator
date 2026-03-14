@@ -23,6 +23,7 @@ import { vectorStorageService, type VectorStorageStatusResponse } from '../../..
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import { useProjectStore } from '../../../store/projectStore';
 import { List, Trash, Refresh, Download } from '../../../components/icons';
+import { canCancelThreadStatus, canResumeThreadStatus } from '../../../types/thread';
 import './WorkspaceConfigPanel.css';
 
 interface WorkspaceConfigPanelProps {
@@ -455,17 +456,35 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
   }, [loadVectorStorageStatus, projectId, t, vectorStorageStatus?.enabled, vectorStorageStatus?.profile]);
 
   const handleCancelJourney = useCallback(async (journeyId: string) => {
-    if (!await confirm({ title: 'Cancel Journey', message: 'Cancel this running journey?', variant: 'warning', confirmLabel: 'Cancel Journey' })) {
+    if (!await confirm({ title: 'Cancel Journey', message: 'Cancel this journey?', variant: 'warning', confirmLabel: 'Cancel Journey' })) {
       return;
     }
     try {
       await journeyService.cancel(journeyId);
-      await loadJourneys();
+      const rows = await loadJourneys();
+      if (selectedJourney?.journey_id === journeyId) {
+        const refreshed = rows.find((row) => row.journey_id === journeyId);
+        if (refreshed) setSelectedJourney(refreshed);
+      }
     } catch (err: any) {
       console.error('Failed to cancel journey:', err);
       showAlert({ title: 'Journeys', message: 'Failed to cancel journey.' });
     }
-  }, [loadJourneys]);
+  }, [loadJourneys, selectedJourney?.journey_id]);
+
+  const handleResumeJourney = useCallback(async (journeyId: string) => {
+    try {
+      await journeyService.resume(journeyId);
+      const rows = await loadJourneys();
+      if (selectedJourney?.journey_id === journeyId) {
+        const refreshed = rows.find((row) => row.journey_id === journeyId);
+        if (refreshed) setSelectedJourney(refreshed);
+      }
+    } catch (err: any) {
+      console.error('Failed to resume journey:', err);
+      showAlert({ title: 'Journeys', message: 'Failed to resume journey.' });
+    }
+  }, [loadJourneys, selectedJourney?.journey_id]);
 
   const handleDeleteJourney = useCallback(async (journeyId: string) => {
     if (!await confirm({ title: 'Delete Journey', message: 'Delete this journey and its history?', variant: 'danger', confirmLabel: 'Delete' })) {
@@ -553,7 +572,8 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         ) : (
           <ul className="workspace-config-candidate-list">
             {journeys.map((journey) => {
-              const isActive = ['running', 'waiting', 'processing', 'paused'].includes(journey.status);
+              const canResume = canResumeThreadStatus(journey.status);
+              const canCancel = canCancelThreadStatus(journey.status);
               return (
                 <li key={journey.journey_id} className="workspace-config-candidate-item workspace-config-journey-item">
                   <div className="workspace-config-candidate-meta">
@@ -575,11 +595,21 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
                     >
                       Open
                     </TextButton>
+                    {canResume && (
+                      <TextButton
+                        onClick={() => { void handleResumeJourney(journey.journey_id); }}
+                        size="sm"
+                        variant="primary"
+                        iconLeft={<Refresh size="xs" />}
+                      >
+                        Resume
+                      </TextButton>
+                    )}
                     <TextButton
                       onClick={() => { void handleCancelJourney(journey.journey_id); }}
                       size="sm"
                       variant="secondary"
-                      disabled={!isActive}
+                      disabled={!canCancel}
                       iconLeft={<Refresh size="xs" />}
                     >
                       Cancel

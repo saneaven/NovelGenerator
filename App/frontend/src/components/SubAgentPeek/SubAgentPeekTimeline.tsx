@@ -8,7 +8,7 @@ import { useToolCallDecisions } from '../../toolCall/useToolCallDecisions';
 import { threadService } from '../../api/threadService';
 import { useThreadStore } from '../../store/threadStore';
 import type { ThreadMessage, ThreadToolCall } from '../../types/thread';
-import { resolveRunMessageDisplay } from '../../types/thread';
+import { isPausedLikeThreadStatus, resolveRunMessageDisplay } from '../../types/thread';
 import { FunctionCallsThread } from '../../toolCall/ui';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
@@ -230,7 +230,9 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
           .filter((tc): tc is ThreadToolCall => Boolean(tc))
           .map(toToolCallMetadata);
         const isLatestAssistant = message.role === 'assistant' && String(message.id) === lastAssistantMessageId;
-        const isPendingDecisionState = isLatestAssistant && (threadStatus === 'waiting' || threadStatus === 'paused');
+        const isPendingDecisionState = isLatestAssistant && (
+          threadStatus === 'waiting' || isPausedLikeThreadStatus(threadStatus)
+        );
         const allowApplyAndPause = isLatestAssistant && threadStatus === 'waiting';
         const cards = toolCalls.length > 0 ? buildEditCardsFromToolCallMetadata(toolCalls) : [];
         const hasPendingCards = cards.some((card) => hasPendingStatus(String(card.toolCall.status)));

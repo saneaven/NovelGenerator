@@ -173,6 +173,22 @@ export function buildLangEntry(
   };
 }
 
+export function isPausedLikeThreadStatus(status: ThreadStatus | null | undefined): boolean {
+  return status === 'paused' || status === 'error';
+}
+
+export function canResumeThreadStatus(status: ThreadStatus | null | undefined): boolean {
+  return isPausedLikeThreadStatus(status);
+}
+
+export function canPauseThreadStatus(status: ThreadStatus | null | undefined): boolean {
+  return status === 'running' || status === 'waiting' || status === 'processing';
+}
+
+export function canCancelThreadStatus(status: ThreadStatus | null | undefined): boolean {
+  return canPauseThreadStatus(status) || isPausedLikeThreadStatus(status);
+}
+
 export function threadPriority(status: ThreadStatus): number {
   switch (status) {
     case 'running':
@@ -182,15 +198,14 @@ export function threadPriority(status: ThreadStatus): number {
     case 'waiting':
       return 2;
     case 'paused':
-      return 3;
     case 'error':
-      return 4;
+      return 3;
     case 'done':
-      return 5;
+      return 4;
     case 'canceled':
-      return 6;
+      return 5;
     default:
-      return 7;
+      return 6;
   }
 }
 

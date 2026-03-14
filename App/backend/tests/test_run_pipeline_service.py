@@ -368,6 +368,9 @@ class FakeResumeRunDb:
     def commit(self) -> None:
         self.commits += 1
 
+    def flush(self) -> None:
+        return None
+
     def refresh(self, _obj: object) -> None:
         return None
 
@@ -523,6 +526,38 @@ def test_resume_run_rejects_when_pending_tool_call_exists() -> None:
     assert exc_info.value.detail == "Pending tool call exists in thread"
 
 
+def test_resume_run_rejects_error_latest_run_when_pending_tool_call_exists() -> None:
+    thread = Thread(id=uuid4(), project_id=uuid4(), user_id=uuid4(), thread_type="agent", status="error")
+    run = RunModel(
+        id=uuid4(),
+        thread_id=thread.id,
+        user_id=thread.user_id,
+        project_id=thread.project_id,
+        status="error",
+        language="English",
+        input_payload={},
+    )
+    run.thread = thread
+    db = FakeResumeRunDb(thread=thread, run=run, pending_tool=object())
+    pipeline = _make_idle_pipeline(lambda: db)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            pipeline.resume_run(
+                thread_id=thread.id,
+                user_id=thread.user_id,
+                run_mode=None,
+                surface=None,
+                context_object_ids=[],
+                journey_target_ids=[],
+                language=None,
+            )
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Pending tool call exists in thread"
+
+
 def test_resume_run_rejects_when_no_latest_run_exists() -> None:
     thread = Thread(id=uuid4(), project_id=uuid4(), user_id=uuid4(), thread_type="agent", status="waiting")
     db = FakeResumeRunDb(thread=thread, run=None)
@@ -575,6 +610,48 @@ def test_resume_run_rejects_running_latest_run() -> None:
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail == "Run status 'running' is not resumable"
+
+
+def test_resume_run_allows_error_latest_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    thread = Thread(id=uuid4(), project_id=uuid4(), user_id=uuid4(), thread_type="agent", status="error")
+    run = RunModel(
+        id=uuid4(),
+        thread_id=thread.id,
+        user_id=thread.user_id,
+        project_id=thread.project_id,
+        status="error",
+        language="English",
+        input_payload={},
+    )
+    run.thread = thread
+    db = FakeResumeRunDb(thread=thread, run=run)
+    pipeline = _make_idle_pipeline(lambda: db)
+    spawned_run_ids: list[UUID] = []
+
+    async def _spawn_task(run_id: UUID, *, create_ctx: CreateContext | None = None) -> None:
+        del create_ctx
+        spawned_run_ids.append(run_id)
+
+    monkeypatch.setattr(pipeline, "_spawn_task", _spawn_task)
+
+    resumed = asyncio.run(
+        pipeline.resume_run(
+            thread_id=thread.id,
+            user_id=thread.user_id,
+            run_mode=None,
+            surface=None,
+            context_object_ids=[],
+            journey_target_ids=[],
+            language=None,
+        )
+    )
+
+    assert resumed is run
+    assert run.status == "running"
+    assert run.error is None
+    assert thread.status == "running"
+    assert db.commits == 1
+    assert spawned_run_ids == [run.id]
 
 
 def test_execute_loop_preserves_non_template_errors(monkeypatch: pytest.MonkeyPatch) -> None:

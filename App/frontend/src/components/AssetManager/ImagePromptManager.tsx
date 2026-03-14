@@ -7,6 +7,7 @@ import ThinkingDisplay from '../common/ThinkingDisplay';
 import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
 import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
 import { useThreadStore } from '../../store/threadStore';
+import { isPausedLikeThreadStatus } from '../../types/thread';
 import type { ObjectType } from '../../types/unifiedObject';
 import { TextButton } from '../TextButton';
 import './ImagePromptManager.css';
@@ -77,7 +78,7 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
     const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
     const [streamingMode, setStreamingMode] = useState<PromptMode | null>(null);
     const [streamingError, setStreamingError] = useState<string | null>(null);
-    const previousStreamingStatusRef = useRef<'running' | 'done' | 'error' | null>(null);
+    const previousStreamingStatusRef = useRef<'running' | 'done' | 'halted' | null>(null);
 
     const journeyThreadId = useJourneyStore((state) =>
         streamingSessionId ? state.journeys[streamingSessionId]?.threadId : undefined
@@ -91,8 +92,8 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
     const liveView = useThreadLiveViewState(journeyThreadId ?? null);
     const streamingStatus = useMemo(() => {
         if (!streamingSessionId) return null;
-        return streamingThreadStatus === 'error'
-            ? 'error'
+        return isPausedLikeThreadStatus(streamingThreadStatus)
+            ? 'halted'
             : (streamingThreadStatus === 'done' || streamingThreadStatus === 'canceled')
                 ? 'done'
                 : 'running';
@@ -112,8 +113,12 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
         [streamedToolPrompt, streamedText],
     );
     const streamThreadId = journeyThreadId ?? null;
-    const streamingErrorMessage = streamingStatus === 'error'
-        ? (streamingThreadError ?? 'Failed to generate prompt')
+    const streamingErrorMessage = streamingStatus === 'halted'
+        ? (
+            streamingThreadStatus === 'paused'
+                ? 'Prompt generation paused.'
+                : (streamingThreadError ?? 'Failed to generate prompt')
+        )
         : null;
     const isSuppressedStreaming = streamingStatus === 'running' && streamingDeliveryMode === 'suppressed';
     const isStreamingRunning = streamingStatus === 'running';
@@ -196,7 +201,7 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
         if (previousStreamingStatusRef.current === streamingStatus) return;
         previousStreamingStatusRef.current = streamingStatus;
 
-        if (streamingStatus === 'error') {
+        if (streamingStatus === 'halted') {
             setStreamingError(streamingErrorMessage ?? 'Failed to generate prompt');
             setStreamingSessionId(null);
             setStreamingMode(null);

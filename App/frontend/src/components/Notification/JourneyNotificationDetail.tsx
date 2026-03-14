@@ -6,11 +6,15 @@ import { useThreadStore } from '../../store/threadStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { threadService } from '../../api/threadService';
 import {
-  sendThreadMessage,
   cancelThread,
+  resumeThread,
+  sendThreadMessage,
 } from '../../runtime/threadCommands';
-import { resolveRunMessageDisplay } from '../../types/thread';
-import type { ThreadMessage, ThreadToolCall } from '../../types/thread';
+import {
+  canResumeThreadStatus,
+  resolveRunMessageDisplay,
+} from '../../types/thread';
+import type { ThreadMessage, ThreadStatus, ThreadToolCall } from '../../types/thread';
 import type { ToolCallMetadata } from '../../types/chat';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { FunctionCallsThread } from '../../toolCall/ui';
@@ -76,6 +80,14 @@ function getDisplayReasoningDetail(message: ThreadMessage, language: string) {
   return resolved.reasoningDetail;
 }
 
+function isPendingToolCallStatus(status: ToolCallMetadata['status'] | undefined): boolean {
+  return status === 'pending'
+    || status === 'streaming'
+    || status === 'validating'
+    || status === 'processing'
+    || status === 'working';
+}
+
 const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   threadId,
   label,
@@ -89,6 +101,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
+  const [footerActionInFlight, setFooterActionInFlight] = useState<'resume' | 'cancel' | null>(null);
   const [latestRunContext, setLatestRunContext] = useState<{
     inputPayload: Record<string, any>;
     journeyTargetIds: string[];
@@ -101,12 +114,13 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const threadMessages = useThreadStore(
     useShallow((s) => s.messagesByThreadId[threadId]),
   );
-  const { toolCallsById, toolCallIdsByAssistantMessageId, threadLastError } =
+  const { toolCallsById, toolCallIdsByAssistantMessageId, threadLastError, runtimeUnresolvedToolCallCount } =
     useThreadStore(
       useShallow((s) => ({
         toolCallsById: s.toolCallsById,
         toolCallIdsByAssistantMessageId: s.toolCallIdsByAssistantMessageId,
         threadLastError: s.threadsById[threadId]?.lastError,
+        runtimeUnresolvedToolCallCount: s.threadsById[threadId]?.unresolvedToolCallCount ?? 0,
       })),
     );
 
@@ -200,26 +214,43 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   }, [lastAssistantMessage, toolCallIdsByAssistantMessageId, toolCallsById]);
 
   const hasPendingToolCalls = useMemo(
-    () => lastAssistantToolCalls.some(
-      (tc) => tc.status === 'pending'
-        || tc.status === 'streaming'
-        || tc.status === 'validating'
-        || tc.status === 'processing'
-        || tc.status === 'working',
-    ),
+    () => lastAssistantToolCalls.some((tc) => isPendingToolCallStatus(tc.status)),
     [lastAssistantToolCalls],
   );
 
+  const journeyStatus = status as ThreadStatus;
   const statusText = formatNotificationStatusLabelFor('journey', status);
-  const isRunning = status === 'running' || status === 'processing';
-  const isWaiting = status === 'waiting';
+  const isRunning = journeyStatus === 'running' || journeyStatus === 'processing';
+  const isWaiting = journeyStatus === 'waiting';
+  const canResume = canResumeThreadStatus(journeyStatus);
   const hasDecisionControls = hasPendingToolCalls;
   const isFeedbackDisabled = isRunning || isWaiting || hasDecisionControls;
+  const pendingToolCallCount = useMemo(
+    () => lastAssistantToolCalls.filter((tc) => isPendingToolCallStatus(tc.status)).length,
+    [lastAssistantToolCalls],
+  );
+  const unresolvedToolCallCount = runtimeUnresolvedToolCallCount > 0
+    ? runtimeUnresolvedToolCallCount
+    : pendingToolCallCount;
 
   // Handlers
   const handleCancel = useCallback(() => {
-    void cancelThread({ threadId });
-  }, [threadId]);
+    if (footerActionInFlight) return;
+    setFooterActionInFlight('cancel');
+    const op = cancelThread({ threadId });
+    void op.finally(() => setFooterActionInFlight(null));
+  }, [footerActionInFlight, threadId]);
+
+  const handleResume = useCallback(() => {
+    if (footerActionInFlight || unresolvedToolCallCount > 0) return;
+    setFooterActionInFlight('resume');
+    const op = resumeThread({
+      threadId,
+      projectId,
+      threadType: 'journey',
+    });
+    void op.finally(() => setFooterActionInFlight(null));
+  }, [footerActionInFlight, projectId, threadId, unresolvedToolCallCount]);
 
   const { commitDecisions, commitDecisionsAndPause } = useToolCallDecisions(threadId);
 
@@ -290,7 +321,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
               mode={isLast && hasDecisionControls ? 'pending' : 'confirmed'}
               cards={cards}
               onCommitDecisions={isLast && hasDecisionControls ? commitDecisions : undefined}
-              onCommitDecisionsAndPause={isLast && hasDecisionControls ? commitDecisionsAndPause : undefined}
+              onCommitDecisionsAndPause={isLast && isWaiting && hasDecisionControls ? commitDecisionsAndPause : undefined}
               projectId={projectId}
             />
           </div>
@@ -353,7 +384,36 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     );
   }
 
-  const hasInlineWarning = Boolean(warning || (status === 'error' && threadLastError));
+  const hasInlineWarning = Boolean(warning || (journeyStatus === 'error' && threadLastError));
+  const footer = isRunning ? (
+    <TextButton
+      variant="danger"
+      onClick={handleCancel}
+      disabled={footerActionInFlight !== null}
+      loading={footerActionInFlight === 'cancel'}
+    >
+      Cancel
+    </TextButton>
+  ) : canResume ? (
+    <>
+      <TextButton
+        variant="primary"
+        onClick={handleResume}
+        disabled={footerActionInFlight !== null || unresolvedToolCallCount > 0}
+        loading={footerActionInFlight === 'resume'}
+      >
+        Resume
+      </TextButton>
+      <TextButton
+        variant="danger"
+        onClick={handleCancel}
+        disabled={footerActionInFlight !== null}
+        loading={footerActionInFlight === 'cancel'}
+      >
+        Cancel
+      </TextButton>
+    </>
+  ) : undefined;
 
   return (
     <BaseModal
@@ -362,9 +422,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
       showHeader={false}
       size="large"
       className="journey-detail-modal"
-      footer={isRunning ? (
-        <TextButton variant="danger" onClick={handleCancel}>Cancel</TextButton>
-      ) : undefined}
+      footer={footer}
     >
       {/* Header */}
       <div className="journey-detail-header">
