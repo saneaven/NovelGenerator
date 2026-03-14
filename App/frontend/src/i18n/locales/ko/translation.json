@@ -1199,7 +1199,6 @@
     "close": "닫기",
     "welcomeMessage": "안녕하세요! 소설 작성을 도와드리겠습니다.",
     "projectHelp": "\"{{projectName}}\" 프로젝트에 대해 무엇을 도와드릴까요?",
-    "usingLanguage": "{{language}} 사용 중",
     "you": "나",
     "ai": "AI",
     "edit": "편집",

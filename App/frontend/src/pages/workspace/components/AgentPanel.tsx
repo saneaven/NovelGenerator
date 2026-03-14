@@ -88,8 +88,6 @@ interface DisplayMessageInfo {
   chatMessage: ChatMessage;
   requestedLanguage: string;
   displayLanguage: string;
-  hasRequestedLanguage: boolean;
-  fallbackLanguage: string | null;
 }
 
 interface ToolCallBlockingSummary {
@@ -717,8 +715,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
             chatMessage,
             requestedLanguage,
             displayLanguage: resolved.displayLanguage,
-            hasRequestedLanguage: !resolved.isFallback,
-            fallbackLanguage: resolved.isFallback ? resolved.displayLanguage : null,
           },
         });
         i++;
@@ -1593,13 +1589,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
 
                   {!isEditing && (primaryPlainContent || isStreamingMessage) && (
                     <div className="message-content">
-                      {!message.hasRequestedLanguage && (
-                        <div className="language-fallback-badge">
-                          {t('agent.usingLanguage', {
-                            language: message.fallbackLanguage || message.displayLanguage,
-                          })}
-                        </div>
-                      )}
                       {processed.displayContent}
                       {isStreamingMessage && thread?.status === 'running' && (
                         <div className="typing-indicator inline">

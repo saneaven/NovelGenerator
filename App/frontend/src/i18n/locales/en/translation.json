@@ -1199,7 +1199,6 @@
     "close": "Close",
     "welcomeMessage": "Hello! I am here to help with your novel writing.",
     "projectHelp": "What can I help you with for the \"{{projectName}}\" project?",
-    "usingLanguage": "Using {{language}}",
     "you": "You",
     "ai": "AI",
     "edit": "Edit",

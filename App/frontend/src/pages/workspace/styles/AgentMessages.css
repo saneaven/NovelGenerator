@@ -310,19 +310,6 @@
     box-shadow: var(--shadow-sm);
 }
 
-/* ===== Language Fallback Badge ===== */
-.language-fallback-badge {
-    display: inline-block;
-    background: var(--color-warning-light);
-    color: var(--color-warning-dark);
-    font-size: var(--font-size-xs);
-    padding: var(--spacing-xs) var(--spacing-sm);
-    border-radius: var(--border-radius-md);
-    margin-bottom: var(--spacing-sm);
-    font-weight: var(--font-weight-semibold);
-    border: 1px solid var(--color-warning);
-}
-
 /* ===== Message Actions ===== */
 .agent-message .message-actions {
     padding: 0 var(--spacing-sm);
