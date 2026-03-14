@@ -74,9 +74,12 @@ export interface ThreadMessagesResponse {
     status: ThreadStatus;
     runSeq: number;
     language: string;
+    runMode: 'planMode' | 'agentMode' | null;
+    surface: string | null;
     createdAt: string;
     updatedAt: string;
     inputPayload: Record<string, any>;
+    contextObjectIds: string[];
     journeyTargetIds: string[];
   } | null;
   messages: ThreadMessage[];
@@ -295,9 +298,18 @@ export const threadService = {
             status: String(latestRunRaw.status) as ThreadStatus,
             runSeq: Number(latestRunRaw.run_seq ?? 0),
             language: String(latestRunRaw.language ?? ''),
+            runMode: latestRunRaw.run_mode === 'planMode' || latestRunRaw.run_mode === 'agentMode'
+              ? latestRunRaw.run_mode
+              : null,
+            surface: typeof latestRunRaw.surface === 'string' && latestRunRaw.surface.length > 0
+              ? latestRunRaw.surface
+              : null,
             createdAt: String(latestRunRaw.created_at ?? new Date().toISOString()),
             updatedAt: String(latestRunRaw.updated_at ?? new Date().toISOString()),
             inputPayload: (latestRunRaw.input_payload ?? {}) as Record<string, any>,
+            contextObjectIds: Array.isArray(latestRunRaw.context_object_ids)
+              ? (latestRunRaw.context_object_ids as string[])
+              : [],
             journeyTargetIds: Array.isArray(latestRunRaw.journey_target_ids)
               ? (latestRunRaw.journey_target_ids as string[])
               : [],

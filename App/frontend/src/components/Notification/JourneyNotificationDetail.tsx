@@ -88,6 +88,34 @@ function isPendingToolCallStatus(status: ToolCallMetadata['status'] | undefined)
     || status === 'working';
 }
 
+type LatestRunContext = {
+  inputPayload: Record<string, any>;
+  contextObjectIds: string[];
+  journeyTargetIds: string[];
+  language: string;
+  runMode: 'planMode' | 'agentMode' | null;
+  surface: string | null;
+};
+
+function toLatestRunContext(responseLatestRun: {
+  inputPayload: Record<string, any>;
+  contextObjectIds: string[];
+  journeyTargetIds: string[];
+  language: string;
+  runMode: 'planMode' | 'agentMode' | null;
+  surface: string | null;
+} | null): LatestRunContext | null {
+  if (!responseLatestRun) return null;
+  return {
+    inputPayload: responseLatestRun.inputPayload,
+    contextObjectIds: responseLatestRun.contextObjectIds,
+    journeyTargetIds: responseLatestRun.journeyTargetIds,
+    language: responseLatestRun.language,
+    runMode: responseLatestRun.runMode,
+    surface: responseLatestRun.surface,
+  };
+}
+
 const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   threadId,
   label,
@@ -97,15 +125,12 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   projectId,
   onClose,
 }) => {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => useThreadStore.getState().getMessages(threadId).length === 0);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [footerActionInFlight, setFooterActionInFlight] = useState<'resume' | 'cancel' | null>(null);
-  const [latestRunContext, setLatestRunContext] = useState<{
-    inputPayload: Record<string, any>;
-    journeyTargetIds: string[];
-  } | null>(null);
+  const [latestRunContext, setLatestRunContext] = useState<LatestRunContext | null>(null);
 
   const mainLanguage = useSettingsStore((s) => s.getSettings().mainLanguage);
   const liveView = useThreadLiveViewState(threadId);
@@ -124,35 +149,30 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
       })),
     );
 
-  // Fetch messages on mount & hydrate ThreadStore
+  // Fetch the latest run context on mount. Hydrate messages only when the store is empty.
   useEffect(() => {
-    // Skip hydration if SSE has already populated messages for this thread
-    // (same guard as AgentPanel — avoids overwriting streaming state).
     const store = useThreadStore.getState();
     const existingMessages = store.getMessages(threadId);
-    if (existingMessages.length > 0) {
-      setLoading(false);
-      return;
-    }
+    const shouldHydrateMessages = existingMessages.length === 0;
 
     let cancelled = false;
-    setLoading(true);
+    setLatestRunContext(null);
     setFetchError(null);
+    setLoading(shouldHydrateMessages);
 
     void threadService.listMessages(threadId)
       .then((response) => {
         if (cancelled) return;
-        applyThreadSnapshot(response);
-        if (response.latestRun) {
-          setLatestRunContext({
-            inputPayload: response.latestRun.inputPayload,
-            journeyTargetIds: response.latestRun.journeyTargetIds,
-          });
+        if (shouldHydrateMessages) {
+          applyThreadSnapshot(response);
         }
+        setLatestRunContext(toLatestRunContext(response.latestRun));
       })
       .catch((err) => {
         if (cancelled) return;
-        setFetchError(err instanceof Error ? err.message : 'Failed to load messages');
+        if (shouldHydrateMessages) {
+          setFetchError(err instanceof Error ? err.message : 'Failed to load messages');
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -224,7 +244,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const isWaiting = journeyStatus === 'waiting';
   const canResume = canResumeThreadStatus(journeyStatus);
   const hasDecisionControls = hasPendingToolCalls;
-  const isFeedbackDisabled = isRunning || isWaiting || hasDecisionControls;
+  const isFeedbackDisabled = isRunning || isWaiting || hasDecisionControls || latestRunContext === null;
   const pendingToolCallCount = useMemo(
     () => lastAssistantToolCalls.filter((tc) => isPendingToolCallStatus(tc.status)).length,
     [lastAssistantToolCalls],
@@ -255,16 +275,20 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const { commitDecisions, commitDecisionsAndPause } = useToolCallDecisions(threadId);
 
   const handleSendFeedback = useCallback(() => {
-    if (!feedbackText.trim()) return;
+    if (!feedbackText.trim() || latestRunContext === null) return;
     void sendThreadMessage({
       threadId,
       projectId,
       threadType: 'journey',
       inputText: feedbackText,
-      request: latestRunContext ? {
+      request: {
         input_payload: latestRunContext.inputPayload,
+        context_object_ids: latestRunContext.contextObjectIds,
         journey_target_ids: latestRunContext.journeyTargetIds,
-      } : undefined,
+        language: latestRunContext.language || undefined,
+        run_mode: latestRunContext.runMode || undefined,
+        surface: latestRunContext.surface || undefined,
+      },
     });
     setFeedbackText('');
     setFeedbackOpen(false);

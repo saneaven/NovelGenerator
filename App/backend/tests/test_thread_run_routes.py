@@ -5,6 +5,7 @@ import os
 import sys
 import types
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -431,6 +432,111 @@ def test_resume_thread_run_passes_request_to_resume_run(monkeypatch: pytest.Monk
     assert captured["context_object_ids"] == [context_object_id]
     assert captured["journey_target_ids"] == [journey_target_id]
     assert captured["language"] == "Korean"
+
+
+class FakeListThreadMessagesQuery:
+    def __init__(self, db: "FakeListThreadMessagesDb", target: object) -> None:
+        self.db = db
+        self.target = target
+
+    def filter(self, *_args, **_kwargs) -> "FakeListThreadMessagesQuery":
+        return self
+
+    def order_by(self, *_args, **_kwargs) -> "FakeListThreadMessagesQuery":
+        return self
+
+    def all(self) -> list[object]:
+        if self.target is thread_routes.RunMessageModel:
+            return list(self.db.messages)
+        if self.target is thread_routes.RunMessageAttachmentModel:
+            return list(self.db.attachments)
+        if self.target is thread_routes.RunToolCallModel:
+            return list(self.db.tool_calls)
+        raise AssertionError(f"Unsupported all() target: {self.target!r}")
+
+    def first(self):
+        if self.target is thread_routes.RunModel:
+            return self.db.latest_run
+        if _is_column_for(self.target, thread_routes.MessageMemorySummary, "to_message_id"):
+            return self.db.boundary_row
+        raise AssertionError(f"Unsupported first() target: {self.target!r}")
+
+
+class FakeListThreadMessagesDb:
+    def __init__(self, *, latest_run: SimpleNamespace, boundary_row: tuple[object] | None = None) -> None:
+        self.latest_run = latest_run
+        self.messages: list[object] = []
+        self.attachments: list[object] = []
+        self.tool_calls: list[object] = []
+        self.boundary_row = boundary_row
+
+    def query(self, target: object) -> FakeListThreadMessagesQuery:
+        return FakeListThreadMessagesQuery(self, target)
+
+
+def test_list_thread_messages_serializes_latest_run_context_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    thread_id = uuid4()
+    project_id = uuid4()
+    user_id = uuid4()
+    parent_id = uuid4()
+    created_at = datetime.now(UTC)
+    updated_at = datetime.now(UTC)
+    thread = SimpleNamespace(
+        id=thread_id,
+        project_id=project_id,
+        user_id=user_id,
+        thread_type="journey",
+        status="error",
+        created_at=created_at,
+        updated_at=updated_at,
+    )
+    latest_run = SimpleNamespace(
+        id=uuid4(),
+        status="error",
+        run_seq=7,
+        language="Korean",
+        run_mode="planMode",
+        surface="story-object",
+        created_at=created_at,
+        updated_at=updated_at,
+        input_payload={"userRequest": "revise tone"},
+        context_object_ids=[str(uuid4()), str(uuid4())],
+        journey_target_ids=[str(uuid4())],
+    )
+    db = FakeListThreadMessagesDb(latest_run=latest_run)
+
+    monkeypatch.setattr(thread_routes, "require_owned_thread", lambda *_args, **_kwargs: thread)
+    monkeypatch.setattr(
+        thread_routes,
+        "thread_runtime_fields",
+        lambda *_args, **_kwargs: {
+            "parent_id": parent_id,
+            "journey_kind": "storyObjectEdit",
+            "display_label": "Journey",
+        },
+    )
+    monkeypatch.setattr(
+        thread_routes.image_run_service,
+        "list_thread_runs",
+        lambda *_args, **_kwargs: [],
+        raising=False,
+    )
+
+    response = asyncio.run(
+        thread_routes.list_thread_messages(
+            thread_id=thread_id,
+            current_user=SimpleNamespace(id=user_id),
+            db=db,  # type: ignore[arg-type]
+        )
+    )
+
+    assert response.latest_run is not None
+    assert response.latest_run["input_payload"] == latest_run.input_payload
+    assert response.latest_run["context_object_ids"] == latest_run.context_object_ids
+    assert response.latest_run["journey_target_ids"] == latest_run.journey_target_ids
+    assert response.latest_run["language"] == "Korean"
+    assert response.latest_run["run_mode"] == "planMode"
+    assert response.latest_run["surface"] == "story-object"
 
 
 def _is_column_for(target: object, model: object, key: str) -> bool:
