@@ -25,10 +25,8 @@ from ..models.db_models import (
     Manuscript,
     Organization,
     Outline,
-    RunModel,
     RunToolCallModel,
     StoryObjectAsset,
-    Thread,
     UserSettings,
 )
 from ..schemas.assets import CreateImageRunRequest, ImageRunResponse, StyledPrompt
@@ -41,7 +39,7 @@ from ..services.image_model_catalog_service import (
 )
 from ..services.manuscript_image_index_service import restore_image_asset_ids
 from ..services.notification_service import (
-    NotificationSourceSnapshot,
+    build_image_run_notification_snapshot,
     serialize_notification,
     upsert_notification_source,
 )
@@ -51,6 +49,7 @@ from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..services.settings_service import settings_service
 from ..services.sidecar_client import SidecarClient, SidecarConversionError, SidecarUnavailableError, sidecar_client
 from ..services.storage_service import storage_service
+from ..services.thread_runtime_sync_service import emit_runtime_sync_events, sync_run_thread_status
 from .asset_change_events import (
     queue_project_assets_change,
     queue_scene_assets_change,
@@ -203,42 +202,6 @@ def _pick_nearest_size(candidates: list[str], requested_ratio: float | None, fal
         candidates,
         key=lambda size: abs((_ratio_from_size(size) or requested_ratio) - requested_ratio),
     )
-
-
-def _notification_status(status: str) -> str:
-    if status in {"queued", "running", "applying"}:
-        return "running"
-    if status == "review":
-        return "pending"
-    if status == "applied":
-        return "success"
-    if status in {"rejected", "cancelled"}:
-        return "cancelled"
-    return "error"
-
-
-def _notification_message(row: ImageRunModel) -> str:
-    if row.status == "review":
-        return "Preview ready"
-    if row.status == "applying":
-        return "Applying..."
-    if row.status == "applied":
-        return "Completed"
-    if row.status == "rejected":
-        return "Rejected"
-    if row.status == "cancelled":
-        return "Cancelled"
-    if row.status == "failed":
-        return row.error_message or "Image generation failed"
-    if row.stage == "preparing":
-        return "Preparing..."
-    if row.stage == "generating":
-        return "Generating..."
-    if row.stage == "saving":
-        return "Saving..."
-    if row.stage == "binding":
-        return "Binding..."
-    return "Running..."
 
 
 def _get_image_settings(settings_row: UserSettings) -> ImageGenConfig:
@@ -520,9 +483,9 @@ class ImageRunService:
             if row.status not in {"queued", "running"}:
                 return row
             before = snapshot_image_run_row(row)
-            row.status = "cancelled"
+            row.status = "canceled"
             row.stage = None
-            row.failure_code = "cancelled"
+            row.failure_code = "canceled"
             row.error_message = None
             row.updated_at = datetime.utcnow()
             apply_project_usage_delta(
@@ -810,33 +773,10 @@ class ImageRunService:
 
             notification = upsert_notification_source(
                 db,
-                snapshot=NotificationSourceSnapshot(
-                    user_id=row.user_id,
-                    project_id=row.project_id,
-                    source_kind="imageRun",
-                    source_id=str(row.id),
-                    status=_notification_status(row.status),
-                    label=str(_json_dict(row.request_snapshot).get("label") or "Image generation"),
-                    message=_notification_message(row),
-                    warning=row.error_message if row.status == "failed" else None,
-                    progress={
-                        "stage": row.stage,
-                        "label": _notification_message(row),
-                    } if row.status in {"queued", "running", "applying"} else None,
+                snapshot=build_image_run_notification_snapshot(
+                    row=row,
+                    serialized_payload=payload,
                     custom_slot=custom_slot,
-                    target={
-                        "kind": "thread" if row.thread_id else "project",
-                        "project_id": str(row.project_id),
-                        "thread_id": str(row.thread_id) if row.thread_id else None,
-                    },
-                    meta={
-                        "image_run_id": str(row.id),
-                        "thread_id": str(row.thread_id) if row.thread_id else None,
-                        "tool_call_id": _tool_call_id_from_snapshot(_json_dict(row.request_snapshot)),
-                        "preview_asset_id": payload.get("preview_asset_id"),
-                        "final_asset_id": payload.get("final_asset_id"),
-                    },
-                    important=_notification_status(row.status) in {"pending", "error"},
                 ),
             )
             db.commit()
@@ -1519,9 +1459,9 @@ class ImageRunService:
                         "image_run_id": str(image_run.id),
                     },
                 }
-            elif image_run.status in {"failed", "cancelled"}:
+            elif image_run.status in {"failed", "canceled"}:
                 tool_call.status = "failed"
-                tool_call.reason = image_run.error_message or ("Image run cancelled" if image_run.status == "cancelled" else "Image generation failed")
+                tool_call.reason = image_run.error_message or ("Image run canceled" if image_run.status == "canceled" else "Image generation failed")
                 tool_call.result = {
                     "success": False,
                     "message": tool_call.reason,
@@ -1536,30 +1476,7 @@ class ImageRunService:
 
             tool_call.updated_at = datetime.utcnow()
 
-            run = db.query(RunModel).filter(RunModel.id == tool_call.run_id).first()
-            thread = db.query(Thread).filter(Thread.id == tool_call.thread_id).first()
-            if run is not None and thread is not None:
-                statuses = [
-                    status
-                    for (status,) in db.query(RunToolCallModel.status).filter(RunToolCallModel.run_id == run.id).all()
-                ]
-                if any(status == "pending" for status in statuses):
-                    next_status = "waiting"
-                elif any(status in {"streaming", "validating", "processing", "working"} for status in statuses):
-                    next_status = "processing"
-                elif any(status == "rejected" for status in statuses):
-                    next_status = "paused"
-                else:
-                    next_status = "done"
-                run.status = next_status
-                latest_run = (
-                    db.query(RunModel)
-                    .filter(RunModel.thread_id == thread.id)
-                    .order_by(RunModel.run_seq.desc())
-                    .first()
-                )
-                if latest_run is not None and latest_run.id == run.id:
-                    thread.status = next_status
+            sync_result = sync_run_thread_status(db, run_id=tool_call.run_id)
 
             apply_project_usage_delta(
                 db,
@@ -1587,18 +1504,7 @@ class ImageRunService:
                     "child_thread_id": str(tool_call.child_thread_id) if tool_call.child_thread_id else None,
                 },
                 )
-            if run is not None and thread is not None:
-                await runtime_event_dispatcher.emit_runtime_event(
-                    user_id=image_run.user_id,
-                    project_id=image_run.project_id,
-                    thread_id=thread.id,
-                    event_name="run:status",
-                    data={
-                        "run_id": str(run.id),
-                        "status": run.status,
-                        "error": run.error,
-                    },
-                )
+            await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
         finally:
             db.close()
 

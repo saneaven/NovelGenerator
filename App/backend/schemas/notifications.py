@@ -7,7 +7,21 @@ from pydantic import BaseModel, Field
 
 
 NotificationSourceKind = Literal["journey", "imageRun", "system"]
-NotificationStatus = Literal["running", "pending", "success", "error", "cancelled"]
+NotificationStatus = Literal[
+    "running",
+    "waiting",
+    "processing",
+    "paused",
+    "done",
+    "error",
+    "canceled",
+    "queued",
+    "review",
+    "applying",
+    "applied",
+    "rejected",
+    "failed",
+]
 NotificationTargetKind = Literal["none", "project", "thread", "journey"]
 
 
@@ -28,6 +42,11 @@ class NotificationCustomSlot(BaseModel):
 class NotificationSource(BaseModel):
     kind: NotificationSourceKind
     id: str
+    thread_id: str | None = None
+    run_id: str | None = None
+    journey_kind: str | None = None
+    tool_call_id: str | None = None
+    review_mode: str | None = None
 
 
 class NotificationTarget(BaseModel):

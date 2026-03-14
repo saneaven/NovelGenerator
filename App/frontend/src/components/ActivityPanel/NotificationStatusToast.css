@@ -52,11 +52,11 @@
   flex-shrink: 0;
 }
 
-.notification-status-toast__dot--running {
+.notification-status-toast__dot--active {
   background: var(--color-brand-primary);
 }
 
-.notification-status-toast__dot--pending {
+.notification-status-toast__dot--attention {
   background: var(--color-warning);
 }
 
@@ -68,8 +68,7 @@
   background: var(--color-error);
 }
 
-.notification-status-toast__dot--cancelled,
-.notification-status-toast__dot--idle {
+.notification-status-toast__dot--neutral {
   background: var(--color-text-muted);
 }
 

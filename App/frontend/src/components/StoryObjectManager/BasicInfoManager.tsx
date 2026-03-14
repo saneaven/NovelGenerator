@@ -463,7 +463,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
           projectId={projectId}
           preSelectedObjectIds={[basicInfoId]}
           defaultSourceLanguage={settings.mainLanguage}
-          defaultTargetLanguage={settings.defaultSubLanguage}
+          defaultTargetLanguage={settings.defaultSubLanguage ?? undefined}
         />
       )}
 

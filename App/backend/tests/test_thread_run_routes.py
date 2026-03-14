@@ -61,9 +61,16 @@ def _install_import_stubs() -> None:
     fake_run_event_bus.run_event_bus = SimpleNamespace(subscribe=lambda *_args, **_kwargs: [])
     sys.modules["App.backend.services.run_event_bus"] = fake_run_event_bus
 
+    async def _emit_runtime_event(*_args, **_kwargs):
+        return None
+
+    async def _emit_project_event(*_args, **_kwargs):
+        return None
+
     fake_runtime_event_dispatcher = types.ModuleType("App.backend.services.runtime_event_dispatcher")
     fake_runtime_event_dispatcher.runtime_event_dispatcher = SimpleNamespace(
-        emit_runtime_event=lambda *_args, **_kwargs: None,
+        emit_runtime_event=_emit_runtime_event,
+        emit_project_event=_emit_project_event,
     )
     sys.modules["App.backend.services.runtime_event_dispatcher"] = fake_runtime_event_dispatcher
 
@@ -78,6 +85,21 @@ def _install_import_stubs() -> None:
     fake_notification_service.delete_threads = lambda *_args, **_kwargs: None
     fake_notification_service.map_run_status_to_notification_status = lambda status: status
     fake_notification_service.upsert_notification_source = lambda *_args, **_kwargs: None
+    fake_notification_service.build_journey_notification_snapshot = lambda **kwargs: SimpleNamespace(
+        user_id=getattr(kwargs.get("journey"), "user_id", None),
+        project_id=getattr(kwargs.get("journey"), "project_id", None),
+        source_kind="journey",
+        source_id=str(getattr(kwargs.get("journey"), "id", "")),
+        status=str(getattr(kwargs.get("run"), "status", "")),
+        label="Journey",
+        message="",
+        important=False,
+        target={"kind": "journey"},
+        warning=None,
+        progress=None,
+        custom_slot={"type": "none"},
+        meta={},
+    )
     sys.modules["App.backend.services.notification_service"] = fake_notification_service
 
     fake_run_pipeline_status_logic = types.ModuleType("App.backend.services.run_pipeline.status_logic")

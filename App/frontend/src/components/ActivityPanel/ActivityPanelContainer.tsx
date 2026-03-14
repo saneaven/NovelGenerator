@@ -26,7 +26,7 @@ const ActivityPanelContainer: React.FC<ActivityPanelContainerProps> = ({
   const notificationsMap = useNotificationStore((state) => state.notifications);
 
   const hasNotifications = Object.values(notificationsMap).some(
-    (n) => n !== undefined && n.status !== 'idle'
+    (n) => n !== undefined
   );
 
   const handleClearAll = async () => {

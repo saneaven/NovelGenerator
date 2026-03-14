@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..models.db_models import (
     ImageRunModel,
+    Journey,
     NotificationModel,
     RunMessageModel,
     RunModel,
@@ -34,7 +35,15 @@ from .storage_usage_service import (
 )
 
 NOTIFICATION_SOURCE_KIND_VALUES = {"journey", "imageRun", "system"}
-NOTIFICATION_STATUS_VALUES = {"running", "pending", "success", "error", "cancelled"}
+JOURNEY_NOTIFICATION_STATUS_VALUES = {"running", "waiting", "processing", "paused", "done", "error", "canceled"}
+IMAGE_RUN_NOTIFICATION_STATUS_VALUES = {"queued", "running", "review", "applying", "applied", "rejected", "failed", "canceled"}
+SYSTEM_NOTIFICATION_STATUS_VALUES = {"running", "done", "error", "canceled"}
+NOTIFICATION_ALLOWED_STATUSES_BY_SOURCE = {
+    "journey": JOURNEY_NOTIFICATION_STATUS_VALUES,
+    "imageRun": IMAGE_RUN_NOTIFICATION_STATUS_VALUES,
+    "system": SYSTEM_NOTIFICATION_STATUS_VALUES,
+}
+NOTIFICATION_STATUS_VALUES = set().union(*NOTIFICATION_ALLOWED_STATUSES_BY_SOURCE.values())
 NOTIFICATION_TARGET_KIND_VALUES = {"none", "project", "thread", "journey"}
 ACTIVE_THREAD_DELETE_STATUSES = {"running", "waiting", "processing"}
 
@@ -147,12 +156,17 @@ def _normalize_target_json(
     if kind == "journey":
         journey_id_value = value.get("journey_id")
         journey_id_text = str(journey_id_value).strip() if journey_id_value is not None else None
+        thread_id_value = value.get("thread_id")
+        thread_id_text = str(thread_id_value).strip() if thread_id_value is not None else None
         if project_id_text and journey_id_text:
-            return {
+            out = {
                 "kind": "journey",
                 "project_id": project_id_text,
                 "journey_id": journey_id_text,
             }
+            if thread_id_text:
+                out["thread_id"] = thread_id_text
+            return out
         return {"kind": "none"}
 
     return {"kind": "none"}
@@ -164,35 +178,6 @@ def _to_iso_utc(value: Any) -> Any:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def map_run_status_to_notification_status(status: str | None) -> str:
-    text = str(status or "").strip()
-    if text in {"running", "processing"}:
-        return "running"
-    if text in {"waiting", "paused"}:
-        return "pending"
-    if text == "done":
-        return "success"
-    if text == "error":
-        return "error"
-    if text == "canceled":
-        return "cancelled"
-    return "running"
-
-
-def message_from_notification_status(*, status: str, error: str | None = None) -> str:
-    if status == "running":
-        return "Processing..."
-    if status == "pending":
-        return "Needs confirmation"
-    if status == "success":
-        return "Completed"
-    if status == "error":
-        return error or "An error occurred"
-    if status == "cancelled":
-        return "Canceled"
-    return "Processing..."
 
 
 def default_journey_label(journey_kind: str | None) -> str:
@@ -214,6 +199,198 @@ def default_journey_label(journey_kind: str | None) -> str:
     return "Journey"
 
 
+def validate_notification_snapshot(snapshot: NotificationSourceSnapshot) -> None:
+    normalized_source_kind = str(snapshot.source_kind or "").strip()
+    if normalized_source_kind not in NOTIFICATION_SOURCE_KIND_VALUES:
+        raise ValueError(f"Unsupported notification source kind: {normalized_source_kind}")
+
+    normalized_status = str(snapshot.status or "").strip()
+    allowed = NOTIFICATION_ALLOWED_STATUSES_BY_SOURCE.get(normalized_source_kind, set())
+    if normalized_status not in allowed:
+        raise ValueError(
+            f"Unsupported notification status '{normalized_status}' for source kind '{normalized_source_kind}'"
+        )
+
+
+def _journey_message_for_status(*, status: str, error: str | None = None) -> str:
+    if status == "running":
+        return "Running..."
+    if status == "processing":
+        return "Applying changes..."
+    if status == "waiting":
+        return "Needs confirmation"
+    if status == "paused":
+        return "Paused"
+    if status == "done":
+        return "Completed"
+    if status == "error":
+        return error or "An error occurred"
+    if status == "canceled":
+        return "Canceled"
+    return "Running..."
+
+
+def build_journey_notification_snapshot(
+    *,
+    journey: Journey,
+    thread: Thread,
+    run: RunModel,
+    error: str | None,
+) -> NotificationSourceSnapshot:
+    status = str(run.status or "").strip() or "running"
+    return NotificationSourceSnapshot(
+        user_id=journey.user_id,
+        project_id=journey.project_id,
+        source_kind="journey",
+        source_id=str(journey.id),
+        status=status,
+        label=str(journey.display_label or "").strip() or default_journey_label(journey.kind),
+        message=_journey_message_for_status(status=status, error=error),
+        warning=error if status == "error" else None,
+        progress=None,
+        custom_slot={"type": "none"},
+        target={
+            "kind": "journey",
+            "project_id": str(journey.project_id),
+            "journey_id": str(journey.id),
+            "thread_id": str(thread.id),
+        },
+        meta={
+            "journey_id": str(journey.id),
+            "thread_id": str(thread.id),
+            "run_id": str(run.id),
+            "journey_kind": journey.kind,
+            "project_id": str(journey.project_id),
+        },
+        important=status in {"waiting", "error"},
+    )
+
+
+def _image_run_message_for_row(row: ImageRunModel) -> str:
+    if row.status == "queued":
+        return "Queued"
+    if row.status == "review":
+        return "Preview ready"
+    if row.status == "applying":
+        return "Applying..."
+    if row.status == "applied":
+        return "Completed"
+    if row.status == "rejected":
+        return "Rejected"
+    if row.status == "failed":
+        return row.error_message or "Image generation failed"
+    if row.status == "canceled":
+        return "Canceled"
+    if row.stage == "preparing":
+        return "Preparing..."
+    if row.stage == "generating":
+        return "Generating..."
+    if row.stage == "saving":
+        return "Saving..."
+    if row.stage == "binding":
+        return "Binding..."
+    return "Running..."
+
+
+def build_image_run_notification_snapshot(
+    *,
+    row: ImageRunModel,
+    serialized_payload: dict[str, Any],
+    custom_slot: dict[str, Any] | None = None,
+) -> NotificationSourceSnapshot:
+    request_snapshot = serialized_payload.get("request_snapshot")
+    if not isinstance(request_snapshot, dict):
+        request_snapshot = {}
+    tool_call_id = request_snapshot.get("tool_call_id")
+    normalized_tool_call_id = str(tool_call_id).strip() if tool_call_id is not None else None
+    thread_id = str(row.thread_id) if row.thread_id is not None else None
+    return NotificationSourceSnapshot(
+        user_id=row.user_id,
+        project_id=row.project_id,
+        source_kind="imageRun",
+        source_id=str(row.id),
+        status=str(row.status),
+        label=str(request_snapshot.get("label") or "Image generation"),
+        message=_image_run_message_for_row(row),
+        warning=row.error_message if row.status == "failed" else None,
+        progress={
+            "stage": row.stage,
+            "label": _image_run_message_for_row(row),
+        }
+        if row.status in {"queued", "running", "applying"}
+        else None,
+        custom_slot=custom_slot or {"type": "none"},
+        target={
+            "kind": "thread" if thread_id else "project",
+            "project_id": str(row.project_id),
+            "thread_id": thread_id,
+        },
+        meta={
+            "image_run_id": str(row.id),
+            "thread_id": thread_id,
+            "tool_call_id": normalized_tool_call_id,
+            "preview_asset_id": serialized_payload.get("preview_asset_id"),
+            "final_asset_id": serialized_payload.get("final_asset_id"),
+            "review_mode": row.review_mode,
+        },
+        important=row.status in {"review", "failed"},
+    )
+
+
+def build_system_notification_snapshot(
+    *,
+    user_id: UUID,
+    source_id: str,
+    status: str,
+    label: str,
+    message: str,
+    project_id: UUID | None = None,
+    warning: str | None = None,
+    progress: dict[str, Any] | None = None,
+    custom_slot: dict[str, Any] | None = None,
+    target: dict[str, Any] | None = None,
+    meta: dict[str, Any] | None = None,
+    important: bool = False,
+) -> NotificationSourceSnapshot:
+    return NotificationSourceSnapshot(
+        user_id=user_id,
+        project_id=project_id,
+        source_kind="system",
+        source_id=source_id,
+        status=status,
+        label=label,
+        message=message,
+        important=important,
+        target=target or {"kind": "none"},
+        warning=warning,
+        progress=progress,
+        custom_slot=custom_slot,
+        meta=meta,
+    )
+
+
+def _serialize_source_payload(*, row: NotificationModel, meta: dict[str, Any] | None) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "kind": row.source_kind,
+        "id": str(row.source_id),
+    }
+    if row.source_kind == "journey":
+        if isinstance(meta, dict) and meta.get("thread_id"):
+            payload["thread_id"] = str(meta.get("thread_id")).strip()
+        if isinstance(meta, dict) and meta.get("run_id"):
+            payload["run_id"] = str(meta.get("run_id")).strip()
+        if isinstance(meta, dict) and meta.get("journey_kind"):
+            payload["journey_kind"] = str(meta.get("journey_kind")).strip()
+    elif row.source_kind == "imageRun":
+        if isinstance(meta, dict) and meta.get("thread_id"):
+            payload["thread_id"] = str(meta.get("thread_id")).strip()
+        if isinstance(meta, dict) and meta.get("tool_call_id"):
+            payload["tool_call_id"] = str(meta.get("tool_call_id")).strip()
+        if isinstance(meta, dict) and meta.get("review_mode"):
+            payload["review_mode"] = str(meta.get("review_mode")).strip()
+    return payload
+
+
 def serialize_notification(row: NotificationModel) -> dict[str, Any]:
     progress = _as_progress_json(row.progress_json)
     custom_slot = _as_custom_slot_json(row.custom_slot_json)
@@ -223,10 +400,7 @@ def serialize_notification(row: NotificationModel) -> dict[str, Any]:
     return {
         "id": str(row.id),
         "project_id": str(row.project_id) if row.project_id is not None else None,
-        "source": {
-            "kind": row.source_kind,
-            "id": str(row.source_id),
-        },
+        "source": _serialize_source_payload(row=row, meta=meta),
         "status": row.status,
         "label": row.label,
         "message": row.message,
@@ -286,17 +460,13 @@ def upsert_notification_source(
     *,
     snapshot: NotificationSourceSnapshot,
 ) -> NotificationModel:
+    validate_notification_snapshot(snapshot)
     normalized_source_kind = str(snapshot.source_kind or "").strip()
-    if normalized_source_kind not in NOTIFICATION_SOURCE_KIND_VALUES:
-        raise ValueError(f"Unsupported notification source kind: {normalized_source_kind}")
-
     normalized_source_id = str(snapshot.source_id or "").strip()
     if not normalized_source_id:
         raise ValueError("Notification source_id is required")
 
     normalized_status = str(snapshot.status or "").strip()
-    if normalized_status not in NOTIFICATION_STATUS_VALUES:
-        raise ValueError(f"Unsupported notification status: {normalized_status}")
 
     normalized_label = str(snapshot.label or "").strip() or "Notification"
     normalized_message = str(snapshot.message or "").strip() or "Processing..."
@@ -416,16 +586,15 @@ def push_system_notification(
 ) -> NotificationModel:
     return upsert_notification_source(
         db,
-        snapshot=NotificationSourceSnapshot(
+        snapshot=build_system_notification_snapshot(
             user_id=user_id,
             project_id=project_id,
-            source_kind="system",
             source_id=source_id,
             status=status,
             label=label,
             message=message,
             important=important,
-            target=target or {"kind": "none"},
+            target=target,
             warning=warning,
             progress=progress,
             custom_slot=custom_slot,

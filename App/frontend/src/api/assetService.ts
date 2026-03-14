@@ -190,7 +190,7 @@ export interface ReferenceImage {
 
 export type ImageRunOrigin = 'direct' | 'tool_preview';
 export type ImageRunReviewMode = 'auto' | 'manual';
-export type ImageRunStatus = 'queued' | 'running' | 'review' | 'applying' | 'applied' | 'rejected' | 'failed' | 'cancelled';
+export type ImageRunStatus = 'queued' | 'running' | 'review' | 'applying' | 'applied' | 'rejected' | 'failed' | 'canceled';
 export type ImageRunStage = 'preparing' | 'generating' | 'saving' | 'binding' | null;
 
 export interface ImageRunRecipeRequest {

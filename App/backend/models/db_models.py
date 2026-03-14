@@ -1136,7 +1136,7 @@ class ImageRunModel(Base):
             name='ck_image_runs_review_mode',
         ),
         CheckConstraint(
-            "status IN ('queued','running','review','applying','applied','rejected','failed','cancelled')",
+            "status IN ('queued','running','review','applying','applied','rejected','failed','canceled')",
             name='ck_image_runs_status',
         ),
         CheckConstraint(
@@ -1163,7 +1163,7 @@ class NotificationModel(Base):
     source_kind = Column(String(32), nullable=False)  # 'journey' | 'imageRun' | 'system'
     source_id = Column(String(160), nullable=False)
 
-    status = Column(String(16), nullable=False)  # 'running' | 'pending' | 'success' | 'error' | 'cancelled'
+    status = Column(String(16), nullable=False)  # Source-specific raw status (journey|imageRun|system)
     label = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)
     warning = Column(Text, nullable=True)
@@ -1182,7 +1182,10 @@ class NotificationModel(Base):
     __table_args__ = (
         CheckConstraint("source_kind IN ('journey','imageRun','system')", name="ck_notifications_source_kind"),
         CheckConstraint(
-            "status IN ('running','pending','success','error','cancelled')",
+            "status IN ("
+            "'running','waiting','processing','paused','done','error','canceled',"
+            "'queued','review','applying','applied','rejected','failed'"
+            ")",
             name="ck_notifications_status",
         ),
         UniqueConstraint("user_id", "source_kind", "source_id", name="uq_notifications_user_source"),

@@ -47,6 +47,7 @@ export interface DecideToolCallsBatchParams {
     decision: 'accept' | 'reject';
     reason?: string;
   }>;
+  pauseAfterApply?: boolean;
 }
 
 function upsertThreadStatus(params: {
@@ -131,7 +132,6 @@ function toResumeRunRequest(request?: Omit<StartRunCommand, 'input_text'>): Resu
 }
 
 export async function sendThreadMessage(params: SendThreadMessageParams): Promise<boolean> {
-  useThreadStore.getState().setAutoContinuePaused(params.threadId, false);
   useThreadStore.getState().clearPreexistingLiveThread(params.threadId);
 
   const trimmed = params.inputText.trim();
@@ -206,7 +206,6 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
 }
 
 export async function resumeThread(params: ResumeThreadParams): Promise<boolean> {
-  useThreadStore.getState().setAutoContinuePaused(params.threadId, false);
   useThreadStore.getState().clearPreexistingLiveThread(params.threadId);
 
   const response = await threadService.resumeRun(params.threadId, params.request);
@@ -224,23 +223,16 @@ export async function resumeThread(params: ResumeThreadParams): Promise<boolean>
 
 export async function pauseThread(params: PauseThreadParams): Promise<void> {
   const store = useThreadStore.getState();
-  store.setAutoContinuePaused(params.threadId, true);
-  try {
-    await threadService.pauseThread(params.threadId);
-    store.setThreadRuntime(params.threadId, {
-      status: 'paused',
-      latestRunStatus: 'paused',
-      updatedAt: nowIso(),
-    });
-    store.setThreadStreamActive(params.threadId, false);
-  } catch (error) {
-    store.setAutoContinuePaused(params.threadId, false);
-    throw error;
-  }
+  await threadService.pauseThread(params.threadId);
+  store.setThreadRuntime(params.threadId, {
+    status: 'paused',
+    latestRunStatus: 'paused',
+    updatedAt: nowIso(),
+  });
+  store.setThreadStreamActive(params.threadId, false);
 }
 
 export async function cancelThread(params: CancelThreadParams): Promise<void> {
-  useThreadStore.getState().setAutoContinuePaused(params.threadId, false);
   await threadService.cancelThread(params.threadId);
 }
 
@@ -264,6 +256,7 @@ export async function decideToolCallsBatch(params: DecideToolCallsBatchParams): 
 
   const response = await threadService.decideToolCallsBatch(params.threadId, {
     decisions,
+    pause_after_apply: params.pauseAfterApply ?? false,
   });
   response.results.forEach((item) => applyToolDecisionResponse(item));
 }

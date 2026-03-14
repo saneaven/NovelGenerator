@@ -4,6 +4,10 @@ import type { NotificationEntry } from '../../store/notificationStore';
 import AuthenticatedImage from '../common/AuthenticatedImage';
 import { Check, Close, ChevronRight, Trash } from '../icons';
 import { Loading } from '../common/Loading';
+import {
+  getNotificationTone,
+  shouldShowSpinner,
+} from './notificationPresentation';
 
 interface NotificationItemProps {
   notification: NotificationEntry;
@@ -167,10 +171,8 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
       animate(dragX, 0, { type: 'spring', stiffness: 500, damping: 30 });
       return;
     }
-    if (status !== 'idle') {
-      onClick(id);
-    }
-  }, [status, onClick, id, dragX]);
+    onClick(id);
+  }, [onClick, id, dragX]);
 
   // Snap based on current position, not offset from drag start
   const handleDragEnd = useCallback(
@@ -207,20 +209,23 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   );
 
   const getStatusIcon = () => {
-    switch (status) {
-      case 'running':
-        return <Loading size="sm" />;
-      case 'pending':
-        return <span className="notification-icon notification-icon--pending">!</span>;
-      case 'success':
-        return <span className="notification-icon notification-icon--success"><Check size="sm" /></span>;
-      case 'error':
-        return <span className="notification-icon notification-icon--error">!</span>;
-      case 'cancelled':
-        return <span className="notification-icon notification-icon--cancelled"><Close size="sm" /></span>;
-      default:
-        return null;
+    const tone = getNotificationTone(notification);
+    if (shouldShowSpinner(notification)) {
+      return <Loading size="sm" />;
     }
+    if (tone === 'success') {
+      return <span className="notification-icon notification-icon--success"><Check size="sm" /></span>;
+    }
+    if (tone === 'error') {
+      return <span className="notification-icon notification-icon--error">!</span>;
+    }
+    if (tone === 'attention') {
+      return <span className="notification-icon notification-icon--attention">!</span>;
+    }
+    if (tone === 'neutral') {
+      return <span className="notification-icon notification-icon--neutral"><Close size="sm" /></span>;
+    }
+    return <span className="notification-icon notification-icon--active">…</span>;
   };
 
   const renderCustomSlot = () => {
@@ -250,9 +255,10 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
     return null;
   };
 
-  const isClickable = status !== 'idle';
+  const isClickable = true;
 
   const animationIndex = isMobile ? (totalCount - 1 - index) : index;
+  const tone = getNotificationTone(notification);
   const surfaceStyle = {
     '--item-index': animationIndex,
   } as React.CSSProperties;
@@ -260,7 +266,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   return (
     <motion.div
       ref={itemRef}
-      className={`notification-item notification-item--${status} notification-item--${source.kind} ${isClickable ? 'notification-item--clickable' : ''} ${!isRead ? 'notification-item--unread' : ''} ${important ? 'notification-item--important' : ''}`}
+      className={`notification-item notification-item--${status} notification-item--${source.kind} notification-item--tone-${tone} ${isClickable ? 'notification-item--clickable' : ''} ${!isRead ? 'notification-item--unread' : ''} ${important ? 'notification-item--important' : ''}`}
       style={{ opacity, transform, pointerEvents, zIndex }}
     >
       <div className="notification-item-swipe-container">

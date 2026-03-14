@@ -51,6 +51,7 @@ class ToolCallBatchDecisionItem(BaseModel):
 
 class ToolCallBatchDecisionRequest(BaseModel):
     decisions: list[ToolCallBatchDecisionItem]
+    pause_after_apply: bool = False
 
 
 class CreateJourneyRequest(BaseModel):

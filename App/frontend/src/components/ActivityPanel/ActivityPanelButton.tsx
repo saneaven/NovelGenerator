@@ -6,6 +6,7 @@ import { Bell } from '../icons';
 import { IconButton } from '../IconButton';
 import ActivityPanelContainer, { type ActivityView } from './ActivityPanelContainer';
 import NotificationStatusToast from './NotificationStatusToast';
+import { isNotificationActive } from '../Notification/notificationPresentation';
 import './ActivityPanel.css';
 import '../Notification/Notification.css';
 
@@ -31,7 +32,7 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
   const hasUnread = useMemo(
     () =>
       Object.values(notificationsMap).some(
-        (n) => n !== undefined && n.status !== 'idle' && !n.isRead
+        (n) => n !== undefined && !n.isRead
       ),
     [notificationsMap]
   );
@@ -39,7 +40,7 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
   const hasRunning = useMemo(
     () =>
       Object.values(notificationsMap).some(
-        (n) => n !== undefined && n.status === 'running'
+        (n) => n !== undefined && isNotificationActive(n)
       ),
     [notificationsMap]
   );

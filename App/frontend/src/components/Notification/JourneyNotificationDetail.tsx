@@ -24,12 +24,14 @@ import { Loading } from '../common/Loading';
 import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
 import { hasRenderableAssistantOutput } from '../../runtime/messageVisibility';
 import { applyThreadSnapshot } from '../../runtime/threadHydration';
+import type { NotificationStatus } from '../../store/notificationStore';
+import { formatNotificationStatusLabelFor } from './notificationPresentation';
 import './JourneyNotificationDetail.css';
 
 interface JourneyNotificationDetailProps {
   threadId: string;
   label: string;
-  status: string;
+  status: NotificationStatus;
   message: string;
   warning?: string;
   projectId: string;
@@ -74,42 +76,11 @@ function getDisplayReasoningDetail(message: ThreadMessage, language: string) {
   return resolved.reasoningDetail;
 }
 
-type DisplayStatus = 'idle' | 'running' | 'processing' | 'waiting' | 'paused' | 'done' | 'canceled' | 'error';
-
-function deriveDisplayStatus(params: {
-  threadStatus: string | undefined;
-  hasPendingToolCalls: boolean;
-  isStreamActive: boolean;
-}): DisplayStatus {
-  const { threadStatus, hasPendingToolCalls, isStreamActive } = params;
-  if (!threadStatus) return 'idle';
-  if (threadStatus === 'processing') return 'processing';
-  if (isStreamActive) return 'running';
-  if (threadStatus === 'error') return 'error';
-  if (hasPendingToolCalls || threadStatus === 'waiting') return 'waiting';
-  if (threadStatus === 'paused') return 'paused';
-  if (threadStatus === 'running') return 'running';
-  if (threadStatus === 'done') return 'done';
-  if (threadStatus === 'canceled') return 'canceled';
-  return 'idle';
-}
-
-function statusLabel(status: DisplayStatus): string {
-  switch (status) {
-    case 'running': return 'Running';
-    case 'processing': return 'Processing';
-    case 'waiting': return 'Needs confirmation';
-    case 'paused': return 'Paused';
-    case 'done': return 'Completed';
-    case 'canceled': return 'Canceled';
-    case 'error': return 'Error';
-    default: return '';
-  }
-}
-
 const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   threadId,
   label,
+  status,
+  message,
   warning,
   projectId,
   onClose,
@@ -130,14 +101,12 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const threadMessages = useThreadStore(
     useShallow((s) => s.messagesByThreadId[threadId]),
   );
-  const { toolCallsById, toolCallIdsByAssistantMessageId, threadStatus, threadLastError, isStreamActive } =
+  const { toolCallsById, toolCallIdsByAssistantMessageId, threadLastError } =
     useThreadStore(
       useShallow((s) => ({
         toolCallsById: s.toolCallsById,
         toolCallIdsByAssistantMessageId: s.toolCallIdsByAssistantMessageId,
-        threadStatus: s.threadsById[threadId]?.status,
         threadLastError: s.threadsById[threadId]?.lastError,
-        isStreamActive: Boolean(s.activeStreamByThread[threadId]),
       })),
     );
 
@@ -241,14 +210,11 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     [lastAssistantToolCalls],
   );
 
-  const displayStatus = useMemo(
-    () => deriveDisplayStatus({ threadStatus, hasPendingToolCalls, isStreamActive }),
-    [threadStatus, hasPendingToolCalls, isStreamActive],
-  );
-
-  const isRunning = displayStatus === 'running' || displayStatus === 'processing';
-  const isPending = displayStatus === 'waiting' || hasPendingToolCalls;
-  const isFeedbackDisabled = isRunning || isPending;
+  const statusText = formatNotificationStatusLabelFor('journey', status);
+  const isRunning = status === 'running' || status === 'processing';
+  const isWaiting = status === 'waiting';
+  const hasDecisionControls = hasPendingToolCalls;
+  const isFeedbackDisabled = isRunning || isWaiting || hasDecisionControls;
 
   // Handlers
   const handleCancel = useCallback(() => {
@@ -321,10 +287,10 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
             <FunctionCallsThread
               threadId={threadId}
               scopeKey={`journey:${threadId}:${message.id}:calls`}
-              mode={isLast && isPending ? 'pending' : 'confirmed'}
+              mode={isLast && hasDecisionControls ? 'pending' : 'confirmed'}
               cards={cards}
-              onCommitDecisions={isLast && isPending ? commitDecisions : undefined}
-              onCommitDecisionsAndPause={isLast && isPending ? commitDecisionsAndPause : undefined}
+              onCommitDecisions={isLast && hasDecisionControls ? commitDecisions : undefined}
+              onCommitDecisionsAndPause={isLast && hasDecisionControls ? commitDecisionsAndPause : undefined}
               projectId={projectId}
             />
           </div>
@@ -387,8 +353,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     );
   }
 
-  const statusText = statusLabel(displayStatus);
-  const hasInlineWarning = Boolean(warning || (displayStatus === 'error' && threadLastError));
+  const hasInlineWarning = Boolean(warning || (status === 'error' && threadLastError));
 
   return (
     <BaseModal
@@ -404,12 +369,17 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
       {/* Header */}
       <div className="journey-detail-header">
         <div className="journey-detail-header-left">
-          <h3 className="journey-detail-title">{label}</h3>
-          {statusText && (
-            <span className={`journey-detail-status journey-detail-status--${displayStatus}`}>
-              {statusText}
-            </span>
-          )}
+          <div className="journey-detail-header-meta">
+            <h3 className="journey-detail-title">{label}</h3>
+            {statusText && (
+              <span className={`journey-detail-status journey-detail-status--${status}`}>
+                {statusText}
+              </span>
+            )}
+          </div>
+          {message ? (
+            <div className="journey-detail-header-message">{message}</div>
+          ) : null}
         </div>
         <div className="journey-detail-header-right">
           <IconButton icon={<Close size="md" />} onClick={onClose} title="Close" size="md" variant="ghost" />

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from types import SimpleNamespace
 from typing import Any, Callable
 from uuid import UUID
 
@@ -20,7 +21,6 @@ from ..chat_attachment_service import (
 from ..runtime_event_dispatcher import RuntimeEventDispatcher
 from ..settings_service import settings_service
 from ..mcp import mcp_policy_service, mcp_resolver
-from ..notification_service import serialize_notification
 from ..storage_usage_service import (
     StorageQuotaExceededError,
     apply_project_usage_deltas,
@@ -33,7 +33,7 @@ from ..storage_usage_service import (
     snapshot_run_row,
     snapshot_tool_call_row,
 )
-from ..thread_parent_runtime_service import apply_parent_runtime_snapshot
+from ..thread_runtime_sync_service import emit_runtime_sync_events, sync_explicit_run_thread_status
 from ..template_engine import FragmentNotFoundError, TemplateRenderLimitError, format_template_error
 from ..tool_engine import tool_engine
 from ..tool_engine.contracts import ToolOffer
@@ -179,16 +179,6 @@ class RunPipeline:
         except Exception:
             return True
 
-    async def _emit_notification_upsert(self, row: Any) -> None:
-        if row is None:
-            return
-        await self._event_dispatcher.emit_project_event(
-            user_id=row.user_id,
-            project_id=row.project_id,
-            event_name="notification:upsert",
-            data=serialize_notification(row),
-        )
-
     async def _sync_status_side_effects(
         self,
         db: Session,
@@ -200,10 +190,10 @@ class RunPipeline:
         emit_run_status: bool = True,
         extra_status_data: dict[str, Any] | None = None,
     ) -> None:
-        notification_row = apply_parent_runtime_snapshot(
+        sync_result = sync_explicit_run_thread_status(
             db,
-            thread=thread,
             run=run,
+            thread=thread,
             error=error,
         )
         db.commit()
@@ -218,23 +208,15 @@ class RunPipeline:
                     "error": error,
                 },
             )
-        if emit_run_status:
-            payload = {
-                "run_id": str(run.id),
-                "status": run.status,
-                "error": run.error,
-            }
-            if extra_status_data:
-                payload.update(extra_status_data)
-            await self._emit(
-                user_id=run.user_id,
-                project_id=run.project_id,
-                thread_id=thread.id,
-                event_name="run:status",
-                data=payload,
-            )
-        if notification_row is not None:
-            await self._emit_notification_upsert(notification_row)
+        await emit_runtime_sync_events(
+            SimpleNamespace(
+                emit_runtime_event=self._emit,
+                emit_project_event=getattr(self._event_dispatcher, "emit_project_event", None),
+            ),
+            result=sync_result,
+            emit_run_status=emit_run_status,
+            extra_status_data=extra_status_data,
+        )
 
     async def _apply_status_transition(
         self,
@@ -598,8 +580,8 @@ class RunPipeline:
                 )
                 if thread is None:
                     raise HTTPException(status_code=404, detail="Thread not found")
-                if thread.thread_type != "subAgent":
-                    raise HTTPException(status_code=409, detail="Only sub-agent threads can be paused")
+                if thread.thread_type not in {"subAgent", "journey"}:
+                    raise HTTPException(status_code=409, detail="Only sub-agent and journey threads can be paused")
 
                 run = (
                     db.query(RunModel)

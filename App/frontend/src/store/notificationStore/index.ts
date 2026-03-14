@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import type { NotificationCustomSlot, NotificationEntry, NotificationServerDTO } from './types';
+import type {
+  ImageRunNotificationEntry,
+  JourneyNotificationEntry,
+  NotificationCustomSlot,
+  NotificationEntry,
+  NotificationServerDTO,
+  SystemNotificationEntry,
+} from './types';
 
 interface NotificationStore {
   notifications: Record<string, NotificationEntry | undefined>;
@@ -39,14 +46,50 @@ function toCustomSlot(value: NotificationServerDTO['custom_slot']): Notification
   return { type: 'image', url, alt };
 }
 
-function toEntry(dto: NotificationServerDTO): NotificationEntry {
+const JOURNEY_STATUSES = [
+  'running',
+  'waiting',
+  'processing',
+  'paused',
+  'done',
+  'error',
+  'canceled',
+ ] as const;
+
+const IMAGE_RUN_STATUSES = [
+  'queued',
+  'running',
+  'review',
+  'applying',
+  'applied',
+  'rejected',
+  'failed',
+  'canceled',
+ ] as const;
+
+const SYSTEM_STATUSES = [
+  'running',
+  'done',
+  'error',
+  'canceled',
+ ] as const;
+
+function isJourneyStatus(value: string): value is JourneyNotificationEntry['status'] {
+  return (JOURNEY_STATUSES as readonly string[]).includes(value);
+}
+
+function isImageRunStatus(value: string): value is ImageRunNotificationEntry['status'] {
+  return (IMAGE_RUN_STATUSES as readonly string[]).includes(value);
+}
+
+function isSystemStatus(value: string): value is SystemNotificationEntry['status'] {
+  return (SYSTEM_STATUSES as readonly string[]).includes(value);
+}
+
+function toEntryBase(dto: NotificationServerDTO) {
   return {
     id: String(dto.id),
     projectId: dto.project_id ? String(dto.project_id) : null,
-    source: {
-      kind: dto.source.kind,
-      id: String(dto.source.id),
-    },
     target: {
       kind: dto.target?.kind ?? 'none',
       project_id: dto.target?.project_id ? String(dto.target.project_id) : null,
@@ -54,7 +97,6 @@ function toEntry(dto: NotificationServerDTO): NotificationEntry {
       journey_id: dto.target?.journey_id ? String(dto.target.journey_id) : null,
     },
     important: Boolean(dto.important),
-    status: dto.status,
     label: String(dto.label || 'Notification'),
     message: String(dto.message || ''),
     warning: dto.warning ? String(dto.warning) : undefined,
@@ -75,6 +117,62 @@ function toEntry(dto: NotificationServerDTO): NotificationEntry {
   };
 }
 
+function toEntry(dto: NotificationServerDTO): NotificationEntry | null {
+  const base = toEntryBase(dto);
+  const status = String(dto.status || '').trim();
+  const source = dto.source;
+
+  if (source.kind === 'journey' && isJourneyStatus(status)) {
+    const entry: JourneyNotificationEntry = {
+      ...base,
+      source: {
+        kind: 'journey',
+        id: String(source.id),
+        thread_id: source.thread_id ? String(source.thread_id) : null,
+        run_id: source.run_id ? String(source.run_id) : null,
+        journey_kind: source.journey_kind ? String(source.journey_kind) : null,
+      },
+      status,
+    };
+    return entry;
+  }
+
+  if (source.kind === 'imageRun' && isImageRunStatus(status)) {
+    const reviewMode = source.review_mode === 'auto' || source.review_mode === 'manual'
+      ? source.review_mode
+      : null;
+    const entry: ImageRunNotificationEntry = {
+      ...base,
+      source: {
+        kind: 'imageRun',
+        id: String(source.id),
+        thread_id: source.thread_id ? String(source.thread_id) : null,
+        tool_call_id: source.tool_call_id ? String(source.tool_call_id) : null,
+        review_mode: reviewMode,
+      },
+      status,
+    };
+    return entry;
+  }
+
+  if (source.kind === 'system' && isSystemStatus(status)) {
+    const entry: SystemNotificationEntry = {
+      ...base,
+      source: {
+        kind: 'system',
+        id: String(source.id),
+      },
+      status,
+    };
+    return entry;
+  }
+
+  if (import.meta.env.DEV) {
+    console.warn('Dropping invalid notification payload', { sourceKind: source.kind, status, dto });
+  }
+  return null;
+}
+
 export const useNotificationStore = create<NotificationStore>((set, get) => ({
   notifications: {},
   detailNotificationId: null,
@@ -84,6 +182,7 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
       const next: Record<string, NotificationEntry | undefined> = {};
       for (const item of items) {
         const normalized = toEntry(item);
+        if (!normalized) continue;
         next[normalized.id] = normalized;
       }
 
@@ -97,6 +196,7 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
   upsertFromServer: (item) =>
     set((state) => {
       const normalized = toEntry(item);
+      if (!normalized) return state;
       return {
         notifications: {
           ...state.notifications,
@@ -219,7 +319,13 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
 
   hasRunning: () =>
     Object.values(get().notifications).some(
-      (entry) => entry !== undefined && entry.status === 'running',
+      (entry) =>
+        entry !== undefined
+        && (
+          (entry.source.kind === 'journey' && (entry.status === 'running' || entry.status === 'processing'))
+          || (entry.source.kind === 'imageRun' && (entry.status === 'queued' || entry.status === 'running' || entry.status === 'applying'))
+          || (entry.source.kind === 'system' && entry.status === 'running')
+        ),
     ),
 }));
 

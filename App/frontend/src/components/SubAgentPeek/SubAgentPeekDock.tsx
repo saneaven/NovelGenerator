@@ -192,7 +192,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   }, [childEntries, orderedKeys, selectedKey, prioritizedKeys]);
 
   const { t } = useTranslation();
-  const [actionInFlight, setActionInFlight] = useState<'pause' | 'resume' | 'retry' | 'cancel' | null>(null);
+  const [actionInFlight, setActionInFlight] = useState<'pause' | 'resume' | 'cancel' | null>(null);
 
   const selectedChildThreadId = selectedEntry?.childThreadId;
 
@@ -215,17 +215,6 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   const handleResume = useCallback(() => {
     if (actionInFlight || !selectedChildThreadId) return;
     setActionInFlight('resume');
-    const op = resumeThread({
-      threadId: selectedChildThreadId,
-      projectId,
-      threadType: 'subAgent',
-    });
-    void op.finally(() => setActionInFlight(null));
-  }, [actionInFlight, selectedChildThreadId, projectId]);
-
-  const handleRetry = useCallback(() => {
-    if (actionInFlight || !selectedChildThreadId) return;
-    setActionInFlight('retry');
     const op = resumeThread({
       threadId: selectedChildThreadId,
       projectId,
@@ -311,11 +300,11 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
               <TextButton
                 size="sm"
                 variant="primary"
-                onClick={handleRetry}
+                onClick={handleResume}
                 disabled={actionInFlight !== null}
-                loading={actionInFlight === 'retry'}
+                loading={actionInFlight === 'resume'}
               >
-                {t('common.retry')}
+                {t('common.resume')}
               </TextButton>
               <TextButton
                 size="sm"

@@ -41,11 +41,16 @@ from ..services.run_event_bus import run_event_bus
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..services.notification_service import ACTIVE_THREAD_DELETE_STATUSES, collect_thread_delete_deltas, delete_threads
 from ..services.run_pipeline import run_pipeline
-from ..services.run_pipeline.status_logic import derive_run_status
 from ..services.tool_engine import tool_engine
 from ..services.sidecar_client import sidecar_client
 from ..services.reasoning.normalize import normalize_reasoning_detail
 from ..services.thread_parent_runtime_service import resolve_parent, thread_runtime_fields
+from ..services.thread_runtime_sync_service import (
+    RuntimeSyncResult,
+    emit_runtime_sync_events,
+    sync_explicit_run_thread_status,
+    sync_run_thread_status,
+)
 from ..services.ownership import require_owned_project, require_owned_thread
 from ..services.image_run_service import image_run_service
 from ..services.storage_usage_service import (
@@ -303,35 +308,6 @@ def _count_unresolved_run_tool_calls(db: Session, *, run_id: UUID) -> int:
     return sum(1 for status in statuses if status in _DELETE_UNRESOLVED_TOOL_STATUSES)
 
 
-def _sync_run_thread_status(db: Session, *, run_id: UUID) -> tuple[RunModel | None, Thread | None, str | None]:
-    run = db.query(RunModel).filter(RunModel.id == run_id).first()
-    if run is None:
-        return None, None, None
-    thread = run.thread
-    if thread is None:
-        return run, None, run.status
-
-    statuses = [
-        s
-        for (s,) in db.query(RunToolCallModel.status)
-        .filter(RunToolCallModel.run_id == run_id)
-        .all()
-    ]
-
-    next_status = derive_run_status(current_status=run.status, tool_call_statuses=statuses)
-
-    run.status = next_status
-    latest_run = (
-        db.query(RunModel)
-        .filter(RunModel.thread_id == thread.id)
-        .order_by(RunModel.run_seq.desc())
-        .first()
-    )
-    if latest_run is not None and latest_run.id == run.id:
-        thread.status = next_status
-    return run, thread, next_status
-
-
 def _pause_run_after_delete_if_needed(
     db: Session,
     *,
@@ -383,20 +359,6 @@ async def _emit_tool_call_status(*, thread: Thread, tool_call: RunToolCallModel)
             "image_run_id": str(tool_call.image_run_id) if tool_call.image_run_id else None,
             "assistant_message_id": str(tool_call.assistant_message_id) if tool_call.assistant_message_id else None,
             "child_thread_id": str(tool_call.child_thread_id) if tool_call.child_thread_id else None,
-        },
-    )
-
-
-async def _emit_run_status(*, thread: Thread, run: RunModel) -> None:
-    await runtime_event_dispatcher.emit_runtime_event(
-        user_id=thread.user_id,
-        project_id=thread.project_id,
-        thread_id=thread.id,
-        event_name="run:status",
-        data={
-            "run_id": str(run.id),
-            "status": run.status,
-            "error": run.error,
         },
     )
 
@@ -458,13 +420,13 @@ async def _apply_tool_decision(
             tool_call.status = "rejected"
             tool_call.reason = reason
             tool_call.updated_at = datetime.utcnow()
-            synced_run, synced_thread, _ = _sync_run_thread_status(db, run_id=tool_call.run_id)
+            sync_result = sync_run_thread_status(db, run_id=tool_call.run_id)
             db.commit()
             db.refresh(tool_call)
 
-            if synced_run is not None and synced_thread is not None:
-                await _emit_tool_call_status(thread=synced_thread, tool_call=tool_call)
-                await _emit_run_status(thread=synced_thread, run=synced_run)
+            if sync_result.thread is not None:
+                await _emit_tool_call_status(thread=sync_result.thread, tool_call=tool_call)
+            await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
 
             return {
                 "tool_call": _serialize_tool_call(tool_call),
@@ -484,13 +446,13 @@ async def _apply_tool_decision(
         tool_call.reason = None
         tool_call.accepted_at = tool_call.accepted_at or datetime.utcnow()
         tool_call.updated_at = datetime.utcnow()
-        synced_run, synced_thread, _ = _sync_run_thread_status(db, run_id=tool_call.run_id)
+        sync_result = sync_run_thread_status(db, run_id=tool_call.run_id)
         db.commit()
         db.refresh(tool_call)
 
-        if synced_run is not None and synced_thread is not None:
-            await _emit_tool_call_status(thread=synced_thread, tool_call=tool_call)
-            await _emit_run_status(thread=synced_thread, run=synced_run)
+        if sync_result.thread is not None:
+            await _emit_tool_call_status(thread=sync_result.thread, tool_call=tool_call)
+        await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
     finally:
         db.close()
 
@@ -516,13 +478,13 @@ async def _apply_tool_decision(
         )
         if executed_row is None:
             raise HTTPException(status_code=404, detail="Tool call not found after execution")
-        synced_run, synced_thread, _ = _sync_run_thread_status(db2, run_id=executed_row.run_id)
+        sync_result = sync_run_thread_status(db2, run_id=executed_row.run_id)
         db2.commit()
         db2.refresh(executed_row)
 
-        if synced_run is not None and synced_thread is not None:
-            await _emit_tool_call_status(thread=synced_thread, tool_call=executed_row)
-            await _emit_run_status(thread=synced_thread, run=synced_run)
+        if sync_result.thread is not None:
+            await _emit_tool_call_status(thread=sync_result.thread, tool_call=executed_row)
+        await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
 
         result_payload = {
             "tool_call": _serialize_tool_call(executed_row),
@@ -582,12 +544,12 @@ async def _apply_tool_decision(
                         }
                         failed_row.updated_at = datetime.utcnow()
 
-                        synced_run, synced_thread, _ = _sync_run_thread_status(db3, run_id=failed_row.run_id)
+                        sync_result = sync_run_thread_status(db3, run_id=failed_row.run_id)
                         db3.commit()
                         db3.refresh(failed_row)
-                        if synced_run is not None and synced_thread is not None:
-                            await _emit_tool_call_status(thread=synced_thread, tool_call=failed_row)
-                            await _emit_run_status(thread=synced_thread, run=synced_run)
+                        if sync_result.thread is not None:
+                            await _emit_tool_call_status(thread=sync_result.thread, tool_call=failed_row)
+                        await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
                 finally:
                     db3.close()
 
@@ -1043,13 +1005,18 @@ async def _execute_batched_patch_group(
             modified_tc_ids.append(item.tool_call_id)
 
         # Commit processing/rejected statuses and emit SSE so frontend sees them
+        sync_result: RuntimeSyncResult | None = None
         if modified_tc_ids:
+            if run_id is not None:
+                sync_result = sync_run_thread_status(db, run_id=run_id)
             db.commit()
             for tc_id in modified_tc_ids:
                 tc = db.query(RunToolCallModel).filter(RunToolCallModel.id == tc_id).first()
                 if tc:
                     db.refresh(tc)
                     await _emit_tool_call_status(thread=thread, tool_call=tc)
+            if sync_result is not None:
+                await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
 
         # ── Phase 2: Execute accepted tool calls ──
         for item, tc in accepted_tcs:
@@ -1207,8 +1174,9 @@ async def _execute_batched_patch_group(
                         _mark_tc_failed_by_id(db, UUID(call_id_str), status.reason or "flush failed")
 
         # --- Sync run/thread status + commit ---
+        final_sync_result: RuntimeSyncResult | None = None
         if run_id is not None:
-            _sync_run_thread_status(db, run_id=run_id)
+            final_sync_result = sync_run_thread_status(db, run_id=run_id)
         db.commit()
 
         # --- Emit SSE events (final statuses) ---
@@ -1219,11 +1187,8 @@ async def _execute_batched_patch_group(
                 db.refresh(tc)
                 await _emit_tool_call_status(thread=thread, tool_call=tc)
                 final_results.append((tc_id, {"tool_call": _serialize_tool_call(tc)}))
-        if run_id is not None:
-            run = db.query(RunModel).filter(RunModel.id == run_id).first()
-            if run:
-                db.refresh(run)
-                await _emit_run_status(thread=thread, run=run)
+        if final_sync_result is not None:
+            await emit_runtime_sync_events(runtime_event_dispatcher, result=final_sync_result)
 
     finally:
         db.close()
@@ -1238,6 +1203,35 @@ async def decide_tool_calls_batch(
     current_user: User = Depends(get_current_user),
 ):
     from collections import defaultdict
+
+    has_accept_decision = any(item.decision == "accept" for item in payload.decisions)
+
+    if payload.pause_after_apply and has_accept_decision:
+        db = SessionLocal()
+        try:
+            thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
+            latest_run = (
+                db.query(RunModel)
+                .filter(RunModel.thread_id == thread.id)
+                .order_by(RunModel.run_seq.desc())
+                .with_for_update()
+                .first()
+            )
+            sync_result: RuntimeSyncResult | None = None
+            if latest_run is not None and latest_run.status in {"running", "waiting", "processing"}:
+                latest_run.status = "paused"
+                thread.status = "paused"
+                sync_result = sync_explicit_run_thread_status(
+                    db,
+                    run=latest_run,
+                    thread=thread,
+                    error=None,
+                )
+            db.commit()
+            if sync_result is not None:
+                await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
+        finally:
+            db.close()
 
     # Step 1: Group tool calls by target object.
     db = SessionLocal()
@@ -1341,6 +1335,14 @@ async def delete_thread_message(
         previous_thread_status=previous_thread_status,
         previous_unresolved_count=previous_unresolved_count,
     )
+    pause_sync_result: RuntimeSyncResult | None = None
+    if paused_after_delete and paused_run is not None and paused_thread is not None:
+        pause_sync_result = sync_explicit_run_thread_status(
+            db,
+            run=paused_run,
+            thread=paused_thread,
+            error=None,
+        )
     thread.captured_history_conversation_json = None
     deltas = [
         build_run_message_delta(message_before, None),
@@ -1357,10 +1359,8 @@ async def delete_thread_message(
         enforce_quota=False,
     )
     db.commit()
-    if paused_after_delete and paused_run is not None and paused_thread is not None:
-        refreshed_run = db.query(RunModel).filter(RunModel.id == paused_run.id).first()
-        if refreshed_run is not None and refreshed_run.thread is not None:
-            await _emit_run_status(thread=refreshed_run.thread, run=refreshed_run)
+    if pause_sync_result is not None:
+        await emit_runtime_sync_events(runtime_event_dispatcher, result=pause_sync_result)
     await _emit_thread_snapshot_invalidated(
         user_id=current_user.id,
         project_id=project_id,
@@ -1444,6 +1444,14 @@ async def delete_thread_tool_call(
         previous_thread_status=previous_thread_status,
         previous_unresolved_count=previous_unresolved_count,
     )
+    pause_sync_result: RuntimeSyncResult | None = None
+    if paused_after_delete and paused_run is not None and paused_thread is not None:
+        pause_sync_result = sync_explicit_run_thread_status(
+            db,
+            run=paused_run,
+            thread=paused_thread,
+            error=None,
+        )
     thread.captured_history_conversation_json = None
     deltas = [
         build_tool_call_delta(tool_call_before, None),
@@ -1460,10 +1468,8 @@ async def delete_thread_tool_call(
         enforce_quota=False,
     )
     db.commit()
-    if paused_after_delete and paused_run is not None and paused_thread is not None:
-        refreshed_run = db.query(RunModel).filter(RunModel.id == paused_run.id).first()
-        if refreshed_run is not None and refreshed_run.thread is not None:
-            await _emit_run_status(thread=refreshed_run.thread, run=refreshed_run)
+    if pause_sync_result is not None:
+        await emit_runtime_sync_events(runtime_event_dispatcher, result=pause_sync_result)
     await _emit_thread_snapshot_invalidated(
         user_id=current_user.id,
         project_id=project_id,

@@ -68,7 +68,7 @@ class ImageRunResponse(BaseModel):
     client_request_id: Optional[str] = None
     origin: Literal["direct", "tool_preview"]
     review_mode: Literal["auto", "manual"]
-    status: Literal["queued", "running", "review", "applying", "applied", "rejected", "failed", "cancelled"]
+    status: Literal["queued", "running", "review", "applying", "applied", "rejected", "failed", "canceled"]
     stage: Optional[Literal["preparing", "generating", "saving", "binding"]] = None
     request_snapshot: Dict[str, Any]
     preview_asset_id: Optional[str] = None

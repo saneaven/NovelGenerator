@@ -14,6 +14,7 @@ import { Loading } from '../components/common/Loading';
 import AuthenticatedImage from '../components/common/AuthenticatedImage';
 import BrandLogo from '../components/common/BrandLogo';
 import ActivityPanelButton from '../components/ActivityPanel/ActivityPanelButton';
+import { formatNotificationStatusLabel } from '../components/Notification/notificationPresentation';
 import { confirm, alert as showAlert } from '../store/dialogStore';
 
 const Home: React.FC = () => {
@@ -35,7 +36,7 @@ const Home: React.FC = () => {
   const recentNotifications = useMemo(
     () =>
       Object.values(notificationsMap)
-        .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined && entry.status !== 'idle')
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined)
         .sort((a, b) => {
           if (a.important !== b.important) return Number(b.important) - Number(a.important);
           if (a.isRead !== b.isRead) return Number(a.isRead) - Number(b.isRead);
@@ -192,11 +193,11 @@ const Home: React.FC = () => {
                 >
                   <div className="home-notification-card__top">
                     <span className="home-notification-card__label">{notification.label}</span>
-                    <span className="home-notification-card__status">{notification.status}</span>
+                    <span className="home-notification-card__status">{formatNotificationStatusLabel(notification)}</span>
                   </div>
                   <div className="home-notification-card__message">{notification.message}</div>
                   <div className="home-notification-card__meta">
-                    <span>{notification.projectId ? `Project ${notification.projectId.slice(0, 8)}` : 'System'}</span>
+                    <span>{notification.projectId ? (projects.find(p => p.id === notification.projectId)?.name ?? '') : 'System'}</span>
                     <span>{new Date(notification.updatedAt).toLocaleString()}</span>
                   </div>
                 </button>

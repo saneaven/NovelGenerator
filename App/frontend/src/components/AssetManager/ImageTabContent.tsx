@@ -215,7 +215,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                 || run.status === 'running'
                 || run.status === 'applying'
                 || run.status === 'failed'
-                || run.status === 'cancelled'
+                || run.status === 'canceled'
             ))
             .map((run) => {
                 const binding = imageRunBindingFromSnapshot(run);
@@ -244,14 +244,14 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                 kind: 'placeholder' as const,
                 id: `image-run:${run.id}`,
                 runId: run.id,
-                status: run.status === 'failed' ? 'error' : run.status === 'cancelled' ? 'cancelled' : 'running',
+                status: run.status === 'failed' ? 'error' : run.status === 'canceled' ? 'canceled' : 'running',
                 stage: run.stage ?? undefined,
                 message:
                     run.status === 'queued' || run.status === 'running' || run.status === 'applying'
                         ? (run.error_message ?? 'Working...')
                         : run.status === 'failed'
                             ? (run.error_message ?? 'An error occurred')
-                            : 'Cancelled',
+                            : 'Canceled',
                 error: run.status === 'failed' ? (run.error_message ?? 'An error occurred') : undefined,
                 binding,
                 recipe,

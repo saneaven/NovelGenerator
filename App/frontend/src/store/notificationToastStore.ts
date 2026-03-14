@@ -1,51 +1,67 @@
 import { create } from 'zustand';
+import type { NotificationSourceKind } from '../api/notificationService';
 import type { NotificationStatus } from './notificationStore';
 
 export type NotificationStatusToast = {
   id: string;
   label: string;
   message: string;
+  sourceKind: NotificationSourceKind;
   status: NotificationStatus;
   updatedAt: number;
+  durationMs?: number;
 };
 
 interface NotificationToastStore {
-  toast: NotificationStatusToast | null;
+  activeToast: NotificationStatusToast | null;
+  queue: NotificationStatusToast[];
   activityPanelOpen: boolean;
 
   show: (toast: NotificationStatusToast, durationMs?: number) => void;
+  dismissActive: () => void;
   clear: () => void;
   setActivityPanelOpen: (open: boolean) => void;
 }
 
 let toastTimeoutId: number | null = null;
+let activateNextToast: (() => void) | null = null;
+
+function clearToastTimer(): void {
+  if (toastTimeoutId !== null) {
+    window.clearTimeout(toastTimeoutId);
+    toastTimeoutId = null;
+  }
+}
 
 export const useNotificationToastStore = create<NotificationToastStore>()((set, get) => ({
-  toast: null,
+  activeToast: null,
+  queue: [],
   activityPanelOpen: false,
 
   show: (toast, durationMs = 2500) => {
     if (get().activityPanelOpen) return;
-
-    if (toastTimeoutId !== null) {
-      window.clearTimeout(toastTimeoutId);
-      toastTimeoutId = null;
+    const nextToast = { ...toast, durationMs };
+    const state = get();
+    if (state.activeToast === null) {
+      set({ activeToast: nextToast });
+      clearToastTimer();
+      toastTimeoutId = window.setTimeout(() => {
+        clearToastTimer();
+        activateNextToast?.();
+      }, durationMs);
+      return;
     }
+    set((current) => ({ queue: [...current.queue, nextToast] }));
+  },
 
-    set({ toast });
-
-    toastTimeoutId = window.setTimeout(() => {
-      toastTimeoutId = null;
-      set({ toast: null });
-    }, durationMs);
+  dismissActive: () => {
+    clearToastTimer();
+    activateNextToast?.();
   },
 
   clear: () => {
-    if (toastTimeoutId !== null) {
-      window.clearTimeout(toastTimeoutId);
-      toastTimeoutId = null;
-    }
-    set({ toast: null });
+    clearToastTimer();
+    set({ activeToast: null, queue: [] });
   },
 
   setActivityPanelOpen: (open) => {
@@ -55,4 +71,19 @@ export const useNotificationToastStore = create<NotificationToastStore>()((set, 
     }
   },
 }));
+
+activateNextToast = () => {
+  const { queue } = useNotificationToastStore.getState();
+  if (queue.length === 0) {
+    useNotificationToastStore.setState({ activeToast: null });
+    return;
+  }
+  const [nextToast, ...rest] = queue;
+  useNotificationToastStore.setState({ activeToast: nextToast, queue: rest });
+  clearToastTimer();
+  toastTimeoutId = window.setTimeout(() => {
+    clearToastTimer();
+    activateNextToast?.();
+  }, nextToast.durationMs);
+};
 

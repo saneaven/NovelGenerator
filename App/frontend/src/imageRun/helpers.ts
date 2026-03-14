@@ -100,5 +100,5 @@ export function generationRecipeFromImageRun(run: ImageRun): ImageGenerationReci
 }
 
 export function isTerminalImageRunStatus(status: ImageRun['status']): boolean {
-  return status === 'applied' || status === 'rejected' || status === 'failed' || status === 'cancelled';
+  return status === 'applied' || status === 'rejected' || status === 'failed' || status === 'canceled';
 }

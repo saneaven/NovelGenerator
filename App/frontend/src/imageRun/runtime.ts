@@ -85,7 +85,7 @@ async function handleTerminalRun(run: ImageRun): Promise<void> {
       });
       return;
     }
-    if (run.status === 'cancelled' || run.status === 'rejected') {
+    if (run.status === 'canceled' || run.status === 'rejected') {
       handlers.onCancelled?.();
       return;
     }

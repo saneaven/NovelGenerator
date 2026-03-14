@@ -374,7 +374,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
           projectId={projectId}
           preSelectedObjectIds={[guidelinesId]}
           defaultSourceLanguage={settings.mainLanguage}
-          defaultTargetLanguage={settings.defaultSubLanguage}
+          defaultTargetLanguage={settings.defaultSubLanguage ?? undefined}
         />
       )}
     </div>

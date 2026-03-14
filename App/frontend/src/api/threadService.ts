@@ -64,6 +64,7 @@ export interface ToolCallBatchDecisionItem {
 
 export interface ToolCallBatchDecisionRequest {
   decisions: ToolCallBatchDecisionItem[];
+  pause_after_apply?: boolean;
 }
 
 export interface ThreadMessagesResponse {

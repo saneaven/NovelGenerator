@@ -6,13 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ..models.db_models import Journey, NotificationModel, RunModel, SubAgentDefinitionModel, Thread
-from .notification_service import (
-    NotificationSourceSnapshot,
-    default_journey_label,
-    map_run_status_to_notification_status,
-    message_from_notification_status,
-    upsert_notification_source,
-)
+from .notification_service import build_journey_notification_snapshot, upsert_notification_source
 
 
 @dataclass(frozen=True)
@@ -91,33 +85,13 @@ def apply_parent_runtime_snapshot(
     journey.status = run.status
     journey.last_error = error if run.status == "error" else None
 
-    mapped_status = map_run_status_to_notification_status(run.status)
     row = upsert_notification_source(
         db,
-        snapshot=NotificationSourceSnapshot(
-            user_id=journey.user_id,
-            project_id=journey.project_id,
-            source_kind="journey",
-            source_id=str(journey.id),
-            status=mapped_status,
-            label=str(journey.display_label or "").strip() or default_journey_label(journey.kind),
-            message=message_from_notification_status(status=mapped_status, error=error),
-            warning=error if mapped_status == "error" else None,
-            progress=None,
-            custom_slot={"type": "none"},
-            target={
-                "kind": "journey",
-                "project_id": str(journey.project_id),
-                "journey_id": str(journey.id),
-            },
-            meta={
-                "journey_id": str(journey.id),
-                "thread_id": str(thread.id),
-                "run_id": str(run.id),
-                "journey_kind": journey.kind,
-                "project_id": str(journey.project_id),
-            },
-            important=mapped_status in {"pending", "error"},
+        snapshot=build_journey_notification_snapshot(
+            journey=journey,
+            thread=thread,
+            run=run,
+            error=error,
         ),
     )
     db.flush()

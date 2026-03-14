@@ -38,7 +38,7 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobil
   const notifications = useMemo(
     () =>
       Object.values(notificationsMap)
-        .filter((n): n is NonNullable<typeof n> => n !== undefined && n.status !== 'idle')
+        .filter((n): n is NonNullable<typeof n> => n !== undefined)
         .sort((a, b) => {
           if (a.important !== b.important) return Number(b.important) - Number(a.important);
           if (a.isRead !== b.isRead) return Number(a.isRead) - Number(b.isRead);

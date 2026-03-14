@@ -22,7 +22,7 @@ export type DisplayAsset =
         kind: 'placeholder';
         id: string;
         runId: string;
-        status: 'running' | 'error' | 'cancelled';
+        status: 'running' | 'error' | 'canceled';
         stage?: Exclude<ImageRunStage, null>;
         message: string;
         error?: string;
@@ -83,7 +83,7 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
 }) => {
     if (item.kind === 'placeholder') {
         const canCancel = item.status === 'running';
-        const canRetry = item.status === 'error' || item.status === 'cancelled';
+        const canRetry = item.status === 'error' || item.status === 'canceled';
 
         return (
             <div
@@ -101,7 +101,7 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
                             ? item.message
                             : item.status === 'error'
                                 ? (item.error ?? 'An error occurred')
-                                : 'Cancelled'}
+                                : 'Canceled'}
                     </span>
                 </div>
 
@@ -124,7 +124,7 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
                             variant="danger"
                         />
                     )}
-                    {(item.status === 'error' || item.status === 'cancelled') && (
+                    {(item.status === 'error' || item.status === 'canceled') && (
                         <IconButton
                             size="xs"
                             icon={<Trash size="xs" />}

@@ -38,7 +38,6 @@ export interface ThreadState {
   pendingToolCallIdsByThread: Record<string, string[] | undefined>;
   pendingToolCallMessageByThread: Record<string, string | undefined>;
   activeStreamByThread: Record<string, boolean | undefined>;
-  autoContinuePausedByThread: Record<string, boolean>;
 
   upsertThread: (thread: ThreadInfo) => void;
   upsertThreadsRuntime: (threads: ThreadInfo[]) => void;
@@ -84,9 +83,6 @@ export interface ThreadState {
   setThreadStreamActive: (threadId: string, active: boolean) => void;
   isThreadStreamActive: (threadId: string) => boolean;
   clearThreadStreamingState: (threadId: string) => void;
-
-  setAutoContinuePaused: (threadId: string, paused: boolean) => void;
-  isAutoContinuePaused: (threadId: string) => boolean;
 
   findThreadByParent: (projectId: string, parentId: string) => ThreadInfo | undefined;
 
@@ -233,7 +229,6 @@ function removeThreadsCascadeState(state: ThreadState, threadIds: string[]): Par
   const nextMessagesByThreadId = { ...state.messagesByThreadId };
   const nextPreexistingLiveThreadsById = { ...state.preexistingLiveThreadsById };
   const nextActiveStreamByThread = { ...state.activeStreamByThread };
-  const nextAutoContinuePausedByThread = { ...state.autoContinuePausedByThread };
 
   for (const threadId of toDelete) {
     for (const message of nextMessagesByThreadId[threadId] ?? []) {
@@ -243,7 +238,6 @@ function removeThreadsCascadeState(state: ThreadState, threadIds: string[]): Par
     delete nextMessagesByThreadId[threadId];
     delete nextPreexistingLiveThreadsById[threadId];
     delete nextActiveStreamByThread[threadId];
-    delete nextAutoContinuePausedByThread[threadId];
   }
 
   const nextToolCallsById: Record<string, ThreadToolCall | undefined> = {};
@@ -258,7 +252,6 @@ function removeThreadsCascadeState(state: ThreadState, threadIds: string[]): Par
     preexistingLiveThreadsById: nextPreexistingLiveThreadsById,
     ...buildThreadScopedToolCallState(nextToolCallsById),
     activeStreamByThread: nextActiveStreamByThread,
-    autoContinuePausedByThread: nextAutoContinuePausedByThread,
   };
 }
 
@@ -275,7 +268,6 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
   pendingToolCallIdsByThread: {},
   pendingToolCallMessageByThread: {},
   activeStreamByThread: {},
-  autoContinuePausedByThread: {},
 
   upsertThread: (thread) =>
     set((s) => {
@@ -752,16 +744,6 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
       };
     }),
 
-  setAutoContinuePaused: (threadId, paused) =>
-    set((s) => {
-      if (s.autoContinuePausedByThread[threadId] === paused) return s;
-      return {
-        autoContinuePausedByThread: { ...s.autoContinuePausedByThread, [threadId]: paused },
-      };
-    }),
-
-  isAutoContinuePaused: (threadId) => Boolean(get().autoContinuePausedByThread[threadId]),
-
   findThreadByParent: (projectId, parentId) => {
     for (const thread of Object.values(get().threadsById)) {
       if (!thread) continue;
@@ -782,6 +764,5 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
       pendingToolCallIdsByThread: {},
       pendingToolCallMessageByThread: {},
       activeStreamByThread: {},
-      autoContinuePausedByThread: {},
     }),
 }));
