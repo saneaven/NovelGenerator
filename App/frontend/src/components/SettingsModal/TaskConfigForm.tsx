@@ -531,10 +531,15 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                     </div>
 
                     {onTemplatesChange && (
-                      <ThinkingTemplateEditor
-                        templates={customThinkingTemplates}
-                        onChange={onTemplatesChange}
-                      />
+                      <>
+                        <h4 className="section-title">
+                          {t('settings.taskConfig.templateManager.title')}
+                        </h4>
+                        <ThinkingTemplateEditor
+                          templates={customThinkingTemplates}
+                          onChange={onTemplatesChange}
+                        />
+                      </>
                     )}
                   </>
                 )}
