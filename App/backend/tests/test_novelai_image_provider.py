@@ -80,8 +80,8 @@ def test_generate_image_omits_hidden_quality_uc_and_negative_when_negative_missi
 
     assert "qualityToggle" not in parameters
     assert "ucPreset" not in parameters
-    assert "negative_prompt" not in parameters
-    assert "v4_negative_prompt" not in parameters
+    assert parameters["negative_prompt"] == ""
+    assert parameters["v4_negative_prompt"]["caption"]["base_caption"] == ""
     assert parameters["v4_prompt"]["caption"]["base_caption"] == "1girl, city lights"
 
 

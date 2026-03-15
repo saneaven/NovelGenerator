@@ -232,17 +232,16 @@ class NovelAIImageProvider(BaseImageProvider):
                 "use_coords": False,
                 "use_order": True
             },
-        }
-        if final_negative.strip():
-            parameters["negative_prompt"] = final_negative
-            parameters["v4_negative_prompt"] = {
+            "negative_prompt": final_negative,
+            "v4_negative_prompt": {
                 "caption": {
                     "base_caption": final_negative,
                     "char_captions": []
                 },
                 "use_coords": False,
                 "use_order": True
-            }
+            },
+        }
 
         payload = {
             "input": final_positive,
