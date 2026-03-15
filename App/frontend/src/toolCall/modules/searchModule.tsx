@@ -27,7 +27,6 @@ const searchModule = defineToolCallUiModule({
       return {
         id: operation.id,
         operationIds: [operation.id],
-        deleteOperationId: operation.id,
         element: (
           <SearchCallCard
             key={operation.id}

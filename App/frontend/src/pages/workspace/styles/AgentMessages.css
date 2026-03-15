@@ -92,14 +92,6 @@
     color: var(--color-text-tertiary);
 }
 
-/* ===== Tool Group ===== */
-.agent-tool-group {
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    animation: messageSlideIn var(--transition-base) ease-out;
-}
-
 /* ===== Message Base ===== */
 .agent-message {
     display: flex;

@@ -259,21 +259,6 @@ def _has_non_empty_part_text(parts: Any, *, part_type: str) -> bool:
     return False
 
 
-def _assistant_has_content_or_reasoning(data: Any) -> bool:
-    if not isinstance(data, dict):
-        return False
-    for entry in data.values():
-        if not isinstance(entry, dict):
-            continue
-        parts = entry.get("contentParts")
-        if _has_non_empty_part_text(parts, part_type="content"):
-            return True
-        reasoning_detail = entry.get("reasoningDetail")
-        if isinstance(reasoning_detail, dict):
-            return True
-    return False
-
-
 def _snapshot_assistant_tool_call_tree(
     db: Session,
     *,
@@ -1354,115 +1339,6 @@ async def delete_thread_message(
     deltas.extend(build_run_message_attachment_delta(attachment_before, None) for attachment_before in attachments_before)
     deltas.extend(build_tool_call_delta(tool_call, None) for tool_call in tool_calls_before)
     deltas.extend(build_run_message_delta(tool_message, None) for tool_message in tool_messages_before)
-    apply_project_usage_deltas(
-        db,
-        user_id=current_user.id,
-        project_id=thread.project_id,
-        deltas=deltas,
-        enforce_quota=False,
-    )
-    db.commit()
-    if pause_sync_result is not None:
-        await emit_runtime_sync_events(runtime_event_dispatcher, result=pause_sync_result)
-    await _emit_thread_snapshot_invalidated(
-        user_id=current_user.id,
-        project_id=project_id,
-        thread_id=thread_id,
-        run_id=run_id,
-    )
-    return Response(status_code=204)
-
-
-@router.delete("/threads/{thread_id}/tool-calls/{tool_call_id}", status_code=204)
-async def delete_thread_tool_call(
-    thread_id: UUID,
-    tool_call_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Delete a tool call. FK CASCADE via parent_tool_call_id on run_messages
-    automatically deletes the associated tool_call messages."""
-    thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
-    row = (
-        db.query(RunToolCallModel)
-        .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread_id)
-        .first()
-    )
-    if row is None:
-        raise HTTPException(status_code=404, detail="Tool call not found")
-    run_id = row.run_id
-    project_id = thread.project_id
-    previous_thread_status = thread.status
-    previous_unresolved_count = _count_unresolved_run_tool_calls(db, run_id=run_id)
-    thread_before = snapshot_thread_row(thread)
-    tool_call_before = snapshot_tool_call_row(row)
-    tool_messages_before = snapshot_rows(
-        db.query(RunMessageModel).filter(RunMessageModel.parent_tool_call_id == row.id).all(),
-        snapshot_run_message_row,
-    )
-    if row.image_run_id is not None:
-        image_run_service.cleanup_preview_assets_for_image_run(
-            db,
-            image_run_id=row.image_run_id,
-            project_id=thread.project_id,
-            user_id=current_user.id,
-        )
-    assistant_message_id = row.assistant_message_id
-    db.delete(row)
-    db.flush()
-
-    if assistant_message_id is not None:
-        has_remaining_tool_calls = (
-            db.query(RunToolCallModel.id)
-            .filter(
-                RunToolCallModel.thread_id == thread_id,
-                RunToolCallModel.assistant_message_id == assistant_message_id,
-            )
-            .first()
-            is not None
-        )
-        if not has_remaining_tool_calls:
-            assistant_row = (
-                db.query(RunMessageModel)
-                .filter(
-                    RunMessageModel.id == assistant_message_id,
-                    RunMessageModel.thread_id == thread_id,
-                    RunMessageModel.role == "assistant",
-                )
-                .first()
-            )
-            if assistant_row is not None and not _assistant_has_content_or_reasoning(assistant_row.data):
-                assistant_message_before = snapshot_run_message_row(assistant_row)
-                db.delete(assistant_row)
-            else:
-                assistant_message_before = None
-        else:
-            assistant_message_before = None
-    else:
-        assistant_message_before = None
-
-    paused_run, paused_thread, paused_after_delete = _pause_run_after_delete_if_needed(
-        db,
-        run_id=run_id,
-        previous_thread_status=previous_thread_status,
-        previous_unresolved_count=previous_unresolved_count,
-    )
-    pause_sync_result: RuntimeSyncResult | None = None
-    if paused_after_delete and paused_run is not None and paused_thread is not None:
-        pause_sync_result = sync_explicit_run_thread_status(
-            db,
-            run=paused_run,
-            thread=paused_thread,
-            error=None,
-        )
-    thread.captured_history_conversation_json = None
-    deltas = [
-        build_tool_call_delta(tool_call_before, None),
-        build_thread_delta(thread_before, snapshot_thread_row(thread)),
-    ]
-    deltas.extend(build_run_message_delta(message_before, None) for message_before in tool_messages_before)
-    if assistant_message_before is not None:
-        deltas.append(build_run_message_delta(assistant_message_before, None))
     apply_project_usage_deltas(
         db,
         user_id=current_user.id,

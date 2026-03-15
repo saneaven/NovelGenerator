@@ -33,7 +33,6 @@ const callModule = defineToolCallUiModule({
       return {
         id: operation.id,
         operationIds: [operation.id],
-        deleteOperationId: operation.id,
         element: (
           <CallAgentCard
             key={operation.id}

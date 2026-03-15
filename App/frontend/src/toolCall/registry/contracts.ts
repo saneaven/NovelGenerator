@@ -44,7 +44,6 @@ export interface RenderItem {
   id: string;
   operationIds: string[];
   element: ReactElement | null;
-  deleteOperationId?: string;
 }
 
 export interface ToolCallUiModule {

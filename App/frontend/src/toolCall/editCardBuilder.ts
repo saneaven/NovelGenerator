@@ -3,17 +3,20 @@ import { resolveToolUiModule } from './registry';
 import type { EditCard, ToolCallStatus, ToolCallWithStatus } from './types';
 
 export function buildEditCardsFromToolCallMetadata(toolCalls: ToolCallMetadata[]): EditCard[] {
-  return toolCalls.map((tc) => {
+  return toolCalls.flatMap((tc) => {
+    const toolName = typeof tc.tool_name === 'string' ? tc.tool_name.trim() : '';
+    if (!toolName) return [];
+
     const args = typeof tc.arguments === 'object' && tc.arguments !== null
       ? (tc.arguments as Record<string, unknown>)
       : {};
 
-    const module = resolveToolUiModule(tc.tool_name);
-    const editMeta = module.getEditMeta(tc.tool_name, args);
+    const module = resolveToolUiModule(toolName);
+    const editMeta = module.getEditMeta(toolName, args);
 
     const toolCallWithStatus: ToolCallWithStatus = {
       id: tc.id,
-      toolName: tc.tool_name,
+      toolName,
       arguments: args,
       status: tc.status as ToolCallStatus,
       extraContent: tc.extra_content ?? null,
@@ -33,7 +36,7 @@ export function buildEditCardsFromToolCallMetadata(toolCalls: ToolCallMetadata[]
       id: tc.id,
       type: editMeta.type,
       title: editMeta.title,
-      description: tc.tool_name,
+      description: toolName,
       data: args,
       toolCall: toolCallWithStatus,
     };

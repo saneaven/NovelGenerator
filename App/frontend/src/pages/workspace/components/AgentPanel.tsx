@@ -52,7 +52,6 @@ import {
   Image as ImageIcon,
   Close,
 } from '../../../components/icons';
-import { getByDotPath } from '../../../utils/dotPath';
 import '../../../pages/workspace/styles/AgentPanel.css';
 import '../../../pages/workspace/styles/AgentHeader.css';
 import '../../../pages/workspace/styles/AgentMessages.css';
@@ -96,8 +95,13 @@ interface ToolCallBlockingSummary {
 }
 
 type DisplayItem =
-  | { kind: 'message'; info: DisplayMessageInfo }
-  | { kind: 'tool_group'; assistantMessageId: string; toolCalls: ThreadToolCall[]; messageIds: string[] };
+  | { kind: 'user_message'; info: DisplayMessageInfo }
+  | {
+      kind: 'assistant_block';
+      info: DisplayMessageInfo;
+      toolCalls: ThreadToolCall[];
+      toolCallMessageIds: string[];
+    };
 
 type SendBlockReason = 'missing_agent' | 'running' | 'pending_tool_calls' | null;
 
@@ -197,32 +201,6 @@ function collapseContent(parts: Array<{ type: string; text: string }>): string {
     .map((part) => part.text)
     .join('')
     .trim();
-}
-
-function hasNonEmptyPartText(message: ThreadMessage, partType: 'content'): boolean {
-  return Object.values(message.data).some((entry) => (
-    entry.contentParts.some((part) => (
-      part.type === partType && typeof part.text === 'string' && part.text.trim().length > 0
-    ))
-  ));
-}
-
-function hasReasoningText(message: ThreadMessage): boolean {
-  return Object.values(message.data).some((entry) => {
-    const detail = entry.reasoningDetail;
-    if (!detail || typeof detail !== 'object') return false;
-    const path = detail.meta?.thinking_display?.trim();
-    if (!path) return false;
-    const value = getByDotPath(detail.data ?? {}, path);
-    return typeof value === 'string' && value.trim().length > 0;
-  });
-}
-
-function shouldDeleteAssistantMessageAfterToolCallCleanup(message: ThreadMessage): boolean {
-  if (message.role !== 'assistant') return false;
-  const hasContent = hasNonEmptyPartText(message, 'content');
-  if (hasContent) return false;
-  return !hasReasoningText(message);
 }
 
 const AgentContextTrigger: React.FC<AgentContextTriggerProps> = React.memo(({
@@ -671,82 +649,110 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     while (i < orderedMessages.length) {
       const msg = orderedMessages[i];
 
-      if (msg.role === 'user' || msg.role === 'assistant') {
-        const wantsSecondary = messageLanguageView[msg.id] === 'secondary' && Boolean(secondaryLanguage);
-        const requestedLanguage = wantsSecondary && secondaryLanguage ? secondaryLanguage : primaryLanguage;
-        const fallbackLanguage = wantsSecondary ? primaryLanguage : secondaryLanguage;
-        const attachedToolCalls = msg.role === 'assistant'
-          ? (toolCallIdsByAssistantMessageId[msg.id] ?? [])
-            .map((id) => toolCallsById[id])
-            .filter((toolCall): toolCall is ThreadToolCall => Boolean(toolCall))
-          : [];
-
-        if (msg.role === 'assistant' && !hasRenderableAssistantOutput({
-          message: msg,
-          language: requestedLanguage,
-          fallbackLanguage: fallbackLanguage ?? undefined,
-          toolCalls: attachedToolCalls,
-        })) {
-          i++;
-          continue;
-        }
-
-        const resolved = msg.isStreaming
-          ? {
-              contentParts: msg.streamingData?.contentParts ?? [],
-              reasoningDetail: msg.streamingData?.reasoningDetail,
-              displayLanguage: requestedLanguage,
-              isFallback: false,
-            }
-          : resolveRunMessageDisplay(msg, requestedLanguage, fallbackLanguage);
-
-        const chatMessage: ChatMessage = {
-          id: msg.id,
-          role: msg.role === 'assistant' ? 'assistant' : 'user',
-          contentParts: resolved.contentParts as any,
-          reasoning_detail: (resolved.reasoningDetail as any),
-          timestamp: new Date(msg.createdAt),
-        };
-
-        items.push({
-          kind: 'message',
-          info: {
-            source: msg,
-            chatMessage,
-            requestedLanguage,
-            displayLanguage: resolved.displayLanguage,
-          },
-        });
+      if (msg.role === 'tool_call') {
         i++;
-      } else if (msg.role === 'tool_call') {
-        const firstTcs = toolCallsByMessageId[msg.id] ?? [];
-        const assistantMsgId = firstTcs[0]?.assistantMessageId ?? null;
+        continue;
+      }
 
-        const groupToolCalls: ThreadToolCall[] = [...firstTcs];
-        const groupMessageIds: string[] = [msg.id];
+      const wantsSecondary = messageLanguageView[msg.id] === 'secondary' && Boolean(secondaryLanguage);
+      const requestedLanguage = wantsSecondary && secondaryLanguage ? secondaryLanguage : primaryLanguage;
+      const fallbackLanguage = wantsSecondary ? primaryLanguage : secondaryLanguage;
+      const assistantIndexedToolCalls = msg.role === 'assistant'
+        ? (toolCallIdsByAssistantMessageId[msg.id] ?? [])
+          .map((id) => toolCallsById[id])
+          .filter((toolCall): toolCall is ThreadToolCall => Boolean(toolCall))
+          .filter((toolCall) => toolCall.toolName.trim().length > 0)
+        : [];
 
-        let j = i + 1;
+      let j = i + 1;
+      const toolCallMessageIds: string[] = [];
+      if (msg.role === 'assistant') {
         while (j < orderedMessages.length && orderedMessages[j].role === 'tool_call') {
-          const nextTcs = toolCallsByMessageId[orderedMessages[j].id] ?? [];
-          const nextAssistantId = nextTcs[0]?.assistantMessageId ?? null;
-          if (nextAssistantId !== assistantMsgId) break;
-          groupToolCalls.push(...nextTcs);
-          groupMessageIds.push(orderedMessages[j].id);
+          const nextToolCalls = toolCallsByMessageId[orderedMessages[j].id] ?? [];
+          const nextAssistantId = nextToolCalls[0]?.assistantMessageId ?? null;
+          if (nextAssistantId !== msg.id) break;
+          toolCallMessageIds.push(orderedMessages[j].id);
           j++;
         }
-
-        if (groupToolCalls.length > 0) {
-          items.push({
-            kind: 'tool_group',
-            assistantMessageId: assistantMsgId ?? '',
-            toolCalls: groupToolCalls,
-            messageIds: groupMessageIds,
-          });
-        }
-        i = j;
-      } else {
-        i++;
       }
+
+      const messageScopedToolCalls = msg.role === 'assistant'
+        ? toolCallMessageIds
+          .flatMap((messageId) => toolCallsByMessageId[messageId] ?? [])
+          .filter((toolCall) => toolCall.toolName.trim().length > 0)
+        : [];
+
+      const attachedToolCalls = msg.role === 'assistant'
+        ? (() => {
+            const seen = new Set<string>();
+            const merged: ThreadToolCall[] = [];
+            for (const toolCall of [...messageScopedToolCalls, ...assistantIndexedToolCalls]) {
+              if (seen.has(toolCall.id)) continue;
+              seen.add(toolCall.id);
+              merged.push(toolCall);
+            }
+            return merged;
+          })()
+        : [];
+
+      if (msg.role === 'assistant') {
+        for (const toolCall of attachedToolCalls) {
+          if (!toolCall.messageId) continue;
+          if (toolCallMessageIds.includes(toolCall.messageId)) continue;
+          toolCallMessageIds.push(toolCall.messageId);
+        }
+      }
+
+      if (msg.role === 'assistant' && !hasRenderableAssistantOutput({
+        message: msg,
+        language: requestedLanguage,
+        fallbackLanguage: fallbackLanguage ?? undefined,
+        toolCalls: attachedToolCalls,
+      })) {
+        i = j;
+        continue;
+      }
+
+      const resolved = msg.isStreaming
+        ? {
+            contentParts: msg.streamingData?.contentParts ?? [],
+            reasoningDetail: msg.streamingData?.reasoningDetail,
+            displayLanguage: requestedLanguage,
+            isFallback: false,
+          }
+        : resolveRunMessageDisplay(msg, requestedLanguage, fallbackLanguage);
+
+      const chatMessage: ChatMessage = {
+        id: msg.id,
+        role: msg.role === 'assistant' ? 'assistant' : 'user',
+        contentParts: resolved.contentParts as any,
+        reasoning_detail: (resolved.reasoningDetail as any),
+        timestamp: new Date(msg.createdAt),
+      };
+
+      const info: DisplayMessageInfo = {
+        source: msg,
+        chatMessage,
+        requestedLanguage,
+        displayLanguage: resolved.displayLanguage,
+      };
+
+      if (msg.role === 'assistant') {
+        items.push({
+          kind: 'assistant_block',
+          info,
+          toolCalls: attachedToolCalls,
+          toolCallMessageIds,
+        });
+        i = j;
+        continue;
+      }
+
+      items.push({
+        kind: 'user_message',
+        info,
+      });
+      i++;
     }
 
     return items;
@@ -1331,62 +1337,30 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     }
   }, [threadId, projectId, primaryLanguage, secondaryLanguage]);
 
-  const handleDeleteSingleToolCall = useCallback(async (toolCallId: string) => {
-    if (!threadId) {
-      showAlert({ title: 'Delete Failed', message: 'Could not find the thread.' });
-      return;
-    }
-    if (!await confirm({ title: 'Delete Tool Call', message: 'Are you sure you want to delete this tool call?', variant: 'danger', confirmLabel: 'Delete' })) return;
-
-    const state = useThreadStore.getState();
-    const deletePauseContext = getThreadDeletePauseContext(threadId);
-    const tc = state.toolCallsById[toolCallId];
-    if (!tc) return;
-    const assistantMessageId = tc.assistantMessageId;
-
-    // Local cleanup first (optimistic)
-    if (tc.messageId) state.removeMessage(threadId, tc.messageId);
-    state.removeToolCall(toolCallId);
-
-    // Remove the assistant message when its last tool call is removed and
-    // it has neither content nor reasoning display text.
-    if (assistantMessageId) {
-      const nextState = useThreadStore.getState();
-      const remainingToolCalls = nextState
-        .getToolCallsForAssistantMessage(assistantMessageId)
-        .filter((linkedTc) => linkedTc.threadId === threadId);
-
-      if (remainingToolCalls.length === 0) {
-        const assistantMessage = nextState
-          .getMessages(threadId)
-          .find((msg) => msg.id === assistantMessageId && msg.role === 'assistant');
-        if (assistantMessage && shouldDeleteAssistantMessageAfterToolCallCleanup(assistantMessage)) {
-          nextState.removeMessage(threadId, assistantMessageId);
-        }
-      }
-    }
-
-    applyOptimisticDeletePause(threadId, deletePauseContext);
-
-    // Backend — deleteToolCall cascades to messages via parent_tool_call_id FK
-    if (isUuid(toolCallId)) {
-      try {
-        await threadService.deleteToolCall(threadId, toolCallId);
-        await fetchAndReplaceThreadSnapshot(threadId);
-      } catch (error) {
-        console.error('Failed to delete tool call:', error);
-        await fetchAndReplaceThreadSnapshot(threadId);
-      }
-    }
-  }, [threadId]);
-
-  const handleDeleteMessage = useCallback(async (messageId: string) => {
+  const handleDeleteMessage = useCallback(async (
+    messageId: string,
+    role: ThreadMessage['role'],
+    linkedToolCallCount: number = 0,
+  ) => {
     if (!threadId) {
       showAlert({ title: 'Delete Failed', message: 'Could not find the thread.' });
       return;
     }
 
-    if (!await confirm({ title: 'Delete Message', message: 'Are you sure you want to delete this message?', variant: 'danger', confirmLabel: 'Delete' })) return;
+    const isAssistantResponse = role === 'assistant';
+    const confirmed = await confirm({
+      title: isAssistantResponse ? 'Delete Response' : 'Delete Message',
+      message: isAssistantResponse
+        ? (
+            linkedToolCallCount > 0
+              ? `Delete this response and its ${linkedToolCallCount} linked operation${linkedToolCallCount === 1 ? '' : 's'}?`
+              : 'Are you sure you want to delete this response?'
+          )
+        : 'Are you sure you want to delete this message?',
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
 
     const state = useThreadStore.getState();
     const deletePauseContext = getThreadDeletePauseContext(threadId);
@@ -1471,73 +1445,16 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         )}
 
         {displayItems.map((item, index) => {
-          if (item.kind === 'tool_group') {
-            const hasSubAgentCalls = item.toolCalls.some((tc) => (
-              tc.toolName.startsWith('call_') && Boolean(tc.childThreadId)
-            ));
-            const isActiveSubAgentParent = item.assistantMessageId === lastAssistantMessageId;
-            const showRunError = Boolean(latestRunError) && index === displayItems.length - 1;
-
-            const allCards = buildEditCardsFromToolCallMetadata(
-              item.toolCalls.map(toToolCallMetadata),
-            );
-            const hasAnyPending = item.toolCalls.some((tc) => isBlockingToolCallStatus(tc.status));
-            const groupMode = hasAnyPending ? 'pending' : 'confirmed';
-
-            return (
-              <React.Fragment key={`toolgroup:${item.messageIds[0]}`}>
-                {allCards.length > 0 && (
-                  <div className="agent-tool-group">
-                    {item.messageIds.map((mid) => (
-                      <span key={mid} data-function-call-message-id={mid} />
-                    ))}
-                    <FunctionCallsThread
-                      threadId={threadId ?? item.toolCalls[0]?.threadId ?? ''}
-                      scopeKey={`agent:${selectedAgentId ?? 'none'}:tg:${item.assistantMessageId}`}
-                      mode={groupMode}
-                      cards={allCards}
-                      onCommitDecisions={groupMode === 'pending' ? commitDecisions : undefined}
-                      onCommitDecisionsAndPause={groupMode === 'pending' ? commitDecisionsAndPause : undefined}
-                      onDeleteCard={(cardId) => void handleDeleteSingleToolCall(cardId)}
-                      projectId={projectId}
-                    />
-                  </div>
-                )}
-
-                {selectedAgentId && hasSubAgentCalls && threadId && (
-                  <SubAgentPeekDock
-                    parentThreadId={threadId}
-                    parentMessageId={item.assistantMessageId}
-                    projectId={projectId}
-                    isActiveParent={isActiveSubAgentParent}
-                  />
-                )}
-
-                {showRunError && (
-                  <div className="message-error">{latestRunError}</div>
-                )}
-              </React.Fragment>
-            );
-          }
-
           const message = item.info;
-          let prevMessageItem: DisplayItem | null = null;
-          for (let j = index - 1; j >= 0; j--) {
-            if (displayItems[j].kind === 'message') {
-              prevMessageItem = displayItems[j];
-              break;
-            }
-          }
-          const isSameRoleAsPrevious = prevMessageItem?.kind === 'message'
-            && prevMessageItem.info.chatMessage.role === message.chatMessage.role;
-          const isUser = message.chatMessage.role === 'user';
+          const previousItem = index > 0 ? displayItems[index - 1] : null;
+          const previousRole = previousItem?.kind === 'assistant_block'
+            ? 'assistant'
+            : previousItem?.kind === 'user_message'
+              ? 'user'
+              : null;
+          const currentRole = item.kind === 'assistant_block' ? 'assistant' : 'user';
+          const isSameRoleAsPrevious = previousRole === currentRole;
           const isStreamingMessage = message.source.isStreaming === true;
-
-          const processed = displayProcessor.process(
-            message.chatMessage as any,
-            { projectId, surface: (surface ?? 'story-object') as any },
-          );
-
           const showRunError = Boolean(latestRunError) && index === displayItems.length - 1;
           const translationAvailable = secondaryLanguage
             ? Boolean(message.source.data[secondaryLanguage])
@@ -1550,33 +1467,196 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
             primaryEntry?.contentParts ?? message.chatMessage.contentParts,
           );
           const mcpSelections = getMessageMcpSelections(message.source);
+          const processed = displayProcessor.process(
+            message.chatMessage as any,
+            { projectId, surface: (surface ?? 'story-object') as any },
+          );
 
-          if (isSameRoleAsPrevious && !isStreamingMessage && !primaryPlainContent && !hasAttachments) {
-            const detail = message.chatMessage.reasoning_detail as { meta?: { thinking_display?: string }; data?: Record<string, unknown> } | undefined;
-            const path = detail?.meta?.thinking_display?.trim();
-            const thinkingValue = path && detail?.data ? getByDotPath(detail.data, path) : undefined;
-            if (!(typeof thinkingValue === 'string' && thinkingValue.trim().length > 0)) {
-              return null;
-            }
+          if (item.kind === 'assistant_block') {
+            const hasSubAgentCalls = item.toolCalls.some((tc) => (
+              tc.toolName.startsWith('call_') && Boolean(tc.childThreadId)
+            ));
+            const isActiveSubAgentParent = message.source.id === lastAssistantMessageId;
+            const cards = item.toolCalls.length > 0
+              ? buildEditCardsFromToolCallMetadata(item.toolCalls.map(toToolCallMetadata))
+              : [];
+            const hasAnyPending = item.toolCalls.some((tc) => isBlockingToolCallStatus(tc.status));
+            const groupMode = hasAnyPending ? 'pending' : 'confirmed';
+
+            return (
+              <React.Fragment key={message.chatMessage.id}>
+                <div className={`agent-message assistant${isSameRoleAsPrevious ? ' same-role-as-previous' : ''}`}>
+                  <div className="message-wrapper">
+                    {!isSameRoleAsPrevious && (
+                      <div className="message-header">
+                        <span className="message-role">{t('agent.ai')}</span>
+                        <span className="message-time">{formatTimestamp(message.chatMessage.timestamp)}</span>
+                      </div>
+                    )}
+
+                    {!isEditing && (
+                      <ThinkingDisplay
+                        messageId={message.chatMessage.id}
+                        reasoningDetail={message.chatMessage.reasoning_detail as any}
+                        isStreaming={isStreamingMessage}
+                      />
+                    )}
+
+                    {hasAttachments && (
+                      <MessageAttachmentBlock attachments={message.source.attachments} />
+                    )}
+
+                    {mcpSelections.length > 0 && (
+                      <MessageMcpChipRow selections={mcpSelections} />
+                    )}
+
+                    {!isEditing && (primaryPlainContent || isStreamingMessage) && (
+                      <div className="message-content">
+                        {processed.displayContent}
+                        {isStreamingMessage && thread?.status === 'running' && (
+                          <div className="typing-indicator inline">
+                            <div className="loading-track">
+                              <div className="loading-bar" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {isEditing && (
+                      <div className="message-edit">
+                        <textarea
+                          value={editingText}
+                          onChange={(event) => setEditingText(event.target.value)}
+                          autoFocus
+                        />
+                        <div className="edit-actions">
+                          <TextButton
+                            variant="secondary"
+                            onClick={handleCancelMessageEdit}
+                            disabled={editingSaving}
+                          >
+                            {t('agent.cancel')}
+                          </TextButton>
+                          <TextButton
+                            variant="primary"
+                            onClick={() => void handleSaveMessageEdit(message.source)}
+                            disabled={editingSaving || !editingText.trim()}
+                          >
+                            {editingSaving ? t('common.loading') : t('agent.save')}
+                          </TextButton>
+                        </div>
+                      </div>
+                    )}
+
+                    {cards.length > 0 && (
+                      <div className="message-function-calls">
+                        {item.toolCallMessageIds.map((mid) => (
+                          <span
+                            key={mid}
+                            className="message-function-call-anchor"
+                            data-function-call-message-id={mid}
+                          />
+                        ))}
+                        <FunctionCallsThread
+                          threadId={threadId ?? item.toolCalls[0]?.threadId ?? ''}
+                          scopeKey={`agent:${selectedAgentId ?? 'none'}:assistant:${message.source.id}`}
+                          mode={groupMode}
+                          cards={cards}
+                          onCommitDecisions={groupMode === 'pending' ? commitDecisions : undefined}
+                          onCommitDecisionsAndPause={groupMode === 'pending' ? commitDecisionsAndPause : undefined}
+                          projectId={projectId}
+                        />
+                      </div>
+                    )}
+
+                    {selectedAgentId && hasSubAgentCalls && threadId && (
+                      <SubAgentPeekDock
+                        parentThreadId={threadId}
+                        parentMessageId={message.source.id}
+                        projectId={projectId}
+                        isActiveParent={isActiveSubAgentParent}
+                      />
+                    )}
+
+                    {showRunError && (
+                      <div className="message-error">
+                        {latestRunError}
+                      </div>
+                    )}
+
+                    {!isStreamingMessage && !isEditing && (
+                      <div className="message-actions">
+                        <div className="action-buttons">
+                          {translationAvailable && secondaryLanguage && (
+                            <IconButton
+                              icon={<Globe size="sm" />}
+                              variant="ghost"
+                              size="sm"
+                              isActive={messageLanguageView[message.source.id] === 'secondary'}
+                              onClick={() => setMessageLanguageView((prev) => ({
+                                ...prev,
+                                [message.source.id]: prev[message.source.id] === 'secondary' ? 'primary' : 'secondary',
+                              }))}
+                              title={messageLanguageView[message.source.id] === 'secondary'
+                                ? t('agent.switchToLanguage', { language: primaryLanguage })
+                                : t('agent.switchToLanguage', { language: secondaryLanguage })}
+                            />
+                          )}
+                          {secondaryLanguage && (
+                            <IconButton
+                              icon={translating ? <CircularArrow size="sm" /> : (translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />)}
+                              onClick={() => void handleTranslateMessage(message.source, primaryPlainContent)}
+                              title={translationAvailable
+                                ? t('agent.refreshTranslation', { language: secondaryLanguage })
+                                : t('agent.translateTo', { language: secondaryLanguage })}
+                              variant="ghost"
+                              size="sm"
+                              disabled={translating || !primaryPlainContent}
+                            />
+                          )}
+                          <IconButton
+                            icon={<Edit size="sm" />}
+                            onClick={() => handleStartMessageEdit(message.source.id, primaryPlainContent)}
+                            disabled={!primaryPlainContent}
+                            title={t('agent.edit')}
+                            variant="ghost"
+                            size="sm"
+                          />
+                          <IconButton
+                            icon={<Trash size="sm" />}
+                            onClick={() => void handleDeleteMessage(message.chatMessage.id, 'assistant', item.toolCalls.length)}
+                            title="Delete response"
+                            variant="ghost"
+                            size="sm"
+                            className="icon-button--ghost-danger"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {thread?.memoryBoundaryMessageId === message.source.id && (
+                  <div className="agent-archive-divider" role="separator" aria-label="Memory boundary">
+                    <div className="agent-archive-divider-line" />
+                    <span className="agent-archive-divider-label">Memory boundary</span>
+                    <div className="agent-archive-divider-line" />
+                  </div>
+                )}
+              </React.Fragment>
+            );
           }
 
           return (
             <React.Fragment key={message.chatMessage.id}>
-              <div className={`agent-message ${message.chatMessage.role}${isSameRoleAsPrevious ? ' same-role-as-previous' : ''}`}>
+              <div className={`agent-message user${isSameRoleAsPrevious ? ' same-role-as-previous' : ''}`}>
                 <div className="message-wrapper">
                   {!isSameRoleAsPrevious && (
                     <div className="message-header">
-                      <span className="message-role">{isUser ? t('agent.you') : t('agent.ai')}</span>
+                      <span className="message-role">{t('agent.you')}</span>
                       <span className="message-time">{formatTimestamp(message.chatMessage.timestamp)}</span>
                     </div>
-                  )}
-
-                  {message.chatMessage.role === 'assistant' && !isEditing && (
-                    <ThinkingDisplay
-                      messageId={message.chatMessage.id}
-                      reasoningDetail={message.chatMessage.reasoning_detail as any}
-                      isStreaming={isStreamingMessage}
-                    />
                   )}
 
                   {hasAttachments && (
@@ -1650,18 +1730,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                               : t('agent.switchToLanguage', { language: secondaryLanguage })}
                           />
                         )}
-                        {!isUser && secondaryLanguage && (
-                          <IconButton
-                            icon={translating ? <CircularArrow size="sm" /> : (translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />)}
-                            onClick={() => void handleTranslateMessage(message.source, primaryPlainContent)}
-                            title={translationAvailable
-                              ? t('agent.refreshTranslation', { language: secondaryLanguage })
-                              : t('agent.translateTo', { language: secondaryLanguage })}
-                            variant="ghost"
-                            size="sm"
-                            disabled={translating || !primaryPlainContent}
-                          />
-                        )}
                         <IconButton
                           icon={<Edit size="sm" />}
                           onClick={() => handleStartMessageEdit(message.source.id, primaryPlainContent)}
@@ -1672,7 +1740,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                         />
                         <IconButton
                           icon={<Trash size="sm" />}
-                          onClick={() => void handleDeleteMessage(message.chatMessage.id)}
+                          onClick={() => void handleDeleteMessage(message.chatMessage.id, 'user')}
                           title={t('agent.delete')}
                           variant="ghost"
                           size="sm"

@@ -111,7 +111,6 @@ const generateModule = defineToolCallUiModule({
       return {
         id: operation.id,
         operationIds: [operation.id],
-        deleteOperationId: operation.id,
         element: (
           <ImageToolCard
             key={operation.id}

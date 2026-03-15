@@ -46,18 +46,6 @@ class ReadToolCallModule(ToolCallModule):
                     auto_approve_category="read",
                 ),
                 ToolSpec(
-                    name="read_basic_info",
-                    description="Read project basic info.",
-                    parameters=obj_schema({"id": _ID}, ["id"]),
-                    auto_approve_category="read",
-                ),
-                ToolSpec(
-                    name="read_guidelines",
-                    description="Read project guidelines.",
-                    parameters=obj_schema({"id": _ID}, ["id"]),
-                    auto_approve_category="read",
-                ),
-                ToolSpec(
                     name="read_outline",
                     description="Read an outline.",
                     parameters=obj_schema({"id": _ID}, ["id"]),
@@ -89,10 +77,6 @@ class ReadToolCallModule(ToolCallModule):
             object_id = to_uuid(args.get("id"), "id")
             if tool_name == "read_story_object":
                 object_type = require_story_object_type(args.get("type"))
-            elif tool_name == "read_basic_info":
-                object_type = "basic_info"
-            elif tool_name == "read_guidelines":
-                object_type = "guidelines"
             elif tool_name == "read_outline":
                 object_type = "outline"
             elif tool_name == "read_outline_act":
@@ -126,10 +110,6 @@ class ReadToolCallModule(ToolCallModule):
 
         if tool_name == "read_story_object":
             object_type = require_story_object_type(args.get("type"))
-        elif tool_name == "read_basic_info":
-            object_type = "basic_info"
-        elif tool_name == "read_guidelines":
-            object_type = "guidelines"
         elif tool_name == "read_outline":
             object_type = "outline"
         elif tool_name == "read_outline_act":

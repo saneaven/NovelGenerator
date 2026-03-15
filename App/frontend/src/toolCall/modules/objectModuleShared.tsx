@@ -24,8 +24,6 @@ interface ObjectToolConfig {
 
 const OBJECT_TOOL_CONFIGS: Record<string, ObjectToolConfig> = {
   read_story_object: { category: 'read', objectType: 'story_object', storySubtypeFromArgs: true },
-  read_basic_info: { category: 'read', objectType: 'basic_info' },
-  read_guidelines: { category: 'read', objectType: 'guidelines' },
   read_outline: { category: 'read', objectType: 'outline' },
   read_outline_act: { category: 'read', objectType: 'outline_act' },
   read_outline_chapter: { category: 'read', objectType: 'outline_chapter' },
@@ -173,7 +171,6 @@ export function buildSingleObjectRenderItems(operations: ObjectOperationVM[], ct
   return operations.map((operation) => ({
     id: operation.id,
     operationIds: [operation.id],
-    deleteOperationId: operation.id,
     element: renderSingleObjectCard(operation, ctx),
   }));
 }

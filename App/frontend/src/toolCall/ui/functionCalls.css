@@ -1,9 +1,19 @@
 .message-function-calls {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
   width: 100%;
   max-width: none;
+}
+
+.message-function-call-anchor {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  inline-size: 0;
+  block-size: 0;
+  overflow: hidden;
 }
 
 .function-calls-thread {
@@ -624,28 +634,6 @@
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
   font-family: var(--font-family-content);
-}
-
-/* ===== Per-card delete wrapper ===== */
-.function-call-card-slot {
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-
-.function-call-card-slot__actions {
-  padding: 0 var(--spacing-sm);
-  max-height: 0;
-  overflow: hidden;
-  opacity: 0;
-  transition: max-height 0.2s ease-out, opacity 0.2s ease-out, padding 0.2s ease-out;
-}
-
-.function-call-card-slot:hover .function-call-card-slot__actions {
-  max-height: 3rem;
-  opacity: 1;
-  padding-top: var(--spacing-xs);
-  padding-bottom: var(--spacing-sm);
 }
 
 .function-call-sticky-decision-bar {

@@ -6,8 +6,6 @@ import { buildStoredOperations, buildStreamingOperations } from './buildOperatio
 import type { OperationVM } from './vmTypes';
 import { useFunctionCallUIStore } from './store';
 import { StickyDecisionBar } from './StickyDecisionBar';
-import { IconButton } from '../../components/IconButton';
-import { Trash } from '../../components/icons';
 import './functionCalls.css';
 
 export interface FunctionCallsThreadProps {
@@ -18,7 +16,6 @@ export interface FunctionCallsThreadProps {
   streamingProgress?: ToolCallProgress[];
   onCommitDecisions?: (decisions: ToolCallDecisionMap) => Promise<void>;
   onCommitDecisionsAndPause?: (decisions: ToolCallDecisionMap) => Promise<void>;
-  onDeleteCard?: (cardId: string) => void;
   projectId: string;
   isApplyDisabled?: boolean;
   applyDisabledReason?: string;
@@ -32,7 +29,6 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
   streamingProgress = [],
   onCommitDecisions,
   onCommitDecisionsAndPause,
-  onDeleteCard,
   projectId,
   isApplyDisabled = false,
   applyDisabledReason,
@@ -167,27 +163,6 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
     }
   }, [hasDecisionFlow, isApplyDisabled, unresolvedIds, setPatchDecisionsBulk, scopeKey, commitDecisions]);
 
-  const wrapCard = useCallback((element: React.ReactElement, operationId: string, renderItemId: string) => {
-    if (!onDeleteCard) return element;
-    return (
-      <div className="function-call-card-slot" key={renderItemId}>
-        {element}
-        <div className="function-call-card-slot__actions">
-          <div className="action-buttons">
-            <IconButton
-              icon={<Trash size="sm" />}
-              onClick={() => onDeleteCard(operationId)}
-              title="Delete"
-              variant="ghost"
-              size="sm"
-              className="icon-button--ghost-danger"
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }, [onDeleteCard]);
-
   const getDecisionProps = useCallback((operation: OperationVM): DecisionRenderProps => {
     const showDecisionButtons = hasDecisionFlow && operation.decisionEligible;
     const decisionDisabled = isApplyDisabled || committingById[operation.id] === true;
@@ -243,10 +218,7 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
 
       {renderItems.map((item) => {
         if (!item.element) return null;
-        if (!item.deleteOperationId || !onDeleteCard) {
-          return <React.Fragment key={item.id}>{item.element}</React.Fragment>;
-        }
-        return wrapCard(item.element, item.deleteOperationId, item.id);
+        return <React.Fragment key={item.id}>{item.element}</React.Fragment>;
       })}
 
       <StickyDecisionBar

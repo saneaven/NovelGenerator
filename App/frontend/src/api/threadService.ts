@@ -357,10 +357,6 @@ export const threadService = {
     await apiClient.delete<void>(`/api/v1/threads/${threadId}/messages/${messageId}`);
   },
 
-  async deleteToolCall(threadId: string, toolCallId: string): Promise<void> {
-    await apiClient.delete<void>(`/api/v1/threads/${threadId}/tool-calls/${toolCallId}`);
-  },
-
   async cancelThread(threadId: string): Promise<void> {
     await apiClient.post(`/api/v1/threads/${threadId}/cancel`);
   },
