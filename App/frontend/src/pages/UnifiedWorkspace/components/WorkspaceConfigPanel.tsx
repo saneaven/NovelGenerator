@@ -141,6 +141,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
   const [lastVectorStorageSummary, setLastVectorStorageSummary] = useState<string | null>(null);
   const [journeys, setJourneys] = useState<JourneyDTO[]>([]);
   const [isJourneysLoading, setIsJourneysLoading] = useState(false);
+  const [isDeletingAllJourneys, setIsDeletingAllJourneys] = useState(false);
   const [selectedJourney, setSelectedJourney] = useState<JourneyDTO | null>(null);
 
   useEffect(() => {
@@ -456,7 +457,12 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
   }, [loadVectorStorageStatus, projectId, t, vectorStorageStatus?.enabled, vectorStorageStatus?.profile]);
 
   const handleCancelJourney = useCallback(async (journeyId: string) => {
-    if (!await confirm({ title: 'Cancel Journey', message: 'Cancel this journey?', variant: 'warning', confirmLabel: 'Cancel Journey' })) {
+    if (!await confirm({
+      title: t('workspaceConfig.journeys.confirmCancelTitle'),
+      message: t('workspaceConfig.journeys.confirmCancelMessage'),
+      variant: 'warning',
+      confirmLabel: t('workspaceConfig.journeys.cancelAction'),
+    })) {
       return;
     }
     try {
@@ -468,9 +474,9 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       }
     } catch (err: any) {
       console.error('Failed to cancel journey:', err);
-      showAlert({ title: 'Journeys', message: 'Failed to cancel journey.' });
+      showAlert({ title: t('workspaceConfig.journeys.errorTitle'), message: t('workspaceConfig.journeys.errorCancel') });
     }
-  }, [loadJourneys, selectedJourney?.journey_id]);
+  }, [loadJourneys, selectedJourney?.journey_id, t]);
 
   const handleResumeJourney = useCallback(async (journeyId: string) => {
     try {
@@ -482,12 +488,17 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       }
     } catch (err: any) {
       console.error('Failed to resume journey:', err);
-      showAlert({ title: 'Journeys', message: 'Failed to resume journey.' });
+      showAlert({ title: t('workspaceConfig.journeys.errorTitle'), message: t('workspaceConfig.journeys.errorResume') });
     }
-  }, [loadJourneys, selectedJourney?.journey_id]);
+  }, [loadJourneys, selectedJourney?.journey_id, t]);
 
   const handleDeleteJourney = useCallback(async (journeyId: string) => {
-    if (!await confirm({ title: 'Delete Journey', message: 'Delete this journey and its history?', variant: 'danger', confirmLabel: 'Delete' })) {
+    if (!await confirm({
+      title: t('workspaceConfig.journeys.confirmDeleteTitle'),
+      message: t('workspaceConfig.journeys.confirmDeleteMessage'),
+      variant: 'danger',
+      confirmLabel: t('workspaceConfig.journeys.delete'),
+    })) {
       return;
     }
     try {
@@ -498,9 +509,31 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       await loadJourneys();
     } catch (err: any) {
       console.error('Failed to delete journey:', err);
-      showAlert({ title: 'Journeys', message: 'Failed to delete journey.' });
+      showAlert({ title: t('workspaceConfig.journeys.errorTitle'), message: t('workspaceConfig.journeys.errorDelete') });
     }
-  }, [loadJourneys, projectId, selectedJourney?.journey_id]);
+  }, [loadJourneys, projectId, selectedJourney?.journey_id, t]);
+
+  const handleDeleteAllJourneys = useCallback(async () => {
+    if (!await confirm({
+      title: t('workspaceConfig.journeys.confirmDeleteAllTitle'),
+      message: t('workspaceConfig.journeys.confirmDeleteAllMessage'),
+      variant: 'danger',
+      confirmLabel: t('workspaceConfig.journeys.deleteAll'),
+    })) {
+      return;
+    }
+    setIsDeletingAllJourneys(true);
+    try {
+      await journeyService.deleteAll(projectId);
+      setSelectedJourney(null);
+      await loadJourneys();
+    } catch (err: any) {
+      console.error('Failed to delete all journeys:', err);
+      showAlert({ title: t('workspaceConfig.journeys.errorTitle'), message: t('workspaceConfig.journeys.errorDeleteAll') });
+    } finally {
+      setIsDeletingAllJourneys(false);
+    }
+  }, [loadJourneys, projectId, t]);
 
   return (
     <div className="workspace-config-panel">
@@ -548,9 +581,9 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       </div>
 
       <div className="workspace-config-card">
-        <h3>Journeys</h3>
+        <h3>{t('workspaceConfig.journeys.title')}</h3>
         <p className="workspace-config-hint">
-          Review background journeys for this project. Notifications are now separate from journey history.
+          {t('workspaceConfig.journeys.hint')}
         </p>
 
         <div className="workspace-config-actions">
@@ -560,15 +593,26 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
             size="sm"
             iconLeft={<Refresh size="xs" />}
             loading={isJourneysLoading}
+            disabled={isDeletingAllJourneys}
           >
-            Refresh
+            {t('workspaceConfig.journeys.refresh')}
+          </TextButton>
+          <TextButton
+            onClick={() => { void handleDeleteAllJourneys(); }}
+            variant="danger"
+            size="sm"
+            iconLeft={<Trash size="xs" />}
+            loading={isDeletingAllJourneys}
+            disabled={journeys.length === 0 || isJourneysLoading}
+          >
+            {t('workspaceConfig.journeys.deleteAll')}
           </TextButton>
         </div>
 
         {isJourneysLoading ? (
           <div className="workspace-config-empty">{t('common.loading')}</div>
         ) : journeys.length === 0 ? (
-          <div className="workspace-config-empty">No journeys yet.</div>
+          <div className="workspace-config-empty">{t('workspaceConfig.journeys.empty')}</div>
         ) : (
           <ul className="workspace-config-candidate-list">
             {journeys.map((journey) => {
@@ -578,11 +622,11 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
                 <li key={journey.journey_id} className="workspace-config-candidate-item workspace-config-journey-item">
                   <div className="workspace-config-candidate-meta">
                     <div className="workspace-config-candidate-title">
-                      {journey.display_label || journey.kind || 'Journey'}
+                      {journey.display_label || journey.kind || t('workspaceConfig.journeys.defaultLabel')}
                     </div>
                     <div className="workspace-config-candidate-sub">
                       {journey.status}
-                      {journey.latest_run_id ? ' | active run' : ''}
+                      {journey.latest_run_id ? ` | ${t('workspaceConfig.journeys.activeRun')}` : ''}
                       {journey.last_error ? ` | ${journey.last_error}` : ''}
                     </div>
                   </div>
@@ -591,36 +635,39 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
                       onClick={() => setSelectedJourney(journey)}
                       size="sm"
                       variant="secondary"
+                      disabled={isDeletingAllJourneys}
                       iconLeft={<List size="xs" />}
                     >
-                      Open
+                      {t('workspaceConfig.journeys.open')}
                     </TextButton>
                     {canResume && (
                       <TextButton
                         onClick={() => { void handleResumeJourney(journey.journey_id); }}
                         size="sm"
                         variant="primary"
+                        disabled={isDeletingAllJourneys}
                         iconLeft={<Refresh size="xs" />}
                       >
-                        Resume
+                        {t('workspaceConfig.journeys.resume')}
                       </TextButton>
                     )}
                     <TextButton
                       onClick={() => { void handleCancelJourney(journey.journey_id); }}
                       size="sm"
                       variant="secondary"
-                      disabled={!canCancel}
+                      disabled={!canCancel || isDeletingAllJourneys}
                       iconLeft={<Refresh size="xs" />}
                     >
-                      Cancel
+                      {t('workspaceConfig.journeys.cancel')}
                     </TextButton>
                     <TextButton
                       onClick={() => { void handleDeleteJourney(journey.journey_id); }}
                       size="sm"
                       variant="danger"
+                      disabled={isDeletingAllJourneys}
                       iconLeft={<Trash size="xs" />}
                     >
-                      Delete
+                      {t('workspaceConfig.journeys.delete')}
                     </TextButton>
                   </div>
                 </li>
@@ -784,6 +831,8 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
 
         {lastExportSummary && <div className="workspace-config-result">{lastExportSummary}</div>}
 
+        {exportPreview && <hr className="workspace-config-divider" />}
+
         {exportPreview && exportSummary && (
           <div className="workspace-config-preview-summary workspace-config-preview-summary--stack">
             <div>
@@ -932,90 +981,86 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         </div>
 
         {lastRebuildSummary && <div className="workspace-config-result">{lastRebuildSummary}</div>}
-      </div>
 
-      <div className="workspace-config-card">
-        <h3>{t('workspaceConfig.imageCleanup.preview')}</h3>
+        {preview && (
+          <>
+            <hr className="workspace-config-divider" />
+            <div className="workspace-config-preview-summary">
+              <div>
+                {t('workspaceConfig.imageCleanup.candidates')}: <strong>{preview.total_candidates}</strong>
+                {' '}• {t('workspaceConfig.imageCleanup.totalSize')}: <strong>{formatBytes(preview.total_size_bytes)}</strong>
+              </div>
+              <div>
+                {t('workspaceConfig.imageCleanup.selected')}: <strong>{totalSelected}</strong> • {t('workspaceConfig.projectExport.size')}: <strong>{formatBytes(selectedTotalBytes)}</strong>
+              </div>
+            </div>
 
-        <div className="workspace-config-preview-summary">
-          <div>
-            {t('workspaceConfig.imageCleanup.candidates')}: <strong>{preview?.total_candidates ?? 0}</strong>
-            {preview && (
-              <>
-                {' '}
-                • {t('workspaceConfig.imageCleanup.totalSize')}: <strong>{formatBytes(preview.total_size_bytes)}</strong>
-              </>
+            <div className="workspace-config-actions">
+              <TextButton onClick={handleSelectAll} size="sm" variant="secondary" disabled={!candidates.length}>
+                {t('workspaceConfig.projectExport.selectAll')}
+              </TextButton>
+              <TextButton onClick={handleSelectNone} size="sm" variant="secondary" disabled={!candidates.length}>
+                {t('workspaceConfig.projectExport.selectNone')}
+              </TextButton>
+              <TextButton
+                onClick={() => handleExecute(Array.from(selectedIds))}
+                size="sm"
+                variant="danger"
+                iconLeft={<Trash size="xs" />}
+                disabled={!anySelected || isExecuting}
+                loading={isExecuting}
+              >
+                {t('workspaceConfig.imageCleanup.deleteSelected')}
+              </TextButton>
+            </div>
+
+            {lastExecute && (
+              <div className="workspace-config-result">
+                {t('workspaceConfig.imageCleanup.deleted')}: {lastExecute.deleted.length}
+                {lastExecute.scrubbed_reference_entries > 0 && (
+                  <> • {t('workspaceConfig.imageCleanup.scrubbedRefs')}: {lastExecute.scrubbed_reference_entries}</>
+                )}
+                {lastExecute.skipped.length > 0 && <> • {t('workspaceConfig.imageCleanup.skipped')}: {lastExecute.skipped.length}</>}
+                {lastExecute.errors.length > 0 && <> • {t('workspaceConfig.imageCleanup.errors')}: {lastExecute.errors.length}</>}
+              </div>
             )}
-          </div>
-          <div>
-            {t('workspaceConfig.imageCleanup.selected')}: <strong>{totalSelected}</strong> • {t('workspaceConfig.projectExport.size')}: <strong>{formatBytes(selectedTotalBytes)}</strong>
-          </div>
-        </div>
 
-        <div className="workspace-config-actions">
-          <TextButton onClick={handleSelectAll} size="sm" variant="secondary" disabled={!candidates.length}>
-            {t('workspaceConfig.projectExport.selectAll')}
-          </TextButton>
-          <TextButton onClick={handleSelectNone} size="sm" variant="secondary" disabled={!candidates.length}>
-            {t('workspaceConfig.projectExport.selectNone')}
-          </TextButton>
-          <TextButton
-            onClick={() => handleExecute(Array.from(selectedIds))}
-            size="sm"
-            variant="danger"
-            iconLeft={<Trash size="xs" />}
-            disabled={!anySelected || isExecuting}
-            loading={isExecuting}
-          >
-            {t('workspaceConfig.imageCleanup.deleteSelected')}
-          </TextButton>
-        </div>
-
-        {lastExecute && (
-          <div className="workspace-config-result">
-            {t('workspaceConfig.imageCleanup.deleted')}: {lastExecute.deleted.length}
-            {lastExecute.scrubbed_reference_entries > 0 && (
-              <> • {t('workspaceConfig.imageCleanup.scrubbedRefs')}: {lastExecute.scrubbed_reference_entries}</>
+            {candidates.length === 0 ? (
+              <div className="workspace-config-empty">{t('workspaceConfig.imageCleanup.noCandidates')}</div>
+            ) : (
+              <ul className="workspace-config-candidate-list">
+                {candidates.map((c) => {
+                  const checked = selectedIds.has(c.asset_id);
+                  return (
+                    <li key={c.asset_id} className="workspace-config-candidate-item">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => handleToggleSelected(c.asset_id, e.target.checked)}
+                      />
+                      <AuthenticatedImage
+                        className="workspace-config-thumb"
+                        src={getAssetUrl(c) || ''}
+                        alt={c.name}
+                        loading="lazy"
+                      />
+                      <div className="workspace-config-candidate-meta">
+                        <div className="workspace-config-candidate-title">{c.name}</div>
+                        <div className="workspace-config-candidate-sub">
+                          {c.asset_type ?? 'uncategorized'}
+                          {c.file_size !== null && <> • {formatBytes(c.file_size)}</>}
+                          {c.reasons.length > 0 && <> • {c.reasons.join(', ')}</>}
+                          {c.referenced_by_count > 0 && (
+                            <> • referenced_by={c.referenced_by_count}</>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-            {lastExecute.skipped.length > 0 && <> • {t('workspaceConfig.imageCleanup.skipped')}: {lastExecute.skipped.length}</>}
-            {lastExecute.errors.length > 0 && <> • {t('workspaceConfig.imageCleanup.errors')}: {lastExecute.errors.length}</>}
-          </div>
-        )}
-
-        {candidates.length === 0 ? (
-          <div className="workspace-config-empty">{t('workspaceConfig.imageCleanup.noCandidates')}</div>
-        ) : (
-          <ul className="workspace-config-candidate-list">
-            {candidates.map((c) => {
-              const checked = selectedIds.has(c.asset_id);
-              return (
-                <li key={c.asset_id} className="workspace-config-candidate-item">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(e) => handleToggleSelected(c.asset_id, e.target.checked)}
-                  />
-                  <AuthenticatedImage
-                    className="workspace-config-thumb"
-                    src={getAssetUrl(c) || ''}
-                    alt={c.name}
-                    loading="lazy"
-                  />
-                  <div className="workspace-config-candidate-meta">
-                    <div className="workspace-config-candidate-title">{c.name}</div>
-                    <div className="workspace-config-candidate-sub">
-                      {c.asset_type ?? 'uncategorized'}
-                      {c.file_size !== null && <> • {formatBytes(c.file_size)}</>}
-                      {c.reasons.length > 0 && <> • {c.reasons.join(', ')}</>}
-                      {c.referenced_by_count > 0 && (
-                        <> • referenced_by={c.referenced_by_count}</>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          </>
         )}
       </div>
 
@@ -1023,9 +1068,9 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         <JourneyNotificationDetail
           threadId={selectedJourney.thread_id}
           projectId={projectId}
-          label={selectedJourney.display_label || selectedJourney.kind || 'Journey'}
+          label={selectedJourney.display_label || selectedJourney.kind || t('workspaceConfig.journeys.defaultLabel')}
           status={selectedJourney.status}
-          message={selectedJourney.last_error || 'Journey details'}
+          message={selectedJourney.last_error || t('workspaceConfig.journeys.detailsFallback')}
           warning={selectedJourney.last_error || undefined}
           onClose={() => setSelectedJourney(null)}
         />

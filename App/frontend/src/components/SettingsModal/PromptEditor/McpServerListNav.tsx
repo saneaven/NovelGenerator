@@ -13,7 +13,6 @@ interface McpServerListNavProps {
   newDraftLabel?: string | null;
   isNewDraftSelected?: boolean;
   onSelectNewDraft?: () => void;
-  onClose?: () => void;
 }
 
 const McpServerListNav: React.FC<McpServerListNavProps> = ({
@@ -23,7 +22,6 @@ const McpServerListNav: React.FC<McpServerListNavProps> = ({
   newDraftLabel,
   isNewDraftSelected,
   onSelectNewDraft,
-  onClose,
 }) => {
   const activePresetId = usePresetStore((state) => state.activePresetId);
   const { servers, ensureLoaded, isLoading } = useMcpStore(useShallow((state) => ({
@@ -47,12 +45,6 @@ const McpServerListNav: React.FC<McpServerListNavProps> = ({
 
   return (
     <div className="mcp-server-list-nav">
-      {onClose && (
-        <header className="mcp-server-list-nav__header">
-          <h3 className="mcp-server-list-nav__title">MCP Servers</h3>
-        </header>
-      )}
-
       <div className="mcp-server-list-nav__list">
         {newDraftLabel && (
           <button

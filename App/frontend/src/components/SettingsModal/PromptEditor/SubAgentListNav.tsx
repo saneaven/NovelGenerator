@@ -13,7 +13,6 @@ interface SubAgentListNavProps {
   newDraftLabel?: string | null;
   isNewDraftSelected?: boolean;
   onSelectNewDraft?: () => void;
-  onClose?: () => void;
 }
 
 const SubAgentListNav: React.FC<SubAgentListNavProps> = ({
@@ -23,7 +22,6 @@ const SubAgentListNav: React.FC<SubAgentListNavProps> = ({
   newDraftLabel,
   isNewDraftSelected,
   onSelectNewDraft,
-  onClose,
 }) => {
   const { t } = useTranslation();
   const activePresetId = usePresetStore((s) => s.activePresetId);
@@ -39,12 +37,6 @@ const SubAgentListNav: React.FC<SubAgentListNavProps> = ({
 
   return (
     <div className="sub-agent-list-nav">
-      {onClose && (
-        <header className="sub-agent-list-nav__header">
-          <h3 className="sub-agent-list-nav__title">{t('settings.promptEditor.subAgents')}</h3>
-        </header>
-      )}
-
       <div className="sub-agent-list-nav__list">
         {newDraftLabel && (
           <button

@@ -48,6 +48,10 @@ export interface JourneyListResponseDTO {
   items: JourneyDTO[];
 }
 
+export interface DeleteAllJourneysResponseDTO {
+  deleted: number;
+}
+
 export const journeyService = {
   async create(projectId: string, payload: CreateJourneyRequest): Promise<CreateJourneyResponse> {
     return apiClient.post<CreateJourneyResponse>(`/api/v1/projects/${projectId}/journeys`, payload);
@@ -72,6 +76,10 @@ export const journeyService = {
 
   async delete(projectId: string, journeyId: string): Promise<void> {
     await apiClient.delete<void>(`/api/v1/projects/${projectId}/journeys/${journeyId}`);
+  },
+
+  async deleteAll(projectId: string): Promise<DeleteAllJourneysResponseDTO> {
+    return apiClient.post<DeleteAllJourneysResponseDTO>(`/api/v1/projects/${projectId}/journeys/delete-all`);
   },
 };
 

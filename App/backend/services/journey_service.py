@@ -76,6 +76,73 @@ class JourneyService:
             .first()
         )
 
+    def _list_owned_project_journeys(
+        self,
+        db: Session,
+        *,
+        project_id: UUID,
+        user_id: UUID,
+    ) -> list[Journey]:
+        return (
+            db.query(Journey)
+            .filter(Journey.project_id == project_id, Journey.user_id == user_id)
+            .order_by(Journey.updated_at.desc(), Journey.id.desc())
+            .all()
+        )
+
+    def _load_child_threads_by_journey_id(
+        self,
+        db: Session,
+        *,
+        journey_ids: list[UUID],
+    ) -> dict[UUID, Thread]:
+        if not journey_ids:
+            return {}
+        rows = (
+            db.query(Thread)
+            .filter(Thread.thread_type == "journey", Thread.parent_id.in_(journey_ids))
+            .all()
+        )
+        return {thread.parent_id: thread for thread in rows}
+
+    async def _emit_deleted_journey_events(
+        self,
+        *,
+        user_id: UUID,
+        project_id: UUID,
+        deleted_notifications: list[NotificationDeleteRow],
+        deleted_thread_ids: list[str],
+    ) -> None:
+        if len(deleted_notifications) == 1:
+            await self._event_dispatcher.emit_user_event(
+                user_id=user_id,
+                event_name="notification:delete",
+                data={"id": deleted_notifications[0].id},
+                project_id=project_id,
+            )
+        elif deleted_notifications:
+            await self._event_dispatcher.emit_user_event(
+                user_id=user_id,
+                event_name="notification:bulk_delete",
+                data={"ids": [row.id for row in deleted_notifications]},
+                project_id=project_id,
+            )
+
+        if len(deleted_thread_ids) == 1:
+            await self._event_dispatcher.emit_project_event(
+                user_id=user_id,
+                project_id=project_id,
+                event_name="thread:delete",
+                data={"id": deleted_thread_ids[0]},
+            )
+        elif deleted_thread_ids:
+            await self._event_dispatcher.emit_project_event(
+                user_id=user_id,
+                project_id=project_id,
+                event_name="thread:bulk_delete",
+                data={"ids": deleted_thread_ids},
+            )
+
     def list_project_journeys(
         self,
         db: Session,
@@ -83,22 +150,17 @@ class JourneyService:
         project_id: UUID,
         user_id: UUID,
     ) -> list[JourneyRuntimeRow]:
-        journeys = (
-            db.query(Journey)
-            .filter(Journey.project_id == project_id, Journey.user_id == user_id)
-            .order_by(Journey.updated_at.desc(), Journey.id.desc())
-            .all()
+        journeys = self._list_owned_project_journeys(
+            db,
+            project_id=project_id,
+            user_id=user_id,
         )
         if not journeys:
             return []
 
         journey_ids = [row.id for row in journeys]
-        threads = (
-            db.query(Thread)
-            .filter(Thread.thread_type == "journey", Thread.parent_id.in_(journey_ids))
-            .all()
-        )
-        thread_by_journey_id = {thread.parent_id: thread for thread in threads}
+        thread_by_journey_id = self._load_child_threads_by_journey_id(db, journey_ids=journey_ids)
+        threads = list(thread_by_journey_id.values())
         thread_ids = [thread.id for thread in threads]
 
         latest_run_rows = (
@@ -330,7 +392,29 @@ class JourneyService:
         journey_id: UUID,
         user_id: UUID,
     ) -> tuple[str | None, list[str]]:
+        discovery_db = self._db_factory()
+        try:
+            journey = self.require_owned_journey(
+                discovery_db,
+                journey_id=journey_id,
+                user_id=user_id,
+                project_id=project_id,
+            )
+            thread = self.get_child_thread(discovery_db, journey_id=journey.id)
+            active_thread_id = (
+                thread.id
+                if thread is not None and thread.status in ACTIVE_THREAD_DELETE_STATUSES
+                else None
+            )
+        finally:
+            discovery_db.close()
+
+        if active_thread_id is not None:
+            await self._run_pipeline.cancel_run_for_delete(thread_id=active_thread_id, user_id=user_id)
+
         db = self._db_factory()
+        deleted_notification: NotificationDeleteRow | None = None
+        deleted_thread_ids: list[str] = []
         try:
             journey = self.require_owned_journey(
                 db,
@@ -339,17 +423,6 @@ class JourneyService:
                 project_id=project_id,
             )
             thread = self.get_child_thread(db, journey_id=journey.id)
-            if thread is not None and thread.status in ACTIVE_THREAD_DELETE_STATUSES:
-                db.close()
-                await self._run_pipeline.cancel_run_for_delete(thread_id=thread.id, user_id=user_id)
-                db = self._db_factory()
-                journey = self.require_owned_journey(
-                    db,
-                    journey_id=journey_id,
-                    user_id=user_id,
-                    project_id=project_id,
-                )
-                thread = self.get_child_thread(db, journey_id=journey.id)
 
             deleted_notification = delete_notification_source(
                 db,
@@ -357,27 +430,101 @@ class JourneyService:
                 source_kind="journey",
                 source_id=journey.id,
             )
-            deleted_thread_ids: list[str] = []
             if thread is not None:
                 deleted_thread_ids.append(str(thread.id))
                 db.delete(thread)
             db.delete(journey)
             db.commit()
+        except Exception:
+            db.rollback()
+            raise
         finally:
             db.close()
 
-        if deleted_notification is not None:
-            await self._event_dispatcher.emit_user_event(
-                user_id=user_id,
-                event_name="notification:delete",
-                data={"id": deleted_notification.id},
-                project_id=project_id,
-            )
-        if deleted_thread_ids:
-            await self._event_dispatcher.emit_project_event(
-                user_id=user_id,
-                project_id=project_id,
-                event_name="thread:delete" if len(deleted_thread_ids) == 1 else "thread:bulk_delete",
-                data={"id": deleted_thread_ids[0]} if len(deleted_thread_ids) == 1 else {"ids": deleted_thread_ids},
-            )
+        await self._emit_deleted_journey_events(
+            user_id=user_id,
+            project_id=project_id,
+            deleted_notifications=[deleted_notification] if deleted_notification is not None else [],
+            deleted_thread_ids=deleted_thread_ids,
+        )
         return deleted_notification.id if deleted_notification is not None else None, deleted_thread_ids
+
+    async def delete_all_project_journeys(
+        self,
+        *,
+        project_id: UUID,
+        user_id: UUID,
+    ) -> int:
+        discovery_db = self._db_factory()
+        try:
+            journeys = self._list_owned_project_journeys(
+                discovery_db,
+                project_id=project_id,
+                user_id=user_id,
+            )
+            journey_ids = [journey.id for journey in journeys]
+            thread_by_journey_id = self._load_child_threads_by_journey_id(
+                discovery_db,
+                journey_ids=journey_ids,
+            )
+            active_thread_ids = [
+                thread.id
+                for thread in thread_by_journey_id.values()
+                if thread.status in ACTIVE_THREAD_DELETE_STATUSES
+            ]
+        finally:
+            discovery_db.close()
+
+        for thread_id in active_thread_ids:
+            await self._run_pipeline.cancel_run_for_delete(thread_id=thread_id, user_id=user_id)
+
+        db = self._db_factory()
+        deleted_notifications: list[NotificationDeleteRow] = []
+        deleted_thread_ids: list[str] = []
+        deleted_count = 0
+        try:
+            journeys = self._list_owned_project_journeys(
+                db,
+                project_id=project_id,
+                user_id=user_id,
+            )
+            if not journeys:
+                return 0
+
+            thread_by_journey_id = self._load_child_threads_by_journey_id(
+                db,
+                journey_ids=[journey.id for journey in journeys],
+            )
+
+            for journey in journeys:
+                deleted_notification = delete_notification_source(
+                    db,
+                    user_id=user_id,
+                    source_kind="journey",
+                    source_id=journey.id,
+                )
+                if deleted_notification is not None:
+                    deleted_notifications.append(deleted_notification)
+
+                thread = thread_by_journey_id.get(journey.id)
+                if thread is not None:
+                    deleted_thread_ids.append(str(thread.id))
+                    db.delete(thread)
+
+                db.delete(journey)
+
+            deleted_count = len(journeys)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+        await self._emit_deleted_journey_events(
+            user_id=user_id,
+            project_id=project_id,
+            deleted_notifications=deleted_notifications,
+            deleted_thread_ids=deleted_thread_ids,
+        )
+        return deleted_count

@@ -8,7 +8,14 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user
 from ..database import SessionLocal, get_db
 from ..models.db_models import User
-from ..schemas.thread_api import CreateJourneyRequest, CreateJourneyResponse, JourneyListResponse, JourneyResponse, ThreadRunResponse
+from ..schemas.thread_api import (
+    CreateJourneyRequest,
+    CreateJourneyResponse,
+    DeleteAllJourneysResponse,
+    JourneyListResponse,
+    JourneyResponse,
+    ThreadRunResponse,
+)
 from ..services.journey_service import JourneyRuntimeRow, JourneyService
 from ..services.ownership import require_owned_project
 from ..services.run_pipeline import run_pipeline
@@ -140,6 +147,20 @@ async def resume_journey(
         status=run.status,
         thread_status=thread.status,
     )
+
+
+@router.post("/projects/{project_id}/journeys/delete-all", response_model=DeleteAllJourneysResponse)
+async def delete_all_project_journeys(
+    project_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_owned_project(db, project_id=project_id, user_id=current_user.id)
+    deleted = await journey_service.delete_all_project_journeys(
+        project_id=project_id,
+        user_id=current_user.id,
+    )
+    return DeleteAllJourneysResponse(deleted=deleted)
 
 
 @router.delete("/projects/{project_id}/journeys/{journey_id}", status_code=204)

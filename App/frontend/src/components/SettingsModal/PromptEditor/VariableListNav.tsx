@@ -12,7 +12,6 @@ interface VariableListNavProps {
   newDraftLabel?: string | null;
   isNewDraftSelected?: boolean;
   onSelectNewDraft?: () => void;
-  onClose?: () => void;
 }
 
 const getTypeIcon = (type: VariableType) => {
@@ -90,7 +89,6 @@ const VariableListNav: React.FC<VariableListNavProps> = ({
   newDraftLabel,
   isNewDraftSelected,
   onSelectNewDraft,
-  onClose,
 }) => {
   const { variables, isLoading, loadVariables, reorderVariables } = useVariableStore();
   const [draggedId, setDraggedId] = React.useState<string | null>(null);
@@ -144,12 +142,6 @@ const VariableListNav: React.FC<VariableListNavProps> = ({
 
   return (
     <div className="variable-list-nav">
-      {onClose && (
-        <header className="variable-list-nav__header">
-          <h3 className="variable-list-nav__title">Variables</h3>
-        </header>
-      )}
-
       <div className="variable-list-nav__list">
         {newDraftLabel && (
           <button

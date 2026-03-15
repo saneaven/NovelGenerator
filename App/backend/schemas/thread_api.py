@@ -187,6 +187,10 @@ class CreateJourneyResponse(BaseModel):
     status: str
 
 
+class DeleteAllJourneysResponse(BaseModel):
+    deleted: int
+
+
 class JourneyResponse(BaseModel):
     journey_id: UUID
     project_id: UUID

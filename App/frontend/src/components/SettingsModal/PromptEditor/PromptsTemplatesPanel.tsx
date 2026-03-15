@@ -52,7 +52,8 @@ import { scenarioService } from '../../../api/scenarioService';
 import { fragmentService } from '../../../api/fragmentService';
 import { PROMPT_TREE, getFirstPromptNode, findPromptNode, type PromptNode } from './promptTree';
 import { TextButton } from '../../TextButton';
-import { Copy, Document, Eye, Trash } from '../../icons';
+import { ChevronDown, Close, Copy, Document, Eye, Trash } from '../../icons';
+import { DropdownMenu, DropdownItem } from '../../ui/DropdownMenu';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import './PromptsTemplatesPanel.css';
 import TemplateSyntaxHint from './TemplateSyntaxHint';
@@ -2464,114 +2465,131 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
               beforeSelectPreset={confirmPresetSwitchIfDirty}
             />
 
-            <div className="sidebar-toggle">
-              <button
-                className={`sidebar-toggle__btn ${subTab === 'prompts' ? 'sidebar-toggle__btn--active' : ''}`}
-                onClick={() => handleSubTabChange('prompts')}
-              >
-                {t('settings.promptEditor.prompts')}
-              </button>
-              <button
-                className={`sidebar-toggle__btn ${subTab === 'fragments' ? 'sidebar-toggle__btn--active' : ''}`}
-                onClick={() => handleSubTabChange('fragments')}
-              >
-                {t('settings.promptEditor.fragments')}
-              </button>
-              <button
-                className={`sidebar-toggle__btn ${subTab === 'variables' ? 'sidebar-toggle__btn--active' : ''}`}
-                onClick={() => handleSubTabChange('variables')}
-              >
-                {t('settings.promptEditor.variables')}
-              </button>
-              <button
-                className={`sidebar-toggle__btn ${subTab === 'subAgents' ? 'sidebar-toggle__btn--active' : ''}`}
-                onClick={() => handleSubTabChange('subAgents')}
-              >
-                {t('settings.promptEditor.subAgents')}
-              </button>
-              <button
-                className={`sidebar-toggle__btn ${subTab === 'mcp' ? 'sidebar-toggle__btn--active' : ''}`}
-                onClick={() => handleSubTabChange('mcp')}
-              >
-                MCP
-              </button>
-            </div>
+            <nav className="tree-nav">
+              <header className="tree-nav__header">
+                <DropdownMenu
+                  trigger={
+                    <button className="tree-nav__tab-switcher" type="button">
+                      <span>
+                        {({
+                          prompts: t('settings.promptEditor.prompts'),
+                          fragments: t('settings.promptEditor.fragments'),
+                          variables: t('settings.promptEditor.variables'),
+                          subAgents: t('settings.promptEditor.subAgents'),
+                          mcp: 'MCP',
+                        } as Record<SubTab, string>)[subTab]}
+                      </span>
+                      <ChevronDown size="sm" />
+                    </button>
+                  }
+                  align="left"
+                >
+                  <DropdownItem
+                    label={t('settings.promptEditor.prompts')}
+                    onClick={() => handleSubTabChange('prompts')}
+                    className={subTab === 'prompts' ? 'is-selected' : ''}
+                  />
+                  <DropdownItem
+                    label={t('settings.promptEditor.fragments')}
+                    onClick={() => handleSubTabChange('fragments')}
+                    className={subTab === 'fragments' ? 'is-selected' : ''}
+                  />
+                  <DropdownItem
+                    label={t('settings.promptEditor.variables')}
+                    onClick={() => handleSubTabChange('variables')}
+                    className={subTab === 'variables' ? 'is-selected' : ''}
+                  />
+                  <DropdownItem
+                    label={t('settings.promptEditor.subAgents')}
+                    onClick={() => handleSubTabChange('subAgents')}
+                    className={subTab === 'subAgents' ? 'is-selected' : ''}
+                  />
+                  <DropdownItem
+                    label="MCP"
+                    onClick={() => handleSubTabChange('mcp')}
+                    className={subTab === 'mcp' ? 'is-selected' : ''}
+                  />
+                </DropdownMenu>
+                <button
+                  className="tree-nav__close-btn"
+                  onClick={() => setIsSidebarCollapsed(true)}
+                  aria-label={t('settings.promptEditor.treeNav.closeSidebar')}
+                >
+                  <Close size="sm" />
+                </button>
+              </header>
 
-            {subTab === 'prompts' && (
-              <PromptTreeNav
-                tree={PROMPT_TREE}
-                selectedNodeId={selectedPrompt?.id || null}
-                onNodeSelect={handlePromptSelect}
-                onClose={() => setIsSidebarCollapsed(true)}
-              />
-            )}
-            {subTab === 'fragments' && (
-              <FragmentTreeNav
-                selectedPath={selectedPath}
-                onFragmentSelect={handleFragmentSelect}
-                onCreateFragment={handleCreateFragment}
-                onFolderDeleted={handleFolderDeleted}
-                draftLabel={newFragmentDraft ? getFragmentDraftLabel(newFragmentDraft) : null}
-                isDraftSelected={!!newFragmentDraft && !selectedFragment}
-                onSelectDraft={() => {
-                  setSelectedFragment(null);
-                  if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
-                }}
-                refreshTrigger={refreshTrigger}
-                onClose={() => setIsSidebarCollapsed(true)}
-              />
-            )}
-            {subTab === 'variables' && (
-              <VariableListNav
-                selectedId={selectedVariableId}
-                onVariableSelect={(id) => {
-                  setSelectedVariableId(id);
-                  if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
-                }}
-                onCreateVariable={handleCreateVariable}
-                newDraftLabel={newVariableDraft ? (newVariableDraft.current.name || 'New Variable') : null}
-                isNewDraftSelected={!!newVariableDraft && !selectedVariableId}
-                onSelectNewDraft={() => {
-                  setSelectedVariableId(null);
-                  if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
-                }}
-                onClose={() => setIsSidebarCollapsed(true)}
-              />
-            )}
-            {subTab === 'subAgents' && (
-              <SubAgentListNav
-                selectedId={selectedSubAgentId}
-                onSelect={(id) => {
-                  setSelectedSubAgentId(id);
-                  if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
-                }}
-                onCreate={handleCreateSubAgent}
-                newDraftLabel={newSubAgentDraft ? (newSubAgentDraft.current.display_name || 'New Sub Agent') : null}
-                isNewDraftSelected={!!newSubAgentDraft && !selectedSubAgentId}
-                onSelectNewDraft={() => {
-                  setSelectedSubAgentId(null);
-                  if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
-                }}
-                onClose={() => setIsSidebarCollapsed(true)}
-              />
-            )}
-            {subTab === 'mcp' && (
-              <McpServerListNav
-                selectedId={selectedMcpServerId}
-                onSelect={(id) => {
-                  setSelectedMcpServerId(id);
-                  if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
-                }}
-                onCreate={handleCreateMcpServer}
-                newDraftLabel={newMcpDraft ? (newMcpDraft.current.display_name || newMcpDraft.current.server_key || 'New MCP Server') : null}
-                isNewDraftSelected={!!newMcpDraft && !selectedMcpServerId}
-                onSelectNewDraft={() => {
-                  setSelectedMcpServerId(null);
-                  if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
-                }}
-                onClose={() => setIsSidebarCollapsed(true)}
-              />
-            )}
+              {subTab === 'prompts' && (
+                <PromptTreeNav
+                  tree={PROMPT_TREE}
+                  selectedNodeId={selectedPrompt?.id || null}
+                  onNodeSelect={handlePromptSelect}
+                />
+              )}
+              {subTab === 'fragments' && (
+                <FragmentTreeNav
+                  selectedPath={selectedPath}
+                  onFragmentSelect={handleFragmentSelect}
+                  onCreateFragment={handleCreateFragment}
+                  onFolderDeleted={handleFolderDeleted}
+                  draftLabel={newFragmentDraft ? getFragmentDraftLabel(newFragmentDraft) : null}
+                  isDraftSelected={!!newFragmentDraft && !selectedFragment}
+                  onSelectDraft={() => {
+                    setSelectedFragment(null);
+                    if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+                  }}
+                  refreshTrigger={refreshTrigger}
+                />
+              )}
+              {subTab === 'variables' && (
+                <VariableListNav
+                  selectedId={selectedVariableId}
+                  onVariableSelect={(id) => {
+                    setSelectedVariableId(id);
+                    if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+                  }}
+                  onCreateVariable={handleCreateVariable}
+                  newDraftLabel={newVariableDraft ? (newVariableDraft.current.name || 'New Variable') : null}
+                  isNewDraftSelected={!!newVariableDraft && !selectedVariableId}
+                  onSelectNewDraft={() => {
+                    setSelectedVariableId(null);
+                    if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+                  }}
+                />
+              )}
+              {subTab === 'subAgents' && (
+                <SubAgentListNav
+                  selectedId={selectedSubAgentId}
+                  onSelect={(id) => {
+                    setSelectedSubAgentId(id);
+                    if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+                  }}
+                  onCreate={handleCreateSubAgent}
+                  newDraftLabel={newSubAgentDraft ? (newSubAgentDraft.current.display_name || 'New Sub Agent') : null}
+                  isNewDraftSelected={!!newSubAgentDraft && !selectedSubAgentId}
+                  onSelectNewDraft={() => {
+                    setSelectedSubAgentId(null);
+                    if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+                  }}
+                />
+              )}
+              {subTab === 'mcp' && (
+                <McpServerListNav
+                  selectedId={selectedMcpServerId}
+                  onSelect={(id) => {
+                    setSelectedMcpServerId(id);
+                    if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+                  }}
+                  onCreate={handleCreateMcpServer}
+                  newDraftLabel={newMcpDraft ? (newMcpDraft.current.display_name || newMcpDraft.current.server_key || 'New MCP Server') : null}
+                  isNewDraftSelected={!!newMcpDraft && !selectedMcpServerId}
+                  onSelectNewDraft={() => {
+                    setSelectedMcpServerId(null);
+                    if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+                  }}
+                />
+              )}
+            </nav>
           </aside>
         </div>
       </div>

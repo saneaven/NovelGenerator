@@ -148,6 +148,12 @@
   font-size: var(--font-size-sm);
 }
 
+.workspace-config-divider {
+  border: none;
+  border-top: 1px solid var(--color-border-default);
+  margin: var(--spacing-md) 0;
+}
+
 .workspace-config-preview-summary {
   display: flex;
   flex-wrap: wrap;

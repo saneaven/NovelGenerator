@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import type { PromptNode } from './promptTree';
-import { ChevronRight, Close } from '../../icons';
+import { ChevronRight } from '../../icons';
 import './PromptTreeNav.css';
 
 interface PromptTreeNavProps {
   tree: PromptNode[];
   selectedNodeId: string | null;
   onNodeSelect: (node: PromptNode) => void;
-  onClose?: () => void;
 }
 
 interface TreeNodeProps {
@@ -93,9 +91,7 @@ const PromptTreeNav: React.FC<PromptTreeNavProps> = ({
   tree,
   selectedNodeId,
   onNodeSelect,
-  onClose,
 }) => {
-  const { t } = useTranslation();
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(() => {
     const initial = new Set<string>();
     const collectDefaultExpanded = (nodes: PromptNode[]) => {
@@ -125,29 +121,19 @@ const PromptTreeNav: React.FC<PromptTreeNavProps> = ({
   };
 
   return (
-    <nav className="tree-nav">
-      <header className="tree-nav__header">
-        <h3 className="tree-nav__title">{t('settings.promptEditor.prompts')}</h3>
-        {onClose && (
-          <button className="tree-nav__close-btn" onClick={onClose} aria-label={t('settings.promptEditor.treeNav.closeSidebar')}>
-            <Close size="sm" />
-          </button>
-        )}
-      </header>
-      <div className="tree-nav__content">
-        {tree.map((node) => (
-          <TreeNode
-            key={node.id}
-            node={node}
-            level={0}
-            selectedNodeId={selectedNodeId}
-            expandedNodes={expandedNodes}
-            onNodeSelect={onNodeSelect}
-            onToggleExpand={handleToggleExpand}
-          />
-        ))}
-      </div>
-    </nav>
+    <div className="tree-nav__content">
+      {tree.map((node) => (
+        <TreeNode
+          key={node.id}
+          node={node}
+          level={0}
+          selectedNodeId={selectedNodeId}
+          expandedNodes={expandedNodes}
+          onNodeSelect={onNodeSelect}
+          onToggleExpand={handleToggleExpand}
+        />
+      ))}
+    </div>
   );
 };
 

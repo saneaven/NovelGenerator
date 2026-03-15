@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { fragmentService } from '../../../api/fragmentService';
 import { folderService } from '../../../api/folderService';
 import type { FragmentTreeResponse, FragmentListItem, FolderTreeNode } from '../../../types/fragments';
-import { ChevronRight, Plus, Folder, Close, GripVertical, Trash } from '../../icons';
+import { ChevronRight, Plus, Folder, GripVertical, Trash } from '../../icons';
 import { TextButton } from '../../TextButton';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import './FragmentTreeNav.css';
@@ -22,7 +22,6 @@ interface FragmentTreeNavProps {
   isDraftSelected?: boolean;
   onSelectDraft?: () => void;
   refreshTrigger?: number;
-  onClose?: () => void;
 }
 
 interface FolderNodeProps {
@@ -199,7 +198,6 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
   isDraftSelected,
   onSelectDraft,
   refreshTrigger,
-  onClose,
 }) => {
   const { t } = useTranslation();
   const [treeData, setTreeData] = useState<FragmentTreeResponse | null>(null);
@@ -336,7 +334,7 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
 
   if (isLoading) {
     return (
-      <div className="tree-nav tree-nav--loading">
+      <div className="tree-nav__content tree-nav--loading">
         <div className="loading-indicator">Loading...</div>
       </div>
     );
@@ -346,22 +344,7 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
   const hasAnyItems = Boolean(draftLabel) || Boolean(hasFragments);
 
   return (
-    <nav className="tree-nav">
-      <header className="tree-nav__header">
-        <div className="tree-nav__header-left">
-          <h3 className="tree-nav__title">{t('settings.promptEditor.fragments')}</h3>
-        </div>
-        {onClose && (
-          <button
-            className="tree-nav__close-btn"
-            onClick={onClose}
-            aria-label={t('settings.promptEditor.treeNav.closeSidebar')}
-          >
-            <Close size="sm" />
-          </button>
-        )}
-      </header>
-
+    <>
       <div
         className={`tree-nav__content ${isRootDragOver ? 'tree-nav__content--drag-over' : ''}`}
         onDragOver={handleRootDragOver}
@@ -430,7 +413,7 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
           {t('settings.promptEditor.createNewFragment')}
         </TextButton>
       </div>
-    </nav>
+    </>
   );
 };
 
