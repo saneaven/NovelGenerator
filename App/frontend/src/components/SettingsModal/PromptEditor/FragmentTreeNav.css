@@ -76,6 +76,38 @@
   border-top: 1px solid var(--color-border-subtle);
 }
 
+.tree-nav__section {
+  padding: var(--spacing-sm) 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.tree-nav__section-title {
+  padding: 0 var(--spacing-md) var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tree-node__content--draft {
+  width: 100%;
+  justify-content: flex-start;
+  border: none;
+  background: transparent;
+}
+
+.tree-node__content--draft .tree-node__grip {
+  opacity: 1;
+  cursor: default;
+}
+
+.tree-node__draft-badge {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  color: var(--color-warning);
+}
+
 /* Drag-and-drop visual feedback */
 .tree-node__content--drag-over {
   background-color: var(--color-brand-primary-soft);

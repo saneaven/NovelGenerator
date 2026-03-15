@@ -10,6 +10,9 @@ interface McpServerListNavProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onCreate: () => void;
+  newDraftLabel?: string | null;
+  isNewDraftSelected?: boolean;
+  onSelectNewDraft?: () => void;
   onClose?: () => void;
 }
 
@@ -17,6 +20,9 @@ const McpServerListNav: React.FC<McpServerListNavProps> = ({
   selectedId,
   onSelect,
   onCreate,
+  newDraftLabel,
+  isNewDraftSelected,
+  onSelectNewDraft,
   onClose,
 }) => {
   const activePresetId = usePresetStore((state) => state.activePresetId);
@@ -48,6 +54,20 @@ const McpServerListNav: React.FC<McpServerListNavProps> = ({
       )}
 
       <div className="mcp-server-list-nav__list">
+        {newDraftLabel && (
+          <button
+            type="button"
+            className={`mcp-server-item ${isNewDraftSelected ? 'mcp-server-item--selected' : ''}`}
+            onClick={onSelectNewDraft}
+          >
+            <span className="mcp-server-item__icon">
+              <Plus size="sm" />
+            </span>
+            <span className="mcp-server-item__name">{newDraftLabel}</span>
+            <span className="mcp-server-item__key">Unsaved</span>
+            <span className="mcp-server-item__meta">Save to create this server</span>
+          </button>
+        )}
         {isLoading && sortedServers.length === 0 ? (
           <div className="mcp-server-list-nav__loading">Loading...</div>
         ) : sortedServers.length === 0 ? (

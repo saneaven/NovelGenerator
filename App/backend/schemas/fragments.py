@@ -42,6 +42,13 @@ class FragmentUpdate(BaseModel):
     note: Optional[str] = Field(None, max_length=500)
 
 
+class FragmentPatch(BaseModel):
+    """Update fragment content/description and optionally rename it."""
+    content: str = Field(..., min_length=1)
+    description: Optional[str] = Field(None, max_length=500)
+    fragment_name: Optional[str] = Field(None, min_length=1, max_length=100)
+
+
 class FragmentMoveRequest(BaseModel):
     """Request to move fragment to different folder"""
     new_folder_id: Optional[str] = None

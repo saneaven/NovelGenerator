@@ -9,6 +9,9 @@ interface VariableListNavProps {
   selectedId: string | null;
   onVariableSelect: (id: string) => void;
   onCreateVariable: () => void;
+  newDraftLabel?: string | null;
+  isNewDraftSelected?: boolean;
+  onSelectNewDraft?: () => void;
   onClose?: () => void;
 }
 
@@ -84,6 +87,9 @@ const VariableListNav: React.FC<VariableListNavProps> = ({
   selectedId,
   onVariableSelect,
   onCreateVariable,
+  newDraftLabel,
+  isNewDraftSelected,
+  onSelectNewDraft,
   onClose,
 }) => {
   const { variables, isLoading, loadVariables, reorderVariables } = useVariableStore();
@@ -145,6 +151,22 @@ const VariableListNav: React.FC<VariableListNavProps> = ({
       )}
 
       <div className="variable-list-nav__list">
+        {newDraftLabel && (
+          <button
+            type="button"
+            className={`variable-item variable-item--draft ${isNewDraftSelected ? 'variable-item--selected' : ''}`}
+            onClick={onSelectNewDraft}
+          >
+            <span className="variable-item__grip">
+              <GripVertical size="sm" />
+            </span>
+            <span className="variable-item__icon">
+              <Plus size="sm" />
+            </span>
+            <span className="variable-item__name">{newDraftLabel}</span>
+            <span className="variable-item__type">Unsaved</span>
+          </button>
+        )}
         {variables.length === 0 ? (
           <div className="variable-list-nav__empty">
             <p>No variables defined yet.</p>

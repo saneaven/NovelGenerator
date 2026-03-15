@@ -18,6 +18,9 @@ interface FragmentTreeNavProps {
   onFragmentSelect: (folderId: string | null, fragmentName: string, fullPath: string) => void;
   onCreateFragment: (folderPath: string | null) => void;
   onFolderDeleted: (folderPath: string) => void;
+  draftLabel?: string | null;
+  isDraftSelected?: boolean;
+  onSelectDraft?: () => void;
   refreshTrigger?: number;
   onClose?: () => void;
 }
@@ -192,6 +195,9 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
   onFragmentSelect,
   onCreateFragment,
   onFolderDeleted,
+  draftLabel,
+  isDraftSelected,
+  onSelectDraft,
   refreshTrigger,
   onClose,
 }) => {
@@ -336,9 +342,8 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
     );
   }
 
-  const hasFragments = treeData && (
-    treeData.root_fragments.length > 0 || treeData.folders.length > 0
-  );
+  const hasFragments = treeData && (treeData.root_fragments.length > 0 || treeData.folders.length > 0);
+  const hasAnyItems = Boolean(draftLabel) || Boolean(hasFragments);
 
   return (
     <nav className="tree-nav">
@@ -363,12 +368,28 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
         onDragLeave={handleRootDragLeave}
         onDrop={handleRootDrop}
       >
-        {!hasFragments ? (
+        {!hasAnyItems ? (
           <div className="tree-nav__empty">
             <p>No fragments yet</p>
           </div>
         ) : (
           <>
+            {draftLabel && (
+              <section className="tree-nav__section">
+                <div className="tree-nav__section-title">Drafts</div>
+                <button
+                  type="button"
+                  className={`tree-node__content tree-node__content--fragment tree-node__content--draft ${isDraftSelected ? 'tree-node__content--selected' : ''}`}
+                  onClick={onSelectDraft}
+                >
+                  <span className="tree-node__grip">
+                    <Plus size="xs" />
+                  </span>
+                  <span className="tree-node__label">{draftLabel}</span>
+                  <span className="tree-node__draft-badge">Unsaved</span>
+                </button>
+              </section>
+            )}
             {treeData?.root_fragments.map((fragment) => {
               const fragmentPath = fragment.fragment_name;
               return (

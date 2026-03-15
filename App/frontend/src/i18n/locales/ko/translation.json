@@ -909,6 +909,7 @@
       "addDescription": "설명 추가...",
       "noDescription": "설명 없음",
       "editDescription": "설명 편집",
+      "editFragmentName": "프래그먼트 이름 편집",
       "chars": "{{count}}자",
       "unsavedChanges": "저장되지 않은 변경사항",
       "versionHistory": "버전 기록",

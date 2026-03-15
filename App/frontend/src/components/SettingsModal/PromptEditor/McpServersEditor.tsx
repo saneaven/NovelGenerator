@@ -1,13 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { useShallow } from 'zustand/react/shallow';
+import React, { useMemo, useState } from 'react';
 import { TextButton } from '../../TextButton';
 import ToggleSwitch from '../../common/ToggleSwitch';
 import { CustomSelect } from '../../ui/CustomSelect';
 import EditorPanelHeader from './EditorPanelHeader';
 import { usePresetStore } from '../../../store/presetStore';
 import { useMcpStore } from '../../../store/mcpStore';
-import { confirm } from '../../../store/dialogStore';
+import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import type { McpAuthInput, McpHeaderInput, McpServerCreate, McpServerResponse, McpServerUpdate } from '../../../types/mcp';
+import HeaderOverflowMenu from './HeaderOverflowMenu';
+import { Trash } from '../../icons';
 import './McpServersEditor.css';
 
 type AuthKind = McpAuthInput['auth_kind'];
@@ -18,8 +19,7 @@ const AUTH_OPTIONS = [
   { value: 'headers', label: 'Headers' },
 ] as const;
 
-interface McpServerDraft {
-  id: string;
+export interface McpServerDraftFields {
   server_key: string;
   display_name: string;
   server_url: string;
@@ -30,23 +30,64 @@ interface McpServerDraft {
   bearer_token: string;
   headers_text: string;
   auth_dirty: boolean;
+}
+
+export interface McpServerDraft {
+  draftKey: string;
+  serverId: string | null;
   isNew: boolean;
-  isSaving: boolean;
-  isSyncing: boolean;
+  original: McpServerDraftFields;
+  current: McpServerDraftFields;
+  dirty: boolean;
   error: string;
+  isSyncing: boolean;
 }
 
 interface McpServersEditorProps {
-  selectedId: string | null;
-  isCreatingNew: boolean;
-  onCreated: (serverId: string) => void;
+  draft: McpServerDraft | null;
+  snapshot: McpServerResponse['snapshot'] | null;
+  storeError?: string | null;
+  onDraftChange: (draft: McpServerDraft) => void;
   onDeleted: (serverId: string) => void;
-  onCancelCreate: () => void;
+  onDiscardNew: () => void;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
 }
 
-function parseHeadersText(value: string): McpHeaderInput[] {
+function fieldsToSnapshot(fields: McpServerDraftFields): string {
+  return JSON.stringify({
+    server_key: fields.server_key,
+    display_name: fields.display_name,
+    server_url: fields.server_url,
+    enabled: fields.enabled,
+    allow_agent_mode: fields.allow_agent_mode,
+    allow_plan_mode: fields.allow_plan_mode,
+    auth_kind: fields.auth_kind,
+    auth_dirty: fields.auth_dirty,
+    auth_payload: fields.auth_dirty ? {
+      bearer_token: fields.bearer_token,
+      headers_text: fields.headers_text,
+    } : null,
+  });
+}
+
+function validateDraft(draft: McpServerDraft): string {
+  if (!draft.current.display_name.trim()) return 'Name is required';
+  if (!draft.current.server_key.trim()) return 'Key is required';
+  if (!draft.current.server_url.trim()) return 'URL is required';
+  return '';
+}
+
+export function computeMcpDraft(draft: McpServerDraft): McpServerDraft {
+  const dirty = draft.isNew || fieldsToSnapshot(draft.current) !== fieldsToSnapshot(draft.original);
+  return {
+    ...draft,
+    dirty,
+    error: validateDraft(draft),
+  };
+}
+
+export function parseHeadersText(value: string): McpHeaderInput[] {
   return value
     .split('\n')
     .map((line) => line.trim())
@@ -64,19 +105,18 @@ function parseHeadersText(value: string): McpHeaderInput[] {
     .filter((item) => item.name);
 }
 
-function authToDraftFields(server: McpServerResponse): Pick<McpServerDraft, 'auth_kind' | 'bearer_token' | 'headers_text'> {
+function authToDraftFields(server: McpServerResponse): Pick<McpServerDraftFields, 'auth_kind' | 'bearer_token' | 'headers_text' | 'auth_dirty'> {
   if (server.auth_kind === 'bearer') {
-    return { auth_kind: 'bearer', bearer_token: '', headers_text: '' };
+    return { auth_kind: 'bearer', bearer_token: '', headers_text: '', auth_dirty: false };
   }
   if (server.auth_kind === 'headers') {
-    return { auth_kind: 'headers', bearer_token: '', headers_text: '' };
+    return { auth_kind: 'headers', bearer_token: '', headers_text: '', auth_dirty: false };
   }
-  return { auth_kind: 'none', bearer_token: '', headers_text: '' };
+  return { auth_kind: 'none', bearer_token: '', headers_text: '', auth_dirty: false };
 }
 
-function serverToDraft(server: McpServerResponse): McpServerDraft {
-  return {
-    id: server.id,
+export function hydrateMcpDraft(server: McpServerResponse, draftKey: string): McpServerDraft {
+  const fields: McpServerDraftFields = {
     server_key: server.server_key,
     display_name: server.display_name,
     server_url: server.server_url,
@@ -84,57 +124,21 @@ function serverToDraft(server: McpServerResponse): McpServerDraft {
     allow_agent_mode: server.allow_agent_mode,
     allow_plan_mode: server.allow_plan_mode,
     ...authToDraftFields(server),
-    auth_dirty: false,
+  };
+  return computeMcpDraft({
+    draftKey,
+    serverId: server.id,
     isNew: false,
-    isSaving: false,
-    isSyncing: false,
+    original: { ...fields },
+    current: { ...fields },
+    dirty: false,
     error: '',
-  };
+    isSyncing: false,
+  });
 }
 
-function buildAuth(draft: McpServerDraft): McpAuthInput {
-  if (draft.auth_kind === 'bearer') {
-    return { auth_kind: 'bearer', token: draft.bearer_token };
-  }
-  if (draft.auth_kind === 'headers') {
-    return { auth_kind: 'headers', headers: parseHeadersText(draft.headers_text) };
-  }
-  return { auth_kind: 'none' };
-}
-
-function buildCreatePayload(draft: McpServerDraft): McpServerCreate {
-  return {
-    server_key: draft.server_key.trim(),
-    display_name: draft.display_name.trim(),
-    server_url: draft.server_url.trim(),
-    enabled: draft.enabled,
-    allow_agent_mode: draft.allow_agent_mode,
-    allow_plan_mode: draft.allow_plan_mode,
-    auth: buildAuth(draft),
-  };
-}
-
-function buildUpdatePayload(draft: McpServerDraft): McpServerUpdate {
-  const payload: McpServerUpdate = {
-    server_key: draft.server_key.trim(),
-    display_name: draft.display_name.trim(),
-    server_url: draft.server_url.trim(),
-    enabled: draft.enabled,
-    allow_agent_mode: draft.allow_agent_mode,
-    allow_plan_mode: draft.allow_plan_mode,
-  };
-  if (draft.auth_dirty) {
-    payload.auth = buildAuth(draft);
-  }
-  return payload;
-}
-
-function emptyDraft(): McpServerDraft {
-  const id = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID()
-    : `mcp-${Date.now()}`;
-  return {
-    id,
+export function buildNewMcpDraft(draftKey: string): McpServerDraft {
+  const fields: McpServerDraftFields = {
     server_key: '',
     display_name: '',
     server_url: '',
@@ -145,161 +149,131 @@ function emptyDraft(): McpServerDraft {
     bearer_token: '',
     headers_text: '',
     auth_dirty: false,
+  };
+  return computeMcpDraft({
+    draftKey,
+    serverId: null,
     isNew: true,
-    isSaving: false,
-    isSyncing: false,
+    original: { ...fields },
+    current: { ...fields },
+    dirty: true,
     error: '',
+    isSyncing: false,
+  });
+}
+
+function buildAuth(fields: McpServerDraftFields): McpAuthInput {
+  if (fields.auth_kind === 'bearer') {
+    return { auth_kind: 'bearer', token: fields.bearer_token };
+  }
+  if (fields.auth_kind === 'headers') {
+    return { auth_kind: 'headers', headers: parseHeadersText(fields.headers_text) };
+  }
+  return { auth_kind: 'none' };
+}
+
+export function buildMcpCreatePayload(draft: McpServerDraft): McpServerCreate {
+  return {
+    server_key: draft.current.server_key.trim(),
+    display_name: draft.current.display_name.trim(),
+    server_url: draft.current.server_url.trim(),
+    enabled: draft.current.enabled,
+    allow_agent_mode: draft.current.allow_agent_mode,
+    allow_plan_mode: draft.current.allow_plan_mode,
+    auth: buildAuth(draft.current),
   };
 }
 
+export function buildMcpUpdatePayload(draft: McpServerDraft): McpServerUpdate {
+  const payload: McpServerUpdate = {
+    server_key: draft.current.server_key.trim(),
+    display_name: draft.current.display_name.trim(),
+    server_url: draft.current.server_url.trim(),
+    enabled: draft.current.enabled,
+    allow_agent_mode: draft.current.allow_agent_mode,
+    allow_plan_mode: draft.current.allow_plan_mode,
+  };
+  if (draft.current.auth_dirty) {
+    payload.auth = buildAuth(draft.current);
+  }
+  return payload;
+}
+
 const McpServersEditor: React.FC<McpServersEditorProps> = ({
-  selectedId,
-  isCreatingNew,
-  onCreated,
+  draft,
+  snapshot,
+  storeError,
+  onDraftChange,
   onDeleted,
-  onCancelCreate,
+  onDiscardNew,
   isSidebarCollapsed,
   onToggleSidebar,
 }) => {
   const activePresetId = usePresetStore((state) => state.activePresetId);
-  const { servers, ensureLoaded, createServer, updateServer, deleteServer, syncServer, error } = useMcpStore(useShallow((state) => ({
-    servers: state.servers,
-    ensureLoaded: state.ensureLoaded,
-    createServer: state.createServer,
-    updateServer: state.updateServer,
+  const { deleteServer, syncServer } = useMcpStore((state) => ({
     deleteServer: state.deleteServer,
     syncServer: state.syncServer,
-    error: state.error,
-  })));
-  const [drafts, setDrafts] = useState<Record<string, McpServerDraft>>({});
-  const [newDraft, setNewDraft] = useState<McpServerDraft | null>(null);
+  }));
+  const [actionError, setActionError] = useState('');
 
-  useEffect(() => {
-    if (!activePresetId) return;
-    void ensureLoaded(activePresetId).catch(() => {});
-  }, [activePresetId, ensureLoaded]);
-
-  useEffect(() => {
-    setDrafts((prev) => {
-      const next: Record<string, McpServerDraft> = {};
-      for (const server of servers) {
-        next[server.id] = prev[server.id]
-          ? { ...prev[server.id], ...serverToDraft(server), isSaving: false, isSyncing: false }
-          : serverToDraft(server);
-      }
-      return next;
-    });
-  }, [servers]);
-
-  useEffect(() => {
-    if (!isCreatingNew) return;
-    setNewDraft((prev) => prev ?? emptyDraft());
-  }, [isCreatingNew]);
-
-  const selectedServer = useMemo(() => {
-    if (!selectedId) return null;
-    return servers.find((server) => server.id === selectedId) ?? null;
-  }, [selectedId, servers]);
-
-  const activeDraft = useMemo(() => {
-    if (isCreatingNew) {
-      return newDraft;
-    }
-    if (!selectedId) return null;
-    return drafts[selectedId] ?? (selectedServer ? serverToDraft(selectedServer) : null);
-  }, [drafts, isCreatingNew, newDraft, selectedId, selectedServer]);
-
-  const activeSnapshot = selectedServer?.snapshot ?? null;
-
-  const patchSelectedDraft = (patch: Partial<McpServerDraft>) => {
-    if (isCreatingNew) {
-      setNewDraft((prev) => (prev ? { ...prev, ...patch } : { ...emptyDraft(), ...patch }));
-      return;
-    }
-    if (!selectedId) return;
-    setDrafts((prev) => {
-      const base = prev[selectedId] ?? (selectedServer ? serverToDraft(selectedServer) : null);
-      if (!base) return prev;
-      return {
-        ...prev,
-        [selectedId]: { ...base, ...patch },
-      };
-    });
+  const patchDraft = (patch: Partial<McpServerDraftFields>) => {
+    if (!draft) return;
+    onDraftChange(computeMcpDraft({
+      ...draft,
+      current: {
+        ...draft.current,
+        ...patch,
+      },
+    }));
   };
 
-  const handleSave = async () => {
-    if (!activePresetId || !activeDraft) return;
-
-    patchSelectedDraft({ isSaving: true, error: '' });
-    try {
-      if (activeDraft.isNew) {
-        const created = await createServer(activePresetId, buildCreatePayload(activeDraft));
-        setNewDraft(null);
-        setDrafts((prev) => ({ ...prev, [created.id]: serverToDraft(created) }));
-        onCreated(created.id);
-        return;
-      }
-
-      const updated = await updateServer(activePresetId, activeDraft.id, buildUpdatePayload(activeDraft));
-      setDrafts((prev) => ({ ...prev, [updated.id]: serverToDraft(updated) }));
-    } catch (saveError) {
-      patchSelectedDraft({
-        isSaving: false,
-        error: saveError instanceof Error ? saveError.message : 'Failed to save MCP server',
-      });
-      return;
-    }
-
-    patchSelectedDraft({ isSaving: false, error: '' });
-  };
-
-  const handleSync = async () => {
-    if (!activePresetId || !activeDraft || activeDraft.isNew) return;
-
-    patchSelectedDraft({ isSyncing: true, error: '' });
-    try {
-      const updated = await syncServer(activePresetId, activeDraft.id);
-      setDrafts((prev) => ({ ...prev, [updated.id]: serverToDraft(updated) }));
-    } catch (syncError) {
-      patchSelectedDraft({
-        isSyncing: false,
-        error: syncError instanceof Error ? syncError.message : 'Failed to sync MCP server',
-      });
-      return;
-    }
-
-    patchSelectedDraft({ isSyncing: false, error: '' });
-  };
+  const syncDisabled = useMemo(() => {
+    if (!draft) return true;
+    return draft.isNew || draft.dirty || draft.isSyncing || !draft.serverId || !activePresetId;
+  }, [activePresetId, draft]);
 
   const handleDelete = async () => {
-    if (!activeDraft) return;
-
-    if (activeDraft.isNew) {
-      setNewDraft(null);
-      onCancelCreate();
+    if (!draft) return;
+    if (draft.isNew || !draft.serverId) {
+      onDiscardNew();
       return;
     }
 
-    if (!activePresetId) return;
     const ok = await confirm({
       title: 'Delete MCP server',
-      message: `Delete "${activeDraft.display_name || activeDraft.server_key}"?`,
+      message: `Delete "${draft.current.display_name || draft.current.server_key}"?`,
       variant: 'danger',
       confirmLabel: 'Delete',
       cancelLabel: 'Cancel',
     });
     if (!ok) return;
 
-    await deleteServer(activePresetId, activeDraft.id);
-    setDrafts((prev) => {
-      const next = { ...prev };
-      delete next[activeDraft.id];
-      return next;
-    });
-    onDeleted(activeDraft.id);
+    try {
+      await deleteServer(activePresetId!, draft.serverId);
+      onDeleted(draft.serverId);
+    } catch (error) {
+      await showAlert({
+        title: 'Delete MCP server',
+        message: error instanceof Error ? error.message : 'Failed to delete MCP server',
+        variant: 'danger',
+      });
+    }
   };
 
-  if (!activeDraft) {
+  const handleSync = async () => {
+    if (!draft || syncDisabled || !draft.serverId || !activePresetId) return;
+    setActionError('');
+    onDraftChange({ ...draft, isSyncing: true });
+    try {
+      await syncServer(activePresetId, draft.serverId);
+      onDraftChange({ ...draft, isSyncing: false });
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Failed to sync MCP server');
+      onDraftChange({ ...draft, isSyncing: false });
+    }
+  };
+
+  if (!draft) {
     return (
       <div className="mcp-server-editor mcp-server-editor--empty">
         <EditorPanelHeader
@@ -310,9 +284,7 @@ const McpServersEditor: React.FC<McpServersEditorProps> = ({
         />
         <div className="mcp-server-editor__empty-state">
           <p>Select an MCP server to edit.</p>
-          <p className="mcp-server-editor__empty-hint">
-            Use the sidebar to browse existing servers or add a new one.
-          </p>
+          <p className="mcp-server-editor__empty-hint">Use the sidebar to browse existing servers or add a new one.</p>
         </div>
       </div>
     );
@@ -321,23 +293,37 @@ const McpServersEditor: React.FC<McpServersEditorProps> = ({
   return (
     <div className="mcp-server-editor">
       <EditorPanelHeader
-        title={activeDraft.display_name || activeDraft.server_key || 'New MCP Server'}
-        subtitle={activeDraft.server_key || 'streamableHttp MCP endpoint'}
+        title={draft.current.display_name || draft.current.server_key || 'New MCP Server'}
+        subtitle={draft.current.server_key || 'streamableHttp MCP endpoint'}
+        actions={
+          <HeaderOverflowMenu
+            items={[
+              {
+                key: draft.isNew ? 'discard-mcp' : 'delete-mcp',
+                icon: <Trash size="sm" />,
+                label: draft.isNew ? 'Discard' : 'Delete',
+                onClick: handleDelete,
+                variant: 'danger',
+              },
+            ]}
+          />
+        }
         isSidebarCollapsed={isSidebarCollapsed}
         onToggleSidebar={onToggleSidebar}
       />
 
       <div className="mcp-server-editor__content">
-        {error && <div className="mcp-server-editor__error">{error}</div>}
-        {activeDraft.error && <div className="mcp-server-editor__error">{activeDraft.error}</div>}
+        {storeError && <div className="mcp-server-editor__error">{storeError}</div>}
+        {draft.error && <div className="mcp-server-editor__error">{draft.error}</div>}
+        {actionError && <div className="mcp-server-editor__error">{actionError}</div>}
 
         <section className="mcp-server-card">
           <div className="mcp-server-card__grid">
             <label className="mcp-server-card__field">
               <span>Name</span>
               <input
-                value={activeDraft.display_name}
-                onChange={(event) => patchSelectedDraft({ display_name: event.target.value })}
+                value={draft.current.display_name}
+                onChange={(event) => patchDraft({ display_name: event.target.value })}
                 placeholder="Docs MCP"
               />
             </label>
@@ -345,8 +331,8 @@ const McpServersEditor: React.FC<McpServersEditorProps> = ({
             <label className="mcp-server-card__field">
               <span>Key</span>
               <input
-                value={activeDraft.server_key}
-                onChange={(event) => patchSelectedDraft({ server_key: event.target.value })}
+                value={draft.current.server_key}
+                onChange={(event) => patchDraft({ server_key: event.target.value })}
                 placeholder="docs_mcp"
               />
             </label>
@@ -355,26 +341,26 @@ const McpServersEditor: React.FC<McpServersEditorProps> = ({
           <label className="mcp-server-card__field">
             <span>URL</span>
             <input
-              value={activeDraft.server_url}
-              onChange={(event) => patchSelectedDraft({ server_url: event.target.value })}
+              value={draft.current.server_url}
+              onChange={(event) => patchDraft({ server_url: event.target.value })}
               placeholder="https://example.com/mcp"
             />
           </label>
 
           <div className="mcp-server-card__toggles">
             <ToggleSwitch
-              checked={activeDraft.enabled}
-              onChange={(checked) => patchSelectedDraft({ enabled: checked })}
+              checked={draft.current.enabled}
+              onChange={(checked) => patchDraft({ enabled: checked })}
               label="Enabled"
             />
             <ToggleSwitch
-              checked={activeDraft.allow_agent_mode}
-              onChange={(checked) => patchSelectedDraft({ allow_agent_mode: checked })}
+              checked={draft.current.allow_agent_mode}
+              onChange={(checked) => patchDraft({ allow_agent_mode: checked })}
               label="Agent"
             />
             <ToggleSwitch
-              checked={activeDraft.allow_plan_mode}
-              onChange={(checked) => patchSelectedDraft({ allow_plan_mode: checked })}
+              checked={draft.current.allow_plan_mode}
+              onChange={(checked) => patchDraft({ allow_plan_mode: checked })}
               label="Plan"
             />
           </div>
@@ -384,8 +370,8 @@ const McpServersEditor: React.FC<McpServersEditorProps> = ({
               <span>Auth</span>
               <CustomSelect
                 className="mcp-server-card__select"
-                value={activeDraft.auth_kind}
-                onChange={(value) => patchSelectedDraft({
+                value={draft.current.auth_kind}
+                onChange={(value) => patchDraft({
                   auth_kind: value as AuthKind,
                   auth_dirty: true,
                 })}
@@ -393,12 +379,12 @@ const McpServersEditor: React.FC<McpServersEditorProps> = ({
               />
             </label>
 
-            {activeDraft.auth_kind === 'bearer' && (
+            {draft.current.auth_kind === 'bearer' && (
               <label className="mcp-server-card__field">
                 <span>Bearer token</span>
                 <input
-                  value={activeDraft.bearer_token}
-                  onChange={(event) => patchSelectedDraft({
+                  value={draft.current.bearer_token}
+                  onChange={(event) => patchDraft({
                     bearer_token: event.target.value,
                     auth_dirty: true,
                   })}
@@ -407,12 +393,12 @@ const McpServersEditor: React.FC<McpServersEditorProps> = ({
               </label>
             )}
 
-            {activeDraft.auth_kind === 'headers' && (
+            {draft.current.auth_kind === 'headers' && (
               <label className="mcp-server-card__field">
                 <span>Headers</span>
                 <textarea
-                  value={activeDraft.headers_text}
-                  onChange={(event) => patchSelectedDraft({
+                  value={draft.current.headers_text}
+                  onChange={(event) => patchDraft({
                     headers_text: event.target.value,
                     auth_dirty: true,
                   })}
@@ -428,43 +414,27 @@ const McpServersEditor: React.FC<McpServersEditorProps> = ({
           <div className="mcp-server-card__section-title">Snapshot</div>
           <div className="mcp-server-card__status">
             <div>
-              <strong>Last sync:</strong> {activeSnapshot?.synced_at ?? 'Never'}
+              <strong>Last sync:</strong> {snapshot?.synced_at ?? 'Never'}
             </div>
             <div>
               <strong>Catalog:</strong>{' '}
-              {activeSnapshot
-                ? `${activeSnapshot.catalog.prompts.length} prompts / ${activeSnapshot.catalog.resources.length} resources / ${activeSnapshot.catalog.tools.length} tools`
+              {snapshot
+                ? `${snapshot.catalog.prompts.length} prompts / ${snapshot.catalog.resources.length} resources / ${snapshot.catalog.tools.length} tools`
                 : 'No snapshot'}
             </div>
-            {activeSnapshot?.sync_error && (
-              <div className="mcp-server-card__sync-error">{activeSnapshot.sync_error}</div>
-            )}
+            {snapshot?.sync_error && <div className="mcp-server-card__sync-error">{snapshot.sync_error}</div>}
           </div>
         </section>
       </div>
 
       <div className="mcp-server-editor__footer">
         <TextButton
-          variant="primary"
-          onClick={() => void handleSave()}
-          disabled={activeDraft.isSaving}
-          loading={activeDraft.isSaving}
-        >
-          Save
-        </TextButton>
-        <TextButton
           variant="secondary"
           onClick={() => void handleSync()}
-          disabled={activeDraft.isNew || activeDraft.isSyncing}
-          loading={activeDraft.isSyncing}
+          disabled={syncDisabled}
+          loading={draft.isSyncing}
         >
           Sync
-        </TextButton>
-        <TextButton
-          variant={activeDraft.isNew ? 'ghost' : 'danger'}
-          onClick={() => void handleDelete()}
-        >
-          {activeDraft.isNew ? 'Discard' : 'Delete'}
         </TextButton>
       </div>
     </div>

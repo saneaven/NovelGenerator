@@ -36,6 +36,22 @@ DEFAULT_SUB_AGENT_USER_PROMPT = "{{input.agentMessage}}"
 DEFAULT_SUB_AGENT_ASSISTANT_TEMPLATE = "{{input.subAgentMessage}}"
 
 
+def _resolve_prompt_template_content(
+    prompt_templates: Optional[Dict[str, str]],
+    key: str,
+    fallback: str,
+) -> str:
+    if not prompt_templates:
+        return fallback
+    value = prompt_templates.get(key)
+    if value is None:
+        return fallback
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(f"{key} is required")
+    return value
+
+
 class SubAgentService:
     @staticmethod
     def list_sub_agents(db: Session, user_id: uuid.UUID, preset_id: uuid.UUID) -> List[SubAgentDefinition]:
@@ -149,22 +165,23 @@ class SubAgentService:
         if use_custom_llm_config and not llm_config_override:
             raise ValueError("llm_config_override is required when use_custom_llm_config is true")
 
-        prompt_templates = prompt_templates or {}
+        if prompt_templates is None and data.prompt_templates is not None:
+            prompt_templates = {}
+            if data.prompt_templates.system_prompt is not None:
+                prompt_templates["system_prompt"] = data.prompt_templates.system_prompt
+            if data.prompt_templates.user_prompt is not None:
+                prompt_templates["user_prompt"] = data.prompt_templates.user_prompt
 
-        if "systemPrompt" in prompt_templates:
-            system_content = prompt_templates["systemPrompt"]
-        else:
-            system_content = DEFAULT_SUB_AGENT_SYSTEM_PROMPT
-
-        if "userPrompt" in prompt_templates:
-            user_content = prompt_templates["userPrompt"]
-        else:
-            user_content = DEFAULT_SUB_AGENT_USER_PROMPT
-
-        if not system_content.strip():
-            raise ValueError("systemPrompt is required")
-        if not user_content.strip():
-            raise ValueError("userPrompt is required")
+        system_content = _resolve_prompt_template_content(
+            prompt_templates,
+            "system_prompt",
+            DEFAULT_SUB_AGENT_SYSTEM_PROMPT,
+        )
+        user_content = _resolve_prompt_template_content(
+            prompt_templates,
+            "user_prompt",
+            DEFAULT_SUB_AGENT_USER_PROMPT,
+        )
 
         model = SubAgentDefinitionModel(
             id=uuid.uuid4(),

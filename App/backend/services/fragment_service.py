@@ -27,6 +27,10 @@ def _folder_path_str(folder_id: Optional[UUID], path_cache: Dict[UUID, str]) -> 
     return path_cache.get(folder_id)
 
 
+class FragmentConflictError(ValueError):
+    """Raised when a fragment rename collides with an existing fragment."""
+
+
 class FragmentService:
     """Service for managing prompt fragments"""
 
@@ -262,6 +266,86 @@ class FragmentService:
             created_at=new_fragment.created_at,
             updated_at=new_fragment.updated_at,
             note=new_fragment.note,
+        )
+
+    @staticmethod
+    def update_fragment(
+        db: Session,
+        user_id: UUID,
+        preset_id: UUID,
+        folder_id: Optional[UUID],
+        fragment_name: str,
+        content: str,
+        description: Optional[str] = None,
+        new_fragment_name: Optional[str] = None,
+    ) -> Optional[FragmentVersionResponse]:
+        """Update fragment content/description and optionally rename the fragment."""
+        source_filter = and_(
+            PromptFragment.user_id == user_id,
+            PromptFragment.preset_id == preset_id,
+            PromptFragment.folder_id == folder_id if folder_id else PromptFragment.folder_id.is_(None),
+            PromptFragment.fragment_name == fragment_name,
+        )
+
+        versions = db.query(PromptFragment).filter(source_filter).order_by(
+            desc(PromptFragment.version_number)
+        ).all()
+        if not versions:
+            return None
+
+        latest = versions[0]
+        target_name = (new_fragment_name or fragment_name).strip()
+        if not target_name:
+            raise ValueError("Fragment name cannot be empty.")
+
+        if target_name != fragment_name:
+            existing = db.query(PromptFragment).filter(
+                and_(
+                    PromptFragment.user_id == user_id,
+                    PromptFragment.preset_id == preset_id,
+                    PromptFragment.folder_id == folder_id if folder_id else PromptFragment.folder_id.is_(None),
+                    PromptFragment.fragment_name == target_name,
+                )
+            ).first()
+            if existing:
+                raise FragmentConflictError(f"Fragment already exists: {target_name}")
+
+            renamed_at = datetime.utcnow()
+            for version in versions:
+                version.fragment_name = target_name
+                version.updated_at = renamed_at
+            db.flush()
+
+        resolved_description = latest.description if description is None else description
+        content_changed = content != latest.content
+        description_changed = resolved_description != latest.description
+
+        if content_changed or description_changed:
+            return FragmentService.save_new_version(
+                db=db,
+                user_id=user_id,
+                preset_id=preset_id,
+                folder_id=folder_id,
+                fragment_name=target_name,
+                content=content,
+                description=resolved_description,
+                note=None,
+            )
+
+        db.commit()
+
+        path_cache = FolderService.build_folder_path_cache(db, preset_id)
+        return FragmentVersionResponse(
+            id=str(latest.id),
+            folder_id=str(latest.folder_id) if latest.folder_id else None,
+            folder_path=_folder_path_str(latest.folder_id, path_cache),
+            fragment_name=latest.fragment_name,
+            content=latest.content,
+            description=latest.description,
+            version_number=latest.version_number,
+            created_at=latest.created_at,
+            updated_at=latest.updated_at,
+            note=latest.note,
         )
 
     @staticmethod

@@ -2,7 +2,7 @@
  * API service for Sub Agents (per active preset)
  */
 import { apiClient } from './client';
-import type { SubAgentCreate, SubAgentDefinition, SubAgentUpdate } from '../types/subAgents';
+import type { SubAgentCreatePayload, SubAgentDefinition, SubAgentUpdate } from '../types/subAgents';
 
 const BASE_PATH = '/api/v1/sub_agents';
 
@@ -11,7 +11,7 @@ export const subAgentService = {
     return await apiClient.get<SubAgentDefinition[]>(BASE_PATH);
   },
 
-  async create(data: SubAgentCreate): Promise<SubAgentDefinition> {
+  async create(data: SubAgentCreatePayload): Promise<SubAgentDefinition> {
     return await apiClient.post<SubAgentDefinition>(BASE_PATH, data);
   },
 

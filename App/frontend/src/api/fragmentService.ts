@@ -94,6 +94,26 @@ export const fragmentService = {
   },
 
   /**
+   * Update a fragment and optionally rename it
+   */
+  async updateFragment(
+    folderId: string | null,
+    fragmentName: string,
+    data: {
+      content: string;
+      description?: string;
+      fragment_name?: string;
+    }
+  ): Promise<FragmentVersion> {
+    const params = new URLSearchParams();
+    if (folderId !== null) {
+      params.append('folder_id', folderId);
+    }
+    params.append('fragment_name', fragmentName);
+    return await apiClient.patch<FragmentVersion>(`${BASE_PATH}?${params.toString()}`, data);
+  },
+
+  /**
    * Get version history for a fragment
    */
   async getVersionHistory(

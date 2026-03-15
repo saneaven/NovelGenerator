@@ -5,7 +5,7 @@ import { useMcpStore } from '../../../store/mcpStore';
 import { usePresetStore } from '../../../store/presetStore';
 import { useResolvedTaskConfig, useSettings } from '../../../store/settingsStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
-import type { SubAgentAllowedInvocation } from '../../../types/subAgents';
+import type { SubAgentAllowedInvocation, SubAgentCreatePayload, SubAgentDefinition } from '../../../types/subAgents';
 import type { TaskAIConfig } from '../../../store/settingsStore';
 import TaskConfigForm from '../TaskConfigForm';
 import ToggleSwitch from '../../common/ToggleSwitch';
@@ -52,7 +52,9 @@ export interface SubAgentDraftData {
 }
 
 export interface SubAgentDefinitionDraft {
-  subAgentId: string;
+  draftKey: string;
+  subAgentId: string | null;
+  isNew: boolean;
   original: SubAgentDraftData;
   current: SubAgentDraftData;
   dirty: boolean;
@@ -65,7 +67,7 @@ const MODE_OPTIONS: Array<{ mode: SubAgentAllowedInvocation; labelKey: string }>
   { mode: 'subAgent', labelKey: 'settings.promptEditor.subAgentModes.subAgent' },
 ];
 
-function normalizeAgentName(value: string): string {
+export function normalizeAgentName(value: string): string {
   const trimmed = value.trim();
   return trimmed.startsWith(SUB_AGENT_CALL_PREFIX) ? trimmed.slice(SUB_AGENT_CALL_PREFIX.length) : trimmed;
 }
@@ -85,7 +87,7 @@ function snapshotForDraft(data: SubAgentDraftData): string {
   });
 }
 
-function computeSubAgentDraft(next: SubAgentDefinitionDraft): SubAgentDefinitionDraft {
+export function computeSubAgentDraft(next: SubAgentDefinitionDraft): SubAgentDefinitionDraft {
   const error = (() => {
     const agent_name = normalizeAgentName(next.current.agent_name);
     if (!agent_name) return 'Tool ID is required';
@@ -97,16 +99,98 @@ function computeSubAgentDraft(next: SubAgentDefinitionDraft): SubAgentDefinition
   })();
 
   const dirty = snapshotForDraft(next.current) !== snapshotForDraft(next.original);
-  return { ...next, dirty, error };
+  return { ...next, dirty: next.isNew || dirty, error };
+}
+
+export function buildEmptySubAgentDraft(draftKey: string): SubAgentDefinitionDraft {
+  const base: SubAgentDraftData = {
+    agent_name: '',
+    display_name: '',
+    description: '',
+    enabled: true,
+    allowed_invocation_modes: ['planMode', 'agentMode', 'subAgent'],
+    allowed_tool_names: [],
+    allowed_sub_agent_ids: [],
+    allowed_mcp_server_ids: [],
+    use_custom_llm_config: false,
+    llm_config_override: null,
+  };
+  return computeSubAgentDraft({
+    draftKey,
+    subAgentId: null,
+    isNew: true,
+    original: base,
+    current: {
+      ...base,
+      allowed_invocation_modes: [...base.allowed_invocation_modes],
+      allowed_tool_names: [],
+      allowed_sub_agent_ids: [],
+      allowed_mcp_server_ids: [],
+    },
+    dirty: true,
+    error: '',
+  });
+}
+
+export function hydrateSubAgentDraft(definition: SubAgentDefinition, draftKey: string): SubAgentDefinitionDraft {
+  const base: SubAgentDraftData = {
+    agent_name: definition.agent_name,
+    display_name: definition.display_name,
+    description: definition.description,
+    enabled: definition.enabled,
+    allowed_invocation_modes: [...definition.allowed_invocation_modes],
+    allowed_tool_names: [...definition.allowed_tool_names],
+    allowed_sub_agent_ids: [...definition.allowed_sub_agent_ids],
+    allowed_mcp_server_ids: [...definition.allowed_mcp_server_ids],
+    use_custom_llm_config: definition.use_custom_llm_config,
+    llm_config_override: definition.llm_config_override,
+  };
+  return computeSubAgentDraft({
+    draftKey,
+    subAgentId: definition.id,
+    isNew: false,
+    original: {
+      ...base,
+      allowed_invocation_modes: [...base.allowed_invocation_modes],
+      allowed_tool_names: [...base.allowed_tool_names],
+      allowed_sub_agent_ids: [...base.allowed_sub_agent_ids],
+      allowed_mcp_server_ids: [...base.allowed_mcp_server_ids],
+    },
+    current: {
+      ...base,
+      allowed_invocation_modes: [...base.allowed_invocation_modes],
+      allowed_tool_names: [...base.allowed_tool_names],
+      allowed_sub_agent_ids: [...base.allowed_sub_agent_ids],
+      allowed_mcp_server_ids: [...base.allowed_mcp_server_ids],
+    },
+    dirty: false,
+    error: '',
+  });
+}
+
+export function buildSubAgentPayload(draft: SubAgentDefinitionDraft): SubAgentCreatePayload {
+  return {
+    agent_name: normalizeAgentName(draft.current.agent_name),
+    display_name: draft.current.display_name.trim(),
+    description: draft.current.description.trim(),
+    enabled: draft.current.enabled,
+    allowed_invocation_modes: draft.current.allowed_invocation_modes,
+    allowed_tool_names: draft.current.allowed_tool_names.filter((name) => !name.startsWith(SUB_AGENT_CALL_PREFIX)),
+    allowed_sub_agent_ids: draft.current.allowed_sub_agent_ids,
+    allowed_mcp_server_ids: draft.current.allowed_mcp_server_ids,
+    use_custom_llm_config: draft.current.use_custom_llm_config,
+    llm_config_override: draft.current.llm_config_override,
+  };
 }
 
 const SubAgentPromptEditors: React.FC<{
+  isNew: boolean;
   agentNameForHistory: string;
   agentNameForPreview: string;
   scenarioDraft: { scenario: ScenarioDocument; isLoading: boolean; loadError?: string } | null;
   onScenarioChange: (scenario: ScenarioDocument) => void;
   onReloadScenario: () => Promise<void>;
-}> = ({ agentNameForHistory, agentNameForPreview, scenarioDraft, onScenarioChange, onReloadScenario }) => {
+}> = ({ isNew, agentNameForHistory, agentNameForPreview, scenarioDraft, onScenarioChange, onReloadScenario }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<PromptTab>('systemPrompt');
   const [showVersions, setShowVersions] = useState(false);
@@ -287,7 +371,7 @@ const SubAgentPromptEditors: React.FC<{
                 icon: <Clock size="sm" />,
                 label: t('settings.promptEditor.versionHistory'),
                 onClick: () => setShowVersions(true),
-                disabled: !scenarioDraft || scenarioDraft.isLoading,
+                disabled: isNew || !scenarioDraft || scenarioDraft.isLoading,
               },
             ]}
           />
@@ -302,7 +386,7 @@ const SubAgentPromptEditors: React.FC<{
         placeholder={t('settings.promptEditor.enterPromptTemplate')}
       />
 
-      {showVersions && (
+      {showVersions && !isNew && (
         <VersionHistoryModal
           isOpen={showVersions}
           onClose={() => setShowVersions(false)}
@@ -327,7 +411,6 @@ const SubAgentPromptEditors: React.FC<{
 };
 
 interface SubAgentEditorProps {
-  selectedId: string | null;
   draft: SubAgentDefinitionDraft | null;
   onDraftChange: (draft: SubAgentDefinitionDraft) => void;
   promptIdentityName: string | null;
@@ -335,12 +418,12 @@ interface SubAgentEditorProps {
   onScenarioChange: (scenario: ScenarioDocument) => void;
   onReloadScenario: () => Promise<void>;
   onDeleted?: (subAgentId: string) => void;
+  onDiscardNew?: () => void;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
 }
 
 const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
-  selectedId,
   draft,
   onDraftChange,
   promptIdentityName,
@@ -348,6 +431,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   onScenarioChange,
   onReloadScenario,
   onDeleted,
+  onDiscardNew,
   isSidebarCollapsed,
   onToggleSidebar,
 }) => {
@@ -362,8 +446,8 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   const globalSubAgentConfig = useResolvedTaskConfig('subAgent');
 
   const agent = useMemo(() => {
-    return selectedId ? subAgents.find((s) => s.id === selectedId) : undefined;
-  }, [selectedId, subAgents]);
+    return draft?.subAgentId ? subAgents.find((s) => s.id === draft.subAgentId) : undefined;
+  }, [draft?.subAgentId, subAgents]);
 
   const [allStaticTools, setAllStaticTools] = useState<string[]>([]);
   useEffect(() => {
@@ -381,7 +465,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   useEffect(() => {
     setToolFilter('');
     setActiveTab('general');
-  }, [selectedId]);
+  }, [draft?.draftKey]);
 
   useEffect(() => {
     if (!draft) return;
@@ -442,6 +526,10 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
 
   const handleDelete = async () => {
     if (!draft) return;
+    if (draft.isNew || !draft.subAgentId) {
+      onDiscardNew?.();
+      return;
+    }
     const ok = await confirm({
       title: t('common.delete'),
       message: t('settings.promptEditor.subAgentDelete.confirm', { name: draft.current.display_name }),
@@ -461,7 +549,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
     }
   };
 
-  if (!agent || !draft) {
+  if (!draft) {
     return (
       <div className="sub-agent-editor sub-agent-editor--empty">
         <EditorPanelHeader
@@ -478,7 +566,10 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   }
 
   const agentNameForPreview =
-    normalizeAgentName(draft.current.agent_name) || normalizeAgentName(draft.original.agent_name) || agent.agent_name;
+    normalizeAgentName(draft.current.agent_name)
+    || normalizeAgentName(draft.original.agent_name)
+    || agent?.agent_name
+    || '';
 
   return (
     <div className="sub-agent-editor">
@@ -489,9 +580,9 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
           <HeaderOverflowMenu
             items={[
               {
-                key: 'delete-sub-agent',
+                key: draft.isNew ? 'discard-sub-agent' : 'delete-sub-agent',
                 icon: <Trash size="sm" />,
-                label: t('common.delete'),
+                label: draft.isNew ? 'Discard' : t('common.delete'),
                 onClick: handleDelete,
                 variant: 'danger',
               },
@@ -667,7 +758,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
             <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.allowedSubAgents')}</h4>
             <div className="sub-agent-editor__sub-agent-grid">
               {subAgents
-                .filter((s) => s.id !== agent.id)
+                .filter((s) => !draft.subAgentId || s.id !== draft.subAgentId)
                 .sort((a, b) => a.display_name.localeCompare(b.display_name))
                 .map((s) => (
                   <ToggleSwitch
@@ -761,6 +852,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
         >
           {promptIdentityName ? (
             <SubAgentPromptEditors
+              isNew={draft.isNew}
               agentNameForHistory={promptIdentityName}
               agentNameForPreview={agentNameForPreview}
               scenarioDraft={scenarioDraft}

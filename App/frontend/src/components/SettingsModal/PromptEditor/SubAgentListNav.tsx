@@ -10,6 +10,9 @@ interface SubAgentListNavProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onCreate: () => void;
+  newDraftLabel?: string | null;
+  isNewDraftSelected?: boolean;
+  onSelectNewDraft?: () => void;
   onClose?: () => void;
 }
 
@@ -17,6 +20,9 @@ const SubAgentListNav: React.FC<SubAgentListNavProps> = ({
   selectedId,
   onSelect,
   onCreate,
+  newDraftLabel,
+  isNewDraftSelected,
+  onSelectNewDraft,
   onClose,
 }) => {
   const { t } = useTranslation();
@@ -40,6 +46,19 @@ const SubAgentListNav: React.FC<SubAgentListNavProps> = ({
       )}
 
       <div className="sub-agent-list-nav__list">
+        {newDraftLabel && (
+          <button
+            type="button"
+            className={`sub-agent-item ${isNewDraftSelected ? 'sub-agent-item--selected' : ''}`}
+            onClick={onSelectNewDraft}
+          >
+            <span className="sub-agent-item__icon">
+              <Plus size="sm" />
+            </span>
+            <span className="sub-agent-item__name">{newDraftLabel}</span>
+            <span className="sub-agent-item__id">Unsaved</span>
+          </button>
+        )}
         {isLoading && sorted.length === 0 ? (
           <div className="sub-agent-list-nav__loading">Loading...</div>
         ) : sorted.length === 0 ? (

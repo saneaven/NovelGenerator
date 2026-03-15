@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { subAgentService } from '../api/subAgentService';
-import type { SubAgentCreate, SubAgentDefinition, SubAgentUpdate } from '../types/subAgents';
+import type { SubAgentCreatePayload, SubAgentDefinition, SubAgentUpdate } from '../types/subAgents';
 
 interface SubAgentState {
   subAgents: SubAgentDefinition[];
@@ -11,7 +11,7 @@ interface SubAgentState {
 interface SubAgentActions {
   loadSubAgents: () => Promise<void>;
   ensureLoaded: () => Promise<void>;
-  createSubAgent: (data: SubAgentCreate) => Promise<SubAgentDefinition>;
+  createSubAgent: (data: SubAgentCreatePayload) => Promise<SubAgentDefinition>;
   updateSubAgent: (id: string, data: SubAgentUpdate) => Promise<SubAgentDefinition>;
   deleteSubAgent: (id: string) => Promise<void>;
   getById: (id: string) => SubAgentDefinition | undefined;

@@ -2,6 +2,11 @@ import type { TaskAIConfig } from '../store/settingsStore';
 
 export type SubAgentAllowedInvocation = 'planMode' | 'agentMode' | 'subAgent';
 
+export interface SubAgentPromptTemplates {
+  system_prompt?: string;
+  user_prompt?: string;
+}
+
 export interface SubAgentDefinition {
   /** Management identifier (UUID string). Used for update/delete and allowlists. */
   id: string;
@@ -34,5 +39,8 @@ export interface SubAgentDefinition {
 }
 
 export type SubAgentCreate = Omit<SubAgentDefinition, 'id'>;
+export interface SubAgentCreatePayload extends Omit<SubAgentDefinition, 'id'> {
+  prompt_templates?: SubAgentPromptTemplates | null;
+}
 
 export type SubAgentUpdate = Partial<Omit<SubAgentDefinition, 'id'>>;

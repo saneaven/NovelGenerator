@@ -909,6 +909,7 @@
       "addDescription": "Add description...",
       "noDescription": "No description",
       "editDescription": "Edit description",
+      "editFragmentName": "Edit fragment name",
       "chars": "{{count}} chars",
       "unsavedChanges": "Unsaved changes",
       "versionHistory": "Version history",

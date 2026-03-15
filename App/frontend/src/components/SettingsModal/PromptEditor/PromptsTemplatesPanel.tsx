@@ -12,13 +12,29 @@ import { useTranslation } from 'react-i18next';
 import PromptTreeNav from './PromptTreeNav';
 import FragmentTreeNav from './FragmentTreeNav';
 import VariableListNav from './VariableListNav';
-import VariableEditor, { type VariableDefinitionDraft } from './VariableEditor';
-import CreateVariableModal from './CreateVariableModal';
+import VariableEditor, {
+  buildNewVariableDraft,
+  buildVariableCreatePayload,
+  buildVariableDefinitionUpdate,
+  hydrateVariableDraft,
+  type VariableDefinitionDraft,
+} from './VariableEditor';
 import SubAgentListNav from './SubAgentListNav';
-import SubAgentEditor, { type SubAgentDefinitionDraft } from './SubAgentEditor';
-import CreateSubAgentModal from './CreateSubAgentModal';
+import SubAgentEditor, {
+  buildEmptySubAgentDraft,
+  buildSubAgentPayload,
+  hydrateSubAgentDraft,
+  normalizeAgentName,
+  type SubAgentDefinitionDraft,
+} from './SubAgentEditor';
 import McpServerListNav from './McpServerListNav';
-import McpServersEditor from './McpServersEditor';
+import McpServersEditor, {
+  buildMcpCreatePayload,
+  buildMcpUpdatePayload,
+  buildNewMcpDraft,
+  hydrateMcpDraft,
+  type McpServerDraft,
+} from './McpServersEditor';
 import TemplateEditor from './TemplateEditor';
 import ScenarioBlocksEditor from './ScenarioBlocksEditor';
 import EditorPanelHeader from './EditorPanelHeader';
@@ -27,9 +43,9 @@ import PromptPreviewModal from './PromptPreviewModal';
 import VersionHistoryModal from '../../Modal/VersionHistoryModal';
 import PresetSelector from '../PresetSelector';
 import PresetModal from '../PresetModal';
-import { BaseModal } from '../../BaseModal';
 import { usePresetStore } from '../../../store/presetStore';
 import { useSettingsStore } from '../../../store/settingsStore';
+import { useMcpStore } from '../../../store/mcpStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
 import { useVariableStore } from '../../../store/variableStore';
 import { scenarioService } from '../../../api/scenarioService';
@@ -44,8 +60,10 @@ import type { PresetListItem } from '../../../types/presets';
 import type { ScenarioDocument, TaskType } from '../../../types/scenarios';
 import { extractFragmentReferences, validateTemplate } from '../../../templateEngine/engine';
 import { useSettingsToast } from '../SettingsToastContext';
+import { generateTempId } from '../../../utils/tempId';
 import {
   makeFragmentDraftKey,
+  makeMcpDraftKey,
   makeScenarioDraftKey,
   makeSubAgentDraftKey,
   makeVariableDraftKey,
@@ -53,6 +71,11 @@ import {
   type SaveFailure,
   type SaveSummary,
 } from './draftTypes';
+import {
+  DEFAULT_SUB_AGENT_ASSISTANT_TEMPLATE,
+  DEFAULT_SUB_AGENT_SYSTEM_PROMPT,
+  DEFAULT_SUB_AGENT_USER_PROMPT,
+} from './subAgentDefaults';
 
 type SubTab = 'prompts' | 'fragments' | 'variables' | 'subAgents' | 'mcp';
 
@@ -86,9 +109,13 @@ type FragmentDraft = {
   key: string;
   label: string;
   folderId: string | null;
+  sourceFolderId: string | null;
+  sourceFragmentName: string | null;
+  folderPath: string;
   fragmentName: string;
   fullPath: string;
   isLoading: boolean;
+  isNew: boolean;
   loadError?: string;
   originalContent: string;
   originalDescription: string;
@@ -98,6 +125,54 @@ type FragmentDraft = {
   validation: TemplateValidationResult | null;
   isDeleting: boolean;
 };
+
+function getDraftFragmentFullPath(draft: Pick<FragmentDraft, 'folderPath' | 'fragmentName'>): string {
+  const name = draft.fragmentName.trim();
+  const folderPath = draft.folderPath.trim().replace(/^\/+|\/+$/g, '');
+  if (!folderPath) return name;
+  return name ? `${folderPath}/${name}` : folderPath;
+}
+
+function getFragmentDraftLabel(draft: Pick<FragmentDraft, 'folderPath' | 'fragmentName'>): string {
+  return getDraftFragmentFullPath(draft) || 'New Fragment';
+}
+
+function isFragmentDraftDirty(
+  draft: Pick<FragmentDraft, 'isNew' | 'content' | 'originalContent' | 'description' | 'originalDescription' | 'fragmentName' | 'sourceFragmentName'>
+): boolean {
+  if (draft.isNew) return true;
+  return (
+    draft.content !== draft.originalContent
+    || draft.description !== draft.originalDescription
+    || draft.fragmentName !== (draft.sourceFragmentName || '')
+  );
+}
+
+function getSubAgentScenarioLabel(displayName: string, agentName: string): string {
+  const normalizedName = normalizeAgentName(agentName) || 'new_agent';
+  const safeDisplayName = displayName.trim() || 'New';
+  return `Sub Agent: ${safeDisplayName} / call_${normalizedName}`;
+}
+
+function buildDefaultSubAgentScenario(): ScenarioDocument {
+  return {
+    system_template: DEFAULT_SUB_AGENT_SYSTEM_PROMPT,
+    blocks: [
+      {
+        id: generateTempId(),
+        block_order: 0,
+        enabled: true,
+        type: 'rangeMapping',
+        rangeMapping: {
+          start_index: 0,
+          end_index: -1,
+          user_template: DEFAULT_SUB_AGENT_USER_PROMPT,
+          assistant_template: DEFAULT_SUB_AGENT_ASSISTANT_TEMPLATE,
+        },
+      },
+    ],
+  };
+}
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -200,161 +275,6 @@ async function validateFragmentContent(
   };
 }
 
-interface CreateFragmentModalProps {
-  isOpen: boolean;
-  folderPath: string | null;
-  onClose: () => void;
-  onCreate: (folderId: string | null, fragmentName: string, fullPath: string) => void;
-}
-
-const CreateFragmentModal: React.FC<CreateFragmentModalProps> = ({ isOpen, folderPath, onClose, onCreate }) => {
-  const { t } = useTranslation();
-  const [name, setName] = useState('');
-  const [newFolderPath, setNewFolderPath] = useState(folderPath || '');
-  const [content, setContent] = useState('');
-  const [description, setDescription] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
-  const [error, setError] = useState('');
-
-  const resetForm = (nextFolderPath: string | null = null) => {
-    setName('');
-    setNewFolderPath(nextFolderPath || '');
-    setContent('');
-    setDescription('');
-    setIsCreating(false);
-    setError('');
-  };
-
-  useEffect(() => {
-    if (!isOpen) return;
-    resetForm(folderPath);
-  }, [folderPath, isOpen]);
-
-  const handleClose = () => {
-    if (isCreating) return;
-    resetForm();
-    onClose();
-  };
-
-  const handleCreate = async () => {
-    if (!name.trim()) {
-      setError(t('settings.promptEditor.createFragment.nameRequired'));
-      return;
-    }
-
-    if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
-      setError(t('settings.promptEditor.createFragment.invalidName'));
-      return;
-    }
-
-    setIsCreating(true);
-    setError('');
-
-    try {
-      const finalFolderPath = newFolderPath.trim() || null;
-      const result = await fragmentService.createFragment(
-        { folderPath: finalFolderPath },
-        name.trim(),
-        content || `{# ${name} fragment #}`,
-        description || undefined,
-        'Initial creation'
-      );
-      const fullPath = result.folder_path ? `${result.folder_path}/${name.trim()}` : name.trim();
-      onCreate(result.folder_id, name.trim(), fullPath);
-      resetForm();
-      onClose();
-    } catch (err: any) {
-      if (err.message?.includes('409') || err.message?.includes('already exists')) {
-        setError(t('settings.promptEditor.createFragment.duplicateName'));
-      } else {
-        setError(t('settings.promptEditor.createFragment.createFailed'));
-      }
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
-  return (
-    <BaseModal
-      isOpen={isOpen}
-      onClose={handleClose}
-      title={t('settings.promptEditor.createFragment.title')}
-      size="small"
-      zIndexLayer={1}
-      footer={
-        <>
-          <TextButton variant="secondary" onClick={handleClose}>
-            {t('common.cancel')}
-          </TextButton>
-          <TextButton variant="primary" onClick={handleCreate} disabled={isCreating || !name.trim()} loading={isCreating}>
-            {t('settings.promptEditor.createNewFragment')}
-          </TextButton>
-        </>
-      }
-    >
-      <div className="form-group">
-        <label className="form-label" htmlFor="fragment-folder">
-          {t('settings.promptEditor.createFragment.folderPath')}
-        </label>
-        <input
-          id="fragment-folder"
-          className="form-input"
-          type="text"
-          value={newFolderPath}
-          onChange={(e) => setNewFolderPath(e.target.value)}
-          placeholder={t('settings.promptEditor.createFragment.folderPathPlaceholder')}
-        />
-        <small className="form-hint">{t('settings.promptEditor.createFragment.folderPathHint')}</small>
-      </div>
-
-      <div className="form-group">
-        <label className="form-label" htmlFor="fragment-name">
-          {t('settings.promptEditor.createFragment.fragmentName')}
-        </label>
-        <input
-          id="fragment-name"
-          className="form-input"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={t('settings.promptEditor.createFragment.fragmentNamePlaceholder')}
-          autoFocus
-        />
-      </div>
-
-      <div className="form-group">
-        <label className="form-label" htmlFor="fragment-desc">
-          {t('settings.promptEditor.createFragment.description')}
-        </label>
-        <input
-          id="fragment-desc"
-          className="form-input"
-          type="text"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder={t('settings.promptEditor.createFragment.descriptionPlaceholder')}
-        />
-      </div>
-
-      <div className="form-group">
-        <label className="form-label" htmlFor="fragment-content">
-          {t('settings.promptEditor.createFragment.initialContent')}
-        </label>
-        <textarea
-          id="fragment-content"
-          className="form-textarea"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder={t('settings.promptEditor.createFragment.initialContentPlaceholder')}
-          rows={4}
-        />
-      </div>
-
-      {error && <div className="form-error">{error}</div>}
-    </BaseModal>
-  );
-};
-
 export interface PromptsTemplatesPanelHandle {
   hasUnsavedChanges: () => boolean;
   getUnsavedCount: () => number;
@@ -373,13 +293,20 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   const loadScenario = useSettingsStore((s) => s.loadScenario);
   const invalidateScenarioCache = useSettingsStore((s) => s.invalidateScenarioCache);
   const activePresetId = usePresetStore((s) => s.activePresetId);
-  const { getPresetById } = usePresetStore();
+  const getPresetById = usePresetStore((s) => s.getPresetById);
   const variables = useVariableStore((s) => s.variables);
   const loadVariables = useVariableStore((s) => s.loadVariables);
+  const createVariable = useVariableStore((s) => s.createVariable);
   const updateVariableDefinition = useVariableStore((s) => s.updateDefinition);
   const subAgents = useSubAgentStore((s) => s.subAgents);
   const loadSubAgents = useSubAgentStore((s) => s.loadSubAgents);
+  const createSubAgent = useSubAgentStore((s) => s.createSubAgent);
   const updateSubAgent = useSubAgentStore((s) => s.updateSubAgent);
+  const mcpServers = useMcpStore((s) => s.servers);
+  const ensureMcpLoaded = useMcpStore((s) => s.ensureLoaded);
+  const createServer = useMcpStore((s) => s.createServer);
+  const updateServer = useMcpStore((s) => s.updateServer);
+  const mcpStoreError = useMcpStore((s) => s.error);
 
   const [subTab, setSubTab] = useState<SubTab>('prompts');
   const [selectedPrompt, setSelectedPrompt] = useState<PromptNode | null>(null);
@@ -387,12 +314,11 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   const [selectedVariableId, setSelectedVariableId] = useState<string | null>(null);
   const [selectedSubAgentId, setSelectedSubAgentId] = useState<string | null>(null);
   const [selectedMcpServerId, setSelectedMcpServerId] = useState<string | null>(null);
-  const [isCreatingMcpServer, setIsCreatingMcpServer] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showCreateVariableModal, setShowCreateVariableModal] = useState(false);
-  const [showCreateSubAgentModal, setShowCreateSubAgentModal] = useState(false);
-  const [createFolderPath, setCreateFolderPath] = useState<string | null>(null);
+  const [newFragmentDraft, setNewFragmentDraft] = useState<FragmentDraft | null>(null);
+  const [newVariableDraft, setNewVariableDraft] = useState<VariableDefinitionDraft | null>(null);
+  const [newSubAgentDraft, setNewSubAgentDraft] = useState<SubAgentDefinitionDraft | null>(null);
+  const [newMcpDraft, setNewMcpDraft] = useState<McpServerDraft | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [allFragmentContents, setAllFragmentContents] = useState<Map<string, string>>(new Map());
   const allFragmentContentsRef = useRef(allFragmentContents);
@@ -412,18 +338,26 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   }, []);
 
   const [scenarioDrafts, setScenarioDrafts] = useState<Record<string, ScenarioDraft>>({});
+  const [subAgentScenarioDrafts, setSubAgentScenarioDrafts] = useState<Record<string, ScenarioDraft>>({});
   const [fragmentDrafts, setFragmentDrafts] = useState<Record<string, FragmentDraft>>({});
   const [variableDrafts, setVariableDrafts] = useState<Record<string, VariableDefinitionDraft>>({});
   const [subAgentDrafts, setSubAgentDrafts] = useState<Record<string, SubAgentDefinitionDraft>>({});
+  const [mcpDrafts, setMcpDrafts] = useState<Record<string, McpServerDraft>>({});
   const scenarioDraftsRef = useRef(scenarioDrafts);
+  const subAgentScenarioDraftsRef = useRef(subAgentScenarioDrafts);
   const fragmentDraftsRef = useRef(fragmentDrafts);
   const variableDraftsRef = useRef(variableDrafts);
   const subAgentDraftsRef = useRef(subAgentDrafts);
+  const mcpDraftsRef = useRef(mcpDrafts);
   const variablesRef = useRef(variables);
   const subAgentsRef = useRef(subAgents);
+  const mcpServersRef = useRef(mcpServers);
   useEffect(() => {
     scenarioDraftsRef.current = scenarioDrafts;
   }, [scenarioDrafts]);
+  useEffect(() => {
+    subAgentScenarioDraftsRef.current = subAgentScenarioDrafts;
+  }, [subAgentScenarioDrafts]);
   useEffect(() => {
     fragmentDraftsRef.current = fragmentDrafts;
   }, [fragmentDrafts]);
@@ -434,11 +368,27 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     subAgentDraftsRef.current = subAgentDrafts;
   }, [subAgentDrafts]);
   useEffect(() => {
+    mcpDraftsRef.current = mcpDrafts;
+  }, [mcpDrafts]);
+  useEffect(() => {
     variablesRef.current = variables;
   }, [variables]);
   useEffect(() => {
     subAgentsRef.current = subAgents;
   }, [subAgents]);
+  useEffect(() => {
+    mcpServersRef.current = mcpServers;
+  }, [mcpServers]);
+  useEffect(() => {
+    setMcpDrafts((prev) => {
+      const next: Record<string, McpServerDraft> = {};
+      for (const server of mcpServers) {
+        const key = makeMcpDraftKey(server.id);
+        next[key] = prev[key]?.dirty ? prev[key] : hydrateMcpDraft(server, key);
+      }
+      return next;
+    });
+  }, [mcpServers]);
 
   const savingRef = useRef(false);
 
@@ -463,20 +413,28 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   // Clear drafts on preset switch, and refresh fragment tree + contents.
   useEffect(() => {
     setScenarioDrafts({});
+    setSubAgentScenarioDrafts({});
     setFragmentDrafts({});
     setVariableDrafts({});
     setSubAgentDrafts({});
+    setMcpDrafts({});
+    setNewFragmentDraft(null);
+    setNewVariableDraft(null);
+    setNewSubAgentDraft(null);
+    setNewMcpDraft(null);
     setSelectedFragment(null);
     setSelectedVariableId(null);
     setSelectedSubAgentId(null);
     setSelectedMcpServerId(null);
-    setIsCreatingMcpServer(false);
     setShowVersionHistory(false);
     setRefreshTrigger((prev) => prev + 1);
     loadFragmentContents().catch(() => undefined);
     loadVariables().catch(() => undefined);
     loadSubAgents().catch(() => undefined);
-  }, [activePresetId, loadFragmentContents, loadSubAgents, loadVariables]);
+    if (activePresetId) {
+      ensureMcpLoaded(activePresetId).catch(() => undefined);
+    }
+  }, [activePresetId, ensureMcpLoaded, loadFragmentContents, loadSubAgents, loadVariables]);
 
   const selectedPath = useMemo(() => {
     if (!selectedFragment) return null;
@@ -504,34 +462,82 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     return makeSubAgentDraftKey(selectedSubAgentId);
   }, [selectedSubAgentId]);
 
+  const selectedMcpKey = useMemo(() => {
+    if (!selectedMcpServerId) return null;
+    return makeMcpDraftKey(selectedMcpServerId);
+  }, [selectedMcpServerId]);
+
   const currentScenarioDraft = selectedPromptKey ? scenarioDrafts[selectedPromptKey] : null;
-  const currentFragmentDraft = selectedFragmentKey ? fragmentDrafts[selectedFragmentKey] : null;
-  const currentVariableDraft = selectedVariableKey ? variableDrafts[selectedVariableKey] : null;
-  const currentSubAgentDraft = selectedSubAgentKey ? subAgentDrafts[selectedSubAgentKey] : null;
+  const currentFragmentDraft = selectedFragmentKey ? fragmentDrafts[selectedFragmentKey] : newFragmentDraft;
+  const currentVariableDraft = selectedVariableKey ? variableDrafts[selectedVariableKey] : newVariableDraft;
+  const currentSubAgentDraft = selectedSubAgentKey ? subAgentDrafts[selectedSubAgentKey] : newSubAgentDraft;
+  const currentMcpDraft = selectedMcpKey ? mcpDrafts[selectedMcpKey] : newMcpDraft;
+  const currentSubAgentScenarioKey = selectedSubAgentKey ?? newSubAgentDraft?.draftKey ?? null;
+  const currentSubAgentScenarioDraft = currentSubAgentScenarioKey ? subAgentScenarioDrafts[currentSubAgentScenarioKey] : null;
 
   const selectedSubAgent = useMemo(() => {
     if (!selectedSubAgentId) return null;
     return subAgents.find((s) => s.id === selectedSubAgentId) || null;
   }, [selectedSubAgentId, subAgents]);
 
+  const selectedMcpSnapshot = useMemo(() => {
+    if (!selectedMcpServerId) return null;
+    return mcpServers.find((server) => server.id === selectedMcpServerId)?.snapshot ?? null;
+  }, [mcpServers, selectedMcpServerId]);
+
   const subAgentIdentityName = useMemo(() => {
-    return currentSubAgentDraft?.original.agent_name || selectedSubAgent?.agent_name || null;
+    return currentSubAgentDraft?.isNew
+      ? normalizeAgentName(currentSubAgentDraft.current.agent_name) || null
+      : currentSubAgentDraft?.original.agent_name || selectedSubAgent?.agent_name || null;
   }, [currentSubAgentDraft, selectedSubAgent]);
 
   const handleSubAgentDraftChange = useCallback((draft: SubAgentDefinitionDraft) => {
+    const scenarioLabel = getSubAgentScenarioLabel(draft.current.display_name, draft.current.agent_name);
+    const scenarioTaskSubtype = normalizeAgentName(draft.current.agent_name) || 'new_agent';
+    if (draft.isNew) {
+      setNewSubAgentDraft(draft);
+      setSubAgentScenarioDrafts((prev) => {
+        const current = prev[draft.draftKey];
+        if (!current) return prev;
+        return {
+          ...prev,
+          [draft.draftKey]: {
+            ...current,
+            label: scenarioLabel,
+            taskSubtype: scenarioTaskSubtype,
+          },
+        };
+      });
+      return;
+    }
+    if (!draft.subAgentId) return;
+    const draftKey = makeSubAgentDraftKey(draft.subAgentId);
     setSubAgentDrafts((prev) => ({
       ...prev,
-      [makeSubAgentDraftKey(draft.subAgentId)]: draft,
+      [draftKey]: draft,
     }));
+    setSubAgentScenarioDrafts((prev) => {
+      const current = prev[draftKey];
+      if (!current) return prev;
+      return {
+        ...prev,
+        [draftKey]: {
+          ...current,
+          label: scenarioLabel,
+        },
+      };
+    });
   }, []);
 
   const unsavedCount = useMemo(() => {
     const promptCount = Object.values(scenarioDrafts).filter((d) => d.dirty).length;
-    const fragmentCount = Object.values(fragmentDrafts).filter((d) => d.dirty).length;
-    const variableCount = Object.values(variableDrafts).filter((d) => d.dirty).length;
-    const subAgentCount = Object.values(subAgentDrafts).filter((d) => d.dirty).length;
-    return promptCount + fragmentCount + variableCount + subAgentCount;
-  }, [scenarioDrafts, fragmentDrafts, subAgentDrafts, variableDrafts]);
+    const subAgentPromptCount = Object.values(subAgentScenarioDrafts).filter((d) => d.dirty).length;
+    const fragmentCount = Object.values(fragmentDrafts).filter((d) => d.dirty).length + (newFragmentDraft?.dirty ? 1 : 0);
+    const variableCount = Object.values(variableDrafts).filter((d) => d.dirty).length + (newVariableDraft?.dirty ? 1 : 0);
+    const subAgentCount = Object.values(subAgentDrafts).filter((d) => d.dirty).length + (newSubAgentDraft?.dirty ? 1 : 0);
+    const mcpCount = Object.values(mcpDrafts).filter((d) => d.dirty).length + (newMcpDraft?.dirty ? 1 : 0);
+    return promptCount + subAgentPromptCount + fragmentCount + variableCount + subAgentCount + mcpCount;
+  }, [scenarioDrafts, subAgentScenarioDrafts, fragmentDrafts, newFragmentDraft, subAgentDrafts, newSubAgentDraft, variableDrafts, newVariableDraft, mcpDrafts, newMcpDraft]);
 
   useLayoutEffect(() => {
     onUnsavedCountChange?.(unsavedCount);
@@ -540,6 +546,17 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   const getDirtyItems = useCallback((): DirtyItem[] => {
     const dirty: DirtyItem[] = [];
     for (const d of Object.values(scenarioDraftsRef.current)) {
+      if (!d.dirty) continue;
+      dirty.push({
+        kind: 'scenario',
+        key: d.key,
+        label: d.label,
+        taskType: d.taskType,
+        taskSubtype: d.taskSubtype,
+        nodeId: d.nodeId,
+      });
+    }
+    for (const d of Object.values(subAgentScenarioDraftsRef.current)) {
       if (!d.dirty) continue;
       dirty.push({
         kind: 'scenario',
@@ -561,26 +578,69 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         fullPath: d.fullPath,
       });
     }
+    if (newFragmentDraft?.dirty) {
+      dirty.push({
+        kind: 'fragment',
+        key: newFragmentDraft.key,
+        label: newFragmentDraft.label,
+        folderId: newFragmentDraft.folderId,
+        fragmentName: newFragmentDraft.fragmentName,
+        fullPath: newFragmentDraft.fullPath,
+      });
+    }
     for (const d of Object.values(variableDraftsRef.current)) {
       if (!d.dirty) continue;
       dirty.push({
         kind: 'variable',
-        key: makeVariableDraftKey(d.variableId),
-        label: d.current.name || d.original.name || d.variableId,
-        variableId: d.variableId,
+        key: d.draftKey,
+        label: d.current.name || d.original.name || d.variableId || d.draftKey,
+        variableId: d.variableId || d.draftKey,
+      });
+    }
+    if (newVariableDraft?.dirty) {
+      dirty.push({
+        kind: 'variable',
+        key: newVariableDraft.draftKey,
+        label: newVariableDraft.current.name || 'New Variable',
+        variableId: newVariableDraft.variableId || newVariableDraft.draftKey,
       });
     }
     for (const d of Object.values(subAgentDraftsRef.current)) {
       if (!d.dirty) continue;
       dirty.push({
         kind: 'subAgent',
-        key: makeSubAgentDraftKey(d.subAgentId),
-        label: d.current.display_name || d.original.display_name || d.subAgentId,
-        subAgentId: d.subAgentId,
+        key: d.draftKey,
+        label: d.current.display_name || d.original.display_name || d.subAgentId || d.draftKey,
+        subAgentId: d.subAgentId || d.draftKey,
+      });
+    }
+    if (newSubAgentDraft?.dirty) {
+      dirty.push({
+        kind: 'subAgent',
+        key: newSubAgentDraft.draftKey,
+        label: newSubAgentDraft.current.display_name || 'New Sub Agent',
+        subAgentId: newSubAgentDraft.subAgentId || newSubAgentDraft.draftKey,
+      });
+    }
+    for (const d of Object.values(mcpDraftsRef.current)) {
+      if (!d.dirty) continue;
+      dirty.push({
+        kind: 'mcp',
+        key: d.draftKey,
+        label: d.current.display_name || d.current.server_key || d.draftKey,
+        serverId: d.serverId || d.draftKey,
+      });
+    }
+    if (newMcpDraft?.dirty) {
+      dirty.push({
+        kind: 'mcp',
+        key: newMcpDraft.draftKey,
+        label: newMcpDraft.current.display_name || newMcpDraft.current.server_key || 'New MCP Server',
+        serverId: newMcpDraft.serverId || newMcpDraft.draftKey,
       });
     }
     return dirty;
-  }, []);
+  }, [newFragmentDraft, newMcpDraft, newSubAgentDraft, newVariableDraft]);
 
   const discardAllDrafts = useCallback(() => {
     setScenarioDrafts((prev) => {
@@ -591,11 +651,33 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       }
       return next;
     });
+    setSubAgentScenarioDrafts((prev) => {
+      const next: Record<string, ScenarioDraft> = { ...prev };
+      for (const [k, d] of Object.entries(next)) {
+        if (!d.dirty) continue;
+        next[k] = { ...d, scenario: d.originalScenario, dirty: false, saveWarnings: [] };
+      }
+      if (newSubAgentDraft) {
+        delete next[newSubAgentDraft.draftKey];
+      }
+      return next;
+    });
     setFragmentDrafts((prev) => {
       const next: Record<string, FragmentDraft> = { ...prev };
       for (const [k, d] of Object.entries(next)) {
         if (!d.dirty) continue;
-        next[k] = { ...d, content: d.originalContent, description: d.originalDescription, dirty: false };
+        const fragmentName = d.sourceFragmentName || d.fragmentName;
+        const fullPath = getDraftFragmentFullPath({ folderPath: d.folderPath, fragmentName });
+        next[k] = {
+          ...d,
+          label: getFragmentDraftLabel({ folderPath: d.folderPath, fragmentName }),
+          fragmentName,
+          fullPath,
+          content: d.originalContent,
+          description: d.originalDescription,
+          dirty: false,
+          loadError: undefined,
+        };
       }
       return next;
     });
@@ -635,6 +717,24 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       }
       return next;
     });
+    setMcpDrafts((prev) => {
+      const next: Record<string, McpServerDraft> = { ...prev };
+      for (const [k, d] of Object.entries(next)) {
+        if (!d.dirty) continue;
+        next[k] = {
+          ...d,
+          current: { ...d.original },
+          dirty: false,
+          error: '',
+          isSyncing: false,
+        };
+      }
+      return next;
+    });
+    setNewFragmentDraft(null);
+    setNewVariableDraft(null);
+    setNewSubAgentDraft(null);
+    setNewMcpDraft(null);
   }, []);
 
   const saveAllDrafts = useCallback(async (): Promise<SaveSummary> => {
@@ -684,6 +784,45 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         }
       }
 
+      const dirtyExistingSubAgentPromptScenarios = Object.values(subAgentScenarioDraftsRef.current).filter((d) => {
+        if (!d.dirty) return false;
+        return d.key !== newSubAgentDraft?.draftKey;
+      });
+      for (const d of dirtyExistingSubAgentPromptScenarios) {
+        attempted += 1;
+        try {
+          const result = await scenarioService.saveScenario(d.taskType, d.taskSubtype, d.scenario);
+          invalidateScenarioCache(d.taskType, d.taskSubtype);
+          saved += 1;
+          setSubAgentScenarioDrafts((prev) => {
+            const cur = prev[d.key];
+            if (!cur) return prev;
+            return {
+              ...prev,
+              [d.key]: {
+                ...cur,
+                originalScenario: result.scenario,
+                scenario: result.scenario,
+                dirty: false,
+                saveWarnings: result.warnings || [],
+              },
+            };
+          });
+        } catch (error) {
+          failures.push({
+            item: {
+              kind: 'scenario',
+              key: d.key,
+              label: d.label,
+              taskType: d.taskType,
+              taskSubtype: d.taskSubtype,
+              nodeId: d.nodeId,
+            },
+            error: toErrorMessage(error),
+          });
+        }
+      }
+
       const dirtySubAgents = Object.values(subAgentDraftsRef.current).filter((d) => d.dirty);
       for (const d of dirtySubAgents) {
         attempted += 1;
@@ -692,9 +831,9 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
           failures.push({
             item: {
               kind: 'subAgent',
-              key: makeSubAgentDraftKey(d.subAgentId),
-              label: d.current.display_name || d.original.display_name || d.subAgentId,
-              subAgentId: d.subAgentId,
+              key: d.draftKey,
+              label: d.current.display_name || d.original.display_name || d.subAgentId || d.draftKey,
+              subAgentId: d.subAgentId || d.draftKey,
             },
             error: d.error,
           });
@@ -707,7 +846,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         }
 
         try {
-          const updated = await updateSubAgent(d.subAgentId, {
+          const updated = await updateSubAgent(d.subAgentId!, {
             agent_name,
             display_name: d.current.display_name.trim(),
             description: d.current.description.trim(),
@@ -721,8 +860,21 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
           });
 
           saved += 1;
+          setSubAgentScenarioDrafts((prev) => {
+            const key = makeSubAgentDraftKey(d.subAgentId!);
+            const cur = prev[key];
+            if (!cur) return prev;
+            return {
+              ...prev,
+              [key]: {
+                ...cur,
+                label: getSubAgentScenarioLabel(updated.display_name, updated.agent_name),
+                taskSubtype: updated.agent_name,
+              },
+            };
+          });
           setSubAgentDrafts((prev) => {
-            const key = makeSubAgentDraftKey(d.subAgentId);
+            const key = makeSubAgentDraftKey(d.subAgentId!);
             const cur = prev[key];
             if (!cur) return prev;
 
@@ -760,19 +912,131 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
           failures.push({
             item: {
               kind: 'subAgent',
-              key: makeSubAgentDraftKey(d.subAgentId),
-              label: d.current.display_name || d.original.display_name || d.subAgentId,
-              subAgentId: d.subAgentId,
+              key: d.draftKey,
+              label: d.current.display_name || d.original.display_name || d.subAgentId || d.draftKey,
+              subAgentId: d.subAgentId || d.draftKey,
             },
             error: toErrorMessage(error),
+          });
+          setSubAgentDrafts((prev) => {
+            const key = makeSubAgentDraftKey(d.subAgentId!);
+            const cur = prev[key];
+            if (!cur) return prev;
+            return {
+              ...prev,
+              [key]: {
+                ...cur,
+                error: toErrorMessage(error),
+              },
+            };
           });
         }
       }
 
-      const dirtyFragments = Object.values(fragmentDraftsRef.current).filter((d) => d.dirty);
+      if (newSubAgentDraft?.dirty) {
+        attempted += 1;
+        if (newSubAgentDraft.error) {
+          failures.push({
+            item: {
+              kind: 'subAgent',
+              key: newSubAgentDraft.draftKey,
+              label: newSubAgentDraft.current.display_name || 'New Sub Agent',
+              subAgentId: newSubAgentDraft.draftKey,
+            },
+            error: newSubAgentDraft.error,
+          });
+        } else {
+          try {
+            const scenarioDraft = subAgentScenarioDraftsRef.current[newSubAgentDraft.draftKey];
+            const scenario = scenarioDraft?.scenario;
+            const rangeBlock = scenario?.blocks.find((block) => block.type === 'rangeMapping' && block.rangeMapping);
+            const created = await createSubAgent({
+              ...buildSubAgentPayload(newSubAgentDraft),
+              prompt_templates: scenario ? {
+                system_prompt: scenario.system_template || DEFAULT_SUB_AGENT_SYSTEM_PROMPT,
+                user_prompt: rangeBlock?.type === 'rangeMapping'
+                  ? rangeBlock.rangeMapping?.user_template || DEFAULT_SUB_AGENT_USER_PROMPT
+                  : DEFAULT_SUB_AGENT_USER_PROMPT,
+              } : {
+                system_prompt: DEFAULT_SUB_AGENT_SYSTEM_PROMPT,
+                user_prompt: DEFAULT_SUB_AGENT_USER_PROMPT,
+              },
+            });
+            saved += 1;
+            setNewSubAgentDraft(null);
+            setSubAgentScenarioDrafts((prev) => {
+              const next = { ...prev };
+              delete next[newSubAgentDraft.draftKey];
+              return next;
+            });
+            setSelectedSubAgentId(created.id);
+          } catch (error) {
+            failures.push({
+              item: {
+                kind: 'subAgent',
+                key: newSubAgentDraft.draftKey,
+                label: newSubAgentDraft.current.display_name || 'New Sub Agent',
+                subAgentId: newSubAgentDraft.draftKey,
+              },
+              error: toErrorMessage(error),
+            });
+            setNewSubAgentDraft((prev) => (prev ? { ...prev, error: toErrorMessage(error) } : prev));
+          }
+        }
+      }
+
+      const dirtyFragments = [
+        ...Object.values(fragmentDraftsRef.current).filter((d) => d.dirty),
+        ...(newFragmentDraft?.dirty ? [newFragmentDraft] : []),
+      ];
       let didSaveAnyFragment = false;
       for (const d of dirtyFragments) {
         attempted += 1;
+        const trimmedName = d.fragmentName.trim();
+        const applyFragmentError = (message: string) => {
+          if (d.isNew) {
+            setNewFragmentDraft((prev) => (prev?.key === d.key ? { ...prev, loadError: message } : prev));
+            return;
+          }
+          setFragmentDrafts((prev) => {
+            const cur = prev[d.key];
+            if (!cur) return prev;
+            return { ...prev, [d.key]: { ...cur, loadError: message } };
+          });
+        };
+
+        if (!trimmedName) {
+          const errorMessage = t('settings.promptEditor.createFragment.nameRequired');
+          failures.push({
+            item: {
+              kind: 'fragment',
+              key: d.key,
+              label: d.label,
+              folderId: d.folderId,
+              fragmentName: d.fragmentName,
+              fullPath: d.fullPath,
+            },
+            error: errorMessage,
+          });
+          applyFragmentError(errorMessage);
+          continue;
+        }
+        if (!/^[a-zA-Z0-9_-]+$/.test(trimmedName)) {
+          const errorMessage = t('settings.promptEditor.createFragment.invalidName');
+          failures.push({
+            item: {
+              kind: 'fragment',
+              key: d.key,
+              label: d.label,
+              folderId: d.folderId,
+              fragmentName: d.fragmentName,
+              fullPath: d.fullPath,
+            },
+            error: errorMessage,
+          });
+          applyFragmentError(errorMessage);
+          continue;
+        }
         const validation = await validateFragmentContent(d.content, d.fullPath, fragmentDraftsRef.current, allFragmentContentsRef.current);
         if (!validation.valid) {
           failures.push({
@@ -786,33 +1050,85 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
             },
             error: validation.errors[0]?.message || t('settings.promptEditor.toast.templateSyntaxError'),
           });
-          setFragmentDrafts((prev) => {
-            const cur = prev[d.key];
-            if (!cur) return prev;
-            return { ...prev, [d.key]: { ...cur, validation } };
-          });
+          if (d.isNew) {
+            setNewFragmentDraft((prev) => (prev?.key === d.key ? { ...prev, validation, loadError: validation.errors[0]?.message } : prev));
+          } else {
+            setFragmentDrafts((prev) => {
+              const cur = prev[d.key];
+              if (!cur) return prev;
+              return { ...prev, [d.key]: { ...cur, validation, loadError: validation.errors[0]?.message } };
+            });
+          }
           continue;
         }
 
         try {
-          await fragmentService.saveFragment(d.folderId, d.fragmentName, d.content, d.description || undefined, undefined);
-          didSaveAnyFragment = true;
-          saved += 1;
-          setFragmentDrafts((prev) => {
-            const cur = prev[d.key];
-            if (!cur) return prev;
-            return {
-              ...prev,
-              [d.key]: {
+          if (d.isNew) {
+            const created = await fragmentService.createFragment(
+              { folderPath: d.folderPath.trim() || null },
+              trimmedName,
+              d.content,
+              d.description || undefined,
+              'Initial creation'
+            );
+            setNewFragmentDraft(null);
+            setSelectedFragment({
+              folderId: created.folder_id,
+              fragmentName: created.fragment_name,
+              fullPath: created.folder_path ? `${created.folder_path}/${created.fragment_name}` : created.fragment_name,
+            });
+          } else {
+            const updated = await fragmentService.updateFragment(d.sourceFolderId, d.sourceFragmentName!, {
+              content: d.content,
+              description: d.description || undefined,
+              fragment_name: trimmedName !== d.sourceFragmentName ? trimmedName : undefined,
+            });
+            const nextFullPath = updated.folder_path ? `${updated.folder_path}/${updated.fragment_name}` : updated.fragment_name;
+            const nextKey = makeFragmentDraftKey(updated.folder_id, updated.fragment_name);
+            setFragmentDrafts((prev) => {
+              const cur = prev[d.key];
+              if (!cur) return prev;
+              const nextDraft: FragmentDraft = {
                 ...cur,
-                originalContent: cur.content,
-                originalDescription: cur.description,
+                key: nextKey,
+                label: nextFullPath,
+                folderId: updated.folder_id,
+                sourceFolderId: updated.folder_id,
+                sourceFragmentName: updated.fragment_name,
+                folderPath: updated.folder_path || '',
+                fragmentName: updated.fragment_name,
+                fullPath: nextFullPath,
+                originalContent: updated.content,
+                originalDescription: updated.description || '',
+                content: updated.content,
+                description: updated.description || '',
                 dirty: false,
                 validation,
-              },
-            };
-          });
+                loadError: undefined,
+              };
+              if (nextKey === d.key) {
+                return {
+                  ...prev,
+                  [d.key]: nextDraft,
+                };
+              }
+              const next = { ...prev };
+              delete next[d.key];
+              next[nextKey] = nextDraft;
+              return {
+                ...next,
+              };
+            });
+            setSelectedFragment({
+              folderId: updated.folder_id,
+              fragmentName: updated.fragment_name,
+              fullPath: nextFullPath,
+            });
+          }
+          didSaveAnyFragment = true;
+          saved += 1;
         } catch (error) {
+          const errorMessage = toErrorMessage(error);
           failures.push({
             item: {
               kind: 'fragment',
@@ -822,27 +1138,35 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
               fragmentName: d.fragmentName,
               fullPath: d.fullPath,
             },
-            error: toErrorMessage(error),
+            error: errorMessage,
           });
+          applyFragmentError(errorMessage);
         }
       }
 
       if (didSaveAnyFragment) {
         await loadFragmentContents();
+        setRefreshTrigger((prev) => prev + 1);
       }
 
-      const dirtyVariables = Object.values(variableDraftsRef.current).filter((d) => d.dirty);
+      const dirtyVariables = [
+        ...Object.values(variableDraftsRef.current).filter((d) => d.dirty),
+        ...(newVariableDraft?.dirty ? [newVariableDraft] : []),
+      ];
       for (const d of dirtyVariables) {
         attempted += 1;
 
         const name = d.current.name.trim();
         if (!name) {
+          if (d.isNew) {
+            setNewVariableDraft((prev) => (prev?.draftKey === d.draftKey ? { ...prev, error: 'Name is required' } : prev));
+          }
           failures.push({
             item: {
               kind: 'variable',
-              key: makeVariableDraftKey(d.variableId),
-              label: d.current.name || d.original.name || d.variableId,
-              variableId: d.variableId,
+              key: d.draftKey,
+              label: d.current.name || d.original.name || d.variableId || d.draftKey,
+              variableId: d.variableId || d.draftKey,
             },
             error: 'Name is required',
           });
@@ -853,63 +1177,132 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
           failures.push({
             item: {
               kind: 'variable',
-              key: makeVariableDraftKey(d.variableId),
-              label: d.current.name || d.original.name || d.variableId,
-              variableId: d.variableId,
+              key: d.draftKey,
+              label: d.current.name || d.original.name || d.variableId || d.draftKey,
+              variableId: d.variableId || d.draftKey,
             },
             error: d.error,
           });
           continue;
         }
 
-        const description = d.current.description.trim();
-        const select_options = d.varType === 'select' ? d.current.select_options : undefined;
-        const number_options =
-          d.varType === 'number'
-            ? {
-                min: d.current.number_options.min.trim() ? parseFloat(d.current.number_options.min) : undefined,
-                max: d.current.number_options.max.trim() ? parseFloat(d.current.number_options.max) : undefined,
-                step: d.current.number_options.step.trim() ? parseFloat(d.current.number_options.step) : undefined,
-                input_type: d.current.number_options.input_type,
-              }
-            : undefined;
-
         try {
-          await updateVariableDefinition(d.variableId, {
-            name,
-            description,
-            select_options,
-            number_options,
-          });
-          saved += 1;
-          setVariableDrafts((prev) => {
-            const key = makeVariableDraftKey(d.variableId);
-            const cur = prev[key];
-            if (!cur) return prev;
-            return {
-              ...prev,
-              [key]: {
-                ...cur,
-                original: {
-                  ...cur.current,
-                  select_options: [...cur.current.select_options],
-                  number_options: { ...cur.current.number_options },
+          if (d.isNew) {
+            const created = await createVariable(buildVariableCreatePayload(d));
+            setNewVariableDraft(null);
+            setSelectedVariableId(created.id);
+          } else {
+            await updateVariableDefinition(d.variableId!, buildVariableDefinitionUpdate(d));
+            setVariableDrafts((prev) => {
+              const key = makeVariableDraftKey(d.variableId!);
+              const cur = prev[key];
+              if (!cur) return prev;
+              return {
+                ...prev,
+                [key]: {
+                  ...cur,
+                  original: {
+                    ...cur.current,
+                    select_options: [...cur.current.select_options],
+                    number_options: { ...cur.current.number_options },
+                  },
+                  dirty: false,
+                  error: '',
                 },
-                dirty: false,
-                error: '',
-              },
-            };
-          });
+              };
+            });
+          }
+          saved += 1;
         } catch (error) {
           failures.push({
             item: {
               kind: 'variable',
-              key: makeVariableDraftKey(d.variableId),
-              label: d.current.name || d.original.name || d.variableId,
-              variableId: d.variableId,
+              key: d.draftKey,
+              label: d.current.name || d.original.name || d.variableId || d.draftKey,
+              variableId: d.variableId || d.draftKey,
             },
             error: toErrorMessage(error),
           });
+          if (d.isNew) {
+            setNewVariableDraft((prev) => (prev?.draftKey === d.draftKey ? { ...prev, error: toErrorMessage(error) } : prev));
+          } else {
+            setVariableDrafts((prev) => {
+              const cur = prev[d.draftKey];
+              if (!cur) return prev;
+              return {
+                ...prev,
+                [d.draftKey]: {
+                  ...cur,
+                  error: toErrorMessage(error),
+                },
+              };
+            });
+          }
+        }
+      }
+
+      const dirtyMcpDrafts = [
+        ...Object.values(mcpDraftsRef.current).filter((d) => d.dirty),
+        ...(newMcpDraft?.dirty ? [newMcpDraft] : []),
+      ];
+      for (const d of dirtyMcpDrafts) {
+        attempted += 1;
+
+        if (d.error) {
+          failures.push({
+            item: {
+              kind: 'mcp',
+              key: d.draftKey,
+              label: d.current.display_name || d.current.server_key || d.draftKey,
+              serverId: d.serverId || d.draftKey,
+            },
+            error: d.error,
+          });
+          continue;
+        }
+
+        try {
+          if (!activePresetId) {
+            throw new Error('No active preset selected');
+          }
+          if (d.isNew) {
+            const created = await createServer(activePresetId, buildMcpCreatePayload(d));
+            setNewMcpDraft(null);
+            setSelectedMcpServerId(created.id);
+          } else {
+            const updated = await updateServer(activePresetId, d.serverId!, buildMcpUpdatePayload(d));
+            setMcpDrafts((prev) => ({
+              ...prev,
+              [d.draftKey]: hydrateMcpDraft(updated, d.draftKey),
+            }));
+          }
+          saved += 1;
+        } catch (error) {
+          failures.push({
+            item: {
+              kind: 'mcp',
+              key: d.draftKey,
+              label: d.current.display_name || d.current.server_key || d.draftKey,
+              serverId: d.serverId || d.draftKey,
+            },
+            error: toErrorMessage(error),
+          });
+          if (d.isNew) {
+            setNewMcpDraft((prev) => (prev?.draftKey === d.draftKey ? { ...prev, error: toErrorMessage(error) } : prev));
+          } else {
+            setMcpDrafts((prev) => {
+              const cur = prev[d.draftKey];
+              if (!cur) return prev;
+              return {
+                ...prev,
+                [d.draftKey]: {
+                  ...cur,
+                  error: toErrorMessage(error),
+                  isSyncing: false,
+                },
+              };
+            });
+          }
         }
       }
 
@@ -917,7 +1310,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     } finally {
       savingRef.current = false;
     }
-  }, [invalidateScenarioCache, t, updateSubAgent, updateVariableDefinition]);
+  }, [activePresetId, createServer, createSubAgent, createVariable, invalidateScenarioCache, loadFragmentContents, newFragmentDraft, newMcpDraft, newSubAgentDraft, newVariableDraft, t, updateServer, updateSubAgent, updateVariableDefinition]);
 
   useImperativeHandle(
     ref,
@@ -995,9 +1388,13 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         key,
         label: fullPath,
         folderId,
+        sourceFolderId: folderId,
+        sourceFragmentName: fragmentName,
+        folderPath: fullPath.includes('/') ? fullPath.slice(0, fullPath.lastIndexOf('/')) : '',
         fragmentName,
         fullPath,
         isLoading: true,
+        isNew: false,
         originalContent: '',
         originalDescription: '',
         content: '',
@@ -1047,38 +1444,9 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         if (!variable) return;
       }
 
-      const base = {
-        name: variable.name,
-        description: variable.description ?? '',
-        select_options: variable.select_options ? [...variable.select_options] : [],
-        number_options: {
-          min: variable.number_options?.min !== undefined ? String(variable.number_options.min) : '',
-          max: variable.number_options?.max !== undefined ? String(variable.number_options.max) : '',
-          step: variable.number_options?.step !== undefined ? String(variable.number_options.step) : '',
-          input_type: variable.number_options?.input_type ?? 'input',
-        },
-      };
-
-      const draft: VariableDefinitionDraft = {
-        variableId: variable.id,
-        varType: variable.var_type,
-        original: {
-          ...base,
-          select_options: [...base.select_options],
-          number_options: { ...base.number_options },
-        },
-        current: {
-          ...base,
-          select_options: [...base.select_options],
-          number_options: { ...base.number_options },
-        },
-        dirty: false,
-        error: '',
-      };
-
       setVariableDrafts((prev) => ({
         ...prev,
-        [key]: draft,
+        [key]: hydrateVariableDraft(variable, key),
       }));
     },
     [loadVariables]
@@ -1096,39 +1464,64 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         if (!agent) return;
       }
 
-      const base = {
-        agent_name: agent.agent_name,
-        display_name: agent.display_name,
-        description: agent.description,
-        enabled: agent.enabled,
-        allowed_invocation_modes: [...agent.allowed_invocation_modes],
-        allowed_tool_names: [...agent.allowed_tool_names],
-        allowed_sub_agent_ids: [...agent.allowed_sub_agent_ids],
-        allowed_mcp_server_ids: [...agent.allowed_mcp_server_ids],
-        use_custom_llm_config: agent.use_custom_llm_config,
-        llm_config_override: agent.llm_config_override,
-      };
-
-      const draft: SubAgentDefinitionDraft = {
-        subAgentId: agent.id,
-        original: base,
-        current: {
-          ...base,
-          allowed_invocation_modes: [...base.allowed_invocation_modes],
-          allowed_tool_names: [...base.allowed_tool_names],
-          allowed_sub_agent_ids: [...base.allowed_sub_agent_ids],
-          allowed_mcp_server_ids: [...base.allowed_mcp_server_ids],
-        },
-        dirty: false,
-        error: '',
-      };
-
       setSubAgentDrafts((prev) => ({
         ...prev,
-        [key]: draft,
+        [key]: hydrateSubAgentDraft(agent, key),
       }));
     },
     [loadSubAgents]
+  );
+
+  const ensureSubAgentScenarioDraftLoaded = useCallback(
+    async (subAgentId: string, label: string) => {
+      const key = makeSubAgentDraftKey(subAgentId);
+      if (subAgentScenarioDraftsRef.current[key]) return;
+
+      const agent = subAgentsRef.current.find((item) => item.id === subAgentId);
+      if (!agent) return;
+
+      const emptyScenario: ScenarioDocument = { system_template: '', blocks: [] };
+      setSubAgentScenarioDrafts((prev) => ({
+        ...prev,
+        [key]: {
+          key,
+          label,
+          taskType: 'subAgent',
+          taskSubtype: agent.agent_name,
+          isLoading: true,
+          originalScenario: emptyScenario,
+          scenario: emptyScenario,
+          dirty: false,
+          saveWarnings: [],
+        },
+      }));
+
+      try {
+        const loaded = await loadScenario('subAgent', agent.agent_name);
+        setSubAgentScenarioDrafts((prev) => ({
+          ...prev,
+          [key]: {
+            ...(prev[key] as ScenarioDraft),
+            isLoading: false,
+            loadError: undefined,
+            originalScenario: loaded,
+            scenario: loaded,
+            dirty: false,
+            saveWarnings: [],
+          },
+        }));
+      } catch (error) {
+        setSubAgentScenarioDrafts((prev) => ({
+          ...prev,
+          [key]: {
+            ...(prev[key] as ScenarioDraft),
+            isLoading: false,
+            loadError: toErrorMessage(error),
+          },
+        }));
+      }
+    },
+    [loadScenario]
   );
 
   // Load drafts as selection changes.
@@ -1161,24 +1554,60 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       currentSubAgentDraft?.current.display_name
       || selectedSubAgent?.display_name
       || subAgentIdentityName;
-    ensureScenarioDraftLoaded(
-      'subAgent',
-      subAgentIdentityName,
-      `Sub Agent: ${displayName} / call_${subAgentIdentityName}`,
-      `subAgent-${selectedSubAgentId}`
+    ensureSubAgentScenarioDraftLoaded(
+      selectedSubAgentId,
+      `Sub Agent: ${displayName} / call_${subAgentIdentityName}`
     );
-  }, [currentSubAgentDraft?.current.display_name, ensureScenarioDraftLoaded, selectedSubAgent?.display_name, selectedSubAgentId, subAgentIdentityName]);
+  }, [currentSubAgentDraft?.current.display_name, ensureSubAgentScenarioDraftLoaded, selectedSubAgent?.display_name, selectedSubAgentId, subAgentIdentityName]);
+
+  useEffect(() => {
+    if (!newSubAgentDraft) return;
+    const label = getSubAgentScenarioLabel(newSubAgentDraft.current.display_name, newSubAgentDraft.current.agent_name);
+    const taskSubtype = normalizeAgentName(newSubAgentDraft.current.agent_name) || 'new_agent';
+    setSubAgentScenarioDrafts((prev) => {
+      const current = prev[newSubAgentDraft.draftKey];
+      if (current) {
+        return {
+          ...prev,
+          [newSubAgentDraft.draftKey]: {
+            ...current,
+            label,
+            taskSubtype,
+          },
+        };
+      }
+      const baseScenario = buildDefaultSubAgentScenario();
+      return {
+        ...prev,
+        [newSubAgentDraft.draftKey]: {
+          key: newSubAgentDraft.draftKey,
+          label,
+          taskType: 'subAgent',
+          taskSubtype,
+          isLoading: false,
+          originalScenario: baseScenario,
+          scenario: baseScenario,
+          dirty: false,
+          saveWarnings: [],
+        },
+      };
+    });
+  }, [newSubAgentDraft]);
 
   useEffect(() => {
     if (!currentFragmentDraft || currentFragmentDraft.isLoading) return;
     const key = currentFragmentDraft.key;
     const timer = window.setTimeout(async () => {
       const validation = await validateFragmentContent(currentFragmentDraft.content, currentFragmentDraft.fullPath, fragmentDraftsRef.current, allFragmentContentsRef.current);
-      setFragmentDrafts((prev) => {
-        const cur = prev[key];
-        if (!cur) return prev;
-        return { ...prev, [key]: { ...cur, validation } };
-      });
+      if (currentFragmentDraft.isNew) {
+        setNewFragmentDraft((prev) => (prev?.key === key ? { ...prev, validation } : prev));
+      } else {
+        setFragmentDrafts((prev) => {
+          const cur = prev[key];
+          if (!cur) return prev;
+          return { ...prev, [key]: { ...cur, validation } };
+        });
+      }
     }, 500);
     return () => window.clearTimeout(timer);
   }, [currentFragmentDraft?.content, currentFragmentDraft?.fullPath, currentFragmentDraft?.isLoading, currentFragmentDraft?.key]);
@@ -1195,19 +1624,35 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
   };
 
   const handleCreateFragment = (folderPath: string | null) => {
-    setCreateFolderPath(folderPath);
-    setShowCreateModal(true);
-  };
+    if (newFragmentDraft) {
+      setSelectedFragment(null);
+      if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+      return;
+    }
 
-  const handleCloseCreateFragmentModal = () => {
-    setShowCreateModal(false);
-    setCreateFolderPath(null);
-  };
-
-  const handleFragmentCreated = (folderId: string | null, fragmentName: string, fullPath: string) => {
-    setRefreshTrigger((prev) => prev + 1);
-    setSelectedFragment({ folderId, fragmentName, fullPath });
-    loadFragmentContents().catch(() => undefined);
+    const tempId = generateTempId();
+    const draft: FragmentDraft = {
+      key: `fragment:${tempId}`,
+      label: getFragmentDraftLabel({ folderPath: folderPath || '', fragmentName: '' }),
+      folderId: null,
+      sourceFolderId: null,
+      sourceFragmentName: null,
+      folderPath: folderPath || '',
+      fragmentName: '',
+      fullPath: '',
+      isLoading: false,
+      isNew: true,
+      originalContent: '',
+      originalDescription: '',
+      content: '',
+      description: '',
+      dirty: true,
+      validation: null,
+      isDeleting: false,
+    };
+    setNewFragmentDraft(draft);
+    setSelectedFragment(null);
+    if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
   };
 
   const handleFragmentDeleted = () => {
@@ -1216,10 +1661,47 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     loadFragmentContents().catch(() => undefined);
   };
 
+  const handleCreateVariable = () => {
+    if (newVariableDraft) {
+      setSelectedVariableId(null);
+      if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+      return;
+    }
+    setNewVariableDraft(buildNewVariableDraft(makeVariableDraftKey(generateTempId())));
+    setSelectedVariableId(null);
+    if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+  };
+
+  const handleCreateSubAgent = () => {
+    if (newSubAgentDraft) {
+      setSelectedSubAgentId(null);
+      if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+      return;
+    }
+    setNewSubAgentDraft(buildEmptySubAgentDraft(makeSubAgentDraftKey(generateTempId())));
+    setSelectedSubAgentId(null);
+    if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+  };
+
+  const handleCreateMcpServer = () => {
+    if (newMcpDraft) {
+      setSelectedMcpServerId(null);
+      if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+      return;
+    }
+    setNewMcpDraft(buildNewMcpDraft(makeMcpDraftKey(generateTempId())));
+    setSelectedMcpServerId(null);
+    if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+  };
+
   const handleFolderDeleted = (deletedFolderPath: string) => {
     setFragmentDrafts((prev) => Object.fromEntries(
       Object.entries(prev).filter(([, draft]) => !draft.fullPath.startsWith(`${deletedFolderPath}/`))
     ));
+    setNewFragmentDraft((prev) => {
+      if (!prev) return null;
+      return prev.fullPath.startsWith(`${deletedFolderPath}/`) ? null : prev;
+    });
     setSelectedFragment((prev) => {
       if (!prev) return null;
       return prev.fullPath.startsWith(`${deletedFolderPath}/`) ? null : prev;
@@ -1234,37 +1716,12 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   const handleSubTabChange = (newTab: SubTab) => {
     setSubTab(newTab);
-    if (newTab === 'prompts') {
-      setSelectedFragment(null);
-      setSelectedVariableId(null);
-      setSelectedSubAgentId(null);
-      setIsCreatingMcpServer(false);
-    } else if (newTab === 'fragments') {
-      setSelectedPrompt(null);
-      setSelectedVariableId(null);
-      setSelectedSubAgentId(null);
-      setIsCreatingMcpServer(false);
-    } else if (newTab === 'variables') {
-      setSelectedPrompt(null);
-      setSelectedFragment(null);
-      setSelectedSubAgentId(null);
-      setIsCreatingMcpServer(false);
-    } else if (newTab === 'subAgents') {
-      setSelectedPrompt(null);
-      setSelectedFragment(null);
-      setSelectedVariableId(null);
-      setIsCreatingMcpServer(false);
-    } else {
-      setSelectedPrompt(null);
-      setSelectedFragment(null);
-      setSelectedVariableId(null);
-      setSelectedSubAgentId(null);
-    }
   };
 
   const handleCopyFragmentPath = async () => {
-    if (!selectedPath) return;
-    const pathToCopy = `{% include "${toFragmentReference(selectedPath)}" %}`;
+    const fragmentPath = currentFragmentDraft?.fullPath;
+    if (!fragmentPath) return;
+    const pathToCopy = `{% include "${toFragmentReference(fragmentPath)}" %}`;
     try {
       await navigator.clipboard.writeText(pathToCopy);
       toast.success(t('common.copied', { value: pathToCopy }));
@@ -1282,7 +1739,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
       return `${parentLabel} — ${selectedPrompt.label}`;
     }
     if (subTab === 'prompts') return t('settings.promptEditor.prompts');
-    if (subTab === 'fragments' && selectedPath) return selectedPath;
+    if (subTab === 'fragments' && currentFragmentDraft?.isNew) return 'New Fragment';
     if (subTab === 'fragments') return t('settings.promptEditor.fragments');
     return '';
   };
@@ -1298,7 +1755,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   const hasSelection =
     (subTab === 'prompts' && selectedPrompt) ||
-    (subTab === 'fragments' && selectedFragment) ||
+    (subTab === 'fragments' && currentFragmentDraft) ||
     subTab === 'variables' ||
     subTab === 'subAgents' ||
     subTab === 'mcp';
@@ -1388,24 +1845,65 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     setShowVersionHistory(false);
   };
 
-  const handleDescriptionChange = useCallback((value: string) => {
+  const updateCurrentFragmentDraft = useCallback((updater: (draft: FragmentDraft) => FragmentDraft) => {
     if (!currentFragmentDraft) return;
+    if (currentFragmentDraft.isNew) {
+      setNewFragmentDraft((prev) => {
+        if (!prev || prev.key !== currentFragmentDraft.key) return prev;
+        return updater(prev);
+      });
+      return;
+    }
     setFragmentDrafts((prev) => {
       const cur = prev[currentFragmentDraft.key];
       if (!cur) return prev;
       return {
         ...prev,
-        [currentFragmentDraft.key]: {
-          ...cur,
-          description: value,
-          dirty: cur.content !== cur.originalContent || value !== cur.originalDescription,
-        },
+        [currentFragmentDraft.key]: updater(cur),
       };
     });
   }, [currentFragmentDraft]);
 
+  const handleDescriptionChange = useCallback((value: string) => {
+    if (!currentFragmentDraft) return;
+    updateCurrentFragmentDraft((draft) => ({
+      ...draft,
+      description: value,
+      dirty: isFragmentDraftDirty({
+        ...draft,
+        description: value,
+      }),
+      loadError: undefined,
+    }));
+  }, [currentFragmentDraft, updateCurrentFragmentDraft]);
+
+  const handleFragmentNameChange = useCallback((value: string) => {
+    if (!currentFragmentDraft || currentFragmentDraft.isNew) return;
+    updateCurrentFragmentDraft((draft) => {
+      const nextDraft = {
+        ...draft,
+        fragmentName: value,
+      };
+      const fullPath = getDraftFragmentFullPath(nextDraft);
+      return {
+        ...nextDraft,
+        fullPath,
+        label: getFragmentDraftLabel(nextDraft),
+        dirty: isFragmentDraftDirty({
+          ...nextDraft,
+          fragmentName: value,
+        }),
+        loadError: undefined,
+      };
+    });
+  }, [currentFragmentDraft, updateCurrentFragmentDraft]);
+
   const handleDeleteSelectedFragment = async () => {
     if (!currentFragmentDraft) return;
+    if (currentFragmentDraft.isNew) {
+      setNewFragmentDraft(null);
+      return;
+    }
     const ok = await confirm({
       title: 'Delete Fragment',
       message: `Are you sure you want to delete "${currentFragmentDraft.fullPath}"? This will delete all versions.`,
@@ -1422,7 +1920,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     });
 
     try {
-      await fragmentService.deleteFragment(currentFragmentDraft.folderId, currentFragmentDraft.fragmentName);
+      await fragmentService.deleteFragment(currentFragmentDraft.sourceFolderId, currentFragmentDraft.sourceFragmentName!);
       setFragmentDrafts((prev) => {
         const next = { ...prev };
         delete next[key];
@@ -1513,7 +2011,14 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
   const isBlocksPromptView = subTab === 'prompts' && selectedPrompt?.viewKind === 'blocks';
   const editorHeaderActionsList: React.ReactNode[] = [];
-  const editorHeaderMenuItems = [];
+  const editorHeaderMenuItems: Array<{
+    key: string;
+    icon?: React.ReactNode;
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+    variant?: 'danger';
+  }> = [];
 
   if (subTab === 'prompts' && selectedPrompt) {
     editorHeaderActionsList.push(
@@ -1530,7 +2035,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     });
   }
 
-  if (subTab === 'fragments' && selectedPath) {
+  if (subTab === 'fragments' && currentFragmentDraft?.fullPath) {
     editorHeaderMenuItems.push({
       key: 'copy-fragment-path',
       icon: <Copy size="sm" />,
@@ -1558,7 +2063,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     editorHeaderMenuItems.push({
       key: 'delete-fragment',
       icon: <Trash size="sm" />,
-      label: t('settings.promptEditor.deleteFragment'),
+      label: currentFragmentDraft.isNew ? 'Discard' : t('settings.promptEditor.deleteFragment'),
       onClick: handleDeleteSelectedFragment,
       disabled: currentFragmentDraft.isDeleting,
       variant: 'danger' as const,
@@ -1586,15 +2091,28 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
             <div className="editor-wrapper">
               {showEditorHeader && (
                 <EditorPanelHeader
-                  title={getEditorTitle()}
+                  title={
+                    subTab === 'fragments' && currentFragmentDraft && !currentFragmentDraft.isNew
+                      ? currentFragmentDraft.fragmentName
+                      : getEditorTitle()
+                  }
+                  editableTitle={subTab === 'fragments' && !!currentFragmentDraft && !currentFragmentDraft.isNew}
+                  titleStaticPrefix={
+                    subTab === 'fragments' && currentFragmentDraft && !currentFragmentDraft.isNew && currentFragmentDraft.folderPath
+                      ? `${currentFragmentDraft.folderPath}/`
+                      : undefined
+                  }
+                  onTitleChange={currentFragmentDraft && !currentFragmentDraft.isNew ? handleFragmentNameChange : undefined}
+                  titlePlaceholder={t('settings.promptEditor.createFragment.fragmentNamePlaceholder')}
+                  editTitleLabel={t('settings.promptEditor.editFragmentName')}
                   subtitle={
                     subTab === 'fragments' && currentFragmentDraft
-                      ? (currentFragmentDraft?.description || '')
+                      ? (currentFragmentDraft.isNew ? undefined : (currentFragmentDraft.description || ''))
                       : (subTab === 'prompts' && selectedPrompt ? (getEditorDescription() || undefined) : undefined)
                   }
-                  editableSubtitle={subTab === 'fragments' && !!currentFragmentDraft}
+                  editableSubtitle={subTab === 'fragments' && !!currentFragmentDraft && !currentFragmentDraft.isNew}
                   onSubtitleChange={currentFragmentDraft ? handleDescriptionChange : undefined}
-                  subtitlePlaceholder={currentFragmentDraft ? t('settings.promptEditor.addDescription') : undefined}
+                  subtitlePlaceholder={currentFragmentDraft && !currentFragmentDraft.isNew ? t('settings.promptEditor.addDescription') : undefined}
                   meta={editorHeaderMeta}
                   actions={editorHeaderActions}
                   isSidebarCollapsed={isSidebarCollapsed}
@@ -1677,39 +2195,124 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                   </>
                 )}
 
-                {subTab === 'fragments' && selectedFragment && (
-                  <TemplateEditor
-                    content={currentFragmentDraft?.content || ''}
-                    onContentChange={(text) => {
-                      if (!currentFragmentDraft) return;
-                      setFragmentDrafts((prev) => {
-                        const cur = prev[currentFragmentDraft.key];
-                        if (!cur) return prev;
-                        const dirty = text !== cur.originalContent || cur.description !== cur.originalDescription;
-                        return {
-                          ...prev,
-                          [currentFragmentDraft.key]: {
-                            ...cur,
+                {subTab === 'fragments' && currentFragmentDraft && (
+                  <div className="editor-wrapper__split">
+                    {currentFragmentDraft.isNew && (
+                      <div className="editor-wrapper__fragment-fields">
+                        <div className="form-group">
+                          <label className="form-label" htmlFor="fragment-folder-path">
+                            {t('settings.promptEditor.createFragment.folderPath')}
+                          </label>
+                          <input
+                            id="fragment-folder-path"
+                            className="form-input"
+                            type="text"
+                            value={currentFragmentDraft.folderPath}
+                            onChange={(event) => {
+                              const folderPath = event.target.value;
+                              updateCurrentFragmentDraft((draft) => {
+                                const nextDraft = {
+                                  ...draft,
+                                  folderPath,
+                                  dirty: true,
+                                  loadError: undefined,
+                                };
+                                const fullPath = getDraftFragmentFullPath(nextDraft);
+                                return {
+                                  ...nextDraft,
+                                  fullPath,
+                                  label: getFragmentDraftLabel(nextDraft),
+                                };
+                              });
+                            }}
+                            placeholder={t('settings.promptEditor.createFragment.folderPathPlaceholder')}
+                          />
+                          <small className="form-hint">{t('settings.promptEditor.createFragment.folderPathHint')}</small>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label" htmlFor="fragment-name">
+                            {t('settings.promptEditor.createFragment.fragmentName')}
+                          </label>
+                          <input
+                            id="fragment-name"
+                            className="form-input"
+                            type="text"
+                            value={currentFragmentDraft.fragmentName}
+                            onChange={(event) => {
+                              const fragmentName = event.target.value;
+                              updateCurrentFragmentDraft((draft) => {
+                                const nextDraft = {
+                                  ...draft,
+                                  fragmentName,
+                                  dirty: true,
+                                  loadError: undefined,
+                                };
+                                const fullPath = getDraftFragmentFullPath(nextDraft);
+                                return {
+                                  ...nextDraft,
+                                  fullPath,
+                                  label: getFragmentDraftLabel(nextDraft),
+                                };
+                              });
+                            }}
+                            placeholder={t('settings.promptEditor.createFragment.fragmentNamePlaceholder')}
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label" htmlFor="fragment-description">
+                            {t('settings.promptEditor.createFragment.description')}
+                          </label>
+                          <input
+                            id="fragment-description"
+                            className="form-input"
+                            type="text"
+                            value={currentFragmentDraft.description}
+                            onChange={(event) => handleDescriptionChange(event.target.value)}
+                            placeholder={t('settings.promptEditor.createFragment.descriptionPlaceholder')}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {currentFragmentDraft.loadError && (
+                      <div className="editor-wrapper__inline-error">{currentFragmentDraft.loadError}</div>
+                    )}
+
+                    <TemplateEditor
+                      content={currentFragmentDraft.content || ''}
+                      onContentChange={(text) => {
+                        updateCurrentFragmentDraft((draft) => ({
+                          ...draft,
+                          content: text,
+                          dirty: isFragmentDraftDirty({
+                            ...draft,
                             content: text,
-                            dirty,
-                          },
-                        };
-                      });
-                    }}
-                    validation={currentFragmentDraft?.validation ?? null}
-                    isLoading={!currentFragmentDraft || currentFragmentDraft.isLoading}
-                    placeholder={t('settings.promptEditor.enterFragmentTemplate')}
-                  />
+                          }),
+                          loadError: undefined,
+                        }));
+                      }}
+                      validation={currentFragmentDraft.validation ?? null}
+                      isLoading={currentFragmentDraft.isLoading}
+                      placeholder={t('settings.promptEditor.enterFragmentTemplate')}
+                    />
+                  </div>
                 )}
 
                 {subTab === 'variables' && (
                   <VariableEditor
-                    variableId={selectedVariableId}
                     draft={currentVariableDraft}
                     onDraftChange={(draft) => {
+                      if (draft.isNew) {
+                        setNewVariableDraft(draft);
+                        return;
+                      }
+                      if (!draft.variableId) return;
+                      const draftKey = makeVariableDraftKey(draft.variableId);
                       setVariableDrafts((prev) => ({
                         ...prev,
-                        [makeVariableDraftKey(draft.variableId)]: draft,
+                        [draftKey]: draft,
                       }));
                     }}
                     onDeleted={(variableId) => {
@@ -1720,6 +2323,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                         return next;
                       });
                     }}
+                    onDiscardNew={() => setNewVariableDraft(null)}
                     isSidebarCollapsed={isSidebarCollapsed}
                     onToggleSidebar={toggleSidebar}
                   />
@@ -1727,22 +2331,20 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
                 {subTab === 'subAgents' && (
                   <SubAgentEditor
-                    key={selectedSubAgentId}
-                    selectedId={selectedSubAgentId}
+                    key={currentSubAgentDraft?.draftKey || selectedSubAgentId || 'new-sub-agent'}
                     draft={currentSubAgentDraft}
                     onDraftChange={handleSubAgentDraftChange}
                     promptIdentityName={subAgentIdentityName}
-                    scenarioDraft={subAgentIdentityName ? scenarioDrafts[makeScenarioDraftKey('subAgent', subAgentIdentityName)] : null}
+                    scenarioDraft={currentSubAgentScenarioDraft}
                     onScenarioChange={(nextScenario) => {
-                      if (!subAgentIdentityName) return;
-                      const draftKey = makeScenarioDraftKey('subAgent', subAgentIdentityName);
-                      setScenarioDrafts((prev) => {
-                        const cur = prev[draftKey];
+                      if (!currentSubAgentScenarioKey) return;
+                      setSubAgentScenarioDrafts((prev) => {
+                        const cur = prev[currentSubAgentScenarioKey];
                         if (!cur) return prev;
                         const dirty = JSON.stringify(nextScenario) !== JSON.stringify(cur.originalScenario);
                         return {
                           ...prev,
-                          [draftKey]: {
+                          [currentSubAgentScenarioKey]: {
                             ...cur,
                             scenario: nextScenario,
                             dirty,
@@ -1752,16 +2354,15 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                       });
                     }}
                     onReloadScenario={async () => {
-                      if (!subAgentIdentityName) return;
-                      invalidateScenarioCache('subAgent', subAgentIdentityName);
-                      const loaded = await loadScenario('subAgent', subAgentIdentityName);
-                      const draftKey = makeScenarioDraftKey('subAgent', subAgentIdentityName);
-                      setScenarioDrafts((prev) => {
-                        const cur = prev[draftKey];
+                      if (!currentSubAgentScenarioKey || !currentSubAgentScenarioDraft || currentSubAgentDraft?.isNew) return;
+                      invalidateScenarioCache('subAgent', currentSubAgentScenarioDraft.taskSubtype);
+                      const loaded = await loadScenario('subAgent', currentSubAgentScenarioDraft.taskSubtype);
+                      setSubAgentScenarioDrafts((prev) => {
+                        const cur = prev[currentSubAgentScenarioKey];
                         if (!cur) return prev;
                         return {
                           ...prev,
-                          [draftKey]: {
+                          [currentSubAgentScenarioKey]: {
                             ...cur,
                             originalScenario: loaded,
                             scenario: loaded,
@@ -1778,15 +2379,20 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                         delete next[makeSubAgentDraftKey(subAgentId)];
                         return next;
                       });
-                      const draft = subAgentDraftsRef.current[makeSubAgentDraftKey(subAgentId)];
-                      const name = draft?.original.agent_name;
-                      if (name) {
-                        setScenarioDrafts((prev) => {
-                          const next = { ...prev };
-                          delete next[makeScenarioDraftKey('subAgent', name)];
-                          return next;
-                        });
-                      }
+                      setSubAgentScenarioDrafts((prev) => {
+                        const next = { ...prev };
+                        delete next[makeSubAgentDraftKey(subAgentId)];
+                        return next;
+                      });
+                    }}
+                    onDiscardNew={() => {
+                      if (!newSubAgentDraft) return;
+                      setSubAgentScenarioDrafts((prev) => {
+                        const next = { ...prev };
+                        delete next[newSubAgentDraft.draftKey];
+                        return next;
+                      });
+                      setNewSubAgentDraft(null);
                     }}
                     isSidebarCollapsed={isSidebarCollapsed}
                     onToggleSidebar={toggleSidebar}
@@ -1795,19 +2401,30 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
 
                 {subTab === 'mcp' && (
                   <McpServersEditor
-                    selectedId={selectedMcpServerId}
-                    isCreatingNew={isCreatingMcpServer}
-                    onCreated={(serverId) => {
-                      setSelectedMcpServerId(serverId);
-                      setIsCreatingMcpServer(false);
+                    draft={currentMcpDraft}
+                    snapshot={selectedMcpSnapshot}
+                    storeError={mcpStoreError}
+                    onDraftChange={(draft) => {
+                      if (draft.isNew) {
+                        setNewMcpDraft(draft);
+                        return;
+                      }
+                      if (!draft.serverId) return;
+                      const draftKey = makeMcpDraftKey(draft.serverId);
+                      setMcpDrafts((prev) => ({
+                        ...prev,
+                        [draftKey]: draft,
+                      }));
                     }}
                     onDeleted={(serverId) => {
-                      setIsCreatingMcpServer(false);
                       setSelectedMcpServerId((prev) => (prev === serverId ? null : prev));
+                      setMcpDrafts((prev) => {
+                        const next = { ...prev };
+                        delete next[makeMcpDraftKey(serverId)];
+                        return next;
+                      });
                     }}
-                    onCancelCreate={() => {
-                      setIsCreatingMcpServer(false);
-                    }}
+                    onDiscardNew={() => setNewMcpDraft(null)}
                     isSidebarCollapsed={isSidebarCollapsed}
                     onToggleSidebar={toggleSidebar}
                   />
@@ -1894,6 +2511,12 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                 onFragmentSelect={handleFragmentSelect}
                 onCreateFragment={handleCreateFragment}
                 onFolderDeleted={handleFolderDeleted}
+                draftLabel={newFragmentDraft ? getFragmentDraftLabel(newFragmentDraft) : null}
+                isDraftSelected={!!newFragmentDraft && !selectedFragment}
+                onSelectDraft={() => {
+                  setSelectedFragment(null);
+                  if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+                }}
                 refreshTrigger={refreshTrigger}
                 onClose={() => setIsSidebarCollapsed(true)}
               />
@@ -1905,7 +2528,13 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                   setSelectedVariableId(id);
                   if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
                 }}
-                onCreateVariable={() => setShowCreateVariableModal(true)}
+                onCreateVariable={handleCreateVariable}
+                newDraftLabel={newVariableDraft ? (newVariableDraft.current.name || 'New Variable') : null}
+                isNewDraftSelected={!!newVariableDraft && !selectedVariableId}
+                onSelectNewDraft={() => {
+                  setSelectedVariableId(null);
+                  if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+                }}
                 onClose={() => setIsSidebarCollapsed(true)}
               />
             )}
@@ -1916,7 +2545,13 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                   setSelectedSubAgentId(id);
                   if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
                 }}
-                onCreate={() => setShowCreateSubAgentModal(true)}
+                onCreate={handleCreateSubAgent}
+                newDraftLabel={newSubAgentDraft ? (newSubAgentDraft.current.display_name || 'New Sub Agent') : null}
+                isNewDraftSelected={!!newSubAgentDraft && !selectedSubAgentId}
+                onSelectNewDraft={() => {
+                  setSelectedSubAgentId(null);
+                  if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
+                }}
                 onClose={() => setIsSidebarCollapsed(true)}
               />
             )}
@@ -1925,12 +2560,13 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                 selectedId={selectedMcpServerId}
                 onSelect={(id) => {
                   setSelectedMcpServerId(id);
-                  setIsCreatingMcpServer(false);
                   if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
                 }}
-                onCreate={() => {
+                onCreate={handleCreateMcpServer}
+                newDraftLabel={newMcpDraft ? (newMcpDraft.current.display_name || newMcpDraft.current.server_key || 'New MCP Server') : null}
+                isNewDraftSelected={!!newMcpDraft && !selectedMcpServerId}
+                onSelectNewDraft={() => {
                   setSelectedMcpServerId(null);
-                  setIsCreatingMcpServer(true);
                   if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
                 }}
                 onClose={() => setIsSidebarCollapsed(true)}
@@ -1940,13 +2576,6 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         </div>
       </div>
 
-      <CreateFragmentModal
-        isOpen={showCreateModal}
-        folderPath={createFolderPath}
-        onClose={handleCloseCreateFragmentModal}
-        onCreate={handleFragmentCreated}
-      />
-
       {showVersionHistory && currentVersionHistoryProps && (
         <VersionHistoryModal
           isOpen={showVersionHistory}
@@ -1955,22 +2584,6 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
           textVersionProps={currentVersionHistoryProps}
         />
       )}
-
-      <CreateVariableModal
-        isOpen={showCreateVariableModal}
-        onClose={() => setShowCreateVariableModal(false)}
-        onCreate={(id) => setSelectedVariableId(id)}
-      />
-
-      <CreateSubAgentModal
-        isOpen={showCreateSubAgentModal}
-        onClose={() => setShowCreateSubAgentModal(false)}
-        onCreated={(id) => {
-          setSelectedSubAgentId(id);
-          setShowCreateSubAgentModal(false);
-          setSubTab('subAgents');
-        }}
-      />
 
       <PresetModal
         isOpen={showPresetModal}

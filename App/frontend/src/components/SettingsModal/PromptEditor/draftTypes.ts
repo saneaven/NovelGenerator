@@ -6,6 +6,7 @@ export type ScenarioDraftKey = DraftKey;
 export type FragmentDraftKey = DraftKey;
 export type VariableDraftKey = DraftKey;
 export type SubAgentDraftKey = DraftKey;
+export type McpDraftKey = DraftKey;
 
 export function makeScenarioDraftKey(taskType: TaskType, taskSubtype: string): ScenarioDraftKey {
   return `scenario:${taskType}:${taskSubtype}`;
@@ -21,6 +22,10 @@ export function makeVariableDraftKey(variableId: string): VariableDraftKey {
 
 export function makeSubAgentDraftKey(subAgentId: string): SubAgentDraftKey {
   return `subAgent:${subAgentId}`;
+}
+
+export function makeMcpDraftKey(serverId: string): McpDraftKey {
+  return `mcp:${serverId}`;
 }
 
 export type DirtyItem =
@@ -51,6 +56,12 @@ export type DirtyItem =
       key: SubAgentDraftKey;
       label: string;
       subAgentId: string;
+    }
+  | {
+      kind: 'mcp';
+      key: McpDraftKey;
+      label: string;
+      serverId: string;
     };
 
 export type SaveFailure = { item: DirtyItem; error: string };

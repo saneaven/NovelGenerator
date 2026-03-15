@@ -6,6 +6,11 @@ import './EditorPanelHeader.css';
 
 interface EditorPanelHeaderProps {
   title: string;
+  editableTitle?: boolean;
+  titleStaticPrefix?: string;
+  onTitleChange?: (value: string) => void;
+  titlePlaceholder?: string;
+  editTitleLabel?: string;
   badge?: React.ReactNode;
   subtitle?: string;
   editableSubtitle?: boolean;
@@ -20,6 +25,11 @@ interface EditorPanelHeaderProps {
 
 const EditorPanelHeader: React.FC<EditorPanelHeaderProps> = ({
   title,
+  editableTitle,
+  titleStaticPrefix,
+  onTitleChange,
+  titlePlaceholder,
+  editTitleLabel,
   badge,
   subtitle,
   editableSubtitle,
@@ -33,12 +43,82 @@ const EditorPanelHeader: React.FC<EditorPanelHeaderProps> = ({
 }) => {
   const { t } = useTranslation();
 
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editedValue, setEditedValue] = useState('');
 
   useEffect(() => {
+    setIsEditingTitle(false);
     setIsEditing(false);
+  }, [title, titleStaticPrefix]);
+
+  const handleStartTitleEdit = useCallback(() => {
+    setEditedTitle(title || '');
+    setIsEditingTitle(true);
   }, [title]);
+
+  const handleSaveTitle = useCallback(() => {
+    const trimmed = editedTitle.trim();
+    if (trimmed && trimmed !== title) {
+      onTitleChange?.(trimmed);
+    }
+    setIsEditingTitle(false);
+  }, [editedTitle, onTitleChange, title]);
+
+  const handleCancelTitle = useCallback(() => {
+    setIsEditingTitle(false);
+  }, []);
+
+  const renderTitle = () => {
+    if (!editableTitle) {
+      return <h3 className="editor-panel-header__title">{title}</h3>;
+    }
+
+    if (isEditingTitle) {
+      return (
+        <div className="editor-panel-header__title editor-panel-header__title--editable">
+          {titleStaticPrefix && (
+            <span className="editor-panel-header__title-prefix">{titleStaticPrefix}</span>
+          )}
+          <input
+            type="text"
+            value={editedTitle}
+            onChange={(e) => setEditedTitle(e.target.value)}
+            onBlur={handleSaveTitle}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSaveTitle();
+              if (e.key === 'Escape') handleCancelTitle();
+            }}
+            placeholder={titlePlaceholder}
+            className="editor-panel-header__title-input"
+            autoFocus
+          />
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <h3 className="editor-panel-header__title editor-panel-header__title--editable">
+          {titleStaticPrefix && (
+            <span className="editor-panel-header__title-prefix">{titleStaticPrefix}</span>
+          )}
+          <span className="editor-panel-header__title-text">
+            {title || titlePlaceholder || ''}
+          </span>
+        </h3>
+        <button
+          className="editor-panel-header__title-edit"
+          onClick={handleStartTitleEdit}
+          title={editTitleLabel || t('common.edit')}
+          type="button"
+        >
+          <Edit size="xs" />
+        </button>
+      </>
+    );
+  };
 
   const handleStartEdit = useCallback(() => {
     setEditedValue(subtitle || '');
@@ -106,7 +186,7 @@ const EditorPanelHeader: React.FC<EditorPanelHeaderProps> = ({
     <header className="editor-panel-header">
       <div className="editor-panel-header__left">
         <div className="editor-panel-header__title-row">
-          <h3 className="editor-panel-header__title">{title}</h3>
+          {renderTitle()}
           {badge}
           {onCopyTitle && (
             <IconButton

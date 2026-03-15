@@ -10,6 +10,7 @@ from ..models.db_models import User
 from ..schemas.fragments import (
     FragmentContentResponse,
     FragmentCreate,
+    FragmentPatch,
     FragmentUpdate,
     FragmentVersionResponse,
     FragmentVersionHistoryItem,
@@ -21,7 +22,7 @@ from ..schemas.fragments import (
     FragmentValidationRequest,
     FragmentValidationResponse
 )
-from ..services.fragment_service import fragment_service
+from ..services.fragment_service import fragment_service, FragmentConflictError
 from ..services.folder_service import FolderService
 from ..services.default_preset_seed import load_default_preset_seed
 from ..services.prompt_runtime.template_renderer import load_user_fragment_map
@@ -218,6 +219,46 @@ async def save_fragment(
         description=data.description,
         note=data.note
     )
+
+
+@router.patch(
+    "",
+    response_model=FragmentVersionResponse
+)
+async def update_fragment(
+    data: FragmentPatch,
+    folder_id: Optional[str] = Query(None, description="Folder ID (None for root)"),
+    fragment_name: str = Query(..., description="Fragment name"),
+    _demo_guard: None = Depends(require_demo_off),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a fragment and optionally rename it."""
+    preset_id = get_active_preset_id(current_user)
+    try:
+        result = fragment_service.update_fragment(
+            db=db,
+            user_id=current_user.id,
+            preset_id=preset_id,
+            folder_id=_parse_folder_id(folder_id),
+            fragment_name=fragment_name,
+            content=data.content,
+            description=data.description,
+            new_fragment_name=data.fragment_name,
+        )
+    except FragmentConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Fragment not found: {fragment_name}"
+        )
+
+    return result
 
 
 @router.get(

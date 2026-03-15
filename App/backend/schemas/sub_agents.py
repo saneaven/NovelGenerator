@@ -10,6 +10,13 @@ import uuid
 from .settings import TaskAIConfig
 
 
+class SubAgentPromptTemplates(BaseModel):
+    """Optional prompt payload used when creating a new Sub Agent."""
+
+    system_prompt: Optional[str] = Field(None, min_length=1)
+    user_prompt: Optional[str] = Field(None, min_length=1)
+
+
 class SubAgentDefinition(BaseModel):
     """Sub Agent definition stored per preset."""
     model_config = ConfigDict(from_attributes=True, extra="forbid")
@@ -50,6 +57,7 @@ class SubAgentCreate(BaseModel):
 
     use_custom_llm_config: bool = False
     llm_config_override: Optional[TaskAIConfig] = None
+    prompt_templates: Optional[SubAgentPromptTemplates] = None
 
 
 class SubAgentUpdate(BaseModel):
