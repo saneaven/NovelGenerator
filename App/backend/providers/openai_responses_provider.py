@@ -29,7 +29,7 @@ from openai import (
 from .base import BaseProvider
 from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
 from .final_mappers import map_openai_response_to_snapshot
-from .multimodal import build_openai_responses_content, get_canonical_content_parts
+from .multimodal import build_openai_responses_content, get_canonical_content_parts as get_message_content_parts
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 
@@ -78,11 +78,117 @@ class OpenAIResponsesProvider(BaseProvider):
             self._client = self._build_client()
         return self._client
 
+    def _sanitize_history(self, messages: List[Dict]) -> List[Dict]:
+        """Normalize stored history into a Responses-safe sequence."""
+        sanitized: List[Dict] = []
+        current_assistant_call_ids: set[str] = set()
+
+        for msg in messages:
+            if not isinstance(msg, dict):
+                current_assistant_call_ids.clear()
+                continue
+
+            role = msg.get("role", "user")
+
+            if role == "assistant":
+                next_msg = dict(msg)
+                raw_tool_calls = msg.get("tool_calls")
+                normalized_tool_calls: List[Dict] = []
+
+                if isinstance(raw_tool_calls, list):
+                    for tool_call in raw_tool_calls:
+                        if not isinstance(tool_call, dict):
+                            continue
+
+                        call_id = tool_call.get("id")
+                        if not isinstance(call_id, str) or not call_id.strip():
+                            continue
+
+                        function = tool_call.get("function")
+                        if not isinstance(function, dict):
+                            continue
+
+                        name = function.get("name")
+                        if not isinstance(name, str) or not name.strip():
+                            continue
+
+                        arguments = function.get("arguments")
+                        if not isinstance(arguments, str):
+                            arguments = "{}"
+
+                        normalized_tool_call = dict(tool_call)
+                        normalized_tool_call["id"] = call_id.strip()
+                        normalized_function = dict(function)
+                        normalized_function["name"] = name.strip()
+                        normalized_function["arguments"] = arguments
+                        normalized_tool_call["function"] = normalized_function
+                        normalized_tool_calls.append(normalized_tool_call)
+
+                if normalized_tool_calls:
+                    next_msg["tool_calls"] = normalized_tool_calls
+                    current_assistant_call_ids = {tool_call["id"] for tool_call in normalized_tool_calls}
+                else:
+                    next_msg.pop("tool_calls", None)
+                    current_assistant_call_ids.clear()
+
+                has_text_output = bool(
+                    build_openai_responses_content(get_message_content_parts(next_msg), role="assistant")
+                )
+                if normalized_tool_calls and not has_text_output:
+                    if "reasoning_detail" in next_msg:
+                        logger.debug(
+                            "Stripping reasoning_detail from tool-call-only assistant turn with %d tool calls",
+                            len(normalized_tool_calls),
+                        )
+                    next_msg.pop("reasoning_detail", None)
+
+                sanitized.append(next_msg)
+                continue
+
+            if role == "tool_results":
+                if not current_assistant_call_ids:
+                    logger.debug("Dropping orphan tool_results turn with no matching preceding assistant")
+                    continue
+
+                filtered_tool_results: List[Dict] = []
+                raw_tool_results = msg.get("tool_results")
+                if isinstance(raw_tool_results, list):
+                    for tool_result in raw_tool_results:
+                        if not isinstance(tool_result, dict):
+                            continue
+
+                        tool_call_id = tool_result.get("tool_call_id")
+                        if not isinstance(tool_call_id, str):
+                            continue
+                        normalized_call_id = tool_call_id.strip()
+                        if not normalized_call_id or normalized_call_id not in current_assistant_call_ids:
+                            continue
+
+                        normalized_tool_result = dict(tool_result)
+                        normalized_tool_result["tool_call_id"] = normalized_call_id
+                        content = normalized_tool_result.get("content")
+                        normalized_tool_result["content"] = "" if content is None else str(content)
+                        filtered_tool_results.append(normalized_tool_result)
+
+                if not filtered_tool_results:
+                    logger.debug("Dropping tool_results turn after filtering unmatched call_ids")
+                    continue
+
+                next_msg = dict(msg)
+                next_msg["tool_results"] = filtered_tool_results
+                sanitized.append(next_msg)
+                continue
+
+            current_assistant_call_ids.clear()
+            sanitized.append(dict(msg))
+
+        return sanitized
+
     def _convert_messages(self, messages: List[Dict]) -> List[Dict]:
         """
-        Convert canonical messages to Responses API input format.
+        Convert stored thread messages to Responses API input format.
 
-        Canonical format:
+        Stored message format:
             {"role": "user", "content_parts": [{"type": "content", "text": "Hello"}]}
 
         Responses API format:
@@ -92,9 +198,10 @@ class OpenAIResponsesProvider(BaseProvider):
         Responses API function_call format.
         """
         result = []
-        for msg in messages:
+        sanitized_messages = self._sanitize_history(messages)
+        for msg in sanitized_messages:
             role = msg.get("role", "user")
-            canonical_parts = get_canonical_content_parts(msg)
+            message_parts = get_message_content_parts(msg)
             text_content = self._extract_text_content(msg)
             tool_calls = msg.get("tool_calls")
             reasoning_detail = msg.get("reasoning_detail") if isinstance(msg.get("reasoning_detail"), dict) else None
@@ -139,16 +246,17 @@ class OpenAIResponsesProvider(BaseProvider):
 
             # Handle assistant messages with tool_calls
             if role == "assistant" and tool_calls:
+                content_items = build_openai_responses_content(message_parts, role=role)
                 # Reasoning items must precede the output they produced
                 ri = _reasoning_items()
-                for item in ri:
-                    result.append(item)
-                # Add message only if there's text content
-                content_items = build_openai_responses_content(canonical_parts, role=role)
                 if content_items:
+                    for item in ri:
+                        result.append(item)
                     msg_dict: Dict = {"role": role, "content": content_items}
                     _apply_output_id(msg_dict, ri)
                     result.append(msg_dict)
+                else:
+                    ri = []
                 # Function calls are top-level input items in the Responses API
                 fc_item_ids = _reasoning_data().get("function_call_item_ids", {})
                 for tc in tool_calls:
@@ -169,7 +277,7 @@ class OpenAIResponsesProvider(BaseProvider):
 
             # Skip empty assistant messages — reasoning items without a
             # following output item would cause a 400 error from the API.
-            content_items = build_openai_responses_content(canonical_parts, role=role)
+            content_items = build_openai_responses_content(message_parts, role=role)
             if not content_items:
                 continue
 

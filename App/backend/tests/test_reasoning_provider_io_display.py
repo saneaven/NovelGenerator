@@ -15,21 +15,41 @@ from App.backend.services.reasoning.provider_io import (
 
 def _ensure_openai_stub() -> None:
     if "openai" in sys.modules:
-        return
+        openai_ready = True
+    else:
+        openai_ready = False
 
-    fake_openai = types.ModuleType("openai")
+    if not openai_ready:
+        fake_openai = types.ModuleType("openai")
 
-    class _StubOpenAIError(Exception):
-        pass
+        class _StubOpenAIError(Exception):
+            pass
 
-    fake_openai.AsyncOpenAI = object
-    fake_openai.OpenAIError = _StubOpenAIError
-    fake_openai.APIConnectionError = _StubOpenAIError
-    fake_openai.APIStatusError = _StubOpenAIError
-    fake_openai.AuthenticationError = _StubOpenAIError
-    fake_openai.BadRequestError = _StubOpenAIError
-    fake_openai.RateLimitError = _StubOpenAIError
-    sys.modules["openai"] = fake_openai
+        fake_openai.AsyncOpenAI = object
+        fake_openai.OpenAIError = _StubOpenAIError
+        fake_openai.APIConnectionError = _StubOpenAIError
+        fake_openai.APIStatusError = _StubOpenAIError
+        fake_openai.AuthenticationError = _StubOpenAIError
+        fake_openai.BadRequestError = _StubOpenAIError
+        fake_openai.RateLimitError = _StubOpenAIError
+        sys.modules["openai"] = fake_openai
+
+    if "App.backend.models.db_models" not in sys.modules:
+        fake_db_models = types.ModuleType("App.backend.models.db_models")
+
+        class _StubRunMessageAttachmentModel:
+            pass
+
+        fake_db_models.RunMessageAttachmentModel = _StubRunMessageAttachmentModel
+        sys.modules["App.backend.models.db_models"] = fake_db_models
+
+    if "App.backend.services.chat_attachment_service" not in sys.modules:
+        fake_chat_attachment_service = types.ModuleType("App.backend.services.chat_attachment_service")
+        fake_chat_attachment_service.chat_attachment_service = types.SimpleNamespace(
+            load_attachment_bytes=lambda _storage_key: b"",
+            to_data_url=lambda mime_type, _data: f"data:{mime_type};base64,",
+        )
+        sys.modules["App.backend.services.chat_attachment_service"] = fake_chat_attachment_service
 
 
 def _load_openai_responses_provider():
@@ -287,6 +307,194 @@ def test_openai_convert_messages_no_reasoning_no_extra_fields() -> None:
     assert "id" not in result[0]
     assert "status" not in result[0]
     assert "type" not in result[0]
+
+
+def test_openai_convert_messages_tool_call_only_assistant_drops_reasoning_and_keeps_tool_replay() -> None:
+    provider_cls = _load_openai_responses_provider()
+    provider = provider_cls.__new__(provider_cls)
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [],
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "read_story_object", "arguments": "{}"},
+                }
+            ],
+            "reasoning_detail": {
+                "type": "openai",
+                "data": {
+                    "items": [{"id": "rs_1", "type": "reasoning", "encrypted_content": "enc"}],
+                    "output_msg_id": "msg_1",
+                    "function_call_item_ids": {"call_1": "fc_1"},
+                },
+            },
+        },
+        {
+            "role": "tool_results",
+            "content_parts": [],
+            "tool_results": [{"tool_call_id": "call_1", "content": "result payload"}],
+        },
+    ]
+
+    result = provider._convert_messages(messages)
+
+    assert [item["type"] for item in result] == ["function_call", "function_call_output"]
+    assert all(item["type"] != "reasoning" for item in result)
+    assert all(item.get("role") != "assistant" for item in result)
+    assert result[0]["call_id"] == "call_1"
+    assert result[1]["call_id"] == "call_1"
+
+
+def test_openai_convert_messages_orphan_tool_results_are_dropped() -> None:
+    provider_cls = _load_openai_responses_provider()
+    provider = provider_cls.__new__(provider_cls)
+    messages = [
+        {
+            "role": "tool_results",
+            "content_parts": [],
+            "tool_results": [{"tool_call_id": "call_1", "content": "result payload"}],
+        },
+    ]
+
+    result = provider._convert_messages(messages)
+
+    assert result == []
+
+
+def test_openai_convert_messages_filters_unmatched_tool_results() -> None:
+    provider_cls = _load_openai_responses_provider()
+    provider = provider_cls.__new__(provider_cls)
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [],
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "read_story_object", "arguments": "{}"},
+                }
+            ],
+        },
+        {
+            "role": "tool_results",
+            "content_parts": [],
+            "tool_results": [
+                {"tool_call_id": "call_1", "content": "first"},
+                {"tool_call_id": "call_2", "content": "second"},
+            ],
+        },
+    ]
+
+    result = provider._convert_messages(messages)
+
+    assert [item["type"] for item in result] == ["function_call", "function_call_output"]
+    assert result[1]["call_id"] == "call_1"
+
+
+def test_openai_convert_messages_user_message_breaks_tool_result_attachment_chain() -> None:
+    provider_cls = _load_openai_responses_provider()
+    provider = provider_cls.__new__(provider_cls)
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [],
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "read_story_object", "arguments": "{}"},
+                }
+            ],
+        },
+        {"role": "user", "content_parts": [{"type": "content", "text": "next turn"}]},
+        {
+            "role": "tool_results",
+            "content_parts": [],
+            "tool_results": [{"tool_call_id": "call_1", "content": "result payload"}],
+        },
+    ]
+
+    result = provider._convert_messages(messages)
+
+    assert not any(item["type"] == "function_call_output" for item in result if "type" in item)
+    assert any(item.get("role") == "user" for item in result)
+
+
+def test_openai_convert_messages_invalid_tool_calls_do_not_accept_trailing_tool_results() -> None:
+    provider_cls = _load_openai_responses_provider()
+    provider = provider_cls.__new__(provider_cls)
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [],
+            "tool_calls": [
+                {
+                    "id": "",
+                    "type": "function",
+                    "function": {"name": "read_story_object", "arguments": "{}"},
+                },
+                {
+                    "type": "function",
+                    "function": {"name": "read_story_object", "arguments": "{}"},
+                },
+            ],
+        },
+        {
+            "role": "tool_results",
+            "content_parts": [],
+            "tool_results": [{"tool_call_id": "call_1", "content": "result payload"}],
+        },
+    ]
+
+    result = provider._convert_messages(messages)
+
+    assert result == []
+
+
+def test_custom_openai_response_convert_messages_tool_call_only_replay_is_sanitized() -> None:
+    advanced = {"custom_kind": "openai_response"}
+    io = get_provider_io("custom", advanced)
+    provider_cls = _load_openai_responses_provider()
+    provider = provider_cls.__new__(provider_cls)
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [],
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "read_story_object", "arguments": "{}"},
+                }
+            ],
+            "reasoning_detail": {
+                "type": "openai",
+                "meta": {"provider": "openai"},
+                "data": {
+                    "items": [{"id": "rs_1", "type": "reasoning", "encrypted_content": "enc"}],
+                    "output_msg_id": "msg_1",
+                    "function_call_item_ids": {"call_1": "fc_1"},
+                },
+                "token_count": 0,
+            },
+        },
+        {
+            "role": "tool_results",
+            "content_parts": [],
+            "tool_results": [{"tool_call_id": "call_1", "content": "result payload"}],
+        },
+    ]
+
+    prepared = io.to_provider_messages(messages, "gpt-5.4", advanced)
+    result = provider._convert_messages(prepared)
+
+    assert [item["type"] for item in result] == ["function_call", "function_call_output"]
+    assert result[0]["call_id"] == "call_1"
+    assert result[1]["call_id"] == "call_1"
 
 
 def test_custom_claude_to_provider_messages_preserves_reasoning_blocks() -> None:
