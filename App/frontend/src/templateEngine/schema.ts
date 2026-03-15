@@ -9,11 +9,25 @@
  * - Mode-specific: agent.*, editAssistant.*, translation.*, imagePrompt.*
  */
 
+import {
+  buildPromptProjectDataSkeleton,
+  type PromptProjectBasicInfo,
+  type PromptProjectContentByLanguage,
+  type PromptProjectGuidelines,
+  type PromptProjectManuscript,
+  type PromptProjectObject,
+  type PromptProjectOutline,
+} from './projectShape';
+
 // Helper type for variable metadata
 type VariableDef<T> = {
   desc: string;
   example: T;
 };
+
+const PROJECT_SCHEMA_EXAMPLE = buildPromptProjectDataSkeleton({
+  languages: ['English', 'Korean'],
+});
 
 /**
  * The Single Source of Truth for all prompt variables.
@@ -30,82 +44,27 @@ export const UNIFIED_SCHEMA = {
   project: {
     basicInfo: {
       desc: "Story basic info",
-      example: {
-        id: "proj-123",
-        title: "The Last Kingdom",
-        logline: "A warrior's journey to reclaim his homeland",
-        genres: ["Fantasy", "Historical Adventure"],
-        tags: ["warfare", "kingdom politics"]
-      } as { id: string; title: string; logline: string; genres: string[]; tags: string[] }
+      example: PROJECT_SCHEMA_EXAMPLE.basicInfo as PromptProjectBasicInfo,
     },
     objects: {
       desc: "Main language objects array",
-      example: [{
-        type: "character" as "basic_info" | "character" | "location" | "organization" | "lorebook",
-        id: "char-1",
-        name: "Uhtred",
-        description: "A Saxon warrior",
-        content: "A Saxon lord raised by Danes who seeks to reclaim his birthright...",
-        imagePrompt: "A tall warrior with long hair...",
-        imagePromptPositive: "warrior, medieval, armor",
-        imagePromptNegative: "modern, futuristic"
-      }] as Array<{ type: "basic_info" | "character" | "location" | "organization" | "lorebook"; id: string; name: string; description: string; content: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>
+      example: PROJECT_SCHEMA_EXAMPLE.objects as PromptProjectObject[],
     },
     outline: {
       desc: "Story outline with acts and chapters",
-      example: {
-        acts: [{
-          id: "act-1",
-          name: "Act 1: The Fall",
-          description: "The fall of Bebbanburg",
-          content: "Uhtred loses his birthright when Danish raiders attack...",
-          chapters: [{
-            id: "ch-1",
-            name: "Chapter 1: The Raid",
-            description: "The Danish attack",
-            content: "Danish raiders attack Bebbanburg at dawn..."
-          }]
-        }]
-      } as { acts: Array<{ id: string; name: string; description: string; content: string; chapters: Array<{ id: string; name: string; description: string; content: string }> }> }
+      example: PROJECT_SCHEMA_EXAMPLE.outline as PromptProjectOutline,
     },
     manuscripts: {
       desc: "All manuscripts array",
-      example: [{
-        id: "ms-1",
-        chapterId: "ch-1",
-        chapterName: "Chapter 1: The Raid",
-        content: "The longships appeared at dawn...",
-        wordCount: 1500
-      }] as Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>
+      example: PROJECT_SCHEMA_EXAMPLE.manuscripts as PromptProjectManuscript[],
     },
-    languages: {
+    contentByLang: {
       desc: "All language versions (keyed by language name)",
-      example: {
-        "English": {
-          basicInfo: { id: "proj-123", title: "The Last Kingdom", logline: "A warrior's journey", genres: ["Fantasy"], tags: ["warfare"] },
-          objects: [{ type: "character" as const, id: "char-1", name: "Uhtred", description: "Saxon warrior", content: "A Saxon lord..." }],
-          outline: { acts: [{ id: "act-1", name: "Act 1", description: "The fall", content: "...", chapters: [] }] },
-          manuscripts: [{ id: "ms-1", chapterId: "ch-1", chapterName: "Chapter 1", content: "...", wordCount: 100 }],
-        },
-        "Korean": {
-          basicInfo: { id: "proj-123", title: "마지막 왕국", logline: "전사의 여정", genres: ["판타지"], tags: ["전쟁"] },
-          objects: [{ type: "character" as const, id: "char-1", name: "우트레드", description: "색슨 전사", content: "색슨 영주..." }],
-          outline: { acts: [{ id: "act-1", name: "1막", description: "몰락", content: "...", chapters: [] }] },
-          manuscripts: [{ id: "ms-1", chapterId: "ch-1", chapterName: "1장", content: "...", wordCount: 100 }],
-        }
-      } as Record<string, {
-        basicInfo: { id: string; title: string; logline: string; genres: string[]; tags: string[] };
-        objects: Array<{ type: "basic_info" | "character" | "location" | "organization" | "lorebook"; id: string; name: string; description: string; content: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>;
-        outline: { acts: Array<{ id: string; name: string; description: string; content: string; chapters: Array<{ id: string; name: string; description: string; content: string }> }> } | null;
-        manuscripts: Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>;
-      }>
+      example: PROJECT_SCHEMA_EXAMPLE.contentByLang as PromptProjectContentByLanguage,
     },
     guidelines: {
       desc: "Project guidelines for AI",
-      example: {
-        id: "guidelines-1",
-        authorNote: "Focus on character development. Use formal tone."
-      } as { id: string; authorNote: string }
+      example: PROJECT_SCHEMA_EXAMPLE.guidelines as PromptProjectGuidelines,
     },
   },
 

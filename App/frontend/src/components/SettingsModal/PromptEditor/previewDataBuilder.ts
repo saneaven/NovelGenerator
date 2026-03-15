@@ -9,6 +9,7 @@ import { useProjectStore } from '../../../store/projectStore';
 import { useVariableStore } from '../../../store/variableStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { type PromptType, type ConfigData, type VariablesData } from '../../../templateEngine/schema';
+import { buildPromptProjectDataSkeleton, type PromptProjectData } from '../../../templateEngine/projectShape';
 import type { TaskType } from '../../../types/scenarios';
 import { setNestedValue } from './promptTypeFields';
 
@@ -57,64 +58,11 @@ export function getPromptTypeFromTask(taskType: TaskType, taskSubtype: string): 
 }
 
 /**
- * Build minimal placeholder project data with clear descriptive placeholders.
- * Used when no project is selected or in minimal context mode.
+ * Build shape-complete placeholder project data that mirrors runtime keys.
+ * Preview stays local and placeholder-based even when project context is enabled.
  */
-export function buildMinimalProjectData(): TemplateData['project'] {
-  return {
-    basicInfo: {
-      id: '[ placeholder-project-id ]',
-      title: '[ Placeholder for project title ]',
-      logline: '[ Placeholder for project logline ]',
-      genres: ['[ Placeholder genre ]'],
-      tags: ['[ Placeholder tag ]'],
-    },
-    objects: [{
-      type: 'character' as const,
-      id: '[ placeholder-char-id ]',
-      name: '[ Placeholder for character name ]',
-      description: '[ Placeholder for character description ]',
-      content: '[ Placeholder for character content ]',
-    }],
-    outline: {
-      outlines: [{
-        id: '[ placeholder-outline-id ]',
-        name: '[ Placeholder for outline name ]',
-        description: '[ Placeholder for outline description ]',
-        content: '[ Placeholder for outline content ]',
-        order: 0,
-        acts: [{
-          id: '[ placeholder-act-id ]',
-          name: '[ Placeholder for act name ]',
-          description: '[ Placeholder for act description ]',
-          content: '[ Placeholder for act content ]',
-          order: 0,
-          outlineId: '[ placeholder-outline-id ]',
-          chapters: [{
-            id: '[ placeholder-chapter-id ]',
-            name: '[ Placeholder for chapter name ]',
-            description: '[ Placeholder for chapter description ]',
-            content: '[ Placeholder for chapter content ]',
-            order: 0,
-            actId: '[ placeholder-act-id ]',
-          }],
-        }],
-      }],
-    },
-    manuscripts: [{
-      id: '[ placeholder-manuscript-id ]',
-      chapterId: '[ placeholder-chapter-id ]',
-      chapterName: '[ Placeholder for chapter name ]',
-      content: '[ Placeholder for manuscript content ]',
-      wordCount: 0,
-    }],
-    languages: {},
-    contentByLang: {},
-    guidelines: {
-      id: '[ placeholder-guidelines-id ]',
-      authorNote: '[ Placeholder for author note / guidelines ]',
-    },
-  };
+export function buildMinimalProjectData(languages: string[] = []): PromptProjectData {
+  return buildPromptProjectDataSkeleton({ languages });
 }
 
 /**
@@ -326,19 +274,10 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
   const config = buildConfigData(configOverrides);
 
   // Build project data based on context mode
-  let project: TemplateData['project'];
-
-  if (showProjectContext && projectId) {
-    try {
-      project = buildMinimalProjectData();
-    } catch (error) {
-      // Fall back to minimal if project data fails to load
-      console.error('Failed to load project data for preview, using minimal:', error);
-      project = buildMinimalProjectData();
-    }
-  } else {
-    project = buildMinimalProjectData();
-  }
+  const projectLanguages = showProjectContext && projectId
+    ? [config.mainLanguage, config.displayLanguage]
+    : [config.mainLanguage];
+  const project = buildMinimalProjectData(projectLanguages);
 
   // Build input data with placeholders (match runtime injection model)
   const input: Record<string, any> = {
