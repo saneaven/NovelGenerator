@@ -291,6 +291,8 @@
 
 .agent-message.assistant .message-content {
     background: var(--color-surface-elevated);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-sm);
     padding: var(--spacing-lg) var(--spacing-xl);
     width: 100%;
     color: var(--color-text-primary);
