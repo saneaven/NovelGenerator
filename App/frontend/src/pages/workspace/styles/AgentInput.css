@@ -369,7 +369,7 @@
   left: var(--spacing-md);
   right: var(--spacing-md);
   margin-bottom: var(--spacing-xs);
-  z-index: var(--z-dropdown);
+  z-index: var(--z-fixed);
   background: var(--color-surface-elevated);
   border: 1px solid var(--color-border-default);
   border-radius: var(--border-radius-lg);
