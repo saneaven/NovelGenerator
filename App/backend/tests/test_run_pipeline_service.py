@@ -184,7 +184,7 @@ def _install_import_stubs() -> None:
 
 _install_import_stubs()
 
-from App.backend.models.db_models import RunModel, RunToolCallModel, Thread, UserSettings
+from App.backend.models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thread, UserSettings
 from App.backend.providers.contracts import DeltaPayload, FinalToolCall
 from App.backend.providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from App.backend.services.run_pipeline import service as run_service
@@ -202,23 +202,51 @@ class FakeQuery:
     def filter(self, *_args: object, **_kwargs: object) -> "FakeQuery":
         return self
 
+    def order_by(self, *_args: object, **_kwargs: object) -> "FakeQuery":
+        return self
+
     def first(self) -> object:
-        return self._result
+        result = self._result() if callable(self._result) else self._result
+        if isinstance(result, list):
+            return result[0] if result else None
+        return result
+
+    def all(self) -> list[object]:
+        result = self._result() if callable(self._result) else self._result
+        if result is None:
+            return []
+        if isinstance(result, list):
+            return result
+        return [result]
 
 
 class FakeSession:
-    def __init__(self, *, run: RunModel, thread: Thread) -> None:
+    def __init__(
+        self,
+        *,
+        run: RunModel,
+        thread: Thread,
+        assistant_message: RunMessageModel | None = None,
+        persisted_tool_call: RunToolCallModel | None = None,
+    ) -> None:
         self._run = run
         self._thread = thread
+        self.assistant_message = assistant_message
+        self.persisted_tool_call = persisted_tool_call
+        self.deleted: list[object] = []
         self.commits = 0
         self.rollbacks = 0
         self.closed = False
 
     def query(self, model: object) -> FakeQuery:
         if model is RunModel:
-            return FakeQuery(self._run)
+            return FakeQuery(lambda: self._run)
         if model is Thread:
-            return FakeQuery(self._thread)
+            return FakeQuery(lambda: self._thread)
+        if model is RunMessageModel:
+            return FakeQuery(lambda: self.assistant_message)
+        if model is RunToolCallModel:
+            return FakeQuery(lambda: self.persisted_tool_call)
         raise AssertionError(f"Unexpected model query: {model!r}")
 
     def rollback(self) -> None:
@@ -229,6 +257,13 @@ class FakeSession:
 
     def flush(self) -> None:
         return None
+
+    def delete(self, obj: object) -> None:
+        self.deleted.append(obj)
+        if obj is self.assistant_message:
+            self.assistant_message = None
+        if obj is self.persisted_tool_call:
+            self.persisted_tool_call = None
 
     def close(self) -> None:
         self.closed = True
@@ -683,6 +718,123 @@ def test_execute_loop_preserves_non_template_errors(monkeypatch: pytest.MonkeyPa
     assert run_error_event["data"] == {"run_id": str(run.id), "error": "boom"}
     assert run_status_event["event_name"] == "run:status"
     assert run_status_event["data"] == {"run_id": str(run.id), "status": "error", "error": "boom"}
+
+
+def test_execute_loop_midstream_failure_emits_message_error_and_discards_placeholder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, thread = _make_run_and_thread()
+    assistant_message = RunMessageModel(
+        id=uuid4(),
+        thread_id=thread.id,
+        run_id=run.id,
+        role="assistant",
+        seq=0,
+        seq_in_thread=0,
+        data={"English": {"contentParts": []}},
+    )
+    session = FakeSession(run=run, thread=thread, assistant_message=assistant_message)
+    dispatcher = FakeEventDispatcher()
+    pipeline = run_service.RunPipeline(db_factory=lambda: session, event_dispatcher=dispatcher)  # type: ignore[arg-type]
+
+    async def _assemble_create(*_args: object, **_kwargs: object) -> tuple[str, list[dict[str, object]], None]:
+        return "system", [], None
+
+    async def _failing_llm(*_args: object, **kwargs: object) -> None:
+        assistant_state = kwargs["assistant_message_state_out"]
+        assistant_state.message_id = assistant_message.id
+        assistant_state.finalized = False
+        raise RuntimeError("stream blew up")
+
+    monkeypatch.setattr(run_service.settings_service, "_get_settings", lambda *_args, **_kwargs: UserSettings())
+    monkeypatch.setattr(run_service.prompt_assembly, "assemble_create", _assemble_create)
+    monkeypatch.setattr(run_service.llm_executor, "run_llm", _failing_llm)
+
+    asyncio.run(
+        pipeline.execute_loop(
+            run.id,
+            create_ctx=CreateContext(input_text="hello", input_payload={}),
+        )
+    )
+
+    assert run.status == "error"
+    assert thread.status == "error"
+    assert session.assistant_message is None
+    assert [event["event_name"] for event in dispatcher.events] == [
+        "run:status",
+        "message:error",
+        "run:error",
+        "run:status",
+    ]
+    assert dispatcher.events[1]["data"] == {
+        "run_id": str(run.id),
+        "message_id": str(assistant_message.id),
+        "error": "stream blew up",
+    }
+    assert not any(event["event_name"] == "message:end" for event in dispatcher.events)
+
+
+def test_execute_loop_finalized_failure_keeps_message_without_message_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, thread = _make_run_and_thread()
+    assistant_message = RunMessageModel(
+        id=uuid4(),
+        thread_id=thread.id,
+        run_id=run.id,
+        role="assistant",
+        seq=0,
+        seq_in_thread=0,
+        data={"English": {"contentParts": [{"type": "content", "text": "done"}]}},
+    )
+    session = FakeSession(run=run, thread=thread, assistant_message=assistant_message)
+    dispatcher = FakeEventDispatcher()
+    pipeline = run_service.RunPipeline(db_factory=lambda: session, event_dispatcher=dispatcher)  # type: ignore[arg-type]
+
+    async def _assemble_create(*_args: object, **_kwargs: object) -> tuple[str, list[dict[str, object]], None]:
+        return "system", [], None
+
+    async def _finalized_then_fail(*_args: object, **kwargs: object) -> None:
+        assistant_state = kwargs["assistant_message_state_out"]
+        emit_fn = kwargs["emit_fn"]
+        assistant_state.message_id = assistant_message.id
+        assistant_state.finalized = True
+        await emit_fn(
+            user_id=run.user_id,
+            project_id=run.project_id,
+            thread_id=thread.id,
+            event_name="message:end",
+            data={
+                "run_id": str(run.id),
+                "message_id": str(assistant_message.id),
+                "seq_in_thread": int(assistant_message.seq_in_thread),
+                "data": assistant_message.data,
+                "tool_calls": [],
+            },
+        )
+        raise RuntimeError("post commit boom")
+
+    monkeypatch.setattr(run_service.settings_service, "_get_settings", lambda *_args, **_kwargs: UserSettings())
+    monkeypatch.setattr(run_service.prompt_assembly, "assemble_create", _assemble_create)
+    monkeypatch.setattr(run_service.llm_executor, "run_llm", _finalized_then_fail)
+
+    asyncio.run(
+        pipeline.execute_loop(
+            run.id,
+            create_ctx=CreateContext(input_text="hello", input_payload={}),
+        )
+    )
+
+    assert run.status == "error"
+    assert thread.status == "error"
+    assert session.assistant_message is assistant_message
+    assert [event["event_name"] for event in dispatcher.events] == [
+        "run:status",
+        "message:end",
+        "run:error",
+        "run:status",
+    ]
+    assert not any(event["event_name"] == "message:error" for event in dispatcher.events)
 
 
 def test_persist_tool_calls_uses_parsed_arguments_for_validation(monkeypatch: pytest.MonkeyPatch) -> None:

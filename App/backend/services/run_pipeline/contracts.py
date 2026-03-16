@@ -14,6 +14,12 @@ class ToolDeltaState:
 
 
 @dataclass
+class AssistantMessageExecutionState:
+    message_id: Any | None = None
+    finalized: bool = False
+
+
+@dataclass
 class CreateContext:
     input_text: str
     input_payload: dict[str, Any]

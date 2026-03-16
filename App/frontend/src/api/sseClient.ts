@@ -68,6 +68,7 @@ export type ThreadRuntimeEvent =
       child_thread_id?: string | null;
     } }
   | { event: 'message:update'; data: RuntimeEventBase & { message_id: string; data: Record<string, unknown> } }
+  | { event: 'message:error'; data: RuntimeEventBase & { message_id: string; error: string } }
   | { event: 'message:end'; data: RuntimeEventBase & {
       message_id: string;
       seq_in_thread: number;

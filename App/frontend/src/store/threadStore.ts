@@ -83,6 +83,7 @@ export interface ThreadState {
   setThreadStreamActive: (threadId: string, active: boolean) => void;
   isThreadStreamActive: (threadId: string) => boolean;
   clearThreadStreamingState: (threadId: string) => void;
+  discardStreamingAssistantMessage: (threadId: string, messageId: string) => void;
 
   findThreadByParent: (projectId: string, parentId: string) => ThreadInfo | undefined;
 
@@ -737,6 +738,42 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
         messagesByThreadId: changed
           ? { ...s.messagesByThreadId, [threadId]: nextMessages }
           : s.messagesByThreadId,
+        activeStreamByThread: {
+          ...s.activeStreamByThread,
+          [threadId]: false,
+        },
+      };
+    }),
+
+  discardStreamingAssistantMessage: (threadId, messageId) =>
+    set((s) => {
+      const messages = s.messagesByThreadId[threadId] ?? [];
+      const target = messages.find((message) => message.id === messageId);
+      if (!target?.isStreaming || target.role !== 'assistant') return s;
+
+      revokeMessageAttachmentObjectUrls(target);
+
+      const nextMessages = messages.filter((message) => message.id !== messageId);
+      const nextToolCallsById = { ...s.toolCallsById };
+      let toolCallsChanged = false;
+
+      for (const [toolCallId, toolCall] of Object.entries(s.toolCallsById)) {
+        if (!toolCall) continue;
+        if (toolCall.threadId !== threadId) continue;
+        if (toolCall.assistantMessageId !== messageId) continue;
+        if (!(toolCall.status === 'streaming' || toolCall.id.startsWith('streaming:'))) continue;
+        delete nextToolCallsById[toolCallId];
+        toolCallsChanged = true;
+      }
+
+      return {
+        messagesByThreadId: {
+          ...s.messagesByThreadId,
+          [threadId]: nextMessages,
+        },
+        ...(toolCallsChanged
+          ? buildThreadScopedToolCallState(nextToolCallsById)
+          : {}),
         activeStreamByThread: {
           ...s.activeStreamByThread,
           [threadId]: false,

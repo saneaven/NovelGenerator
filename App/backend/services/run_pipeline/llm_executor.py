@@ -42,7 +42,7 @@ from ..thread_parent_runtime_service import resolve_parent
 from ..tool_engine import tool_engine
 from ..tool_engine.contracts import ToolOffer
 from ..context_manager import fit_to_context_window
-from .contracts import ToolDeltaState
+from .contracts import AssistantMessageExecutionState, ToolDeltaState
 from .text_utils import extract_last_texts
 from . import memory_preflight as _mem
 from . import raw_output as _raw
@@ -242,7 +242,7 @@ async def run_llm(
     conversation: list[dict[str, Any]],
     scenario_bundle: ScenarioBundle | None,
     input_payload: dict[str, Any],
-    assistant_message_ref_out: list[RunMessageModel | None],
+    assistant_message_state_out: AssistantMessageExecutionState,
     emit_fn: EmitFn,
     persist_tool_calls_fn: PersistToolCallsFn,
     sync_status_fn: SyncStatusFn,
@@ -378,7 +378,8 @@ async def run_llm(
             "seq_in_thread": int(assistant_message.seq_in_thread),
         },
     )
-    assistant_message_ref_out[0] = assistant_message
+    assistant_message_state_out.message_id = assistant_message.id
+    assistant_message_state_out.finalized = False
 
     parent = resolve_parent(db, thread)
     output_mode = resolve_output_mode(
@@ -759,6 +760,7 @@ async def run_llm(
             enforce_quota=True,
         )
     db.commit()
+    assistant_message_state_out.finalized = True
 
     tool_call_summaries: list[dict[str, Any]] = [
         {

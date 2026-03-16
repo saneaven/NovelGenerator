@@ -37,38 +37,11 @@ from ..thread_runtime_sync_service import emit_runtime_sync_events, sync_explici
 from ..template_engine import FragmentNotFoundError, TemplateRenderLimitError, format_template_error
 from ..tool_engine import tool_engine
 from ..tool_engine.contracts import ToolOffer
-from .contracts import CreateContext
+from .contracts import AssistantMessageExecutionState, CreateContext
 from . import llm_executor
 from . import prompt_assembly
 
 logger = logging.getLogger(__name__)
-
-
-def _build_tool_call_summaries(
-    db: Session,
-    assistant_message_id: Any,
-) -> list[dict[str, Any]]:
-    rows = (
-        db.query(RunToolCallModel)
-        .filter(RunToolCallModel.assistant_message_id == assistant_message_id)
-        .order_by(RunToolCallModel.call_seq)
-        .all()
-    )
-    return [
-        {
-            "tool_call_id": str(row.id),
-            "message_id": str(row.message_id),
-            "assistant_message_id": str(row.assistant_message_id),
-            "index": idx,
-            "name": row.tool_name,
-            "arguments": row.arguments,
-            "extra_content": row.extra_content if isinstance(row.extra_content, dict) else None,
-            "status": row.status,
-            "reason": row.reason,
-            "seq_in_thread": int(row.message.seq_in_thread) if row.message else 0,
-        }
-        for idx, row in enumerate(rows)
-    ]
 
 
 def _has_message_content(data: dict | None) -> bool:
@@ -90,6 +63,15 @@ def _has_message_content(data: dict | None) -> bool:
         if entry.get("reasoningDetail"):
             return True
     return False
+
+
+def _has_persisted_tool_calls(db: Session, assistant_message_id: Any) -> bool:
+    row = (
+        db.query(RunToolCallModel)
+        .filter(RunToolCallModel.assistant_message_id == assistant_message_id)
+        .first()
+    )
+    return row is not None
 
 
 def _format_user_run_error(exc: Exception) -> str:
@@ -189,6 +171,7 @@ class RunPipeline:
         emit_error: bool = False,
         emit_run_status: bool = True,
         extra_status_data: dict[str, Any] | None = None,
+        pre_emit_events: list[tuple[str, dict[str, Any]]] | None = None,
     ) -> None:
         sync_result = sync_explicit_run_thread_status(
             db,
@@ -197,6 +180,14 @@ class RunPipeline:
             error=error,
         )
         db.commit()
+        for event_name, payload in pre_emit_events or []:
+            await self._emit(
+                user_id=run.user_id,
+                project_id=run.project_id,
+                thread_id=thread.id,
+                event_name=event_name,
+                data=payload,
+            )
         if emit_error and error:
             await self._emit(
                 user_id=run.user_id,
@@ -229,6 +220,7 @@ class RunPipeline:
         emit_error: bool = False,
         emit_run_status: bool = True,
         extra_status_data: dict[str, Any] | None = None,
+        pre_emit_events: list[tuple[str, dict[str, Any]]] | None = None,
     ) -> None:
         run_before = snapshot_run_row(run)
         run.status = status
@@ -250,7 +242,45 @@ class RunPipeline:
             emit_error=emit_error,
             emit_run_status=emit_run_status,
             extra_status_data=extra_status_data,
+            pre_emit_events=pre_emit_events,
         )
+
+    def _discard_unfinished_assistant_message(
+        self,
+        db: Session,
+        *,
+        run: RunModel,
+        assistant_message_state: AssistantMessageExecutionState,
+    ) -> UUID | None:
+        message_id = assistant_message_state.message_id
+        if message_id is None or assistant_message_state.finalized:
+            return None
+
+        assistant_message = (
+            db.query(RunMessageModel)
+            .filter(RunMessageModel.id == message_id)
+            .first()
+        )
+        if assistant_message is None:
+            return None
+
+        msg_data = assistant_message.data if isinstance(assistant_message.data, dict) else {}
+        if _has_message_content(msg_data):
+            return None
+        if _has_persisted_tool_calls(db, assistant_message.id):
+            return None
+
+        message_before = snapshot_run_message_row(assistant_message)
+        db.delete(assistant_message)
+        apply_project_usage_deltas(
+            db,
+            user_id=run.user_id,
+            project_id=run.project_id,
+            deltas=[build_run_message_delta(message_before, None)],
+            enforce_quota=False,
+        )
+        db.flush()
+        return assistant_message.id
 
     # ------------------------------------------------------------------
     # Public API
@@ -879,7 +909,7 @@ class RunPipeline:
 
     async def execute_loop(self, run_id: UUID, *, create_ctx: CreateContext | None = None) -> None:
         db = self._db_factory()
-        assistant_message_ref: list[RunMessageModel | None] = [None]
+        assistant_message_state = AssistantMessageExecutionState()
         try:
             run = db.query(RunModel).filter(RunModel.id == run_id).first()
             if run is None:
@@ -927,7 +957,7 @@ class RunPipeline:
                 conversation=conversation,
                 scenario_bundle=scenario_bundle,
                 input_payload=create_ctx.input_payload if create_ctx is not None else restored_payload,
-                assistant_message_ref_out=assistant_message_ref,
+                assistant_message_state_out=assistant_message_state,
                 emit_fn=self._emit,
                 persist_tool_calls_fn=self._persist_tool_calls,
                 sync_status_fn=self._sync_status_side_effects,
@@ -947,21 +977,6 @@ class RunPipeline:
                                 status="canceled",
                                 error=None,
                             )
-                    if thread is not None and assistant_message_ref[0] is not None:
-                        msg_data = assistant_message_ref[0].data
-                        await self._emit(
-                            user_id=run.user_id,
-                            project_id=run.project_id,
-                            thread_id=thread.id,
-                            event_name="message:end",
-                            data={
-                                "run_id": str(run.id),
-                                "message_id": str(assistant_message_ref[0].id),
-                                "seq_in_thread": int(assistant_message_ref[0].seq_in_thread),
-                                "data": msg_data if _has_message_content(msg_data) else {},
-                                "tool_calls": _build_tool_call_summaries(db, assistant_message_ref[0].id),
-                            },
-                        )
             finally:
                 raise
         except Exception as exc:  # noqa: BLE001
@@ -972,6 +987,23 @@ class RunPipeline:
             if run is not None:
                 thread = run.thread
                 if thread is not None:
+                    discarded_message_id = self._discard_unfinished_assistant_message(
+                        db,
+                        run=run,
+                        assistant_message_state=assistant_message_state,
+                    )
+                    pre_emit_events = (
+                        [(
+                            "message:error",
+                            {
+                                "run_id": str(run.id),
+                                "message_id": str(discarded_message_id),
+                                "error": user_error,
+                            },
+                        )]
+                        if discarded_message_id is not None
+                        else None
+                    )
                     await self._apply_status_transition(
                         db,
                         run=run,
@@ -979,21 +1011,7 @@ class RunPipeline:
                         status="error",
                         error=user_error,
                         emit_error=True,
+                        pre_emit_events=pre_emit_events,
                     )
-                    if assistant_message_ref[0] is not None:
-                        msg_data = assistant_message_ref[0].data
-                        await self._emit(
-                            user_id=run.user_id,
-                            project_id=run.project_id,
-                            thread_id=thread.id,
-                            event_name="message:end",
-                            data={
-                                "run_id": str(run.id),
-                                "message_id": str(assistant_message_ref[0].id),
-                                "seq_in_thread": int(assistant_message_ref[0].seq_in_thread),
-                                "data": msg_data if _has_message_content(msg_data) else {},
-                                "tool_calls": _build_tool_call_summaries(db, assistant_message_ref[0].id),
-                            },
-                        )
         finally:
             db.close()

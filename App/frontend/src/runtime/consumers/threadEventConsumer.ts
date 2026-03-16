@@ -439,6 +439,22 @@ export class ThreadEventConsumer {
     });
   }
 
+  private clearStreamingAssistantBuffers(threadId: string, assistantMessageId: string): void {
+    const toolMap = this.streamingToolCallsByThread.get(threadId);
+    if (!toolMap) return;
+
+    const assistantToken = `:${assistantMessageId}:`;
+    for (const [streamKey, tempId] of [...toolMap.entries()]) {
+      if (!tempId.includes(assistantToken)) continue;
+      toolMap.delete(streamKey);
+      this.streamingArgBuffers.delete(tempId);
+    }
+
+    if (toolMap.size === 0) {
+      this.streamingToolCallsByThread.delete(threadId);
+    }
+  }
+
   private handleToolCallStart(threadId: string, payload: Record<string, unknown>): void {
     const streamKey = deriveStreamKey(payload);
     if (!streamKey) return;
@@ -1064,6 +1080,17 @@ export class ThreadEventConsumer {
         this.checkAutoContinue(threadId);
         this.refreshUnresolvedCount(threadId);
       });
+      return;
+    }
+
+    if (event.event === 'message:error') {
+      this.flushDeltaBuffer();
+      const messageId = String(payload.message_id ?? '');
+      if (!messageId) return;
+      this.clearStreamingAssistantBuffers(threadId, messageId);
+      const store = useThreadStore.getState();
+      store.discardStreamingAssistantMessage(threadId, messageId);
+      this.refreshUnresolvedCount(threadId);
       return;
     }
 
