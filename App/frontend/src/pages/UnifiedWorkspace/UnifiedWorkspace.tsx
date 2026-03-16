@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 import { useAgentStore } from '../../store/agentStore';
@@ -148,32 +148,29 @@ const UnifiedWorkspace: React.FC = () => {
     return mainLanguage;
   }, [preferredDisplayLanguage, availableLanguages, mainLanguage]);
 
-  // Calculate count of objects needing translation (not tied to current sub-page)
-  useEffect(() => {
+  // Refresh count of objects needing translation
+  const refreshTranslationCount = useCallback(() => {
     if (!projectId || !subLanguages || subLanguages.length === 0) {
       setObjectsNeedingTranslation(0);
       return;
     }
 
-    let cancelled = false;
-
     void translationService.getProjectTranslationStatus(projectId, subLanguages)
       .then((result) => {
-        if (cancelled) return;
         const count = result.translation_status.filter(s => s.missing_languages.length > 0).length;
         setObjectsNeedingTranslation(count);
       })
       .catch((err) => {
         console.error('Failed to fetch translation status:', err);
-        if (!cancelled) {
-          setObjectsNeedingTranslation(0);
-        }
+        setObjectsNeedingTranslation(0);
       });
-
-    return () => {
-      cancelled = true;
-    };
   }, [projectId, subLanguages]);
+
+  // Calculate count of objects needing translation (not tied to current sub-page)
+  const objectCount = Object.keys(unifiedObjects).length;
+  useEffect(() => {
+    refreshTranslationCount();
+  }, [refreshTranslationCount, objectCount]);
 
   // Selected chapter for novel-editor
   const selectedChapterId = selectedChapterByProject[projectId ?? '']
@@ -520,7 +517,7 @@ const UnifiedWorkspace: React.FC = () => {
 
       <TranslationModal
         isOpen={showTranslateModal}
-        onClose={() => setShowTranslateModal(false)}
+        onClose={() => { setShowTranslateModal(false); refreshTranslationCount(); }}
         projectId={projectId || ''}
       />
 
