@@ -44,9 +44,9 @@ from App.backend.providers.openai_responses_provider import OpenAIResponsesProvi
 def _assert_default_timeout(timeout: object) -> None:
     assert isinstance(timeout, httpx.Timeout)
     assert timeout.connect == 5.0
-    assert timeout.read == 1800.0
-    assert timeout.write == 1800.0
-    assert timeout.pool == 1800.0
+    assert timeout.read == 3600.0
+    assert timeout.write == 3600.0
+    assert timeout.pool == 3600.0
 
 
 def test_llm_stream_timeout_helper_uses_centralized_defaults() -> None:

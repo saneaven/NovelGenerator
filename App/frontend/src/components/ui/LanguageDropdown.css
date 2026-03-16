@@ -66,10 +66,7 @@
 /* ===== Dropdown Panel (container for menu + translate btn) ===== */
 .language-dropdown-panel {
   position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  min-width: 100%;
-  z-index: var(--z-dropdown, 1000);
+  min-width: 160px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -83,6 +80,19 @@
     opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
     visibility 0.2s cubic-bezier(0.4, 0, 0.2, 1),
     transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.language-dropdown-panel--portal {
+  top: 0;
+  left: 0;
+  z-index: var(--z-max);
+  transform-origin: top right;
+}
+
+.language-dropdown-panel--upward {
+  flex-direction: column-reverse;
+  transform: translateY(8px) scale(0.96);
+  transform-origin: bottom right;
 }
 
 .language-dropdown-panel.open {
@@ -224,16 +234,4 @@
   padding: 0;
   justify-content: center;
   background: var(--color-surface-base);
-}
-
-.mobile-footer .language-dropdown-panel {
-  top: auto;
-  bottom: calc(100% + 6px);
-  transform-origin: bottom right;
-  transform: translateY(8px) scale(0.96);
-  flex-direction: column-reverse; /* Translate button appears above menu */
-}
-
-.mobile-footer .language-dropdown-panel.open {
-  transform: translateY(0) scale(1);
 }
