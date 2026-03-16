@@ -222,27 +222,27 @@
 
 .notification-icon--success {
   background: var(--color-success);
-  color: white;
+  color: var(--color-text-inverse);
 }
 
 .notification-icon--active {
   background: var(--color-brand-primary);
-  color: white;
+  color: var(--color-text-inverse);
 }
 
 .notification-icon--attention {
   background: var(--color-warning);
-  color: white;
+  color: var(--color-text-inverse);
 }
 
 .notification-icon--error {
   background: var(--color-error);
-  color: white;
+  color: var(--color-text-inverse);
 }
 
 .notification-icon--neutral {
   background: var(--color-text-muted);
-  color: white;
+  color: var(--color-text-inverse);
 }
 
 /* Text content */

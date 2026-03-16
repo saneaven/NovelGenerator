@@ -773,7 +773,7 @@ export class ThreadEventConsumer {
       const runId = d.run_id ? String(d.run_id) : 'n/a';
       console.groupCollapsed(
         `%c[LLM Request]%c run=${runId} · ${d.provider}/${d.model}`,
-        'color: #6366f1; font-weight: bold',
+        'color: var(--color-brand-primary); font-weight: bold',
         'color: inherit',
       );
       console.log('Raw Request:', d.raw_request);
@@ -786,7 +786,7 @@ export class ThreadEventConsumer {
       const runId = d.run_id ? String(d.run_id) : 'n/a';
       console.groupCollapsed(
         `%c[LLM Response]%c run=${runId} · ${d.provider}/${d.model}`,
-        'color: #10b981; font-weight: bold',
+        'color: var(--color-success); font-weight: bold',
         'color: inherit',
       );
       console.log('Raw Response:', d.raw_response);

@@ -59,12 +59,12 @@
 }
 
 .sub-agent-item:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--color-surface-hover);
 }
 
 .sub-agent-item--selected {
-  border-color: rgba(120, 170, 255, 0.45);
-  background: rgba(120, 170, 255, 0.08);
+  border-color: var(--color-brand-secondary-border);
+  background: var(--color-brand-secondary-soft);
 }
 
 .sub-agent-item__icon {
@@ -85,7 +85,7 @@
   opacity: 0.7;
   padding: 2px 6px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--color-border-default);
 }
 
 .sub-agent-item__id {
@@ -98,5 +98,5 @@
   display: flex;
   justify-content: flex-end;
   padding: 10px 12px;
-  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-top: 1px solid var(--color-border-subtle);
 }

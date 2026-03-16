@@ -253,7 +253,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const renderFooter = () => {
     return (
       <>
-        {error && <div className="confirmation-error" style={{ flex: 1, color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}>{error}</div>}
+        {error && <div className="confirmation-error" style={{ flex: 1, color: 'var(--color-error)', fontSize: 'var(--font-size-sm)' }}>{error}</div>}
         <TextButton variant="secondary" onClick={onClose}>
           Cancel
         </TextButton>

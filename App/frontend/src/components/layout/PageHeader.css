@@ -71,15 +71,15 @@
 }
 
 .page-header-save-indicator.saving {
-  color: var(--color-status-warning);
+  color: var(--color-warning-dark);
 }
 
 .page-header-save-indicator.unsaved {
-  color: var(--color-status-error);
+  color: var(--color-feedback-error-strong);
 }
 
 .page-header-save-indicator.saved {
-  color: var(--color-status-success);
+  color: var(--color-success-dark);
 }
 
 /* Mobile Left Container */

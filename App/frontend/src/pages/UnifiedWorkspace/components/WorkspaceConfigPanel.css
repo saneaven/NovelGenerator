@@ -101,19 +101,19 @@
 .workspace-config-textarea:focus {
   outline: none;
   border-color: var(--color-border-focus);
-  box-shadow: 0 0 0 2px var(--color-border-focus-soft);
+  box-shadow: 0 0 0 2px var(--color-border-focus);
 }
 
 .workspace-config-number-input:focus {
   outline: none;
   border-color: var(--color-border-focus);
-  box-shadow: 0 0 0 2px var(--color-border-focus-soft);
+  box-shadow: 0 0 0 2px var(--color-border-focus);
 }
 
 .workspace-config-select:focus {
   outline: none;
   border-color: var(--color-border-focus);
-  box-shadow: 0 0 0 2px var(--color-border-focus-soft);
+  box-shadow: 0 0 0 2px var(--color-border-focus);
 }
 
 .workspace-config-select:disabled {

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useThreadStore } from '../../store/threadStore';
@@ -7,7 +7,6 @@ import {
   canPauseThreadStatus,
   canResumeThreadStatus,
   isBlockingThreadStatus,
-  threadPriority,
 } from '../../types/thread';
 import { useFunctionCallUIStore } from '../../toolCall/ui/store';
 import { TextButton } from '../TextButton';
@@ -65,13 +64,21 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 }) => {
   const peekKey = `${parentThreadId}:${parentMessageId}:peek`;
 
-  const { threadsById, messagesByThreadId, toolCallsById, toolCallIdsByAssistantMessageId, toolCallsByMessageId } = useThreadStore(
+  const {
+    threadsById,
+    messagesByThreadId,
+    toolCallsById,
+    toolCallIdsByAssistantMessageId,
+    toolCallsByMessageId,
+    pendingToolCallIdsByThread,
+  } = useThreadStore(
     useShallow((state) => ({
       threadsById: state.threadsById,
       messagesByThreadId: state.messagesByThreadId,
       toolCallsById: state.toolCallsById,
       toolCallIdsByAssistantMessageId: state.toolCallIdsByAssistantMessageId,
       toolCallsByMessageId: state.toolCallsByMessageId,
+      pendingToolCallIdsByThread: state.pendingToolCallIdsByThread,
     })),
   );
 
@@ -84,6 +91,8 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   const selectedKey = useFunctionCallUIStore(
     (state) => state.selectedPeekRunByThread[peekKey],
   );
+  const pendingSnapshotRef = useRef<Record<string, string[]>>({});
+  const pendingSnapshotInitializedRef = useRef(false);
 
   const childEntries = useMemo(() => {
     // parentMessageId is the assistant message ID — look up via the assistant message index
@@ -132,69 +141,75 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     return map;
   }, [childEntries]);
 
-  const prioritizedKeys = useMemo(() => {
-    const next = [...orderedKeys];
-    next.sort((a, b) => {
-      const ae = entryByKey[a];
-      const be = entryByKey[b];
-      if (!ae || !be) return 0;
-
-      const ap = threadPriority(ae.thread.status);
-      const bp = threadPriority(be.thread.status);
-      if (ap !== bp) return ap - bp;
-
-      const aPending = pendingCountByKey[a] ?? 0;
-      const bPending = pendingCountByKey[b] ?? 0;
-      if (aPending !== bPending) return bPending - aPending;
-
-      return 0;
-    });
-    return next;
-  }, [orderedKeys, entryByKey, pendingCountByKey]);
+  const pendingToolCallIdsByKey = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const entry of childEntries) {
+      map[entry.key] = [...(pendingToolCallIdsByThread[entry.childThreadId] ?? [])].sort();
+    }
+    return map;
+  }, [childEntries, pendingToolCallIdsByThread]);
 
   useEffect(() => {
     if (orderedKeys.length === 0) return;
-    let nextSelectedKey = selectedKey;
     if (!selectedKey || !orderedKeys.includes(selectedKey)) {
-      nextSelectedKey = prioritizedKeys[0] ?? orderedKeys[0];
-    } else if (isActiveParent) {
-      const selectedEntry = entryByKey[selectedKey];
-      const prioritized = prioritizedKeys[0] ? entryByKey[prioritizedKeys[0]] : undefined;
-      if (selectedEntry && prioritized) {
-        const selectedBlocking = isBlockingThreadStatus(selectedEntry.thread.status);
-        const prioritizedBlocking = isBlockingThreadStatus(prioritized.thread.status);
-        const selectedPri = threadPriority(selectedEntry.thread.status);
-        const prioritizedPri = threadPriority(prioritized.thread.status);
-
-        if (
-          (!selectedBlocking && prioritizedBlocking) ||
-          (prioritizedPri === 0 && selectedPri !== 0)
-        ) {
-          nextSelectedKey = prioritized.key;
-        }
-      }
-    }
-
-    if (nextSelectedKey !== selectedKey) {
-      setSelectedPeekRun(peekKey, nextSelectedKey);
+      setSelectedPeekRun(peekKey, orderedKeys[0]);
     }
   }, [
     orderedKeys,
     selectedKey,
     setSelectedPeekRun,
     peekKey,
-    isActiveParent,
-    entryByKey,
-    prioritizedKeys,
   ]);
+
+  useEffect(() => {
+    pendingSnapshotRef.current = {};
+    pendingSnapshotInitializedRef.current = false;
+  }, [peekKey]);
+
+  useEffect(() => {
+    if (orderedKeys.length === 0) {
+      pendingSnapshotRef.current = {};
+      pendingSnapshotInitializedRef.current = false;
+      return;
+    }
+
+    const currentSnapshot: Record<string, string[]> = {};
+    for (const key of orderedKeys) {
+      currentSnapshot[key] = pendingToolCallIdsByKey[key] ?? [];
+    }
+
+    if (!pendingSnapshotInitializedRef.current) {
+      pendingSnapshotRef.current = currentSnapshot;
+      pendingSnapshotInitializedRef.current = true;
+      return;
+    }
+
+    let nextSelectedKey: string | undefined;
+    const previousSnapshot = pendingSnapshotRef.current;
+
+    for (const key of orderedKeys) {
+      if (!(key in previousSnapshot)) continue;
+      const previousIds = new Set(previousSnapshot[key] ?? []);
+      const currentIds = currentSnapshot[key] ?? [];
+      if (currentIds.some((id) => !previousIds.has(id))) {
+        nextSelectedKey = key;
+        break;
+      }
+    }
+
+    pendingSnapshotRef.current = currentSnapshot;
+    if (nextSelectedKey && nextSelectedKey !== selectedKey) {
+      setSelectedPeekRun(peekKey, nextSelectedKey);
+    }
+  }, [orderedKeys, pendingToolCallIdsByKey, peekKey, selectedKey, setSelectedPeekRun]);
 
   const selectedEntry = useMemo(() => {
     if (orderedKeys.length === 0) return undefined;
     const effective = selectedKey && orderedKeys.includes(selectedKey)
       ? selectedKey
-      : prioritizedKeys[0] ?? orderedKeys[0];
-    return childEntries.find((e) => e.key === effective);
-  }, [childEntries, orderedKeys, selectedKey, prioritizedKeys]);
+      : orderedKeys[0];
+    return entryByKey[effective];
+  }, [entryByKey, orderedKeys, selectedKey]);
 
   const { t } = useTranslation();
   const [actionInFlight, setActionInFlight] = useState<'pause' | 'resume' | 'cancel' | null>(null);

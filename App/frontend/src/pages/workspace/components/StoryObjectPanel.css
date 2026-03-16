@@ -139,7 +139,7 @@
     position: fixed;
     inset: 0;
     z-index: var(--z-modal);
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--overlay-dark-heavy);
     backdrop-filter: blur(8px);
     display: flex;
     align-items: center;

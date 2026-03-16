@@ -84,13 +84,13 @@
 
 /* Selected state */
 .dropdown-item.is-selected {
-  background: var(--color-brand-primary-subtle);
+  background: var(--color-brand-primary-soft);
   color: var(--color-brand-primary);
   font-weight: 500;
 }
 
 .dropdown-item.is-selected:hover:not(.disabled) {
-  background: var(--color-brand-primary-subtle);
+  background: var(--color-brand-primary-soft);
 }
 
 /* Danger variant */
@@ -99,7 +99,7 @@
 }
 
 .dropdown-item.danger:hover:not(.disabled) {
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--color-feedback-error-soft);
 }
 
 /* Disabled state */

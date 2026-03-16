@@ -25,7 +25,7 @@ const ImageRunNotificationDetail: React.FC<{
       <div style={{ fontSize: 13, opacity: 0.8 }}>Status: {status}</div>
       <div style={{ fontSize: 14 }}>{message}</div>
       {warning ? (
-        <div style={{ color: 'var(--color-danger, #c0392b)', fontSize: 13 }}>{warning}</div>
+        <div style={{ color: 'var(--color-error)', fontSize: 13 }}>{warning}</div>
       ) : null}
       {imageUrl ? (
         <AuthenticatedImage
@@ -104,7 +104,7 @@ export const NotificationModals: React.FC = () => {
           <div style={{ fontSize: 13, opacity: 0.8 }}>Status: {formatNotificationStatusLabel(notification)}</div>
           <div style={{ fontSize: 14 }}>{notification.message}</div>
           {notification.warning ? (
-            <div style={{ color: 'var(--color-danger, #c0392b)', fontSize: 13 }}>
+            <div style={{ color: 'var(--color-error)', fontSize: 13 }}>
               {notification.warning}
             </div>
           ) : null}

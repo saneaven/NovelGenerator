@@ -202,9 +202,9 @@
     inset: 0;
     background: linear-gradient(
         90deg,
-        rgba(255, 255, 255, 0.05) 0%,
-        rgba(255, 255, 255, 0.12) 50%,
-        rgba(255, 255, 255, 0.05) 100%
+        var(--overlay-light-ghost) 0%,
+        var(--overlay-light-faint) 50%,
+        var(--overlay-light-ghost) 100%
     );
     background-size: 200% 100%;
     animation: placeholderShimmer 1.2s ease-in-out infinite;
@@ -225,7 +225,7 @@
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 60%);
+    background: linear-gradient(to top, var(--overlay-dark-heavy) 0%, transparent 60%);
     opacity: 0;
     transition: opacity var(--transition-fast);
     pointer-events: none;
@@ -318,8 +318,8 @@
     flex: 1;
     font-size: 11px;
     font-weight: var(--font-weight-medium);
-    color: white;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    color: var(--color-text-inverse);
+    text-shadow: var(--shadow-xs);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -328,7 +328,7 @@
 .image-tab-content .rename-button {
     background: none;
     border: none;
-    color: white;
+    color: var(--color-text-inverse);
     cursor: pointer;
     padding: 2px;
     font-size: 10px;
@@ -365,7 +365,7 @@
     opacity: 0;
     transition: opacity var(--transition-fast);
     z-index: 1;
-    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.5) 0%, transparent 100%);
+    background: linear-gradient(to bottom, var(--overlay-dark-heavy) 0%, transparent 100%);
 }
 
 .image-tab-content .asset-item:hover .asset-actions {
@@ -669,7 +669,7 @@
 }
 
 .image-tab-content .detail-prompt-box.positive {
-    border-left: 3px solid var(--color-feedback-success-base);
+    border-left: 3px solid var(--color-success);
 }
 
 .image-tab-content .detail-prompt-box.negative {
@@ -754,12 +754,12 @@
 
 .import-dropzone:hover {
     border-color: var(--color-brand-primary);
-    background: var(--color-brand-soft);
+    background: var(--color-brand-primary-soft);
 }
 
 .import-dropzone.drag-over {
     border-color: var(--color-brand-primary);
-    background: var(--color-brand-soft);
+    background: var(--color-brand-primary-soft);
     border-style: solid;
 }
 
@@ -850,7 +850,7 @@
     height: 20px;
     padding: 0 var(--spacing-xs);
     background: var(--color-brand-primary);
-    color: white;
+    color: var(--color-text-inverse);
     font-size: 10px;
     font-weight: var(--font-weight-semibold);
     border-radius: var(--border-radius-full);
@@ -867,7 +867,7 @@
 .image-tab-content .excluded-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.7);
+    background: var(--overlay-dark-heavy);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -877,7 +877,7 @@
 
 .image-tab-content .excluded-overlay span {
     background: var(--color-brand-primary);
-    color: white;
+    color: var(--color-text-inverse);
     padding: var(--spacing-xs) var(--spacing-sm);
     border-radius: var(--border-radius-md);
     font-size: var(--font-size-xs);
@@ -895,7 +895,7 @@
 
 .image-tab-content .asset-item.selected {
     border-color: var(--color-brand-primary);
-    box-shadow: 0 0 0 2px var(--color-brand-soft);
+    box-shadow: 0 0 0 2px var(--color-brand-primary-soft);
 }
 
 .image-tab-content .asset-item.selected::after {

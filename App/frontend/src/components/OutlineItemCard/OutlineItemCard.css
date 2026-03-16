@@ -162,7 +162,7 @@
 .outline-item-card .chapter-index {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-bold);
-  color: var(--color-secondary-main);
+  color: var(--color-brand-secondary-hover);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -296,11 +296,11 @@
    ============================================================================ */
 
 .outline-item-card .fallback-badge {
-  color: var(--color-warning-main);
+  color: var(--color-warning);
 }
 
 .outline-item-card .warning-icon {
-  color: var(--color-warning-main);
+  color: var(--color-warning);
   margin-left: var(--spacing-xs);
 }
 

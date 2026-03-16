@@ -155,21 +155,21 @@
 }
 
 .agent-status-chip.running {
-  border-color: color-mix(in srgb, var(--color-brand-primary) 30%, var(--color-border-subtle));
-  background: color-mix(in srgb, var(--color-brand-primary) 14%, transparent);
+  border-color: var(--color-brand-primary-border);
+  background: var(--color-brand-primary-soft);
   color: var(--color-brand-primary);
 }
 
 .agent-status-chip.done {
-  border-color: color-mix(in srgb, #22c55e 35%, var(--color-border-subtle));
-  background: color-mix(in srgb, #22c55e 14%, transparent);
-  color: #15803d;
+  border-color: var(--color-success);
+  background: var(--color-success-light);
+  color: var(--color-success-dark);
 }
 
 .agent-status-chip.tools {
-  border-color: color-mix(in srgb, #f59e0b 35%, var(--color-border-subtle));
-  background: color-mix(in srgb, #f59e0b 16%, transparent);
-  color: #b45309;
+  border-color: var(--color-warning);
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
 }
 
 .agent-preview {

@@ -440,8 +440,8 @@
     position: absolute;
     top: 4px;
     right: 4px;
-    background: rgba(0, 0, 0, 0.6);
-    color: white;
+    background: var(--overlay-dark-heavy);
+    color: var(--color-text-inverse);
     border-radius: 50%;
     opacity: 0;
     transition: opacity var(--transition-base);
@@ -480,7 +480,7 @@
 
 .image-generation-modal .ref-warning {
     font-size: var(--font-size-xs);
-    color: var(--color-feedback-warning-base);
+    color: var(--color-warning-dark);
 }
 
 .image-generation-modal .form-field.full-width {

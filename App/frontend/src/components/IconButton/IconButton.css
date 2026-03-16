@@ -98,7 +98,7 @@
 }
 
 .icon-button--ghost:active:not(:disabled) {
-  background: var(--color-surface-active);
+  background: var(--color-surface-overlay);
 }
 
 /* Ghost button with danger hover */

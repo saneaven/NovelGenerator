@@ -370,7 +370,7 @@
 
 .language-input:focus {
     outline: none;
-    border-color: var(--color-secondary-main);
+    border-color: var(--color-brand-secondary-border);
     background: var(--color-surface-subtle);
     box-shadow: var(--shadow-focus-secondary);
 }

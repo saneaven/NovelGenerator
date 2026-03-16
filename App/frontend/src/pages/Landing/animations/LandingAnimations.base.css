@@ -39,11 +39,11 @@
 }
 
 .landing-anim-bubble--accent-a {
-  border: 2px solid var(--color-primary-400);
+  border: 2px solid var(--color-brand-primary-outline);
 }
 
 .landing-anim-bubble--accent-b {
-  border: 2px solid var(--color-secondary-400);
+  border: 2px solid var(--color-brand-secondary-outline);
 }
 
 /* ===== Typing Indicator ===== */
@@ -109,8 +109,8 @@
 .landing-anim-ref-badge {
   display: inline;
   padding: 0.1em 0.4em;
-  background: var(--color-primary-100);
-  color: var(--color-primary-700);
+  background: var(--color-brand-primary-soft);
+  color: var(--color-brand-primary-contrast);
   border-radius: var(--border-radius-sm);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
@@ -182,7 +182,7 @@
 }
 
 .landing-anim-search-item--highlight {
-  background: var(--color-primary-100);
+  background: var(--color-brand-primary-soft);
 }
 
 /* ===== Action Bar ===== */
@@ -243,11 +243,11 @@
 }
 
 .landing-section[data-tone='inverse'] .landing-anim-bubble--accent-a {
-  border-color: var(--color-primary-300);
+  border-color: var(--color-brand-primary-border);
 }
 
 .landing-section[data-tone='inverse'] .landing-anim-bubble--accent-b {
-  border-color: var(--color-secondary-300);
+  border-color: var(--color-brand-secondary-border);
 }
 
 .landing-section[data-tone='inverse'] .landing-anim-typing-track {
@@ -265,8 +265,8 @@
 }
 
 .landing-section[data-tone='inverse'] .landing-anim-ref-badge {
-  background: var(--color-primary-800);
-  color: var(--color-primary-200);
+  background: var(--color-brand-primary-contrast);
+  color: var(--color-brand-primary-tint);
 }
 
 .landing-section[data-tone='inverse'] .landing-anim-prose {
@@ -293,7 +293,7 @@
 }
 
 .landing-section[data-tone='inverse'] .landing-anim-search-item--highlight {
-  background: var(--color-primary-800);
+  background: var(--color-brand-primary-contrast);
 }
 
 .landing-section[data-tone='inverse'] .landing-anim-action-btn {

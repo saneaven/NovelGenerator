@@ -77,7 +77,7 @@
 }
 
 .activity-panel-tab[data-active="true"] {
-  background: var(--color-surface-active);
+  background: var(--color-surface-overlay);
   color: var(--color-text-primary);
 }
 
@@ -261,7 +261,7 @@
   width: 36px;
   height: 20px;
   padding: 2px;
-  background-color: var(--color-surface-default);
+  background-color: var(--color-surface-base);
   border: 1px solid var(--color-border-default);
   border-radius: 10px;
   transition: background-color var(--transition-fast), border-color var(--transition-fast);
@@ -275,7 +275,7 @@
 .variable-control__toggle-thumb {
   width: 14px;
   height: 14px;
-  background-color: white;
+  background-color: var(--color-surface-base);
   border-radius: var(--border-radius-full);
   box-shadow: var(--shadow-xs);
   transition: transform var(--transition-fast);
@@ -303,7 +303,7 @@
   padding: var(--spacing-xs) var(--spacing-sm);
   font-size: var(--font-size-sm);
   color: var(--color-text-primary);
-  background-color: var(--color-surface-default);
+  background-color: var(--color-surface-base);
   border: 1px solid var(--color-border-default);
   border-radius: var(--border-radius-sm);
   transition: border-color var(--transition-fast);

@@ -384,7 +384,7 @@ pre {
   *::before,
   *::after {
     background: transparent;
-    color: #000;
+    color: var(--color-text-primary);
     box-shadow: none;
     text-shadow: none;
   }
@@ -404,7 +404,7 @@ pre {
 
   pre,
   blockquote {
-    border: 1px solid #999;
+    border: 1px solid var(--color-border-contrast);
     page-break-inside: avoid;
   }
 

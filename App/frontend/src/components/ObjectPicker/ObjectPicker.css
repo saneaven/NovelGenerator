@@ -52,7 +52,7 @@
 .object-picker-search-input:focus {
   outline: none;
   border-color: var(--color-brand-primary);
-  box-shadow: 0 0 0 3px rgba(var(--color-brand-primary-rgb, 99, 102, 241), 0.15);
+  box-shadow: var(--shadow-focus-primary);
 }
 
 .object-picker-search-input::placeholder {
@@ -142,7 +142,7 @@
 }
 
 .object-picker-token-estimate {
-  color: var(--color-text-quaternary);
+  color: var(--color-text-muted);
   font-weight: 500;
   cursor: help;
 }
@@ -294,7 +294,7 @@
 }
 
 .object-picker-item.highlighted {
-  background: var(--color-feedback-info-muted);
+  background: var(--color-info-light);
 }
 
 .object-picker-item.pre-selected {
@@ -303,12 +303,12 @@
 }
 
 .object-picker-item.excluded {
-  background: var(--color-feedback-warning-muted);
+  background: var(--color-warning-light);
   cursor: default;
 }
 
 .object-picker-item.excluded:hover {
-  background: var(--color-feedback-warning-muted);
+  background: var(--color-warning-light);
 }
 
 .object-picker-item.disabled {
@@ -339,15 +339,15 @@
   font-size: 10px;
   font-weight: 500;
   padding: 2px 6px;
-  background: var(--color-feedback-info-soft);
-  color: var(--color-feedback-info-base);
+  background: var(--color-info-light);
+  color: var(--color-info-dark);
   border-radius: var(--border-radius-sm);
   flex-shrink: 0;
 }
 
 .object-picker-item-badge.edit-target {
-  background: var(--color-feedback-warning-soft);
-  color: var(--color-feedback-warning-base);
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
 }
 
 .object-picker-item-wordcount {
@@ -433,7 +433,7 @@
 .object-picker-preview-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay-dark-heavy);
   display: flex;
   align-items: center;
   justify-content: center;

@@ -46,7 +46,7 @@
 }
 
 .workspace-tab-item.active {
-  background: var(--color-brand-subtle);
+  background: var(--color-brand-primary-soft);
 }
 
 .workspace-tab-item.active .workspace-tab-icon {

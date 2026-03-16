@@ -74,7 +74,7 @@
 }
 
 .format-btn.active {
-    background: var(--color-brand-soft);
+    background: var(--color-brand-primary-soft);
     color: var(--color-brand-primary);
 }
 
@@ -165,7 +165,7 @@
 }
 
 .heading-dropdown-item.active {
-    background: var(--color-brand-soft);
+    background: var(--color-brand-primary-soft);
     color: var(--color-brand-primary);
 }
 

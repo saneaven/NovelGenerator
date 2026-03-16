@@ -68,7 +68,7 @@
 }
 
 .text-button--secondary:active:not(:disabled) {
-  background: var(--color-surface-active);
+  background: var(--color-surface-overlay);
 }
 
 /* ===== Ghost Variant ===== */
@@ -84,7 +84,7 @@
 }
 
 .text-button--ghost:active:not(:disabled) {
-  background: var(--color-surface-active);
+  background: var(--color-surface-overlay);
 }
 
 /* ===== Danger Variant ===== */
@@ -115,7 +115,7 @@
 }
 
 .text-button--warning:active:not(:disabled) {
-  background: color-mix(in srgb, var(--color-warning) 20%, var(--color-surface-base));
+  background: var(--color-warning-light);
   border-color: var(--color-warning-dark);
 }
 

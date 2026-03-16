@@ -286,13 +286,11 @@
 }
 
 .agent-message.assistant .message-role {
-    color: var(--color-secondary-main);
+    color: var(--color-brand-secondary-hover);
 }
 
 .agent-message.assistant .message-content {
     background: var(--color-surface-elevated);
-    border-left: 3px solid var(--color-secondary-subtle);
-    border-radius: var(--border-radius-md);
     padding: var(--spacing-lg) var(--spacing-xl);
     width: 100%;
     color: var(--color-text-primary);

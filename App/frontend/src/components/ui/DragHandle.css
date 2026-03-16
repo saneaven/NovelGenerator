@@ -23,13 +23,13 @@
 
 .drag-handle__indicator {
   display: block;
-  background: rgba(255, 255, 255, 0.24);
+  background: var(--overlay-light-subtle);
   transition: background var(--transition-fast), transform var(--transition-fast);
 }
 
 .drag-handle:not(.is-disabled):hover .drag-handle__indicator,
 .drag-handle:focus-visible .drag-handle__indicator {
-  background: rgba(255, 255, 255, 0.46);
+  background: var(--overlay-light-light);
 }
 
 .drag-handle--horizontal {

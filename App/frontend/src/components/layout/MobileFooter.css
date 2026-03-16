@@ -26,7 +26,7 @@
     inset: 0;
     background: var(--overlay-dark-ghost);
     backdrop-filter: blur(10px);
-    mask-image: linear-gradient(to top, #000 0%, #000 50%, transparent 100%);
+    mask-image: linear-gradient(to top, var(--color-surface-inverse-strong) 0%, var(--color-surface-inverse-strong) 50%, transparent 100%);
     box-shadow: var(--shadow-lg);
     z-index: -1;
     pointer-events: none;
