@@ -38,7 +38,7 @@ class TranslateToolCallModule(ToolCallModule):
                     description="Translate story object fields.",
                     parameters=obj_schema(
                         {"id": _ID, "type": {"type": "string", "enum": list(STORY_OBJECT_TYPES)}, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}},
-                        ["id", "type"],
+                        ["id", "type", "name", "description", "content"],
                     ),
                     auto_approve_category="translate",
                 ),
@@ -52,7 +52,7 @@ class TranslateToolCallModule(ToolCallModule):
                             "genres": {"type": "array", "items": {"type": "string"}},
                             "tags": {"type": "array", "items": {"type": "string"}},
                         },
-                        [],
+                        ["title", "logline", "genres", "tags"],
                     ),
                     auto_approve_category="translate",
                 ),
@@ -65,19 +65,19 @@ class TranslateToolCallModule(ToolCallModule):
                 ToolSpec(
                     name="translate_outline",
                     description="Translate outline fields.",
-                    parameters=obj_schema({"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}}, ["id"]),
+                    parameters=obj_schema({"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}}, ["id", "name", "description", "content"]),
                     auto_approve_category="translate",
                 ),
                 ToolSpec(
                     name="translate_outline_act",
                     description="Translate act fields.",
-                    parameters=obj_schema({"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}}, ["id"]),
+                    parameters=obj_schema({"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}}, ["id", "name", "description", "content"]),
                     auto_approve_category="translate",
                 ),
                 ToolSpec(
                     name="translate_outline_chapter",
                     description="Translate chapter fields.",
-                    parameters=obj_schema({"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}}, ["id"]),
+                    parameters=obj_schema({"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}}, ["id", "name", "description", "content"]),
                     auto_approve_category="translate",
                 ),
                 ToolSpec(
@@ -122,8 +122,7 @@ class TranslateToolCallModule(ToolCallModule):
             current = read_object(ctx.db, project_id=ctx.project_id, object_type="basic_info", object_id=object_id, language=ctx.language)
             next_data = dict(extract_lang_data(current, ctx.language))
             for key in ["title", "logline", "genres", "tags"]:
-                if key in args:
-                    next_data[key] = args[key]
+                next_data[key] = args[key]
             object_service.update_object(
                 ctx.db,
                 project_id=ctx.project_id,
@@ -141,8 +140,7 @@ class TranslateToolCallModule(ToolCallModule):
             object_id = get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
             current = read_object(ctx.db, project_id=ctx.project_id, object_type="guidelines", object_id=object_id, language=ctx.language)
             next_data = dict(extract_lang_data(current, ctx.language))
-            if "authorNote" in args:
-                next_data["authorNote"] = args.get("authorNote")
+            next_data["authorNote"] = args["authorNote"]
             object_service.update_object(
                 ctx.db,
                 project_id=ctx.project_id,
@@ -181,8 +179,7 @@ class TranslateToolCallModule(ToolCallModule):
         current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
         next_data = dict(extract_lang_data(current, ctx.language))
         for key in ["name", "description", "content"]:
-            if key in args:
-                next_data[key] = args[key]
+            next_data[key] = args[key]
 
         object_service.update_object(
             ctx.db,
