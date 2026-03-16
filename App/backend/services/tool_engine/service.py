@@ -382,7 +382,7 @@ class ToolEngineService:
         finally:
             db.close()
 
-    async def complete_parent_tool_call(
+    async def propagate_child_terminal_state_to_parent(
         self,
         db: Session,
         *,
@@ -481,4 +481,19 @@ class ToolEngineService:
                 "status": parent_run.status,
                 "error": parent_run.error,
             },
+        )
+
+    async def complete_parent_tool_call(
+        self,
+        db: Session,
+        *,
+        thread: Thread,
+        run: RunModel,
+        emit: Callable[..., Awaitable[None]],
+    ) -> None:
+        await self.propagate_child_terminal_state_to_parent(
+            db,
+            thread=thread,
+            run=run,
+            emit=emit,
         )

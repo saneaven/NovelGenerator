@@ -43,6 +43,8 @@ from . import prompt_assembly
 
 logger = logging.getLogger(__name__)
 
+_UNRESOLVED_RESUME_TOOL_STATUSES = {"streaming", "validating", "pending", "processing", "working"}
+
 
 def _has_message_content(data: dict | None) -> bool:
     """Return True if *data* contains at least one language entry with real content."""
@@ -544,15 +546,6 @@ class RunPipeline:
                 if thread is None:
                     raise HTTPException(status_code=404, detail="Thread not found")
 
-                has_pending_tool = (
-                    db.query(RunToolCallModel.id)
-                    .filter(RunToolCallModel.thread_id == thread.id, RunToolCallModel.status == "pending")
-                    .first()
-                    is not None
-                )
-                if has_pending_tool:
-                    raise HTTPException(status_code=409, detail="Pending tool call exists in thread")
-
                 run = (
                     db.query(RunModel)
                     .filter(RunModel.thread_id == thread.id)
@@ -561,6 +554,18 @@ class RunPipeline:
                 )
                 if run is None:
                     raise HTTPException(status_code=409, detail="No run exists to resume")
+
+                has_unresolved_tool = (
+                    db.query(RunToolCallModel.id)
+                    .filter(
+                        RunToolCallModel.run_id == run.id,
+                        RunToolCallModel.status.in_(_UNRESOLVED_RESUME_TOOL_STATUSES),
+                    )
+                    .first()
+                    is not None
+                )
+                if has_unresolved_tool:
+                    raise HTTPException(status_code=409, detail="Unresolved tool call exists in latest run")
 
                 _UNRESUMABLE_STATUSES = {"running"}
                 if run.status in _UNRESUMABLE_STATUSES:
@@ -696,7 +701,7 @@ class RunPipeline:
                     if canceled_run is not None:
                         canceled_thread = canceled_run.thread
                         if canceled_thread is not None:
-                            await tool_engine.complete_parent_tool_call(
+                            await tool_engine.propagate_child_terminal_state_to_parent(
                                 db2,
                                 thread=canceled_thread,
                                 run=canceled_run,

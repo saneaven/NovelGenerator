@@ -834,7 +834,7 @@ async def run_llm(
         },
     )
 
-    await tool_engine.complete_parent_tool_call(
+    await tool_engine.propagate_child_terminal_state_to_parent(
         db,
         thread=thread,
         run=run,

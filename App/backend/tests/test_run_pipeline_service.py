@@ -132,6 +132,7 @@ def _install_import_stubs() -> None:
     fake_tool_engine.tool_engine = SimpleNamespace(
         validate_tool_call=lambda *_args, **_kwargs: None,
         execute_tool_call_by_id=lambda *_args, **_kwargs: None,
+        propagate_child_terminal_state_to_parent=lambda *_args, **_kwargs: None,
         complete_parent_tool_call=lambda *_args, **_kwargs: None,
     )
     sys.modules["App.backend.services.tool_engine"] = fake_tool_engine
@@ -385,15 +386,23 @@ class FakeResumeRunQuery:
         if self._model is RunModel:
             return self._db.run
         if getattr(self._model, "class_", None) is RunToolCallModel:
-            return self._db.pending_tool
+            return self._db.unresolved_tool
         raise AssertionError(f"Unexpected model query: {self._model!r}")
 
 
 class FakeResumeRunDb:
-    def __init__(self, *, thread: Thread | None, run: RunModel | None, pending_tool: object | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        thread: Thread | None,
+        run: RunModel | None,
+        pending_tool: object | None = None,
+        unresolved_tool: object | None = None,
+    ) -> None:
         self.thread = thread
         self.run = run
         self.pending_tool = pending_tool
+        self.unresolved_tool = unresolved_tool if unresolved_tool is not None else pending_tool
         self.commits = 0
         self.closed = 0
 
@@ -541,7 +550,17 @@ def test_start_run_rejects_empty_request_before_db() -> None:
 
 def test_resume_run_rejects_when_pending_tool_call_exists() -> None:
     thread = Thread(id=uuid4(), project_id=uuid4(), user_id=uuid4(), thread_type="agent", status="waiting")
-    db = FakeResumeRunDb(thread=thread, run=None, pending_tool=object())
+    run = RunModel(
+        id=uuid4(),
+        thread_id=thread.id,
+        user_id=thread.user_id,
+        project_id=thread.project_id,
+        status="waiting",
+        language="English",
+        input_payload={},
+    )
+    run.thread = thread
+    db = FakeResumeRunDb(thread=thread, run=run, pending_tool=object())
     pipeline = _make_idle_pipeline(lambda: db)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -558,7 +577,7 @@ def test_resume_run_rejects_when_pending_tool_call_exists() -> None:
         )
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.detail == "Pending tool call exists in thread"
+    assert exc_info.value.detail == "Unresolved tool call exists in latest run"
 
 
 def test_resume_run_rejects_error_latest_run_when_pending_tool_call_exists() -> None:
@@ -590,7 +609,7 @@ def test_resume_run_rejects_error_latest_run_when_pending_tool_call_exists() -> 
         )
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.detail == "Pending tool call exists in thread"
+    assert exc_info.value.detail == "Unresolved tool call exists in latest run"
 
 
 def test_resume_run_rejects_when_no_latest_run_exists() -> None:
@@ -613,6 +632,38 @@ def test_resume_run_rejects_when_no_latest_run_exists() -> None:
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail == "No run exists to resume"
+
+
+def test_resume_run_rejects_when_processing_tool_call_exists_in_latest_run() -> None:
+    thread = Thread(id=uuid4(), project_id=uuid4(), user_id=uuid4(), thread_type="agent", status="processing")
+    run = RunModel(
+        id=uuid4(),
+        thread_id=thread.id,
+        user_id=thread.user_id,
+        project_id=thread.project_id,
+        status="processing",
+        language="English",
+        input_payload={},
+    )
+    run.thread = thread
+    db = FakeResumeRunDb(thread=thread, run=run, unresolved_tool=object())
+    pipeline = _make_idle_pipeline(lambda: db)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            pipeline.resume_run(
+                thread_id=thread.id,
+                user_id=thread.user_id,
+                run_mode=None,
+                surface=None,
+                context_object_ids=[],
+                journey_target_ids=[],
+                language=None,
+            )
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Unresolved tool call exists in latest run"
 
 
 def test_resume_run_rejects_running_latest_run() -> None:
@@ -1066,12 +1117,16 @@ def test_pause_run_marks_sub_agent_paused_without_parent_completion(monkeypatch:
         _ = user_id, project_id, thread_id
         emitted.append((event_name, data))
 
-    async def _fake_complete_parent_tool_call(*args: object, **kwargs: object) -> None:
+    async def _fake_propagate_child_terminal_state_to_parent(*args: object, **kwargs: object) -> None:
         parent_calls.append((args, kwargs))
 
     pipeline._cancel_task_and_wait = _fake_cancel_task_and_wait  # type: ignore[method-assign]
     pipeline._emit = _fake_emit  # type: ignore[method-assign]
-    monkeypatch.setattr(run_service.tool_engine, "complete_parent_tool_call", _fake_complete_parent_tool_call)
+    monkeypatch.setattr(
+        run_service.tool_engine,
+        "propagate_child_terminal_state_to_parent",
+        _fake_propagate_child_terminal_state_to_parent,
+    )
 
     asyncio.run(pipeline.pause_run(thread_id=thread.id, user_id=thread.user_id))
 
@@ -1114,7 +1169,7 @@ def test_cancel_run_allows_paused_and_propagates_parent_completion(monkeypatch: 
         _ = user_id, project_id, thread_id
         emitted.append((event_name, data))
 
-    async def _fake_complete_parent_tool_call(_db: object, *, thread: object, run: object, emit: object) -> None:
+    async def _fake_propagate_child_terminal_state_to_parent(_db: object, *, thread: object, run: object, emit: object) -> None:
         _ = emit
         parent_calls.append(
             {
@@ -1125,7 +1180,11 @@ def test_cancel_run_allows_paused_and_propagates_parent_completion(monkeypatch: 
 
     pipeline._cancel_task_and_wait = _fake_cancel_task_and_wait  # type: ignore[method-assign]
     pipeline._emit = _fake_emit  # type: ignore[method-assign]
-    monkeypatch.setattr(run_service.tool_engine, "complete_parent_tool_call", _fake_complete_parent_tool_call)
+    monkeypatch.setattr(
+        run_service.tool_engine,
+        "propagate_child_terminal_state_to_parent",
+        _fake_propagate_child_terminal_state_to_parent,
+    )
 
     asyncio.run(pipeline.cancel_run(thread_id=thread.id, user_id=thread.user_id))
 

@@ -117,7 +117,10 @@ def _install_import_stubs() -> None:
     sys.modules["App.backend.services.run_pipeline"] = fake_run_pipeline
 
     fake_tool_engine = types.ModuleType("App.backend.services.tool_engine")
-    fake_tool_engine.tool_engine = SimpleNamespace(execute_tool_call_by_id=lambda *_args, **_kwargs: {})
+    fake_tool_engine.tool_engine = SimpleNamespace(
+        execute_tool_call_by_id=lambda *_args, **_kwargs: {},
+        propagate_child_terminal_state_to_parent=lambda *_args, **_kwargs: None,
+    )
     sys.modules["App.backend.services.tool_engine"] = fake_tool_engine
 
     fake_sidecar_client = types.ModuleType("App.backend.services.sidecar_client")

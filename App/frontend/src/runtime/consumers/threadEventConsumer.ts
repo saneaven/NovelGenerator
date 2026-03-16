@@ -660,6 +660,12 @@ export class ThreadEventConsumer {
         return;
       }
 
+      const unresolvedCount = Number(thread?.unresolvedToolCallCount ?? 0);
+      if (unresolvedCount > 0) {
+        console.debug('[AutoContinue] Skipped: thread has unresolved tool calls', { threadId, unresolvedCount });
+        return;
+      }
+
       if (isPausedLikeThreadStatus(thread?.status)) {
         console.debug('[AutoContinue] Skipped: thread is paused-like', { threadId, status: thread?.status });
         return;
@@ -667,7 +673,6 @@ export class ThreadEventConsumer {
 
       const allowedForContinue =
         thread?.status === 'waiting'
-        || thread?.status === 'processing'
         || thread?.status === 'done';
       if (!allowedForContinue) {
         console.debug('[AutoContinue] Skipped: thread status not allowed', { threadId, status: thread?.status });
@@ -799,6 +804,7 @@ export class ThreadEventConsumer {
       if (isNonLiveThreadStatus(status) && useThreadStore.getState().isPreexistingLiveThread(threadId)) {
         void fetchAndReplaceThreadSnapshot(threadId);
       }
+      this.refreshUnresolvedCount(threadId);
       void this.checkAutoContinue(threadId);
       return;
     }
@@ -950,8 +956,8 @@ export class ThreadEventConsumer {
         });
       }
 
-      await this.checkAutoContinue(threadId);
       this.refreshUnresolvedCount(threadId);
+      await this.checkAutoContinue(threadId);
       return;
     }
 
@@ -1077,8 +1083,8 @@ export class ThreadEventConsumer {
       // Fire-and-forget: don't block the event consumer with network calls.
       // tryAutoAccept must complete before checkAutoContinue can evaluate.
       this.tryAutoAcceptForAssistant(threadId, messageId).then(() => {
-        this.checkAutoContinue(threadId);
         this.refreshUnresolvedCount(threadId);
+        this.checkAutoContinue(threadId);
       });
       return;
     }
@@ -1102,6 +1108,7 @@ export class ThreadEventConsumer {
       if (useThreadStore.getState().isPreexistingLiveThread(threadId)) {
         void fetchAndReplaceThreadSnapshot(threadId);
       }
+      this.refreshUnresolvedCount(threadId);
       void this.checkAutoContinue(threadId);
       return;
     }
