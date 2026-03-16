@@ -63,6 +63,37 @@ class GeminiProvider(BaseProvider):
             self._client = self._build_client()
         return self._client
 
+    def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
+        parts = []
+        for detail in self._snapshot_reasoning_details(final_snapshot):
+            if not isinstance(detail, dict):
+                continue
+            if detail.get("thought") is True:
+                parts.append(detail)
+                continue
+            if isinstance(detail.get("thought_signature"), str) and detail.get("thought_signature"):
+                parts.append(detail)
+
+        reasoning_text = self._reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
+        if not parts and not reasoning_text:
+            return None
+
+        data: dict[str, Any] = {"parts": parts}
+        meta: dict[str, Any] = {"provider": "gemini"}
+        if reasoning_text:
+            data["reasoning_text"] = reasoning_text
+            meta["thinking_display"] = "reasoning_text"
+
+        return {
+            "type": "gemini",
+            "meta": meta,
+            "data": data,
+            "token_count": 0,
+        }
+
+    def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
+        return "reasoning_text"
+
     @staticmethod
     def _error_event(message: str, status: Optional[int] = None) -> ProviderEvent:
         return ProviderEvent(

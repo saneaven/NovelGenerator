@@ -59,6 +59,44 @@ class ClaudeProvider(BaseProvider):
             self._client = self._build_client()
         return self._client
 
+    def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
+        blocks: list[dict[str, Any]] = []
+        for block in self._snapshot_reasoning_details(final_snapshot):
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") != "thinking":
+                continue
+            signature = block.get("signature")
+            thinking_text = block.get("thinking") or block.get("text")
+            if isinstance(signature, str) and signature:
+                blocks.append(block)
+                continue
+            if isinstance(thinking_text, str) and thinking_text:
+                blocks.append(block)
+
+        reasoning_text = self._reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
+        if not blocks and not reasoning_text:
+            return None
+
+        data: dict[str, Any] = {"blocks": blocks}
+        meta: dict[str, Any] = {"provider": "claude"}
+        if reasoning_text:
+            data["reasoning_text"] = reasoning_text
+            meta["thinking_display"] = "reasoning_text"
+
+        return {
+            "type": "claude",
+            "meta": meta,
+            "data": data,
+            "token_count": 0,
+        }
+
+    def read_reasoning_tokens(self, final_snapshot: Any) -> int | None:
+        return None
+
+    def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
+        return "reasoning_text"
+
     @staticmethod
     def _error_event(message: str, status: Optional[int] = None) -> ProviderEvent:
         return ProviderEvent(

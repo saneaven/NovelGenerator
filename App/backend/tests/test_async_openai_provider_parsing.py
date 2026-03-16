@@ -18,10 +18,42 @@ if "openai" not in sys.modules:
     fake_openai.RateLimitError = _StubOpenAIError
     sys.modules["openai"] = fake_openai
 
+if "anthropic" not in sys.modules:
+    fake_anthropic = types.ModuleType("anthropic")
+    fake_anthropic.AsyncAnthropic = object
+    sys.modules["anthropic"] = fake_anthropic
+
+if "App.backend.database" not in sys.modules:
+    from sqlalchemy.orm import declarative_base
+
+    fake_database = types.ModuleType("App.backend.database")
+    fake_database.Base = declarative_base()
+    fake_database.SessionLocal = lambda: None
+    fake_database.get_db = lambda: None
+    sys.modules["App.backend.database"] = fake_database
+    sys.modules["database"] = fake_database
+
+if "App.backend.models.db_models" not in sys.modules:
+    fake_db_models = types.ModuleType("App.backend.models.db_models")
+
+    class _StubRunMessageAttachmentModel:
+        pass
+
+    fake_db_models.RunMessageAttachmentModel = _StubRunMessageAttachmentModel
+    sys.modules["App.backend.models.db_models"] = fake_db_models
+
+if "App.backend.services.chat_attachment_service" not in sys.modules:
+    fake_chat_attachment_service = types.ModuleType("App.backend.services.chat_attachment_service")
+    fake_chat_attachment_service.chat_attachment_service = types.SimpleNamespace(
+        load_attachment_bytes=lambda _storage_key: b"",
+        to_data_url=lambda mime_type, _data: f"data:{mime_type};base64,",
+    )
+    sys.modules["App.backend.services.chat_attachment_service"] = fake_chat_attachment_service
+
 from App.backend.providers.async_openai_provider import AsyncOpenAIProvider
+from App.backend.providers.custom import CustomProvider
 from App.backend.providers.contracts import DeltaPayload, merge_openai_tool_call_deltas
 from App.backend.providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
-from App.backend.services.reasoning.provider_io import CustomOpenAICompletionIO
 
 
 def test_chunk_to_events_extracts_reasoning_from_delta_thoughts() -> None:
@@ -85,7 +117,7 @@ def test_custom_openai_completion_non_template_ignores_reasoning_detail_items_wi
             assembler.apply_meta(event.meta)
 
     snapshot = assembler.finalize_or_raise()
-    reasoning_detail = CustomOpenAICompletionIO().read_reasoning_detail(
+    reasoning_detail = CustomProvider({}).read_reasoning_detail(
         snapshot,
         {"custom_kind": "openai_completion"},
     )

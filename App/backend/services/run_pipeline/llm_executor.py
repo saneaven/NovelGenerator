@@ -29,7 +29,6 @@ from ..prompt_runtime.template_renderer import TemplateRenderer, load_user_fragm
 from ..reasoning.history_filter import filter_history_by_run
 from ..reasoning.mode_policy import apply_thinking_mode
 from ..reasoning.normalize import normalize_reasoning_detail
-from ..reasoning.provider_io import get_provider_io
 from ..settings_service import settings_service
 from ..llm_runtime_service import get_llm_runtime
 from ..storage_usage_service import (
@@ -180,9 +179,9 @@ async def _fill_reasoning_token_count(
     run: RunModel,
     task_config: Any,
     final_snapshot: Any,
-    provider_io: Any,
+    provider: Any,
 ) -> int:
-    direct = provider_io.read_reasoning_tokens(final_snapshot)
+    direct = provider.read_reasoning_tokens(final_snapshot)
     if isinstance(direct, int):
         return max(0, int(direct))
 
@@ -424,7 +423,6 @@ async def run_llm(
     thinking_mode = str(advanced.get("thinking_mode") or "off")
     tool_history_limit = int(getattr(settings, "tool_call_history_limit", 5) or 0)
     thinking_history_limit = int(getattr(settings, "thinking_history_limit", 5) or 0)
-    provider_io = get_provider_io(task_config.provider, advanced)
     messages = [{"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]}] + conversation
     messages = filter_history_by_run(
         messages,
@@ -474,7 +472,6 @@ async def run_llm(
                     provider.set_thinking_template(thinking_template)
                     advanced["_resolved_template"] = thinking_template
 
-    messages = provider_io.to_provider_messages(messages, task_config.model, advanced)
     provider_messages = _strip_internal_message_keys(messages)
     # When a custom thinking template is resolved, the template's effort_fields handle
     # request body injection — don't pass the generic thinking_config alongside it.
@@ -482,7 +479,7 @@ async def run_llm(
         effective_thinking_config = None
     else:
         effective_thinking_config = advanced.get("thinking_config") if thinking_mode == "model" else None
-    stream_thinking_display = provider_io.get_stream_thinking_display_path(advanced)
+    stream_thinking_display = provider.get_stream_thinking_display_path(advanced)
     if isinstance(stream_thinking_display, str):
         stream_thinking_display = stream_thinking_display.strip() or None
     else:
@@ -663,7 +660,7 @@ async def run_llm(
     if thinking_mode == "custom":
         reasoning_detail = _build_custom_reasoning_detail(final_snapshot.content_parts)
     elif thinking_mode == "model":
-        reasoning_detail = normalize_reasoning_detail(provider_io.read_reasoning_detail(final_snapshot, advanced))
+        reasoning_detail = normalize_reasoning_detail(provider.read_reasoning_detail(final_snapshot, advanced))
 
     if reasoning_detail is not None:
         reasoning_detail["token_count"] = await _fill_reasoning_token_count(
@@ -671,7 +668,7 @@ async def run_llm(
             run=run,
             task_config=task_config,
             final_snapshot=final_snapshot,
-            provider_io=provider_io,
+            provider=provider,
         )
 
     db.refresh(run)

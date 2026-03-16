@@ -1,5 +1,6 @@
+import copy
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator, List, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from .contracts import ProviderEvent
 
@@ -26,6 +27,50 @@ class BaseProvider(ABC):
             if isinstance(text, str) and text:
                 chunks.append(text)
         return "".join(chunks)
+
+    @staticmethod
+    def _copy_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return copy.deepcopy(messages)
+
+    @staticmethod
+    def _snapshot_reasoning_details(final_snapshot: Any) -> list[dict[str, Any]]:
+        raw = getattr(final_snapshot, "reasoning_details", None)
+        if not isinstance(raw, list):
+            return []
+        return [item for item in raw if isinstance(item, dict)]
+
+    @staticmethod
+    def _snapshot_reasoning_tokens(final_snapshot: Any) -> int | None:
+        value = getattr(final_snapshot, "reasoning_tokens", None)
+        if isinstance(value, bool):
+            value = int(value)
+        if isinstance(value, int):
+            return max(0, value)
+        return None
+
+    @staticmethod
+    def _reasoning_text_from_parts(content_parts: Any) -> str:
+        if not isinstance(content_parts, list):
+            return ""
+        chunks: list[str] = []
+        for part in content_parts:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") != "thinking":
+                continue
+            text = part.get("text")
+            if isinstance(text, str) and text:
+                chunks.append(text)
+        return "".join(chunks)
+
+    def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
+        return None
+
+    def read_reasoning_tokens(self, final_snapshot: Any) -> int | None:
+        return self._snapshot_reasoning_tokens(final_snapshot)
+
+    def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
+        return None
 
     @abstractmethod
     def stream_chat(

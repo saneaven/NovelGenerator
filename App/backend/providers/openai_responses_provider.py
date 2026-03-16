@@ -14,7 +14,7 @@ Benefits:
 
 import logging
 import re
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from openai import (
     APIConnectionError,
@@ -29,7 +29,7 @@ from openai import (
 from .base import BaseProvider
 from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
 from .final_mappers import map_openai_response_to_snapshot
-from .multimodal import build_openai_responses_content, get_canonical_content_parts as get_message_content_parts
+from .multimodal import build_openai_responses_content, get_canonical_content_parts
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 
@@ -78,111 +78,69 @@ class OpenAIResponsesProvider(BaseProvider):
             self._client = self._build_client()
         return self._client
 
-    def _sanitize_history(self, messages: List[Dict]) -> List[Dict]:
-        """Normalize stored history into a Responses-safe sequence."""
-        sanitized: List[Dict] = []
-        current_assistant_call_ids: set[str] = set()
-
-        for msg in messages:
-            if not isinstance(msg, dict):
-                current_assistant_call_ids.clear()
+    @staticmethod
+    def _filter_reasoning_items(items: Any) -> List[Dict]:
+        if not isinstance(items, list):
+            return []
+        filtered: List[Dict] = []
+        for item in items:
+            if not isinstance(item, dict):
                 continue
-
-            role = msg.get("role", "user")
-
-            if role == "assistant":
-                next_msg = dict(msg)
-                raw_tool_calls = msg.get("tool_calls")
-                normalized_tool_calls: List[Dict] = []
-
-                if isinstance(raw_tool_calls, list):
-                    for tool_call in raw_tool_calls:
-                        if not isinstance(tool_call, dict):
-                            continue
-
-                        call_id = tool_call.get("id")
-                        if not isinstance(call_id, str) or not call_id.strip():
-                            continue
-
-                        function = tool_call.get("function")
-                        if not isinstance(function, dict):
-                            continue
-
-                        name = function.get("name")
-                        if not isinstance(name, str) or not name.strip():
-                            continue
-
-                        arguments = function.get("arguments")
-                        if not isinstance(arguments, str):
-                            arguments = "{}"
-
-                        normalized_tool_call = dict(tool_call)
-                        normalized_tool_call["id"] = call_id.strip()
-                        normalized_function = dict(function)
-                        normalized_function["name"] = name.strip()
-                        normalized_function["arguments"] = arguments
-                        normalized_tool_call["function"] = normalized_function
-                        normalized_tool_calls.append(normalized_tool_call)
-
-                if normalized_tool_calls:
-                    next_msg["tool_calls"] = normalized_tool_calls
-                    current_assistant_call_ids = {tool_call["id"] for tool_call in normalized_tool_calls}
-                else:
-                    next_msg.pop("tool_calls", None)
-                    current_assistant_call_ids.clear()
-
-                has_text_output = bool(
-                    build_openai_responses_content(get_message_content_parts(next_msg), role="assistant")
-                )
-                if normalized_tool_calls and not has_text_output:
-                    if "reasoning_detail" in next_msg:
-                        logger.debug(
-                            "Stripping reasoning_detail from tool-call-only assistant turn with %d tool calls",
-                            len(normalized_tool_calls),
-                        )
-                    next_msg.pop("reasoning_detail", None)
-
-                sanitized.append(next_msg)
+            item_id = item.get("id")
+            if not isinstance(item_id, str) or not item_id:
                 continue
+            compact: Dict[str, Any] = {
+                "id": item_id,
+                "type": str(item.get("type") or "reasoning"),
+            }
+            encrypted = item.get("encrypted_content")
+            if isinstance(encrypted, str) and encrypted:
+                compact["encrypted_content"] = encrypted
+            summary = item.get("summary")
+            if isinstance(summary, (str, list, dict)):
+                compact["summary"] = summary
+            else:
+                compact["summary"] = []
+            filtered.append(compact)
+        return filtered
 
-            if role == "tool_results":
-                if not current_assistant_call_ids:
-                    logger.debug("Dropping orphan tool_results turn with no matching preceding assistant")
+    def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
+        items = self._filter_reasoning_items(self._snapshot_reasoning_details(final_snapshot))
+        reasoning_text = self._reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
+        if not items and not reasoning_text:
+            return None
+
+        data: dict[str, Any] = {"items": items}
+        raw = getattr(final_snapshot, "raw_native_response", None)
+        if isinstance(raw, dict):
+            for output_item in raw.get("output") or []:
+                if not isinstance(output_item, dict):
                     continue
+                if output_item.get("type") == "message":
+                    msg_id = output_item.get("id")
+                    if isinstance(msg_id, str) and msg_id:
+                        data["output_msg_id"] = msg_id
+                elif output_item.get("type") == "function_call":
+                    call_id = output_item.get("call_id")
+                    item_id = output_item.get("id")
+                    if isinstance(call_id, str) and call_id and isinstance(item_id, str) and item_id:
+                        fc_ids = data.setdefault("function_call_item_ids", {})
+                        fc_ids[call_id] = item_id
 
-                filtered_tool_results: List[Dict] = []
-                raw_tool_results = msg.get("tool_results")
-                if isinstance(raw_tool_results, list):
-                    for tool_result in raw_tool_results:
-                        if not isinstance(tool_result, dict):
-                            continue
+        meta: dict[str, Any] = {"provider": "openai"}
+        if reasoning_text:
+            data["reasoning_text"] = reasoning_text
+            meta["thinking_display"] = "reasoning_text"
 
-                        tool_call_id = tool_result.get("tool_call_id")
-                        if not isinstance(tool_call_id, str):
-                            continue
-                        normalized_call_id = tool_call_id.strip()
-                        if not normalized_call_id or normalized_call_id not in current_assistant_call_ids:
-                            continue
+        return {
+            "type": "openai",
+            "meta": meta,
+            "data": data,
+            "token_count": 0,
+        }
 
-                        normalized_tool_result = dict(tool_result)
-                        normalized_tool_result["tool_call_id"] = normalized_call_id
-                        content = normalized_tool_result.get("content")
-                        normalized_tool_result["content"] = "" if content is None else str(content)
-                        filtered_tool_results.append(normalized_tool_result)
-
-                if not filtered_tool_results:
-                    logger.debug("Dropping tool_results turn after filtering unmatched call_ids")
-                    continue
-
-                next_msg = dict(msg)
-                next_msg["tool_results"] = filtered_tool_results
-                sanitized.append(next_msg)
-                continue
-
-            current_assistant_call_ids.clear()
-            sanitized.append(dict(msg))
-
-        return sanitized
+    def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
+        return "reasoning_text"
 
     def _convert_messages(self, messages: List[Dict]) -> List[Dict]:
         """
@@ -198,12 +156,10 @@ class OpenAIResponsesProvider(BaseProvider):
         Responses API function_call format.
         """
         result = []
-        sanitized_messages = self._sanitize_history(messages)
-        for msg in sanitized_messages:
+        for msg in messages:
             role = msg.get("role", "user")
-            message_parts = get_message_content_parts(msg)
-            text_content = self._extract_text_content(msg)
-            tool_calls = msg.get("tool_calls")
+            message_parts = get_canonical_content_parts(msg)
+            tool_calls = msg.get("tool_calls") if isinstance(msg.get("tool_calls"), list) else None
             reasoning_detail = msg.get("reasoning_detail") if isinstance(msg.get("reasoning_detail"), dict) else None
 
             # Map roles (Chat Completions -> Responses)
@@ -229,19 +185,21 @@ class OpenAIResponsesProvider(BaseProvider):
                 return reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
 
             def _reasoning_items() -> List[Dict]:
-                items = _reasoning_data().get("items")
-                if not isinstance(items, list):
-                    return []
-                return [item for item in items if isinstance(item, dict)]
+                return self._filter_reasoning_items(_reasoning_data().get("items"))
 
-            def _apply_output_id(msg_dict: Dict, ri: List[Dict]) -> None:
-                """Mark assistant message as a proper output item when reasoning items are present."""
-                if not ri:
+            def _output_msg_id() -> str | None:
+                value = _reasoning_data().get("output_msg_id")
+                if isinstance(value, str) and value:
+                    return value
+                return None
+
+            def _apply_output_id(msg_dict: Dict, has_output_item: bool) -> None:
+                if not has_output_item:
                     return
                 msg_dict["type"] = "message"
                 msg_dict["status"] = "completed"
-                output_msg_id = _reasoning_data().get("output_msg_id")
-                if isinstance(output_msg_id, str) and output_msg_id:
+                output_msg_id = _output_msg_id()
+                if output_msg_id:
                     msg_dict["id"] = output_msg_id
 
             # Handle assistant messages with tool_calls
@@ -249,14 +207,23 @@ class OpenAIResponsesProvider(BaseProvider):
                 content_items = build_openai_responses_content(message_parts, role=role)
                 # Reasoning items must precede the output they produced
                 ri = _reasoning_items()
+                for item in ri:
+                    result.append(item)
                 if content_items:
-                    for item in ri:
-                        result.append(item)
                     msg_dict: Dict = {"role": role, "content": content_items}
-                    _apply_output_id(msg_dict, ri)
+                    _apply_output_id(msg_dict, bool(ri) or _output_msg_id() is not None)
                     result.append(msg_dict)
-                else:
-                    ri = []
+                elif ri or _output_msg_id() is not None:
+                    msg_dict = {
+                        "type": "message",
+                        "role": role,
+                        "status": "completed",
+                        "content": [],
+                    }
+                    output_msg_id = _output_msg_id()
+                    if output_msg_id:
+                        msg_dict["id"] = output_msg_id
+                    result.append(msg_dict)
                 # Function calls are top-level input items in the Responses API
                 fc_item_ids = _reasoning_data().get("function_call_item_ids", {})
                 for tc in tool_calls:
@@ -286,7 +253,7 @@ class OpenAIResponsesProvider(BaseProvider):
             for item in ri:
                 result.append(item)
             msg_dict: Dict = {"role": role, "content": content_items}
-            _apply_output_id(msg_dict, ri)
+            _apply_output_id(msg_dict, role == "assistant" and (bool(ri) or _output_msg_id() is not None))
             result.append(msg_dict)
 
         return result

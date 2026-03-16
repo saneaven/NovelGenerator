@@ -5,21 +5,9 @@ import sys
 import types
 from typing import Any
 
-from App.backend.services.reasoning.provider_io import (
-    ClaudeIO,
-    CustomOpenAICompletionIO,
-    OpenAIResponsesIO,
-    get_provider_io,
-)
 
-
-def _ensure_openai_stub() -> None:
-    if "openai" in sys.modules:
-        openai_ready = True
-    else:
-        openai_ready = False
-
-    if not openai_ready:
+def _ensure_provider_stubs() -> None:
+    if "openai" not in sys.modules:
         fake_openai = types.ModuleType("openai")
 
         class _StubOpenAIError(Exception):
@@ -33,6 +21,71 @@ def _ensure_openai_stub() -> None:
         fake_openai.BadRequestError = _StubOpenAIError
         fake_openai.RateLimitError = _StubOpenAIError
         sys.modules["openai"] = fake_openai
+
+    if "anthropic" not in sys.modules:
+        fake_anthropic = types.ModuleType("anthropic")
+        fake_anthropic.AsyncAnthropic = object
+        sys.modules["anthropic"] = fake_anthropic
+
+    google_module = sys.modules.setdefault("google", types.ModuleType("google"))
+    if "google.genai" not in sys.modules:
+        fake_genai = types.ModuleType("google.genai")
+        fake_errors = types.ModuleType("google.genai.errors")
+        fake_types = types.ModuleType("google.genai.types")
+
+        class _StubClient:
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                pass
+
+        class _StubHttpOptions:
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                pass
+
+        class _StubPart:
+            def __init__(self, **kwargs: object) -> None:
+                self.__dict__.update(kwargs)
+
+            @classmethod
+            def from_text(cls, *, text: str) -> "_StubPart":
+                return cls(text=text)
+
+            @classmethod
+            def from_bytes(cls, *, data: bytes, mime_type: str) -> "_StubPart":
+                return cls(data=data, mime_type=mime_type)
+
+            @classmethod
+            def from_function_response(cls, *, name: str, response: dict[str, object]) -> "_StubPart":
+                return cls(name=name, response=response)
+
+            @classmethod
+            def from_function_call(cls, *, name: str, args: dict[str, object]) -> "_StubPart":
+                return cls(name=name, args=args)
+
+            @classmethod
+            def model_validate(cls, payload: dict[str, object]) -> "_StubPart":
+                return cls(**payload)
+
+        class _StubContent:
+            def __init__(self, role: str | None = None, parts: list[object] | None = None) -> None:
+                self.role = role
+                self.parts = parts or []
+
+        class _StubFunctionCallingConfigMode:
+            AUTO = "AUTO"
+            ANY = "ANY"
+            NONE = "NONE"
+
+        fake_genai.Client = _StubClient
+        fake_types.HttpOptions = _StubHttpOptions
+        fake_types.Part = _StubPart
+        fake_types.Content = _StubContent
+        fake_types.FunctionCallingConfigMode = _StubFunctionCallingConfigMode
+        fake_genai.errors = fake_errors
+        fake_genai.types = fake_types
+        google_module.genai = fake_genai
+        sys.modules["google.genai"] = fake_genai
+        sys.modules["google.genai.errors"] = fake_errors
+        sys.modules["google.genai.types"] = fake_types
 
     if "App.backend.models.db_models" not in sys.modules:
         fake_db_models = types.ModuleType("App.backend.models.db_models")
@@ -52,11 +105,16 @@ def _ensure_openai_stub() -> None:
         sys.modules["App.backend.services.chat_attachment_service"] = fake_chat_attachment_service
 
 
-def _load_openai_responses_provider():
-    _ensure_openai_stub()
+def _load_providers():
+    _ensure_provider_stubs()
+    from App.backend.providers.claude_provider import ClaudeProvider
+    from App.backend.providers.custom import CustomProvider
+    from App.backend.providers.gemini_provider import GeminiProvider
     from App.backend.providers.openai_responses_provider import OpenAIResponsesProvider
+    from App.backend.providers.openrouter import OpenRouterProvider
+    from App.backend.providers.xai_provider import XAIProvider
 
-    return OpenAIResponsesProvider
+    return ClaudeProvider, CustomProvider, GeminiProvider, OpenAIResponsesProvider, OpenRouterProvider, XAIProvider
 
 
 @dataclass
@@ -69,25 +127,23 @@ class _Snapshot:
 
 
 def test_provider_stream_thinking_display_paths() -> None:
-    assert get_provider_io("openai", {}).get_stream_thinking_display_path({}) == "reasoning_text"
-    assert get_provider_io("gemini", {}).get_stream_thinking_display_path({}) == "reasoning_text"
-    assert get_provider_io("claude", {}).get_stream_thinking_display_path({}) == "reasoning_text"
-    assert get_provider_io("openrouter", {}).get_stream_thinking_display_path({}) == "reasoning"
-    assert get_provider_io("xai", {}).get_stream_thinking_display_path({}) == "reasoning_text"
-    assert get_provider_io("custom", {}).get_stream_thinking_display_path({}) == "text"
-    assert get_provider_io("custom", {"custom_kind": "openai_response"}).get_stream_thinking_display_path({}) == "reasoning_text"
-    assert get_provider_io("custom", {"custom_kind": "claude"}).get_stream_thinking_display_path({}) == "reasoning_text"
+    ClaudeProvider, CustomProvider, GeminiProvider, OpenAIResponsesProvider, OpenRouterProvider, XAIProvider = _load_providers()
 
+    assert OpenAIResponsesProvider({}).get_stream_thinking_display_path({}) == "reasoning_text"
+    assert GeminiProvider({}).get_stream_thinking_display_path({}) == "reasoning_text"
+    assert ClaudeProvider({}).get_stream_thinking_display_path({}) == "reasoning_text"
+    assert OpenRouterProvider({}).get_stream_thinking_display_path({}) == "reasoning"
+    assert XAIProvider({}).get_stream_thinking_display_path({}) == "reasoning_text"
 
-def test_custom_provider_io_routes_by_custom_kind() -> None:
-    assert isinstance(get_provider_io("custom", {}), CustomOpenAICompletionIO)
-    assert isinstance(get_provider_io("custom", {"custom_kind": "openai_completion"}), CustomOpenAICompletionIO)
-    assert isinstance(get_provider_io("custom", {"custom_kind": "openai_response"}), OpenAIResponsesIO)
-    assert isinstance(get_provider_io("custom", {"custom_kind": "claude"}), ClaudeIO)
-    assert isinstance(get_provider_io("custom", {"custom_kind": "unknown"}), CustomOpenAICompletionIO)
+    custom = CustomProvider({})
+    assert custom.get_stream_thinking_display_path({}) == "text"
+    assert custom.get_stream_thinking_display_path({"custom_kind": "openai_response"}) == "reasoning_text"
+    assert custom.get_stream_thinking_display_path({"custom_kind": "claude"}) == "reasoning_text"
 
 
 def test_custom_template_stream_display_path_and_nested_data() -> None:
+    _, CustomProvider, _, _, _, _ = _load_providers()
+    provider = CustomProvider({})
     advanced = {
         "custom_thinking_template_id": "tpl-1",
         "_resolved_template": {
@@ -96,8 +152,8 @@ def test_custom_template_stream_display_path_and_nested_data() -> None:
             ],
         },
     }
-    io = get_provider_io("custom", advanced)
-    assert io.get_stream_thinking_display_path(advanced) == "reasoning_info.reasoning_text"
+
+    assert provider.get_stream_thinking_display_path(advanced) == "reasoning_info.reasoning_text"
 
     snapshot = _Snapshot(
         content_parts=[{"type": "content", "text": "answer"}],
@@ -106,7 +162,8 @@ def test_custom_template_stream_display_path_and_nested_data() -> None:
             {"_template_var": "reasoning_info.reasoning_text", "value": "world"},
         ],
     )
-    detail = io.read_reasoning_detail(snapshot, advanced)
+    detail = provider.read_reasoning_detail(snapshot, advanced)
+
     assert detail is not None
     assert detail["type"] == "openai_compatible_template"
     assert detail["meta"]["provider"] == "custom"
@@ -116,6 +173,8 @@ def test_custom_template_stream_display_path_and_nested_data() -> None:
 
 
 def test_custom_template_without_stream_field_has_no_display_path() -> None:
+    _, CustomProvider, _, _, _, _ = _load_providers()
+    provider = CustomProvider({})
     advanced = {
         "custom_thinking_template_id": "tpl-1",
         "_resolved_template": {
@@ -124,8 +183,8 @@ def test_custom_template_without_stream_field_has_no_display_path() -> None:
             ],
         },
     }
-    io = get_provider_io("custom", advanced)
-    assert io.get_stream_thinking_display_path(advanced) is None
+
+    assert provider.get_stream_thinking_display_path(advanced) is None
 
     snapshot = _Snapshot(
         content_parts=[{"type": "content", "text": "answer"}],
@@ -133,17 +192,15 @@ def test_custom_template_without_stream_field_has_no_display_path() -> None:
             {"_template_var": "reasoning_info.other", "value": "value"},
         ],
     )
-    detail = io.read_reasoning_detail(snapshot, advanced)
+    detail = provider.read_reasoning_detail(snapshot, advanced)
+
     assert detail is not None
     assert "thinking_display" not in detail["meta"]
 
 
-# --- OpenAI reasoning multi-turn pairing tests ---
-
-
 def test_openai_read_reasoning_detail_captures_output_msg_id() -> None:
-    """read_reasoning_detail should extract the output message ID from the raw native response."""
-    io = get_provider_io("openai", {})
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    provider = OpenAIResponsesProvider({})
     snapshot = _Snapshot(
         content_parts=[{"type": "content", "text": "Hello"}],
         reasoning_details=[
@@ -156,117 +213,115 @@ def test_openai_read_reasoning_detail_captures_output_msg_id() -> None:
             ],
         },
     )
-    detail = io.read_reasoning_detail(snapshot, {})
+
+    detail = provider.read_reasoning_detail(snapshot, {})
+
     assert detail is not None
     assert detail["data"]["output_msg_id"] == "msg_xyz"
     assert detail["data"]["items"][0]["id"] == "rs_abc"
 
 
 def test_openai_read_reasoning_detail_no_raw_response() -> None:
-    """read_reasoning_detail should work without raw_native_response (no output_msg_id)."""
-    io = get_provider_io("openai", {})
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    provider = OpenAIResponsesProvider({})
     snapshot = _Snapshot(
         content_parts=[{"type": "content", "text": "Hello"}],
         reasoning_details=[
             {"id": "rs_abc", "type": "reasoning", "encrypted_content": "enc123"},
         ],
     )
-    detail = io.read_reasoning_detail(snapshot, {})
+
+    detail = provider.read_reasoning_detail(snapshot, {})
+
     assert detail is not None
     assert "output_msg_id" not in detail["data"]
     assert detail["data"]["items"][0]["id"] == "rs_abc"
 
 
-def test_openai_to_provider_messages_preserves_output_msg_id() -> None:
-    """to_provider_messages should preserve output_msg_id through reasoning item filtering."""
-    io = get_provider_io("openai", {})
-    messages = [
-        {
-            "role": "assistant",
-            "content_parts": [{"type": "content", "text": "Hello"}],
-            "reasoning_detail": {
-                "type": "openai",
-                "meta": {"provider": "openai"},
-                "data": {
-                    "items": [{"id": "rs_abc", "type": "reasoning", "encrypted_content": "enc123"}],
-                    "output_msg_id": "msg_xyz",
-                },
-                "token_count": 0,
-            },
-        },
-    ]
-    result = io.to_provider_messages(messages, "o3", {})
-    rd = result[0]["reasoning_detail"]
-    assert rd["data"]["output_msg_id"] == "msg_xyz"
-    assert len(rd["data"]["items"]) == 1
-
-
-def test_custom_openai_response_to_provider_messages_preserves_output_msg_id() -> None:
-    advanced = {"custom_kind": "openai_response"}
-    io = get_provider_io("custom", advanced)
-    messages = [
-        {
-            "role": "assistant",
-            "content_parts": [{"type": "content", "text": "Hello"}],
-            "reasoning_detail": {
-                "type": "openai",
-                "meta": {"provider": "openai"},
-                "data": {
-                    "items": [{"id": "rs_abc", "type": "reasoning", "encrypted_content": "enc123"}],
-                    "output_msg_id": "msg_xyz",
-                },
-                "token_count": 0,
-            },
-        },
-    ]
-    result = io.to_provider_messages(messages, "gpt-5.4", advanced)
-    rd = result[0]["reasoning_detail"]
-    assert rd["data"]["output_msg_id"] == "msg_xyz"
-    assert len(rd["data"]["items"]) == 1
-
-
-def test_custom_openai_response_convert_messages_keeps_reasoning_items_before_output_and_tool_calls() -> None:
-    advanced = {"custom_kind": "openai_response"}
-    io = get_provider_io("custom", advanced)
-    provider_cls = _load_openai_responses_provider()
-    provider = provider_cls.__new__(provider_cls)
-    messages = [
-        {
-            "role": "assistant",
-            "content_parts": [{"type": "content", "text": "Hello"}],
-            "tool_calls": [
-                {
-                    "id": "call_123",
-                    "type": "function",
-                    "function": {"name": "read_story_object", "arguments": "{\"id\":\"abc\"}"},
-                }
+def test_custom_openai_response_read_reasoning_detail_delegates_to_responses_provider() -> None:
+    _, CustomProvider, _, _, _, _ = _load_providers()
+    provider = CustomProvider({})
+    snapshot = _Snapshot(
+        content_parts=[{"type": "content", "text": "Hello"}],
+        reasoning_details=[
+            {"id": "rs_abc", "type": "reasoning", "encrypted_content": "enc123"},
+        ],
+        raw_native_response={
+            "output": [
+                {"type": "message", "id": "msg_xyz", "role": "assistant", "content": [{"type": "output_text", "text": "Hello"}]},
             ],
+        },
+    )
+
+    detail = provider.read_reasoning_detail(snapshot, {"custom_kind": "openai_response"})
+
+    assert detail is not None
+    assert detail["type"] == "openai"
+    assert detail["data"]["output_msg_id"] == "msg_xyz"
+
+
+def test_custom_claude_read_reasoning_detail_delegates_to_claude_provider() -> None:
+    _, CustomProvider, _, _, _, _ = _load_providers()
+    provider = CustomProvider({})
+    snapshot = _Snapshot(
+        content_parts=[{"type": "content", "text": "Hello"}],
+        reasoning_details=[
+            {"type": "thinking", "thinking": "step one", "signature": "sig_123"},
+        ],
+    )
+
+    detail = provider.read_reasoning_detail(snapshot, {"custom_kind": "claude"})
+
+    assert detail is not None
+    assert detail["type"] == "claude"
+    assert detail["data"]["blocks"][0]["thinking"] == "step one"
+    assert detail["data"]["blocks"][0]["signature"] == "sig_123"
+
+
+def test_custom_openai_completion_convert_messages_applies_history_inject() -> None:
+    _, CustomProvider, _, _, _, _ = _load_providers()
+    provider = CustomProvider({})
+    provider.set_thinking_template(
+        {
+            "id": "tpl-1",
+            "effort_fields": [],
+            "response_fields": [],
+            "history_fields": [
+                {"path": "metadata.replayed_reasoning", "in_var": "reasoning_info.reasoning_text"},
+            ],
+        }
+    )
+
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [{"type": "content", "text": "Hello"}],
             "reasoning_detail": {
-                "type": "openai",
-                "meta": {"provider": "openai"},
+                "type": "openai_compatible_template",
+                "meta": {
+                    "provider": "custom",
+                    "custom_thinking_template_id": "tpl-1",
+                },
                 "data": {
-                    "items": [{"id": "rs_abc", "type": "reasoning", "encrypted_content": "enc123"}],
-                    "output_msg_id": "msg_xyz",
-                    "function_call_item_ids": {"call_123": "fc_xyz"},
+                    "reasoning_info": {
+                        "reasoning_text": "step one",
+                    }
                 },
                 "token_count": 0,
             },
         },
     ]
-    prepared = io.to_provider_messages(messages, "gpt-5.4", advanced)
-    result = provider._convert_messages(prepared)
-    assert [item["type"] for item in result] == ["reasoning", "message", "function_call"]
-    assert result[0]["id"] == "rs_abc"
-    assert result[1]["id"] == "msg_xyz"
-    assert result[1]["status"] == "completed"
-    assert result[2]["id"] == "fc_xyz"
-    assert result[2]["status"] == "completed"
+
+    converted = provider._convert_messages(messages)
+
+    assert converted[0]["metadata"]["replayed_reasoning"] == "step one"
+    assert "reasoning" not in converted[0]
+    assert "reasoning_details" not in converted[0]
 
 
 def test_openai_convert_messages_includes_id_and_status() -> None:
-    """_convert_messages should include id and status on assistant messages following reasoning items."""
-    provider_cls = _load_openai_responses_provider()
-    provider = provider_cls.__new__(provider_cls)
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    provider = OpenAIResponsesProvider({})
     messages = [
         {"role": "user", "content_parts": [{"type": "content", "text": "Hi"}]},
         {
@@ -281,8 +336,9 @@ def test_openai_convert_messages_includes_id_and_status() -> None:
             },
         },
     ]
+
     result = provider._convert_messages(messages)
-    # Should be: user message, reasoning item, assistant message
+
     assert len(result) == 3
     assert result[1]["type"] == "reasoning"
     assert result[1]["id"] == "rs_abc"
@@ -293,25 +349,64 @@ def test_openai_convert_messages_includes_id_and_status() -> None:
 
 
 def test_openai_convert_messages_no_reasoning_no_extra_fields() -> None:
-    """_convert_messages should NOT add id/status when no reasoning items are present."""
-    provider_cls = _load_openai_responses_provider()
-    provider = provider_cls.__new__(provider_cls)
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    provider = OpenAIResponsesProvider({})
     messages = [
         {
             "role": "assistant",
             "content_parts": [{"type": "content", "text": "Hello"}],
         },
     ]
+
     result = provider._convert_messages(messages)
+
     assert len(result) == 1
     assert "id" not in result[0]
     assert "status" not in result[0]
     assert "type" not in result[0]
 
 
-def test_openai_convert_messages_tool_call_only_assistant_drops_reasoning_and_keeps_tool_replay() -> None:
-    provider_cls = _load_openai_responses_provider()
-    provider = provider_cls.__new__(provider_cls)
+def test_openai_convert_messages_tool_call_only_assistant_restores_empty_message() -> None:
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    provider = OpenAIResponsesProvider({})
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [],
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "read_story_object", "arguments": "{}"},
+                }
+            ],
+            "reasoning_detail": {
+                "type": "openai",
+                "data": {
+                    "items": [{"id": "rs_1", "type": "reasoning", "encrypted_content": "enc"}],
+                    "output_msg_id": "msg_1",
+                    "function_call_item_ids": {"call_1": "fc_1"},
+                },
+            },
+        },
+    ]
+
+    result = provider._convert_messages(messages)
+
+    assert [item["type"] for item in result] == ["reasoning", "message", "function_call"]
+    assert result[0]["id"] == "rs_1"
+    assert result[1]["id"] == "msg_1"
+    assert result[1]["role"] == "assistant"
+    assert result[1]["status"] == "completed"
+    assert result[1]["content"] == []
+    assert result[2]["id"] == "fc_1"
+    assert result[2]["status"] == "completed"
+    assert result[2]["call_id"] == "call_1"
+
+
+def test_openai_convert_messages_tool_call_only_assistant_with_tool_results_keeps_full_chain() -> None:
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    provider = OpenAIResponsesProvider({})
     messages = [
         {
             "role": "assistant",
@@ -341,185 +436,5 @@ def test_openai_convert_messages_tool_call_only_assistant_drops_reasoning_and_ke
 
     result = provider._convert_messages(messages)
 
-    assert [item["type"] for item in result] == ["function_call", "function_call_output"]
-    assert all(item["type"] != "reasoning" for item in result)
-    assert all(item.get("role") != "assistant" for item in result)
-    assert result[0]["call_id"] == "call_1"
-    assert result[1]["call_id"] == "call_1"
-
-
-def test_openai_convert_messages_orphan_tool_results_are_dropped() -> None:
-    provider_cls = _load_openai_responses_provider()
-    provider = provider_cls.__new__(provider_cls)
-    messages = [
-        {
-            "role": "tool_results",
-            "content_parts": [],
-            "tool_results": [{"tool_call_id": "call_1", "content": "result payload"}],
-        },
-    ]
-
-    result = provider._convert_messages(messages)
-
-    assert result == []
-
-
-def test_openai_convert_messages_filters_unmatched_tool_results() -> None:
-    provider_cls = _load_openai_responses_provider()
-    provider = provider_cls.__new__(provider_cls)
-    messages = [
-        {
-            "role": "assistant",
-            "content_parts": [],
-            "tool_calls": [
-                {
-                    "id": "call_1",
-                    "type": "function",
-                    "function": {"name": "read_story_object", "arguments": "{}"},
-                }
-            ],
-        },
-        {
-            "role": "tool_results",
-            "content_parts": [],
-            "tool_results": [
-                {"tool_call_id": "call_1", "content": "first"},
-                {"tool_call_id": "call_2", "content": "second"},
-            ],
-        },
-    ]
-
-    result = provider._convert_messages(messages)
-
-    assert [item["type"] for item in result] == ["function_call", "function_call_output"]
-    assert result[1]["call_id"] == "call_1"
-
-
-def test_openai_convert_messages_user_message_breaks_tool_result_attachment_chain() -> None:
-    provider_cls = _load_openai_responses_provider()
-    provider = provider_cls.__new__(provider_cls)
-    messages = [
-        {
-            "role": "assistant",
-            "content_parts": [],
-            "tool_calls": [
-                {
-                    "id": "call_1",
-                    "type": "function",
-                    "function": {"name": "read_story_object", "arguments": "{}"},
-                }
-            ],
-        },
-        {"role": "user", "content_parts": [{"type": "content", "text": "next turn"}]},
-        {
-            "role": "tool_results",
-            "content_parts": [],
-            "tool_results": [{"tool_call_id": "call_1", "content": "result payload"}],
-        },
-    ]
-
-    result = provider._convert_messages(messages)
-
-    assert not any(item["type"] == "function_call_output" for item in result if "type" in item)
-    assert any(item.get("role") == "user" for item in result)
-
-
-def test_openai_convert_messages_invalid_tool_calls_do_not_accept_trailing_tool_results() -> None:
-    provider_cls = _load_openai_responses_provider()
-    provider = provider_cls.__new__(provider_cls)
-    messages = [
-        {
-            "role": "assistant",
-            "content_parts": [],
-            "tool_calls": [
-                {
-                    "id": "",
-                    "type": "function",
-                    "function": {"name": "read_story_object", "arguments": "{}"},
-                },
-                {
-                    "type": "function",
-                    "function": {"name": "read_story_object", "arguments": "{}"},
-                },
-            ],
-        },
-        {
-            "role": "tool_results",
-            "content_parts": [],
-            "tool_results": [{"tool_call_id": "call_1", "content": "result payload"}],
-        },
-    ]
-
-    result = provider._convert_messages(messages)
-
-    assert result == []
-
-
-def test_custom_openai_response_convert_messages_tool_call_only_replay_is_sanitized() -> None:
-    advanced = {"custom_kind": "openai_response"}
-    io = get_provider_io("custom", advanced)
-    provider_cls = _load_openai_responses_provider()
-    provider = provider_cls.__new__(provider_cls)
-    messages = [
-        {
-            "role": "assistant",
-            "content_parts": [],
-            "tool_calls": [
-                {
-                    "id": "call_1",
-                    "type": "function",
-                    "function": {"name": "read_story_object", "arguments": "{}"},
-                }
-            ],
-            "reasoning_detail": {
-                "type": "openai",
-                "meta": {"provider": "openai"},
-                "data": {
-                    "items": [{"id": "rs_1", "type": "reasoning", "encrypted_content": "enc"}],
-                    "output_msg_id": "msg_1",
-                    "function_call_item_ids": {"call_1": "fc_1"},
-                },
-                "token_count": 0,
-            },
-        },
-        {
-            "role": "tool_results",
-            "content_parts": [],
-            "tool_results": [{"tool_call_id": "call_1", "content": "result payload"}],
-        },
-    ]
-
-    prepared = io.to_provider_messages(messages, "gpt-5.4", advanced)
-    result = provider._convert_messages(prepared)
-
-    assert [item["type"] for item in result] == ["function_call", "function_call_output"]
-    assert result[0]["call_id"] == "call_1"
-    assert result[1]["call_id"] == "call_1"
-
-
-def test_custom_claude_to_provider_messages_preserves_reasoning_blocks() -> None:
-    advanced = {"custom_kind": "claude"}
-    io = get_provider_io("custom", advanced)
-    messages = [
-        {
-            "role": "assistant",
-            "content_parts": [{"type": "content", "text": "Hello"}],
-            "reasoning_detail": {
-                "type": "claude",
-                "meta": {"provider": "claude", "thinking_display": "reasoning_text"},
-                "data": {
-                    "blocks": [
-                        {"type": "thinking", "thinking": "step one", "signature": "sig_123"},
-                    ],
-                    "reasoning_text": "step one",
-                },
-                "token_count": 0,
-            },
-        },
-    ]
-    result = io.to_provider_messages(messages, "claude-3.7", advanced)
-    rd = result[0]["reasoning_detail"]
-    assert rd["type"] == "claude"
-    assert rd["data"]["blocks"][0]["thinking"] == "step one"
-    assert rd["data"]["blocks"][0]["signature"] == "sig_123"
-
+    assert [item["type"] for item in result] == ["reasoning", "message", "function_call", "function_call_output"]
+    assert result[3]["call_id"] == "call_1"

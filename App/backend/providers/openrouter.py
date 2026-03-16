@@ -38,6 +38,40 @@ class OpenRouterProvider(AsyncOpenAIProvider):
         headers.update(self._additional_headers)
         return headers
 
+    @staticmethod
+    def _read_openrouter_format(details: list[dict[str, object]]) -> str | None:
+        for detail in details:
+            fmt = detail.get("format") if isinstance(detail, dict) else None
+            if isinstance(fmt, str) and fmt.strip():
+                return fmt
+        return None
+
+    def read_reasoning_detail(self, final_snapshot, advanced: Dict) -> Dict | None:
+        details = self._snapshot_reasoning_details(final_snapshot)
+        reasoning_text = self._reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
+        if not details and not reasoning_text:
+            return None
+
+        meta: Dict[str, object] = {"provider": "openrouter"}
+        fmt = self._read_openrouter_format(details)
+        if isinstance(fmt, str):
+            meta["openrouter_reasoning_format"] = fmt
+
+        data: Dict[str, object] = {"reasoning_details": details}
+        if reasoning_text:
+            data["reasoning"] = reasoning_text
+            meta["thinking_display"] = "reasoning"
+
+        return {
+            "type": "openrouter",
+            "meta": meta,
+            "data": data,
+            "token_count": 0,
+        }
+
+    def get_stream_thinking_display_path(self, advanced: Dict) -> str | None:
+        return "reasoning"
+
     def _build_extra_body(
         self,
         provider_preference: Optional[Dict],
