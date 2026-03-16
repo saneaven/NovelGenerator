@@ -830,6 +830,7 @@ async def patch_thread_message(
     updated = dict(current)
     updated[language] = entry
     row.data = updated
+    thread.captured_history_conversation_json = None
     db.commit()
     db.refresh(row)
 
