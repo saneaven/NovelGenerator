@@ -9,7 +9,11 @@ import {
   isBlockingThreadStatus,
 } from '../../types/thread';
 import { useFunctionCallUIStore } from '../../toolCall/ui/store';
+import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
+import { useAutoScrollLock } from '../../hooks/useAutoScrollLock';
 import { TextButton } from '../TextButton';
+import { IconButton } from '../IconButton';
+import { ChevronDown } from '../icons';
 import { SubAgentPeekHeader } from './SubAgentPeekHeader';
 import { SubAgentPeekTimeline } from './SubAgentPeekTimeline';
 import { cancelThread, pauseThread, resumeThread } from '../../runtime/threadCommands';
@@ -215,6 +219,9 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   const [actionInFlight, setActionInFlight] = useState<'pause' | 'resume' | 'cancel' | null>(null);
 
   const selectedChildThreadId = selectedEntry?.childThreadId;
+  const selectedLiveView = useThreadLiveViewState(selectedChildThreadId);
+  const peekBodyRef = useRef<HTMLDivElement | null>(null);
+  const peekContentRef = useRef<HTMLDivElement | null>(null);
 
   // Reset action state when switching threads
   useEffect(() => {
@@ -228,8 +235,25 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     ? runtimeUnresolvedToolCallCount
     : selectedPendingCount;
   const isBlocking = isBlockingThreadStatus(selectedThreadStatus);
+  const isPeekLive = selectedThreadStatus === 'running'
+    || selectedLiveView?.noticeKind === 'preexisting_live_run';
   const canPauseSelectedThread = canPauseThreadStatus(selectedThreadStatus);
   const canResumeSelectedThread = canResumeThreadStatus(selectedThreadStatus);
+
+  const {
+    showScrollButton,
+    scrollToBottom,
+    resetToBottom,
+  } = useAutoScrollLock({
+    scrollContainerRef: peekBodyRef,
+    contentRef: peekContentRef,
+    active: isPeekLive,
+  });
+
+  useEffect(() => {
+    if (!peekOpen) return;
+    resetToBottom();
+  }, [peekOpen, selectedChildThreadId, resetToBottom]);
 
   const handlePause = useCallback(() => {
     if (actionInFlight || !selectedChildThreadId) return;
@@ -278,11 +302,22 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
       />
 
       <div className={`sub-agent-peek-dock__body${peekOpen ? ' sub-agent-peek-dock__body--open' : ''}`}>
-        <div className="sub-agent-peek-dock__body-inner">
-          <SubAgentPeekTimeline
-            childThreadId={selectedEntry.childThreadId}
-            projectId={projectId}
-          />
+        <div className="sub-agent-peek-dock__body-inner" ref={peekBodyRef}>
+          <div className="sub-agent-peek-dock__body-content" ref={peekContentRef}>
+            <SubAgentPeekTimeline
+              childThreadId={selectedEntry.childThreadId}
+              projectId={projectId}
+            />
+          </div>
+          {showScrollButton && (
+            <IconButton
+              className="scroll-to-bottom-button sub-agent-peek-scroll-button"
+              icon={<ChevronDown size="sm" />}
+              onClick={() => scrollToBottom()}
+              title={t('agent.scrollToBottom')}
+              variant="primary"
+            />
+          )}
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { notificationService } from '../../api/notificationService';
 import { useNotificationStore } from '../../store/notificationStore';
 import { useNotificationToastStore } from '../../store/notificationToastStore';
@@ -15,6 +16,33 @@ interface ActivityPanelButtonProps {
   className?: string;
 }
 
+const DESKTOP_PANEL_WIDTH = 320;
+const MOBILE_BREAKPOINT = 768;
+const FALLBACK_VIEWPORT_PADDING = 16;
+const FALLBACK_DESKTOP_GAP = 8;
+const FALLBACK_MOBILE_GAP = 12;
+
+function resolveCssLength(value: string, fallback: number): number {
+  if (typeof document === 'undefined') return fallback;
+
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+
+  if (trimmed.endsWith('px')) {
+    const parsed = Number.parseFloat(trimmed);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  if (trimmed.endsWith('rem')) {
+    const parsed = Number.parseFloat(trimmed);
+    const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    return Number.isFinite(parsed) ? parsed * rootFontSize : fallback;
+  }
+
+  const parsed = Number.parseFloat(trimmed);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
   position = 'desktop',
   className = '',
@@ -24,6 +52,9 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
   const [activeView, setActiveView] = useState<ActivityView>('notifications');
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const closeTimeoutRef = useRef<number | null>(null);
+  const positionFrameRef = useRef<number | null>(null);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties | null>(null);
 
   // Subscribe to notification state for indicators
   const notificationsMap = useNotificationStore((state) => state.notifications);
@@ -45,11 +76,75 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
     [notificationsMap]
   );
 
+  const computePanelStyle = useCallback((): React.CSSProperties | null => {
+    if (typeof window === 'undefined' || typeof document === 'undefined' || !buttonRef.current) {
+      return null;
+    }
+
+    const rootStyle = getComputedStyle(document.documentElement);
+    const viewportPadding = resolveCssLength(
+      rootStyle.getPropertyValue('--spacing-lg'),
+      FALLBACK_VIEWPORT_PADDING,
+    );
+    const desktopGap = resolveCssLength(
+      rootStyle.getPropertyValue('--spacing-sm'),
+      FALLBACK_DESKTOP_GAP,
+    );
+    const mobileGap = resolveCssLength(
+      rootStyle.getPropertyValue('--spacing-md'),
+      FALLBACK_MOBILE_GAP,
+    );
+    const { innerWidth, innerHeight } = window;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const availableWidth = Math.max(innerWidth - viewportPadding * 2, 0);
+    const width = position === 'mobile'
+      ? availableWidth
+      : innerWidth <= MOBILE_BREAKPOINT
+        ? availableWidth
+        : Math.min(DESKTOP_PANEL_WIDTH, availableWidth);
+
+    if (position === 'mobile') {
+      return {
+        width,
+        right: Math.max(viewportPadding, innerWidth - rect.right),
+        bottom: innerHeight - rect.top + mobileGap,
+      };
+    }
+
+    const maxLeft = Math.max(viewportPadding, innerWidth - width - viewportPadding);
+    return {
+      width,
+      top: rect.bottom + desktopGap,
+      left: Math.min(Math.max(rect.left, viewportPadding), maxLeft),
+    };
+  }, [position]);
+
+  const updatePanelPosition = useCallback(() => {
+    const nextStyle = computePanelStyle();
+    if (!nextStyle) return;
+    setPanelStyle(nextStyle);
+  }, [computePanelStyle]);
+
+  const schedulePanelPositionUpdate = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (positionFrameRef.current !== null) return;
+
+    positionFrameRef.current = window.requestAnimationFrame(() => {
+      positionFrameRef.current = null;
+      updatePanelPosition();
+    });
+  }, [updatePanelPosition]);
+
   const handleClose = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (closeTimeoutRef.current !== null) return;
+
     setIsClosing(true);
-    setTimeout(() => {
+    closeTimeoutRef.current = window.setTimeout(() => {
+      closeTimeoutRef.current = null;
       setIsOpen(false);
       setIsClosing(false);
+      setPanelStyle(null);
       useNotificationToastStore.getState().setActivityPanelOpen(false);
     }, 150);
   }, []);
@@ -65,12 +160,13 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
         console.warn('Failed to mark notifications as read', { error });
       });
       useNotificationToastStore.getState().setActivityPanelOpen(true);
+      setPanelStyle(computePanelStyle() ?? { visibility: 'hidden' });
       setIsOpen(true);
       setActiveView('notifications'); // Reset to notifications on open
     } else {
       handleClose();
     }
-  }, [isOpen, markAllReadLocal, handleClose]);
+  }, [isOpen, markAllReadLocal, handleClose, computePanelStyle]);
 
   const handleViewChange = useCallback((view: ActivityView) => {
     setActiveView(view);
@@ -79,9 +175,46 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
   // Safety: ensure toast suppression doesn't stick if this component unmounts while open.
   useEffect(() => {
     return () => {
+      if (closeTimeoutRef.current !== null) {
+        window.clearTimeout(closeTimeoutRef.current);
+      }
+      if (positionFrameRef.current !== null) {
+        window.cancelAnimationFrame(positionFrameRef.current);
+      }
       useNotificationToastStore.getState().setActivityPanelOpen(false);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    schedulePanelPositionUpdate();
+
+    const handleViewportChange = () => {
+      schedulePanelPositionUpdate();
+    };
+
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('scroll', handleViewportChange, true);
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && buttonRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        schedulePanelPositionUpdate();
+      });
+      resizeObserver.observe(buttonRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('scroll', handleViewportChange, true);
+      resizeObserver?.disconnect();
+      if (positionFrameRef.current !== null) {
+        window.cancelAnimationFrame(positionFrameRef.current);
+        positionFrameRef.current = null;
+      }
+    };
+  }, [isOpen, schedulePanelPositionUpdate]);
 
   // Close on click outside
   useEffect(() => {
@@ -121,6 +254,22 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
 
   const buttonSize = position === 'mobile' ? 'md' : 'lg';
   const isMobile = position === 'mobile';
+  const panel = isOpen && typeof document !== 'undefined'
+    ? createPortal(
+      <div
+        ref={panelRef}
+        className={`activity-panel-container activity-panel-container--portal activity-panel-container--${position} ${isClosing ? 'activity-panel-container--closing' : ''}`}
+        style={panelStyle ?? { visibility: 'hidden' }}
+      >
+        <ActivityPanelContainer
+          activeView={activeView}
+          onViewChange={handleViewChange}
+          isMobile={isMobile}
+        />
+      </div>,
+      document.body,
+    )
+    : null;
 
   return (
     <div className={`activity-panel-button-wrapper activity-panel-button-wrapper--${position} ${className}`}>
@@ -139,19 +288,7 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
       />
 
       <NotificationStatusToast />
-
-      {isOpen && (
-        <div
-          ref={panelRef}
-          className={`activity-panel-container ${isClosing ? 'activity-panel-container--closing' : ''}`}
-        >
-          <ActivityPanelContainer
-            activeView={activeView}
-            onViewChange={handleViewChange}
-            isMobile={isMobile}
-          />
-        </div>
-      )}
+      {panel}
     </div>
   );
 };

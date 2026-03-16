@@ -10,10 +10,15 @@
     overflow-x: hidden;
     padding: var(--spacing-xl);
     min-height: 0;
+    position: relative;
+    background: var(--color-surface-base);
+}
+
+.agent-messages__content {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-lg);
-    background: var(--color-surface-base);
+    min-height: 100%;
 }
 
 /* ===== Memory Boundary Divider ===== */

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
 import { BaseModal } from '../BaseModal';
@@ -23,9 +23,10 @@ import ThinkingDisplay from '../common/ThinkingDisplay';
 import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
-import { Close } from '../icons';
+import { ChevronDown, Close } from '../icons';
 import { Loading } from '../common/Loading';
 import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
+import { useAutoScrollLock } from '../../hooks/useAutoScrollLock';
 import { hasRenderableAssistantOutput } from '../../runtime/messageVisibility';
 import { applyThreadSnapshot } from '../../runtime/threadHydration';
 import type { NotificationStatus } from '../../store/notificationStore';
@@ -131,6 +132,8 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const [feedbackText, setFeedbackText] = useState('');
   const [footerActionInFlight, setFooterActionInFlight] = useState<'resume' | 'cancel' | null>(null);
   const [latestRunContext, setLatestRunContext] = useState<LatestRunContext | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const bodyContentRef = useRef<HTMLDivElement | null>(null);
 
   const mainLanguage = useSettingsStore((s) => s.getSettings().mainLanguage);
   const liveView = useThreadLiveViewState(threadId);
@@ -241,6 +244,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const journeyStatus = status as ThreadStatus;
   const statusText = formatNotificationStatusLabelFor('journey', status);
   const isRunning = journeyStatus === 'running' || journeyStatus === 'processing';
+  const isJourneyLive = isRunning || liveView?.noticeKind === 'preexisting_live_run';
   const isWaiting = journeyStatus === 'waiting';
   const canResume = canResumeThreadStatus(journeyStatus);
   const hasDecisionControls = hasPendingToolCalls;
@@ -252,6 +256,20 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const unresolvedToolCallCount = runtimeUnresolvedToolCallCount > 0
     ? runtimeUnresolvedToolCallCount
     : pendingToolCallCount;
+
+  const {
+    showScrollButton,
+    scrollToBottom,
+    resetToBottom,
+  } = useAutoScrollLock({
+    scrollContainerRef: bodyRef,
+    contentRef: bodyContentRef,
+    active: isJourneyLive,
+  });
+
+  useEffect(() => {
+    resetToBottom();
+  }, [threadId, resetToBottom]);
 
   // Handlers
   const handleCancel = useCallback(() => {
@@ -469,84 +487,96 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
       </div>
 
       {/* Scrollable message timeline */}
-      <div className="journey-detail-body">
-        {displayMessages.length === 0 && !isRunning && !hasInlineWarning && liveView?.noticeKind !== 'preexisting_live_run' && (
-          <div className="journey-detail-empty">No messages yet.</div>
-        )}
+      <div className="journey-detail-body" ref={bodyRef}>
+        <div className="journey-detail-body__content" ref={bodyContentRef}>
+          {displayMessages.length === 0 && !isRunning && !hasInlineWarning && liveView?.noticeKind !== 'preexisting_live_run' && (
+            <div className="journey-detail-empty">No messages yet.</div>
+          )}
 
-        {displayMessages.map((message) => {
-          if (message.role === 'user') return renderUserMessage(message);
-          if (message.role === 'assistant') {
-            const isLastAssistant = message.id === lastAssistantMessage?.id;
-            return renderAssistantMessage(message, isLastAssistant);
-          }
-          return null;
-        })}
+          {displayMessages.map((message) => {
+            if (message.role === 'user') return renderUserMessage(message);
+            if (message.role === 'assistant') {
+              const isLastAssistant = message.id === lastAssistantMessage?.id;
+              return renderAssistantMessage(message, isLastAssistant);
+            }
+            return null;
+          })}
 
-        {hasInlineWarning && (
-          <div className="journey-detail-warning">{warning || threadLastError}</div>
-        )}
+          {hasInlineWarning && (
+            <div className="journey-detail-warning">{warning || threadLastError}</div>
+          )}
 
-        {/* Streaming indicator */}
-        {isRunning && !liveView?.hasStreamingMessage && liveView?.noticeKind === 'preexisting_live_run' && (
-          <PreexistingLiveRunNotice className="journey-detail-notice" compact />
-        )}
+          {/* Streaming indicator */}
+          {isRunning && !liveView?.hasStreamingMessage && liveView?.noticeKind === 'preexisting_live_run' && (
+            <PreexistingLiveRunNotice className="journey-detail-notice" compact />
+          )}
 
-        {isRunning && !liveView?.hasStreamingMessage && liveView?.noticeKind !== 'preexisting_live_run' && displayMessages.length > 0 && (
-          <div className="journey-detail-typing">
-            <div className="loading-track">
-              <div className="loading-bar" />
+          {isRunning && !liveView?.hasStreamingMessage && liveView?.noticeKind !== 'preexisting_live_run' && displayMessages.length > 0 && (
+            <div className="journey-detail-typing">
+              <div className="loading-track">
+                <div className="loading-bar" />
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Feedback area */}
-        {!isRunning && displayMessages.length > 0 && (
-          <div className={`journey-detail-feedback ${feedbackOpen ? 'journey-detail-feedback--open' : ''}`}>
-            <button
-              className="journey-detail-feedback-toggle"
-              onClick={() => setFeedbackOpen(!feedbackOpen)}
-              disabled={isFeedbackDisabled}
-            >
-              {feedbackOpen ? 'Feedback' : '+ Feedback'}
-            </button>
+          {/* Feedback area */}
+          {!isRunning && displayMessages.length > 0 && (
+            <div className={`journey-detail-feedback ${feedbackOpen ? 'journey-detail-feedback--open' : ''}`}>
+              <button
+                className="journey-detail-feedback-toggle"
+                onClick={() => setFeedbackOpen(!feedbackOpen)}
+                disabled={isFeedbackDisabled}
+              >
+                {feedbackOpen ? 'Feedback' : '+ Feedback'}
+              </button>
 
-            <AnimatePresence>
-              {feedbackOpen && (
-                <motion.div
-                  className="journey-detail-feedback-body"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2, ease: 'easeInOut' }}
-                >
-                  <div className="journey-detail-feedback-inner">
-                    <textarea
-                      className="journey-detail-feedback-textarea"
-                      value={feedbackText}
-                      onChange={(e) => setFeedbackText(e.target.value)}
-                      onKeyDown={handleFeedbackKeyDown}
-                      placeholder="Tell the AI what to change..."
-                      rows={3}
-                      autoFocus
-                    />
-                    <div className="journey-detail-feedback-actions">
-                      <TextButton variant="secondary" onClick={() => setFeedbackOpen(false)}>
-                        Cancel
-                      </TextButton>
-                      <TextButton
-                        variant="primary"
-                        onClick={handleSendFeedback}
-                        disabled={!feedbackText.trim() || isFeedbackDisabled}
-                      >
-                        Send
-                      </TextButton>
+              <AnimatePresence>
+                {feedbackOpen && (
+                  <motion.div
+                    className="journey-detail-feedback-body"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  >
+                    <div className="journey-detail-feedback-inner">
+                      <textarea
+                        className="journey-detail-feedback-textarea"
+                        value={feedbackText}
+                        onChange={(e) => setFeedbackText(e.target.value)}
+                        onKeyDown={handleFeedbackKeyDown}
+                        placeholder="Tell the AI what to change..."
+                        rows={3}
+                        autoFocus
+                      />
+                      <div className="journey-detail-feedback-actions">
+                        <TextButton variant="secondary" onClick={() => setFeedbackOpen(false)}>
+                          Cancel
+                        </TextButton>
+                        <TextButton
+                          variant="primary"
+                          onClick={handleSendFeedback}
+                          disabled={!feedbackText.trim() || isFeedbackDisabled}
+                        >
+                          Send
+                        </TextButton>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
+
+        {showScrollButton && (
+          <IconButton
+            className="scroll-to-bottom-button journey-detail-scroll-button"
+            icon={<ChevronDown size="sm" />}
+            onClick={() => scrollToBottom()}
+            title="Scroll to bottom"
+            variant="primary"
+          />
         )}
       </div>
     </BaseModal>
