@@ -27,6 +27,7 @@ from openai import (
 )
 
 from .base import BaseProvider
+from .client_timeouts import get_llm_stream_timeout
 from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
 from .final_mappers import map_openai_response_to_snapshot
 from .multimodal import build_openai_responses_content, get_canonical_content_parts
@@ -71,6 +72,7 @@ class OpenAIResponsesProvider(BaseProvider):
         return AsyncOpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
+            timeout=get_llm_stream_timeout(),
         )
 
     def _ensure_client(self) -> AsyncOpenAI:

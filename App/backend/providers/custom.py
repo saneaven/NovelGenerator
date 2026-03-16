@@ -14,6 +14,7 @@ from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI, OpenAIError
 
 from .async_openai_provider import AsyncOpenAIProvider
+from .client_timeouts import get_llm_stream_timeout
 from .claude_provider import ClaudeProvider
 from .contracts import ProviderEvent
 from .openai_responses_provider import OpenAIResponsesProvider
@@ -68,6 +69,7 @@ class _CustomClaudeProvider(ClaudeProvider):
         kwargs: Dict[str, object] = {
             "api_key": (self._api_key or "custom-endpoint-key"),
             "base_url": self._base_url.rstrip("/"),
+            "timeout": get_llm_stream_timeout(),
         }
         if self._additional_headers:
             kwargs["default_headers"] = self._additional_headers
@@ -108,6 +110,7 @@ class _CustomOpenAIResponseProvider(OpenAIResponsesProvider):
         kwargs: Dict[str, object] = {
             "api_key": (self._api_key or "custom-endpoint-key"),
             "base_url": self._base_url.rstrip("/"),
+            "timeout": get_llm_stream_timeout(),
         }
         if self._additional_headers:
             kwargs["default_headers"] = self._additional_headers

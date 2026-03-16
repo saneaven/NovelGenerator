@@ -5,6 +5,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 from anthropic import AsyncAnthropic
 
 from .base import BaseProvider
+from .client_timeouts import get_llm_stream_timeout
 from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
 from .final_mappers import map_claude_message_to_snapshot
 from .multimodal import build_claude_content, get_canonical_content_parts
@@ -31,7 +32,10 @@ class ClaudeProvider(BaseProvider):
 
     def _build_client(self) -> AsyncAnthropic:
         """Build Anthropic client with optional custom base_url."""
-        kwargs = {"api_key": self.api_key}
+        kwargs = {
+            "api_key": self.api_key,
+            "timeout": get_llm_stream_timeout(),
+        }
         if self._base_url:
             kwargs["base_url"] = self._base_url
         return AsyncAnthropic(**kwargs)

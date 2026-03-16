@@ -12,6 +12,7 @@ from openai import (
 )
 
 from .base import BaseProvider
+from .client_timeouts import get_llm_stream_timeout
 from .contracts import (
     DeltaPayload,
     MetaPayload,
@@ -52,7 +53,10 @@ class AsyncOpenAIProvider(BaseProvider):
         return self.config.get("additional_headers") or {}
 
     def _build_client(self) -> AsyncOpenAI:
-        client_kwargs: Dict[str, object] = {"base_url": self.base_url}
+        client_kwargs: Dict[str, object] = {
+            "base_url": self.base_url,
+            "timeout": get_llm_stream_timeout(),
+        }
         if self.api_key:
             client_kwargs["api_key"] = self.api_key
         if self.default_headers:
