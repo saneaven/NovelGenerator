@@ -69,6 +69,7 @@ const UnifiedWorkspace: React.FC = () => {
   const unifiedObjects = useUnifiedObjectStore(state => state.objects);
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
+  const changeRevision = useUnifiedObjectStore(state => state.changeRevision);
 
   // NovelEditor specific stores
   const selectedChapterByProject = useNovelEditorStore(state => state.selectedChapterByProject);
@@ -167,10 +168,9 @@ const UnifiedWorkspace: React.FC = () => {
   }, [projectId, subLanguages]);
 
   // Calculate count of objects needing translation (not tied to current sub-page)
-  const objectCount = Object.keys(unifiedObjects).length;
   useEffect(() => {
     refreshTranslationCount();
-  }, [refreshTranslationCount, objectCount]);
+  }, [refreshTranslationCount, changeRevision]);
 
   // Selected chapter for novel-editor
   const selectedChapterId = selectedChapterByProject[projectId ?? '']

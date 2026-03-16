@@ -782,9 +782,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
 
   const isMessageRunActive = useMemo(() => (
     thread?.status === 'running'
-    || hasStreamingMessage
     || liveView?.noticeKind === 'preexisting_live_run'
-  ), [thread?.status, hasStreamingMessage, liveView?.noticeKind]);
+  ), [thread?.status, liveView?.noticeKind]);
 
   const sendBlockingState: SendBlockingState = useMemo(() => {
     const missingAgent = !selectedAgentId;
@@ -853,6 +852,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     setEditingText('');
     setTranslatingByMessageId({});
   }, [selectedAgentId, threadId]);
+
+  useEffect(() => {
+    if (!threadId || !hasStreamingMessage) return;
+    if (thread?.status === 'running') return;
+    void fetchAndReplaceThreadSnapshot(threadId);
+  }, [threadId, hasStreamingMessage, thread?.status]);
 
   useEffect(() => {
     pendingAttachmentsRef.current = pendingAttachments;

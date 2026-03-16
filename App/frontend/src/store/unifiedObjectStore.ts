@@ -39,6 +39,9 @@ interface UnifiedObjectStore {
   // Translation status (reactive, replaces TranslationService static Map)
   translating: Record<string, boolean>;
 
+  // Monotonic counter bumped on every SSE-driven object change
+  changeRevision: number;
+
   // Translation status actions
   setTranslating: (objectId: string, isTranslating: boolean) => void;
   clearTranslating: (objectId: string) => void;
@@ -112,6 +115,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
   loading: {},
   errors: {},
   translating: {},
+  changeRevision: 0,
 
   // ========================================================================
   // TRANSLATION STATUS ACTIONS
@@ -581,6 +585,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
         loading: nextLoading,
         errors: nextErrors,
         translating: nextTranslating,
+        changeRevision: state.changeRevision + 1,
       };
     });
   },

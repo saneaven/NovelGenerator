@@ -233,7 +233,15 @@ export async function pauseThread(params: PauseThreadParams): Promise<void> {
 }
 
 export async function cancelThread(params: CancelThreadParams): Promise<void> {
+  const store = useThreadStore.getState();
   await threadService.cancelThread(params.threadId);
+  store.setThreadRuntime(params.threadId, {
+    status: 'canceled',
+    latestRunStatus: 'canceled',
+    lastError: null,
+    updatedAt: nowIso(),
+  });
+  store.setThreadStreamActive(params.threadId, false);
 }
 
 export async function decideToolCall(params: DecideToolCallParams): Promise<void> {

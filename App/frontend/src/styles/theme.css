@@ -353,17 +353,17 @@
     --z-card-animating: 50;
     --z-header: 100;
     --z-notification-stack: 500;  /* Base z-index for notification stack items */
-    --z-dropdown: 1000;
+    --z-dropdown: 1050;
     --z-sticky: 1010;
     --z-fixed: 1020;
     --z-overlay: 1030;
     --z-mobile-agent: 1032;
     --z-sidebar-backdrop: 1035;
     --z-sidebar: 1036;
-    --z-modal: 1040;
-    --z-modal-nested-1: 1140;
-    --z-modal-nested-2: 1240;
-    --z-modal-nested-3: 1340;
+    --z-modal: 1100;
+    --z-modal-nested-1: 1200;
+    --z-modal-nested-2: 1300;
+    --z-modal-nested-3: 1400;
     --z-popover: 1050;
     --z-tooltip: 1060;
     --z-max: 9999;
