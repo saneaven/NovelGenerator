@@ -27,6 +27,7 @@ def upgrade() -> None:
     inspector = sa.inspect(bind)
 
     outline_columns = _column_names(inspector, "outlines")
+    has_legacy_order = "order" in outline_columns
 
     if "kind" not in outline_columns:
         op.add_column("outlines", sa.Column("kind", sa.String(length=20), nullable=True))
@@ -49,22 +50,40 @@ def upgrade() -> None:
     )
 
     if _table_exists(inspector, "acts"):
-        bind.exec_driver_sql(
-            """
-            INSERT INTO outlines (id, project_id, kind, parent_id, position, created_at, updated_at)
-            SELECT id, project_id, 'act', outline_id, COALESCE("order", 0), created_at, updated_at
-            FROM acts
-            """
-        )
+        if has_legacy_order:
+            bind.exec_driver_sql(
+                """
+                INSERT INTO outlines (id, project_id, "order", kind, parent_id, position, created_at, updated_at)
+                SELECT id, project_id, COALESCE("order", 0), 'act', outline_id, COALESCE("order", 0), created_at, updated_at
+                FROM acts
+                """
+            )
+        else:
+            bind.exec_driver_sql(
+                """
+                INSERT INTO outlines (id, project_id, kind, parent_id, position, created_at, updated_at)
+                SELECT id, project_id, 'act', outline_id, COALESCE("order", 0), created_at, updated_at
+                FROM acts
+                """
+            )
 
     if _table_exists(inspector, "chapters"):
-        bind.exec_driver_sql(
-            """
-            INSERT INTO outlines (id, project_id, kind, parent_id, position, created_at, updated_at)
-            SELECT id, project_id, 'chapter', act_id, COALESCE("order", 0), created_at, updated_at
-            FROM chapters
-            """
-        )
+        if has_legacy_order:
+            bind.exec_driver_sql(
+                """
+                INSERT INTO outlines (id, project_id, "order", kind, parent_id, position, created_at, updated_at)
+                SELECT id, project_id, COALESCE("order", 0), 'chapter', act_id, COALESCE("order", 0), created_at, updated_at
+                FROM chapters
+                """
+            )
+        else:
+            bind.exec_driver_sql(
+                """
+                INSERT INTO outlines (id, project_id, kind, parent_id, position, created_at, updated_at)
+                SELECT id, project_id, 'chapter', act_id, COALESCE("order", 0), created_at, updated_at
+                FROM chapters
+                """
+            )
 
     if _table_exists(inspector, "manuscripts"):
         op.execute("ALTER TABLE manuscripts DROP CONSTRAINT IF EXISTS manuscripts_chapter_id_fkey")
