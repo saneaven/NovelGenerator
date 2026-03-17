@@ -11,6 +11,7 @@ from ....utils.story_entities import STORY_ENTITY_TYPE
 from .manuscript_access import patch_manuscript, validate_patch_args as validate_manuscript_patch, ensure_manuscript_exists
 from .object_access import (
     ensure_act_parent_exists,
+    ensure_story_entity_folder_exists,
     extract_lang_data,
     get_primary_object_id,
     patch_object_field,
@@ -30,6 +31,7 @@ from .shared import (
 
 _ID = {"type": "string", "description": "Object ID"}
 _TEXT_PATCH = {"old": {"type": "string"}, "new": {"type": "string"}}
+_FOLDER_ID = {"type": ["string", "null"], "description": "Parent folder ID. Use null for root."}
 
 
 def _positive_order(value: Any) -> None:
@@ -62,7 +64,13 @@ class PatchToolCallModule(ToolCallModule):
                         name="patch_story_entity",
                         description="Patch story entity by single replacement.",
                         parameters=obj_schema(
-                            {"id": _ID, "kind": {"type": "string", "enum": ["character", "location", "organization", "lorebook"]}, "field": {"type": "string", "enum": ["name", "description", "content"]}, **_TEXT_PATCH},
+                            {
+                                "id": _ID,
+                                "kind": {"type": "string", "enum": ["character", "location", "organization", "lorebook"]},
+                                "field": {"type": "string", "enum": ["name", "description", "content"]},
+                                "folderId": _FOLDER_ID,
+                                **_TEXT_PATCH,
+                            },
                             ["id", "kind", "field", "old", "new"],
                         ),
                         auto_approve_category="patch",
@@ -160,6 +168,11 @@ class PatchToolCallModule(ToolCallModule):
                     language=ctx.language,
                     kind=args.get("kind"),
                 )
+                ensure_story_entity_folder_exists(
+                    ctx.db,
+                    project_id=ctx.project_id,
+                    folder_id=args.get("folderId"),
+                )
                 patch_object_field(extract_lang_data(current, ctx.language), field=str(field), old=str(args.get("old") or ""), new=str(args.get("new") or ""))
                 return valid_result()
 
@@ -234,6 +247,7 @@ class PatchToolCallModule(ToolCallModule):
         if tool_name == "patch_story_entity":
             kind = str(args.get("kind") or "")
             object_type = STORY_ENTITY_TYPE
+            metadata = {"folder_id": args.get("folderId")} if "folderId" in args else None
             current = read_story_entity(
                 ctx.db,
                 project_id=ctx.project_id,
@@ -254,6 +268,7 @@ class PatchToolCallModule(ToolCallModule):
                 object_id=object_id,
                 data=next_data,
                 language=ctx.language,
+                metadata=metadata,
                 kind=kind,
                 user_request="tool:patch_story_entity",
                 created_by=ctx.user_id,

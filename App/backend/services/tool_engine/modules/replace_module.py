@@ -11,6 +11,7 @@ from ....utils.story_entities import STORY_ENTITY_TYPE
 from .manuscript_access import ensure_manuscript_exists, replace_manuscript
 from .object_access import (
     ensure_act_parent_exists,
+    ensure_story_entity_folder_exists,
     extract_lang_data,
     get_primary_object_id,
     read_object,
@@ -28,6 +29,7 @@ from .shared import (
 
 
 _ID = {"type": "string", "description": "Object ID"}
+_FOLDER_ID = {"type": ["string", "null"], "description": "Parent folder ID. Use null for root."}
 
 
 def _positive_order(value: Any) -> None:
@@ -66,6 +68,7 @@ class ReplaceToolCallModule(ToolCallModule):
                                 "name": {"type": "string"},
                                 "description": {"type": "string"},
                                 "content": {"type": "string"},
+                                "folderId": _FOLDER_ID,
                             },
                             ["id", "kind"],
                         ),
@@ -162,6 +165,11 @@ class ReplaceToolCallModule(ToolCallModule):
                     language=ctx.language,
                     kind=args.get("kind"),
                 )
+                ensure_story_entity_folder_exists(
+                    ctx.db,
+                    project_id=ctx.project_id,
+                    folder_id=args.get("folderId"),
+                )
                 return valid_result()
             elif tool_name == "replace_outline":
                 object_type = "outline"
@@ -250,6 +258,7 @@ class ReplaceToolCallModule(ToolCallModule):
         if tool_name == "replace_story_entity":
             kind = str(args.get("kind") or "")
             object_type = STORY_ENTITY_TYPE
+            metadata = {"folder_id": args.get("folderId")} if "folderId" in args else None
             current = read_story_entity(
                 ctx.db,
                 project_id=ctx.project_id,
@@ -268,6 +277,7 @@ class ReplaceToolCallModule(ToolCallModule):
                 object_id=object_id,
                 data=next_data,
                 language=ctx.language,
+                metadata=metadata,
                 kind=kind,
                 user_request="tool:replace_story_entity",
                 created_by=ctx.user_id,

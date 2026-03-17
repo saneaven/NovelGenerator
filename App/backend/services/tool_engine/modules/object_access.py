@@ -5,7 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from ....models.db_models import Act, Outline
+from ....models.db_models import Act, Outline, StoryEntityFolder
 from ....services.object_service import object_service
 from ....services.patch_utils import apply_single_replacement
 from ....utils.story_entities import STORY_ENTITY_KINDS, STORY_ENTITY_TYPE, require_story_entity_kind
@@ -102,6 +102,25 @@ def ensure_act_parent_exists(db: Session, *, project_id: UUID, act_id: UUID) -> 
     )
     if row is None:
         raise ValueError(f"Parent act not found: {act_id}")
+
+
+def ensure_story_entity_folder_exists(
+    db: Session,
+    *,
+    project_id: UUID,
+    folder_id: Any,
+    field_name: str = "folderId",
+) -> None:
+    if folder_id is None:
+        return
+    parsed_folder_id = to_uuid(folder_id, field_name)
+    row = (
+        db.query(StoryEntityFolder)
+        .filter(StoryEntityFolder.id == parsed_folder_id, StoryEntityFolder.project_id == project_id)
+        .first()
+    )
+    if row is None:
+        raise ValueError(f"Story entity folder not found: {parsed_folder_id}")
 
 
 def patch_text(current: str, *, old: str, new: str) -> str:

@@ -905,6 +905,13 @@ def _extract_outline_metadata(object_type: str, args: dict) -> dict | None:
     return meta or None
 
 
+def _extract_story_entity_metadata(args: dict) -> dict | None:
+    meta: dict[str, Any] = {}
+    if "folderId" in args:
+        meta["folder_id"] = args.get("folderId")
+    return meta or None
+
+
 def _mark_tc_failed_by_id(db: Session, tc_id: UUID, reason: str) -> None:
     tc = db.query(RunToolCallModel).filter(RunToolCallModel.id == tc_id).first()
     if tc and tc.status in {"applied", "processing"}:
@@ -1064,9 +1071,9 @@ async def _execute_batched_patch_group(
                     )
                     obj_id = UUID(str(args.get("id")))
                     metadata = (
-                        _extract_outline_metadata(obj_type, args)
-                        if tool_name != "patch_story_entity"
-                        else None
+                        _extract_story_entity_metadata(args)
+                        if tool_name == "patch_story_entity"
+                        else _extract_outline_metadata(obj_type, args)
                     )
                     r = object_patch_batch.apply_patch(
                         db=db,
@@ -1101,9 +1108,9 @@ async def _execute_batched_patch_group(
                     obj_id = UUID(str(args.get("id")))
                     fields = {k: args[k] for k in ("name", "description", "content") if k in args}
                     metadata = (
-                        _extract_outline_metadata(obj_type, args)
-                        if tool_name != "replace_story_entity"
-                        else None
+                        _extract_story_entity_metadata(args)
+                        if tool_name == "replace_story_entity"
+                        else _extract_outline_metadata(obj_type, args)
                     )
                     r = object_patch_batch.apply_replace(
                         db=db,

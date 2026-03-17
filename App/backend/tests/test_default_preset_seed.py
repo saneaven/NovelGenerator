@@ -69,3 +69,16 @@ def test_default_prompt_places_project_reference_and_guidelines_in_expected_sect
     assert '{% include "fragment:common/objectIndex" %}' in project_data_system
     assert '{% if not editAssistant.projectData.guidelines %}{% include "fragment:common/guidelines" %}{% endif %}' in project_data_last_user
     assert '{% include "fragment:common/objectContext" %}' in project_data_last_user
+
+
+def test_default_prompt_story_entity_tool_docs_include_folder_id() -> None:
+    document = _load_default_prompt_document()
+
+    project_data_ops = document["fragments"]["common/editOperations"]["projectData"]["content"]
+    project_data_native = document["fragments"]["common/nativeOutput"]["projectData"]["content"]
+
+    assert "Optional `folderId` places it in a folder; use `null` for root." in project_data_ops
+    assert "Optional `folderId` moves it to a folder; use `null` for root." in project_data_ops
+    assert "`folderId` can be used together with create, replace, or patch to place or move a story entity." in project_data_ops
+    assert '"folderId": "folder-main-cast"' in project_data_native
+    assert '"folderId": null' in project_data_native

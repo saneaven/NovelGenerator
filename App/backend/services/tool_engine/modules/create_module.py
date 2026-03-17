@@ -8,7 +8,13 @@ from ..registry import tool_call_module
 from ..result_utils import invalid_result, make_result, valid_result
 from ....services.object_service import object_service
 from ....utils.story_entities import STORY_ENTITY_TYPE
-from .object_access import require_story_entity_arg_kind, to_uuid, ensure_outline_parent_exists, ensure_act_parent_exists
+from .object_access import (
+    ensure_act_parent_exists,
+    ensure_outline_parent_exists,
+    ensure_story_entity_folder_exists,
+    require_story_entity_arg_kind,
+    to_uuid,
+)
 from .shared import filter_allowed_specs, is_agent_write_context, is_outline_journey, is_object_journey, obj_schema
 
 
@@ -16,6 +22,7 @@ _NAME = {"type": "string", "description": "Name"}
 _DESC = {"type": "string", "description": "Description"}
 _CONTENT = {"type": "string", "description": "Content"}
 _ENTITY_KIND = {"type": "string", "enum": ["character", "location", "organization", "lorebook"]}
+_FOLDER_ID = {"type": ["string", "null"], "description": "Parent folder ID. Use null for root."}
 
 
 @tool_call_module(prefix="create_")
@@ -34,7 +41,7 @@ class CreateToolCallModule(ToolCallModule):
                     name="create_story_entity",
                     description="Create a story entity.",
                     parameters=obj_schema(
-                        {"kind": _ENTITY_KIND, "name": _NAME, "description": _DESC, "content": _CONTENT},
+                        {"kind": _ENTITY_KIND, "name": _NAME, "description": _DESC, "content": _CONTENT, "folderId": _FOLDER_ID},
                         ["kind", "name", "content"],
                     ),
                     auto_approve_category="create",
@@ -75,6 +82,11 @@ class CreateToolCallModule(ToolCallModule):
         try:
             if tool_name == "create_story_entity":
                 require_story_entity_arg_kind(args.get("kind"))
+                ensure_story_entity_folder_exists(
+                    ctx.db,
+                    project_id=ctx.project_id,
+                    folder_id=args.get("folderId"),
+                )
             elif tool_name == "create_outline_act":
                 ensure_outline_parent_exists(
                     ctx.db,
@@ -106,6 +118,7 @@ class CreateToolCallModule(ToolCallModule):
                 object_type=STORY_ENTITY_TYPE,
                 data=payload,
                 language=ctx.language,
+                metadata={"folder_id": args.get("folderId")},
                 kind=kind,
                 user_request="tool:create_story_entity",
                 created_by=ctx.user_id,
