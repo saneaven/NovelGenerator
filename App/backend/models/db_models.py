@@ -571,7 +571,6 @@ class StoryEntityFolder(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
-    name = Column(String(255), nullable=False)
     parent_id = Column(UUID(as_uuid=True), ForeignKey("story_entity_folders.id", ondelete="CASCADE"), nullable=True, index=True)
     display_order = Column(Integer, nullable=False, default=0)
 
@@ -589,7 +588,6 @@ class StoryEntityFolder(Base):
     story_entities = relationship("StoryEntity", back_populates="folder")
 
     __table_args__ = (
-        UniqueConstraint("project_id", "parent_id", "name", name="uq_story_entity_folders_parent_name"),
         Index("ix_story_entity_folders_project_parent_order", "project_id", "parent_id", "display_order"),
     )
 

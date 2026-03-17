@@ -8,7 +8,7 @@ from ..registry import tool_call_module
 from ..result_utils import invalid_result, make_result, valid_result
 from ....services.object_service import object_service
 from ....services.outline_service import require_outline_kind
-from ....utils.story_entities import STORY_ENTITY_TYPE
+from ....utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE
 from .object_access import (
     ensure_outline_parent_kind,
     ensure_story_entity_folder_exists,
@@ -50,6 +50,17 @@ class CreateToolCallModule(ToolCallModule):
                     auto_approve_category="create",
                 )
             )
+            specs.append(
+                ToolSpec(
+                    name="create_story_entity_folder",
+                    description="Create a story entity folder.",
+                    parameters=obj_schema(
+                        {"name": _NAME, "description": _DESC, "parentId": _FOLDER_ID},
+                        ["name"],
+                    ),
+                    auto_approve_category="create",
+                )
+            )
         if is_agent_write_context(ctx) or is_outline_journey(ctx):
             specs.extend(
                 [
@@ -74,6 +85,13 @@ class CreateToolCallModule(ToolCallModule):
                     ctx.db,
                     project_id=ctx.project_id,
                     folder_id=args.get("folderId"),
+                )
+            elif tool_name == "create_story_entity_folder":
+                ensure_story_entity_folder_exists(
+                    ctx.db,
+                    project_id=ctx.project_id,
+                    folder_id=args.get("parentId"),
+                    field_name="parentId",
                 )
             elif tool_name == "create_outline":
                 outline_kind = require_outline_kind(args.get("kind"))
@@ -124,6 +142,26 @@ class CreateToolCallModule(ToolCallModule):
                 object_id=created["id"],
                 object_type=STORY_ENTITY_TYPE,
                 data={"kind": kind},
+            )
+
+        if tool_name == "create_story_entity_folder":
+            created = object_service.create_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type=STORY_ENTITY_FOLDER_TYPE,
+                data={
+                    "name": str(args.get("name") or ""),
+                    "description": str(args.get("description") or ""),
+                },
+                language=ctx.language,
+                metadata={"parent_id": args.get("parentId")},
+                user_request="tool:create_story_entity_folder",
+                created_by=ctx.user_id,
+            )
+            return make_result(
+                "Created story entity folder",
+                object_id=created["id"],
+                object_type=STORY_ENTITY_FOLDER_TYPE,
             )
 
         if tool_name == "create_outline":

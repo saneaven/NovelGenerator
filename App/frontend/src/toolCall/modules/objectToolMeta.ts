@@ -17,6 +17,8 @@ export function parseOutlineKind(raw: unknown): OutlineKind | undefined {
 
 export function objectTypeLabel(objectType: ObjectType, storyEntityKind?: StoryEntityKind, outlineKind?: OutlineKind): string {
   switch (objectType) {
+    case 'story_entity_folder':
+      return 'Story Entity Folder';
     case 'story_entity':
       return storyEntityKind
         ? `${storyEntityKind.replace(/(^\w)/, (char) => char.toUpperCase())} Entity`

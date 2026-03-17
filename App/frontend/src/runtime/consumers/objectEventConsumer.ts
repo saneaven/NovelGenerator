@@ -1,5 +1,6 @@
 import { unifiedObjectService } from '../../api/unifiedObjectService';
 import { useProjectStore } from '../../store/projectStore';
+import { useStoryEntityFolderStore } from '../../store/storyEntityFolderStore';
 import type { ObjectChangedEvent } from '../../api/sseClient';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import type { ObjectType, UnifiedObject } from '../../types/unifiedObject';
@@ -9,6 +10,7 @@ const FLUSH_DEBOUNCE_MS = 50;
 const OBJECT_TYPE_SET: ReadonlySet<ObjectType> = new Set([
   'basic_info',
   'guidelines',
+  'story_entity_folder',
   'story_entity',
   'outline',
   'manuscript',
@@ -25,6 +27,7 @@ export class ObjectEventConsumer {
   private readonly pendingDeleteIds = new Set<string>();
   private readonly pendingDeleteKeys = new Set<string>();
   private readonly pendingUpserts = new Map<string, PendingUpsert>();
+  private readonly pendingFolderRefreshProjectIds = new Set<string>();
   private readonly revisionByKey = new Map<string, number>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
@@ -40,6 +43,7 @@ export class ObjectEventConsumer {
     this.pendingDeleteIds.clear();
     this.pendingDeleteKeys.clear();
     this.pendingUpserts.clear();
+    this.pendingFolderRefreshProjectIds.clear();
     this.revisionByKey.clear();
   }
 
@@ -58,6 +62,10 @@ export class ObjectEventConsumer {
       if (!objectId || !this.isObjectType(objectTypeRaw)) continue;
 
       const objectType = objectTypeRaw;
+      if (objectType === 'story_entity_folder') {
+        this.pendingFolderRefreshProjectIds.add(projectId);
+        continue;
+      }
       const key = this.objectKey(objectType, objectId);
       const revision = this.bumpRevision(key);
 
@@ -104,15 +112,31 @@ export class ObjectEventConsumer {
     const deletes = [...this.pendingDeleteIds];
     const deleteKeys = new Set(this.pendingDeleteKeys);
     const upserts = [...this.pendingUpserts.values()];
+    const folderRefreshProjectIds = [...this.pendingFolderRefreshProjectIds];
 
     this.pendingDeleteIds.clear();
     this.pendingDeleteKeys.clear();
     this.pendingUpserts.clear();
+    this.pendingFolderRefreshProjectIds.clear();
 
-    if (!deletes.length && !upserts.length) return;
+    if (!deletes.length && !upserts.length && !folderRefreshProjectIds.length) return;
 
     if (deletes.length > 0) {
       useUnifiedObjectStore.getState().applyObjectChanges({ deletes });
+    }
+    if (folderRefreshProjectIds.length > 0) {
+      await Promise.all(
+        folderRefreshProjectIds.map(async (projectId) => {
+          try {
+            await useStoryEntityFolderStore.getState().fetchFolders(projectId);
+          } catch (error) {
+            console.warn('Failed to refresh story entity folders from SSE event', {
+              projectId,
+              error,
+            });
+          }
+        }),
+      );
     }
     if (upserts.length === 0) return;
 

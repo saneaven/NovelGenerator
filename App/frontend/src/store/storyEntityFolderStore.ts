@@ -11,9 +11,10 @@ import { useUnifiedObjectStore } from './unifiedObjectStore';
 interface StoryEntityFolderStore {
   foldersById: Record<string, StoryEntityFolder>;
   loadingByProject: Record<string, boolean>;
-  fetchFolders: (projectId: string) => Promise<StoryEntityFolder[]>;
-  createFolder: (projectId: string, payload: { name: string; parent_id?: string | null }) => Promise<StoryEntityFolder>;
-  renameFolder: (projectId: string, folderId: string, payload: { name: string }) => Promise<StoryEntityFolder>;
+  languageByProject: Record<string, string | undefined>;
+  fetchFolders: (projectId: string, language?: string) => Promise<StoryEntityFolder[]>;
+  createFolder: (projectId: string, payload: { language: string; name: string; description?: string; parent_id?: string | null }) => Promise<StoryEntityFolder>;
+  updateFolder: (projectId: string, folderId: string, payload: { language: string; name?: string; description?: string }) => Promise<StoryEntityFolder>;
   moveFolder: (projectId: string, folderId: string, payload: { new_parent_id?: string | null; new_index?: number }) => Promise<StoryEntityFolder>;
   deleteFolder: (projectId: string, folderId: string) => Promise<StoryEntityFolderDeleteResponse>;
   moveTreeNode: (projectId: string, payload: StoryEntityTreeMoveRequest) => Promise<void>;
@@ -33,7 +34,7 @@ function upsertFolders(
 
 function sortFoldersByDisplayOrder(a: StoryEntityFolder, b: StoryEntityFolder): number {
   if (a.display_order === b.display_order) {
-    return a.name.localeCompare(b.name);
+    return a.id.localeCompare(b.id);
   }
   return a.display_order - b.display_order;
 }
@@ -207,31 +208,43 @@ function normalizeStoryEntitiesAfterMove(
 export const useStoryEntityFolderStore = create<StoryEntityFolderStore>((set, get) => ({
   foldersById: {},
   loadingByProject: {},
+  languageByProject: {},
 
-  fetchFolders: async (projectId) => {
+  fetchFolders: async (projectId, language) => {
+    const resolvedLanguage = language ?? get().languageByProject[projectId];
     set((state) => ({
       loadingByProject: { ...state.loadingByProject, [projectId]: true },
     }));
-    const folders = await storyEntityFolderService.list(projectId);
-    set((state) => ({
-      foldersById: upsertFolders(state, folders),
-      loadingByProject: { ...state.loadingByProject, [projectId]: false },
-    }));
-    return folders;
+    try {
+      const folders = await storyEntityFolderService.list(projectId, resolvedLanguage);
+      set((state) => ({
+        foldersById: upsertFolders(state, folders),
+        loadingByProject: { ...state.loadingByProject, [projectId]: false },
+        languageByProject: { ...state.languageByProject, [projectId]: resolvedLanguage },
+      }));
+      return folders;
+    } catch (error) {
+      set((state) => ({
+        loadingByProject: { ...state.loadingByProject, [projectId]: false },
+      }));
+      throw error;
+    }
   },
 
   createFolder: async (projectId, payload) => {
     const folder = await storyEntityFolderService.create(projectId, payload);
     set((state) => ({
       foldersById: { ...state.foldersById, [folder.id]: folder },
+      languageByProject: { ...state.languageByProject, [projectId]: payload.language },
     }));
     return folder;
   },
 
-  renameFolder: async (projectId, folderId, payload) => {
-    const folder = await storyEntityFolderService.rename(projectId, folderId, payload);
+  updateFolder: async (projectId, folderId, payload) => {
+    const folder = await storyEntityFolderService.update(projectId, folderId, payload);
     set((state) => ({
       foldersById: { ...state.foldersById, [folder.id]: folder },
+      languageByProject: { ...state.languageByProject, [projectId]: payload.language },
     }));
     return folder;
   },
@@ -250,7 +263,7 @@ export const useStoryEntityFolderStore = create<StoryEntityFolderStore>((set, ge
 
     try {
       const folder = await storyEntityFolderService.move(projectId, folderId, payload);
-      void get().fetchFolders(projectId).catch((error) => {
+      void get().fetchFolders(projectId, get().languageByProject[projectId]).catch((error) => {
         console.error('Failed to reconcile folders after move:', error);
       });
       return folder;
@@ -270,6 +283,9 @@ export const useStoryEntityFolderStore = create<StoryEntityFolderStore>((set, ge
       return { foldersById: nextFolders };
     });
     useUnifiedObjectStore.getState().applyObjectChanges({ deletes: response.deleted_entity_ids });
+    void get().fetchFolders(projectId, get().languageByProject[projectId]).catch((error) => {
+      console.error('Failed to reconcile folders after delete:', error);
+    });
     return response;
   },
 
@@ -302,7 +318,7 @@ export const useStoryEntityFolderStore = create<StoryEntityFolderStore>((set, ge
     try {
       await storyEntityFolderService.moveTreeNode(projectId, payload);
       void Promise.all([
-        get().fetchFolders(projectId),
+        get().fetchFolders(projectId, get().languageByProject[projectId]),
         useUnifiedObjectStore.getState().refreshProjectObjects(projectId, ['story_entity']),
       ]).catch((error) => {
         console.error('Failed to reconcile story entity tree after move:', error);
@@ -314,5 +330,5 @@ export const useStoryEntityFolderStore = create<StoryEntityFolderStore>((set, ge
     }
   },
 
-  clear: () => set({ foldersById: {}, loadingByProject: {} }),
+  clear: () => set({ foldersById: {}, loadingByProject: {}, languageByProject: {} }),
 }));

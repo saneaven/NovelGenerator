@@ -9,7 +9,12 @@ from ....models.db_models import Outline, StoryEntityFolder
 from ....services.object_service import object_service
 from ....services.patch_utils import apply_single_replacement
 from ....services.outline_service import require_outline_kind
-from ....utils.story_entities import STORY_ENTITY_KINDS, STORY_ENTITY_TYPE, require_story_entity_kind
+from ....utils.story_entities import (
+    STORY_ENTITY_FOLDER_TYPE,
+    STORY_ENTITY_KINDS,
+    STORY_ENTITY_TYPE,
+    require_story_entity_kind,
+)
 
 
 STORY_ENTITY_KIND_VALUES = tuple(STORY_ENTITY_KINDS)
@@ -86,6 +91,22 @@ def read_story_entity(
     if actual_kind and actual_kind != expected_kind:
         raise ValueError(f"Story entity kind mismatch: expected {expected_kind}, got {actual_kind}")
     return obj
+
+
+def read_story_entity_folder(
+    db: Session,
+    *,
+    project_id: UUID,
+    object_id: UUID,
+    language: str,
+) -> dict[str, Any]:
+    return read_object(
+        db,
+        project_id=project_id,
+        object_type=STORY_ENTITY_FOLDER_TYPE,
+        object_id=object_id,
+        language=language,
+    )
 
 
 def ensure_outline_parent_exists(db: Session, *, project_id: UUID, outline_id: UUID) -> None:

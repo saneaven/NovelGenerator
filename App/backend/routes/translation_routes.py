@@ -23,6 +23,7 @@ from ..models.db_models import (
     Outline,
     Project,
     StoryEntity,
+    StoryEntityFolder,
     User,
 )
 from ..models.translation_models import ObjectVersion
@@ -30,7 +31,7 @@ from ..services.object_change_events import queue_object_change
 from ..services.object_service import object_service
 from ..services.ownership import require_owned_object, resolve_project_id_for_object
 from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
-from ..utils.story_entities import STORY_ENTITY_TYPE, require_story_entity_kind
+from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, require_story_entity_kind
 
 
 router = APIRouter()
@@ -99,6 +100,7 @@ async def get_project_translation_status(
     object_types = {
         'basic_info': BasicInfo,
         'guidelines': Guidelines,
+        STORY_ENTITY_FOLDER_TYPE: StoryEntityFolder,
         STORY_ENTITY_TYPE: StoryEntity,
         'outline': Outline,
         'manuscript': Manuscript,
@@ -111,7 +113,7 @@ async def get_project_translation_status(
         query = db.query(model_class)
 
         # Filter by project_id (different field names for different types)
-        if object_type in ['basic_info', 'guidelines', STORY_ENTITY_TYPE, 'outline']:
+        if object_type in ['basic_info', 'guidelines', STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, 'outline']:
             query = query.filter(model_class.project_id == project_id)
         elif object_type == 'manuscript':
             query = query.join(Outline, Manuscript.chapter_id == Outline.id).filter(
@@ -173,6 +175,9 @@ async def get_language_coverage(
 
     guidelines = db.query(Guidelines).filter(Guidelines.project_id == project_id).all()
     object_ids.update([(str(row.id), 'guidelines') for row in guidelines])
+
+    story_entity_folders = db.query(StoryEntityFolder).filter(StoryEntityFolder.project_id == project_id).all()
+    object_ids.update([(str(row.id), STORY_ENTITY_FOLDER_TYPE) for row in story_entity_folders])
 
     story_entities = db.query(StoryEntity).filter(StoryEntity.project_id == project_id).all()
     object_ids.update([(str(row.id), STORY_ENTITY_TYPE) for row in story_entities])

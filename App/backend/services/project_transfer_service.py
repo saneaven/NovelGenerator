@@ -42,7 +42,7 @@ from ..services.storage_usage_service import (
     recalculate_project_usage_and_enforce_quota,
 )
 from ..utils.object_type_aliases import externalize_object_type, normalize_object_type
-from ..utils.story_entities import STORY_ENTITY_TYPE, require_story_entity_kind
+from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, require_story_entity_kind
 from .outline_service import require_outline_kind
 
 
@@ -387,7 +387,6 @@ class ProjectTransferService:
             )
 
         objects_payload = ProjectTransferService._build_objects_payload(db=db, project_id=project_id)
-        folders_payload = ProjectTransferService._build_story_entity_folders_payload(db=db, project_id=project_id)
 
         assets_payload: Optional[Dict[str, Any]] = None
         if options.include_images:
@@ -441,7 +440,6 @@ class ProjectTransferService:
             zf.writestr("manifest.json", _json_dumps(manifest))
             zf.writestr("data/project.json", _json_dumps(project_payload))
             zf.writestr("data/objects.json", _json_dumps(objects_payload))
-            zf.writestr("data/story_entity_folders.json", _json_dumps(folders_payload))
             zf.writestr("data/links_object_assets.json", _json_dumps(links_payload))
 
             if options.include_images and assets_payload is not None:
@@ -478,29 +476,13 @@ class ProjectTransferService:
         }
 
     @staticmethod
-    def _build_story_entity_folders_payload(db: Session, project_id: UUID) -> Dict[str, Any]:
+    def _build_objects_payload(db: Session, project_id: UUID) -> Dict[str, Any]:
         folders = (
             db.query(StoryEntityFolder)
             .filter(StoryEntityFolder.project_id == project_id)
             .order_by(StoryEntityFolder.parent_id.asc().nullsfirst(), StoryEntityFolder.display_order.asc())
             .all()
         )
-        return {
-            "folders": [
-                {
-                    "id": str(folder.id),
-                    "name": str(folder.name),
-                    "parent_id": str(folder.parent_id) if folder.parent_id is not None else None,
-                    "display_order": int(folder.display_order or 0),
-                    "created_at": _dt_to_iso(folder.created_at),
-                    "updated_at": _dt_to_iso(folder.updated_at),
-                }
-                for folder in folders
-            ]
-        }
-
-    @staticmethod
-    def _build_objects_payload(db: Session, project_id: UUID) -> Dict[str, Any]:
         outlines: List[Outline] = (
             db.query(Outline)
             .filter(Outline.project_id == project_id)
@@ -527,6 +509,7 @@ class ProjectTransferService:
         objects: List[Tuple[str, Any]] = []
         objects.extend([("basic_info", o) for o in basic_infos])
         objects.extend([("guidelines", o) for o in guidelines])
+        objects.extend([(STORY_ENTITY_FOLDER_TYPE, o) for o in folders])
         objects.extend([(STORY_ENTITY_TYPE, o) for o in story_entities])
         objects.extend([("outline", o) for o in outlines])
         objects.extend([("manuscript", o) for o in manuscripts])
@@ -558,8 +541,12 @@ class ProjectTransferService:
                 "updated_at": _dt_to_iso(getattr(obj, "updated_at", None)),
             }
 
-            if obj_type in {"basic_info", "guidelines", STORY_ENTITY_TYPE, "outline"}:
+            if obj_type in {"basic_info", "guidelines", STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, "outline"}:
                 meta["project_id"] = str(getattr(obj, "project_id"))
+
+            if obj_type == STORY_ENTITY_FOLDER_TYPE:
+                meta["parent_id"] = str(getattr(obj, "parent_id")) if getattr(obj, "parent_id", None) is not None else None
+                meta["display_order"] = int(getattr(obj, "display_order") or 0)
 
             if obj_type == "manuscript":
                 meta["chapter_id"] = str(getattr(obj, "chapter_id"))
@@ -627,7 +614,6 @@ class ProjectTransferService:
 
                 project_data = json.loads(zf.read("data/project.json").decode("utf-8"))
                 objects_data = json.loads(zf.read("data/objects.json").decode("utf-8"))
-                folders_data = json.loads(zf.read("data/story_entity_folders.json").decode("utf-8"))
                 links_data = json.loads(zf.read("data/links_object_assets.json").decode("utf-8"))
 
                 assets_data: Optional[dict] = None
@@ -641,7 +627,6 @@ class ProjectTransferService:
                     zf=zf,
                     project_data=project_data,
                     objects_data=objects_data,
-                    folders_data=folders_data,
                     links_data=links_data,
                     assets_data=assets_data,
                     created_files=created_files,
@@ -668,7 +653,6 @@ class ProjectTransferService:
         zf: zipfile.ZipFile,
         project_data: dict,
         objects_data: dict,
-        folders_data: dict,
         links_data: dict,
         assets_data: Optional[dict],
         created_files: List[str],
@@ -678,9 +662,6 @@ class ProjectTransferService:
         object_items = objects_data.get("objects") if isinstance(objects_data, dict) else None
         if not isinstance(object_items, list):
             raise ValueError("Invalid objects.json format")
-        folder_items = folders_data.get("folders") if isinstance(folders_data, dict) else None
-        if not isinstance(folder_items, list):
-            raise ValueError("Invalid story_entity_folders.json format")
 
         new_project_id = uuid4()
         project = Project(
@@ -696,12 +677,6 @@ class ProjectTransferService:
         # Pre-generate object ID mapping
         object_id_map: Dict[Tuple[str, str], UUID] = {}
         folder_id_map: Dict[str, UUID] = {}
-        for folder in folder_items:
-            if not isinstance(folder, dict):
-                continue
-            export_id = str(folder.get("id") or "")
-            if export_id:
-                folder_id_map[export_id] = uuid4()
         for item in object_items:
             if not isinstance(item, dict):
                 continue
@@ -710,6 +685,8 @@ class ProjectTransferService:
             if not obj_type or not export_id:
                 continue
             object_id_map[(obj_type, export_id)] = uuid4()
+            if obj_type == STORY_ENTITY_FOLDER_TYPE:
+                folder_id_map[export_id] = object_id_map[(obj_type, export_id)]
 
         def items_of_type(t: str) -> List[dict]:
             return [i for i in object_items if isinstance(i, dict) and i.get("type") == t]
@@ -719,10 +696,10 @@ class ProjectTransferService:
             project_id=new_project_id,
             object_id_map=object_id_map,
             folder_id_map=folder_id_map,
-            folder_items=[folder for folder in folder_items if isinstance(folder, dict)],
             objects_by_type={
                 "basic_info": items_of_type("basic_info"),
                 "guidelines": items_of_type("guidelines"),
+                STORY_ENTITY_FOLDER_TYPE: items_of_type(STORY_ENTITY_FOLDER_TYPE),
                 STORY_ENTITY_TYPE: items_of_type(STORY_ENTITY_TYPE),
                 "outline": items_of_type("outline"),
                 "manuscript": items_of_type("manuscript"),
@@ -958,7 +935,6 @@ class ProjectTransferService:
         project_id: UUID,
         object_id_map: Dict[Tuple[str, str], UUID],
         folder_id_map: Dict[str, UUID],
-        folder_items: List[dict],
         objects_by_type: Dict[str, List[dict]],
     ) -> None:
         now = datetime.utcnow()
@@ -1002,10 +978,11 @@ class ProjectTransferService:
             )
 
         # story entity folders
-        for folder in folder_items:
-            export_id = str(folder.get("id") or "")
+        for item in objects_by_type.get(STORY_ENTITY_FOLDER_TYPE, []):
+            export_id = str(item.get("id") or "")
             new_id = folder_id_map.get(export_id)
-            parent_export_id = folder.get("parent_id")
+            meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+            parent_export_id = meta.get("parent_id")
             parent_id = folder_id_map.get(str(parent_export_id)) if parent_export_id else None
             if not export_id or not new_id:
                 continue
@@ -1013,11 +990,10 @@ class ProjectTransferService:
                 StoryEntityFolder(
                     id=new_id,
                     project_id=project_id,
-                    name=str(folder.get("name") or "Folder"),
                     parent_id=parent_id,
-                    display_order=int(folder.get("display_order") or 0),
-                    created_at=_iso_to_dt(folder.get("created_at")) or now,
-                    updated_at=_iso_to_dt(folder.get("updated_at")) or now,
+                    display_order=int(meta.get("display_order") or 0),
+                    created_at=meta_dt(meta, "created_at"),
+                    updated_at=meta_dt(meta, "updated_at"),
                 )
             )
 

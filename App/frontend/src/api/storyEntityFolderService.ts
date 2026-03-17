@@ -7,21 +7,28 @@ import type {
 } from '../types/storyEntityFolder';
 
 export const storyEntityFolderService = {
-  async list(projectId: string): Promise<StoryEntityFolder[]> {
+  async list(projectId: string, language?: string): Promise<StoryEntityFolder[]> {
     const response = await apiClient.get<StoryEntityFolderListResponse>(
-      `/api/v1/projects/${projectId}/story-entity-folders`,
+      `/api/v1/projects/${projectId}/story-entity-folders${language ? `?language=${encodeURIComponent(language)}` : ''}`,
     );
     return response.folders;
   },
 
-  async create(projectId: string, payload: { name: string; parent_id?: string | null }): Promise<StoryEntityFolder> {
+  async create(
+    projectId: string,
+    payload: { language: string; name: string; description?: string; parent_id?: string | null },
+  ): Promise<StoryEntityFolder> {
     return apiClient.post<StoryEntityFolder>(
       `/api/v1/projects/${projectId}/story-entity-folders`,
       payload,
     );
   },
 
-  async rename(projectId: string, folderId: string, payload: { name: string }): Promise<StoryEntityFolder> {
+  async update(
+    projectId: string,
+    folderId: string,
+    payload: { language: string; name?: string; description?: string },
+  ): Promise<StoryEntityFolder> {
     return apiClient.patch<StoryEntityFolder>(
       `/api/v1/projects/${projectId}/story-entity-folders/${folderId}`,
       payload,

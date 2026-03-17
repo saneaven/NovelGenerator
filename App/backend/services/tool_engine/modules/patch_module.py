@@ -7,7 +7,7 @@ from ..contracts import ToolCallModule, ToolSpec
 from ..registry import tool_call_module
 from ..result_utils import invalid_result, make_result, valid_result
 from ....services.object_service import object_service
-from ....utils.story_entities import STORY_ENTITY_TYPE
+from ....utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE
 from .manuscript_access import patch_manuscript, validate_patch_args as validate_manuscript_patch, ensure_manuscript_exists
 from .object_access import (
     ensure_outline_parent_kind,
@@ -16,6 +16,7 @@ from .object_access import (
     get_primary_object_id,
     patch_object_field,
     read_object,
+    read_story_entity_folder,
     read_story_entity,
     to_uuid,
 )
@@ -74,6 +75,21 @@ class PatchToolCallModule(ToolCallModule):
                                 **_TEXT_PATCH,
                             },
                             ["id", "kind", "field", "old", "new"],
+                        ),
+                        auto_approve_category="patch",
+                    ),
+                    ToolSpec(
+                        name="patch_story_entity_folder",
+                        description="Patch story entity folder by single replacement.",
+                        parameters=obj_schema(
+                            {
+                                "id": _ID,
+                                "field": {"type": "string", "enum": ["name", "description"]},
+                                "parentId": _FOLDER_ID,
+                                "position": _POSITION,
+                                **_TEXT_PATCH,
+                            },
+                            ["id", "field", "old", "new"],
                         ),
                         auto_approve_category="patch",
                     ),
@@ -162,6 +178,25 @@ class PatchToolCallModule(ToolCallModule):
                     ctx.db,
                     project_id=ctx.project_id,
                     folder_id=args.get("folderId"),
+                )
+                patch_object_field(extract_lang_data(current, ctx.language), field=str(field), old=str(args.get("old") or ""), new=str(args.get("new") or ""))
+                return valid_result()
+            elif tool_name == "patch_story_entity_folder":
+                field = args.get("field")
+                if field not in {"name", "description"}:
+                    raise ValueError("field must be one of name|description")
+                _non_negative_position(args.get("position"))
+                current = read_story_entity_folder(
+                    ctx.db,
+                    project_id=ctx.project_id,
+                    object_id=object_id,
+                    language=ctx.language,
+                )
+                ensure_story_entity_folder_exists(
+                    ctx.db,
+                    project_id=ctx.project_id,
+                    folder_id=args.get("parentId"),
+                    field_name="parentId",
                 )
                 patch_object_field(extract_lang_data(current, ctx.language), field=str(field), old=str(args.get("old") or ""), new=str(args.get("new") or ""))
                 return valid_result()
@@ -270,6 +305,43 @@ class PatchToolCallModule(ToolCallModule):
                 object_id=str(object_id),
                 object_type=object_type,
                 data={"kind": kind},
+            )
+
+        if tool_name == "patch_story_entity_folder":
+            object_type = STORY_ENTITY_FOLDER_TYPE
+            current = read_story_entity_folder(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_id=object_id,
+                language=ctx.language,
+            )
+            next_data = patch_object_field(
+                extract_lang_data(current, ctx.language),
+                field=str(args.get("field") or ""),
+                old=str(args.get("old") or ""),
+                new=str(args.get("new") or ""),
+            )
+            metadata: dict[str, Any] = {}
+            if isinstance(args.get("position"), int):
+                metadata["display_order"] = int(args["position"])
+            if "parentId" in args:
+                metadata["parent_id"] = args.get("parentId")
+            object_service.update_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type=object_type,
+                object_id=object_id,
+                data=next_data,
+                language=ctx.language,
+                metadata=metadata or None,
+                user_request="tool:patch_story_entity_folder",
+                created_by=ctx.user_id,
+                create_new_version=True,
+            )
+            return make_result(
+                "Patched story entity folder",
+                object_id=str(object_id),
+                object_type=object_type,
             )
 
         if tool_name == "patch_outline":

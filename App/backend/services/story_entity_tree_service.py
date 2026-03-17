@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..models.db_models import StoryEntity, StoryEntityFolder
+from ..models.translation_models import ObjectVersion
+from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE
 
 
 NodeKind = Literal["folder", "entity"]
@@ -132,30 +134,125 @@ def list_story_entity_folders(
     return rows
 
 
-def serialize_story_entity_folder(folder: StoryEntityFolder) -> dict[str, str | int | None]:
-    return {
+def _resolve_folder_lang_data(
+    data: dict[str, Any],
+    *,
+    language: str | None,
+    fallback_language: str | None = None,
+) -> dict[str, str]:
+    if language and isinstance(data.get(language), dict):
+        lang_data = data[language]
+        return {
+            "name": str(lang_data.get("name") or ""),
+            "description": str(lang_data.get("description") or ""),
+        }
+    if fallback_language and isinstance(data.get(fallback_language), dict):
+        lang_data = data[fallback_language]
+        return {
+            "name": str(lang_data.get("name") or ""),
+            "description": str(lang_data.get("description") or ""),
+        }
+    for value in data.values():
+        if isinstance(value, dict):
+            return {
+                "name": str(value.get("name") or ""),
+                "description": str(value.get("description") or ""),
+            }
+    return {"name": "", "description": ""}
+
+
+def _latest_story_entity_folder_versions(
+    db: Session,
+    *,
+    folder_ids: list[UUID],
+) -> dict[UUID, ObjectVersion]:
+    if not folder_ids:
+        return {}
+    rows = (
+        db.query(ObjectVersion)
+        .filter(
+            ObjectVersion.object_type == STORY_ENTITY_FOLDER_TYPE,
+            ObjectVersion.object_id.in_(folder_ids),
+        )
+        .order_by(ObjectVersion.object_id.asc(), ObjectVersion.version_number.desc())
+        .all()
+    )
+    latest: dict[UUID, ObjectVersion] = {}
+    for row in rows:
+        if row.object_id not in latest:
+            latest[row.object_id] = row
+    return latest
+
+
+def build_story_entity_folder_content_map(
+    db: Session,
+    *,
+    project_id: UUID,
+    language: str | None = None,
+    fallback_language: str | None = None,
+) -> dict[UUID, dict[str, Any]]:
+    folders = list_story_entity_folders(db, project_id=project_id)
+    latest_by_id = _latest_story_entity_folder_versions(
+        db,
+        folder_ids=[folder.id for folder in folders if isinstance(folder.id, UUID)],
+    )
+    payload: dict[UUID, dict[str, Any]] = {}
+    for folder in folders:
+        latest = latest_by_id.get(folder.id)
+        data = latest.data if latest and isinstance(latest.data, dict) else {}
+        lang_data = _resolve_folder_lang_data(
+            data,
+            language=language,
+            fallback_language=fallback_language,
+        )
+        payload[folder.id] = {
+            "name": lang_data["name"],
+            "description": lang_data["description"],
+            "data": data,
+            "version": {
+                "id": str(latest.id) if latest is not None else None,
+                "number": int(latest.version_number) if latest is not None else 0,
+                "created_at": latest.created_at.isoformat() if latest and latest.created_at else None,
+            },
+        }
+    return payload
+
+
+def serialize_story_entity_folder(
+    folder: StoryEntityFolder,
+    *,
+    content: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    serialized: dict[str, Any] = {
         "id": str(folder.id),
         "project_id": str(folder.project_id),
-        "name": folder.name,
         "parent_id": str(folder.parent_id) if folder.parent_id else None,
         "display_order": int(folder.display_order or 0),
         "created_at": folder.created_at.isoformat() if folder.created_at else None,
         "updated_at": folder.updated_at.isoformat() if folder.updated_at else None,
     }
+    if content is not None:
+        serialized["name"] = str(content.get("name") or "")
+        serialized["description"] = str(content.get("description") or "")
+        serialized["data"] = content.get("data") if isinstance(content.get("data"), dict) else {}
+        serialized["version"] = content.get("version") if isinstance(content.get("version"), dict) else {
+            "id": None,
+            "number": 0,
+            "created_at": None,
+        }
+    return serialized
 
 
 def create_story_entity_folder(
     db: Session,
     *,
     project_id: UUID,
-    name: str,
     parent_id: UUID | None,
 ) -> StoryEntityFolder:
     ensure_valid_parent_folder(db, project_id=project_id, folder_id=parent_id)
     siblings = _load_parent_siblings(db, project_id=project_id, parent_folder_id=parent_id)
     folder = StoryEntityFolder(
         project_id=project_id,
-        name=name.strip(),
         parent_id=parent_id,
         display_order=len(siblings),
         created_at=datetime.utcnow(),
@@ -173,20 +270,6 @@ def next_story_entity_sibling_order(
     parent_folder_id: UUID | None,
 ) -> int:
     return len(_load_parent_siblings(db, project_id=project_id, parent_folder_id=parent_folder_id))
-
-
-def rename_story_entity_folder(
-    db: Session,
-    *,
-    project_id: UUID,
-    folder_id: UUID,
-    name: str,
-) -> StoryEntityFolder:
-    folder = require_story_entity_folder(db, project_id=project_id, folder_id=folder_id)
-    folder.name = name.strip()
-    folder.updated_at = datetime.utcnow()
-    db.flush()
-    return folder
 
 
 def move_story_entity(
@@ -309,22 +392,31 @@ def build_story_entity_folder_path_map(
     db: Session,
     *,
     project_id: UUID,
+    language: str | None = None,
+    fallback_language: str | None = None,
 ) -> dict[UUID, list[str]]:
     folders = list_story_entity_folders(db, project_id=project_id)
     folder_map = {folder.id: folder for folder in folders}
+    content_map = build_story_entity_folder_content_map(
+        db,
+        project_id=project_id,
+        language=language,
+        fallback_language=fallback_language,
+    )
     path_map: dict[UUID, list[str]] = {}
 
     def _resolve_path(folder: StoryEntityFolder) -> list[str]:
+        label = str(content_map.get(folder.id, {}).get("name") or "")
         if folder.id in path_map:
             return path_map[folder.id]
         if folder.parent_id is None:
-            path_map[folder.id] = [folder.name]
+            path_map[folder.id] = [label]
             return path_map[folder.id]
         parent = folder_map.get(folder.parent_id)
         if parent is None:
-            path_map[folder.id] = [folder.name]
+            path_map[folder.id] = [label]
             return path_map[folder.id]
-        path_map[folder.id] = [*_resolve_path(parent), folder.name]
+        path_map[folder.id] = [*_resolve_path(parent), label]
         return path_map[folder.id]
 
     for folder in folders:

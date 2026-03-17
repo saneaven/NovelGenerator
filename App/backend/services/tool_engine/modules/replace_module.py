@@ -7,7 +7,7 @@ from ..contracts import ToolCallModule, ToolSpec
 from ..registry import tool_call_module
 from ..result_utils import invalid_result, make_result, valid_result
 from ....services.object_service import object_service
-from ....utils.story_entities import STORY_ENTITY_TYPE
+from ....utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE
 from .manuscript_access import ensure_manuscript_exists, replace_manuscript
 from .object_access import (
     ensure_outline_parent_kind,
@@ -15,6 +15,7 @@ from .object_access import (
     extract_lang_data,
     get_primary_object_id,
     read_object,
+    read_story_entity_folder,
     read_story_entity,
     to_uuid,
 )
@@ -40,6 +41,10 @@ def _non_negative_position(value: Any) -> None:
     if isinstance(value, int) and value >= 0:
         return
     raise ValueError("position must be a non-negative integer")
+
+
+def _has_any_story_entity_folder_replace_field(args: dict[str, Any]) -> bool:
+    return any(key in args for key in ("name", "description", "parentId", "position"))
 
 
 @tool_call_module(prefix="replace_")
@@ -73,6 +78,21 @@ class ReplaceToolCallModule(ToolCallModule):
                                 "folderId": _FOLDER_ID,
                             },
                             ["id", "kind"],
+                        ),
+                        auto_approve_category="replace",
+                    ),
+                    ToolSpec(
+                        name="replace_story_entity_folder",
+                        description="Replace story entity folder fields.",
+                        parameters=obj_schema(
+                            {
+                                "id": _ID,
+                                "name": {"type": "string"},
+                                "description": {"type": "string"},
+                                "parentId": _FOLDER_ID,
+                                "position": _POSITION,
+                            },
+                            ["id"],
                         ),
                         auto_approve_category="replace",
                     ),
@@ -156,6 +176,23 @@ class ReplaceToolCallModule(ToolCallModule):
                     ctx.db,
                     project_id=ctx.project_id,
                     folder_id=args.get("folderId"),
+                )
+                return valid_result()
+            elif tool_name == "replace_story_entity_folder":
+                if not _has_any_story_entity_folder_replace_field(args):
+                    raise ValueError("replace_story_entity_folder requires at least one of name, description, parentId, or position")
+                _non_negative_position(args.get("position"))
+                read_story_entity_folder(
+                    ctx.db,
+                    project_id=ctx.project_id,
+                    object_id=object_id,
+                    language=ctx.language,
+                )
+                ensure_story_entity_folder_exists(
+                    ctx.db,
+                    project_id=ctx.project_id,
+                    folder_id=args.get("parentId"),
+                    field_name="parentId",
                 )
                 return valid_result()
             elif tool_name == "replace_outline":
@@ -283,6 +320,42 @@ class ReplaceToolCallModule(ToolCallModule):
                 object_id=str(object_id),
                 object_type=object_type,
                 data={"kind": kind},
+            )
+
+        if tool_name == "replace_story_entity_folder":
+            object_type = STORY_ENTITY_FOLDER_TYPE
+            current = read_story_entity_folder(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_id=object_id,
+                language=ctx.language,
+            )
+            content_fields_present = any(key in args for key in ("name", "description"))
+            next_data = dict(extract_lang_data(current, ctx.language)) if content_fields_present else {}
+            for key in ("name", "description"):
+                if key in args:
+                    next_data[key] = args[key]
+            metadata: dict[str, Any] = {}
+            if isinstance(args.get("position"), int):
+                metadata["display_order"] = int(args["position"])
+            if "parentId" in args:
+                metadata["parent_id"] = args.get("parentId")
+            object_service.update_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type=object_type,
+                object_id=object_id,
+                data=next_data,
+                language=ctx.language,
+                metadata=metadata or None,
+                user_request="tool:replace_story_entity_folder",
+                created_by=ctx.user_id,
+                create_new_version=True,
+            )
+            return make_result(
+                "Replaced story entity folder",
+                object_id=str(object_id),
+                object_type=object_type,
             )
 
         if tool_name == "replace_outline":

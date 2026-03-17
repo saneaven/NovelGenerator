@@ -21,6 +21,7 @@ from ..models.db_models import (
     Outline,
     Project,
     StoryEntity,
+    StoryEntityFolder,
     StoryObjectAsset,
 )
 from ..models.translation_models import ObjectVersion
@@ -35,7 +36,7 @@ from ..services.deletion_service import (
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.semantic_index_service import index_object, invalidate_object_index
 from ..utils.object_type_aliases import externalize_object_type, normalize_object_type
-from ..utils.story_entities import STORY_ENTITY_TYPE, require_story_entity_kind
+from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, require_story_entity_kind
 from .basic_info_utils import normalize_basic_info_data
 from .outline_service import (
     insert_outline_position,
@@ -46,7 +47,16 @@ from .outline_service import (
 )
 from .asset_change_events import queue_scene_assets_change
 from .object_change_events import queue_object_change
-from .story_entity_tree_service import ensure_valid_parent_folder, move_story_entity, next_story_entity_sibling_order, normalize_story_entity_parent
+from .story_entity_tree_service import (
+    collect_descendant_folder_ids,
+    collect_descendant_story_entity_ids,
+    delete_story_entity_folder_rows,
+    ensure_valid_parent_folder,
+    move_story_entity,
+    move_story_entity_folder,
+    next_story_entity_sibling_order,
+    normalize_story_entity_parent,
+)
 from .credential_service import CredentialServiceError, credential_service
 from .settings_service import settings_service
 from .storage_usage_service import (
@@ -67,7 +77,7 @@ from .storage_usage_service import (
 )
 
 _PENDING_SEMANTIC_OPS_KEY = "_pending_semantic_ops"
-_SEMANTIC_EXCLUDED_TYPES = {"basic_info", "guidelines"}
+_SEMANTIC_EXCLUDED_TYPES = {"basic_info", "guidelines", STORY_ENTITY_FOLDER_TYPE}
 logger = logging.getLogger(__name__)
 
 
@@ -199,6 +209,7 @@ def _model_for_object_type(object_type: str):
     mapping = {
         "basic_info": BasicInfo,
         "guidelines": Guidelines,
+        STORY_ENTITY_FOLDER_TYPE: StoryEntityFolder,
         STORY_ENTITY_TYPE: StoryEntity,
         "outline": Outline,
         "manuscript": Manuscript,
@@ -259,6 +270,10 @@ def _get_metadata(db: Session, obj: Any, object_type: str) -> dict[str, Any]:
         metadata["image_prompt_negative"] = getattr(obj, "image_prompt_negative", None)
     elif object_type == "guidelines":
         metadata["project_id"] = str(obj.project_id)
+    elif object_type == STORY_ENTITY_FOLDER_TYPE:
+        metadata["project_id"] = str(obj.project_id)
+        metadata["parent_id"] = str(obj.parent_id) if getattr(obj, "parent_id", None) else None
+        metadata["display_order"] = int(getattr(obj, "display_order", 0) or 0)
     elif object_type == STORY_ENTITY_TYPE:
         metadata["project_id"] = str(obj.project_id)
         metadata["folder_id"] = str(obj.folder_id) if getattr(obj, "folder_id", None) else None
@@ -328,7 +343,7 @@ def _serialize_object(db: Session, object_type: str, obj: Any, language: str | N
 
 
 def _load_owned_object(db: Session, project_id: UUID, object_type: str, object_id: UUID) -> Any | None:
-    if object_type in {"basic_info", "guidelines", STORY_ENTITY_TYPE}:
+    if object_type in {"basic_info", "guidelines", STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE}:
         model = _model_for_object_type(object_type)
         return db.query(model).filter(model.id == object_id, model.project_id == project_id).first()
     if object_type == "outline":
@@ -415,6 +430,24 @@ def _create_or_update_version(
 
 
 def _handle_metadata_update(db: Session, object_type: str, object_id: UUID, obj: Any, metadata: dict[str, Any]) -> None:
+    if object_type == STORY_ENTITY_FOLDER_TYPE:
+        requested_parent_id = obj.parent_id
+        if "parent_id" in metadata:
+            requested_parent_id = _parse_optional_uuid(metadata.get("parent_id"), "parent_id")
+        requested_order = metadata.get("display_order")
+        if requested_order is not None and (not isinstance(requested_order, int) or requested_order < 0):
+            raise HTTPException(status_code=400, detail="Invalid display_order value")
+
+        if requested_parent_id != obj.parent_id or requested_order is not None:
+            move_story_entity_folder(
+                db,
+                project_id=obj.project_id,
+                folder_id=object_id,
+                new_parent_folder_id=requested_parent_id,
+                new_index=requested_order,
+            )
+        return
+
     if object_type == STORY_ENTITY_TYPE:
         requested_folder_id = obj.folder_id
         if "folder_id" in metadata:
@@ -484,13 +517,31 @@ class ObjectService:
                 raise ValueError("Manuscript creation requires data.doc (TipTap JSON)")
             if "content" in data:
                 raise ValueError("Manuscript creation does not accept data.content")
+        elif t == STORY_ENTITY_FOLDER_TYPE:
+            if not str(data.get("name") or "").strip():
+                raise ValueError("Story entity folder creation requires data.name")
 
         object_id = uuid4()
         manuscript_id: UUID | None = None
         md = metadata or {}
         storage_type = _canonical_object_type(t)
 
-        if t == STORY_ENTITY_TYPE:
+        if t == STORY_ENTITY_FOLDER_TYPE:
+            parent_id = _parse_optional_uuid(md.get("parent_id"), "parent_id")
+            ensure_valid_parent_folder(db, project_id=project_id, folder_id=parent_id)
+            core_obj = StoryEntityFolder(
+                id=object_id,
+                project_id=project_id,
+                parent_id=parent_id,
+                display_order=next_story_entity_sibling_order(
+                    db,
+                    project_id=project_id,
+                    parent_folder_id=parent_id,
+                ),
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
+        elif t == STORY_ENTITY_TYPE:
             folder_id = _parse_optional_uuid(md.get("folder_id"), "folder_id")
             ensure_valid_parent_folder(db, project_id=project_id, folder_id=folder_id)
             entity_kind = require_story_entity_kind(kind or md.get("kind"))
@@ -556,7 +607,19 @@ class ObjectService:
 
         db.add(core_obj)
         db.flush()
-        if storage_type == "outline":
+        if storage_type == STORY_ENTITY_FOLDER_TYPE:
+            requested_order = md.get("display_order")
+            if requested_order is not None and (not isinstance(requested_order, int) or requested_order < 0):
+                raise ValueError("Folder display_order must be a non-negative integer")
+            if isinstance(requested_order, int):
+                move_story_entity_folder(
+                    db,
+                    project_id=project_id,
+                    folder_id=core_obj.id,
+                    new_parent_folder_id=core_obj.parent_id,
+                    new_index=requested_order,
+                )
+        elif storage_type == "outline":
             requested_position = md.get("position")
             if requested_position is not None and (not isinstance(requested_position, int) or requested_position < 0):
                 raise ValueError("Outline position must be a non-negative integer")
@@ -702,6 +765,18 @@ class ObjectService:
 
         if metadata:
             _handle_metadata_update(db, storage_type, object_id, obj, metadata)
+
+        if storage_type != "manuscript" and not data:
+            current_serialized = _serialize_object(db, storage_type, obj)
+            current_data = current_serialized.get("data") if isinstance(current_serialized, dict) else {}
+            if isinstance(current_data, dict):
+                if isinstance(current_data.get(language), dict):
+                    data = dict(current_data[language])
+                else:
+                    for value in current_data.values():
+                        if isinstance(value, dict):
+                            data = dict(value)
+                            break
 
         version_before = None if create_new_version else snapshot_object_version_row(_latest_version(db, storage_type, object_id))
         manuscript_images_before = None
@@ -1020,6 +1095,140 @@ class ObjectService:
 
         resolved_project_id: UUID | None = project_id
 
+        if storage_type == STORY_ENTITY_FOLDER_TYPE:
+            folder_ids = collect_descendant_folder_ids(
+                db,
+                project_id=project_id,
+                folder_id=object_id,
+            )
+            entity_ids = collect_descendant_story_entity_ids(
+                db,
+                project_id=project_id,
+                folder_ids=folder_ids,
+            )
+            ids_by_type: dict[str, list[UUID]] = {
+                STORY_ENTITY_FOLDER_TYPE: list(folder_ids),
+                STORY_ENTITY_TYPE: list(entity_ids),
+            }
+
+            story_core_before = snapshot_rows(
+                db.query(StoryEntity).filter(StoryEntity.id.in_(entity_ids)).all(),
+                snapshot_story_core_row,
+            ) if entity_ids else []
+            story_version_before = []
+            for deleted_type, deleted_ids in ids_by_type.items():
+                if not deleted_ids:
+                    continue
+                story_version_before.extend(
+                    snapshot_rows(
+                        db.query(ObjectVersion)
+                        .filter(
+                            ObjectVersion.object_type == deleted_type,
+                            ObjectVersion.object_id.in_(list(deleted_ids)),
+                        )
+                        .all(),
+                        snapshot_object_version_row,
+                    )
+                )
+
+            owned_assets: list[Asset] = []
+            if entity_ids:
+                owned_assets = (
+                    db.query(Asset)
+                    .join(StoryObjectAsset, StoryObjectAsset.asset_id == Asset.id)
+                    .filter(
+                        StoryObjectAsset.object_type == STORY_ENTITY_TYPE,
+                        StoryObjectAsset.object_id.in_(entity_ids),
+                    )
+                    .all()
+                )
+
+            deleted_asset_ids = [asset.id for asset in owned_assets if isinstance(asset.id, UUID)]
+            deleted_asset_before = snapshot_rows(owned_assets, snapshot_asset_row)
+            remaining_ref_assets_before = snapshot_rows(
+                db.query(Asset)
+                .filter(
+                    Asset.project_id == resolved_project_id,
+                    Asset.generation_reference_images.isnot(None),
+                    ~Asset.id.in_(deleted_asset_ids) if deleted_asset_ids else True,
+                )
+                .all(),
+                snapshot_asset_row,
+            )
+
+            if owned_assets:
+                delete_assets_with_files(
+                    db,
+                    assets=owned_assets,
+                    scrub_references_in_project_id=resolved_project_id,
+                )
+
+            delete_semantic_sources_bulk(
+                db,
+                user_id=user_id,
+                project_id=resolved_project_id,
+                ids_by_type=ids_by_type,
+            )
+            delete_object_versions_bulk(db, ids_by_type=ids_by_type)
+
+            for deleted_type, deleted_ids in ids_by_type.items():
+                for deleted_id in set(deleted_ids):
+                    queue_object_change(
+                        db,
+                        user_id=user_id,
+                        project_id=resolved_project_id,
+                        object_type=deleted_type,
+                        object_id=deleted_id,
+                        action="deleted",
+                    )
+
+            if entity_ids:
+                (
+                    db.query(StoryEntity)
+                    .filter(StoryEntity.project_id == project_id, StoryEntity.id.in_(entity_ids))
+                    .delete(synchronize_session=False)
+                )
+
+            delete_story_entity_folder_rows(
+                db,
+                project_id=project_id,
+                folder_ids=folder_ids,
+            )
+            normalize_story_entity_parent(
+                db,
+                project_id=project_id,
+                parent_folder_id=getattr(obj, "parent_id", None),
+            )
+
+            remaining_ref_assets_after = snapshot_rows(
+                db.query(Asset)
+                .filter(
+                    Asset.project_id == resolved_project_id,
+                    Asset.generation_reference_images.isnot(None),
+                    ~Asset.id.in_(deleted_asset_ids) if deleted_asset_ids else True,
+                )
+                .all(),
+                snapshot_asset_row,
+            )
+            apply_project_usage_deltas(
+                db,
+                user_id=user_id,
+                project_id=resolved_project_id,
+                deltas=[
+                    build_story_core_rows_delta(story_core_before, []),
+                    build_usage_delta_for_measurement_rows(
+                        category="story",
+                        before_rows=story_version_before,
+                        after_rows=[],
+                        measure_fn=lambda row: measure_object_version_row(row),
+                    ),
+                    build_asset_rows_delta(deleted_asset_before, []),
+                    build_asset_rows_delta(remaining_ref_assets_before, remaining_ref_assets_after),
+                ],
+                enforce_quota=False,
+            )
+            return
+
         ids_by_type: dict[str, list[UUID]] = {storage_type: [object_id]}
 
         if storage_type == "outline":
@@ -1185,9 +1394,11 @@ class ObjectService:
         model_class = _model_for_object_type(t)
 
         query = db.query(model_class)
-        if storage_type in {"basic_info", "guidelines", STORY_ENTITY_TYPE}:
+        if storage_type in {"basic_info", "guidelines", STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE}:
             query = query.filter(model_class.project_id == project_id)
-            if storage_type == STORY_ENTITY_TYPE:
+            if storage_type == STORY_ENTITY_FOLDER_TYPE:
+                query = query.order_by(StoryEntityFolder.parent_id.asc().nullsfirst(), StoryEntityFolder.display_order.asc())
+            elif storage_type == STORY_ENTITY_TYPE:
                 if kinds:
                     query = query.filter(StoryEntity.kind.in_([require_story_entity_kind(kind) for kind in kinds]))
                 query = query.order_by(StoryEntity.display_order.asc())

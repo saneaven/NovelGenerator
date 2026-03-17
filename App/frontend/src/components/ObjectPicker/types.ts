@@ -39,6 +39,7 @@ export interface ObjectPickerItem {
 export interface ObjectPickerGroup {
   id: string;
   label: string;
+  description?: string;
   type: ObjectType;
   kind?: OutlineKind;
   items: ObjectPickerItem[];

@@ -16,7 +16,11 @@ from ...models.translation_models import ObjectVersion
 from ...utils.story_entities import STORY_ENTITY_TYPE
 from ..basic_info_utils import basic_info_summary_text, normalize_basic_info_data
 from ..sidecar_client import SidecarClient
-from ..story_entity_tree_service import build_story_entity_folder_path_map, list_story_entity_folders
+from ..story_entity_tree_service import (
+    build_story_entity_folder_content_map,
+    build_story_entity_folder_path_map,
+    list_story_entity_folders,
+)
 
 
 def _latest_version_data(db: Session, object_type: str, object_id: UUID) -> dict[str, Any]:
@@ -69,6 +73,7 @@ def _story_entity_sort_key(display_order: Any, *, is_folder: bool, node_id: UUID
 def _build_story_entity_tree(
     *,
     folders: list[Any],
+    folder_content_map: dict[UUID, dict[str, Any]],
     entities: list[StoryEntity],
     entity_payloads: dict[UUID, dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -101,7 +106,8 @@ def _build_story_entity_tree(
                     {
                         "nodeType": "folder",
                         "id": str(row.id),
-                        "name": str(row.name or ""),
+                        "name": str(folder_content_map.get(row.id, {}).get("name") or ""),
+                        "description": str(folder_content_map.get(row.id, {}).get("description") or ""),
                         "children": _walk(row.id),
                     }
                 )
@@ -218,9 +224,19 @@ async def build_project_data(
     basic_info, basic_context_object = _basic_info_payload(language)
     guideline_payload, guideline_context_object = _guidelines_payload(language)
 
-    folder_path_map = build_story_entity_folder_path_map(db, project_id=project_id)
-
     def build_story_entities_payload(lang: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        folder_path_map = build_story_entity_folder_path_map(
+            db,
+            project_id=project_id,
+            language=lang,
+            fallback_language=language,
+        )
+        folder_content_map = build_story_entity_folder_content_map(
+            db,
+            project_id=project_id,
+            language=lang,
+            fallback_language=language,
+        )
         payload_map: dict[UUID, dict[str, Any]] = {}
         for row in story_entities:
             payload_map[row.id] = _story_entity_payload(
@@ -230,6 +246,7 @@ async def build_project_data(
             )
         story_entity_tree = _build_story_entity_tree(
             folders=story_entity_folders,
+            folder_content_map=folder_content_map,
             entities=story_entities,
             entity_payloads=payload_map,
         )

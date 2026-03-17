@@ -105,7 +105,7 @@ const ObjectPickerGroup: React.FC<ObjectPickerGroupProps> = ({
         </span>
 
         {/* Group name */}
-        <span className="object-picker-group-name">{group.label}</span>
+        <span className="object-picker-group-name" title={group.description || group.label}>{group.label}</span>
 
         {/* Count and checkbox (right side) */}
         {selectionMode === 'multi' && (

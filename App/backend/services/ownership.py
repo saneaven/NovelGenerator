@@ -13,6 +13,7 @@ from ..models.db_models import (
     Outline,
     Project,
     StoryEntity,
+    StoryEntityFolder,
     Thread,
 )
 from ..utils.object_type_aliases import normalize_object_type
@@ -20,6 +21,7 @@ from ..utils.object_type_aliases import normalize_object_type
 OBJECT_TYPE_MODEL_MAP = {
     "basic_info": BasicInfo,
     "guidelines": Guidelines,
+    "story_entity_folder": StoryEntityFolder,
     "story_entity": StoryEntity,
     "outline": Outline,
     "manuscript": Manuscript,
@@ -28,6 +30,7 @@ OBJECT_TYPE_MODEL_MAP = {
 DIRECT_PROJECT_OBJECT_TYPES = {
     "basic_info",
     "guidelines",
+    "story_entity_folder",
     "story_entity",
     "outline",
 }

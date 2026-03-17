@@ -47,7 +47,12 @@ import {
   Save,
   Trash,
 } from '../icons';
-import type { StoryEntityFolder } from '../../types/storyEntityFolder';
+import {
+  getStoryEntityFolderData,
+  getStoryEntityFolderDescription,
+  getStoryEntityFolderName,
+  type StoryEntityFolder,
+} from '../../types/storyEntityFolder';
 import type { StoryEntityData, StoryEntityKind, StoryEntityObject } from '../../types/unifiedObject';
 import type { StoryObjectAsset } from '../../api/assetService';
 import './StoryEntityExplorer.css';
@@ -65,6 +70,7 @@ type FolderDialogState = {
   mode: 'create' | 'edit';
   folderId?: string;
   name: string;
+  description: string;
   parentId: string | null;
 };
 
@@ -77,6 +83,7 @@ type MixedGridItem =
     folder: StoryEntityFolder;
     childFolderCount: number;
     childEntityCount: number;
+    previewDescription: string;
     previewLabels: string[];
   }
   | {
@@ -101,7 +108,7 @@ const KIND_SHORT_LABELS: Record<StoryEntityKind, string> = {
 
 function sortFolders(a: StoryEntityFolder, b: StoryEntityFolder): number {
   if (a.display_order === b.display_order) {
-    return a.name.localeCompare(b.name);
+    return a.id.localeCompare(b.id);
   }
   return a.display_order - b.display_order;
 }
@@ -186,7 +193,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
   const fetchFolders = useStoryEntityFolderStore((state) => state.fetchFolders);
   const foldersByIdState = useStoryEntityFolderStore((state) => state.foldersById);
   const createFolder = useStoryEntityFolderStore((state) => state.createFolder);
-  const renameFolder = useStoryEntityFolderStore((state) => state.renameFolder);
+  const updateFolder = useStoryEntityFolderStore((state) => state.updateFolder);
   const moveFolder = useStoryEntityFolderStore((state) => state.moveFolder);
   const moveTreeNode = useStoryEntityFolderStore((state) => state.moveTreeNode);
   const deleteFolder = useStoryEntityFolderStore((state) => state.deleteFolder);
@@ -234,12 +241,12 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
     if (!projectId) return;
     void Promise.all([
       listObjects('story_entity', projectId),
-      fetchFolders(projectId),
+      fetchFolders(projectId, globalDisplayLanguage || settings.mainLanguage),
     ]).catch((error) => {
       console.error('Failed to load story entities:', error);
       showAlert({ title: 'Load Error', message: 'Failed to load story entities.' });
     });
-  }, [projectId, listObjects, fetchFolders]);
+  }, [projectId, listObjects, fetchFolders, globalDisplayLanguage, settings.mainLanguage]);
 
   const folders = useMemo(
     () => Object.values(foldersByIdState).filter((folder) => folder.project_id === projectId).sort(sortFolders),
@@ -310,9 +317,14 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
   const folderOptions = useMemo(
     () => [
       { id: null as string | null, label: 'Root' },
-      ...folders.map((folder) => ({ id: folder.id, label: folderPath(folder.id, foldersById).map((entry) => entry.name).join(' / ') })),
+      ...folders.map((folder) => ({
+        id: folder.id,
+        label: folderPath(folder.id, foldersById)
+          .map((entry) => getStoryEntityFolderName(entry, globalDisplayLanguage, settings.mainLanguage))
+          .join(' / '),
+      })),
     ],
-    [folders, foldersById],
+    [folders, foldersById, globalDisplayLanguage, settings.mainLanguage],
   );
 
   const storyEntityKindOptions = useMemo(
@@ -356,8 +368,10 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
     const folderItems = childFolders.map<MixedGridItem>((folder) => {
       const nestedFolders = folderChildren.get(folder.id) ?? [];
       const nestedEntities = entitiesByFolder.get(folder.id) ?? [];
+      const folderName = getStoryEntityFolderName(folder, globalDisplayLanguage, settings.mainLanguage);
+      const folderDescription = getStoryEntityFolderDescription(folder, globalDisplayLanguage, settings.mainLanguage);
       const previewLabels = [
-        ...nestedFolders.map((item) => item.name),
+        ...nestedFolders.map((item) => getStoryEntityFolderName(item, globalDisplayLanguage, settings.mainLanguage)),
         ...nestedEntities.map((entity) => {
           const language = getEffectiveLanguage(entity, globalDisplayLanguage, settings.mainLanguage);
           return getEntityData(entity, language).name || 'Untitled Entity';
@@ -368,11 +382,12 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
         kind: 'folder',
         id: folder.id,
         order: folder.display_order,
-        label: folder.name,
+        label: folderName,
         folder,
         childFolderCount: nestedFolders.length,
         childEntityCount: nestedEntities.length,
         previewLabels,
+        previewDescription: folderDescription,
       };
     });
 
@@ -526,18 +541,21 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
     setFolderDialog({
       mode: 'create',
       name: '',
+      description: '',
       parentId: currentFolderId,
     });
   }, [currentFolderId]);
 
   const openEditFolderDialog = useCallback((folder: StoryEntityFolder) => {
+    const folderData = getStoryEntityFolderData(folder, globalDisplayLanguage, settings.mainLanguage);
     setFolderDialog({
       mode: 'edit',
       folderId: folder.id,
-      name: folder.name,
+      name: folderData.name,
+      description: folderData.description,
       parentId: folder.parent_id ?? null,
     });
-  }, []);
+  }, [globalDisplayLanguage, settings.mainLanguage]);
 
   const canSelectFolderParent = useCallback((candidateId: string | null): boolean => {
     if (!folderDialog || folderDialog.mode !== 'edit' || !folderDialog.folderId) return true;
@@ -584,20 +602,27 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
     try {
       if (folderDialog.mode === 'create') {
         await createFolder(projectId, {
+          language: globalDisplayLanguage || settings.mainLanguage,
           name: folderDialog.name.trim(),
+          description: folderDialog.description.trim(),
           parent_id: folderDialog.parentId,
         });
       } else if (folderDialog.folderId) {
         const folder = foldersById[folderDialog.folderId];
         if (!folder) return;
-        if (folder.name !== folderDialog.name.trim()) {
-          await renameFolder(projectId, folderDialog.folderId, { name: folderDialog.name.trim() });
+        const currentFolderData = getStoryEntityFolderData(folder, globalDisplayLanguage, settings.mainLanguage);
+        if (
+          currentFolderData.name !== folderDialog.name.trim()
+          || currentFolderData.description !== folderDialog.description.trim()
+        ) {
+          await updateFolder(projectId, folderDialog.folderId, {
+            language: globalDisplayLanguage || settings.mainLanguage,
+            name: folderDialog.name.trim(),
+            description: folderDialog.description.trim(),
+          });
         }
         if ((folder.parent_id ?? null) !== (folderDialog.parentId ?? null)) {
           await moveFolder(projectId, folderDialog.folderId, { new_parent_id: folderDialog.parentId });
-          if (currentFolderId === folderDialog.folderId && folderDialog.parentId === folderDialog.folderId) {
-            setCurrentFolderId(null);
-          }
         }
       }
       setFolderDialog(null);
@@ -607,7 +632,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
     } finally {
       setIsSavingFolder(false);
     }
-  }, [createFolder, currentFolderId, folderDialog, foldersById, moveFolder, projectId, renameFolder]);
+  }, [createFolder, folderDialog, foldersById, globalDisplayLanguage, moveFolder, projectId, settings.mainLanguage, updateFolder]);
 
   const handleDeleteFolder = useCallback(async () => {
     if (!projectId || !folderDialog?.folderId) return;
@@ -652,7 +677,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
     <div className="story-entity-manager">
       <div className="section-header story-entity-manager__header">
         <div className="story-entity-manager__heading">
-          <h2>{currentFolder ? currentFolder.name : 'Story Entities'}</h2>
+          <h2>{currentFolder ? getStoryEntityFolderName(currentFolder, globalDisplayLanguage, settings.mainLanguage) : 'Story Entities'}</h2>
           <div className="story-entity-breadcrumbs">
             <button type="button" className="story-entity-breadcrumb" onClick={() => setCurrentFolderId(null)}>
               Root
@@ -664,7 +689,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                 className="story-entity-breadcrumb"
                 onClick={() => setCurrentFolderId(folder.id)}
               >
-                {folder.name}
+                {getStoryEntityFolderName(folder, globalDisplayLanguage, settings.mainLanguage)}
               </button>
             ))}
           </div>
@@ -751,7 +776,8 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                       <SortableStoryObjectCard key={getSortableId(item)} id={getSortableId(item)} spanType="normal">
                         {(dragHandle) => (
                           <FolderCard
-                            folder={item.folder}
+                            name={item.label}
+                            description={item.previewDescription}
                             childFolderCount={item.childFolderCount}
                             childEntityCount={item.childEntityCount}
                             previewLabels={item.previewLabels}
@@ -959,6 +985,19 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                     </label>
 
                     <label className="story-entity-folder-editor__field">
+                      <span>Description</span>
+                      <textarea
+                        value={folderDialog.description}
+                        onChange={(event) => setFolderDialog((prev) => prev ? {
+                          ...prev,
+                          description: event.target.value,
+                        } : prev)}
+                        placeholder="Folder description"
+                        rows={4}
+                      />
+                    </label>
+
+                    <label className="story-entity-folder-editor__field">
                       <span>Parent Folder</span>
                       <CustomSelect
                         value={folderDialog.parentId ?? ''}
@@ -1099,7 +1138,8 @@ const EntityCard: React.FC<{
 );
 
 const FolderCard: React.FC<{
-  folder: StoryEntityFolder;
+  name: string;
+  description: string;
   childFolderCount: number;
   childEntityCount: number;
   previewLabels: string[];
@@ -1107,7 +1147,8 @@ const FolderCard: React.FC<{
   onOpen: () => void;
   onEdit: () => void;
 }> = ({
-  folder,
+  name,
+  description,
   childFolderCount,
   childEntityCount,
   previewLabels,
@@ -1143,7 +1184,7 @@ const FolderCard: React.FC<{
                 }
               }}
             >
-              {folder.name}
+              {name}
             </h4>
             <p className="story-object-card__subtitle">
               {childFolderCount} folders · {childEntityCount} entities
@@ -1152,7 +1193,9 @@ const FolderCard: React.FC<{
 
           <div className="story-object-card__description-wrapper story-entity-folder-card__description-wrapper">
             <div className="story-object-card__description">
-              {previewLabels.length > 0 ? (
+              {description ? (
+                <p>{description}</p>
+              ) : previewLabels.length > 0 ? (
                 <ul className="story-entity-folder-card__preview-list">
                   {previewLabels.map((label) => (
                     <li key={label}>{label}</li>

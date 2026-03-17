@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -15,19 +14,16 @@ from ..services.demo_policy import require_demo_off
 from ..services.object_service import object_service
 from ..services.ownership import require_owned_project
 from ..services.story_entity_tree_service import (
+    build_story_entity_folder_content_map,
     collect_descendant_folder_ids,
     collect_descendant_story_entity_ids,
-    create_story_entity_folder,
-    delete_story_entity_folder_rows,
     list_story_entity_folders,
     move_story_entity,
     move_story_entity_folder,
-    normalize_story_entity_parent,
-    rename_story_entity_folder,
     require_story_entity_folder,
     serialize_story_entity_folder,
 )
-from ..utils.story_entities import STORY_ENTITY_TYPE
+from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE
 
 
 router = APIRouter(tags=["story-entity-folders"])
@@ -35,11 +31,15 @@ router = APIRouter(tags=["story-entity-folders"])
 
 class StoryEntityFolderCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+    description: str = ""
+    language: str = "English"
     parent_id: UUID | None = None
 
 
-class StoryEntityFolderRenameRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
+class StoryEntityFolderUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = None
+    language: str = "English"
 
 
 class StoryEntityFolderMoveRequest(BaseModel):
@@ -58,10 +58,13 @@ class StoryEntityFolderResponse(BaseModel):
     id: str
     project_id: str
     name: str
+    description: str
     parent_id: str | None
     display_order: int
     created_at: str | None
     updated_at: str | None
+    data: dict[str, dict[str, str]]
+    version: dict[str, Any]
 
 
 class StoryEntityFolderListResponse(BaseModel):
@@ -87,16 +90,38 @@ def _clean_folder_name(name: str) -> str:
     return cleaned
 
 
-def _serialize_folder(folder) -> StoryEntityFolderResponse:
-    return StoryEntityFolderResponse(**serialize_story_entity_folder(folder))
+def _extract_lang_data(payload: dict[str, Any], language: str) -> dict[str, str]:
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    if isinstance(data.get(language), dict):
+        lang_data = data[language]
+        return {
+            "name": str(lang_data.get("name") or ""),
+            "description": str(lang_data.get("description") or ""),
+        }
+    for value in data.values():
+        if isinstance(value, dict):
+            return {
+                "name": str(value.get("name") or ""),
+                "description": str(value.get("description") or ""),
+            }
+    return {"name": "", "description": ""}
 
 
-def _commit_or_raise(db: Session, message: str) -> None:
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail=message) from exc
+def _serialize_folder_payload(payload: dict[str, Any], *, language: str | None = None) -> StoryEntityFolderResponse:
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    display = _extract_lang_data(payload, language or "")
+    return StoryEntityFolderResponse(
+        id=str(payload.get("id") or ""),
+        project_id=str(metadata.get("project_id") or ""),
+        name=display["name"],
+        description=display["description"],
+        parent_id=str(metadata.get("parent_id")) if metadata.get("parent_id") else None,
+        display_order=int(metadata.get("display_order") or 0),
+        created_at=str(metadata.get("created_at")) if metadata.get("created_at") else None,
+        updated_at=str(metadata.get("updated_at")) if metadata.get("updated_at") else None,
+        data=payload.get("data") if isinstance(payload.get("data"), dict) else {},
+        version=payload.get("version") if isinstance(payload.get("version"), dict) else {"id": None, "number": 0, "created_at": None},
+    )
 
 
 @router.get(
@@ -105,13 +130,26 @@ def _commit_or_raise(db: Session, message: str) -> None:
 )
 async def get_story_entity_folders(
     project_id: UUID,
+    language: str | None = Query(None),
     _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
     folders = list_story_entity_folders(db, project_id=project_id)
-    return StoryEntityFolderListResponse(folders=[_serialize_folder(folder) for folder in folders])
+    content_map = build_story_entity_folder_content_map(
+        db,
+        project_id=project_id,
+        language=language,
+    )
+    return StoryEntityFolderListResponse(
+        folders=[
+            StoryEntityFolderResponse(
+                **serialize_story_entity_folder(folder, content=content_map.get(folder.id))
+            )
+            for folder in folders
+        ]
+    )
 
 
 @router.post(
@@ -127,39 +165,64 @@ async def create_story_entity_folder_route(
     db: Session = Depends(get_db),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
-    folder = create_story_entity_folder(
+    created = object_service.create_object(
         db,
         project_id=project_id,
-        name=_clean_folder_name(payload.name),
-        parent_id=payload.parent_id,
+        object_type=STORY_ENTITY_FOLDER_TYPE,
+        data={
+            "name": _clean_folder_name(payload.name),
+            "description": str(payload.description or ""),
+        },
+        language=payload.language,
+        metadata={"parent_id": payload.parent_id},
+        user_request="User Creation",
+        created_by=current_user.id,
     )
-    _commit_or_raise(db, "A folder with that name already exists in the target parent")
-    db.refresh(folder)
-    return _serialize_folder(folder)
+    db.commit()
+    return _serialize_folder_payload(created, language=payload.language)
 
 
 @router.patch(
     "/api/v1/projects/{project_id}/story-entity-folders/{folder_id}",
     response_model=StoryEntityFolderResponse,
 )
-async def rename_story_entity_folder_route(
+async def update_story_entity_folder_route(
     project_id: UUID,
     folder_id: UUID,
-    payload: StoryEntityFolderRenameRequest,
+    payload: StoryEntityFolderUpdateRequest,
     _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
-    folder = rename_story_entity_folder(
+    current = object_service.get_object(
+        db,
+        object_type=STORY_ENTITY_FOLDER_TYPE,
+        object_id=folder_id,
+        project_id=project_id,
+    )
+    if current is None:
+        raise HTTPException(status_code=404, detail="Story entity folder not found")
+
+    next_data = dict(_extract_lang_data(current, payload.language))
+    if payload.name is not None:
+        next_data["name"] = _clean_folder_name(payload.name)
+    if payload.description is not None:
+        next_data["description"] = str(payload.description or "")
+
+    updated = object_service.update_object(
         db,
         project_id=project_id,
-        folder_id=folder_id,
-        name=_clean_folder_name(payload.name),
+        object_type=STORY_ENTITY_FOLDER_TYPE,
+        object_id=folder_id,
+        data=next_data,
+        language=payload.language,
+        user_request="User Edit",
+        created_by=current_user.id,
+        create_new_version=True,
     )
-    _commit_or_raise(db, "A folder with that name already exists in the target parent")
-    db.refresh(folder)
-    return _serialize_folder(folder)
+    db.commit()
+    return _serialize_folder_payload(updated, language=payload.language)
 
 
 @router.post(
@@ -182,9 +245,11 @@ async def move_story_entity_folder_route(
         new_parent_folder_id=payload.new_parent_id,
         new_index=payload.new_index,
     )
-    _commit_or_raise(db, "A folder with that name already exists in the target parent")
-    db.refresh(folder)
-    return _serialize_folder(folder)
+    db.commit()
+    content_map = build_story_entity_folder_content_map(db, project_id=project_id)
+    return StoryEntityFolderResponse(
+        **serialize_story_entity_folder(folder, content=content_map.get(folder.id))
+    )
 
 
 @router.delete(
@@ -200,21 +265,15 @@ async def delete_story_entity_folder_route(
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
     folder = require_story_entity_folder(db, project_id=project_id, folder_id=folder_id)
-    parent_id = folder.parent_id
     folder_ids = collect_descendant_folder_ids(db, project_id=project_id, folder_id=folder_id)
     entity_ids = collect_descendant_story_entity_ids(db, project_id=project_id, folder_ids=folder_ids)
-
-    for entity_id in entity_ids:
-        object_service.delete_object(
-            db,
-            project_id=project_id,
-            object_type=STORY_ENTITY_TYPE,
-            object_id=entity_id,
-            user_id=current_user.id,
-        )
-
-    delete_story_entity_folder_rows(db, project_id=project_id, folder_ids=folder_ids)
-    normalize_story_entity_parent(db, project_id=project_id, parent_folder_id=parent_id)
+    object_service.delete_object(
+        db,
+        project_id=project_id,
+        object_type=STORY_ENTITY_FOLDER_TYPE,
+        object_id=folder.id,
+        user_id=current_user.id,
+    )
     db.commit()
 
     return StoryEntityFolderDeleteResponse(
@@ -254,7 +313,7 @@ async def move_story_entity_tree_node(
             new_index=payload.new_index,
         )
 
-    _commit_or_raise(db, "Unable to move story entity tree node")
+    db.commit()
     return StoryEntityTreeMoveResponse(
         success=True,
         node_kind=payload.node_kind,

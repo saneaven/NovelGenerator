@@ -13,6 +13,7 @@ export type OperationCategory =
   | 'generate';
 
 export type ObjectType =
+  | 'story_entity_folder'
   | 'story_entity'
   | 'basic_info'
   | 'guidelines'

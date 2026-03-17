@@ -28,6 +28,7 @@ export type ToolCategory =
 export type TargetType =
   | 'basic_info'
   | 'guidelines'
+  | 'story_entity_folder'
   | 'story_entity'
   | 'outline'
   | 'manuscript'
@@ -236,6 +237,7 @@ export const STORY_ENTITY_TYPE_MAP: Record<StoryEntityKind, ObjectType> = {
 
 /** All object types including outline structure (for translation and validation) */
 export const ALL_OBJECT_TYPE_MAP: Record<string, ObjectType> = {
+  story_entity_folder: 'story_entity_folder',
   story_entity: 'story_entity',
   outline: 'outline',
 };

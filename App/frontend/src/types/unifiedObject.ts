@@ -15,6 +15,7 @@ import type { TipTapDoc } from './tiptap';
 export type ObjectType =
   | 'basic_info'
   | 'guidelines'
+  | 'story_entity_folder'
   | 'story_entity'
   | 'outline'
   | 'manuscript';
@@ -121,11 +122,17 @@ export interface GuidelinesData {
   authorNote: string;
 }
 
+export interface StoryEntityFolderData {
+  name: string;
+  description: string;
+}
+
 // ============================================================================
 // TYPED UNIFIED OBJECTS
 // ============================================================================
 
 export type BasicInfoObject = UnifiedObject<BasicInfoData> & { type: 'basic_info' };
+export type StoryEntityFolderObject = UnifiedObject<StoryEntityFolderData> & { type: 'story_entity_folder' };
 export type StoryEntityObject = UnifiedObject<StoryEntityData> & { type: 'story_entity'; kind: StoryEntityKind };
 export type StoryObject = StoryEntityObject;
 export type ManuscriptObject = UnifiedObject<ManuscriptData> & { type: 'manuscript' };

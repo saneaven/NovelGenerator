@@ -34,6 +34,7 @@ export type PromptStoryEntityTreeNode =
       nodeType: 'folder';
       id: string;
       name: string;
+      description: string;
       children: PromptStoryEntityTreeNode[];
     }
   | {
@@ -202,11 +203,13 @@ function buildStoryEntityTree(ids: PromptProjectSkeletonIds): PromptStoryEntityT
       nodeType: 'folder',
       id: '[ placeholder-folder-characters-id ]',
       name: 'Characters',
+      description: '[ Placeholder for folder description ]',
       children: [
         {
           nodeType: 'folder',
           id: '[ placeholder-folder-main-cast-id ]',
           name: 'Main Cast',
+          description: '[ Placeholder for nested folder description ]',
           children: [
             {
               nodeType: 'story_entity',

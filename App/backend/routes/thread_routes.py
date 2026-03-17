@@ -876,8 +876,14 @@ def _tool_call_target_key(tc: RunToolCallModel | None) -> str:
     target_id = args.get("id", "")
     if tc.tool_name in {"patch_manuscript", "replace_manuscript"}:
         return f"manuscript:{target_id}"
-    if tc.tool_name in {"patch_story_entity", "replace_story_entity"}:
+    if tc.tool_name in {"patch_story_entity", "replace_story_entity", "patch_translation_story_entity"}:
         return f"story_entity:{args.get('kind', '')}:{target_id}"
+    if tc.tool_name in {
+        "patch_story_entity_folder",
+        "replace_story_entity_folder",
+        "patch_translation_story_entity_folder",
+    }:
+        return f"story_entity_folder:{target_id}"
     if tc.tool_name in {"patch_outline", "replace_outline"}:
         return f"outline:{target_id}"
     # Everything else (sub-agents, reads, creates, deletes) gets a unique key → parallel.
@@ -904,6 +910,15 @@ def _extract_story_entity_metadata(args: dict) -> dict | None:
     meta: dict[str, Any] = {}
     if "folderId" in args:
         meta["folder_id"] = args.get("folderId")
+    return meta or None
+
+
+def _extract_story_entity_folder_metadata(args: dict) -> dict | None:
+    meta: dict[str, Any] = {}
+    if isinstance(args.get("position"), int):
+        meta["display_order"] = args["position"]
+    if "parentId" in args:
+        meta["parent_id"] = args.get("parentId")
     return meta or None
 
 
@@ -1057,17 +1072,24 @@ async def _execute_batched_patch_group(
 
                 elif tool_name in {
                     "patch_story_entity",
+                    "patch_translation_story_entity",
+                    "patch_story_entity_folder",
+                    "patch_translation_story_entity_folder",
                     "patch_outline",
                 }:
                     obj_type = (
                         "story_entity"
-                        if tool_name == "patch_story_entity"
+                        if tool_name in {"patch_story_entity", "patch_translation_story_entity"}
+                        else "story_entity_folder"
+                        if tool_name in {"patch_story_entity_folder", "patch_translation_story_entity_folder"}
                         else "outline"
                     )
                     obj_id = UUID(str(args.get("id")))
                     metadata = (
                         _extract_story_entity_metadata(args)
-                        if tool_name == "patch_story_entity"
+                        if tool_name in {"patch_story_entity", "patch_translation_story_entity"}
+                        else _extract_story_entity_folder_metadata(args)
+                        if tool_name in {"patch_story_entity_folder", "patch_translation_story_entity_folder"}
                         else _extract_outline_metadata(args)
                     )
                     r = object_patch_batch.apply_patch(
@@ -1093,18 +1115,30 @@ async def _execute_batched_patch_group(
 
                 elif tool_name in {
                     "replace_story_entity",
+                    "replace_story_entity_folder",
                     "replace_outline",
                 }:
                     obj_type = (
                         "story_entity"
                         if tool_name == "replace_story_entity"
+                        else "story_entity_folder"
+                        if tool_name == "replace_story_entity_folder"
                         else "outline"
                     )
                     obj_id = UUID(str(args.get("id")))
-                    fields = {k: args[k] for k in ("name", "description", "content") if k in args}
+                    field_keys = (
+                        ("name", "description", "content")
+                        if tool_name == "replace_story_entity"
+                        else ("name", "description")
+                        if tool_name == "replace_story_entity_folder"
+                        else ("name", "description", "content")
+                    )
+                    fields = {k: args[k] for k in field_keys if k in args}
                     metadata = (
                         _extract_story_entity_metadata(args)
                         if tool_name == "replace_story_entity"
+                        else _extract_story_entity_folder_metadata(args)
+                        if tool_name == "replace_story_entity_folder"
                         else _extract_outline_metadata(args)
                     )
                     r = object_patch_batch.apply_replace(
@@ -1261,7 +1295,7 @@ async def decide_tool_calls_batch(
     tasks = []
     for key, items in target_groups.items():
         first_token = key.split(":")[0]
-        if first_token in {"manuscript", "story_entity", "outline"}:
+        if first_token in {"manuscript", "story_entity", "story_entity_folder", "outline"}:
             tasks.append(run_batch_group(items))
         else:
             tasks.append(run_single_group(items))

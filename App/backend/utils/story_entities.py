@@ -6,6 +6,7 @@ from typing import Iterable
 
 
 STORY_ENTITY_TYPE = "story_entity"
+STORY_ENTITY_FOLDER_TYPE = "story_entity_folder"
 STORY_ENTITY_KINDS = ("character", "organization", "location", "lorebook")
 STORY_ENTITY_KIND_SET = set(STORY_ENTITY_KINDS)
 STORY_ENTITY_KIND_ORDER = {

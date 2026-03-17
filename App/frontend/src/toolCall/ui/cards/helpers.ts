@@ -38,6 +38,8 @@ function isSingletonUnifiedType(type: UnifiedObjectType): boolean {
 
 export function resolveUnifiedType(operation: ObjectOperationVM): UnifiedObjectType | undefined {
   switch (operation.objectType) {
+    case 'story_entity_folder':
+      return 'story_entity_folder';
     case 'basic_info':
       return 'basic_info';
     case 'guidelines':
@@ -130,6 +132,17 @@ function resolveDisplayName(
   return undefined;
 }
 
+function fallbackOperationData(operation: ObjectOperationVM): Record<string, unknown> {
+  const resultData = operation.result?.data;
+  if (resultData && typeof resultData === 'object') {
+    const object = (resultData as Record<string, unknown>).object;
+    if (object && typeof object === 'object' && !Array.isArray(object)) {
+      return object as Record<string, unknown>;
+    }
+  }
+  return {};
+}
+
 export function getObjectSnapshot(params: {
   operation: ObjectOperationVM;
   objects: Record<string, UnifiedObject>;
@@ -151,15 +164,21 @@ export function getObjectSnapshot(params: {
   }
 
   const object = resolveByTypeAndId(objects, unifiedType, operation.targetId, projectId);
-  const data = dataForLanguage(object, language);
-  const metadata = (object?.metadata ?? {}) as Record<string, unknown>;
+  const fallbackData = fallbackOperationData(operation);
+  const data = object ? dataForLanguage(object, language) : fallbackData;
+  const metadata = object
+    ? ((object.metadata ?? {}) as unknown as Record<string, unknown>)
+    : {};
+  const fallbackDisplayName = typeof fallbackData.name === 'string' && fallbackData.name.trim()
+    ? fallbackData.name
+    : undefined;
 
   return {
     id: object?.id ?? operation.targetId,
     unifiedType,
     data,
     metadata,
-    displayName: resolveDisplayName(object, data, objects, language) ?? operation.targetLabel,
+    displayName: resolveDisplayName(object, data, objects, language) ?? fallbackDisplayName ?? operation.targetLabel,
     object,
   };
 }
@@ -210,6 +229,11 @@ export function resolveObjectTitle(params: {
       const name = resolveDisplayName(object, data, objects, language);
       if (name) return { type, name };
     }
+  }
+
+  const fallbackData = fallbackOperationData(operation);
+  if (typeof fallbackData.name === 'string' && fallbackData.name.trim()) {
+    return { type, name: fallbackData.name };
   }
 
   if (typeof operation.args.name === 'string' && operation.args.name.trim()) {
