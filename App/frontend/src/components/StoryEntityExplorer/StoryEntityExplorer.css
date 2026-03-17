@@ -74,27 +74,27 @@
   z-index: var(--z-button);
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-xs) var(--spacing-sm);
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
   border-radius: var(--border-radius-full);
-  background: var(--color-brand-primary-soft);
-  color: var(--color-text-brand);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  border: 1px solid var(--color-brand-primary-border);
+  background: var(--color-surface-elevated);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-subtle);
   box-shadow: var(--shadow-sm);
   pointer-events: none;
 }
 
 .story-entity-card-kind-badge--folder {
   background: var(--color-surface-subtle);
-  color: var(--color-text-secondary);
-  border-color: var(--color-border-default);
 }
 
-.story-entity-card .story-object-card__title,
-.story-entity-folder-card .story-object-card__title {
-  padding-top: calc(var(--spacing-xl) + var(--spacing-md));
+.story-entity-card-kind-badge svg {
+  display: block;
+}
+
+.story-entity-folder-card .story-object-card__body-shell {
+  padding-top: calc(var(--spacing-lg) + var(--spacing-sm));
 }
 
 .story-entity-card .story-object-card__full-expand-btn {

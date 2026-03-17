@@ -24,6 +24,10 @@ export interface StoryObjectCardProps {
   spanType?: SpanType;
   /** Additional CSS class (e.g. 'function-call-readonly-item') */
   className?: string;
+  /** Optional badge rendered inside the animated card */
+  badge?: React.ReactNode;
+  /** Force fit-text behavior for text-only cards */
+  enableFitText?: boolean;
   /** Optional drag handle slot rendered inside the card */
   dragHandle?: React.ReactNode;
 
@@ -50,6 +54,8 @@ const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
   expanded = false,
   spanType,
   className,
+  badge,
+  enableFitText: enableFitTextProp,
   dragHandle,
   layoutId,
   isFullExpanded,
@@ -62,9 +68,9 @@ const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
   const hasImage = Boolean(imageUrl);
   const isInteractive = Boolean(layoutId);
   const showSubtitle = (expanded || isTextOnly) && description;
+  const hasBadge = Boolean(badge);
 
-  // Dynamic font scaling for text-only cards in grid context (not readonly)
-  const enableFitText = isTextOnly && !className;
+  const enableFitText = (enableFitTextProp ?? !className) && isTextOnly;
   const { containerRef, textRef, fontSize, isReady } = useFitText({
     minFontSize: 16,
     maxFontSize: 48,
@@ -79,6 +85,12 @@ const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
 
   const cardContent = (
     <>
+      {badge && (
+        <div className="story-object-card__badge">
+          {badge}
+        </div>
+      )}
+
       {/* Expand button — only for interactive variant */}
       {onOpenFullExpand && (
         <IconButton
@@ -171,10 +183,10 @@ const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
         className={cardClassName}
         data-expanded={expanded}
         data-has-image={hasImage}
+        data-has-badge={hasBadge}
         data-span={spanType}
         initial={false}
         animate={{ opacity: isFullExpanded ? 0 : 1 }}
-        whileHover={{ y: -4 }}
         transition={{ opacity: { duration: 0.15 } }}
         onAnimationComplete={onAnimationComplete}
       >
@@ -188,6 +200,7 @@ const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
       className={cardClassName}
       data-expanded={expanded}
       data-has-image={hasImage}
+      data-has-badge={hasBadge}
       data-span={spanType}
     >
       {cardContent}

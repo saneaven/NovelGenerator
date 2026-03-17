@@ -49,6 +49,7 @@ import {
 } from '../icons';
 import type { StoryEntityFolder } from '../../types/storyEntityFolder';
 import type { StoryEntityData, StoryEntityKind, StoryEntityObject } from '../../types/unifiedObject';
+import type { StoryObjectAsset } from '../../api/assetService';
 import './StoryEntityExplorer.css';
 
 interface StoryEntityExplorerProps {
@@ -167,6 +168,10 @@ function getSortableId(item: MixedGridItem): string {
   return `${item.kind}:${item.id}`;
 }
 
+function getMainAssetFromLinks(links: StoryObjectAsset[] | undefined) {
+  return links?.find((entry) => entry.is_main)?.asset ?? null;
+}
+
 const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplayLanguage }) => {
   const { projectId } = useParams<{ projectId: string }>();
   const settings = useSettings();
@@ -187,7 +192,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
   const deleteFolder = useStoryEntityFolderStore((state) => state.deleteFolder);
 
   const fetchStoryObjectAssets = useAssetStore((state) => state.fetchStoryObjectAssets);
-  const getMainAsset = useAssetStore((state) => state.getMainAsset);
+  const storyObjectAssetsByKey = useAssetStore((state) => state.storyObjectAssetsByKey);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const columnCount = useGridColumnCount(gridRef);
@@ -283,6 +288,14 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
     () => entitiesByFolder.get(currentFolderId) ?? [],
     [currentFolderId, entitiesByFolder],
   );
+
+  const mainAssetsByEntityId = useMemo(() => {
+    if (!projectId) return {};
+    return currentFolderEntities.reduce<Record<string, ReturnType<typeof getMainAssetFromLinks>>>((acc, entity) => {
+      acc[entity.id] = getMainAssetFromLinks(storyObjectAssetsByKey[`${projectId}:story_entity:${entity.id}`]);
+      return acc;
+    }, {});
+  }, [currentFolderEntities, projectId, storyObjectAssetsByKey]);
 
   useEffect(() => {
     if (!projectId || currentFolderEntities.length === 0) return;
@@ -751,7 +764,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                     );
                   }
 
-                  const mainAsset = getMainAsset(projectId, 'story_entity', item.entity.id);
+                  const mainAsset = mainAssetsByEntityId[item.entity.id] ?? null;
                   const baseSpanType = getSpanType(mainAsset);
                   const spanType = (baseSpanType === 'horizontal' && columnCount < 2) ? 'normal' : baseSpanType;
 
@@ -799,7 +812,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                   effectiveLanguage={getEffectiveLanguage(currentExpandedEntity, globalDisplayLanguage, settings.mainLanguage)}
                   versionNumber={currentExpandedEntity.version.number}
                   objectType="story_entity"
-                  mainAsset={getMainAsset(projectId, 'story_entity', currentExpandedEntity.id)}
+                  mainAsset={getMainAssetFromLinks(storyObjectAssetsByKey[`${projectId}:story_entity:${currentExpandedEntity.id}`])}
                   loading={loading[currentExpandedEntity.id] || false}
                   showSecondaryLanguage={getEffectiveLanguage(currentExpandedEntity, globalDisplayLanguage, settings.mainLanguage) !== globalDisplayLanguage}
                   extraEditFields={(
@@ -1056,29 +1069,32 @@ const EntityCard: React.FC<{
   onAnimationComplete,
 }) => (
   <div className="story-entity-grid-item" data-span={spanType}>
-    <div className="story-entity-card-shell">
-      <span className="story-entity-card-kind-badge">
-        {kindIcon(entity.kind ?? 'character')}
-        {KIND_SHORT_LABELS[entity.kind ?? 'character']}
-      </span>
-
-      <StoryObjectCard
-        name={itemData.name}
-        description={description}
-        content={itemData.content}
-        imageUrl={imageUrl}
-        expanded={isExpanded}
-        spanType={spanType}
-        className="story-entity-card"
-        dragHandle={dragHandle}
-        layoutId={`card-${entity.id}`}
-        isFullExpanded={isFullExpanded}
-        isAnimating={isAnimating}
-        onToggleExpand={onToggleExpand}
-        onOpenFullExpand={onOpenFullExpand}
-        onAnimationComplete={onAnimationComplete}
-      />
-    </div>
+    <StoryObjectCard
+      name={itemData.name}
+      description={description}
+      content={itemData.content}
+      imageUrl={imageUrl}
+      expanded={isExpanded}
+      spanType={spanType}
+      className="story-entity-card"
+      badge={(
+        <span
+          className="story-entity-card-kind-badge"
+          title={KIND_SHORT_LABELS[entity.kind ?? 'character']}
+          aria-label={KIND_SHORT_LABELS[entity.kind ?? 'character']}
+        >
+          {kindIcon(entity.kind ?? 'character')}
+        </span>
+      )}
+      enableFitText
+      dragHandle={dragHandle}
+      layoutId={`card-${entity.id}`}
+      isFullExpanded={isFullExpanded}
+      isAnimating={isAnimating}
+      onToggleExpand={onToggleExpand}
+      onOpenFullExpand={onOpenFullExpand}
+      onAnimationComplete={onAnimationComplete}
+    />
   </div>
 );
 
@@ -1101,9 +1117,12 @@ const FolderCard: React.FC<{
 }) => (
   <div className="story-entity-grid-item" data-span="normal">
     <article className="story-object-card story-entity-folder-card" data-has-image="false" data-span="normal">
-      <span className="story-entity-card-kind-badge story-entity-card-kind-badge--folder">
+      <span
+        className="story-entity-card-kind-badge story-entity-card-kind-badge--folder"
+        title="Folder"
+        aria-label="Folder"
+      >
         <Folder size="sm" />
-        Folder
       </span>
 
       <div className="story-object-card__content">
