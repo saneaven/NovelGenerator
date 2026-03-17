@@ -665,9 +665,10 @@ export class ThreadEventConsumer {
         return;
       }
 
-      // Mirror backend resume semantics: only actively running threads should block auto-continue here.
-      if (thread?.status === 'running') {
-        console.debug('[AutoContinue] Skipped: thread still running', { threadId, status: thread?.status });
+      // Respect explicit pauses: only auto-continue threads that are not already
+      // running and were not intentionally paused by the user or Apply & Pause.
+      if (thread?.status === 'running' || thread?.status === 'paused') {
+        console.debug('[AutoContinue] Skipped: thread is not auto-continuable', { threadId, status: thread?.status });
         return;
       }
 
