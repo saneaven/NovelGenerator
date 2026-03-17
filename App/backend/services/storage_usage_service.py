@@ -22,15 +22,11 @@ from ..models.db_models import (
     Asset,
     BasicInfo,
     Chapter,
-    Character,
     Guidelines,
     ImageRunModel,
-    Location,
-    LorebookEntry,
     Manuscript,
     ManuscriptImage,
     NotificationModel,
-    Organization,
     Outline,
     Project,
     ProjectStorageUsage,
@@ -38,6 +34,7 @@ from ..models.db_models import (
     RunMessageAttachmentModel,
     RunModel,
     RunToolCallModel,
+    StoryEntity,
     Thread,
     User,
 )
@@ -62,10 +59,7 @@ if DEFAULT_STORAGE_QUOTA_BYTES < 0:
 STORY_OBJECT_TYPES = (
     "basic_info",
     "guidelines",
-    "character",
-    "organization",
-    "location",
-    "lorebook",
+    "story_entity",
     "outline",
     "act",
     "chapter",
@@ -680,10 +674,7 @@ def _uuid_rows(rows: list[object]) -> list[UUID]:
 def _collect_project_object_ids(db: Session, *, project_id: UUID) -> dict[str, list[UUID]]:
     basic_info_ids = _uuid_rows(db.query(BasicInfo.id).filter(BasicInfo.project_id == project_id).all())
     guideline_ids = _uuid_rows(db.query(Guidelines.id).filter(Guidelines.project_id == project_id).all())
-    character_ids = _uuid_rows(db.query(Character.id).filter(Character.project_id == project_id).all())
-    organization_ids = _uuid_rows(db.query(Organization.id).filter(Organization.project_id == project_id).all())
-    location_ids = _uuid_rows(db.query(Location.id).filter(Location.project_id == project_id).all())
-    lorebook_ids = _uuid_rows(db.query(LorebookEntry.id).filter(LorebookEntry.project_id == project_id).all())
+    story_entity_ids = _uuid_rows(db.query(StoryEntity.id).filter(StoryEntity.project_id == project_id).all())
     outline_ids = _uuid_rows(db.query(Outline.id).filter(Outline.project_id == project_id).all())
 
     act_ids = _uuid_rows(
@@ -710,10 +701,7 @@ def _collect_project_object_ids(db: Session, *, project_id: UUID) -> dict[str, l
     return {
         "basic_info": basic_info_ids,
         "guidelines": guideline_ids,
-        "character": character_ids,
-        "organization": organization_ids,
-        "location": location_ids,
-        "lorebook": lorebook_ids,
+        "story_entity": story_entity_ids,
         "outline": outline_ids,
         "act": act_ids,
         "chapter": chapter_ids,
@@ -813,10 +801,7 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
     story_core_rows: list[object] = []
     story_core_rows.extend(db.query(BasicInfo).filter(BasicInfo.project_id == project_id).all())
     story_core_rows.extend(db.query(Guidelines).filter(Guidelines.project_id == project_id).all())
-    story_core_rows.extend(db.query(Character).filter(Character.project_id == project_id).all())
-    story_core_rows.extend(db.query(Organization).filter(Organization.project_id == project_id).all())
-    story_core_rows.extend(db.query(Location).filter(Location.project_id == project_id).all())
-    story_core_rows.extend(db.query(LorebookEntry).filter(LorebookEntry.project_id == project_id).all())
+    story_core_rows.extend(db.query(StoryEntity).filter(StoryEntity.project_id == project_id).all())
     story_core_rows.extend(db.query(Outline).filter(Outline.project_id == project_id).all())
     story_core_rows.extend(
         db.query(Act)

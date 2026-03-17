@@ -1454,7 +1454,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
             const mcpSelections = getMessageMcpSelections(message.source);
             const processed = displayProcessor.process(
               message.chatMessage as any,
-              { projectId, surface: (surface ?? 'story-object') as any },
+              { projectId, surface: (surface ?? 'story-entity') as any },
             );
 
             if (item.kind === 'assistant_block') {

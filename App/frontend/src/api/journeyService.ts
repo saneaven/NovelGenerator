@@ -5,7 +5,7 @@ import type { ThreadStatus } from '../types/thread';
 export type JourneyKind =
   | 'manuscriptEdit'
   | 'outlineEdit'
-  | 'storyObjectEdit'
+  | 'objectEdit'
   | 'objectTranslation'
   | 'imagePrompt'
   | 'sceneImagePrompt'

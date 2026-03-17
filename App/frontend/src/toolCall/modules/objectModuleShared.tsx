@@ -12,52 +12,52 @@ import { ReadCallCard } from '../ui/cards/ReadCallCard';
 import { ReplaceCallCard } from '../ui/cards/ReplaceCallCard';
 import { groupPatchOperations } from '../ui/patchGrouping';
 import type { ObjectOperationVM, ObjectType, OperationCategory } from '../ui/vmTypes';
-import { objectTypeLabel, parseStorySubtype } from './objectToolMeta';
+import { objectTypeLabel, parseStoryEntityKind } from './objectToolMeta';
 
 type ObjectCategory = Extract<OperationCategory, 'read' | 'create' | 'replace' | 'patch' | 'delete' | 'translate' | 'patch_translation'>;
 
 interface ObjectToolConfig {
   category: ObjectCategory;
   objectType: ObjectType;
-  storySubtypeFromArgs?: boolean;
+  storyEntityKindFromArgs?: boolean;
 }
 
 const OBJECT_TOOL_CONFIGS: Record<string, ObjectToolConfig> = {
-  read_story_object: { category: 'read', objectType: 'story_object', storySubtypeFromArgs: true },
+  read_story_entity: { category: 'read', objectType: 'story_entity', storyEntityKindFromArgs: true },
   read_outline: { category: 'read', objectType: 'outline' },
   read_outline_act: { category: 'read', objectType: 'outline_act' },
   read_outline_chapter: { category: 'read', objectType: 'outline_chapter' },
   read_manuscript: { category: 'read', objectType: 'manuscript' },
-  create_story_object: { category: 'create', objectType: 'story_object', storySubtypeFromArgs: true },
+  create_story_entity: { category: 'create', objectType: 'story_entity', storyEntityKindFromArgs: true },
   create_outline: { category: 'create', objectType: 'outline' },
   create_outline_act: { category: 'create', objectType: 'outline_act' },
   create_outline_chapter: { category: 'create', objectType: 'outline_chapter' },
-  replace_story_object: { category: 'replace', objectType: 'story_object', storySubtypeFromArgs: true },
+  replace_story_entity: { category: 'replace', objectType: 'story_entity', storyEntityKindFromArgs: true },
   replace_basic_info: { category: 'replace', objectType: 'basic_info' },
   replace_guidelines: { category: 'replace', objectType: 'guidelines' },
   replace_outline: { category: 'replace', objectType: 'outline' },
   replace_outline_act: { category: 'replace', objectType: 'outline_act' },
   replace_outline_chapter: { category: 'replace', objectType: 'outline_chapter' },
   replace_manuscript: { category: 'replace', objectType: 'manuscript' },
-  patch_story_object: { category: 'patch', objectType: 'story_object', storySubtypeFromArgs: true },
+  patch_story_entity: { category: 'patch', objectType: 'story_entity', storyEntityKindFromArgs: true },
   patch_basic_info: { category: 'patch', objectType: 'basic_info' },
   patch_guidelines: { category: 'patch', objectType: 'guidelines' },
   patch_outline: { category: 'patch', objectType: 'outline' },
   patch_outline_act: { category: 'patch', objectType: 'outline_act' },
   patch_outline_chapter: { category: 'patch', objectType: 'outline_chapter' },
   patch_manuscript: { category: 'patch', objectType: 'manuscript' },
-  delete_story_object: { category: 'delete', objectType: 'story_object', storySubtypeFromArgs: true },
+  delete_story_entity: { category: 'delete', objectType: 'story_entity', storyEntityKindFromArgs: true },
   delete_outline: { category: 'delete', objectType: 'outline' },
   delete_outline_act: { category: 'delete', objectType: 'outline_act' },
   delete_outline_chapter: { category: 'delete', objectType: 'outline_chapter' },
-  translate_story_object: { category: 'translate', objectType: 'story_object', storySubtypeFromArgs: true },
+  translate_story_entity: { category: 'translate', objectType: 'story_entity', storyEntityKindFromArgs: true },
   translate_basic_info: { category: 'translate', objectType: 'basic_info' },
   translate_guidelines: { category: 'translate', objectType: 'guidelines' },
   translate_outline: { category: 'translate', objectType: 'outline' },
   translate_outline_act: { category: 'translate', objectType: 'outline_act' },
   translate_outline_chapter: { category: 'translate', objectType: 'outline_chapter' },
   translate_manuscript: { category: 'translate', objectType: 'manuscript' },
-  patch_translation_story_object: { category: 'patch_translation', objectType: 'story_object', storySubtypeFromArgs: true },
+  patch_translation_story_entity: { category: 'patch_translation', objectType: 'story_entity', storyEntityKindFromArgs: true },
   patch_translation_basic_info: { category: 'patch_translation', objectType: 'basic_info' },
   patch_translation_guidelines: { category: 'patch_translation', objectType: 'guidelines' },
   patch_translation_outline: { category: 'patch_translation', objectType: 'outline' },
@@ -80,17 +80,17 @@ export function getTargetId(_toolName: string, args: Record<string, unknown>): s
 export function buildObjectOperationVM(params: MapToolToVmParams): ObjectOperationVM {
   const args = coerceRecord(params.args);
   const config = resolveObjectToolConfig(params.toolName);
-  const objectType = config?.objectType ?? 'story_object';
-  const storySubtype = config?.storySubtypeFromArgs ? parseStorySubtype(args.type) : undefined;
+  const objectType = config?.objectType ?? 'story_entity';
+  const storyEntityKind = config?.storyEntityKindFromArgs ? parseStoryEntityKind(args.kind) : undefined;
   const targetId = getTargetId(params.toolName, args);
 
-  const base = buildOperationBase(params, objectTypeLabel(objectType, storySubtype), targetId, undefined);
+  const base = buildOperationBase(params, objectTypeLabel(objectType, storyEntityKind), targetId, undefined);
   return {
     ...base,
     args,
     category: config?.category ?? 'read',
     objectType,
-    storySubtype,
+    storyEntityKind,
   };
 }
 
@@ -130,11 +130,11 @@ function editType(category: ObjectCategory): string {
 
 export function getObjectEditMeta(toolName: string, args: Record<string, unknown>): { title: string; type: string } {
   const config = resolveObjectToolConfig(toolName);
-  const objectType = config?.objectType ?? 'story_object';
-  const storySubtype = config?.storySubtypeFromArgs ? parseStorySubtype(args.type) : undefined;
+  const objectType = config?.objectType ?? 'story_entity';
+  const storyEntityKind = config?.storyEntityKindFromArgs ? parseStoryEntityKind(args.kind) : undefined;
   const category = config?.category ?? 'read';
   return {
-    title: `${editVerb(category)} ${objectTypeLabel(objectType, storySubtype)}`,
+    title: `${editVerb(category)} ${objectTypeLabel(objectType, storyEntityKind)}`,
     type: editType(category),
   };
 }

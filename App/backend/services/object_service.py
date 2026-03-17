@@ -18,15 +18,12 @@ from ..models.db_models import (
     Asset,
     BasicInfo,
     Chapter,
-    Character,
     Guidelines,
-    LorebookEntry,
-    Location,
     Manuscript,
     ManuscriptImage,
-    Organization,
     Outline,
     Project,
+    StoryEntity,
     StoryObjectAsset,
 )
 from ..models.translation_models import ObjectVersion
@@ -41,9 +38,11 @@ from ..services.deletion_service import (
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.semantic_index_service import index_object, invalidate_object_index
 from ..utils.object_type_aliases import externalize_object_type, normalize_object_type
+from ..utils.story_entities import STORY_ENTITY_TYPE, require_story_entity_kind
 from .basic_info_utils import normalize_basic_info_data
 from .asset_change_events import queue_scene_assets_change
 from .object_change_events import queue_object_change
+from .story_entity_tree_service import ensure_valid_parent_folder, move_story_entity, next_story_entity_sibling_order, normalize_story_entity_parent
 from .credential_service import CredentialServiceError, credential_service
 from .settings_service import settings_service
 from .storage_usage_service import (
@@ -63,8 +62,6 @@ from .storage_usage_service import (
     snapshot_story_core_row,
 )
 
-
-LOREBOOK_TYPE = normalize_object_type("lorebook")
 _PENDING_SEMANTIC_OPS_KEY = "_pending_semantic_ops"
 _SEMANTIC_EXCLUDED_TYPES = {"basic_info", "guidelines"}
 logger = logging.getLogger(__name__)
@@ -198,10 +195,7 @@ def _model_for_object_type(object_type: str):
     mapping = {
         "basic_info": BasicInfo,
         "guidelines": Guidelines,
-        "character": Character,
-        "organization": Organization,
-        "location": Location,
-        LOREBOOK_TYPE: LorebookEntry,
+        STORY_ENTITY_TYPE: StoryEntity,
         "outline": Outline,
         "act": Act,
         "chapter": Chapter,
@@ -257,9 +251,10 @@ def _get_metadata(db: Session, obj: Any, object_type: str) -> dict[str, Any]:
         metadata["image_prompt_negative"] = getattr(obj, "image_prompt_negative", None)
     elif object_type == "guidelines":
         metadata["project_id"] = str(obj.project_id)
-    elif object_type in {"character", "organization", "location", LOREBOOK_TYPE}:
+    elif object_type == STORY_ENTITY_TYPE:
         metadata["project_id"] = str(obj.project_id)
-        metadata["order"] = int(getattr(obj, "order", 0) or 0)
+        metadata["folder_id"] = str(obj.folder_id) if getattr(obj, "folder_id", None) else None
+        metadata["display_order"] = int(getattr(obj, "display_order", 0) or 0)
         metadata["image_prompt"] = getattr(obj, "image_prompt", None)
         metadata["image_prompt_positive"] = getattr(obj, "image_prompt_positive", None)
         metadata["image_prompt_negative"] = getattr(obj, "image_prompt_negative", None)
@@ -344,17 +339,20 @@ def _serialize_object(db: Session, object_type: str, obj: Any, language: str | N
             if isinstance(lang_data, dict)
         }
 
-    return {
+    serialized = {
         "id": str(obj.id),
         "type": externalize_object_type(object_type),
         "metadata": _get_metadata(db, obj, object_type),
         "data": data,
         "version": version,
     }
+    if object_type == STORY_ENTITY_TYPE:
+        serialized["kind"] = str(getattr(obj, "kind", ""))
+    return serialized
 
 
 def _load_owned_object(db: Session, project_id: UUID, object_type: str, object_id: UUID) -> Any | None:
-    if object_type in {"basic_info", "guidelines", "character", "organization", "location", LOREBOOK_TYPE, "outline"}:
+    if object_type in {"basic_info", "guidelines", STORY_ENTITY_TYPE, "outline"}:
         model = _model_for_object_type(object_type)
         return db.query(model).filter(model.id == object_id, model.project_id == project_id).first()
     if object_type == "act":
@@ -385,6 +383,15 @@ def _load_owned_object(db: Session, project_id: UUID, object_type: str, object_i
             .first()
         )
     return None
+
+
+def _parse_optional_uuid(value: Any, field_name: str) -> UUID | None:
+    if value in (None, "", "null"):
+        return None
+    try:
+        return UUID(str(value))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid {field_name} format") from exc
 
 
 def _create_or_update_version(
@@ -443,6 +450,24 @@ def _create_or_update_version(
 
 
 def _handle_metadata_update(db: Session, object_type: str, object_id: UUID, obj: Any, metadata: dict[str, Any]) -> None:
+    if object_type == STORY_ENTITY_TYPE:
+        requested_folder_id = obj.folder_id
+        if "folder_id" in metadata:
+            requested_folder_id = _parse_optional_uuid(metadata.get("folder_id"), "folder_id")
+        requested_index = metadata.get("display_order")
+        if requested_index is not None and (not isinstance(requested_index, int) or requested_index < 0):
+            raise HTTPException(status_code=400, detail="Invalid display_order value")
+
+        if requested_folder_id != obj.folder_id or requested_index is not None:
+            move_story_entity(
+                db,
+                project_id=obj.project_id,
+                entity_id=object_id,
+                new_parent_folder_id=requested_folder_id,
+                new_index=requested_index,
+            )
+        return
+
     if object_type == "chapter":
         requested_act_id = metadata.get("act_id")
         requested_order = metadata.get("order")
@@ -550,6 +575,7 @@ class ObjectService:
         object_type: str,
         data: dict[str, Any],
         language: str,
+        kind: str | None = None,
         metadata: dict[str, Any] | None = None,
         user_request: str = "Initial Creation",
         create_new_version: bool = True,
@@ -577,9 +603,23 @@ class ObjectService:
         manuscript_id: UUID | None = None
         md = metadata or {}
 
-        if t in {"character", "organization", "location", LOREBOOK_TYPE}:
-            max_order = db.query(func.max(model_class.order)).filter(model_class.project_id == project_id).scalar() or 0
-            core_obj = model_class(id=object_id, project_id=project_id, order=max_order + 1, created_at=datetime.utcnow(), updated_at=datetime.utcnow())
+        if t == STORY_ENTITY_TYPE:
+            folder_id = _parse_optional_uuid(md.get("folder_id"), "folder_id")
+            ensure_valid_parent_folder(db, project_id=project_id, folder_id=folder_id)
+            entity_kind = require_story_entity_kind(kind or md.get("kind"))
+            core_obj = StoryEntity(
+                id=object_id,
+                project_id=project_id,
+                kind=entity_kind,
+                folder_id=folder_id,
+                display_order=next_story_entity_sibling_order(
+                    db,
+                    project_id=project_id,
+                    parent_folder_id=folder_id,
+                ),
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
         elif t == "outline":
             max_order = db.query(func.max(Outline.order)).filter(Outline.project_id == project_id).scalar()
             if max_order is None:
@@ -781,6 +821,7 @@ class ObjectService:
         object_id: UUID,
         data: dict[str, Any],
         language: str,
+        kind: str | None = None,
         metadata: dict[str, Any] | None = None,
         user_request: str = "User Edit",
         create_new_version: bool = True,
@@ -800,6 +841,8 @@ class ObjectService:
                 raise ValueError("Manuscript updates do not accept data.content")
 
         obj.updated_at = datetime.utcnow()
+        if t == STORY_ENTITY_TYPE and kind is not None:
+            obj.kind = require_story_entity_kind(kind)
 
         if metadata:
             _handle_metadata_update(db, t, object_id, obj, metadata)
@@ -1138,10 +1181,7 @@ class ObjectService:
         story_core_before: list[object] = []
         for model_class, key in (
             (BasicInfo, "basic_info"),
-            (Character, "character"),
-            (Organization, "organization"),
-            (Location, "location"),
-            (LorebookEntry, LOREBOOK_TYPE),
+            (StoryEntity, STORY_ENTITY_TYPE),
         ):
             object_ids = ids_by_type.get(key) or []
             if not object_ids:
@@ -1178,7 +1218,7 @@ class ObjectService:
             )
 
         owned_assets: list[Asset] = []
-        if t in {"basic_info", "character", "organization", "location", LOREBOOK_TYPE}:
+        if t in {"basic_info", STORY_ENTITY_TYPE}:
             owned_assets = (
                 db.query(Asset)
                 .join(StoryObjectAsset, StoryObjectAsset.asset_id == Asset.id)
@@ -1198,6 +1238,7 @@ class ObjectService:
                 .all()
             )
 
+        old_story_entity_parent_id = obj.folder_id if t == STORY_ENTITY_TYPE else None
         deleted_asset_ids = [asset.id for asset in owned_assets if isinstance(asset.id, UUID)]
         deleted_asset_before = snapshot_rows(owned_assets, snapshot_asset_row)
         remaining_ref_assets_before = snapshot_rows(
@@ -1229,6 +1270,13 @@ class ObjectService:
                 )
 
         db.delete(obj)
+        db.flush()
+        if t == STORY_ENTITY_TYPE:
+            normalize_story_entity_parent(
+                db,
+                project_id=project_id,
+                parent_folder_id=old_story_entity_parent_id,
+            )
         remaining_ref_assets_after = snapshot_rows(
             db.query(Asset)
             .filter(
@@ -1263,7 +1311,6 @@ class ObjectService:
             ],
             enforce_quota=False,
         )
-        db.flush()
 
     def get_object(self, db: Session, object_type: str, object_id: UUID, *, project_id: UUID, language: str | None = None) -> dict[str, Any] | None:
         t = normalize_object_type(object_type)
@@ -1272,13 +1319,25 @@ class ObjectService:
             return None
         return _serialize_object(db, t, obj, language)
 
-    def list_objects(self, db: Session, project_id: UUID, object_type: str, *, language: str | None = None) -> list[dict[str, Any]]:
+    def list_objects(
+        self,
+        db: Session,
+        project_id: UUID,
+        object_type: str,
+        *,
+        language: str | None = None,
+        kinds: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         t = normalize_object_type(object_type)
         model_class = _model_for_object_type(t)
 
         query = db.query(model_class)
-        if t in {"basic_info", "guidelines", "character", "organization", "location", LOREBOOK_TYPE, "outline"}:
+        if t in {"basic_info", "guidelines", STORY_ENTITY_TYPE, "outline"}:
             query = query.filter(model_class.project_id == project_id)
+            if t == STORY_ENTITY_TYPE:
+                if kinds:
+                    query = query.filter(StoryEntity.kind.in_([require_story_entity_kind(kind) for kind in kinds]))
+                query = query.order_by(StoryEntity.display_order.asc())
         elif t == "act":
             outline_ids = [o.id for o in db.query(Outline.id).filter(Outline.project_id == project_id).all()]
             query = query.filter(Act.outline_id.in_(outline_ids)) if outline_ids else query.filter(Act.id == None)
@@ -1313,7 +1372,7 @@ class ObjectService:
         image_prompt_negative: str | None = None,
     ) -> dict[str, Any]:
         t = normalize_object_type(object_type)
-        allowed = {"basic_info", "character", "organization", "location", LOREBOOK_TYPE}
+        allowed = {"basic_info", STORY_ENTITY_TYPE}
         if t not in allowed:
             raise ValueError(f"Image prompts not supported for {t}")
 
@@ -1365,7 +1424,7 @@ class ObjectService:
         user_id: UUID | None = None,
     ) -> int:
         t = normalize_object_type(object_type)
-        allowed = {"character", "organization", "location", LOREBOOK_TYPE, "outline", "act", "chapter"}
+        allowed = {"outline", "act", "chapter"}
         if t not in allowed:
             raise ValueError(f"Reordering not supported for {t}")
         event_user_id = user_id or _resolve_project_user_id(db, project_id=project_id)

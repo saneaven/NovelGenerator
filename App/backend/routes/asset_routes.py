@@ -19,10 +19,7 @@ from ..models.db_models import (
     Act,
     Outline,
     BasicInfo,
-    Character,
-    Organization,
-    Location,
-    LorebookEntry,
+    StoryEntity,
 )
 from ..models.translation_models import ObjectVersion
 from ..schemas.assets import (
@@ -61,6 +58,7 @@ from ..services.credential_service import CredentialServiceError, credential_ser
 from ..services.ownership import require_owned_manuscript, require_owned_object
 from ..image_providers.registry import ImageProviderRegistry
 from ..utils.object_type_aliases import normalize_object_type
+from ..utils.story_entities import STORY_ENTITY_TYPE
 
 # Import providers to register them
 from ..image_providers import openai_image, gemini_image, xai_image, novelai_image, openrouter_image
@@ -71,10 +69,7 @@ router = APIRouter(prefix="/api/v1/assets", tags=["assets"])
 # Object types allowed for image ownership binding (asset generation -> StoryObjectAsset)
 OBJECT_BINDING_MODELS = {
     "basic_info": BasicInfo,
-    "character": Character,
-    "organization": Organization,
-    "location": Location,
-    "lorebook": LorebookEntry,
+    STORY_ENTITY_TYPE: StoryEntity,
 }
 
 

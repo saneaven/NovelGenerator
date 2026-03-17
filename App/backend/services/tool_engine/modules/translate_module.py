@@ -7,13 +7,13 @@ from ..contracts import ToolCallModule, ToolSpec
 from ..registry import tool_call_module
 from ..result_utils import invalid_result, make_result, valid_result
 from ....services.object_service import object_service
+from ....utils.story_entities import STORY_ENTITY_TYPE
 from .manuscript_access import ensure_manuscript_exists, replace_manuscript
 from .object_access import (
-    STORY_OBJECT_TYPES,
     extract_lang_data,
     get_primary_object_id,
     read_object,
-    require_story_object_type,
+    read_story_entity,
     to_uuid,
 )
 from .shared import filter_allowed_specs, is_translation_journey, obj_schema
@@ -34,11 +34,11 @@ class TranslateToolCallModule(ToolCallModule):
             ctx,
             [
                 ToolSpec(
-                    name="translate_story_object",
-                    description="Translate story object fields.",
+                    name="translate_story_entity",
+                    description="Translate story entity fields.",
                     parameters=obj_schema(
-                        {"id": _ID, "type": {"type": "string", "enum": list(STORY_OBJECT_TYPES)}, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}},
-                        ["id", "type", "name", "description", "content"],
+                        {"id": _ID, "kind": {"type": "string", "enum": ["character", "location", "organization", "lorebook"]}, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}},
+                        ["id", "kind", "name", "description", "content"],
                     ),
                     auto_approve_category="translate",
                 ),
@@ -98,8 +98,15 @@ class TranslateToolCallModule(ToolCallModule):
                 get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
                 return valid_result()
             object_id = to_uuid(args.get("id"), "id")
-            if tool_name == "translate_story_object":
-                object_type = require_story_object_type(args.get("type"))
+            if tool_name == "translate_story_entity":
+                read_story_entity(
+                    ctx.db,
+                    project_id=ctx.project_id,
+                    object_id=object_id,
+                    language=ctx.language,
+                    kind=args.get("kind"),
+                )
+                return valid_result()
             elif tool_name == "translate_outline":
                 object_type = "outline"
             elif tool_name == "translate_outline_act":
@@ -156,8 +163,16 @@ class TranslateToolCallModule(ToolCallModule):
 
         object_id = to_uuid(args.get("id"), "id")
 
-        if tool_name == "translate_story_object":
-            object_type = require_story_object_type(args.get("type"))
+        if tool_name == "translate_story_entity":
+            kind = str(args.get("kind") or "")
+            object_type = STORY_ENTITY_TYPE
+            current = read_story_entity(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_id=object_id,
+                language=ctx.language,
+                kind=kind,
+            )
         elif tool_name == "translate_outline":
             object_type = "outline"
         elif tool_name == "translate_outline_act":
@@ -176,7 +191,8 @@ class TranslateToolCallModule(ToolCallModule):
         else:
             raise ValueError(f"Unsupported translate tool: {tool_name}")
 
-        current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
+        if tool_name != "translate_story_entity":
+            current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
         next_data = dict(extract_lang_data(current, ctx.language))
         for key in ["name", "description", "content"]:
             next_data[key] = args[key]
@@ -188,8 +204,16 @@ class TranslateToolCallModule(ToolCallModule):
             object_id=object_id,
             data=next_data,
             language=ctx.language,
+            kind=(str(args.get("kind") or "") if tool_name == "translate_story_entity" else None),
             user_request=f"tool:{tool_name}",
             created_by=ctx.user_id,
             create_new_version=False,
         )
+        if tool_name == "translate_story_entity":
+            return make_result(
+                f"Translated {args.get('kind')}",
+                object_id=str(object_id),
+                object_type=object_type,
+                data={"kind": args.get("kind")},
+            )
         return make_result(f"Translated {object_type}", object_id=str(object_id), object_type=object_type)

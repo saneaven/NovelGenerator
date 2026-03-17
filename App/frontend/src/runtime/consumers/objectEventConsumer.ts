@@ -9,10 +9,7 @@ const FLUSH_DEBOUNCE_MS = 50;
 const OBJECT_TYPE_SET: ReadonlySet<ObjectType> = new Set([
   'basic_info',
   'guidelines',
-  'character',
-  'organization',
-  'location',
-  'lorebook',
+  'story_entity',
   'outline',
   'act',
   'chapter',

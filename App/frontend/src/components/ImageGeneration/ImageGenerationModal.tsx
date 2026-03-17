@@ -37,6 +37,7 @@ import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import { alert as showAlert } from '../../store/dialogStore';
 import { NumberInput } from '../ui/NumberInput';
+import type { StoryEntityKind } from '../../types/unifiedObject';
 import './ImageGenerationModal.css';
 
 // Reference image item
@@ -126,6 +127,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             negative: savedPromptObject.metadata.image_prompt_negative || '',
         };
     }, [savedPromptObject]);
+    const objectKind = savedPromptObject?.type === 'story_entity' ? savedPromptObject.kind : undefined;
 
     // Natural language prompt (for OpenAI, Gemini, xAI)
     const [prompt, setPrompt] = useState('');
@@ -1237,7 +1239,8 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     onStreamingStart={handleStreamingStart}
                     onStreamingError={handleStreamingError}
                     contextType="object"
-                    objectType={objectType as 'basic_info' | 'character' | 'location' | 'organization' | 'lorebook'}
+                    objectType={objectType as 'basic_info' | 'story_entity'}
+                    objectKind={objectKind as StoryEntityKind | undefined}
                     objectId={objectId}
                     promptMode={isTagBased ? activePromptTab : 'natural'}
                 />

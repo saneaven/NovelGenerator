@@ -9,17 +9,16 @@ from ...models.db_models import (
     Act,
     BasicInfo,
     Chapter,
-    Character,
     Guidelines,
-    Location,
-    LorebookEntry,
     Manuscript,
-    Organization,
     Outline,
+    StoryEntity,
 )
 from ...models.translation_models import ObjectVersion
+from ...utils.story_entities import STORY_ENTITY_TYPE
 from ..basic_info_utils import basic_info_summary_text, normalize_basic_info_data
 from ..sidecar_client import SidecarClient
+from ..story_entity_tree_service import build_story_entity_folder_path_map, list_story_entity_folders
 
 
 def _latest_version_data(db: Session, object_type: str, object_id: UUID) -> dict[str, Any]:
@@ -43,17 +42,105 @@ def _lang_data(all_data: dict[str, Any], language: str) -> dict[str, Any]:
     return {}
 
 
-def _story_object_payload(row: Any, object_type: str, lang_data: dict[str, Any]) -> dict[str, Any]:
+def _story_entity_payload(
+    row: StoryEntity,
+    *,
+    lang_data: dict[str, Any],
+    folder_path: list[str],
+) -> dict[str, Any]:
     return {
-        "type": object_type,
+        "type": STORY_ENTITY_TYPE,
+        "kind": str(row.kind),
         "id": str(row.id),
         "name": str(lang_data.get("name") or ""),
         "description": str(lang_data.get("description") or ""),
         "content": str(lang_data.get("content") or ""),
+        "folderId": str(row.folder_id) if row.folder_id else None,
+        "folderPath": list(folder_path),
+        "displayOrder": int(row.display_order or 0),
         "imagePrompt": getattr(row, "image_prompt", None),
         "imagePromptPositive": getattr(row, "image_prompt_positive", None),
         "imagePromptNegative": getattr(row, "image_prompt_negative", None),
     }
+
+
+def _story_entity_sort_key(display_order: Any, *, is_folder: bool, node_id: UUID) -> tuple[int, int, str]:
+    return (int(display_order or 0), 0 if is_folder else 1, str(node_id))
+
+
+def _build_story_entity_tree(
+    *,
+    folders: list[Any],
+    entities: list[StoryEntity],
+    entity_payloads: dict[UUID, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    folders_by_parent: dict[UUID | None, list[Any]] = {}
+    for folder in folders:
+        folders_by_parent.setdefault(folder.parent_id, []).append(folder)
+    for values in folders_by_parent.values():
+        values.sort(key=lambda row: _story_entity_sort_key(row.display_order, is_folder=True, node_id=row.id))
+
+    entities_by_parent: dict[UUID | None, list[StoryEntity]] = {}
+    for entity in entities:
+        entities_by_parent.setdefault(entity.folder_id, []).append(entity)
+    for values in entities_by_parent.values():
+        values.sort(key=lambda row: _story_entity_sort_key(row.display_order, is_folder=False, node_id=row.id))
+
+    def _walk(parent_id: UUID | None) -> list[dict[str, Any]]:
+        folder_rows = folders_by_parent.get(parent_id, [])
+        entity_rows = entities_by_parent.get(parent_id, [])
+        nodes: list[tuple[int, int, Any]] = []
+        for folder in folder_rows:
+            nodes.append((int(folder.display_order or 0), 0, folder))
+        for entity in entity_rows:
+            nodes.append((int(entity.display_order or 0), 1, entity))
+        nodes.sort(key=lambda item: (item[0], item[1], str(item[2].id)))
+
+        children: list[dict[str, Any]] = []
+        for _display_order, kind_weight, row in nodes:
+            if kind_weight == 0:
+                children.append(
+                    {
+                        "nodeType": "folder",
+                        "id": str(row.id),
+                        "name": str(row.name or ""),
+                        "children": _walk(row.id),
+                    }
+                )
+                continue
+
+            payload = entity_payloads.get(row.id)
+            if payload is None:
+                continue
+            children.append(
+                {
+                    "nodeType": STORY_ENTITY_TYPE,
+                    "entity": payload,
+                }
+            )
+        return children
+
+    return _walk(None)
+
+
+def _flatten_story_entity_tree(tree: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ordered: list[dict[str, Any]] = []
+
+    def _walk(nodes: list[dict[str, Any]]) -> None:
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            if str(node.get("nodeType") or "") == "folder":
+                children = node.get("children")
+                if isinstance(children, list):
+                    _walk(children)
+                continue
+            entity = node.get("entity")
+            if isinstance(entity, dict):
+                ordered.append(entity)
+
+    _walk(tree)
+    return ordered
 
 
 async def build_project_data(
@@ -64,11 +151,13 @@ async def build_project_data(
 ) -> dict[str, Any]:
     basic = db.query(BasicInfo).filter(BasicInfo.project_id == project_id).first()
     guidelines = db.query(Guidelines).filter(Guidelines.project_id == project_id).first()
-
-    characters = db.query(Character).filter(Character.project_id == project_id).order_by(Character.order.asc()).all()
-    organizations = db.query(Organization).filter(Organization.project_id == project_id).order_by(Organization.order.asc()).all()
-    locations = db.query(Location).filter(Location.project_id == project_id).order_by(Location.order.asc()).all()
-    lorebooks = db.query(LorebookEntry).filter(LorebookEntry.project_id == project_id).order_by(LorebookEntry.order.asc()).all()
+    story_entities = (
+        db.query(StoryEntity)
+        .filter(StoryEntity.project_id == project_id)
+        .order_by(StoryEntity.display_order.asc())
+        .all()
+    )
+    story_entity_folders = list_story_entity_folders(db, project_id=project_id)
 
     outlines = db.query(Outline).filter(Outline.project_id == project_id).order_by(Outline.order.asc()).all()
     acts = (
@@ -95,7 +184,6 @@ async def build_project_data(
         .all()
     )
 
-    # Latest per-object data cache for current build.
     latest: dict[tuple[str, UUID], dict[str, Any]] = {}
 
     def get_latest(object_type: str, object_id: UUID) -> dict[str, Any]:
@@ -104,52 +192,63 @@ async def build_project_data(
             latest[key] = _latest_version_data(db, object_type, object_id)
         return latest[key]
 
-    # basicInfo
-    if basic is not None:
-        basic_data = normalize_basic_info_data(_lang_data(get_latest("basic_info", basic.id), language))
-        basic_info = {"id": str(basic.id), **basic_data}
-    else:
-        basic_info = {"id": "", "title": "", "logline": "", "genres": [], "tags": []}
+    def _basic_info_payload(lang: str) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        if basic is None:
+            return {"id": "", "title": "", "logline": "", "genres": [], "tags": []}, None
+        payload = normalize_basic_info_data(_lang_data(get_latest("basic_info", basic.id), lang))
+        return (
+            {"id": str(basic.id), **payload},
+            {
+                "type": "basic_info",
+                "id": str(basic.id),
+                "name": str(payload.get("title") or ""),
+                "description": str(payload.get("logline") or ""),
+                "content": basic_info_summary_text(payload),
+                "imagePrompt": getattr(basic, "image_prompt", None),
+                "imagePromptPositive": getattr(basic, "image_prompt_positive", None),
+                "imagePromptNegative": getattr(basic, "image_prompt_negative", None),
+            },
+        )
 
-    # guidelines
-    if guidelines is not None:
-        guideline_data = _lang_data(get_latest("guidelines", guidelines.id), language)
-        guideline_payload = {
+    def _guidelines_payload(lang: str) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        if guidelines is None:
+            return {"id": "", "authorNote": ""}, None
+        guideline_data = _lang_data(get_latest("guidelines", guidelines.id), lang)
+        payload = {
             "id": str(guidelines.id),
             "authorNote": str(guideline_data.get("authorNote") or ""),
         }
-    else:
-        guideline_payload = {"id": "", "authorNote": ""}
+        return (
+            payload,
+            {
+                "type": "guidelines",
+                "id": str(guidelines.id),
+                "name": "Guidelines",
+                "description": "",
+                "content": str(guideline_data.get("authorNote") or ""),
+            },
+        )
 
-    # story objects
-    story_objects: list[dict[str, Any]] = []
-    if basic is not None:
-        story_objects.append({
-            "type": "basic_info",
-            "id": str(basic.id),
-            "name": str(basic_data.get("title") or ""),
-            "description": str(basic_data.get("logline") or ""),
-            "content": basic_info_summary_text(basic_data),
-            "imagePrompt": getattr(basic, "image_prompt", None),
-            "imagePromptPositive": getattr(basic, "image_prompt_positive", None),
-            "imagePromptNegative": getattr(basic, "image_prompt_negative", None),
-        })
-    for object_type, rows in [
-        ("character", characters),
-        ("organization", organizations),
-        ("location", locations),
-        ("lorebook", lorebooks),
-    ]:
-        for row in rows:
-            story_objects.append(
-                _story_object_payload(
-                    row,
-                    object_type,
-                    _lang_data(get_latest(object_type, row.id), language),
-                )
+    basic_info, basic_context_object = _basic_info_payload(language)
+    guideline_payload, guideline_context_object = _guidelines_payload(language)
+
+    folder_path_map = build_story_entity_folder_path_map(db, project_id=project_id)
+
+    def build_story_entities_payload(lang: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        payload_map: dict[UUID, dict[str, Any]] = {}
+        for row in story_entities:
+            payload_map[row.id] = _story_entity_payload(
+                row,
+                lang_data=_lang_data(get_latest(STORY_ENTITY_TYPE, row.id), lang),
+                folder_path=folder_path_map.get(row.folder_id, []) if row.folder_id else [],
             )
+        story_entity_tree = _build_story_entity_tree(
+            folders=story_entity_folders,
+            entities=story_entities,
+            entity_payloads=payload_map,
+        )
+        return _flatten_story_entity_tree(story_entity_tree), story_entity_tree
 
-    # Build chapter and manuscript maps once.
     chapter_by_id = {chapter.id: chapter for chapter in chapters}
     manuscript_by_chapter: dict[UUID, Manuscript] = {ms.chapter_id: ms for ms in manuscripts}
 
@@ -239,18 +338,15 @@ async def build_project_data(
             )
         return payload
 
+    story_entities_payload, story_entity_tree_payload = build_story_entities_payload(language)
     outline_payload = build_outline_payload(language)
     manuscripts_payload = await build_manuscripts_payload(language)
 
-    # languages snapshot
     all_languages: set[str] = set()
     for object_type, rows in [
         ("basic_info", [basic] if basic is not None else []),
         ("guidelines", [guidelines] if guidelines is not None else []),
-        ("character", characters),
-        ("organization", organizations),
-        ("location", locations),
-        ("lorebook", lorebooks),
+        (STORY_ENTITY_TYPE, story_entities),
         ("outline", outlines),
         ("act", acts),
         ("chapter", chapters),
@@ -263,81 +359,25 @@ async def build_project_data(
 
     content_by_lang: dict[str, Any] = {}
     for lang in sorted(all_languages):
-        if basic is not None:
-            lang_basic = normalize_basic_info_data(_lang_data(get_latest("basic_info", basic.id), lang))
-            lang_basic_info = {"id": str(basic.id), **lang_basic}
-        else:
-            lang_basic_info = {"id": "", "title": "", "logline": "", "genres": [], "tags": []}
+        lang_basic_info, _ = _basic_info_payload(lang)
+        lang_guidelines, _ = _guidelines_payload(lang)
 
-        lang_objects: list[dict[str, Any]] = []
-        if basic is not None:
-            lang_objects.append({
-                "type": "basic_info",
-                "id": str(basic.id),
-                "name": str(lang_basic.get("title") or ""),
-                "description": str(lang_basic.get("logline") or ""),
-                "content": basic_info_summary_text(lang_basic),
-                "imagePrompt": getattr(basic, "image_prompt", None),
-                "imagePromptPositive": getattr(basic, "image_prompt_positive", None),
-                "imagePromptNegative": getattr(basic, "image_prompt_negative", None),
-            })
-        for object_type, rows in [
-            ("character", characters),
-            ("organization", organizations),
-            ("location", locations),
-            ("lorebook", lorebooks),
-        ]:
-            for row in rows:
-                lang_objects.append(_story_object_payload(row, object_type, _lang_data(get_latest(object_type, row.id), lang)))
-
-        for outline in outlines:
-            outline_data = _lang_data(get_latest("outline", outline.id), lang)
-            lang_objects.append(
-                {
-                    "type": "outline",
-                    "id": str(outline.id),
-                    "name": str(outline_data.get("name") or ""),
-                    "description": str(outline_data.get("description") or ""),
-                    "content": str(outline_data.get("content") or ""),
-                }
-            )
-
-        for act in sorted(acts, key=lambda item: int(item.order or 0)):
-            act_data = _lang_data(get_latest("act", act.id), lang)
-            lang_objects.append(
-                {
-                    "type": "act",
-                    "id": str(act.id),
-                    "name": str(act_data.get("name") or ""),
-                    "description": str(act_data.get("description") or ""),
-                    "content": str(act_data.get("content") or ""),
-                }
-            )
-
-        for chapter in sorted(chapters, key=lambda item: int(item.order or 0)):
-            chapter_data = _lang_data(get_latest("chapter", chapter.id), lang)
-            lang_objects.append(
-                {
-                    "type": "chapter",
-                    "id": str(chapter.id),
-                    "name": str(chapter_data.get("name") or ""),
-                    "description": str(chapter_data.get("description") or ""),
-                    "content": str(chapter_data.get("content") or ""),
-                }
-            )
-
+        lang_story_entities, lang_story_entity_tree = build_story_entities_payload(lang)
         content_by_lang[lang] = {
             "basicInfo": lang_basic_info,
-            "objects": lang_objects,
+            "guidelines": lang_guidelines,
+            "storyEntities": lang_story_entities,
+            "storyEntityTree": lang_story_entity_tree,
             "outline": build_outline_payload(lang),
             "manuscripts": await build_manuscripts_payload(lang),
         }
 
     return {
         "basicInfo": basic_info,
-        "objects": story_objects,
+        "guidelines": guideline_payload,
+        "storyEntities": story_entities_payload,
+        "storyEntityTree": story_entity_tree_payload,
         "outline": outline_payload,
         "manuscripts": manuscripts_payload,
-        "guidelines": guideline_payload,
         "contentByLang": content_by_lang,
     }

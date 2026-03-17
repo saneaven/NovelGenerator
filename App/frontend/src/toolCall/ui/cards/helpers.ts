@@ -1,5 +1,5 @@
 import type { UnifiedObject, ObjectType as UnifiedObjectType } from '../../../types/unifiedObject';
-import type { ObjectOperationVM, StoryObjectSubtype } from '../vmTypes';
+import type { ObjectOperationVM, StoryEntityKind } from '../vmTypes';
 import { objectTypeLabel } from '../../modules/objectToolMeta';
 
 export interface ObjectSnapshot {
@@ -25,9 +25,9 @@ function dataForLanguage(object: UnifiedObject | undefined, language: string): R
   return {};
 }
 
-function storySubtypeToUnifiedType(storySubtype?: StoryObjectSubtype): UnifiedObjectType | undefined {
-  if (storySubtype === 'character' || storySubtype === 'location' || storySubtype === 'organization' || storySubtype === 'lorebook') {
-    return storySubtype;
+function storyEntityKindToUnifiedType(storyEntityKind?: StoryEntityKind): UnifiedObjectType | undefined {
+  if (storyEntityKind === 'character' || storyEntityKind === 'location' || storyEntityKind === 'organization' || storyEntityKind === 'lorebook') {
+    return 'story_entity';
   }
   return undefined;
 }
@@ -50,8 +50,8 @@ export function resolveUnifiedType(operation: ObjectOperationVM): UnifiedObjectT
       return 'chapter';
     case 'manuscript':
       return 'manuscript';
-    case 'story_object':
-      return storySubtypeToUnifiedType(operation.storySubtype);
+    case 'story_entity':
+      return storyEntityKindToUnifiedType(operation.storyEntityKind);
     default:
       return undefined;
   }
@@ -175,7 +175,7 @@ export function resolveObjectTitle(params: {
   language: string;
 }): { type: string; name: string | undefined } {
   const { operation, objects, projectId, language } = params;
-  const type = objectTypeLabel(operation.objectType, operation.storySubtype);
+  const type = objectTypeLabel(operation.objectType, operation.storyEntityKind);
 
   const unifiedType = resolveUnifiedType(operation);
   if (operation.category === 'create') {

@@ -140,8 +140,8 @@ async def apply_raw_output(
         )
         return
 
-    if journey_kind in {"outlineEdit", "storyObjectEdit"}:
-        category = str(input_payload.get("category") or "").strip()
+    if journey_kind in {"outlineEdit", "objectEdit"}:
+        category = str(input_payload.get("objectType") or input_payload.get("category") or "").strip()
         target_id = UUID(str(input_payload.get("targetId") or ""))
         user_request = str(input_payload.get("userRequest") or "").strip() or f"raw:{journey_kind}"
 

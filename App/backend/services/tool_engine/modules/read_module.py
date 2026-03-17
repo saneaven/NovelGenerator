@@ -6,12 +6,12 @@ from ..contexts import ToolExecutionContext, ToolModuleContext, ToolValidationCo
 from ..contracts import ToolCallModule, ToolSpec
 from ..registry import tool_call_module
 from ..result_utils import invalid_result, make_result, valid_result
+from ....utils.story_entities import STORY_ENTITY_TYPE
 from .manuscript_access import ensure_manuscript_exists, read_manuscript_markdown
 from .object_access import (
-    STORY_OBJECT_TYPES,
     extract_lang_data,
     read_object,
-    require_story_object_type,
+    read_story_entity,
     to_uuid,
 )
 from .shared import filter_allowed_specs, is_non_journey, obj_schema
@@ -37,11 +37,11 @@ class ReadToolCallModule(ToolCallModule):
             ctx,
             [
                 ToolSpec(
-                    name="read_story_object",
-                    description="Read a story object.",
+                    name="read_story_entity",
+                    description="Read a story entity.",
                     parameters=obj_schema(
-                        {"id": _ID, "type": {"type": "string", "enum": list(STORY_OBJECT_TYPES)}},
-                        ["id", "type"],
+                        {"id": _ID, "kind": {"type": "string", "enum": ["character", "location", "organization", "lorebook"]}},
+                        ["id", "kind"],
                     ),
                     auto_approve_category="read",
                 ),
@@ -75,8 +75,15 @@ class ReadToolCallModule(ToolCallModule):
     async def validate(self, tool_name: str, args: dict[str, Any], ctx: ToolValidationContext):
         try:
             object_id = to_uuid(args.get("id"), "id")
-            if tool_name == "read_story_object":
-                object_type = require_story_object_type(args.get("type"))
+            if tool_name == "read_story_entity":
+                read_story_entity(
+                    ctx.db,
+                    project_id=ctx.project_id,
+                    object_id=object_id,
+                    language=ctx.language,
+                    kind=args.get("kind"),
+                )
+                return valid_result()
             elif tool_name == "read_outline":
                 object_type = "outline"
             elif tool_name == "read_outline_act":
@@ -94,13 +101,7 @@ class ReadToolCallModule(ToolCallModule):
             else:
                 return invalid_result("validate_read_tool_name", f"Unsupported read tool: {tool_name}")
 
-            read_object(
-                ctx.db,
-                project_id=ctx.project_id,
-                object_type=object_type,
-                object_id=object_id,
-                language=ctx.language,
-            )
+            read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
             return valid_result()
         except ValueError as exc:
             return invalid_result(f"validate_{tool_name}", str(exc))
@@ -108,8 +109,20 @@ class ReadToolCallModule(ToolCallModule):
     async def execute(self, tool_name: str, args: dict[str, Any], ctx: ToolExecutionContext) -> dict[str, Any]:
         object_id = to_uuid(args.get("id"), "id")
 
-        if tool_name == "read_story_object":
-            object_type = require_story_object_type(args.get("type"))
+        if tool_name == "read_story_entity":
+            obj = read_story_entity(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_id=object_id,
+                language=ctx.language,
+                kind=args.get("kind"),
+            )
+            return make_result(
+                "Read successful",
+                object_id=str(object_id),
+                object_type=STORY_ENTITY_TYPE,
+                data={"object": {"kind": obj.get("kind"), **extract_lang_data(obj, ctx.language)}},
+            )
         elif tool_name == "read_outline":
             object_type = "outline"
         elif tool_name == "read_outline_act":

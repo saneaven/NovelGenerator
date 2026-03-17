@@ -186,7 +186,7 @@ def default_journey_label(journey_kind: str | None) -> str:
         return "AI Manuscript Edit"
     if kind == "outlineEdit":
         return "AI Outline Edit"
-    if kind == "storyObjectEdit":
+    if kind == "objectEdit":
         return "AI Edit"
     if kind == "objectTranslation":
         return "Object Translation"

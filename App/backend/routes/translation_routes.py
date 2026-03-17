@@ -16,14 +16,23 @@ from uuid import UUID
 
 from ..database import get_db
 from ..auth import get_current_user
-from ..models.db_models import User, Project
+from ..models.db_models import (
+    Act,
+    BasicInfo,
+    Chapter,
+    Guidelines,
+    Manuscript,
+    Outline,
+    Project,
+    StoryEntity,
+    User,
+)
 from ..models.translation_models import ObjectVersion
 from ..services.object_change_events import queue_object_change
 from ..services.object_service import object_service
 from ..services.ownership import require_owned_object, resolve_project_id_for_object
 from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
-
-LOREBOOK_TYPE = normalize_object_type('lorebook')
+from ..utils.story_entities import STORY_ENTITY_TYPE, require_story_entity_kind
 
 
 router = APIRouter()
@@ -37,6 +46,7 @@ class TranslationStatus(BaseModel):
     """Translation status for an object"""
     object_id: str
     object_type: str
+    kind: Optional[str] = None
     available_languages: List[str]
     missing_languages: List[str]
     translation_coverage: float  # Percentage
@@ -49,6 +59,7 @@ class TranslationData(BaseModel):
     """Single object translation data"""
     object_type: str
     object_id: str
+    kind: Optional[str] = None
     language: str
     data: Dict[str, Any]
     target_version_number: Optional[int] = None
@@ -87,19 +98,10 @@ async def get_project_translation_status(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Get all object types for this project
-    from ..models.db_models import (
-        BasicInfo, Guidelines, Character, Organization, Location, LorebookEntry,
-        Act, Chapter, Manuscript, Outline
-    )
-
     object_types = {
         'basic_info': BasicInfo,
         'guidelines': Guidelines,
-        'character': Character,
-        'organization': Organization,
-        'location': Location,
-        LOREBOOK_TYPE: LorebookEntry,
+        STORY_ENTITY_TYPE: StoryEntity,
         'outline': Outline,
         'act': Act,
         'chapter': Chapter,
@@ -113,7 +115,7 @@ async def get_project_translation_status(
         query = db.query(model_class)
 
         # Filter by project_id (different field names for different types)
-        if object_type in ['basic_info', 'guidelines', 'character', 'organization', 'location', LOREBOOK_TYPE, 'outline']:
+        if object_type in ['basic_info', 'guidelines', STORY_ENTITY_TYPE, 'outline']:
             query = query.filter(model_class.project_id == project_id)
         elif object_type == 'act':
             # Acts belong to outlines which belong to projects
@@ -148,6 +150,7 @@ async def get_project_translation_status(
             status_list.append(TranslationStatus(
                 object_id=str(obj.id),
                 object_type=externalize_object_type(object_type),
+                kind=str(obj.kind) if object_type == STORY_ENTITY_TYPE else None,
                 available_languages=available_languages,
                 missing_languages=missing_languages,
                 translation_coverage=coverage
@@ -170,33 +173,17 @@ async def get_language_coverage(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Get all object IDs in the project
-    from ..models.db_models import (
-        BasicInfo, Character, Organization, Location, LorebookEntry,
-        Act, Chapter, Outline, Manuscript
-    )
-
     object_ids = set()
 
     # Basic info
     basic_info = db.query(BasicInfo).filter(BasicInfo.project_id == project_id).all()
     object_ids.update([(str(b.id), 'basic_info') for b in basic_info])
 
-    # Characters
-    characters = db.query(Character).filter(Character.project_id == project_id).all()
-    object_ids.update([(str(c.id), 'character') for c in characters])
+    guidelines = db.query(Guidelines).filter(Guidelines.project_id == project_id).all()
+    object_ids.update([(str(row.id), 'guidelines') for row in guidelines])
 
-    # Organizations
-    orgs = db.query(Organization).filter(Organization.project_id == project_id).all()
-    object_ids.update([(str(o.id), 'organization') for o in orgs])
-
-    # Locations
-    locs = db.query(Location).filter(Location.project_id == project_id).all()
-    object_ids.update([(str(l.id), 'location') for l in locs])
-
-    # Lorebook entries
-    entries = db.query(LorebookEntry).filter(LorebookEntry.project_id == project_id).all()
-    object_ids.update([(str(e.id), LOREBOOK_TYPE) for e in entries])
+    story_entities = db.query(StoryEntity).filter(StoryEntity.project_id == project_id).all()
+    object_ids.update([(str(row.id), STORY_ENTITY_TYPE) for row in story_entities])
 
     # Acts (through outline)
     outline = db.query(Outline).filter(Outline.project_id == project_id).first()
@@ -352,6 +339,8 @@ async def add_translations(
                 )
 
             object_type = normalize_object_type(translation_data.object_type)
+            if object_type == STORY_ENTITY_TYPE and translation_data.kind is not None:
+                require_story_entity_kind(translation_data.kind)
             object_id = UUID(translation_data.object_id)
             project_id = resolve_project_id_for_object(
                 db,

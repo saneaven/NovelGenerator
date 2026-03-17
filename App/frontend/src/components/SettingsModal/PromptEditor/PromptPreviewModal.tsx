@@ -72,7 +72,7 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
   });
 
   // Get fields for the current prompt type
-  const promptTypeFields = useMemo(() => getPromptTypeFields(taskType), [taskType]);
+  const promptTypeFields = useMemo(() => getPromptTypeFields(taskType, taskSubtype), [taskType, taskSubtype]);
 
   const thinking_modeOptions = [
     { value: 'off', label: t('settings.promptEditor.preview.thinking_mode.off') },

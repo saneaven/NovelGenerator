@@ -8,7 +8,7 @@
 export type {
   ToolCategory,
   TargetType,
-  StoryObjectSubtype,
+  StoryEntityKind,
   ExecutionMode,
   ToolCallStatus,
   ToolCallFailureType,
@@ -27,7 +27,7 @@ export type {
   EditCard,
 } from './types';
 
-export { STORY_OBJECT_TYPE_MAP, getObjectData } from './types';
+export { STORY_ENTITY_TYPE_MAP, getObjectData } from './types';
 
 // EditCard builder (simplified, no normalizer/validator dependency)
 export { buildEditCardsFromToolCallMetadata } from './editCardBuilder';

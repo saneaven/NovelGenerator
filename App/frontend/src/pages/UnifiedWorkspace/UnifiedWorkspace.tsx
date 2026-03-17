@@ -38,10 +38,7 @@ import '../../components/Agent/MobileAgent.css';
 // Tab label keys for mobile subtitle (story-object mode) - will be localized in component
 const tabLabelKeys: Record<string, string> = {
   basicInfo: 'storyObjectPanel.tabs.basicInfo',
-  characters: 'storyObjectPanel.tabs.characters',
-  organizations: 'storyObjectPanel.tabs.organizations',
-  locations: 'storyObjectPanel.tabs.locations',
-  lorebook: 'storyObjectPanel.tabs.lorebook',
+  storyEntities: 'storyObjectPanel.tabs.storyEntities',
   guidelines: 'storyObjectPanel.tabs.guidelines',
 };
 
@@ -125,6 +122,7 @@ const UnifiedWorkspace: React.FC = () => {
   // NovelEditor story objects state
   const [storyObjects, setStoryObjects] = useState<SimplifiedStoryObjects>({
     basicInfo: null,
+    storyEntities: [],
     characters: [],
     organizations: [],
     locations: [],
@@ -237,10 +235,7 @@ const UnifiedWorkspace: React.FC = () => {
       try {
         await refreshProjectObjects(projectId, [
           'basic_info',
-          'character',
-          'organization',
-          'location',
-          'lorebook',
+          'story_entity',
           'outline',
           'act',
           'chapter',
@@ -267,12 +262,9 @@ const UnifiedWorkspace: React.FC = () => {
 
     const buildStoryObjects = async () => {
       try {
-        const [basicInfoList, characters, organizations, locations, lorebook, outlines, acts, chapters] = await Promise.all([
+        const [basicInfoList, storyEntities, outlines, acts, chapters] = await Promise.all([
           listObjects('basic_info', projectId),
-          listObjects('character', projectId),
-          listObjects('organization', projectId),
-          listObjects('location', projectId),
-          listObjects('lorebook', projectId),
+          listObjects('story_entity', projectId),
           listObjects('outline', projectId),
           listObjects('act', projectId),
           listObjects('chapter', projectId),
@@ -336,22 +328,40 @@ const UnifiedWorkspace: React.FC = () => {
         if (isActive) {
           setStoryObjects({
             basicInfo,
-            characters: characters.map(ch => {
-              const data = getDataForLanguage(ch, mainLanguage);
-              return { id: ch.id, name: data.name || '', description: data.description || '', content: data.content || '' };
+            storyEntities: storyEntities.map((entity) => {
+              const data = getDataForLanguage(entity, mainLanguage);
+              return {
+                id: entity.id,
+                kind: entity.kind || 'character',
+                name: data.name || '',
+                description: data.description || '',
+                content: data.content || '',
+              };
             }),
-            organizations: organizations.map(org => {
-              const data = getDataForLanguage(org, mainLanguage);
-              return { id: org.id, name: data.name || '', description: data.description || '', content: data.content || '' };
-            }),
-            locations: locations.map(loc => {
-              const data = getDataForLanguage(loc, mainLanguage);
-              return { id: loc.id, name: data.name || '', description: data.description || '', content: data.content || '' };
-            }),
-            lorebook: lorebook.map(entry => {
-              const data = getDataForLanguage(entry, mainLanguage);
-              return { id: entry.id, name: data.name || '', description: data.description || '', content: data.content || '' };
-            }),
+            characters: storyEntities
+              .filter((entity) => entity.kind === 'character')
+              .map((entity) => {
+                const data = getDataForLanguage(entity, mainLanguage);
+                return { id: entity.id, name: data.name || '', description: data.description || '', content: data.content || '' };
+              }),
+            organizations: storyEntities
+              .filter((entity) => entity.kind === 'organization')
+              .map((entity) => {
+                const data = getDataForLanguage(entity, mainLanguage);
+                return { id: entity.id, name: data.name || '', description: data.description || '', content: data.content || '' };
+              }),
+            locations: storyEntities
+              .filter((entity) => entity.kind === 'location')
+              .map((entity) => {
+                const data = getDataForLanguage(entity, mainLanguage);
+                return { id: entity.id, name: data.name || '', description: data.description || '', content: data.content || '' };
+              }),
+            lorebook: storyEntities
+              .filter((entity) => entity.kind === 'lorebook')
+              .map((entity) => {
+                const data = getDataForLanguage(entity, mainLanguage);
+                return { id: entity.id, name: data.name || '', description: data.description || '', content: data.content || '' };
+              }),
             outline: outlineData,
           });
 
@@ -461,7 +471,7 @@ const UnifiedWorkspace: React.FC = () => {
       <div className={`unified-workspace-content ${isAgentVisible ? 'agent-visible' : ''}`}>
         <AgentPanel
           projectId={projectId ?? ''}
-          surface={currentSubPage}
+          surface={currentSubPage === 'story-object' ? 'story-entity' : currentSubPage}
         />
 
         {currentSubPage === 'story-object' && (

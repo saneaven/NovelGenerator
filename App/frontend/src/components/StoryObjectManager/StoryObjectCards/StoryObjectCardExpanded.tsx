@@ -20,11 +20,12 @@ interface StoryObjectCardExpandedProps {
     itemData: { name: string; description: string; content: string };
     effectiveLanguage: string;
     versionNumber: number;
-    objectType: 'character' | 'organization' | 'location' | 'lorebook';
+    objectType: 'character' | 'organization' | 'location' | 'lorebook' | 'story_entity';
     mainAsset: Asset | null;
     loading?: boolean;
     showSecondaryLanguage?: boolean;
     isNewItem?: boolean;
+    extraEditFields?: React.ReactNode;
     onSave: (name: string, description: string, content: string) => void;
     onCancel: () => void;
     onAIEdit?: () => void;
@@ -44,6 +45,7 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
     loading = false,
     showSecondaryLanguage = false,
     isNewItem = false,
+    extraEditFields,
     onSave,
     onCancel,
     onAIEdit,
@@ -142,6 +144,7 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
                     <button
                         className={`expanded-tab ${activeTab === 'image' ? 'active' : ''}`}
                         onClick={() => handleTabSwitch('image')}
+                        disabled={isNewItem}
                     >
                         Image
                     </button>
@@ -160,6 +163,8 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
                 <div className="expanded-tab-content">
                     {activeTab === 'edit' && (
                         <div className="expanded-edit-content">
+                            {extraEditFields}
+
                             {/* Name field */}
                             <div className="expanded-field">
                                 <label htmlFor={`expanded-name-${itemId}`}>Name</label>

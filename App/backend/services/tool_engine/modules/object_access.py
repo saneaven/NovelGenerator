@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 from ....models.db_models import Act, Outline
 from ....services.object_service import object_service
 from ....services.patch_utils import apply_single_replacement
+from ....utils.story_entities import STORY_ENTITY_KINDS, STORY_ENTITY_TYPE, require_story_entity_kind
 
 
-STORY_OBJECT_TYPES = ("character", "location", "organization", "lorebook")
+STORY_ENTITY_KIND_VALUES = tuple(STORY_ENTITY_KINDS)
 
 
 def to_uuid(value: Any, field_name: str) -> UUID:
@@ -20,10 +21,11 @@ def to_uuid(value: Any, field_name: str) -> UUID:
         raise ValueError(f"Invalid {field_name}: {value}") from exc
 
 
-def require_story_object_type(value: Any) -> str:
-    if isinstance(value, str) and value in STORY_OBJECT_TYPES:
-        return value
-    raise ValueError(f"Unknown story object type: {value}")
+def require_story_entity_arg_kind(value: Any) -> str:
+    try:
+        return require_story_entity_kind(value)
+    except ValueError as exc:
+        raise ValueError(f"Unknown story entity kind: {value}") from exc
 
 
 def extract_lang_data(obj: dict[str, Any], language: str) -> dict[str, Any]:
@@ -60,6 +62,28 @@ def read_object(
     )
     if obj is None:
         raise ValueError(f"{object_type} not found: {object_id}")
+    return obj
+
+
+def read_story_entity(
+    db: Session,
+    *,
+    project_id: UUID,
+    object_id: UUID,
+    language: str,
+    kind: Any,
+) -> dict[str, Any]:
+    expected_kind = require_story_entity_arg_kind(kind)
+    obj = read_object(
+        db,
+        project_id=project_id,
+        object_type=STORY_ENTITY_TYPE,
+        object_id=object_id,
+        language=language,
+    )
+    actual_kind = str(obj.get("kind") or "").strip()
+    if actual_kind and actual_kind != expected_kind:
+        raise ValueError(f"Story entity kind mismatch: expected {expected_kind}, got {actual_kind}")
     return obj
 
 

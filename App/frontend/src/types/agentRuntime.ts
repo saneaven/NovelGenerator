@@ -5,7 +5,7 @@
 // - RunCaller: who is creating a run (root planMode/agentMode, or another sub agent).
 
 export type WorkspaceSurface =
-  | 'story-object'
+  | 'story-entity'
   | 'outline-manager'
   | 'novel-editor'
   | 'config';

@@ -16,7 +16,7 @@ function replaceKeysForObjectType(objectType: ObjectCardProps['operation']['obje
       return ['title', 'logline', 'genres', 'tags'];
     case 'guidelines':
       return ['authorNote'];
-    case 'story_object':
+    case 'story_entity':
       return ['name', 'description', 'content'];
     case 'outline':
       return ['name', 'description', 'content'];

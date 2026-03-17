@@ -31,12 +31,12 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
   );
 
   useEffect(() => {
-    if (!operation.storySubtype || !snapshot.id) return;
-    void fetchStoryObjectAssets(projectId, operation.storySubtype, snapshot.id);
-  }, [operation.storySubtype, snapshot.id, fetchStoryObjectAssets, projectId]);
+    if (operation.objectType !== 'story_entity' || !snapshot.id) return;
+    void fetchStoryObjectAssets(projectId, 'story_entity', snapshot.id);
+  }, [operation.objectType, snapshot.id, fetchStoryObjectAssets, projectId]);
 
-  const mainAsset = operation.storySubtype && snapshot.id
-    ? getMainAsset(projectId, operation.storySubtype, snapshot.id)
+  const mainAsset = operation.objectType === 'story_entity' && snapshot.id
+    ? getMainAsset(projectId, 'story_entity', snapshot.id)
     : null;
   const imageUrl = getAssetUrl(mainAsset);
 

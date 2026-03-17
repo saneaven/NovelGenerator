@@ -93,10 +93,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   const getTypeDisplayName = (type: ObjectType): string => {
     const names: Record<ObjectType, string> = {
       basic_info: 'Basic Info',
-      character: 'Character',
-      organization: 'Organization',
-      location: 'Location',
-      lorebook: 'Lorebook',
+      story_entity: 'Story Entity',
       outline: 'Outline',
       act: 'Act',
       chapter: 'Chapter',

@@ -13,7 +13,7 @@ export type OperationCategory =
   | 'generate';
 
 export type ObjectType =
-  | 'story_object'
+  | 'story_entity'
   | 'basic_info'
   | 'guidelines'
   | 'outline'
@@ -23,7 +23,7 @@ export type ObjectType =
 
 export type SearchType = 'semantic' | 'keyword';
 
-export type StoryObjectSubtype = 'character' | 'location' | 'organization' | 'lorebook';
+export type StoryEntityKind = 'character' | 'location' | 'organization' | 'lorebook';
 
 export type HeaderStatus =
   | 'collecting'
@@ -59,7 +59,7 @@ export interface OperationBaseVM {
 export interface ObjectOperationVM extends OperationBaseVM {
   category: Exclude<OperationCategory, 'search' | 'call' | 'generate'>;
   objectType: ObjectType;
-  storySubtype?: StoryObjectSubtype;
+  storyEntityKind?: StoryEntityKind;
 }
 
 export interface SearchOperationVM extends OperationBaseVM {

@@ -32,8 +32,8 @@ def journey_kind(ctx: ToolModuleContext) -> str:
     return str(resolve_parent(ctx.db, ctx.thread).journey_kind or "").strip()
 
 
-def is_story_object_journey(ctx: ToolModuleContext) -> bool:
-    return ctx.thread.thread_type == "journey" and journey_kind(ctx) == "storyObjectEdit"
+def is_object_journey(ctx: ToolModuleContext) -> bool:
+    return ctx.thread.thread_type == "journey" and journey_kind(ctx) == "objectEdit"
 
 
 def is_outline_journey(ctx: ToolModuleContext) -> bool:

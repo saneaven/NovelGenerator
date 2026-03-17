@@ -9,7 +9,7 @@ import type { ObjectType } from '../../types/unifiedObject';
 // ============================================================================
 
 /** Display modes for the ObjectPicker */
-export type ObjectPickerMode = 'story-objects' | 'manuscript' | 'all' | 'translation';
+export type ObjectPickerMode = 'story-entities' | 'manuscript' | 'all' | 'translation';
 
 /** Selection modes */
 export type SelectionMode = 'single' | 'multi';
@@ -23,8 +23,8 @@ export type NovelStructureType = 'act' | 'chapter';
 /** Chapter hierarchy types for manuscript mode display */
 export type ChapterHierarchyType = 'outline' | 'manuscript';
 
-/** Story object types (includes novel structure) */
-export type StoryObjectType = 'character' | 'organization' | 'location' | 'lorebook' | NovelStructureType;
+/** Story entity + outline types */
+export type StoryObjectType = 'story_entity' | NovelStructureType;
 
 // ============================================================================
 // DATA STRUCTURES

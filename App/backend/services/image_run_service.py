@@ -18,14 +18,11 @@ from ..models.db_models import (
     Asset,
     BasicInfo,
     Chapter,
-    Character,
     ImageRunModel,
-    Location,
-    LorebookEntry,
     Manuscript,
-    Organization,
     Outline,
     RunToolCallModel,
+    StoryEntity,
     StoryObjectAsset,
     UserSettings,
 )
@@ -69,18 +66,16 @@ from ..services.storage_usage_service import (
     snapshot_tool_call_row,
 )
 from ..utils.object_type_aliases import normalize_object_type
+from ..utils.story_entities import STORY_ENTITY_TYPE
 
 
 IMAGE_OBJECT_TOOL = "generate_object_image"
 IMAGE_SCENE_TOOL = "generate_scene_image"
 IMAGE_RUN_ACTIVE_STATUSES = {"queued", "running", "review", "applying"}
-OBJECT_IMAGE_TYPES = ("basic_info", "character", "organization", "location", "lorebook")
+OBJECT_IMAGE_TYPES = ("basic_info", STORY_ENTITY_TYPE)
 OBJECT_BINDING_MODELS = {
     "basic_info": BasicInfo,
-    "character": Character,
-    "organization": Organization,
-    "location": Location,
-    "lorebook": LorebookEntry,
+    STORY_ENTITY_TYPE: StoryEntity,
 }
 
 

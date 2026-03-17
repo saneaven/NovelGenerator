@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sys
 
@@ -11,15 +12,20 @@ if str(ROOT) not in sys.path:
 from App.backend.services.default_preset_seed import load_default_preset_seed
 
 
+def _load_default_prompt_document() -> dict:
+    prompt_path = ROOT / "App" / "backend" / "prompts" / "Default.nbprompt"
+    return json.loads(prompt_path.read_text(encoding="utf-8"))
+
+
 def test_default_preset_seed_has_expected_counts() -> None:
     seed = load_default_preset_seed()
 
     assert seed.preset_name == "Default"
     assert seed.preset_description is None
-    assert len(seed.scenarios) == 15
-    assert len(seed.fragments) == 21
+    assert len(seed.scenarios) == 17
+    assert len(seed.fragments) == 24
     assert len(seed.variables) == 1
-    assert len(seed.sub_agents) == 6
+    assert len(seed.sub_agents) == 7
 
 
 def test_default_preset_sub_agents_match_prompt_scenarios() -> None:
@@ -38,3 +44,28 @@ def test_alembic_versions_include_baseline() -> None:
     )
 
     assert "0001_baseline.py" in version_files
+
+
+def test_default_prompt_places_project_reference_and_guidelines_in_expected_sections() -> None:
+    document = _load_default_prompt_document()
+
+    agent_mode = document["prompts"]["agent"]["agentMode"]
+    agent_system = agent_mode["system_template"]
+    agent_last_user = agent_mode["blocks"][-1]["rangeMapping"]["user_template"]
+
+    assert '{% include "fragment:common/basicInfo" %}' in agent_system
+    assert '{% include "fragment:common/objectIndex" %}' in agent_system
+    assert '{% include "fragment:common/guidelines" %}' not in agent_system
+    assert '{% include "fragment:common/guidelines" %}' in agent_last_user
+    assert '{% include "fragment:common/objectContext" %}' in agent_last_user
+    assert '{% include "fragment:common/basicInfo" %}' not in agent_last_user
+    assert '{% include "fragment:common/objectIndex" %}' not in agent_last_user
+
+    project_data = document["prompts"]["editAssistant"]["projectData"]
+    project_data_system = project_data["system_template"]
+    project_data_last_user = project_data["blocks"][-1]["rangeMapping"]["user_template"]
+
+    assert '{% if not editAssistant.projectData.basicInfo %}{% include "fragment:common/basicInfo" %}{% endif %}' in project_data_system
+    assert '{% include "fragment:common/objectIndex" %}' in project_data_system
+    assert '{% if not editAssistant.projectData.guidelines %}{% include "fragment:common/guidelines" %}{% endif %}' in project_data_last_user
+    assert '{% include "fragment:common/objectContext" %}' in project_data_last_user

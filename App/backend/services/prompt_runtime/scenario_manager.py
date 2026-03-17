@@ -31,10 +31,32 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _find_story_object(project_data: dict[str, Any], object_id: str | None) -> dict[str, Any]:
+def _find_basic_info(project_data: dict[str, Any], object_id: str | None) -> dict[str, Any]:
     if not object_id:
         return {}
-    rows = project_data.get("objects")
+    row = project_data.get("basicInfo")
+    if not isinstance(row, dict):
+        return {}
+    if str(row.get("id") or "") == str(object_id):
+        return row
+    return {}
+
+
+def _find_guidelines(project_data: dict[str, Any], object_id: str | None) -> dict[str, Any]:
+    if not object_id:
+        return {}
+    row = project_data.get("guidelines")
+    if not isinstance(row, dict):
+        return {}
+    if str(row.get("id") or "") == str(object_id):
+        return row
+    return {}
+
+
+def _find_story_entity(project_data: dict[str, Any], object_id: str | None) -> dict[str, Any]:
+    if not object_id:
+        return {}
+    rows = project_data.get("storyEntities")
     if not isinstance(rows, list):
         return {}
     sid = str(object_id)
@@ -57,6 +79,36 @@ def _find_manuscript_by_chapter(project_data: dict[str, Any], chapter_id: str | 
     return {}
 
 
+def _find_outline_target(
+    project_data: dict[str, Any],
+    object_id: str | None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
+    if not object_id:
+        return None, None, None
+
+    outline_root = project_data.get("outline")
+    if not isinstance(outline_root, dict):
+        return None, None, None
+
+    sid = str(object_id)
+    for outline in outline_root.get("outlines") or []:
+        if not isinstance(outline, dict):
+            continue
+        if str(outline.get("id") or "") == sid:
+            return outline, None, None
+        for act in outline.get("acts") or []:
+            if not isinstance(act, dict):
+                continue
+            if str(act.get("id") or "") == sid:
+                return None, act, None
+            for chapter in act.get("chapters") or []:
+                if not isinstance(chapter, dict):
+                    continue
+                if str(chapter.get("id") or "") == sid:
+                    return None, None, chapter
+    return None, None, None
+
+
 class ScenarioManager:
     def resolve_target(self, db: Session, *, thread: Thread, run: RunModel, payload: dict[str, Any]) -> ScenarioTarget:
         parent = resolve_parent(db, thread)
@@ -76,8 +128,10 @@ class ScenarioManager:
 
             if journey_kind == "manuscriptEdit":
                 return ScenarioTarget(task_type="editAssistant", task_subtype="manuscript")
-            if journey_kind in {"outlineEdit", "storyObjectEdit"}:
-                return ScenarioTarget(task_type="editAssistant", task_subtype="storyObject")
+            if journey_kind == "outlineEdit":
+                return ScenarioTarget(task_type="editAssistant", task_subtype="outline")
+            if journey_kind == "objectEdit":
+                return ScenarioTarget(task_type="editAssistant", task_subtype="projectData")
 
             raise RuntimeError(f"Unsupported journey kind: {journey_kind}")
 
@@ -99,7 +153,7 @@ class ScenarioManager:
                 return "translation"
             if kind in {"imagePrompt", "sceneImagePrompt"}:
                 return "imagePrompt"
-            if kind in {"manuscriptEdit", "outlineEdit", "storyObjectEdit"}:
+            if kind in {"manuscriptEdit", "outlineEdit", "objectEdit"}:
                 return "editAssistant"
             raise RuntimeError(f"Unsupported journey kind: {kind}")
         if thread.thread_type == "subAgent":
@@ -141,19 +195,26 @@ class ScenarioManager:
         journey_target_ids: list[str],
     ) -> dict[str, Any]:
         defaults = {
-            "mode": "storyObject",
+            "projectData": {
+                "contextIds": [],
+                "editScope": "selected",
+                "basicInfo": None,
+                "guidelines": None,
+                "storyEntity": None,
+            },
             "manuscript": {
                 "currentId": "",
                 "currentChapterId": "",
                 "currentChapterName": "",
                 "currentChapterManuscript": "",
-                "objectIds": [],
-            },
-            "storyObject": {
-                "targetIds": [],
                 "contextIds": [],
-                "categoryName": "",
+            },
+            "outline": {
+                "contextIds": [],
                 "editScope": "selected",
+                "outlines": [],
+                "acts": [],
+                "chapters": [],
             },
         }
 
@@ -165,27 +226,45 @@ class ScenarioManager:
             chapter_id = target_id or (journey_target_ids[0] if journey_target_ids else "")
             manuscript = _find_manuscript_by_chapter(project_data, chapter_id)
             return {
-                "mode": "manuscript",
                 "manuscript": {
                     "currentId": str(manuscript.get("id") or ""),
                     "currentChapterId": str(chapter_id or ""),
                     "currentChapterName": str(manuscript.get("chapterName") or ""),
                     "currentChapterManuscript": str(manuscript.get("content") or ""),
-                    "objectIds": selected_context_ids,
+                    "contextIds": selected_context_ids,
                 },
-                "storyObject": defaults["storyObject"],
+                "projectData": defaults["projectData"],
+                "outline": defaults["outline"],
             }
 
-        target_ids = [target_id] if target_id else list(journey_target_ids)
+        if category in {"outline", "act", "chapter"}:
+            outline, act, chapter = _find_outline_target(project_data, target_id or (journey_target_ids[0] if journey_target_ids else ""))
+            return {
+                "manuscript": defaults["manuscript"],
+                "projectData": defaults["projectData"],
+                "outline": {
+                    "contextIds": selected_context_ids,
+                    "editScope": "selected",
+                    "outlines": [outline] if isinstance(outline, dict) else [],
+                    "acts": [act] if isinstance(act, dict) else [],
+                    "chapters": [chapter] if isinstance(chapter, dict) else [],
+                },
+            }
+
+        basic_info = _find_basic_info(project_data, target_id or (journey_target_ids[0] if journey_target_ids else ""))
+        guidelines = _find_guidelines(project_data, target_id or (journey_target_ids[0] if journey_target_ids else ""))
+        story_entity = _find_story_entity(project_data, target_id or (journey_target_ids[0] if journey_target_ids else ""))
+
         return {
-            "mode": "storyObject",
             "manuscript": defaults["manuscript"],
-            "storyObject": {
-                "targetIds": target_ids,
+            "projectData": {
                 "contextIds": selected_context_ids,
-                "categoryName": category,
                 "editScope": "selected",
+                "basicInfo": basic_info or None,
+                "guidelines": guidelines or None,
+                "storyEntity": story_entity or None,
             },
+            "outline": defaults["outline"],
         }
 
     @staticmethod
@@ -215,27 +294,44 @@ class ScenarioManager:
         *,
         payload: dict[str, Any],
         project_data: dict[str, Any],
-        context_object_ids: list[str],
     ) -> dict[str, Any]:
-        selected_object_ids = _as_str_list(payload.get("selectedObjectIds")) or context_object_ids
+        selected_entity_ids = _as_str_list(payload.get("selectedEntityIds"))
         object_id = str(payload.get("objectId") or "").strip()
-        object_row = _find_story_object(project_data, object_id)
         scene_context = _as_dict(payload.get("sceneContext"))
+        target_type = str(payload.get("objectType") or "").strip()
+
+        basic_info = _find_basic_info(project_data, object_id) if target_type in {"", "basic_info"} else {}
+        story_entity = _find_story_entity(project_data, object_id) if target_type in {"", "story_entity"} else {}
 
         return {
             "promptMode": str(payload.get("promptMode") or "natural"),
-            "currentObject": {
-                "type": str(object_row.get("type") or payload.get("objectType") or ""),
-                "name": str(object_row.get("name") or ""),
-                "description": str(object_row.get("description") or ""),
-                "content": str(object_row.get("content") or ""),
-                "image_prompt": str(object_row.get("imagePrompt") or ""),
-                "image_prompt_positive": str(object_row.get("imagePromptPositive") or ""),
-                "image_prompt_negative": str(object_row.get("imagePromptNegative") or ""),
+            "currentTarget": {
+                "basicInfo": {
+                    "id": str(basic_info.get("id") or ""),
+                    "title": str(basic_info.get("title") or ""),
+                    "logline": str(basic_info.get("logline") or ""),
+                    "image_prompt": str(basic_info.get("imagePrompt") or ""),
+                    "image_prompt_positive": str(basic_info.get("imagePromptPositive") or ""),
+                    "image_prompt_negative": str(basic_info.get("imagePromptNegative") or ""),
+                }
+                if basic_info
+                else None,
+                "storyEntity": {
+                    "id": str(story_entity.get("id") or ""),
+                    "kind": str(story_entity.get("kind") or payload.get("objectKind") or ""),
+                    "name": str(story_entity.get("name") or ""),
+                    "description": str(story_entity.get("description") or ""),
+                    "content": str(story_entity.get("content") or ""),
+                    "image_prompt": str(story_entity.get("imagePrompt") or ""),
+                    "image_prompt_positive": str(story_entity.get("imagePromptPositive") or ""),
+                    "image_prompt_negative": str(story_entity.get("imagePromptNegative") or ""),
+                }
+                if story_entity
+                else None,
             },
             "scenePreContext": str(scene_context.get("preContext") or ""),
             "scenePostContext": str(scene_context.get("postContext") or ""),
-            "selectedObjectIds": selected_object_ids,
+            "selectedEntityIds": selected_entity_ids,
         }
 
     def build_template_data(
@@ -288,7 +384,7 @@ class ScenarioManager:
             },
             "agent": {
                 "runMode": str(run.run_mode or "agentMode"),
-                "surface": str(run.surface or "story-object"),
+                "surface": str(run.surface or "story-entity"),
                 "contextObjectIds": context_object_ids,
             },
             "journey": {
@@ -311,7 +407,6 @@ class ScenarioManager:
             "imagePrompt": self._build_image_prompt_data(
                 payload=payload,
                 project_data=project_data,
-                context_object_ids=context_object_ids,
             ),
             "memory": {
                 "summaries": [],

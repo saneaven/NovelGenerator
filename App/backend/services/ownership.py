@@ -10,28 +10,19 @@ from ..models.db_models import (
     Act,
     BasicInfo,
     Chapter,
-    Character,
     Guidelines,
-    Location,
-    LorebookEntry,
     Manuscript,
-    Organization,
     Outline,
     Project,
+    StoryEntity,
     Thread,
 )
 from ..utils.object_type_aliases import normalize_object_type
 
-
-LOREBOOK_TYPE = normalize_object_type("lorebook")
-
 OBJECT_TYPE_MODEL_MAP = {
     "basic_info": BasicInfo,
     "guidelines": Guidelines,
-    "character": Character,
-    "organization": Organization,
-    "location": Location,
-    LOREBOOK_TYPE: LorebookEntry,
+    "story_entity": StoryEntity,
     "outline": Outline,
     "act": Act,
     "chapter": Chapter,
@@ -41,10 +32,7 @@ OBJECT_TYPE_MODEL_MAP = {
 DIRECT_PROJECT_OBJECT_TYPES = {
     "basic_info",
     "guidelines",
-    "character",
-    "organization",
-    "location",
-    LOREBOOK_TYPE,
+    "story_entity",
     "outline",
 }
 

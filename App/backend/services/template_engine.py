@@ -336,44 +336,225 @@ def _ids_set(ids: Any) -> set[str] | None:
     return {str(v) for v in ids}
 
 
-def _get_objects_of_language(project: dict[str, Any], lang: str, ids: Any = None) -> list[dict[str, Any]]:
+def _as_bucket(project: Any, lang: str | None = None) -> dict[str, Any]:
     if not isinstance(project, dict):
-        return []
-    lang_objects: list[dict[str, Any]] = []
+        return {}
+    if not lang:
+        return project
     languages = project.get("contentByLang")
     if isinstance(languages, dict):
         lang_bucket = languages.get(lang)
-        if isinstance(lang_bucket, dict) and isinstance(lang_bucket.get("objects"), list):
-            lang_objects = [x for x in lang_bucket["objects"] if isinstance(x, dict)]
-    if not lang_objects:
-        objs = project.get("objects")
-        if isinstance(objs, list):
-            lang_objects = [x for x in objs if isinstance(x, dict)]
-
-    wanted = _ids_set(ids)
-    if wanted is None:
-        return lang_objects
-    return [x for x in lang_objects if str(x.get("id")) in wanted]
+        if isinstance(lang_bucket, dict):
+            return lang_bucket
+    return project
 
 
-def _get_manuscripts_of_language(project: dict[str, Any], lang: str, ids: Any = None) -> list[dict[str, Any]]:
-    if not isinstance(project, dict):
+def _list_story_entities(bucket: dict[str, Any]) -> list[dict[str, Any]]:
+    values = bucket.get("storyEntities")
+    if not isinstance(values, list):
         return []
-    manuscripts: list[dict[str, Any]] = []
-    languages = project.get("contentByLang")
-    if isinstance(languages, dict):
-        lang_bucket = languages.get(lang)
-        if isinstance(lang_bucket, dict) and isinstance(lang_bucket.get("manuscripts"), list):
-            manuscripts = [x for x in lang_bucket["manuscripts"] if isinstance(x, dict)]
-    if not manuscripts:
-        values = project.get("manuscripts")
-        if isinstance(values, list):
-            manuscripts = [x for x in values if isinstance(x, dict)]
+    return [value for value in values if isinstance(value, dict)]
 
-    wanted = _ids_set(ids)
+
+def _list_story_entity_tree(bucket: dict[str, Any]) -> list[dict[str, Any]]:
+    values = bucket.get("storyEntityTree")
+    if not isinstance(values, list):
+        return []
+    return [value for value in values if isinstance(value, dict)]
+
+
+def _list_manuscripts(bucket: dict[str, Any]) -> list[dict[str, Any]]:
+    values = bucket.get("manuscripts")
+    if not isinstance(values, list):
+        return []
+    return [value for value in values if isinstance(value, dict)]
+
+
+def _outline_rows(bucket: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    outline = bucket.get("outline")
+    if not isinstance(outline, dict):
+        return [], [], []
+    outline_items = outline.get("outlines")
+    if not isinstance(outline_items, list):
+        return [], [], []
+
+    outlines: list[dict[str, Any]] = []
+    acts: list[dict[str, Any]] = []
+    chapters: list[dict[str, Any]] = []
+    for outline_item in outline_items:
+        if not isinstance(outline_item, dict):
+            continue
+        outlines.append(outline_item)
+        act_items = outline_item.get("acts")
+        if not isinstance(act_items, list):
+            continue
+        for act_item in act_items:
+            if not isinstance(act_item, dict):
+                continue
+            acts.append(act_item)
+            chapter_items = act_item.get("chapters")
+            if not isinstance(chapter_items, list):
+                continue
+            for chapter_item in chapter_items:
+                if isinstance(chapter_item, dict):
+                    chapters.append(chapter_item)
+    return outlines, acts, chapters
+
+
+def _outline_tree(bucket: dict[str, Any]) -> list[dict[str, Any]]:
+    outline = bucket.get("outline")
+    if not isinstance(outline, dict):
+        return []
+    outlines = outline.get("outlines")
+    if not isinstance(outlines, list):
+        return []
+    return [item for item in outlines if isinstance(item, dict)]
+
+
+def _filter_selected(items: list[dict[str, Any]], wanted: set[str] | None) -> list[dict[str, Any]]:
     if wanted is None:
-        return manuscripts
-    return [x for x in manuscripts if str(x.get("id")) in wanted]
+        return list(items)
+    return [item for item in items if str(item.get("id")) in wanted]
+
+
+def _copy_story_entity_tree(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    copied: list[dict[str, Any]] = []
+    for node in nodes:
+        node_type = str(node.get("nodeType") or "")
+        if node_type == "folder":
+            copied.append(
+                {
+                    "nodeType": "folder",
+                    "id": str(node.get("id") or ""),
+                    "name": str(node.get("name") or ""),
+                    "children": _copy_story_entity_tree(
+                        node.get("children") if isinstance(node.get("children"), list) else []
+                    ),
+                }
+            )
+            continue
+        entity = node.get("entity")
+        if isinstance(entity, dict):
+            copied.append({"nodeType": "story_entity", "entity": dict(entity)})
+    return copied
+
+
+def _prune_story_entity_tree(nodes: list[dict[str, Any]], wanted: set[str] | None) -> list[dict[str, Any]]:
+    if wanted is None:
+        return _copy_story_entity_tree(nodes)
+
+    pruned: list[dict[str, Any]] = []
+    for node in nodes:
+        node_type = str(node.get("nodeType") or "")
+        if node_type == "folder":
+            children = _prune_story_entity_tree(
+                node.get("children") if isinstance(node.get("children"), list) else [],
+                wanted,
+            )
+            if children:
+                pruned.append(
+                    {
+                        "nodeType": "folder",
+                        "id": str(node.get("id") or ""),
+                        "name": str(node.get("name") or ""),
+                        "children": children,
+                    }
+                )
+            continue
+
+        entity = node.get("entity")
+        if not isinstance(entity, dict):
+            continue
+        if str(entity.get("id") or "") in wanted:
+            pruned.append({"nodeType": "story_entity", "entity": dict(entity)})
+    return pruned
+
+
+def _flatten_story_entity_tree(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+
+    def _walk(current_nodes: list[dict[str, Any]]) -> None:
+        for node in current_nodes:
+            node_type = str(node.get("nodeType") or "")
+            if node_type == "folder":
+                children = node.get("children")
+                if isinstance(children, list):
+                    _walk(children)
+                continue
+            entity = node.get("entity")
+            if isinstance(entity, dict):
+                items.append(dict(entity))
+
+    _walk(nodes)
+    return items
+
+
+def _prune_outline_tree(outlines: list[dict[str, Any]], wanted: set[str] | None) -> list[dict[str, Any]]:
+    if wanted is None:
+        return [dict(outline) for outline in outlines]
+
+    pruned: list[dict[str, Any]] = []
+    for outline in outlines:
+        outline_id = str(outline.get("id") or "")
+        acts = outline.get("acts") if isinstance(outline.get("acts"), list) else []
+        if outline_id in wanted:
+            pruned.append(dict(outline))
+            continue
+
+        selected_acts: list[dict[str, Any]] = []
+        for act in acts:
+            if not isinstance(act, dict):
+                continue
+            act_id = str(act.get("id") or "")
+            chapters = act.get("chapters") if isinstance(act.get("chapters"), list) else []
+            if act_id in wanted:
+                selected_acts.append(dict(act))
+                continue
+
+            selected_chapters = [
+                dict(chapter)
+                for chapter in chapters
+                if isinstance(chapter, dict) and str(chapter.get("id") or "") in wanted
+            ]
+            if selected_chapters:
+                selected_acts.append({**dict(act), "chapters": selected_chapters})
+
+        if selected_acts:
+            pruned.append({**dict(outline), "acts": selected_acts})
+    return pruned
+
+
+def _select_single(item: Any, wanted: set[str] | None) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    if wanted is None:
+        return item
+    item_id = str(item.get("id") or "")
+    return item if item_id and item_id in wanted else None
+
+
+def _select_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) -> dict[str, Any]:
+    wanted = _ids_set(ids)
+    story_entity_tree = _prune_story_entity_tree(_list_story_entity_tree(bucket), wanted)
+    outline_tree = _prune_outline_tree(_outline_tree(bucket), wanted)
+    manuscripts = _filter_selected(_list_manuscripts(bucket), wanted)
+
+    return {
+        "basicInfo": _select_single(bucket.get("basicInfo"), wanted),
+        "guidelines": _select_single(bucket.get("guidelines"), wanted),
+        "storyEntityTree": story_entity_tree,
+        "storyEntities": _flatten_story_entity_tree(story_entity_tree),
+        "outlineTree": outline_tree,
+        "manuscripts": manuscripts,
+    }
+
+
+def _select_object_context(project: dict[str, Any], ids: Any = None) -> dict[str, Any]:
+    return _select_object_context_from_bucket(_as_bucket(project), ids)
+
+
+def _select_object_context_by_lang(project: dict[str, Any], lang: str, ids: Any = None) -> dict[str, Any]:
+    return _select_object_context_from_bucket(_as_bucket(project, lang), ids)
 
 
 def create_environment(fragment_map: Mapping[str, str] | None = None) -> Environment:
@@ -390,8 +571,8 @@ def create_environment(fragment_map: Mapping[str, str] | None = None) -> Environ
     env.filters["get_by_id"] = _get_by_id
     env.filters["get_manuscript"] = _get_manuscript
 
-    env.globals["get_objects_of_language"] = _get_objects_of_language
-    env.globals["get_manuscripts_of_language"] = _get_manuscripts_of_language
+    env.globals["select_object_context"] = _select_object_context
+    env.globals["select_object_context_by_lang"] = _select_object_context_by_lang
 
     return env
 

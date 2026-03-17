@@ -36,14 +36,14 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
     [operation, objects, projectId, language]
   );
 
-  const canLoadStoryAsset = Boolean(operation.storySubtype && snapshot.id && projectId);
+  const canLoadStoryAsset = Boolean(operation.objectType === 'story_entity' && snapshot.id && projectId);
   useEffect(() => {
-    if (!canLoadStoryAsset || !operation.storySubtype || !snapshot.id) return;
-    void fetchStoryObjectAssets(projectId, operation.storySubtype, snapshot.id);
-  }, [canLoadStoryAsset, operation.storySubtype, snapshot.id, projectId, fetchStoryObjectAssets]);
+    if (!canLoadStoryAsset || !snapshot.id) return;
+    void fetchStoryObjectAssets(projectId, 'story_entity', snapshot.id);
+  }, [canLoadStoryAsset, snapshot.id, projectId, fetchStoryObjectAssets]);
 
-  const mainAsset = operation.storySubtype && snapshot.id
-    ? getMainAsset(projectId, operation.storySubtype, snapshot.id)
+  const mainAsset = operation.objectType === 'story_entity' && snapshot.id
+    ? getMainAsset(projectId, 'story_entity', snapshot.id)
     : null;
   const imageUrl = getAssetUrl(mainAsset);
 

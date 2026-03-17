@@ -38,8 +38,28 @@ const JINJA_SYNTAX = {
         { name: 'tojson', syntax: '{{ obj|tojson }}', desc: 'Output as JSON string' },
     ],
     'Global Functions': [
-        { name: 'get_objects_of_language', syntax: '{% for obj in get_objects_of_language(project, lang) %}', desc: 'Get objects for a specific language' },
-        { name: 'get_manuscripts_of_language', syntax: '{% for ms in get_manuscripts_of_language(project, lang) %}', desc: 'Get manuscripts for a specific language' },
+        {
+            name: 'select_object_context',
+            syntax: '{% set ctx = select_object_context(project, ids) %}',
+            desc: 'Select typed object context buckets from object IDs',
+        },
+        {
+            name: 'select_object_context_by_lang',
+            syntax: '{% set ctx = select_object_context_by_lang(project, lang, ids) %}',
+            desc: 'Select typed object context buckets for a specific language',
+        },
+    ],
+    Macros: [
+        {
+            name: 'macro',
+            syntax: '{% macro render_nodes(nodes) %}...{% endmacro %}',
+            desc: 'Define a local renderer inside the prompt or fragment',
+        },
+        {
+            name: 'macro call',
+            syntax: '{{ render_nodes(ctx.storyEntityTree) }}',
+            desc: 'Render raw tree data using your own XML, Markdown, or custom format',
+        },
     ],
     'Control Flow': [
         { name: 'if / endif', syntax: '{% if condition %}...{% endif %}', desc: 'Conditional block' },

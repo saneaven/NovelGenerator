@@ -15,7 +15,7 @@ import ToggleSwitch from '../common/ToggleSwitch';
 import './AIEditModal.css';
 
 type AIEditCategory = ObjectType | 'manuscript';
-type AIEditJourneyKind = 'manuscriptEdit' | 'outlineEdit' | 'storyObjectEdit';
+type AIEditJourneyKind = 'manuscriptEdit' | 'outlineEdit' | 'objectEdit';
 
 interface AIEditModalProps {
   isOpen: boolean;
@@ -30,10 +30,7 @@ interface AIEditModalProps {
 const getCategoryDisplayName = (cat: string): string => {
   const names: Record<string, string> = {
     basic_info: 'Basic Info',
-    character: 'Character',
-    organization: 'Organization',
-    location: 'Location',
-    lorebook: 'Lorebook',
+    story_entity: 'Story Entity',
     outline: 'Outline',
     act: 'Act',
     chapter: 'Chapter',
@@ -45,7 +42,7 @@ const getCategoryDisplayName = (cat: string): string => {
 function categoryToJourneyKind(category: string): AIEditJourneyKind {
   if (category === 'manuscript') return 'manuscriptEdit';
   if (['outline', 'act', 'chapter'].includes(category)) return 'outlineEdit';
-  return 'storyObjectEdit';
+  return 'objectEdit';
 }
 
 const AIEditModal: React.FC<AIEditModalProps> = ({
@@ -176,7 +173,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         display_label: spec.label(inputPayload),
         input_text: trimmedRequest,
         input_payload: inputPayload,
-        surface: 'story-object',
+        surface: 'story-entity',
         journey_target_ids: [targetId],
         context_object_ids: selectedContextIds,
       });
@@ -220,7 +217,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
             icon={<Document size="sm" />}
           />
           <p className="field-hint">
-            Output text directly without tool calls. Replaces content (story objects) or full chapter text (manuscripts).
+            Output text directly without tool calls. Replaces content for the selected object or full chapter text for manuscripts.
           </p>
         </div>
 

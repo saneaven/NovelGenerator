@@ -28,7 +28,7 @@ export type ToolCategory =
 export type TargetType =
   | 'basic_info'
   | 'guidelines'
-  | 'story_object'
+  | 'story_entity'
   | 'outline'
   | 'outline_act'
   | 'outline_chapter'
@@ -37,15 +37,15 @@ export type TargetType =
   | 'scene_image'
   | 'object_image';
 
-/** Story object subtypes (used in tool arguments) */
-export type StoryObjectSubtype =
+/** Story entity kinds (used in tool arguments) */
+export type StoryEntityKind =
   | 'character'
   | 'location'
   | 'organization'
   | 'lorebook';
 
 /** Execution modes for the tool-call system */
-export type ExecutionMode = 'storyObject' | 'novelEditor' | 'translation' | 'editAssistant';
+export type ExecutionMode = 'object' | 'novelEditor' | 'translation' | 'editAssistant';
 
 // ============================================================================
 // TOOL CALL STATUS
@@ -228,20 +228,17 @@ export interface EditCard {
 // TYPE MAPPING CONSTANTS
 // ============================================================================
 
-/** Maps story object subtype to unified object type */
-export const STORY_OBJECT_TYPE_MAP: Record<StoryObjectSubtype, ObjectType> = {
-  character: 'character',
-  location: 'location',
-  organization: 'organization',
-  lorebook: 'lorebook',
+/** Maps story entity kind to unified object type */
+export const STORY_ENTITY_TYPE_MAP: Record<StoryEntityKind, ObjectType> = {
+  character: 'story_entity',
+  location: 'story_entity',
+  organization: 'story_entity',
+  lorebook: 'story_entity',
 };
 
 /** All object types including outline structure (for translation and validation) */
 export const ALL_OBJECT_TYPE_MAP: Record<string, ObjectType> = {
-  character: 'character',
-  location: 'location',
-  organization: 'organization',
-  lorebook: 'lorebook',
+  story_entity: 'story_entity',
   act: 'act',
   chapter: 'chapter',
 };

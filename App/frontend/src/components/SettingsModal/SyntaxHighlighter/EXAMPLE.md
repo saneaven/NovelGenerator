@@ -16,13 +16,31 @@ Use thinking blocks for analysis
 
 ## Loops
 
-{% for obj in project.objects|filter_by_type("character") %}
-- {{ obj.name }}: {{ obj.content }}
+{% for obj in project.storyEntities|filter_by_type("story_entity") %}
+- {{ obj.name }}: {{ obj.description }}
 {% endfor %}
+
+## Macros And Tree Rendering
+
+{% macro render_story_entity_tree(nodes) -%}
+{% for node in nodes %}
+{% if node.nodeType == "folder" %}
+## Folder: {{ node.name }}
+{{ render_story_entity_tree(node.children) }}
+{% elif node.nodeType == "story_entity" %}
+- {{ node.entity.kind }}: {{ node.entity.name }}
+{% endif %}
+{% endfor %}
+{%- endmacro %}
+
+{{ render_story_entity_tree(project.storyEntityTree) }}
 
 ## Fragment Inclusion
 
-{% include "fragment:common/projectContext/full" %}
+{% include "fragment:common/basicInfo" %}
+{% include "fragment:common/guidelines" %}
+{% with selectedIds = agent.contextObjectIds %}{% include "fragment:common/objectContext" %}{% endwith %}
+{% include "fragment:common/objectIndex" %}
 
 ## Comments
 
@@ -75,7 +93,7 @@ Before responding:
 </thinking>
 {% endif %}
 
-{% for chapter in project.outline.chapters %}
-### {{ chapter.title }}
-{{ chapter.summary }}
+{% for outline in project.outline.outlines %}
+### {{ outline.name }}
+{{ outline.description }}
 {% endfor %}

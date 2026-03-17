@@ -42,7 +42,8 @@ interface UnifiedImagePromptModalProps {
   contextType: ContextType;
 
   // For 'object' context
-  objectType?: 'basic_info' | 'character' | 'location' | 'organization' | 'lorebook';
+  objectType?: 'basic_info' | 'story_entity';
+  objectKind?: 'character' | 'location' | 'organization' | 'lorebook';
   objectId?: string;
 
   // For 'scene' context
@@ -50,7 +51,7 @@ interface UnifiedImagePromptModalProps {
 
   // Optional default values
   defaultUserRequest?: string;
-  defaultSelectedObjectIds?: string[];
+  defaultSelectedEntityIds?: string[];
 }
 
 const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
@@ -62,18 +63,19 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   promptMode,
   contextType,
   objectType,
+  objectKind,
   objectId,
   sceneContext,
   defaultUserRequest,
-  defaultSelectedObjectIds,
+  defaultSelectedEntityIds,
 }) => {
   const { currentProjectId } = useProjectStore();
   const settings = useSettings();
   const unifiedStore = useUnifiedObjectStore();
 
   const [userRequest, setUserRequest] = useState(defaultUserRequest || '');
-  const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>(
-    defaultSelectedObjectIds ?? []
+  const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>(
+    defaultSelectedEntityIds ?? []
   );
   const [activeJourneyId, setActiveJourneyId] = useState<string | null>(null);
 
@@ -110,9 +112,9 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   useEffect(() => {
     if (!isOpen) {
       setUserRequest(defaultUserRequest || '');
-      setSelectedObjectIds(defaultSelectedObjectIds ?? []);
+      setSelectedEntityIds(defaultSelectedEntityIds ?? []);
     }
-  }, [isOpen, defaultUserRequest, defaultSelectedObjectIds]);
+  }, [isOpen, defaultUserRequest, defaultSelectedEntityIds]);
 
   useEffect(() => {
     if (!activeJourneyId) return;
@@ -186,10 +188,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     if (contextType === 'object' && objectType) {
       const labels: Record<string, string> = {
         basic_info: 'Basic Info',
-        character: 'Character',
-        location: 'Location',
-        organization: 'Organization',
-        lorebook: 'Lorebook Entry',
+        story_entity: objectKind ? `${objectKind[0].toUpperCase()}${objectKind.slice(1)} Entity` : 'Story Entity',
       };
       return labels[objectType] || '';
     }
@@ -219,9 +218,10 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       contextType,
       userRequest: userRequest.trim(),
       objectType,
+      objectKind,
       objectId,
       sceneContext,
-      selectedObjectIds,
+      selectedEntityIds,
       rawMode: true,
       outputMode: 'raw_output' as const,
     };
@@ -243,8 +243,8 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
         display_label: spec.label(inputPayload),
         input_text: userRequest.trim() || 'Generate an image prompt.',
         input_payload: inputPayload,
-        surface: 'story-object',
-        context_object_ids: selectedObjectIds,
+        surface: 'story-entity',
+        context_object_ids: selectedEntityIds,
       });
       useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
     } catch (error: any) {
@@ -261,9 +261,10 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     promptMode,
     userRequest,
     objectType,
+    objectKind,
     objectId,
     sceneContext,
-    selectedObjectIds,
+    selectedEntityIds,
     onStreamingStart,
     onStreamingError,
     onClose,
@@ -320,26 +321,26 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
           </div>
         )}
 
-        {/* Object picker for scene - uses mode="story-objects" to auto-fetch */}
+        {/* Object picker for scene - uses mode="story-entities" to auto-fetch */}
         {showObjectPicker && (
           <div className="form-group object-context-section">
-            <label>Include Story Objects</label>
+            <label>Include Story Entities</label>
             <span className="section-hint">
               Uncheck objects you don&apos;t want to include
             </span>
             <ObjectPicker
-              mode="story-objects"
+              mode="story-entities"
               projectId={currentProjectId || ''}
               language={settings.mainLanguage}
-              selectedIds={selectedObjectIds}
-              onChange={(ids) => setSelectedObjectIds(Array.isArray(ids) ? ids : [ids])}
+              selectedIds={selectedEntityIds}
+              onChange={(ids) => setSelectedEntityIds(Array.isArray(ids) ? ids : [ids])}
               selectionMode="multi"
               maxHeight="200px"
               showSearch={false}
-              selectAllOnLoad={!defaultSelectedObjectIds?.length}
+              selectAllOnLoad={!defaultSelectedEntityIds?.length}
             />
             <div className="selection-summary">
-              {selectedObjectIds.length} objects selected
+              {selectedEntityIds.length} entities selected
             </div>
           </div>
         )}

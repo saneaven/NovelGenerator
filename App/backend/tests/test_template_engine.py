@@ -11,24 +11,266 @@ from App.backend.services.template_engine import (
 )
 
 
+def _project_fixture() -> dict[str, object]:
+    story_entity = {
+        "type": "story_entity",
+        "kind": "character",
+        "id": "entity-1",
+        "name": "Ari",
+        "description": "Broker",
+        "content": "Detailed content",
+        "folderId": "folder-1",
+        "folderPath": ["Characters", "Main Cast"],
+        "displayOrder": 0,
+    }
+    root_entity = {
+        "type": "story_entity",
+        "kind": "location",
+        "id": "entity-2",
+        "name": "Port Meridian",
+        "description": "Trade city",
+        "content": "Fog and lanterns",
+        "folderId": None,
+        "folderPath": [],
+        "displayOrder": 1,
+    }
+    outline_tree = [
+        {
+            "id": "outline-1",
+            "name": "Main Outline",
+            "description": "Primary story spine",
+            "content": "Outline content",
+            "order": 0,
+            "acts": [
+                {
+                    "id": "act-1",
+                    "name": "Setup",
+                    "description": "Opening movement",
+                    "content": "Act content",
+                    "order": 0,
+                    "outlineId": "outline-1",
+                    "chapters": [
+                        {
+                            "id": "chapter-1",
+                            "name": "The Raid",
+                            "description": "Inciting chapter",
+                            "content": "Chapter content",
+                            "order": 0,
+                            "actId": "act-1",
+                            "manuscriptId": "ms-1",
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+    return {
+        "basicInfo": {
+            "id": "basic-1",
+            "title": "Project",
+            "logline": "Hook",
+            "genres": ["Fantasy"],
+            "tags": ["academy"],
+        },
+        "guidelines": {"id": "guide-1", "authorNote": "Keep it tense."},
+        "storyEntities": [story_entity, root_entity],
+        "storyEntityTree": [
+            {
+                "nodeType": "folder",
+                "id": "folder-1",
+                "name": "Characters",
+                "children": [
+                    {
+                        "nodeType": "story_entity",
+                        "entity": story_entity,
+                    }
+                ],
+            },
+            {
+                "nodeType": "story_entity",
+                "entity": root_entity,
+            },
+        ],
+        "outline": {"outlines": outline_tree},
+        "manuscripts": [
+            {
+                "id": "ms-1",
+                "chapterId": "chapter-1",
+                "chapterName": "The Raid",
+                "content": "Scene text",
+                "wordCount": 100,
+            }
+        ],
+        "contentByLang": {
+            "Korean": {
+                "basicInfo": {
+                    "id": "basic-1",
+                    "title": "프로젝트",
+                    "logline": "후크",
+                    "genres": ["판타지"],
+                    "tags": ["학원"],
+                },
+                "guidelines": {"id": "guide-1", "authorNote": "긴장을 유지하라."},
+                "storyEntities": [
+                    {
+                        **story_entity,
+                        "name": "아리",
+                        "description": "정보 중개인",
+                        "content": "상세 내용",
+                    }
+                ],
+                "storyEntityTree": [
+                    {
+                        "nodeType": "folder",
+                        "id": "folder-1",
+                        "name": "등장인물",
+                        "children": [
+                            {
+                                "nodeType": "story_entity",
+                                "entity": {
+                                    **story_entity,
+                                    "name": "아리",
+                                    "description": "정보 중개인",
+                                    "content": "상세 내용",
+                                },
+                            }
+                        ],
+                    }
+                ],
+                "outline": {"outlines": outline_tree},
+                "manuscripts": [],
+            }
+        },
+    }
+
+
 def test_render_template_supports_fragment_include() -> None:
-    env = create_environment(fragment_map={"common/projectContext/full": "Project context"})
+    env = create_environment(fragment_map={"common/objectContext": "Object context"})
 
-    rendered = render_template(env, '{% include "fragment:common/projectContext/full" %}', {})
+    rendered = render_template(env, '{% include "fragment:common/objectContext" %}', {})
 
-    assert rendered == "Project context"
+    assert rendered == "Object context"
 
 
 def test_render_template_supports_with_plus_include() -> None:
-    env = create_environment(fragment_map={"translation/filteredContext": "Lang={{ lang }}, Ids={{ ids|length }}"})
+    env = create_environment(fragment_map={"translation/objectContext": "Lang={{ lang }}, Ids={{ ids|length }}"})
 
     rendered = render_template(
         env,
-        '{% with lang = "English", ids = ["a", "b"] %}{% include "fragment:translation/filteredContext" %}{% endwith %}',
+        '{% with lang = "English", ids = ["a", "b"] %}{% include "fragment:translation/objectContext" %}{% endwith %}',
         {},
     )
 
     assert rendered == "Lang=English, Ids=2"
+
+
+def test_render_template_supports_select_object_context_helper() -> None:
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% set ctx = select_object_context(project, ["guide-1", "entity-1", "chapter-1", "ms-1"]) %}'
+        '{{ ctx.guidelines.authorNote }}|{{ ctx.storyEntities[0].name }}|{{ ctx.outlineTree[0].acts[0].chapters[0].name }}|{{ ctx.manuscripts[0].chapterName }}',
+        {"project": project},
+    )
+
+    assert rendered == "Keep it tense.|Ari|The Raid|The Raid"
+
+
+def test_render_template_supports_select_object_context_by_lang_helper() -> None:
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% set ctx = select_object_context_by_lang(project, "Korean", ["entity-1"]) %}{{ ctx.storyEntities[0].name }}',
+        {"project": project},
+    )
+
+    assert rendered == "아리"
+
+
+def test_render_template_supports_local_tree_macros_for_xml() -> None:
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% macro render_story_entity_nodes(nodes) -%}'
+        '{% for node in nodes %}'
+        '{% if node.nodeType == "folder" %}'
+        '<folder id="{{ node.id|e }}" name="{{ node.name|e }}">{{ render_story_entity_nodes(node.children) }}</folder>'
+        '{% elif node.nodeType == "story_entity" %}'
+        '<story-entity id="{{ node.entity.id|e }}" kind="{{ node.entity.kind|e }}">'
+        '<name>{{ node.entity.name|e }}</name>'
+        '<description>{{ node.entity.description|e }}</description>'
+        '<content>{{ node.entity.content|e }}</content>'
+        '</story-entity>'
+        '{% endif %}'
+        '{% endfor %}'
+        '{%- endmacro %}'
+        '{% macro render_outline_nodes(outlines) -%}'
+        '{% for outline in outlines %}'
+        '<outline id="{{ outline.id|e }}" name="{{ outline.name|e }}">'
+        '{% for act in outline.acts %}'
+        '<act id="{{ act.id|e }}" name="{{ act.name|e }}">'
+        '{% for chapter in act.chapters %}'
+        '<chapter id="{{ chapter.id|e }}" name="{{ chapter.name|e }}" manuscript-id="{{ chapter.manuscriptId|e }}"></chapter>'
+        '{% endfor %}'
+        '</act>'
+        '{% endfor %}'
+        '</outline>'
+        '{% endfor %}'
+        '{%- endmacro %}'
+        '{% set ctx = select_object_context(project, ["entity-1", "chapter-1", "ms-1"]) %}'
+        '<story-entity-tree>{{ render_story_entity_nodes(ctx.storyEntityTree) }}</story-entity-tree>'
+        '<outline-structure>{{ render_outline_nodes(ctx.outlineTree) }}</outline-structure>',
+        {"project": project},
+    )
+
+    assert '<folder id="folder-1" name="Characters">' in rendered
+    assert '<story-entity id="entity-1" kind="character">' in rendered
+    assert '<content>Detailed content</content>' in rendered
+    assert '<chapter id="chapter-1" name="The Raid" manuscript-id="ms-1">' in rendered
+    assert "Port Meridian" not in rendered
+
+
+def test_render_template_supports_local_tree_macros_for_markdown() -> None:
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% macro render_story_tree(nodes) -%}\n'
+        '{% for node in nodes %}\n'
+        '{% if node.nodeType == "folder" %}\n'
+        '## Folder: {{ node.name }}\n'
+        '{{ render_story_tree(node.children) }}\n'
+        '{% elif node.nodeType == "story_entity" %}\n'
+        '- {{ node.entity.kind }}: {{ node.entity.name }}\n'
+        '{% endif %}\n'
+        '{% endfor %}\n'
+        '{%- endmacro %}\n'
+        '{% set ctx = select_object_context(project, ["entity-1", "entity-2"]) %}\n'
+        '{{ render_story_tree(ctx.storyEntityTree) }}',
+        {"project": project},
+    )
+
+    assert "## Folder: Characters" in rendered
+    assert "- character: Ari" in rendered
+    assert "- location: Port Meridian" in rendered
+
+
+def test_create_environment_does_not_register_format_specific_renderers() -> None:
+    env = create_environment()
+
+    assert "render_story_entity_context_tree" not in env.globals
+    assert "render_story_entity_index_tree" not in env.globals
+    assert "render_outline_context_tree" not in env.globals
+    assert "render_outline_index_tree" not in env.globals
+    assert "render_manuscript_context_nodes" not in env.globals
+    assert "render_manuscript_index_nodes" not in env.globals
 
 
 def test_validate_template_source_rejects_prompt_calls() -> None:
@@ -80,9 +322,9 @@ def test_render_template_blocks_mutation_methods() -> None:
 
 
 def test_render_template_raises_fragment_not_found_for_bare_paths() -> None:
-    env = create_environment(fragment_map={"common/projectContext/full": "Project context"})
+    env = create_environment(fragment_map={"common/objectContext": "Object context"})
 
     with pytest.raises(FragmentNotFoundError) as exc:
-        render_template(env, '{% include "common/projectContext/full" %}', {})
+        render_template(env, '{% include "common/objectContext" %}', {})
 
-    assert exc.value.path == "common/projectContext/full"
+    assert exc.value.path == "common/objectContext"

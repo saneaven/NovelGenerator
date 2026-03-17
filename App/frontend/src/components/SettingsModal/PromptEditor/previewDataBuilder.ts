@@ -33,8 +33,87 @@ interface FilteredIds {
   objectIds: string[];
   targetIds: string[];
   contextIds: string[];
-  selectedObjectIds: string[];
+  selectedEntityIds: string[];
 }
+
+const PREVIEW_BASIC_INFO = {
+  id: '[ placeholder-basic-info-id ]',
+  title: '[ Placeholder for project title ]',
+  logline: '[ Placeholder for project logline ]',
+  genres: ['[ Placeholder genre ]'],
+  tags: ['[ Placeholder tag ]'],
+};
+
+const PREVIEW_GUIDELINES = {
+  id: '[ placeholder-guidelines-id ]',
+  authorNote: '[ Placeholder for author note / guidelines ]',
+};
+
+const PREVIEW_STORY_ENTITY = {
+  id: '[ placeholder-story-entity-id ]',
+  type: 'story_entity' as const,
+  kind: 'character' as const,
+  name: '[ Placeholder for entity name ]',
+  description: '[ Placeholder for entity description ]',
+  content: '[ Placeholder for entity content ]',
+  folderId: '[ placeholder-folder-characters-id ]',
+  folderPath: ['Characters'],
+  displayOrder: 1,
+  imagePrompt: '[ Placeholder for saved natural language prompt ]',
+  imagePromptPositive: '[ Placeholder for saved positive tags ]',
+  imagePromptNegative: '[ Placeholder for saved negative tags ]',
+};
+
+const PREVIEW_OUTLINE = {
+  id: '[ placeholder-outline-id ]',
+  name: '[ Placeholder for outline name ]',
+  description: '[ Placeholder for outline description ]',
+  content: '[ Placeholder for outline content ]',
+  order: 0,
+  acts: [] as any[],
+};
+
+const PREVIEW_ACT = {
+  id: '[ placeholder-act-id ]',
+  name: '[ Placeholder for act name ]',
+  description: '[ Placeholder for act description ]',
+  content: '[ Placeholder for act content ]',
+  order: 0,
+  outlineId: '[ placeholder-outline-id ]',
+  chapters: [] as any[],
+};
+
+const PREVIEW_CHAPTER = {
+  id: '[ placeholder-chapter-id ]',
+  name: '[ Placeholder for chapter name ]',
+  description: '[ Placeholder for chapter description ]',
+  content: '[ Placeholder for chapter content ]',
+  order: 0,
+  actId: '[ placeholder-act-id ]',
+  manuscriptId: '[ placeholder-manuscript-id ]',
+};
+
+const PREVIEW_ROOT_LOCATION_ID = '[ placeholder-story-entity-id-3 ]';
+const PREVIEW_NESTED_ENTITY_ID = '[ placeholder-story-entity-id-2 ]';
+const PREVIEW_MANUSCRIPT_ID = '[ placeholder-manuscript-id ]';
+
+const PREVIEW_ALL_OBJECT_IDS = [
+  PREVIEW_BASIC_INFO.id,
+  PREVIEW_GUIDELINES.id,
+  PREVIEW_NESTED_ENTITY_ID,
+  PREVIEW_STORY_ENTITY.id,
+  PREVIEW_ROOT_LOCATION_ID,
+  PREVIEW_OUTLINE.id,
+  PREVIEW_ACT.id,
+  PREVIEW_CHAPTER.id,
+  PREVIEW_MANUSCRIPT_ID,
+];
+
+const PREVIEW_CONTEXT_IDS = [
+  PREVIEW_NESTED_ENTITY_ID,
+  PREVIEW_CHAPTER.id,
+  PREVIEW_MANUSCRIPT_ID,
+];
 
 /**
  * Map taskType and taskSubtype to the PromptType used in schema validation.
@@ -80,6 +159,18 @@ function getAllProjectObjectIds(projectId: string): string[] {
   }
 }
 
+function getAllProjectStoryEntityIds(projectId: string): string[] {
+  try {
+    const store = useUnifiedObjectStore.getState();
+    const allObjects = Object.values(store.objects);
+    return allObjects
+      .filter(obj => obj.metadata.project_id === projectId && obj.type === 'story_entity')
+      .map(obj => obj.id);
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Build filtered ID arrays based on toggle state.
  */
@@ -88,22 +179,34 @@ function buildFilteredIds(
   includeAllFilteredIds: boolean
 ): FilteredIds {
   if (!includeAllFilteredIds || !projectId) {
+    if (includeAllFilteredIds) {
+      return {
+        contextObjectIds: PREVIEW_CONTEXT_IDS,
+        objectIds: PREVIEW_ALL_OBJECT_IDS,
+        targetIds: PREVIEW_ALL_OBJECT_IDS,
+        contextIds: PREVIEW_CONTEXT_IDS,
+        selectedEntityIds: [PREVIEW_NESTED_ENTITY_ID],
+      };
+    }
     return {
       contextObjectIds: [],
       objectIds: [],
       targetIds: [],
       contextIds: [],
-      selectedObjectIds: [],
+      selectedEntityIds: [],
     };
   }
 
   const allIds = getAllProjectObjectIds(projectId);
+  const allStoryEntityIds = getAllProjectStoryEntityIds(projectId);
+  const effectiveAllIds = allIds.length > 0 ? allIds : PREVIEW_ALL_OBJECT_IDS;
+  const effectiveStoryEntityIds = allStoryEntityIds.length > 0 ? allStoryEntityIds : [PREVIEW_NESTED_ENTITY_ID];
   return {
-    contextObjectIds: allIds,
-    objectIds: allIds,
-    targetIds: allIds,
-    contextIds: allIds,
-    selectedObjectIds: allIds,
+    contextObjectIds: effectiveAllIds,
+    objectIds: effectiveAllIds,
+    targetIds: effectiveAllIds,
+    contextIds: effectiveAllIds,
+    selectedEntityIds: effectiveStoryEntityIds,
   };
 }
 
@@ -118,13 +221,15 @@ export function buildModeSpecificData(
   promptTypeOverrides?: Record<string, any>
 ): Partial<Pick<TemplateData, 'agent' | 'memorySummary' | 'editAssistant' | 'translation' | 'imagePrompt' | 'memory'>> {
   let modeData: Partial<Pick<TemplateData, 'agent' | 'memorySummary' | 'editAssistant' | 'translation' | 'imagePrompt' | 'memory'>> = {};
+  const projectDataTarget = String(promptTypeOverrides?._preview?.editAssistant?.projectDataTarget || promptTypeOverrides?.['_preview.editAssistant.projectDataTarget'] || 'storyEntity');
+  const imagePromptTarget = String(promptTypeOverrides?._preview?.imagePrompt?.currentTargetType || promptTypeOverrides?.['_preview.imagePrompt.currentTargetType'] || 'storyEntity');
 
   switch (taskType) {
     case 'agent':
       modeData = {
         agent: {
           runMode: taskSubtype === 'planMode' ? 'planMode' : 'agentMode',
-          surface: 'story-object',
+          surface: 'story-entity',
           contextObjectIds: filteredIds.contextObjectIds,
         },
       };
@@ -150,25 +255,81 @@ export function buildModeSpecificData(
       if (taskSubtype === 'manuscript') {
         modeData = {
           editAssistant: {
-            mode: 'manuscript',
+            projectData: {
+              contextIds: [],
+              editScope: 'selected',
+              basicInfo: null,
+              guidelines: null,
+              storyEntity: null,
+            },
             manuscript: {
               currentId: '[ placeholder-manuscript-id ]',
               currentChapterId: '[ placeholder-chapter-id ]',
               currentChapterName: '[ Placeholder for chapter name ]',
               currentChapterManuscript: '[ Placeholder for current chapter manuscript content ]',
-              objectIds: filteredIds.objectIds,
+              contextIds: filteredIds.contextIds,
+            },
+            outline: {
+              contextIds: [],
+              editScope: 'selected',
+              outlines: [],
+              acts: [],
+              chapters: [],
+            },
+          },
+        };
+      } else if (taskSubtype === 'outline') {
+        modeData = {
+          editAssistant: {
+            projectData: {
+              contextIds: [],
+              editScope: 'selected',
+              basicInfo: null,
+              guidelines: null,
+              storyEntity: null,
+            },
+            manuscript: {
+              currentId: '',
+              currentChapterId: '',
+              currentChapterName: '',
+              currentChapterManuscript: '',
+              contextIds: [],
+            },
+            outline: {
+              contextIds: filteredIds.contextIds,
+              editScope: 'selected',
+              outlines: [PREVIEW_OUTLINE],
+              acts: [PREVIEW_ACT],
+              chapters: [PREVIEW_CHAPTER],
             },
           },
         };
       } else {
+        const basicInfo = projectDataTarget === 'basicInfo' ? PREVIEW_BASIC_INFO : null;
+        const guidelines = projectDataTarget === 'guidelines' ? PREVIEW_GUIDELINES : null;
+        const storyEntity = projectDataTarget === 'storyEntity' ? PREVIEW_STORY_ENTITY : null;
         modeData = {
           editAssistant: {
-            mode: 'storyObject',
-            storyObject: {
-              targetIds: filteredIds.targetIds,
+            manuscript: {
+              currentId: '',
+              currentChapterId: '',
+              currentChapterName: '',
+              currentChapterManuscript: '',
+              contextIds: [],
+            },
+            projectData: {
               contextIds: filteredIds.contextIds,
-              categoryName: '[ Placeholder for category name ]',
               editScope: 'selected',
+              basicInfo,
+              guidelines,
+              storyEntity,
+            },
+            outline: {
+              contextIds: [],
+              editScope: 'selected',
+              outlines: [],
+              acts: [],
+              chapters: [],
             },
           },
         };
@@ -184,7 +345,8 @@ export function buildModeSpecificData(
           contextObjectIds: filteredIds.contextObjectIds,
           currentTranslatedContents: [{
             id: '[ placeholder-obj-id ]',
-            type: 'character',
+            type: 'story_entity',
+            kind: 'character',
             name: '[ Placeholder for object name ]',
             translatedContent: '[ Placeholder for existing translation ]',
           }],
@@ -200,18 +362,33 @@ export function buildModeSpecificData(
       modeData = {
         imagePrompt: {
           promptMode: 'natural',
-          currentObject: {
-            type: 'character',
-            name: '[ Placeholder for current object name ]',
-            description: '[ Placeholder for current object description ]',
-            content: '[ Placeholder for current object content ]',
-            image_prompt: '[ Placeholder for saved natural language prompt ]',
-            image_prompt_positive: '[ Placeholder for saved positive tags ]',
-            image_prompt_negative: '[ Placeholder for saved negative tags ]',
+          currentTarget: {
+            basicInfo: imagePromptTarget === 'basicInfo'
+              ? {
+                  id: PREVIEW_BASIC_INFO.id,
+                  title: PREVIEW_BASIC_INFO.title,
+                  logline: PREVIEW_BASIC_INFO.logline,
+                  image_prompt: '[ Placeholder for saved natural language prompt ]',
+                  image_prompt_positive: '[ Placeholder for saved positive tags ]',
+                  image_prompt_negative: '[ Placeholder for saved negative tags ]',
+                }
+              : null,
+            storyEntity: imagePromptTarget === 'storyEntity'
+              ? {
+                  id: PREVIEW_STORY_ENTITY.id,
+                  kind: PREVIEW_STORY_ENTITY.kind,
+                  name: PREVIEW_STORY_ENTITY.name,
+                  description: PREVIEW_STORY_ENTITY.description,
+                  content: PREVIEW_STORY_ENTITY.content,
+                  image_prompt: PREVIEW_STORY_ENTITY.imagePrompt,
+                  image_prompt_positive: PREVIEW_STORY_ENTITY.imagePromptPositive,
+                  image_prompt_negative: PREVIEW_STORY_ENTITY.imagePromptNegative,
+                }
+              : null,
           },
           scenePreContext: '[ Placeholder for scene pre-context ]',
           scenePostContext: '[ Placeholder for scene post-context ]',
-          selectedObjectIds: filteredIds.selectedObjectIds,
+          selectedEntityIds: filteredIds.selectedEntityIds,
         },
       };
       break;
@@ -220,6 +397,9 @@ export function buildModeSpecificData(
   // Apply prompt type overrides
   if (promptTypeOverrides) {
     for (const [path, value] of Object.entries(promptTypeOverrides)) {
+      if (path.startsWith('_preview.')) {
+        continue;
+      }
       if (value !== undefined && value !== '') {
         modeData = setNestedValue(modeData, path, value);
       }
@@ -311,7 +491,7 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
     input,
     agent: {
       runMode: taskSubtype === 'planMode' ? 'planMode' : 'agentMode',
-      surface: 'story-object',
+      surface: 'story-entity',
       contextObjectIds: filteredIds.contextObjectIds,
     },
     journey: {
@@ -363,10 +543,10 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
       {
         messageId: '[placeholder-message-id-3]',
         role: 'assistant',
-        matchedSnippet: 'Tool call: create_character(name="Ari", role="antagonist")',
+        matchedSnippet: 'Tool call: create_story_entity(kind="character", name="Ari")',
         match: { kind: 'tool_call', fieldPath: 'tool_calls/index/0/result', chunkIndex: 2 },
         toolCall: {
-          name: 'create_character',
+          name: 'create_story_entity',
           status: 'accepted',
           result: 'Applied successfully',
         },

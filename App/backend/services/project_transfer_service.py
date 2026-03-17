@@ -23,15 +23,13 @@ from ..models.db_models import (
     Asset,
     BasicInfo,
     Chapter,
-    Character,
     Guidelines,
-    Location,
-    LorebookEntry,
     Manuscript,
     ManuscriptImage,
-    Organization,
     Outline,
     Project,
+    StoryEntity,
+    StoryEntityFolder,
     StoryObjectAsset,
     User,
 )
@@ -46,6 +44,7 @@ from ..services.storage_usage_service import (
     recalculate_project_usage_and_enforce_quota,
 )
 from ..utils.object_type_aliases import externalize_object_type, normalize_object_type
+from ..utils.story_entities import STORY_ENTITY_TYPE, require_story_entity_kind
 
 
 FORMAT_VERSION = "1.0"
@@ -315,10 +314,7 @@ class ProjectTransferService:
         counts = 0
         counts += db.query(BasicInfo).filter(BasicInfo.project_id == project_id).count()
         counts += db.query(Guidelines).filter(Guidelines.project_id == project_id).count()
-        counts += db.query(Character).filter(Character.project_id == project_id).count()
-        counts += db.query(Organization).filter(Organization.project_id == project_id).count()
-        counts += db.query(Location).filter(Location.project_id == project_id).count()
-        counts += db.query(LorebookEntry).filter(LorebookEntry.project_id == project_id).count()
+        counts += db.query(StoryEntity).filter(StoryEntity.project_id == project_id).count()
         counts += db.query(Outline).filter(Outline.project_id == project_id).count()
         counts += (
             db.query(Act)
@@ -407,6 +403,7 @@ class ProjectTransferService:
             )
 
         objects_payload = ProjectTransferService._build_objects_payload(db=db, project_id=project_id)
+        folders_payload = ProjectTransferService._build_story_entity_folders_payload(db=db, project_id=project_id)
 
         assets_payload: Optional[Dict[str, Any]] = None
         if options.include_images:
@@ -460,7 +457,8 @@ class ProjectTransferService:
             zf.writestr("manifest.json", _json_dumps(manifest))
             zf.writestr("data/project.json", _json_dumps(project_payload))
             zf.writestr("data/objects.json", _json_dumps(objects_payload))
-            zf.writestr("data/links_story_object_assets.json", _json_dumps(links_payload))
+            zf.writestr("data/story_entity_folders.json", _json_dumps(folders_payload))
+            zf.writestr("data/links_object_assets.json", _json_dumps(links_payload))
 
             if options.include_images and assets_payload is not None:
                 zf.writestr("data/assets.json", _json_dumps(assets_payload))
@@ -496,6 +494,28 @@ class ProjectTransferService:
         }
 
     @staticmethod
+    def _build_story_entity_folders_payload(db: Session, project_id: UUID) -> Dict[str, Any]:
+        folders = (
+            db.query(StoryEntityFolder)
+            .filter(StoryEntityFolder.project_id == project_id)
+            .order_by(StoryEntityFolder.parent_id.asc().nullsfirst(), StoryEntityFolder.display_order.asc())
+            .all()
+        )
+        return {
+            "folders": [
+                {
+                    "id": str(folder.id),
+                    "name": str(folder.name),
+                    "parent_id": str(folder.parent_id) if folder.parent_id is not None else None,
+                    "display_order": int(folder.display_order or 0),
+                    "created_at": _dt_to_iso(folder.created_at),
+                    "updated_at": _dt_to_iso(folder.updated_at),
+                }
+                for folder in folders
+            ]
+        }
+
+    @staticmethod
     def _build_objects_payload(db: Session, project_id: UUID) -> Dict[str, Any]:
         outlines: List[Outline] = (
             db.query(Outline)
@@ -507,25 +527,17 @@ class ProjectTransferService:
 
         basic_infos = db.query(BasicInfo).filter(BasicInfo.project_id == project_id).all()
         guidelines = db.query(Guidelines).filter(Guidelines.project_id == project_id).all()
-        characters = db.query(Character).filter(Character.project_id == project_id).order_by(Character.order.asc()).all()
-        organizations = (
-            db.query(Organization).filter(Organization.project_id == project_id).order_by(Organization.order.asc()).all()
-        )
-        locations = db.query(Location).filter(Location.project_id == project_id).order_by(Location.order.asc()).all()
-        lorebook_entries = (
-            db.query(LorebookEntry)
-            .filter(LorebookEntry.project_id == project_id)
-            .order_by(LorebookEntry.order.asc())
+        story_entities = (
+            db.query(StoryEntity)
+            .filter(StoryEntity.project_id == project_id)
+            .order_by(StoryEntity.display_order.asc())
             .all()
         )
 
         objects: List[Tuple[str, Any]] = []
         objects.extend([("basic_info", o) for o in basic_infos])
         objects.extend([("guidelines", o) for o in guidelines])
-        objects.extend([("character", o) for o in characters])
-        objects.extend([("organization", o) for o in organizations])
-        objects.extend([("location", o) for o in locations])
-        objects.extend([("lorebook", o) for o in lorebook_entries])
+        objects.extend([(STORY_ENTITY_TYPE, o) for o in story_entities])
 
         for outline in outlines:
             objects.append(("outline", outline))
@@ -563,7 +575,7 @@ class ProjectTransferService:
                 "updated_at": _dt_to_iso(getattr(obj, "updated_at", None)),
             }
 
-            if obj_type in {"basic_info", "guidelines", "character", "organization", "location", "lorebook", "outline"}:
+            if obj_type in {"basic_info", "guidelines", STORY_ENTITY_TYPE, "outline"}:
                 meta["project_id"] = str(getattr(obj, "project_id"))
 
             if obj_type == "act":
@@ -575,8 +587,9 @@ class ProjectTransferService:
             if obj_type == "manuscript":
                 meta["chapter_id"] = str(getattr(obj, "chapter_id"))
 
-            if obj_type in {"character", "organization", "location", "lorebook"}:
-                meta["order"] = int(getattr(obj, "order") or 0)
+            if obj_type == STORY_ENTITY_TYPE:
+                meta["folder_id"] = str(getattr(obj, "folder_id")) if getattr(obj, "folder_id", None) else None
+                meta["display_order"] = int(getattr(obj, "display_order") or 0)
                 meta["image_prompt"] = getattr(obj, "image_prompt", None)
                 meta["image_prompt_positive"] = getattr(obj, "image_prompt_positive", None)
                 meta["image_prompt_negative"] = getattr(obj, "image_prompt_negative", None)
@@ -592,6 +605,7 @@ class ProjectTransferService:
             payload_objects.append(
                 {
                     "type": obj_type,
+                    "kind": str(getattr(obj, "kind", "")) if obj_type == STORY_ENTITY_TYPE else None,
                     "id": str(obj.id),
                     "metadata": meta,
                     "version": version_info,
@@ -632,7 +646,8 @@ class ProjectTransferService:
 
                 project_data = json.loads(zf.read("data/project.json").decode("utf-8"))
                 objects_data = json.loads(zf.read("data/objects.json").decode("utf-8"))
-                links_data = json.loads(zf.read("data/links_story_object_assets.json").decode("utf-8"))
+                folders_data = json.loads(zf.read("data/story_entity_folders.json").decode("utf-8"))
+                links_data = json.loads(zf.read("data/links_object_assets.json").decode("utf-8"))
 
                 assets_data: Optional[dict] = None
                 if options.include_images:
@@ -645,6 +660,7 @@ class ProjectTransferService:
                     zf=zf,
                     project_data=project_data,
                     objects_data=objects_data,
+                    folders_data=folders_data,
                     links_data=links_data,
                     assets_data=assets_data,
                     created_files=created_files,
@@ -671,6 +687,7 @@ class ProjectTransferService:
         zf: zipfile.ZipFile,
         project_data: dict,
         objects_data: dict,
+        folders_data: dict,
         links_data: dict,
         assets_data: Optional[dict],
         created_files: List[str],
@@ -680,6 +697,9 @@ class ProjectTransferService:
         object_items = objects_data.get("objects") if isinstance(objects_data, dict) else None
         if not isinstance(object_items, list):
             raise ValueError("Invalid objects.json format")
+        folder_items = folders_data.get("folders") if isinstance(folders_data, dict) else None
+        if not isinstance(folder_items, list):
+            raise ValueError("Invalid story_entity_folders.json format")
 
         new_project_id = uuid4()
         project = Project(
@@ -694,6 +714,13 @@ class ProjectTransferService:
 
         # Pre-generate object ID mapping
         object_id_map: Dict[Tuple[str, str], UUID] = {}
+        folder_id_map: Dict[str, UUID] = {}
+        for folder in folder_items:
+            if not isinstance(folder, dict):
+                continue
+            export_id = str(folder.get("id") or "")
+            if export_id:
+                folder_id_map[export_id] = uuid4()
         for item in object_items:
             if not isinstance(item, dict):
                 continue
@@ -710,13 +737,12 @@ class ProjectTransferService:
             db=db,
             project_id=new_project_id,
             object_id_map=object_id_map,
+            folder_id_map=folder_id_map,
+            folder_items=[folder for folder in folder_items if isinstance(folder, dict)],
             objects_by_type={
                 "basic_info": items_of_type("basic_info"),
                 "guidelines": items_of_type("guidelines"),
-                "character": items_of_type("character"),
-                "organization": items_of_type("organization"),
-                "location": items_of_type("location"),
-                "lorebook": items_of_type("lorebook"),
+                STORY_ENTITY_TYPE: items_of_type(STORY_ENTITY_TYPE),
                 "outline": items_of_type("outline"),
                 "act": items_of_type("act"),
                 "chapter": items_of_type("chapter"),
@@ -954,6 +980,8 @@ class ProjectTransferService:
         db: Session,
         project_id: UUID,
         object_id_map: Dict[Tuple[str, str], UUID],
+        folder_id_map: Dict[str, UUID],
+        folder_items: List[dict],
         objects_by_type: Dict[str, List[dict]],
     ) -> None:
         now = datetime.utcnow()
@@ -996,31 +1024,49 @@ class ProjectTransferService:
                 )
             )
 
-        # story objects
-        def add_story_objects(model_cls: Any, obj_type: str) -> None:
-            for item in objects_by_type.get(obj_type, []):
-                export_id = str(item.get("id") or "")
-                new_id = object_id_map.get((obj_type, export_id))
-                meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
-                if not export_id or not new_id:
-                    continue
-                db.add(
-                    model_cls(
-                        id=new_id,
-                        project_id=project_id,
-                        order=int(meta.get("order") or 0),
-                        image_prompt=meta.get("image_prompt"),
-                        image_prompt_positive=meta.get("image_prompt_positive"),
-                        image_prompt_negative=meta.get("image_prompt_negative"),
-                        created_at=meta_dt(meta, "created_at"),
-                        updated_at=meta_dt(meta, "updated_at"),
-                    )
+        # story entity folders
+        for folder in folder_items:
+            export_id = str(folder.get("id") or "")
+            new_id = folder_id_map.get(export_id)
+            parent_export_id = folder.get("parent_id")
+            parent_id = folder_id_map.get(str(parent_export_id)) if parent_export_id else None
+            if not export_id or not new_id:
+                continue
+            db.add(
+                StoryEntityFolder(
+                    id=new_id,
+                    project_id=project_id,
+                    name=str(folder.get("name") or "Folder"),
+                    parent_id=parent_id,
+                    display_order=int(folder.get("display_order") or 0),
+                    created_at=_iso_to_dt(folder.get("created_at")) or now,
+                    updated_at=_iso_to_dt(folder.get("updated_at")) or now,
                 )
+            )
 
-        add_story_objects(Character, "character")
-        add_story_objects(Organization, "organization")
-        add_story_objects(Location, "location")
-        add_story_objects(LorebookEntry, "lorebook")
+        # story entities
+        for item in objects_by_type.get(STORY_ENTITY_TYPE, []):
+            export_id = str(item.get("id") or "")
+            new_id = object_id_map.get((STORY_ENTITY_TYPE, export_id))
+            meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+            folder_export_id = meta.get("folder_id")
+            folder_id = folder_id_map.get(str(folder_export_id)) if folder_export_id else None
+            if not export_id or not new_id:
+                continue
+            db.add(
+                StoryEntity(
+                    id=new_id,
+                    project_id=project_id,
+                    kind=require_story_entity_kind(item.get("kind")),
+                    folder_id=folder_id,
+                    display_order=int(meta.get("display_order") or 0),
+                    image_prompt=meta.get("image_prompt"),
+                    image_prompt_positive=meta.get("image_prompt_positive"),
+                    image_prompt_negative=meta.get("image_prompt_negative"),
+                    created_at=meta_dt(meta, "created_at"),
+                    updated_at=meta_dt(meta, "updated_at"),
+                )
+            )
 
         # outlines
         for item in objects_by_type.get("outline", []):

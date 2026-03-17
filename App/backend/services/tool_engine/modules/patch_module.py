@@ -7,6 +7,7 @@ from ..contracts import ToolCallModule, ToolSpec
 from ..registry import tool_call_module
 from ..result_utils import invalid_result, make_result, valid_result
 from ....services.object_service import object_service
+from ....utils.story_entities import STORY_ENTITY_TYPE
 from .manuscript_access import patch_manuscript, validate_patch_args as validate_manuscript_patch, ensure_manuscript_exists
 from .object_access import (
     ensure_act_parent_exists,
@@ -14,15 +15,15 @@ from .object_access import (
     get_primary_object_id,
     patch_object_field,
     read_object,
-    require_story_object_type,
+    read_story_entity,
     to_uuid,
 )
 from .shared import (
     filter_allowed_specs,
     is_agent_write_context,
     is_manuscript_journey,
+    is_object_journey,
     is_outline_journey,
-    is_story_object_journey,
     obj_schema,
 )
 
@@ -47,22 +48,22 @@ class PatchToolCallModule(ToolCallModule):
     def list_tools(self, ctx: ToolModuleContext) -> list[ToolSpec]:
         if not (
             is_agent_write_context(ctx)
-            or is_story_object_journey(ctx)
+            or is_object_journey(ctx)
             or is_outline_journey(ctx)
             or is_manuscript_journey(ctx)
         ):
             return []
 
         specs: list[ToolSpec] = []
-        if is_agent_write_context(ctx) or is_story_object_journey(ctx):
+        if is_agent_write_context(ctx) or is_object_journey(ctx):
             specs.extend(
                 [
                     ToolSpec(
-                        name="patch_story_object",
-                        description="Patch story object by single replacement.",
+                        name="patch_story_entity",
+                        description="Patch story entity by single replacement.",
                         parameters=obj_schema(
-                            {"id": _ID, "type": {"type": "string", "enum": ["character", "location", "organization", "lorebook"]}, "field": {"type": "string", "enum": ["name", "description", "content"]}, **_TEXT_PATCH},
-                            ["id", "type", "field", "old", "new"],
+                            {"id": _ID, "kind": {"type": "string", "enum": ["character", "location", "organization", "lorebook"]}, "field": {"type": "string", "enum": ["name", "description", "content"]}, **_TEXT_PATCH},
+                            ["id", "kind", "field", "old", "new"],
                         ),
                         auto_approve_category="patch",
                     ),
@@ -148,12 +149,17 @@ class PatchToolCallModule(ToolCallModule):
                 return valid_result()
 
             object_id = to_uuid(args.get("id"), "id")
-            if tool_name == "patch_story_object":
+            if tool_name == "patch_story_entity":
                 field = args.get("field")
                 if field not in {"name", "description", "content"}:
                     raise ValueError("field must be one of name|description|content")
-                object_type = require_story_object_type(args.get("type"))
-                current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
+                current = read_story_entity(
+                    ctx.db,
+                    project_id=ctx.project_id,
+                    object_id=object_id,
+                    language=ctx.language,
+                    kind=args.get("kind"),
+                )
                 patch_object_field(extract_lang_data(current, ctx.language), field=str(field), old=str(args.get("old") or ""), new=str(args.get("new") or ""))
                 return valid_result()
 
@@ -225,9 +231,16 @@ class PatchToolCallModule(ToolCallModule):
 
         object_id = to_uuid(args.get("id"), "id")
 
-        if tool_name == "patch_story_object":
-            object_type = require_story_object_type(args.get("type"))
-            current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
+        if tool_name == "patch_story_entity":
+            kind = str(args.get("kind") or "")
+            object_type = STORY_ENTITY_TYPE
+            current = read_story_entity(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_id=object_id,
+                language=ctx.language,
+                kind=kind,
+            )
             next_data = patch_object_field(
                 extract_lang_data(current, ctx.language),
                 field=str(args.get("field") or ""),
@@ -241,11 +254,17 @@ class PatchToolCallModule(ToolCallModule):
                 object_id=object_id,
                 data=next_data,
                 language=ctx.language,
-                user_request="tool:patch_story_object",
+                kind=kind,
+                user_request="tool:patch_story_entity",
                 created_by=ctx.user_id,
                 create_new_version=True,
             )
-            return make_result(f"Patched {object_type}", object_id=str(object_id), object_type=object_type)
+            return make_result(
+                f"Patched {kind}",
+                object_id=str(object_id),
+                object_type=object_type,
+                data={"kind": kind},
+            )
 
         if tool_name in {"patch_outline", "patch_outline_act", "patch_outline_chapter"}:
             object_type = {

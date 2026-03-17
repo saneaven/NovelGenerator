@@ -74,6 +74,7 @@ from .routes.search_routes import router as search_router
 # New unified translation system routes
 from .routes.unified_object_routes import router as unified_object_router
 from .routes.translation_routes import router as translation_router
+from .routes.story_entity_folder_routes import router as story_entity_folder_router
 
 # Asset management routes
 from .routes.asset_routes import router as asset_router
@@ -153,6 +154,7 @@ app.include_router(search_router)
 # Include new unified translation system routers
 app.include_router(unified_object_router, prefix="/api/v1", tags=["objects"])
 app.include_router(translation_router, prefix="/api/v1", tags=["translations"])
+app.include_router(story_entity_folder_router)
 
 # Include asset management router
 app.include_router(asset_router)

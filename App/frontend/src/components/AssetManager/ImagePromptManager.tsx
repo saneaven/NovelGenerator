@@ -8,7 +8,7 @@ import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
 import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
 import { useThreadStore } from '../../store/threadStore';
 import { isPausedLikeThreadStatus } from '../../types/thread';
-import type { ObjectType } from '../../types/unifiedObject';
+import type { ObjectType, StoryEntityKind } from '../../types/unifiedObject';
 import { TextButton } from '../TextButton';
 import './ImagePromptManager.css';
 
@@ -139,6 +139,7 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
 
     // Get object from store
     const object = getObject(objectId);
+    const objectKind = object?.type === 'story_entity' ? object.kind : undefined;
     const objectMetadata = object?.metadata;
 
     // Get object name for display (use title for basic_info, name for others)
@@ -528,7 +529,8 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                 onStreamingStart={handleStreamingStart}
                 onStreamingError={handleStreamingError}
                 contextType="object"
-                objectType={objectType as 'basic_info' | 'character' | 'location' | 'organization' | 'lorebook'}
+                objectType={objectType as 'basic_info' | 'story_entity'}
+                objectKind={objectKind as StoryEntityKind | undefined}
                 objectId={objectId}
                 promptMode={activeTab}
             />

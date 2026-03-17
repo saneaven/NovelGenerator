@@ -13,7 +13,7 @@ function createFieldKeysForObjectType(objectType: ObjectCardProps['operation']['
   switch (objectType) {
     case 'basic_info':
       return ['title', 'logline', 'genres', 'tags'];
-    case 'story_object':
+    case 'story_entity':
       return ['name', 'description', 'content'];
     case 'outline':
       return ['name', 'description', 'content'];

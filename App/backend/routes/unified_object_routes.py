@@ -10,30 +10,25 @@ All story objects use the same pattern:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 from uuid import UUID
-from datetime import datetime
 
 from ..database import get_db
 from ..auth import get_current_user
 from ..models.db_models import (
-    User, Project, BasicInfo, Guidelines, Character, Organization, Location, LorebookEntry,
-    Act, Chapter, Manuscript, Outline, StoryObjectAsset
+    User,
 )
 from ..schemas.story_objects import ImagePromptUpdate
-from ..models.translation_models import ObjectVersion
-from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
+from ..utils.object_type_aliases import normalize_object_type
+from ..utils.story_entities import STORY_ENTITY_TYPE, STORY_ENTITY_KINDS, require_story_entity_kind
 from ..services.object_service import object_service
 from ..services.ownership import (
-    get_object_model_class,
     require_owned_project,
     resolve_project_id_for_object,
 )
 from ..services.storage_usage_service import StorageQuotaExceededError
-
-LOREBOOK_TYPE = normalize_object_type('lorebook')
 
 
 router = APIRouter()
@@ -47,6 +42,7 @@ class UnifiedObjectResponse(BaseModel):
     """Standard response for all story objects"""
     id: str
     type: str
+    kind: Optional[str] = None
     metadata: Dict[str, Any]  # project_id, created_at, updated_at, order (if applicable)
     data: Dict[str, Any]  # Language-keyed data: {"English": {...}, "Korean": {...}}
     # languages field removed - use Object.keys(data) for available, settings.mainLanguage for default
@@ -60,6 +56,7 @@ class UpdateObjectRequest(BaseModel):
     """Request to update an object"""
     data: Dict[str, Any]
     language: str
+    kind: Optional[str] = None
     user_request: Optional[str] = "User Edit"
     create_new_version: bool = True
     metadata: Optional[Dict[str, Any]] = None  # For structural updates like order
@@ -76,6 +73,7 @@ class CreateObjectRequest(BaseModel):
     """Request to create a new object"""
     data: Dict[str, Any]
     language: str
+    kind: Optional[str] = None
     user_request: Optional[str] = "Initial Creation"
     metadata: Optional[Dict[str, Any]] = None
 
@@ -103,96 +101,6 @@ class VersionResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-def get_object_metadata(obj: Any, object_type: str, db: Optional[Session] = None) -> Dict[str, Any]:
-    """Extract metadata from object"""
-    metadata = {
-        'id': str(obj.id),
-        'created_at': obj.created_at.isoformat() if obj.created_at else None,
-        'updated_at': obj.updated_at.isoformat() if obj.updated_at else None,
-    }
-
-    # Add parent ID based on object type
-    if object_type == 'basic_info':
-        metadata['project_id'] = str(obj.project_id)
-        # Cover image ID from main StoryObjectAsset (URL resolved at runtime by frontend)
-        metadata['cover_image_id'] = None
-        if db:
-            main_link = db.query(StoryObjectAsset).filter(
-                StoryObjectAsset.object_type == 'basic_info',
-                StoryObjectAsset.object_id == obj.id,
-                StoryObjectAsset.is_main == True
-            ).first()
-            if main_link:
-                metadata['cover_image_id'] = str(main_link.asset_id)
-        # Image prompt fields for cover image generation
-        metadata['image_prompt'] = getattr(obj, 'image_prompt', None)
-        metadata['image_prompt_positive'] = getattr(obj, 'image_prompt_positive', None)
-        metadata['image_prompt_negative'] = getattr(obj, 'image_prompt_negative', None)
-    elif object_type == 'guidelines':
-        metadata['project_id'] = str(obj.project_id)
-    elif object_type in ['character', 'organization', 'location', LOREBOOK_TYPE]:
-        metadata['project_id'] = str(obj.project_id)
-        # Include order field for story objects
-        metadata['order'] = getattr(obj, 'order', 0) or 0
-        # Include image prompt fields for story objects that support them
-        metadata['image_prompt'] = getattr(obj, 'image_prompt', None)
-        metadata['image_prompt_positive'] = getattr(obj, 'image_prompt_positive', None)
-        metadata['image_prompt_negative'] = getattr(obj, 'image_prompt_negative', None)
-    elif object_type == 'outline':
-        metadata['project_id'] = str(obj.project_id)
-        metadata['order'] = getattr(obj, 'order', 0) or 0
-    elif object_type == 'act':
-        outline = getattr(obj, 'outline', None)
-        if not outline:
-            raise HTTPException(status_code=500, detail='Act is missing outline relation')
-
-        metadata['project_id'] = str(outline.project_id)
-        metadata['outline_id'] = str(obj.outline_id)
-        metadata['order'] = obj.order
-    elif object_type == 'chapter':
-        act = getattr(obj, 'act', None)
-        if not act:
-            raise HTTPException(status_code=500, detail='Chapter is missing act relation')
-
-        manuscript = getattr(obj, 'manuscript', None)
-        if not manuscript:
-            raise HTTPException(status_code=500, detail='Chapter manuscript relation missing')
-
-        outline = getattr(act, 'outline', None)
-        if not outline:
-            raise HTTPException(status_code=500, detail='Chapter act is missing outline relation')
-
-        metadata['project_id'] = str(outline.project_id)
-        metadata['act_id'] = str(obj.act_id)
-        metadata['manuscript_id'] = str(manuscript.id)
-        metadata['order'] = obj.order
-    elif object_type == 'manuscript':
-        chapter = getattr(obj, 'chapter', None)
-        if not chapter:
-            raise HTTPException(status_code=500, detail='Manuscript is missing chapter relation')
-
-        act = getattr(chapter, 'act', None)
-        if not act:
-            raise HTTPException(status_code=500, detail='Manuscript chapter is missing act relation')
-
-        outline = getattr(act, 'outline', None)
-        if not outline:
-            raise HTTPException(status_code=500, detail='Manuscript outline relation missing')
-
-        metadata['project_id'] = str(outline.project_id)
-        metadata['chapter_id'] = str(obj.chapter_id)
-
-    return metadata
-
-
-def get_latest_version(db: Session, object_type: str, object_id: UUID) -> Optional[ObjectVersion]:
-    """Get the latest version (highest version_number) for an object"""
-    return db.query(ObjectVersion).filter(
-        ObjectVersion.object_type == object_type,
-        ObjectVersion.object_id == object_id
-    ).order_by(ObjectVersion.version_number.desc()).first()
 
 
 # ============================================================================
@@ -260,6 +168,7 @@ async def update_object(
             object_id=object_id,
             data=request.data,
             language=request.language,
+            kind=request.kind,
             metadata=request.metadata,
             user_request=request.user_request or "User Edit",
             create_new_version=request.create_new_version,
@@ -417,6 +326,7 @@ async def list_objects(
     project_id: UUID,
     object_type: str,
     language: Optional[str] = Query(None, description="Optional: return only this language. Default: return all languages."),
+    kinds: Optional[List[str]] = Query(None, description="Optional story entity kind filters."),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -430,12 +340,16 @@ async def list_objects(
     """
     object_type = normalize_object_type(object_type)
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
+    normalized_kinds: list[str] | None = None
+    if object_type == STORY_ENTITY_TYPE and kinds:
+        normalized_kinds = [require_story_entity_kind(kind) for kind in kinds]
 
     serialized = object_service.list_objects(
         db,
         project_id=project_id,
         object_type=object_type,
         language=language,
+        kinds=normalized_kinds,
     )
     result_objects = [UnifiedObjectResponse(**item) for item in serialized]
 
@@ -470,12 +384,15 @@ async def create_object(
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
 
     try:
+        if object_type == STORY_ENTITY_TYPE and request.kind is None:
+            raise HTTPException(status_code=400, detail=f"{STORY_ENTITY_TYPE} creation requires kind")
         created = object_service.create_object(
             db,
             project_id=project_id,
             object_type=object_type,
             data=request.data,
             language=request.language,
+            kind=request.kind,
             metadata=request.metadata,
             user_request=request.user_request or "Initial Creation",
             create_new_version=True,

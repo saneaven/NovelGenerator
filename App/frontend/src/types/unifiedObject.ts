@@ -1,7 +1,7 @@
 /**
  * TypeScript Interfaces for New Unified Translation System
  *
- * All story objects follow the same pattern:
+ * All story entities follow the same pattern:
  * - Structure only in core tables
  * - Content in object_versions (source of truth)
  */
@@ -15,14 +15,13 @@ import type { TipTapDoc } from './tiptap';
 export type ObjectType =
   | 'basic_info'
   | 'guidelines'
-  | 'character'
-  | 'organization'
-  | 'location'
-  | 'lorebook'
+  | 'story_entity'
   | 'outline'
   | 'act'
   | 'chapter'
   | 'manuscript';
+
+export type StoryEntityKind = 'character' | 'organization' | 'location' | 'lorebook';
 
 // ============================================================================
 // UNIFIED OBJECT (Response from API)
@@ -31,6 +30,7 @@ export type ObjectType =
 export interface UnifiedObject<TData = Record<string, any>> {
   id: string;
   type: ObjectType;
+  kind?: StoryEntityKind;
   metadata: ObjectMetadata;
   data: Record<string, TData>;  // Language-keyed data: { "English": {...}, "Korean": {...} }
   // languages field removed - use Object.keys(data) for available, settings.mainLanguage for default
@@ -64,8 +64,10 @@ export interface ObjectMetadata {
   act_id?: string;
   chapter_id?: string;
   manuscript_id?: string;
+  folder_id?: string | null;
   // Structural data
   order?: number;  // For acts and chapters
+  display_order?: number; // For story entities and folders
   // Image prompts (for story objects: character, location, organization, lorebook)
   image_prompt?: string | null;  // Natural language prompt
   image_prompt_positive?: string | null;  // Tag-based positive (NovelAI)
@@ -104,14 +106,15 @@ export interface BasicInfoData {
 }
 
 /**
- * Unified data type for all story objects:
- * character, organization, location, lorebook, outline, act, chapter
+ * Unified data type for story entities and outline objects
  */
-export interface StoryObjectData {
+export interface StoryEntityData {
   name: string;          // Object name
   description: string;   // One-line summary for object indexes
   content: string;       // Full content
 }
+
+export type StoryObjectData = StoryEntityData;
 
 export interface ManuscriptData {
   doc: TipTapDoc;
@@ -127,12 +130,13 @@ export interface GuidelinesData {
 // ============================================================================
 
 export type BasicInfoObject = UnifiedObject<BasicInfoData>;
-export type StoryObject = UnifiedObject<StoryObjectData>;
+export type StoryEntityObject = UnifiedObject<StoryEntityData>;
+export type StoryObject = StoryEntityObject;
 export type ManuscriptObject = UnifiedObject<ManuscriptData>;
 export type GuidelinesObject = UnifiedObject<GuidelinesData>;
-export type OutlineObject = StoryObject;
-export type ActObject = StoryObject;
-export type ChapterObject = StoryObject;
+export type OutlineObject = UnifiedObject<StoryEntityData>;
+export type ActObject = UnifiedObject<StoryEntityData>;
+export type ChapterObject = UnifiedObject<StoryEntityData>;
 
 // ============================================================================
 // REQUEST TYPES
@@ -141,6 +145,7 @@ export type ChapterObject = StoryObject;
 export interface UpdateObjectRequest<TData = Record<string, any>> {
   data: TData;
   language: string;
+  kind?: StoryEntityKind;
   user_request?: string;
   create_new_version?: boolean;  // Default: true
   metadata?: Record<string, any>;  // For structural updates like order
@@ -155,6 +160,7 @@ export interface AddTranslationRequest<TData = Record<string, any>> {
 export interface CreateObjectRequest<TData = Record<string, any>> {
   data: TData;
   language: string;
+  kind?: StoryEntityKind;
   user_request?: string;
   metadata?: Record<string, any>;
 }
@@ -166,6 +172,7 @@ export interface CreateObjectRequest<TData = Record<string, any>> {
 export interface TranslationStatus {
   object_id: string;
   object_type: ObjectType;
+  kind?: StoryEntityKind;
   available_languages: string[];
   missing_languages: string[];
   translation_coverage: number;  // Percentage

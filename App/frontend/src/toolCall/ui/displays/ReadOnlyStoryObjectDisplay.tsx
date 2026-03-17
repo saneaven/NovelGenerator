@@ -17,7 +17,7 @@ export const ReadOnlyStoryObjectDisplay: React.FC<ReadOnlyStoryObjectDisplayProp
   mode,
   changedFields,
   imageUrl,
-  objectType = 'story_object',
+  objectType = 'story_entity',
 }) => {
   const mapped = useMemo(() => mapObjectData(objectType, values), [objectType, values]);
 

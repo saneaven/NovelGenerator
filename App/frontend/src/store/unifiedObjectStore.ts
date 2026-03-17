@@ -21,6 +21,7 @@ import type {
   UpdateObjectRequest,
   AddTranslationRequest,
   VersionHistoryEntry,
+  StoryEntityKind,
 } from '../types/unifiedObject';
 import { normalizeBasicInfoData } from '../utils/basicInfo';
 
@@ -67,7 +68,8 @@ interface UnifiedObjectStore {
     data: any,
     language: string,
     metadata?: Record<string, any>,
-    userRequest?: string
+    userRequest?: string,
+    kind?: StoryEntityKind
   ) => Promise<UnifiedObject>;
   deleteObject: (type: ObjectType, id: string) => Promise<void>;
 
@@ -350,11 +352,12 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     });
   },
 
-  createObject: async (type: ObjectType, projectId: string, data: any, language: string, metadata?: Record<string, any>, userRequest: string = 'User Creation') => {
+  createObject: async (type: ObjectType, projectId: string, data: any, language: string, metadata?: Record<string, any>, userRequest: string = 'User Creation', kind?: StoryEntityKind) => {
     try {
       const newObject = await unifiedObjectService.createObject(type, projectId, {
         data,
         language,
+        kind,
         user_request: userRequest,
         metadata,
       });
@@ -656,6 +659,7 @@ export interface SimplifiedStoryObjects {
     genres: string[];
     tags: string[];
   } | null;
+  storyEntities: Array<{ id: string; kind: StoryEntityKind; name: string; description: string; content: string }>;
   characters: Array<{ id: string; name: string; description: string; content: string }>;
   organizations: Array<{ id: string; name: string; description: string; content: string }>;
   locations: Array<{ id: string; name: string; description: string; content: string }>;
@@ -718,6 +722,7 @@ export function useStoryObjects(projectId: string | undefined, language: string)
     if (!projectId) {
       return {
         basicInfo: null,
+        storyEntities: [],
         characters: [],
         organizations: [],
         locations: [],
@@ -734,10 +739,13 @@ export function useStoryObjects(projectId: string | undefined, language: string)
 
     // Group by type
     const basicInfoList = projectObjects.filter(obj => obj.type === 'basic_info');
-    const characters = projectObjects.filter(obj => obj.type === 'character');
-    const organizations = projectObjects.filter(obj => obj.type === 'organization');
-    const locations = projectObjects.filter(obj => obj.type === 'location');
-    const lorebook = projectObjects.filter(obj => obj.type === 'lorebook');
+    const storyEntities = projectObjects
+      .filter(obj => obj.type === 'story_entity')
+      .sort((a, b) => {
+        const orderA = a.metadata.display_order ?? 0;
+        const orderB = b.metadata.display_order ?? 0;
+        return orderA - orderB;
+      });
     const outlines = projectObjects.filter(obj => obj.type === 'outline');
     const acts = projectObjects.filter(obj => obj.type === 'act');
     const chapters = projectObjects.filter(obj => obj.type === 'chapter');
@@ -800,42 +808,60 @@ export function useStoryObjects(projectId: string | undefined, language: string)
 
     return {
       basicInfo,
-      characters: characters.map(ch => {
-        const data = getObjectDataForLanguage(ch, language);
+      storyEntities: storyEntities.map((entity) => {
+        const data = getObjectDataForLanguage(entity, language);
         return {
-          id: ch.id,
+          id: entity.id,
+          kind: entity.kind || 'character',
           name: data.name || '',
           description: data.description || '',
           content: data.content || '',
         };
       }),
-      organizations: organizations.map(org => {
-        const data = getObjectDataForLanguage(org, language);
-        return {
-          id: org.id,
-          name: data.name || '',
-          description: data.description || '',
-          content: data.content || '',
-        };
-      }),
-      locations: locations.map(loc => {
-        const data = getObjectDataForLanguage(loc, language);
-        return {
-          id: loc.id,
-          name: data.name || '',
-          description: data.description || '',
-          content: data.content || '',
-        };
-      }),
-      lorebook: lorebook.map(entry => {
-        const data = getObjectDataForLanguage(entry, language);
-        return {
-          id: entry.id,
-          name: data.name || '',
-          description: data.description || '',
-          content: data.content || '',
-        };
-      }),
+      characters: storyEntities
+        .filter((entity) => entity.kind === 'character')
+        .map((entity) => {
+          const data = getObjectDataForLanguage(entity, language);
+          return {
+            id: entity.id,
+            name: data.name || '',
+            description: data.description || '',
+            content: data.content || '',
+          };
+        }),
+      organizations: storyEntities
+        .filter((entity) => entity.kind === 'organization')
+        .map((entity) => {
+          const data = getObjectDataForLanguage(entity, language);
+          return {
+            id: entity.id,
+            name: data.name || '',
+            description: data.description || '',
+            content: data.content || '',
+          };
+        }),
+      locations: storyEntities
+        .filter((entity) => entity.kind === 'location')
+        .map((entity) => {
+          const data = getObjectDataForLanguage(entity, language);
+          return {
+            id: entity.id,
+            name: data.name || '',
+            description: data.description || '',
+            content: data.content || '',
+          };
+        }),
+      lorebook: storyEntities
+        .filter((entity) => entity.kind === 'lorebook')
+        .map((entity) => {
+          const data = getObjectDataForLanguage(entity, language);
+          return {
+            id: entity.id,
+            name: data.name || '',
+            description: data.description || '',
+            content: data.content || '',
+          };
+        }),
       outline,
     };
   }, [objects, projectId, language]);

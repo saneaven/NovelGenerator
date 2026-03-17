@@ -16,12 +16,16 @@ export interface PromptTypeField {
 // Agent prompts
 const AGENT_FIELDS: PromptTypeField[] = [
   { path: 'agent.runMode', label: 'Run Mode', type: 'dropdown', options: ['planMode', 'agentMode'] },
-  { path: 'agent.surface', label: 'Surface', type: 'dropdown', options: ['story-object', 'outline-manager', 'novel-editor', 'config'] },
+  { path: 'agent.surface', label: 'Surface', type: 'dropdown', options: ['story-entity', 'outline-manager', 'novel-editor', 'config'] },
 ];
 
-// Edit Assistant prompts
-const EDIT_ASSISTANT_FIELDS: PromptTypeField[] = [
-  { path: 'editAssistant.mode', label: 'Mode', type: 'dropdown', options: ['manuscript', 'storyObject'] },
+const EDIT_ASSISTANT_PROJECT_DATA_FIELDS: PromptTypeField[] = [
+  {
+    path: '_preview.editAssistant.projectDataTarget',
+    label: 'Project Data Target Preview',
+    type: 'dropdown',
+    options: ['storyEntity', 'basicInfo', 'guidelines'],
+  },
 ];
 
 // Translation prompts
@@ -33,13 +37,12 @@ const TRANSLATION_FIELDS: PromptTypeField[] = [
 // Image Prompt prompts
 const IMAGE_PROMPT_FIELDS: PromptTypeField[] = [
   { path: 'imagePrompt.promptMode', label: 'Prompt Mode', type: 'dropdown', options: ['natural', 'positive', 'negative'] },
-  { path: 'imagePrompt.currentObject.type', label: 'Current Object Type', type: 'dropdown', options: ['basic_info', 'character', 'location', 'organization', 'lorebook'] },
-  { path: 'imagePrompt.currentObject.name', label: 'Current Object Name', type: 'text', placeholder: 'Uhtred of Bebbanburg' },
-  { path: 'imagePrompt.currentObject.description', label: 'Current Object Description', type: 'textarea', placeholder: 'A Saxon lord raised by Danes...' },
-  { path: 'imagePrompt.currentObject.content', label: 'Current Object Content', type: 'textarea', placeholder: 'Tall, battle-scarred warrior...' },
-  { path: 'imagePrompt.currentObject.image_prompt', label: 'Saved Image Prompt (Natural)', type: 'textarea', placeholder: 'A rugged warrior with long dark hair...' },
-  { path: 'imagePrompt.currentObject.image_prompt_positive', label: 'Saved Positive Tags', type: 'text', placeholder: 'warrior, long hair, armor' },
-  { path: 'imagePrompt.currentObject.image_prompt_negative', label: 'Saved Negative Tags', type: 'text', placeholder: 'blurry, low quality' },
+  {
+    path: '_preview.imagePrompt.currentTargetType',
+    label: 'Current Target Preview',
+    type: 'dropdown',
+    options: ['storyEntity', 'basicInfo'],
+  },
   { path: 'imagePrompt.scenePreContext', label: 'Scene Pre-Context', type: 'textarea', placeholder: 'The hero enters the cave...' },
   { path: 'imagePrompt.scenePostContext', label: 'Scene Post-Context', type: 'textarea', placeholder: 'He finds the treasure...' },
 ];
@@ -47,12 +50,12 @@ const IMAGE_PROMPT_FIELDS: PromptTypeField[] = [
 /**
  * Get the prompt type fields for a given task type.
  */
-export function getPromptTypeFields(taskType: TaskType): PromptTypeField[] {
+export function getPromptTypeFields(taskType: TaskType, taskSubtype: string): PromptTypeField[] {
   switch (taskType) {
     case 'agent':
       return AGENT_FIELDS;
     case 'editAssistant':
-      return EDIT_ASSISTANT_FIELDS;
+      return taskSubtype === 'projectData' ? EDIT_ASSISTANT_PROJECT_DATA_FIELDS : [];
     case 'translation':
       return TRANSLATION_FIELDS;
     case 'imagePrompt':

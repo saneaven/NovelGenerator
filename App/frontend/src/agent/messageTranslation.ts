@@ -63,7 +63,7 @@ export async function runMessageTranslation(
       display_label: spec.label(journeyInput),
       input_text: input.sourceContent,
       input_payload: payload,
-      surface: 'story-object',
+      surface: 'story-entity',
       language: input.targetLanguage,
     });
     useJourneyStore.getState().updateJourney(journeyId, {

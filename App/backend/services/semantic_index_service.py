@@ -13,23 +13,21 @@ from sqlalchemy.orm import Session
 from ..models.db_models import (
     Act,
     Chapter,
-    Character,
-    LorebookEntry,
-    Location,
     Manuscript,
-    Organization,
     Outline,
+    StoryEntity,
     UserSettings,
 )
 from ..models.semantic_models import SemanticChunk, SemanticSource
 from ..models.translation_models import ObjectVersion
+from ..utils.story_entities import STORY_ENTITY_TYPE
 from .embedding_config_service import get_embedding_profile, set_embedding_dimensions
 from .semantic_chunker import merge_blocks_by_length, split_markdown_blocks, split_plaintext_blocks
 from .semantic_embedding_service import embed_many
 from .semantic_text_extractors import extract_index_text
 
 
-STORY_OBJECT_TYPES = {"basic_info", "guidelines", "character", "organization", "location", "lorebook"}
+STORY_OBJECT_TYPES = {"basic_info", "guidelines", STORY_ENTITY_TYPE}
 EXCLUDED_OBJECT_TYPES = {"basic_info", "guidelines"}
 
 MIN_CHARS = 200
@@ -214,25 +212,20 @@ def _latest_versions_for_refs(
 
 def compute_order_meta(db: Session, *, project_id: UUID, object_type: str, object_id: UUID) -> OrderMeta:
     if object_type in STORY_OBJECT_TYPES:
-        story_object_order: Optional[int] = None
-        if object_type == "character":
-            row = db.query(Character).filter(Character.id == object_id, Character.project_id == project_id).first()
-            story_object_order = (row.order if row else 0) or 0
-        elif object_type == "organization":
-            row = db.query(Organization).filter(Organization.id == object_id, Organization.project_id == project_id).first()
-            story_object_order = (row.order if row else 0) or 0
-        elif object_type == "location":
-            row = db.query(Location).filter(Location.id == object_id, Location.project_id == project_id).first()
-            story_object_order = (row.order if row else 0) or 0
-        elif object_type == "lorebook":
-            row = db.query(LorebookEntry).filter(LorebookEntry.id == object_id, LorebookEntry.project_id == project_id).first()
-            story_object_order = (row.order if row else 0) or 0
-        else:
-            story_object_order = 0
+        story_object_order: Optional[int] = 0
+        story_object_type: Optional[str] = object_type
+        if object_type == STORY_ENTITY_TYPE:
+            row = (
+                db.query(StoryEntity)
+                .filter(StoryEntity.id == object_id, StoryEntity.project_id == project_id)
+                .first()
+            )
+            story_object_order = (row.display_order if row else 0) or 0
+            story_object_type = row.kind if row is not None else None
 
         return OrderMeta(
             type_group="story_object",
-            story_object_type=object_type,
+            story_object_type=story_object_type,
             story_object_order=story_object_order,
         )
 
@@ -738,14 +731,8 @@ async def index_object(
 def _project_object_refs(db: Session, *, project_id: UUID) -> List[Tuple[str, UUID]]:
     refs: List[Tuple[str, UUID]] = []
 
-    for row in db.query(Character).filter(Character.project_id == project_id).order_by(Character.order.asc()).all():
-        refs.append(("character", row.id))
-    for row in db.query(Organization).filter(Organization.project_id == project_id).order_by(Organization.order.asc()).all():
-        refs.append(("organization", row.id))
-    for row in db.query(Location).filter(Location.project_id == project_id).order_by(Location.order.asc()).all():
-        refs.append(("location", row.id))
-    for row in db.query(LorebookEntry).filter(LorebookEntry.project_id == project_id).order_by(LorebookEntry.order.asc()).all():
-        refs.append(("lorebook", row.id))
+    for row in db.query(StoryEntity).filter(StoryEntity.project_id == project_id).order_by(StoryEntity.display_order.asc()).all():
+        refs.append((STORY_ENTITY_TYPE, row.id))
 
     outlines = db.query(Outline).filter(Outline.project_id == project_id).order_by(Outline.order.asc()).all()
     for outline in outlines:

@@ -60,7 +60,7 @@ class CreateJourneyRequest(BaseModel):
     kind: Literal[
         "manuscriptEdit",
         "outlineEdit",
-        "storyObjectEdit",
+        "objectEdit",
         "objectTranslation",
         "imagePrompt",
         "sceneImagePrompt",

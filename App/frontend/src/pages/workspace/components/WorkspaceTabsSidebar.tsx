@@ -1,7 +1,7 @@
 import React from 'react';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { BaseSidebar } from '../../../components/BaseSidebar';
-import { Close, Clipboard, People, Organization, Map, Books, Document } from '../../../components/icons';
+import { Close, Clipboard, Folder, Document } from '../../../components/icons';
 import { IconButton } from '../../../components/IconButton';
 import type { StoryObjectTabType } from '../../../types/objectTypeConfig';
 import { useStoryObjectTab } from '../hooks/useStoryObjectTab';
@@ -14,10 +14,7 @@ interface WorkspaceTabsSidebarProps {
 const storyObjectTabs: { id: StoryObjectTabType; label: string; icon: React.ReactNode }[] = [
   { id: 'basicInfo', label: 'Basic Info', icon: <Clipboard size="md" /> },
   { id: 'guidelines', label: 'Guidelines', icon: <Document size="md" /> },
-  { id: 'characters', label: 'Characters', icon: <People size="md" /> },
-  { id: 'organizations', label: 'Organizations', icon: <Organization size="md" /> },
-  { id: 'locations', label: 'Locations', icon: <Map size="md" /> },
-  { id: 'lorebook', label: 'Lorebook', icon: <Books size="md" /> },
+  { id: 'storyEntities', label: 'Story Entities', icon: <Folder size="md" /> },
 ];
 
 const WorkspaceTabsSidebar: React.FC<WorkspaceTabsSidebarProps> = ({
@@ -43,7 +40,7 @@ const WorkspaceTabsSidebar: React.FC<WorkspaceTabsSidebarProps> = ({
       className="workspace-tabs-sidebar"
       header={
         <div className="workspace-tabs-sidebar-header">
-          <h3>Story Objects</h3>
+          <h3>Story Entities</h3>
           <IconButton
             icon={<Close size="sm" />}
             onClick={handleClose}

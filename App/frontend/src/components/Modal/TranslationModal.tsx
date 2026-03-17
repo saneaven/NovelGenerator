@@ -28,9 +28,18 @@ interface TranslationModalProps {
 
 interface StoryObjectToTranslate {
   objectType: ObjectType;
+  objectKind?: UnifiedObject['kind'];
   objectId: string;
   sourceData: Record<string, any>;
   versionNumber?: number;
+}
+
+function objectDisplayLabel(objectType: ObjectType, objectKind?: UnifiedObject['kind']): string {
+  if (objectType === 'story_entity') {
+    if (!objectKind) return 'Story Entity';
+    return `${objectKind[0].toUpperCase()}${objectKind.slice(1)} Entity`;
+  }
+  return OBJECT_TYPE_CONFIG[objectType]?.label || objectType;
 }
 
 const TranslationModal: React.FC<TranslationModalProps> = ({
@@ -70,10 +79,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     const types: ObjectType[] = [
       'basic_info',
       'guidelines',
-      'character',
-      'organization',
-      'location',
-      'lorebook',
+      'story_entity',
       'outline',
       'act',
       'chapter',
@@ -208,6 +214,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
 
       result.push({
         objectType: objType as ObjectType,
+        objectKind: obj.kind,
         objectId: obj.id,
         sourceData,
         versionNumber: obj.version?.number,
@@ -330,7 +337,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
         display_label: spec.label(inputPayload),
         input_text: userInput.trim() || 'Translate the selected objects.',
         input_payload: inputPayload,
-        surface: 'story-object',
+        surface: 'story-entity',
         journey_target_ids: selectedObjectIds,
         context_object_ids: selectedContext,
         language: targetLanguage,
@@ -423,7 +430,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
             <div className="preselected-objects">
               {availableObjects.map(obj => (
                 <div key={obj.objectId} className="preselected-object-item">
-                  <span className="object-type-badge">{OBJECT_TYPE_CONFIG[obj.objectType]?.label || obj.objectType}</span>
+                  <span className="object-type-badge">{objectDisplayLabel(obj.objectType, obj.objectKind)}</span>
                   <span className="object-name">{obj.label}</span>
                 </div>
               ))}

@@ -482,10 +482,8 @@ class Project(Base):
     storage_usage = relationship("ProjectStorageUsage", back_populates="project", uselist=False, cascade="all, delete-orphan")
     basic_info = relationship("BasicInfo", back_populates="project", uselist=False, cascade="all, delete-orphan")
     guidelines = relationship("Guidelines", back_populates="project", uselist=False, cascade="all, delete-orphan")
-    characters = relationship("Character", back_populates="project", cascade="all, delete-orphan")
-    organizations = relationship("Organization", back_populates="project", cascade="all, delete-orphan")
-    locations = relationship("Location", back_populates="project", cascade="all, delete-orphan")
-    lorebook_entries = relationship("LorebookEntry", back_populates="project", cascade="all, delete-orphan")
+    story_entity_folders = relationship("StoryEntityFolder", back_populates="project", cascade="all, delete-orphan", order_by="StoryEntityFolder.display_order")
+    story_entities = relationship("StoryEntity", back_populates="project", cascade="all, delete-orphan", order_by="StoryEntity.display_order")
     outlines = relationship("Outline", back_populates="project", cascade="all, delete-orphan", order_by="Outline.order")
     agents = relationship("Agent", back_populates="project", cascade="all, delete-orphan")
     assets = relationship("Asset", back_populates="project", cascade="all, delete-orphan")
@@ -564,18 +562,47 @@ class Guidelines(Base):
 
 
 # ============================================================================
-# STORY OBJECTS - NAME/DESCRIPTION ENTITIES
+# STORY ENTITIES
 # ============================================================================
 
-class Character(Base):
-    """Character entities - structure only (content in object_versions)"""
-    __tablename__ = 'characters'
+class StoryEntityFolder(Base):
+    """Project-scoped folder tree for story entities."""
+    __tablename__ = "story_entity_folders"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("story_entity_folders.id", ondelete="CASCADE"), nullable=True, index=True)
+    display_order = Column(Integer, nullable=False, default=0)
 
-    # Display order within project (per-type ordering)
-    order = Column(Integer, nullable=True, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    project = relationship("Project", back_populates="story_entity_folders")
+    parent = relationship("StoryEntityFolder", remote_side=[id], back_populates="children")
+    children = relationship(
+        "StoryEntityFolder",
+        back_populates="parent",
+        cascade="all, delete-orphan",
+        order_by="StoryEntityFolder.display_order",
+    )
+    story_entities = relationship("StoryEntity", back_populates="folder")
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "parent_id", "name", name="uq_story_entity_folders_parent_name"),
+        Index("ix_story_entity_folders_project_parent_order", "project_id", "parent_id", "display_order"),
+    )
+
+
+class StoryEntity(Base):
+    """Folderable mixed-kind story entity structure."""
+    __tablename__ = "story_entities"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind = Column(String(50), nullable=False, index=True)
+    folder_id = Column(UUID(as_uuid=True), ForeignKey("story_entity_folders.id", ondelete="SET NULL"), nullable=True, index=True)
+    display_order = Column(Integer, nullable=False, default=0)
 
     # Image prompt fields (stored on base object, not versioned)
     image_prompt = Column(Text, nullable=True)  # Natural language prompt
@@ -585,74 +612,17 @@ class Character(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    # Relationships
-    project = relationship("Project", back_populates="characters")
+    project = relationship("Project", back_populates="story_entities")
+    folder = relationship("StoryEntityFolder", back_populates="story_entities")
 
-
-class Organization(Base):
-    """Organization entities - structure only (content in object_versions)"""
-    __tablename__ = 'organizations'
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
-
-    # Display order within project (per-type ordering)
-    order = Column(Integer, nullable=True, default=0)
-
-    # Image prompt fields (stored on base object, not versioned)
-    image_prompt = Column(Text, nullable=True)  # Natural language prompt
-    image_prompt_positive = Column(Text, nullable=True)  # NovelAI positive tags
-    image_prompt_negative = Column(Text, nullable=True)  # NovelAI negative tags
-
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    # Relationships
-    project = relationship("Project", back_populates="organizations")
-
-
-class Location(Base):
-    """Location entities - structure only (content in object_versions)"""
-    __tablename__ = 'locations'
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
-
-    # Display order within project (per-type ordering)
-    order = Column(Integer, nullable=True, default=0)
-
-    # Image prompt fields (stored on base object, not versioned)
-    image_prompt = Column(Text, nullable=True)  # Natural language prompt
-    image_prompt_positive = Column(Text, nullable=True)  # NovelAI positive tags
-    image_prompt_negative = Column(Text, nullable=True)  # NovelAI negative tags
-
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    # Relationships
-    project = relationship("Project", back_populates="locations")
-
-
-class LorebookEntry(Base):
-    """Lorebook entries - structure only (content in object_versions)"""
-    __tablename__ = 'lorebook_entries'
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
-
-    # Display order within project (per-type ordering)
-    order = Column(Integer, nullable=True, default=0)
-
-    # Image prompt fields (stored on base object, not versioned)
-    image_prompt = Column(Text, nullable=True)  # Natural language prompt
-    image_prompt_positive = Column(Text, nullable=True)  # NovelAI positive tags
-    image_prompt_negative = Column(Text, nullable=True)  # NovelAI negative tags
-
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    # Relationships
-    project = relationship("Project", back_populates="lorebook_entries")
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('character', 'organization', 'location', 'lorebook')",
+            name="ck_story_entities_kind",
+        ),
+        Index("ix_story_entities_project_kind", "project_id", "kind"),
+        Index("ix_story_entities_project_folder_order", "project_id", "folder_id", "display_order"),
+    )
 
 
 # ============================================================================
@@ -779,7 +749,7 @@ class Journey(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('manuscriptEdit','outlineEdit','storyObjectEdit','objectTranslation','imagePrompt','sceneImagePrompt','messageTranslation')",
+            "kind IN ('manuscriptEdit','outlineEdit','objectEdit','objectTranslation','imagePrompt','sceneImagePrompt','messageTranslation')",
             name="ck_journeys_kind",
         ),
         CheckConstraint(

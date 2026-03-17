@@ -18,7 +18,8 @@ import type {
   VersionHistoryEntry,
   ProjectTranslationStatus,
   ProjectLanguageCoverage,
-  CreateObjectRequest
+  CreateObjectRequest,
+  StoryEntityKind,
 } from '../types/unifiedObject';
 
 type QueryParamValue = string | number | boolean | null | undefined;
@@ -161,6 +162,7 @@ export const unifiedObjectService = {
       language?: string;
       page?: number;
       page_size?: number;
+      kinds?: StoryEntityKind[];
     }
   ): Promise<{
     objects: UnifiedObject<TData>[];
@@ -172,6 +174,7 @@ export const unifiedObjectService = {
       language: options?.language,
       page: options?.page || 1,
       page_size: options?.page_size || 50,
+      kinds: options?.kinds,
     });
 
     return apiClient.get<{
@@ -211,8 +214,8 @@ export const unifiedObjectService = {
   },
 
   /**
-   * Update image prompts for a story object
-   * @param type Object type (character, location, organization, lorebook)
+   * Update image prompts for an object
+   * @param type Object type (basic_info or story_entity)
    * @param id Object ID
    * @param prompts Image prompt data
    */

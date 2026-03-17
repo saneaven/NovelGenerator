@@ -7,14 +7,15 @@ from ..contracts import ToolCallModule, ToolSpec
 from ..registry import tool_call_module
 from ..result_utils import invalid_result, make_result, valid_result
 from ....services.object_service import object_service
-from .object_access import require_story_object_type, to_uuid, ensure_outline_parent_exists, ensure_act_parent_exists
-from .shared import filter_allowed_specs, is_agent_write_context, is_outline_journey, is_story_object_journey, obj_schema
+from ....utils.story_entities import STORY_ENTITY_TYPE
+from .object_access import require_story_entity_arg_kind, to_uuid, ensure_outline_parent_exists, ensure_act_parent_exists
+from .shared import filter_allowed_specs, is_agent_write_context, is_outline_journey, is_object_journey, obj_schema
 
 
 _NAME = {"type": "string", "description": "Name"}
 _DESC = {"type": "string", "description": "Description"}
 _CONTENT = {"type": "string", "description": "Content"}
-_STORY_TYPE = {"type": "string", "enum": ["character", "location", "organization", "lorebook"]}
+_ENTITY_KIND = {"type": "string", "enum": ["character", "location", "organization", "lorebook"]}
 
 
 @tool_call_module(prefix="create_")
@@ -23,18 +24,18 @@ class CreateToolCallModule(ToolCallModule):
         return ("create",)
 
     def list_tools(self, ctx: ToolModuleContext) -> list[ToolSpec]:
-        if not (is_agent_write_context(ctx) or is_story_object_journey(ctx) or is_outline_journey(ctx)):
+        if not (is_agent_write_context(ctx) or is_object_journey(ctx) or is_outline_journey(ctx)):
             return []
 
         specs: list[ToolSpec] = []
-        if is_agent_write_context(ctx) or is_story_object_journey(ctx):
+        if is_agent_write_context(ctx) or is_object_journey(ctx):
             specs.append(
                 ToolSpec(
-                    name="create_story_object",
-                    description="Create a story object.",
+                    name="create_story_entity",
+                    description="Create a story entity.",
                     parameters=obj_schema(
-                        {"type": _STORY_TYPE, "name": _NAME, "description": _DESC, "content": _CONTENT},
-                        ["type", "name", "content"],
+                        {"kind": _ENTITY_KIND, "name": _NAME, "description": _DESC, "content": _CONTENT},
+                        ["kind", "name", "content"],
                     ),
                     auto_approve_category="create",
                 )
@@ -72,8 +73,8 @@ class CreateToolCallModule(ToolCallModule):
 
     async def validate(self, tool_name: str, args: dict[str, Any], ctx: ToolValidationContext):
         try:
-            if tool_name == "create_story_object":
-                require_story_object_type(args.get("type"))
+            if tool_name == "create_story_entity":
+                require_story_entity_arg_kind(args.get("kind"))
             elif tool_name == "create_outline_act":
                 ensure_outline_parent_exists(
                     ctx.db,
@@ -97,18 +98,24 @@ class CreateToolCallModule(ToolCallModule):
             "content": str(args.get("content") or ""),
         }
 
-        if tool_name == "create_story_object":
-            object_type = require_story_object_type(args.get("type"))
+        if tool_name == "create_story_entity":
+            kind = require_story_entity_arg_kind(args.get("kind"))
             created = object_service.create_object(
                 ctx.db,
                 project_id=ctx.project_id,
-                object_type=object_type,
+                object_type=STORY_ENTITY_TYPE,
                 data=payload,
                 language=ctx.language,
-                user_request="tool:create_story_object",
+                kind=kind,
+                user_request="tool:create_story_entity",
                 created_by=ctx.user_id,
             )
-            return make_result(f"Created {object_type}", object_id=created["id"], object_type=object_type)
+            return make_result(
+                f"Created {kind}",
+                object_id=created["id"],
+                object_type=STORY_ENTITY_TYPE,
+                data={"kind": kind},
+            )
 
         if tool_name == "create_outline":
             created = object_service.create_object(

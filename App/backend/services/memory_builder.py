@@ -232,7 +232,7 @@ def build_memory_summary_template_data(
         },
         "agent": {
             "runMode": "agentMode",
-            "surface": "story-object",
+            "surface": "story-entity",
             "contextObjectIds": [],
         },
         "journey": {
@@ -241,19 +241,26 @@ def build_memory_summary_template_data(
             "targetIds": [],
         },
         "editAssistant": {
-            "mode": "storyObject",
             "manuscript": {
                 "currentId": "",
                 "currentChapterId": "",
                 "currentChapterName": "",
                 "currentChapterManuscript": "",
-                "objectIds": [],
-            },
-            "storyObject": {
-                "targetIds": [],
                 "contextIds": [],
-                "categoryName": "",
+            },
+            "projectData": {
+                "contextIds": [],
                 "editScope": "selected",
+                "basicInfo": None,
+                "guidelines": None,
+                "storyEntity": None,
+            },
+            "outline": {
+                "contextIds": [],
+                "editScope": "selected",
+                "outlines": [],
+                "acts": [],
+                "chapters": [],
             },
         },
         "translation": {
@@ -266,18 +273,13 @@ def build_memory_summary_template_data(
         },
         "imagePrompt": {
             "promptMode": "natural",
-            "currentObject": {
-                "type": "",
-                "name": "",
-                "description": "",
-                "content": "",
-                "image_prompt": "",
-                "image_prompt_positive": "",
-                "image_prompt_negative": "",
+            "currentTarget": {
+                "basicInfo": None,
+                "storyEntity": None,
             },
             "scenePreContext": "",
             "scenePostContext": "",
-            "selectedObjectIds": [],
+            "selectedEntityIds": [],
         },
         "memory": {
             "summaries": [],

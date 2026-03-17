@@ -15,8 +15,9 @@ import {
   type PromptProjectContentByLanguage,
   type PromptProjectGuidelines,
   type PromptProjectManuscript,
-  type PromptProjectObject,
   type PromptProjectOutline,
+  type PromptProjectStoryEntity,
+  type PromptStoryEntityTreeNode,
 } from './projectShape';
 
 // Helper type for variable metadata
@@ -46,9 +47,13 @@ export const UNIFIED_SCHEMA = {
       desc: "Story basic info",
       example: PROJECT_SCHEMA_EXAMPLE.basicInfo as PromptProjectBasicInfo,
     },
-    objects: {
-      desc: "Main language objects array",
-      example: PROJECT_SCHEMA_EXAMPLE.objects as PromptProjectObject[],
+    storyEntities: {
+      desc: "Folder-managed story entities in deterministic DFS order",
+      example: PROJECT_SCHEMA_EXAMPLE.storyEntities as PromptProjectStoryEntity[],
+    },
+    storyEntityTree: {
+      desc: "Folder-based story entity tree with mixed folder and story_entity nodes",
+      example: PROJECT_SCHEMA_EXAMPLE.storyEntityTree as PromptStoryEntityTreeNode[],
     },
     outline: {
       desc: "Story outline with acts and chapters",
@@ -95,7 +100,7 @@ export const UNIFIED_SCHEMA = {
     runMode: { desc: "Agent run mode", example: "planMode" as "planMode" | "agentMode" },
     surface: {
       desc: "Current workspace surface (right-side panel)",
-      example: "story-object" as "story-object" | "outline-manager" | "novel-editor" | "config",
+      example: "story-entity" as "story-entity" | "outline-manager" | "novel-editor" | "config",
     },
     contextObjectIds: { desc: "IDs of objects to include in context", example: ["char-1", "loc-1"] as string[] },
   },
@@ -140,7 +145,6 @@ export const UNIFIED_SCHEMA = {
   },
 
   editAssistant: {
-    mode: { desc: "Edit assistant mode", example: "manuscript" as "manuscript" | "storyObject" },
     manuscript: {
       desc: "Manuscript editing context",
       example: {
@@ -148,33 +152,92 @@ export const UNIFIED_SCHEMA = {
         currentChapterId: "ch-123",
         currentChapterName: "Chapter 1: The Raid",
         currentChapterManuscript: "The longships appeared at dawn...",
-        objectIds: ["char-1", "ch-1", "ms-1"],
-      } as { currentId: string; currentChapterId: string; currentChapterName: string; currentChapterManuscript: string; objectIds?: string[] }
+        contextIds: ["char-1", "story-entity-1"],
+      } as { currentId: string; currentChapterId: string; currentChapterName: string; currentChapterManuscript: string; contextIds?: string[] }
     },
-    storyObject: {
-      desc: "Story object editing context",
+    projectData: {
+      desc: "Project data editing context for basic info, guidelines, or one story entity",
       example: {
-        targetIds: ["char-1", "char-2"],
         contextIds: ["char-3", "loc-1"],
-        categoryName: "characters",
         editScope: "selected",
-      } as { targetIds: string[]; contextIds?: string[]; categoryName?: string; editScope?: string }
+        basicInfo: null,
+        guidelines: null,
+        storyEntity: {
+          id: "story-entity-1",
+          kind: "character",
+          name: "Ari",
+          description: "Streetwise information broker",
+          content: "Detailed world and character notes...",
+          folderId: "folder-1",
+          folderPath: ["Characters", "Main"],
+          displayOrder: 0,
+          imagePrompt: "cinematic portrait, neon city, scar over one eye",
+          imagePromptPositive: "portrait, neon, cyberpunk",
+          imagePromptNegative: "blurry, low quality",
+        },
+      } as {
+        contextIds?: string[];
+        editScope?: string;
+        basicInfo: PromptProjectBasicInfo | null;
+        guidelines: PromptProjectGuidelines | null;
+        storyEntity: PromptProjectStoryEntity | null;
+      }
+    },
+    outline: {
+      desc: "Outline editing context",
+      example: {
+        contextIds: ["story-entity-1"],
+        editScope: "selected",
+        outlines: [{
+          id: "outline-1",
+          name: "Main Outline",
+          description: "Primary story spine",
+          content: "High-level story beats",
+          order: 0,
+          acts: [],
+        }],
+        acts: [{
+          id: "act-1",
+          name: "Act I",
+          description: "Setup",
+          content: "Introduce the central conflict",
+          order: 0,
+          outlineId: "outline-1",
+          chapters: [],
+        }],
+        chapters: [{
+          id: "chapter-1",
+          name: "The Raid",
+          description: "Opening conflict",
+          content: "Detailed chapter notes",
+          order: 0,
+          actId: "act-1",
+          manuscriptId: "manuscript-1",
+        }],
+      } as {
+        contextIds?: string[];
+        editScope?: string;
+        outlines: PromptProjectOutline['outlines'];
+        acts: PromptProjectOutline['outlines'][number]['acts'];
+        chapters: PromptProjectOutline['outlines'][number]['acts'][number]['chapters'];
+      }
     },
   },
 
   translation: {
     sourceLanguage: { desc: "Source language", example: "English" },
     targetLanguage: { desc: "Target language", example: "Korean" },
-    objectIds: { desc: "IDs of story objects to translate (filter from project.objects)", example: ["char-1", "char-2"] as string[] },
+    objectIds: { desc: "IDs of project objects to translate", example: ["story-entity-1", "story-entity-2"] as string[] },
     contextObjectIds: { desc: "IDs of reference objects for terminology consistency", example: ["char-3", "loc-1"] as string[] },
     currentTranslatedContents: {
       desc: "Current translations of objects being edited (for set/patch decision)",
       example: [{
-        id: "char-1",
-        type: "character",
-        name: "Character Name",
+        id: "story-entity-1",
+        type: "story_entity",
+        kind: "character",
+        name: "Story Entity Name",
         translatedContent: "Name: 캐릭터\nDescription: 설명..."
-      }] as Array<{ id: string; type: string; name: string; translatedContent: string }>
+      }] as Array<{ id: string; type: string; kind?: string; name: string; translatedContent: string }>
     },
     messages: {
       desc: "Agent messages to translate (only for agent message translation)",
@@ -184,29 +247,44 @@ export const UNIFIED_SCHEMA = {
 
   imagePrompt: {
     promptMode: { desc: "Prompt mode", example: "natural" as "natural" | "positive" | "negative" },
-    currentObject: {
-      desc: "Current object context for image prompt generation",
+    currentTarget: {
+      desc: "Current typed target context for image prompt generation",
       example: {
-        type: "character",
-        name: "Uhtred of Bebbanburg",
-        description: "A Saxon lord raised by Danes...",
-        content: "Tall, battle-scarred warrior. Wears worn leather and a wolfskin cloak...",
-        image_prompt: "A rugged warrior with long dark hair, battle-worn leather armor...",
-        image_prompt_positive: "warrior, long hair, leather armor, wolfskin cloak",
-        image_prompt_negative: "blurry, low quality, deformed",
+        basicInfo: null,
+        storyEntity: {
+          id: "story-entity-1",
+          kind: "character",
+          name: "Uhtred of Bebbanburg",
+          description: "A Saxon lord raised by Danes...",
+          content: "Tall, battle-scarred warrior. Wears worn leather and a wolfskin cloak...",
+          image_prompt: "A rugged warrior with long dark hair, battle-worn leather armor...",
+          image_prompt_positive: "warrior, long hair, leather armor, wolfskin cloak",
+          image_prompt_negative: "blurry, low quality, deformed",
+        },
       } as {
-        type?: string;
-        name: string;
-        description: string;
-        content: string;
-        image_prompt: string | null;
-        image_prompt_positive: string | null;
-        image_prompt_negative: string | null;
+        basicInfo: {
+          id: string;
+          title: string;
+          logline: string;
+          image_prompt: string | null;
+          image_prompt_positive: string | null;
+          image_prompt_negative: string | null;
+        } | null;
+        storyEntity: {
+          id: string;
+          kind: PromptProjectStoryEntity['kind'];
+          name: string;
+          description: string;
+          content: string;
+          image_prompt: string | null;
+          image_prompt_positive: string | null;
+          image_prompt_negative: string | null;
+        } | null;
       }
     },
     scenePreContext: { desc: "Scene pre-context (for scene mode)", example: "The hero enters the dark cave..." },
     scenePostContext: { desc: "Scene post-context (for scene mode)", example: "He finds the treasure chest." },
-    selectedObjectIds: { desc: "IDs of selected reference objects", example: ["char-1", "loc-1"] as string[] },
+    selectedEntityIds: { desc: "IDs of selected story entities", example: ["story-entity-1", "story-entity-2"] as string[] },
   },
 
   // User-defined variables (dynamic, fields determined by user configuration)

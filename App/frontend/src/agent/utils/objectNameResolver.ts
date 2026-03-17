@@ -33,10 +33,7 @@ export const parseToolName = (
   // Handle patterns like: create_character, update_basic_info, delete_lorebook
   const patterns: Array<{ regex: RegExp; objectType: string }> = [
     { regex: /^(create|update|delete)_basic_info$/, objectType: 'basic_info' },
-    { regex: /^(create|update|delete)_character$/, objectType: 'character' },
-    { regex: /^(create|update|delete)_organization$/, objectType: 'organization' },
-    { regex: /^(create|update|delete)_location$/, objectType: 'location' },
-    { regex: /^(create|update|delete)_lorebook$/, objectType: 'lorebook' },
+    { regex: /^(create|read|replace|patch|delete|translate)_story_entity$/, objectType: 'story_entity' },
     { regex: /^(create|update|delete)_act$/, objectType: 'act' },
     { regex: /^(create|update|delete)_chapter$/, objectType: 'chapter' },
     { regex: /^(update)_manuscript$/, objectType: 'manuscript' },
@@ -66,14 +63,8 @@ export const resolveStoryObjectName = (
   switch (type) {
     case 'basic_info':
       return storyObjects.basicInfo?.title || storyObjects.basicInfo?.logline;
-    case 'character':
-      return storyObjects.characters.find((item) => item.id === id)?.name;
-    case 'organization':
-      return storyObjects.organizations.find((item) => item.id === id)?.name;
-    case 'location':
-      return storyObjects.locations.find((item) => item.id === id)?.name;
-    case 'lorebook':
-      return storyObjects.lorebook.find((item) => item.id === id)?.name;
+    case 'story_entity':
+      return storyObjects.storyEntities.find((item) => item.id === id)?.name;
     case 'act': {
       const acts = getAllActs(storyObjects);
       return findAct(acts, id)?.name;

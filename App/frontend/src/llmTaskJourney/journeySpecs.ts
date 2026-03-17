@@ -43,10 +43,11 @@ export interface ImagePromptInput {
   promptMode: PromptMode;
   contextType: ContextType;
   userRequest: string;
-  objectType?: 'basic_info' | 'character' | 'location' | 'organization' | 'lorebook';
+  objectType?: 'basic_info' | 'story_entity';
+  objectKind?: 'character' | 'location' | 'organization' | 'lorebook';
   objectId?: string;
   sceneContext?: { preContext: string; postContext: string };
-  selectedObjectIds?: string[];
+  selectedEntityIds?: string[];
 }
 
 export interface ImagePromptResult {
@@ -60,10 +61,7 @@ export interface ImagePromptResult {
 
 const CATEGORY_LABELS: Record<string, string> = {
   basic_info: 'Basic Info',
-  character: 'Character',
-  organization: 'Organization',
-  location: 'Location',
-  lorebook: 'Lorebook',
+  story_entity: 'Story Entity',
   outline: 'Outline',
   act: 'Act',
   chapter: 'Chapter',
@@ -74,7 +72,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 // Shared helpers for object-edit specs
 // =====================================================================
 
-type ObjectEditJourneyKind = 'manuscriptEdit' | 'outlineEdit' | 'storyObjectEdit';
+type ObjectEditJourneyKind = 'manuscriptEdit' | 'outlineEdit' | 'objectEdit';
 
 function objectEditLabel(input: ObjectEditInput): string {
   const categoryLabel = CATEGORY_LABELS[input.category] ?? input.category;
@@ -120,7 +118,7 @@ function objectEditBuildTargets(kind: ObjectEditJourneyKind, input: ObjectEditIn
 }
 
 // =====================================================================
-// manuscriptEdit / outlineEdit / storyObjectEdit Specs
+// manuscriptEdit / outlineEdit / objectEdit Specs
 // =====================================================================
 
 const manuscriptEditSpec: JourneySpec<ObjectEditInput> = {
@@ -135,10 +133,10 @@ const outlineEditSpec: JourneySpec<ObjectEditInput> = {
   buildEditingTargets: (input) => objectEditBuildTargets('outlineEdit', input),
 };
 
-const storyObjectEditSpec: JourneySpec<ObjectEditInput> = {
-  kind: 'storyObjectEdit',
+const objectEditSpec: JourneySpec<ObjectEditInput> = {
+  kind: 'objectEdit',
   label: objectEditLabel,
-  buildEditingTargets: (input) => objectEditBuildTargets('storyObjectEdit', input),
+  buildEditingTargets: (input) => objectEditBuildTargets('objectEdit', input),
 };
 
 // =====================================================================
@@ -193,9 +191,10 @@ const imagePromptSpec: JourneySpec<ImagePromptInput> = {
       contextType: input.contextType as any,
       promptMode: input.promptMode,
       objectType: input.objectType,
+      objectKind: input.objectKind,
       objectId: input.objectId,
       sceneContext: input.sceneContext,
-      selectedObjectIds: input.selectedObjectIds,
+      selectedEntityIds: input.selectedEntityIds,
     }) as EditingTargets,
 };
 
@@ -216,7 +215,7 @@ const sceneImagePromptSpec: JourneySpec<ImagePromptInput> = {
 export const journeySpecs = {
   manuscriptEdit: manuscriptEditSpec,
   outlineEdit: outlineEditSpec,
-  storyObjectEdit: storyObjectEditSpec,
+  objectEdit: objectEditSpec,
   objectTranslation: objectTranslationSpec,
   imagePrompt: imagePromptSpec,
   sceneImagePrompt: sceneImagePromptSpec,

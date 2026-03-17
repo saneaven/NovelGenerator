@@ -1,6 +1,6 @@
 export type EditingTargets =
   | {
-      kind: 'manuscriptEdit' | 'outlineEdit' | 'storyObjectEdit';
+      kind: 'manuscriptEdit' | 'outlineEdit' | 'objectEdit';
       projectId: string;
       category: string;
       targetId: string;
@@ -23,7 +23,7 @@ export type EditingTargets =
       objectType?: string;
       objectId?: string;
       sceneContext?: { preContext: string; postContext: string };
-      selectedObjectIds?: string[];
+      selectedEntityIds?: string[];
     }
   | {
       kind: 'sceneImagePrompt';
@@ -31,7 +31,7 @@ export type EditingTargets =
       contextType: 'scene';
       promptMode: string;
       sceneContext?: { preContext: string; postContext: string };
-      selectedObjectIds?: string[];
+      selectedEntityIds?: string[];
     }
   | {
       kind: 'messageTranslation';

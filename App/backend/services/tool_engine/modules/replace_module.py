@@ -7,22 +7,22 @@ from ..contracts import ToolCallModule, ToolSpec
 from ..registry import tool_call_module
 from ..result_utils import invalid_result, make_result, valid_result
 from ....services.object_service import object_service
+from ....utils.story_entities import STORY_ENTITY_TYPE
 from .manuscript_access import ensure_manuscript_exists, replace_manuscript
 from .object_access import (
-    STORY_OBJECT_TYPES,
     ensure_act_parent_exists,
     extract_lang_data,
     get_primary_object_id,
     read_object,
-    require_story_object_type,
+    read_story_entity,
     to_uuid,
 )
 from .shared import (
     filter_allowed_specs,
     is_agent_write_context,
     is_manuscript_journey,
+    is_object_journey,
     is_outline_journey,
-    is_story_object_journey,
     obj_schema,
 )
 
@@ -46,28 +46,28 @@ class ReplaceToolCallModule(ToolCallModule):
     def list_tools(self, ctx: ToolModuleContext) -> list[ToolSpec]:
         if not (
             is_agent_write_context(ctx)
-            or is_story_object_journey(ctx)
+            or is_object_journey(ctx)
             or is_outline_journey(ctx)
             or is_manuscript_journey(ctx)
         ):
             return []
 
         specs: list[ToolSpec] = []
-        if is_agent_write_context(ctx) or is_story_object_journey(ctx):
+        if is_agent_write_context(ctx) or is_object_journey(ctx):
             specs.extend(
                 [
                     ToolSpec(
-                        name="replace_story_object",
-                        description="Replace story object fields.",
+                        name="replace_story_entity",
+                        description="Replace story entity fields.",
                         parameters=obj_schema(
                             {
                                 "id": _ID,
-                                "type": {"type": "string", "enum": list(STORY_OBJECT_TYPES)},
+                                "kind": {"type": "string", "enum": ["character", "location", "organization", "lorebook"]},
                                 "name": {"type": "string"},
                                 "description": {"type": "string"},
                                 "content": {"type": "string"},
                             },
-                            ["id", "type"],
+                            ["id", "kind"],
                         ),
                         auto_approve_category="replace",
                     ),
@@ -154,8 +154,15 @@ class ReplaceToolCallModule(ToolCallModule):
                 return valid_result()
 
             object_id = to_uuid(args.get("id"), "id")
-            if tool_name == "replace_story_object":
-                object_type = require_story_object_type(args.get("type"))
+            if tool_name == "replace_story_entity":
+                read_story_entity(
+                    ctx.db,
+                    project_id=ctx.project_id,
+                    object_id=object_id,
+                    language=ctx.language,
+                    kind=args.get("kind"),
+                )
+                return valid_result()
             elif tool_name == "replace_outline":
                 object_type = "outline"
             elif tool_name == "replace_outline_act":
@@ -240,9 +247,16 @@ class ReplaceToolCallModule(ToolCallModule):
 
         object_id = to_uuid(args.get("id"), "id")
 
-        if tool_name == "replace_story_object":
-            object_type = require_story_object_type(args.get("type"))
-            current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
+        if tool_name == "replace_story_entity":
+            kind = str(args.get("kind") or "")
+            object_type = STORY_ENTITY_TYPE
+            current = read_story_entity(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_id=object_id,
+                language=ctx.language,
+                kind=kind,
+            )
             next_data = dict(extract_lang_data(current, ctx.language))
             for key in ["name", "description", "content"]:
                 if key in args:
@@ -254,11 +268,17 @@ class ReplaceToolCallModule(ToolCallModule):
                 object_id=object_id,
                 data=next_data,
                 language=ctx.language,
-                user_request="tool:replace_story_object",
+                kind=kind,
+                user_request="tool:replace_story_entity",
                 created_by=ctx.user_id,
                 create_new_version=True,
             )
-            return make_result(f"Replaced {object_type}", object_id=str(object_id), object_type=object_type)
+            return make_result(
+                f"Replaced {kind}",
+                object_id=str(object_id),
+                object_type=object_type,
+                data={"kind": kind},
+            )
 
         if tool_name in {"replace_outline", "replace_outline_act", "replace_outline_chapter"}:
             object_type = {

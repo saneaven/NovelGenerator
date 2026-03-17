@@ -12,22 +12,19 @@ from ..models.db_models import (
     BasicInfo,
     Chapter,
     Guidelines,
-    Location,
-    LorebookEntry,
     Manuscript,
     ManuscriptImage,
-    Organization,
     Outline,
     RunMessageAttachmentModel,
+    StoryEntity,
     StoryObjectAsset,
-    Character,
 )
 from ..models.semantic_models import SemanticSource
 from ..models.translation_models import ObjectVersion
 from .storage_service import storage_service
 
 
-LOREBOOK_OBJECT_TYPE = "lorebook"
+STORY_ENTITY_OBJECT_TYPE = "story_entity"
 
 
 def _ids(rows: Sequence[tuple[Any]] | Sequence[Any]) -> List[UUID]:
@@ -46,10 +43,7 @@ def collect_project_object_ids(db: Session, *, project_id: UUID) -> Dict[str, Li
     """Collect all object IDs in a project by ObjectVersion.object_type."""
     basic_info_ids = _ids(db.query(BasicInfo.id).filter(BasicInfo.project_id == project_id).all())
     guideline_ids = _ids(db.query(Guidelines.id).filter(Guidelines.project_id == project_id).all())
-    character_ids = _ids(db.query(Character.id).filter(Character.project_id == project_id).all())
-    organization_ids = _ids(db.query(Organization.id).filter(Organization.project_id == project_id).all())
-    location_ids = _ids(db.query(Location.id).filter(Location.project_id == project_id).all())
-    lorebook_ids = _ids(db.query(LorebookEntry.id).filter(LorebookEntry.project_id == project_id).all())
+    story_entity_ids = _ids(db.query(StoryEntity.id).filter(StoryEntity.project_id == project_id).all())
     outline_ids = _ids(db.query(Outline.id).filter(Outline.project_id == project_id).all())
 
     act_ids = _ids(
@@ -79,10 +73,7 @@ def collect_project_object_ids(db: Session, *, project_id: UUID) -> Dict[str, Li
     return {
         "basic_info": basic_info_ids,
         "guidelines": guideline_ids,
-        "character": character_ids,
-        "organization": organization_ids,
-        "location": location_ids,
-        LOREBOOK_OBJECT_TYPE: lorebook_ids,
+        STORY_ENTITY_OBJECT_TYPE: story_entity_ids,
         "outline": outline_ids,
         "act": act_ids,
         "chapter": chapter_ids,
