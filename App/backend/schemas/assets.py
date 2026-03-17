@@ -163,7 +163,7 @@ class AssetResponse(BaseModel):
     generation_style_id: Optional[str] = None
     generation_settings: Optional[Dict[str, Any]] = None  # Provider-specific settings
     generation_reference_images: Optional[List[ReferenceImage]] = None  # Reference images used during generation
-    generation_reference_objects: Optional[List[Dict[str, Any]]] = None  # Story objects referenced
+    generation_reference_objects: Optional[List[Dict[str, Any]]] = None  # Project objects referenced
     width: Optional[int] = None
     height: Optional[int] = None
     file_size: Optional[int] = None
@@ -188,12 +188,12 @@ class AssetUpdateRequest(BaseModel):
 
 
 # ============================================================================
-# STORY OBJECT ASSETS
+# OBJECT ASSET LINKS
 # ============================================================================
 
 
-class StoryObjectAssetResponse(BaseModel):
-    """Response for story object asset link"""
+class ObjectAssetLinkResponse(BaseModel):
+    """Response for an object asset link."""
     id: str
     object_type: str
     object_id: str
@@ -207,14 +207,14 @@ class StoryObjectAssetResponse(BaseModel):
         from_attributes = True
 
 
-class StoryObjectAssetsResponse(BaseModel):
-    """Response for listing story object assets"""
-    assets: List[StoryObjectAssetResponse]
-    main_asset: Optional[StoryObjectAssetResponse] = None
+class ObjectAssetLinksResponse(BaseModel):
+    """Response for listing object asset links."""
+    assets: List[ObjectAssetLinkResponse]
+    main_asset: Optional[ObjectAssetLinkResponse] = None
 
 
 class SetMainAssetRequest(BaseModel):
-    """Request to set main asset for a story object"""
+    """Request to set the main asset for an object."""
     asset_id: str
 
 
@@ -226,10 +226,10 @@ class ManuscriptImageCreate(BaseModel):
     """Request to add an image to manuscript"""
     language: Optional[str] = None
     position: int
-    source_type: str  # 'asset' or 'story_object'
+    source_type: str  # 'asset' or 'object'
     asset_id: Optional[str] = None
-    story_object_type: Optional[str] = None
-    story_object_id: Optional[str] = None
+    story_entity_kind: Optional[str] = None
+    object_id: Optional[str] = None
     generation_prompt: Optional[str] = None
     display_width: int = 400
     caption: Optional[str] = None
@@ -243,8 +243,8 @@ class ManuscriptImageResponse(BaseModel):
     position: int
     source_type: str
     asset_id: Optional[str] = None
-    story_object_type: Optional[str] = None
-    story_object_id: Optional[str] = None
+    story_entity_kind: Optional[str] = None
+    object_id: Optional[str] = None
     generation_prompt: Optional[str] = None
     display_width: int
     caption: Optional[str] = None
@@ -322,7 +322,7 @@ class SceneAssetsResponse(BaseModel):
 
 class ImageCleanupPolicy(BaseModel):
     """Policy for selecting candidate assets for cleanup"""
-    delete_non_main_story_object_images: bool = False
+    delete_non_main_object_images: bool = False
     delete_unused_manuscript_images: bool = True
 
     keep_recent_days: int = 7  # 0 disables

@@ -31,7 +31,7 @@ interface WorkspaceConfigPanelProps {
 }
 
 const DEFAULT_POLICY: ImageCleanupPolicy = {
-  delete_non_main_story_object_images: false,
+  delete_non_main_object_images: false,
   delete_unused_manuscript_images: true,
   keep_recent_days: 7,
   treat_reference_images_as_used: true,
@@ -54,7 +54,7 @@ function loadPolicy(projectId: string): ImageCleanupPolicy {
 const DEFAULT_EXPORT_OPTIONS: ProjectExportOptions = {
   include_images: true,
   image_scope: 'used_only',
-  include_non_main_story_object_images: false,
+  include_non_main_object_images: false,
   treat_generation_reference_images_as_used: true,
 };
 
@@ -785,9 +785,9 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
 
           <div className="workspace-config-field">
             <ToggleSwitch
-              checked={exportOptions.include_non_main_story_object_images}
+              checked={exportOptions.include_non_main_object_images}
               onChange={(checked) =>
-                setExportOptions((prev) => ({ ...prev, include_non_main_story_object_images: checked }))
+                setExportOptions((prev) => ({ ...prev, include_non_main_object_images: checked }))
               }
               label={t('workspaceConfig.projectExport.includeNonMain')}
               icon={<List size="sm" />}
@@ -935,9 +935,9 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
 
           <div className="workspace-config-field">
             <ToggleSwitch
-              checked={policy.delete_non_main_story_object_images}
+              checked={policy.delete_non_main_object_images}
               onChange={(checked) =>
-                setPolicy((prev) => ({ ...prev, delete_non_main_story_object_images: checked }))
+                setPolicy((prev) => ({ ...prev, delete_non_main_object_images: checked }))
               }
               label={t('workspaceConfig.imageCleanup.deleteNonMain')}
               icon={<Trash size="sm" />}

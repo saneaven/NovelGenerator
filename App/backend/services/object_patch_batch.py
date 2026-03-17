@@ -33,7 +33,7 @@ class FlushStatus:
 
 
 class ObjectPatchBatch:
-    """Batches patch operations for story objects and outlines.
+    """Batches patch operations for project objects and outlines.
 
     Caches object data in memory so N patches on the same object
     result in 1 DB read + N in-memory replacements + 1 DB write

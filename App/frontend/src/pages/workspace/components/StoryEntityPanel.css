@@ -4,7 +4,7 @@
    ======================================== */
 
 /* ===== Story Object Panel ===== */
-.story-object-panel {
+.story-entity-panel {
     flex: 1 1 auto;
     background: var(--color-surface-base);
     display: flex;
@@ -14,14 +14,14 @@
 }
 
 /* ===== Story Object Tabs ===== */
-.story-object-tabs-container {
+.story-entity-tabs-container {
     padding-top: var(--spacing-lg);
     position: relative;
     background: var(--color-surface-subtle);
     flex-shrink: 0;
 }
 
-.story-object-tabs {
+.story-entity-tabs {
     display: flex;
     padding: 0 var(--spacing-lg);
     gap: var(--spacing-xs);
@@ -31,12 +31,12 @@
     scroll-behavior: smooth;
 }
 
-.story-object-tabs::-webkit-scrollbar {
+.story-entity-tabs::-webkit-scrollbar {
     display: none;
 }
 
 /* Navigation Buttons */
-.story-object-tab-nav-button {
+.story-entity-tab-nav-button {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
@@ -58,12 +58,12 @@
     visibility: hidden;
 }
 
-.story-object-tab-nav-button.visible {
+.story-entity-tab-nav-button.visible {
     opacity: 1;
     visibility: visible;
 }
 
-.story-object-tab-nav-button:hover {
+.story-entity-tab-nav-button:hover {
     background: var(--color-surface-hover);
     border-color: var(--color-border-medium);
     color: var(--color-text-primary);
@@ -71,19 +71,19 @@
     transform: translateY(-50%) scale(1.05);
 }
 
-.story-object-tab-nav-button:active {
+.story-entity-tab-nav-button:active {
     transform: translateY(-50%) scale(0.95);
 }
 
-.story-object-tab-nav-button.left {
+.story-entity-tab-nav-button.left {
     left: var(--spacing-xs);
 }
 
-.story-object-tab-nav-button.right {
+.story-entity-tab-nav-button.right {
     right: var(--spacing-xs);
 }
 
-.story-object-tab-button {
+.story-entity-tab-button {
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
@@ -102,28 +102,28 @@
     box-shadow: var(--shadow-sm);
 }
 
-.story-object-tab-button:hover {
+.story-entity-tab-button:hover {
     color: var(--color-text-secondary);
     background: var(--color-surface-hover);
 }
 
-.story-object-tab-button.active {
+.story-entity-tab-button.active {
     color: var(--color-brand-accent);
     border-bottom-color: var(--color-brand-accent);
     background: var(--color-surface-base);
     font-weight: var(--font-weight-semibold);
 }
 
-.story-object-tab-icon {
+.story-entity-tab-icon {
     font-size: var(--font-size-lg);
     line-height: 1;
 }
 
-.story-object-tab-label {
+.story-entity-tab-label {
     line-height: 1;
 }
 
-.story-object-content {
+.story-entity-content {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
@@ -135,7 +135,7 @@
 }
 
 /* Story Object Card Expanded Overlay - State 3 full edit mode */
-.story-object-card-expanded-container {
+.story-entity-card-expanded-container {
     position: fixed;
     inset: 0;
     z-index: var(--z-modal);
@@ -147,7 +147,7 @@
     padding: var(--spacing-xl);
 }
 
-.story-object-card-expanded-container > * {
+.story-entity-card-expanded-container > * {
     width: 100%;
     max-width: 1200px;
     max-height: 90dvh;
@@ -157,29 +157,29 @@
 /* ===== Responsive Design ===== */
 @media (max-width: 768px) {
     /* Hide tabs container on mobile - use sidebar instead */
-    .story-object-tabs-container {
+    .story-entity-tabs-container {
         display: none;
     }
 
-    .story-object-tabs {
+    .story-entity-tabs {
         padding: 0 var(--spacing-sm);
     }
 
-    .story-object-tab-button {
+    .story-entity-tab-button {
         padding: var(--spacing-sm) var(--spacing-md);
         font-size: var(--font-size-xs);
     }
 
-    .story-object-tab-icon {
+    .story-entity-tab-icon {
         font-size: var(--font-size-base);
     }
 
-    .story-object-content {
+    .story-entity-content {
         padding: var(--spacing-lg);
     }
 
     /* Prevent last content line/card from being hidden behind fixed MobileFooter */
-    .story-object-content::after {
+    .story-entity-content::after {
         content: '';
         display: block;
         height: var(--size-mobile-footer-height);
@@ -189,7 +189,7 @@
 }
 
 @media (min-width: 769px) and (max-width: 1024px) {
-    .story-object-content {
+    .story-entity-content {
         padding: var(--spacing-xl);
     }
 }

@@ -1160,7 +1160,7 @@ class Asset(Base):
 
     # Asset type for categorization
     # 'scene': Images from SceneImageGeneratorModal or Rich Editor upload
-    # 'object': Story Object images (linked via StoryObjectAsset)
+    # 'object': Story Object images (linked via ObjectAssetLink)
     # null: Uncategorized
     asset_type = Column(String(20), nullable=True, index=True)
 
@@ -1181,7 +1181,7 @@ class Asset(Base):
     generation_style_id = Column(String(255), nullable=True)
     generation_settings = Column(JSONB, nullable=True)  # Provider-specific settings (sampler, steps, etc.)
     generation_reference_images = Column(JSONB, nullable=True)  # Reference images used during generation (asset_id + strength)
-    generation_reference_objects = Column(JSONB, nullable=True)  # Story objects referenced during generation
+    generation_reference_objects = Column(JSONB, nullable=True)  # Project objects referenced during generation
 
     # Image dimensions
     width = Column(Integer, nullable=True)
@@ -1193,19 +1193,19 @@ class Asset(Base):
 
     # Relationships
     project = relationship("Project", back_populates="assets")
-    story_object_assets = relationship("StoryObjectAsset", back_populates="asset", cascade="all, delete-orphan")
+    object_asset_links = relationship("ObjectAssetLink", back_populates="asset", cascade="all, delete-orphan")
     manuscript_images = relationship("ManuscriptImage", back_populates="asset", cascade="all, delete-orphan")
     manuscript = relationship("Manuscript", back_populates="owned_assets", foreign_keys=[manuscript_id])
 
 
-class StoryObjectAsset(Base):
-    """Links assets to story objects (characters, locations)"""
-    __tablename__ = 'story_object_assets'
+class ObjectAssetLink(Base):
+    """Links assets to project objects such as story entities and basic info."""
+    __tablename__ = 'object_asset_links'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
-    # Polymorphic reference to story object
-    object_type = Column(String(50), nullable=False)  # 'character', 'location'
+    # Polymorphic reference to a canonical object target.
+    object_type = Column(String(50), nullable=False)  # 'story_entity', 'basic_info'
     object_id = Column(UUID(as_uuid=True), nullable=False, index=True)
 
     asset_id = Column(UUID(as_uuid=True), ForeignKey('assets.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -1216,11 +1216,11 @@ class StoryObjectAsset(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
-    asset = relationship("Asset", back_populates="story_object_assets")
+    asset = relationship("Asset", back_populates="object_asset_links")
 
     __table_args__ = (
-        Index('idx_story_object_asset', 'object_type', 'object_id'),
-        UniqueConstraint('asset_id', name='uq_story_object_assets_asset_id'),
+        Index('idx_object_asset_link_object', 'object_type', 'object_id'),
+        UniqueConstraint('asset_id', name='uq_object_asset_links_asset_id'),
     )
 
 
@@ -1234,13 +1234,13 @@ class ManuscriptImage(Base):
 
     position = Column(Integer, nullable=False)  # Document-order index (0..n-1) within manuscript for a language
 
-    # Image source - either direct asset or story object reference
-    source_type = Column(String(20), nullable=False)  # 'asset' or 'story_object'
+    # Image source - either direct asset or generic object reference
+    source_type = Column(String(20), nullable=False)  # 'asset' or 'object'
     asset_id = Column(UUID(as_uuid=True), ForeignKey('assets.id', ondelete='CASCADE'), nullable=True)
 
-    # If source_type is 'story_object', reference the object
-    story_object_type = Column(String(50), nullable=True)  # 'character', 'location'
-    story_object_id = Column(UUID(as_uuid=True), nullable=True)
+    # If source_type is 'object', reference the canonical object target
+    story_entity_kind = Column(String(50), nullable=True)  # 'character', 'location'
+    object_id = Column(UUID(as_uuid=True), nullable=True)
 
     # Generation metadata (for images generated specifically for this insertion)
     generation_prompt = Column(Text, nullable=True)

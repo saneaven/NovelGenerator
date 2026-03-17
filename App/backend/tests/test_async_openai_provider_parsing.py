@@ -221,7 +221,7 @@ def test_accumulate_raw_chunk_appends_arguments_for_same_tool_call() -> None:
                                 "id": "call_character",
                                 "type": "function",
                                 "function": {
-                                    "name": "translate_story_object",
+                                    "name": "translate_story_entity",
                                     "arguments": '{"id":"char-1"',
                                 },
                             }
@@ -267,7 +267,7 @@ def test_accumulate_raw_chunk_appends_arguments_for_same_tool_call() -> None:
             "id": "call_character",
             "type": "function",
             "function": {
-                "name": "translate_story_object",
+                "name": "translate_story_entity",
                 "arguments": '{"id":"char-1","type":"character"}',
             },
         }
@@ -288,7 +288,7 @@ def test_accumulate_raw_chunk_keeps_id_only_tool_calls_separate() -> None:
                                 "id": "call_alpha",
                                 "type": "function",
                                 "function": {
-                                    "name": "translate_story_object",
+                                    "name": "translate_story_entity",
                                     "arguments": '{"id":"alpha"}',
                                 },
                             }
@@ -309,7 +309,7 @@ def test_accumulate_raw_chunk_keeps_id_only_tool_calls_separate() -> None:
                                 "id": "call_beta",
                                 "type": "function",
                                 "function": {
-                                    "name": "translate_story_object",
+                                    "name": "translate_story_entity",
                                     "arguments": '{"id":"beta"}',
                                 },
                             }
@@ -333,7 +333,7 @@ def test_accumulate_raw_chunk_keeps_id_only_tool_calls_separate() -> None:
             "id": "call_alpha",
             "type": "function",
             "function": {
-                "name": "translate_story_object",
+                "name": "translate_story_entity",
                 "arguments": '{"id":"alpha"}',
             },
         },
@@ -341,7 +341,7 @@ def test_accumulate_raw_chunk_keeps_id_only_tool_calls_separate() -> None:
             "id": "call_beta",
             "type": "function",
             "function": {
-                "name": "translate_story_object",
+                "name": "translate_story_entity",
                 "arguments": '{"id":"beta"}',
             },
         },
@@ -355,7 +355,7 @@ def test_merge_openai_tool_call_deltas_does_not_merge_conflicting_ids_on_same_in
             "id": "call_alpha",
             "type": "function",
             "function": {
-                "name": "translate_story_object",
+                "name": "translate_story_entity",
                 "arguments": '{"id":"alpha"}',
             },
         }
@@ -366,7 +366,7 @@ def test_merge_openai_tool_call_deltas_does_not_merge_conflicting_ids_on_same_in
             "id": "call_beta",
             "type": "function",
             "function": {
-                "name": "translate_story_object",
+                "name": "translate_story_entity",
                 "arguments": '{"id":"beta"}',
             },
         }
@@ -380,7 +380,7 @@ def test_merge_openai_tool_call_deltas_does_not_merge_conflicting_ids_on_same_in
             "id": "call_alpha",
             "type": "function",
             "function": {
-                "name": "translate_story_object",
+                "name": "translate_story_entity",
                 "arguments": '{"id":"alpha"}',
             },
         },
@@ -389,7 +389,7 @@ def test_merge_openai_tool_call_deltas_does_not_merge_conflicting_ids_on_same_in
             "id": "call_beta",
             "type": "function",
             "function": {
-                "name": "translate_story_object",
+                "name": "translate_story_entity",
                 "arguments": '{"id":"beta"}',
             },
         },
@@ -401,7 +401,7 @@ def test_merge_openai_tool_call_deltas_keeps_anonymous_calls_separate() -> None:
         {
             "type": "function",
             "function": {
-                "name": "translate_story_object",
+                "name": "translate_story_entity",
                 "arguments": '{"id":"alpha"}',
             },
         }
@@ -410,7 +410,7 @@ def test_merge_openai_tool_call_deltas_keeps_anonymous_calls_separate() -> None:
         {
             "type": "function",
             "function": {
-                "name": "translate_story_object",
+                "name": "translate_story_entity",
                 "arguments": '{"id":"beta"}',
             },
         }
@@ -422,14 +422,14 @@ def test_merge_openai_tool_call_deltas_keeps_anonymous_calls_separate() -> None:
         {
             "type": "function",
             "function": {
-                "name": "translate_story_object",
+                "name": "translate_story_entity",
                 "arguments": '{"id":"alpha"}',
             },
         },
         {
             "type": "function",
             "function": {
-                "name": "translate_story_object",
+                "name": "translate_story_entity",
                 "arguments": '{"id":"beta"}',
             },
         },
@@ -444,7 +444,7 @@ def test_fallback_snapshot_assembler_uses_index_key_as_synthetic_id_when_provide
                 {
                     "index": 0,
                     "function": {
-                        "name": "translate_story_object",
+                        "name": "translate_story_entity",
                         "arguments": '{"id":"alpha"}',
                     },
                 }
@@ -466,7 +466,7 @@ def test_fallback_snapshot_assembler_keeps_anonymous_deltas_separate() -> None:
             tool_call_deltas=[
                 {
                     "function": {
-                        "name": "translate_story_object",
+                        "name": "translate_story_entity",
                         "arguments": '{"id":"alpha"}',
                     },
                 }
@@ -478,7 +478,7 @@ def test_fallback_snapshot_assembler_keeps_anonymous_deltas_separate() -> None:
             tool_call_deltas=[
                 {
                     "function": {
-                        "name": "translate_story_object",
+                        "name": "translate_story_entity",
                         "arguments": '{"id":"beta"}',
                     },
                 }

@@ -1,7 +1,7 @@
 /**
  * BasicInfoManager - Modern Image Card Design
  *
- * Uses global display language from parent (StoryObjectPanel) instead of per-object switching.
+ * Uses global display language from parent (StoryEntityPanel) instead of per-object switching.
  * Shows warning icon when displaying in fallback language.
  */
 
@@ -186,16 +186,16 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   };
 
   // Get cover image from asset store using the cover_image_id
-  const { fetchStoryObjectAssets, getMainAsset } = useAssetStore();
+  const { fetchObjectAssetLinks, getMainAsset } = useAssetStore();
   const coverAsset = (projectId && basicInfoId) ? getMainAsset(projectId, 'basic_info', basicInfoId) : null;
   const coverImageUrl = getAssetUrl(coverAsset);
 
   // Fetch assets when basicInfoId is available
   useEffect(() => {
     if (projectId && basicInfoId) {
-      fetchStoryObjectAssets(projectId, 'basic_info', basicInfoId);
+      fetchObjectAssetLinks(projectId, 'basic_info', basicInfoId);
     }
-  }, [projectId, basicInfoId, fetchStoryObjectAssets]);
+  }, [projectId, basicInfoId, fetchObjectAssetLinks]);
 
   if (!projectId) return <div className="error-container">Project ID not found.</div>;
   if (loading && !basicInfo) return <div className="loading-container"><Loading size="lg" /></div>;

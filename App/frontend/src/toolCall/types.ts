@@ -227,14 +227,6 @@ export interface EditCard {
 // TYPE MAPPING CONSTANTS
 // ============================================================================
 
-/** Maps story entity kind to unified object type */
-export const STORY_ENTITY_TYPE_MAP: Record<StoryEntityKind, ObjectType> = {
-  character: 'story_entity',
-  location: 'story_entity',
-  organization: 'story_entity',
-  lorebook: 'story_entity',
-};
-
 /** All object types including outline structure (for translation and validation) */
 export const ALL_OBJECT_TYPE_MAP: Record<string, ObjectType> = {
   story_entity_folder: 'story_entity_folder',

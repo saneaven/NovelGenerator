@@ -567,21 +567,21 @@
   padding-top: var(--spacing-xs);
 }
 
-.function-call-readonly-item.story-object-card {
+.function-call-readonly-item.object-card {
   min-height: 200px;
   height: auto;
 }
 
-.function-call-readonly-item.story-object-card:hover {
+.function-call-readonly-item.object-card:hover {
   transform: none;
   box-shadow: var(--shadow-sm);
 }
 
-.function-call-readonly-item .story-object-card__header {
+.function-call-readonly-item .object-card__header {
   cursor: default;
 }
 
-.function-call-readonly-item .story-object-card__description-wrapper {
+.function-call-readonly-item .object-card__description-wrapper {
   max-height: 300px;
   opacity: 1;
   margin-top: var(--spacing-sm);

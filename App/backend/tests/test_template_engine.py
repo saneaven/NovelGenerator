@@ -298,12 +298,16 @@ def test_render_template_supports_local_tree_macros_for_markdown() -> None:
 def test_create_environment_does_not_register_format_specific_renderers() -> None:
     env = create_environment()
 
-    assert "render_story_entity_context_tree" not in env.globals
-    assert "render_story_entity_index_tree" not in env.globals
-    assert "render_outline_context_tree" not in env.globals
-    assert "render_outline_index_tree" not in env.globals
-    assert "render_manuscript_context_nodes" not in env.globals
-    assert "render_manuscript_index_nodes" not in env.globals
+    legacy_renderer_names = (
+        "render_" + "story_entity_context_tree",
+        "render_" + "story_entity_index_tree",
+        "render_" + "outline_context_tree",
+        "render_" + "outline_index_tree",
+        "render_" + "manuscript_context_nodes",
+        "render_" + "manuscript_index_nodes",
+    )
+    for name in legacy_renderer_names:
+        assert name not in env.globals
 
 
 def test_validate_template_source_rejects_prompt_calls() -> None:

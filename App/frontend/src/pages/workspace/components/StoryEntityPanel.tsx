@@ -1,31 +1,31 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import './StoryObjectPanel.css';
-import '../../../components/StoryObjectManager/ManagerCommon.css';
-import BasicInfoManager from '../../../components/StoryObjectManager/BasicInfoManager';
-import GuidelinesManager from '../../../components/StoryObjectManager/GuidelinesManager';
+import './StoryEntityPanel.css';
+import '../../../components/ObjectManager/ManagerCommon.css';
+import BasicInfoManager from '../../../components/ObjectManager/BasicInfoManager';
+import GuidelinesManager from '../../../components/ObjectManager/GuidelinesManager';
 import StoryEntityExplorer from '../../../components/StoryEntityExplorer/StoryEntityExplorer';
 import { Clipboard, Folder, ChevronLeft, ChevronRight, Document } from '../../../components/icons';
-import type { StoryObjectTabType } from '../../../types/objectTypeConfig';
-import { useStoryObjectTab } from '../hooks/useStoryObjectTab';
+import type { StoryEntityTabType } from '../../../types/objectTypeConfig';
+import { useStoryEntityTab } from '../hooks/useStoryEntityTab';
 
-interface StoryObjectPanelProps {
+interface StoryEntityPanelProps {
   globalDisplayLanguage: string; // Actual language name (e.g., 'English', 'Korean')
 }
 
-const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
+const StoryEntityPanel: React.FC<StoryEntityPanelProps> = ({
   globalDisplayLanguage,
 }) => {
   const { t } = useTranslation();
-  const { activeTab: activeStoryObjectTab, setActiveTab: setActiveStoryObjectTab } = useStoryObjectTab();
+  const { activeTab: activeStoryEntityTab, setActiveTab: setActiveStoryEntityTab } = useStoryEntityTab();
   const tabsRef = useRef<HTMLDivElement>(null);
   const [showLeftButton, setShowLeftButton] = useState(false);
   const [showRightButton, setShowRightButton] = useState(false);
 
-  const storyObjectTabs: { id: StoryObjectTabType; label: string; icon: React.ReactNode }[] = [
-    { id: 'basicInfo', label: t('storyObjectPanel.tabs.basicInfo'), icon: <Clipboard size="sm" /> },
-    { id: 'guidelines', label: t('storyObjectPanel.tabs.guidelines'), icon: <Document size="sm" /> },
-    { id: 'storyEntities', label: t('storyObjectPanel.tabs.storyEntities', 'Story Entities'), icon: <Folder size="sm" /> },
+  const storyEntityTabs: { id: StoryEntityTabType; label: string; icon: React.ReactNode }[] = [
+    { id: 'basicInfo', label: t('storyEntityPanel.tabs.basicInfo'), icon: <Clipboard size="sm" /> },
+    { id: 'guidelines', label: t('storyEntityPanel.tabs.guidelines'), icon: <Document size="sm" /> },
+    { id: 'storyEntities', label: t('storyEntityPanel.tabs.storyEntities', 'Story Entities'), icon: <Folder size="sm" /> },
   ];
 
   // Check scroll position to show/hide navigation buttons
@@ -73,10 +73,10 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
   // Check scroll when active tab changes
   useEffect(() => {
     checkScroll();
-  }, [activeStoryObjectTab]);
+  }, [activeStoryEntityTab]);
 
   const renderStoryContent = () => {
-    switch (activeStoryObjectTab) {
+    switch (activeStoryEntityTab) {
       case 'basicInfo':
         return <BasicInfoManager globalDisplayLanguage={globalDisplayLanguage} />;
       case 'guidelines':
@@ -89,47 +89,47 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
   };
 
   return (
-    <div className="story-object-panel">
-      <div className="story-object-tabs-container">
+    <div className="story-entity-panel">
+      <div className="story-entity-tabs-container">
         <button
-          className={`story-object-tab-nav-button left ${showLeftButton ? 'visible' : ''}`}
+          className={`story-entity-tab-nav-button left ${showLeftButton ? 'visible' : ''}`}
           onClick={() => scroll('left')}
-          aria-label={t('storyObjectPanel.scrollTabsLeft')}
+          aria-label={t('storyEntityPanel.scrollTabsLeft')}
         >
           <ChevronLeft size="sm" />
         </button>
 
         <div
-          className="story-object-tabs"
+          className="story-entity-tabs"
           ref={tabsRef}
           onScroll={checkScroll}
         >
-          {storyObjectTabs.map((tab) => (
+          {storyEntityTabs.map((tab) => (
             <button
               key={tab.id}
-              className={`story-object-tab-button ${activeStoryObjectTab === tab.id ? 'active' : ''}`}
-              onClick={() => setActiveStoryObjectTab(tab.id)}
+              className={`story-entity-tab-button ${activeStoryEntityTab === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveStoryEntityTab(tab.id)}
             >
-              <span className="story-object-tab-icon">{tab.icon}</span>
-              <span className="story-object-tab-label">{tab.label}</span>
+              <span className="story-entity-tab-icon">{tab.icon}</span>
+              <span className="story-entity-tab-label">{tab.label}</span>
             </button>
           ))}
         </div>
 
         <button
-          className={`story-object-tab-nav-button right ${showRightButton ? 'visible' : ''}`}
+          className={`story-entity-tab-nav-button right ${showRightButton ? 'visible' : ''}`}
           onClick={() => scroll('right')}
-          aria-label={t('storyObjectPanel.scrollTabsRight')}
+          aria-label={t('storyEntityPanel.scrollTabsRight')}
         >
           <ChevronRight size="sm" />
         </button>
       </div>
 
-      <div className="story-object-content">
+      <div className="story-entity-content">
           {renderStoryContent()}
       </div>
     </div>
   );
 };
 
-export default StoryObjectPanel;
+export default StoryEntityPanel;

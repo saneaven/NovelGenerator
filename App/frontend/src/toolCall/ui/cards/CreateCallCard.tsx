@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
-import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
+import { ReadOnlyObjectDisplay } from '../displays/ReadOnlyObjectDisplay';
 import { OutlineItemCard, toOutlineItemVariant } from '../../../components/OutlineItemCard';
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
 import { ReadOnlyBasicInfoDisplay } from '../displays/ReadOnlyBasicInfoDisplay';
@@ -81,7 +81,7 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
     }
 
     return (
-      <ReadOnlyStoryObjectDisplay
+      <ReadOnlyObjectDisplay
         title={titleValue}
         values={fields}
         mode="create"

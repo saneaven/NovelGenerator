@@ -65,7 +65,7 @@ export interface ObjectMetadata {
   folder_id?: string | null;
   position?: number;
   display_order?: number; // For story entities and folders
-  // Image prompts (for story objects: character, location, organization, lorebook)
+  // Image prompts (for objects: character, location, organization, lorebook)
   image_prompt?: string | null;  // Natural language prompt
   image_prompt_positive?: string | null;  // Tag-based positive (NovelAI)
   image_prompt_negative?: string | null;  // Tag-based negative (NovelAI)
@@ -111,8 +111,6 @@ export interface StoryEntityData {
   content: string;       // Full content
 }
 
-export type StoryObjectData = StoryEntityData;
-
 export interface ManuscriptData {
   doc: TipTapDoc;
   wordCount: number;
@@ -134,7 +132,6 @@ export interface StoryEntityFolderData {
 export type BasicInfoObject = UnifiedObject<BasicInfoData> & { type: 'basic_info' };
 export type StoryEntityFolderObject = UnifiedObject<StoryEntityFolderData> & { type: 'story_entity_folder' };
 export type StoryEntityObject = UnifiedObject<StoryEntityData> & { type: 'story_entity'; kind: StoryEntityKind };
-export type StoryObject = StoryEntityObject;
 export type ManuscriptObject = UnifiedObject<ManuscriptData> & { type: 'manuscript' };
 export type GuidelinesObject = UnifiedObject<GuidelinesData> & { type: 'guidelines' };
 export type OutlineObject = UnifiedObject<StoryEntityData> & { type: 'outline'; kind: OutlineKind };

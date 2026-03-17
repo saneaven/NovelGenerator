@@ -6,9 +6,9 @@ import { Expand } from '../../icons';
 import AuthenticatedImage from '../../common/AuthenticatedImage';
 import { useFitText } from '../../../hooks/useFitText';
 import type { SpanType } from '../../../hooks/useCardSpanType';
-import './StoryObjectCards.css';
+import './ObjectCards.css';
 
-export interface StoryObjectCardProps {
+export interface ObjectCardProps {
   /** Display name / title */
   name: string;
   /** One-line subtitle shown in expanded or text-only mode */
@@ -46,7 +46,7 @@ export interface StoryObjectCardProps {
   onAnimationComplete?: () => void;
 }
 
-const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
+const ObjectCardInner: React.FC<ObjectCardProps> = ({
   name,
   description,
   content,
@@ -78,15 +78,15 @@ const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
   });
 
   const cardClassName = [
-    'story-object-card',
-    isAnimating ? 'story-object-card--animating' : '',
+    'object-card',
+    isAnimating ? 'object-card--animating' : '',
     className ?? '',
   ].filter(Boolean).join(' ');
 
   const cardContent = (
     <>
       {badge && (
-        <div className="story-object-card__badge">
+        <div className="object-card__badge">
           {badge}
         </div>
       )}
@@ -99,29 +99,29 @@ const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
           ariaLabel="Open edit panel"
           title="Edit"
           size="sm"
-          className="story-object-card__full-expand-btn"
+          className="object-card__full-expand-btn"
         />
       )}
 
       {dragHandle && (
-        <div className="story-object-card__drag-slot">
+        <div className="object-card__drag-slot">
           {dragHandle}
         </div>
       )}
 
       {/* Content */}
-      <div className="story-object-card__content">
-        <div className="story-object-card__body-shell">
+      <div className="object-card__content">
+        <div className="object-card__body-shell">
           {/* Header — always visible */}
-          <header className="story-object-card__header">
+          <header className="object-card__header">
             {enableFitText ? (
               <div
                 ref={containerRef}
-                className="story-object-card__title-container"
+                className="object-card__title-container"
               >
                 <h4
                   ref={textRef as React.RefObject<HTMLHeadingElement>}
-                  className="story-object-card__title story-object-card__title--no-toggle story-object-card__title--fit"
+                  className="object-card__title object-card__title--no-toggle object-card__title--fit"
                   style={{
                     fontSize: isReady ? `${fontSize}px` : undefined,
                     opacity: isReady ? 1 : 0,
@@ -132,7 +132,7 @@ const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
               </div>
             ) : onToggleExpand ? (
               <h4
-                className="story-object-card__title"
+                className="object-card__title"
                 onClick={onToggleExpand}
                 role="button"
                 tabIndex={0}
@@ -141,19 +141,19 @@ const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
                 {name}
               </h4>
             ) : (
-              <h4 className="story-object-card__title story-object-card__title--no-toggle">
+              <h4 className="object-card__title object-card__title--no-toggle">
                 {name}
               </h4>
             )}
 
             {showSubtitle && (
-              <p className="story-object-card__subtitle">{description}</p>
+              <p className="object-card__subtitle">{description}</p>
             )}
           </header>
 
           {/* Content — always in DOM, CSS controls visibility via max-height */}
-          <div className="story-object-card__description-wrapper">
-            <div className="story-object-card__description">
+          <div className="object-card__description-wrapper">
+            <div className="object-card__description">
               <MarkdownRenderer>
                 {content || 'No content.'}
               </MarkdownRenderer>
@@ -164,11 +164,11 @@ const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
 
       {/* Image */}
       {hasImage && (
-        <div className="story-object-card__image-container">
+        <div className="object-card__image-container">
           <AuthenticatedImage
             src={imageUrl || ''}
             alt={name}
-            className="story-object-card__image"
+            className="object-card__image"
             loading="lazy"
           />
         </div>
@@ -208,4 +208,4 @@ const StoryObjectCardInner: React.FC<StoryObjectCardProps> = ({
   );
 };
 
-export const StoryObjectCard = React.memo(StoryObjectCardInner);
+export const ObjectCard = React.memo(ObjectCardInner);

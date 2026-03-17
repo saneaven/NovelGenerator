@@ -2,7 +2,7 @@
    Story Object Cards - Modern Clean Design
    ======================================== */
 
-.story-object-cards-grid {
+.object-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(30dvh, 1fr));
   grid-auto-rows: 33dvh;
@@ -22,48 +22,48 @@
 }
 
 /* ========================================
-   Grid Item Wrappers (SortableStoryObjectCard)
+   Grid Item Wrappers (SortableObjectCard)
    The direct children of the grid need to handle the sizing and spanning.
    ======================================== */
 
-.story-object-cards-grid > div {
+.object-cards-grid > div {
   min-width: 0;
 }
 
 /* Span: Horizontal - only span 2 columns when there's room */
-.story-object-cards-grid > div[data-span="horizontal"] {
+.object-cards-grid > div[data-span="horizontal"] {
   grid-column: span min(2, var(--grid-columns, 2));
 }
 
 /* Span: Vertical */
-.story-object-cards-grid > div[data-span="vertical"] {
+.object-cards-grid > div[data-span="vertical"] {
   grid-row: span 2;
 }
 
 /* Mobile Support */
 @media (max-width: 768px) {
 
-    .story-object-cards-grid {
+    .object-cards-grid {
         grid-template-columns: 1fr;
     grid-auto-rows: 60dvh;
     }
 
-    .story-object-cards-grid > div[data-span="horizontal"] {
+    .object-cards-grid > div[data-span="horizontal"] {
     grid-column: span 1;
     }
 
-    .story-object-cards-grid > div[data-span="vertical"] {
+    .object-cards-grid > div[data-span="vertical"] {
     grid-row: span 1;
     }
 
 }
 
 /* ========================================
-   Card Visual Component (.story-object-card)
+   Card Visual Component (.object-card)
    This fills the wrapper and contains the actual UI.
    ======================================== */
 
-.story-object-card {
+.object-card {
   position: relative;
   width: 100%;
   height: 100%;
@@ -83,7 +83,7 @@
   cursor: default;
 }
 
-.story-object-card:hover {
+.object-card:hover {
   transform: translateY(-4px);
   box-shadow: var(--shadow-lg);
   border-color: var(--color-border-default);
@@ -94,7 +94,7 @@
    Image Layer
    ======================================== */
 
-.story-object-card__image-container {
+.object-card__image-container {
   position: absolute;
   inset: 0;
   z-index: 0;
@@ -102,7 +102,7 @@
   overflow: hidden;
 }
 
-.story-object-card__image {
+.object-card__image {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -110,7 +110,7 @@
   display: block;
 }
 
-.story-object-card:hover .story-object-card__image {
+.object-card:hover .object-card__image {
   transform: scale(1.05);
 }
 
@@ -118,7 +118,7 @@
    Expand Button
    ======================================== */
 
-.story-object-card__full-expand-btn {
+.object-card__full-expand-btn {
   position: absolute;
   top: var(--spacing-sm);
   right: var(--spacing-sm);
@@ -135,13 +135,13 @@
 }
 
 /* Visible on hover or keyboard focus */
-.story-object-card:hover .story-object-card__full-expand-btn,
-.story-object-card:focus-within .story-object-card__full-expand-btn {
+.object-card:hover .object-card__full-expand-btn,
+.object-card:focus-within .object-card__full-expand-btn {
   opacity: 1;
   transform: scale(1);
 }
 
-.story-object-card__badge {
+.object-card__badge {
   position: absolute;
   top: var(--spacing-sm);
   left: var(--spacing-sm);
@@ -154,7 +154,7 @@
    Content Container
    ======================================== */
 
-.story-object-card__content {
+.object-card__content {
   position: relative;
   z-index: 1;
   display: flex;
@@ -162,7 +162,7 @@
   width: 100%;
 }
 
-.story-object-card__drag-slot {
+.object-card__drag-slot {
   position: absolute;
   top: var(--spacing-sm);
   left: 50%;
@@ -175,12 +175,12 @@
   transition: opacity var(--transition-fast);
 }
 
-.story-object-card:hover .story-object-card__drag-slot,
-.story-object-card:focus-within .story-object-card__drag-slot {
+.object-card:hover .object-card__drag-slot,
+.object-card:focus-within .object-card__drag-slot {
   opacity: 1;
 }
 
-.story-object-card__body-shell {
+.object-card__body-shell {
   display: flex;
   flex: 1;
   min-height: 0;
@@ -191,7 +191,7 @@
    Variant: Card WITH Image
    ---------------------------------------- */
 
-.story-object-card[data-has-image="true"] .story-object-card__content {
+.object-card[data-has-image="true"] .object-card__content {
   margin-top: auto; /* Push content to bottom */
   background-color: var(--color-surface-base);
   border-top: 1px solid var(--color-border-subtle);
@@ -199,16 +199,16 @@
 }
 
 /* Clickable title area interaction */
-.story-object-card[data-has-image="true"] .story-object-card__header {
+.object-card[data-has-image="true"] .object-card__header {
   cursor: pointer;
 }
 
-.story-object-card[data-has-image="true"] .story-object-card__title {
+.object-card[data-has-image="true"] .object-card__title {
   color: var(--color-text-primary);
   transition: color var(--transition-fast);
 }
 
-.story-object-card[data-has-image="true"] .story-object-card__header:hover .story-object-card__title {
+.object-card[data-has-image="true"] .object-card__header:hover .object-card__title {
   color: var(--color-brand-primary);
 }
 
@@ -216,11 +216,11 @@
    Variant: Card WITHOUT Image (Text Only)
    ---------------------------------------- */
 
-.story-object-card[data-has-image="false"] {
+.object-card[data-has-image="false"] {
   background-color: var(--color-surface-base);
 }
 
-.story-object-card[data-has-image="false"] .story-object-card__content {
+.object-card[data-has-image="false"] .object-card__content {
   flex: 1;
   min-height: 0;
   width: 100%;
@@ -230,15 +230,15 @@
   padding: var(--spacing-lg) var(--spacing-xl);
 }
 
-.story-object-card[data-has-image="false"] .story-object-card__body-shell {
+.object-card[data-has-image="false"] .object-card__body-shell {
   justify-content: stretch;
 }
 
-.story-object-card[data-has-image="false"][data-has-badge="true"] .story-object-card__body-shell {
+.object-card[data-has-image="false"][data-has-badge="true"] .object-card__body-shell {
   padding-top: calc(var(--spacing-lg) + var(--spacing-sm));
 }
 
-.story-object-card[data-has-image="false"] .story-object-card__header {
+.object-card[data-has-image="false"] .object-card__header {
   flex: 2 1 0;
   display: flex;
   flex-direction: column;
@@ -247,7 +247,7 @@
   min-height: 0;
 }
 
-.story-object-card[data-has-image="false"] .story-object-card__title-container {
+.object-card[data-has-image="false"] .object-card__title-container {
   display: flex;
   align-items: center;
   width: 100%;
@@ -258,12 +258,12 @@
   box-sizing: border-box;
 }
 
-.story-object-card[data-has-image="false"] .story-object-card__title {
+.object-card[data-has-image="false"] .object-card__title {
   color: var(--color-text-primary);
 }
 
 /* Always show description for text-only cards */
-.story-object-card[data-has-image="false"] .story-object-card__description-wrapper {
+.object-card[data-has-image="false"] .object-card__description-wrapper {
   flex: 5 1 0;
   max-height: none;
   opacity: 1;
@@ -278,7 +278,7 @@
    Typography & Details
    ======================================== */
 
-.story-object-card__title {
+.object-card__title {
   margin: var(--spacing-sm);
   font-family: var(--font-family-heading);
   font-weight: var(--font-weight-bold);
@@ -286,7 +286,7 @@
   line-height: var(--line-height-tight);
 }
 
-.story-object-card__title--fit {
+.object-card__title--fit {
   margin: 0;
   width: 100%;
   max-width: 100%;
@@ -295,7 +295,7 @@
 }
 
 /* Subtitle — one-line description shown in expanded / text-only state */
-.story-object-card__subtitle {
+.object-card__subtitle {
   margin: 0 var(--spacing-sm);
   font-size: var(--font-size-sm);
   color: var(--color-text-tertiary);
@@ -307,7 +307,7 @@
   flex-shrink: 0;
 }
 
-.story-object-card__description-wrapper {
+.object-card__description-wrapper {
   overflow: hidden;
   transition: max-height var(--transition-base), opacity var(--transition-base), margin-top var(--transition-base);
   max-height: 0;
@@ -315,27 +315,27 @@
   margin: 0 var(--spacing-sm) 0 var(--spacing-sm);
 }
 
-.story-object-card__description {
+.object-card__description {
   font-size: var(--font-size-md);
   color: var(--color-text-secondary);
   line-height: var(--line-height-relaxed);
 }
 
 /* Markdown content styles */
-.story-object-card__description p {
+.object-card__description p {
   margin: 0 0 var(--spacing-sm) 0;
 }
 
-.story-object-card__description p:last-child {
+.object-card__description p:last-child {
   margin-bottom: 0;
 }
 
-.story-object-card__description h1,
-.story-object-card__description h2,
-.story-object-card__description h3,
-.story-object-card__description h4,
-.story-object-card__description h5,
-.story-object-card__description h6 {
+.object-card__description h1,
+.object-card__description h2,
+.object-card__description h3,
+.object-card__description h4,
+.object-card__description h5,
+.object-card__description h6 {
   font-family: var(--font-family-heading);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
@@ -343,33 +343,33 @@
   line-height: var(--line-height-tight);
 }
 
-.story-object-card__description h1:first-child,
-.story-object-card__description h2:first-child,
-.story-object-card__description h3:first-child,
-.story-object-card__description h4:first-child,
-.story-object-card__description h5:first-child,
-.story-object-card__description h6:first-child {
+.object-card__description h1:first-child,
+.object-card__description h2:first-child,
+.object-card__description h3:first-child,
+.object-card__description h4:first-child,
+.object-card__description h5:first-child,
+.object-card__description h6:first-child {
   margin-top: 0;
 }
 
-.story-object-card__description h1 { font-size: var(--font-size-xl); }
-.story-object-card__description h2 { font-size: var(--font-size-lg); }
-.story-object-card__description h3 { font-size: var(--font-size-md); }
-.story-object-card__description h4,
-.story-object-card__description h5,
-.story-object-card__description h6 { font-size: var(--font-size-sm); }
+.object-card__description h1 { font-size: var(--font-size-xl); }
+.object-card__description h2 { font-size: var(--font-size-lg); }
+.object-card__description h3 { font-size: var(--font-size-md); }
+.object-card__description h4,
+.object-card__description h5,
+.object-card__description h6 { font-size: var(--font-size-sm); }
 
-.story-object-card__description ul,
-.story-object-card__description ol {
+.object-card__description ul,
+.object-card__description ol {
   margin: 0 0 var(--spacing-sm) 0;
   padding-left: var(--spacing-lg);
 }
 
-.story-object-card__description li {
+.object-card__description li {
   margin-bottom: var(--spacing-xs);
 }
 
-.story-object-card__description code {
+.object-card__description code {
   font-family: var(--font-family-mono);
   font-size: 0.9em;
   background-color: var(--color-surface-elevated);
@@ -377,7 +377,7 @@
   border-radius: var(--border-radius-sm);
 }
 
-.story-object-card__description pre {
+.object-card__description pre {
   margin: 0 0 var(--spacing-sm) 0;
   padding: var(--spacing-sm);
   background-color: var(--color-surface-elevated);
@@ -385,21 +385,21 @@
   overflow-x: auto;
 }
 
-.story-object-card__description pre code {
+.object-card__description pre code {
   background: none;
   padding: 0;
 }
 
-.story-object-card__description a {
+.object-card__description a {
   color: var(--color-text-link);
   text-decoration: underline;
 }
 
-.story-object-card__description a:hover {
+.object-card__description a:hover {
   color: var(--color-text-link-hover);
 }
 
-.story-object-card__description blockquote {
+.object-card__description blockquote {
   margin: 0 0 var(--spacing-sm) 0;
   padding-left: var(--spacing-md);
   border-left: 3px solid var(--color-border-default);
@@ -407,17 +407,17 @@
   font-style: italic;
 }
 
-.story-object-card__description strong {
+.object-card__description strong {
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
 
-.story-object-card__description em {
+.object-card__description em {
   font-style: italic;
 }
 
 /* Expanded State (State 2) - Description Visible */
-.story-object-card[data-expanded="true"] .story-object-card__description-wrapper {
+.object-card[data-expanded="true"] .object-card__description-wrapper {
   max-height: 30dvh; /* Reasonable cap for description */
   opacity: 1;
   margin: var(--spacing-lg) var(--spacing-sm) var(--spacing-sm) var(--spacing-sm);
@@ -429,7 +429,7 @@
    Animation States
    ======================================== */
 
-.story-object-card--animating {
+.object-card--animating {
   z-index: 50;
   box-shadow: var(--shadow-xl);
 }

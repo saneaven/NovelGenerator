@@ -58,8 +58,8 @@
   padding: 0;
 }
 
-.landing-anim-story-objects-body,
-.landing-anim-story-objects-panel-body {
+.landing-anim-story-entities-body,
+.landing-anim-story-entities-panel-body {
   padding-top: var(--spacing-md);
 }
 
@@ -564,8 +564,8 @@
     font-size: 0.6875rem;
   }
 
-  .landing-anim-story-objects-body,
-  .landing-anim-story-objects-panel-body {
+  .landing-anim-story-entities-body,
+  .landing-anim-story-entities-panel-body {
     padding-top: var(--spacing-sm);
   }
 

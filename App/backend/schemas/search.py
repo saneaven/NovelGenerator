@@ -59,8 +59,8 @@ class SemanticSearchResult(BaseModel):
     object_id: UUID
 
     type_group: str
-    story_object_type: Optional[str] = None
-    story_object_order: Optional[int] = None
+    story_entity_kind: Optional[str] = None
+    story_entity_order: Optional[int] = None
     outline_order: Optional[int] = None
     act_order: Optional[int] = None
     chapter_order: Optional[int] = None

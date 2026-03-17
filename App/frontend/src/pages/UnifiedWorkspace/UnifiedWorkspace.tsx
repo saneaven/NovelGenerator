@@ -5,7 +5,7 @@ import { useAgentStore } from '../../store/agentStore';
 import { useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import { useProjectStore } from '../../store/projectStore';
-import { useUnifiedObjectStore, type SimplifiedStoryObjects } from '../../store/unifiedObjectStore';
+import { useUnifiedObjectStore, type SimplifiedProjectObjects } from '../../store/unifiedObjectStore';
 import { useNovelEditorStore } from '../../store/novelEditorStore';
 import { useSettings } from '../../store/settingsStore';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
@@ -18,7 +18,7 @@ import type { StoryEntityObject, OutlineObject } from '../../types/unifiedObject
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
 import TranslationModal from '../../components/Modal/TranslationModal';
 import AgentPanel from '../workspace/components/AgentPanel';
-import StoryObjectPanel from '../workspace/components/StoryObjectPanel';
+import StoryEntityPanel from '../workspace/components/StoryEntityPanel';
 import OutlinePanel from '../outlinemanager/components/OutlinePanel';
 import NovelEditorPanel from '../noveleditor/components/NovelEditorPanel';
 import WorkspaceTabsSidebar from '../workspace/components/WorkspaceTabsSidebar';
@@ -26,7 +26,7 @@ import WorkspaceConfigPanel from './components/WorkspaceConfigPanel';
 import { PageHeader, MobileFooter } from '../../components/layout';
 
 import { useWorkspaceSubPage, type SubPageType } from './hooks/useWorkspaceSubPage';
-import { useStoryObjectTab } from '../workspace/hooks/useStoryObjectTab';
+import { useStoryEntityTab } from '../workspace/hooks/useStoryEntityTab';
 
 import './UnifiedWorkspace.css';
 import '../workspace/styles/AgentPanel.css';
@@ -36,17 +36,17 @@ import '../workspace/styles/MessageEdit.css';
 import '../workspace/styles/AgentInput.css';
 import '../../components/Agent/MobileAgent.css';
 
-// Tab label keys for mobile subtitle (story-object mode) - will be localized in component
+// Tab label keys for mobile subtitle (story-entity mode) - will be localized in component
 const tabLabelKeys: Record<string, string> = {
-  basicInfo: 'storyObjectPanel.tabs.basicInfo',
-  storyEntities: 'storyObjectPanel.tabs.storyEntities',
-  guidelines: 'storyObjectPanel.tabs.guidelines',
+  basicInfo: 'storyEntityPanel.tabs.basicInfo',
+  storyEntities: 'storyEntityPanel.tabs.storyEntities',
+  guidelines: 'storyEntityPanel.tabs.guidelines',
 };
 
 // Get sidebar type from sub-page
 function getSidebarType(subPage: SubPageType): string {
   switch (subPage) {
-    case 'story-object':
+    case 'story-entity':
       return 'workspace-tabs';
     case 'outline-manager':
       return 'outline';
@@ -112,7 +112,7 @@ const UnifiedWorkspace: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Story object tab state (for mobile subtitle)
-  const { activeTab: activeStoryObjectTab } = useStoryObjectTab();
+  const { activeTab: activeStoryEntityTab } = useStoryEntityTab();
 
   // Translation modal state
   const [showTranslateModal, setShowTranslateModal] = useState(false);
@@ -120,8 +120,8 @@ const UnifiedWorkspace: React.FC = () => {
   // Translation count (missing any sub-language)
   const [objectsNeedingTranslation, setObjectsNeedingTranslation] = useState(0);
 
-  // NovelEditor story objects state
-  const [storyObjects, setStoryObjects] = useState<SimplifiedStoryObjects>({
+  // NovelEditor objects state
+  const [projectObjects, setProjectObjects] = useState<SimplifiedProjectObjects>({
     basicInfo: null,
     storyEntities: [],
     characters: [],
@@ -192,7 +192,7 @@ const UnifiedWorkspace: React.FC = () => {
     };
   }, [selectedChapterId, unifiedObjects, currentDisplayLanguage, mainLanguage]);
 
-  const hasChapters = storyObjects.outline.outlines.some(outline => outline.acts.some(act => act.chapters.length > 0));
+  const hasChapters = projectObjects.outline.outlines.some(outline => outline.acts.some(act => act.chapters.length > 0));
 
   // Helper to get data for a specific language
   const getDataForLanguage = (obj: any, language: string): Record<string, any> => {
@@ -240,10 +240,10 @@ const UnifiedWorkspace: React.FC = () => {
           'outline',
         ]);
       } catch (error) {
-        console.error('Failed to load story objects:', error);
+        console.error('Failed to load objects:', error);
         const errorStatus = (error as any)?.status || (error as any)?.response?.status;
         if (errorStatus !== 404) {
-          showAlert({ title: 'Data Error', message: 'Failed to load story objects. Please try again.' });
+          showAlert({ title: 'Data Error', message: 'Failed to load objects. Please try again.' });
         }
       }
     };
@@ -251,7 +251,7 @@ const UnifiedWorkspace: React.FC = () => {
     populateStoreCache();
   }, [projectId, refreshProjectObjects]);
 
-  // Build story objects for NovelEditor (when in novel-editor mode)
+  // Build objects for NovelEditor (when in novel-editor mode)
   useEffect(() => {
     if (!projectId || currentSubPage !== 'novel-editor') return;
 
@@ -259,7 +259,7 @@ const UnifiedWorkspace: React.FC = () => {
     const activeProjectId = projectId;
     let isActive = true;
 
-    const buildStoryObjects = async () => {
+    const buildProjectObjects = async () => {
       try {
         const [basicInfoList, storyEntities, outlineItems] = await Promise.all([
           listObjects('basic_info', projectId),
@@ -339,7 +339,7 @@ const UnifiedWorkspace: React.FC = () => {
         };
 
         if (isActive) {
-          setStoryObjects({
+          setProjectObjects({
             basicInfo,
             storyEntities: storyEntityItems.map((entity) => {
               const data = getDataForLanguage(entity, mainLanguage);
@@ -395,7 +395,7 @@ const UnifiedWorkspace: React.FC = () => {
           }
         }
       } catch (error) {
-        console.error('Failed to load story objects:', error);
+        console.error('Failed to load objects:', error);
       } finally {
         if (isActive) {
           setIsOutlineInitialized(true);
@@ -403,7 +403,7 @@ const UnifiedWorkspace: React.FC = () => {
       }
     };
 
-    buildStoryObjects();
+    buildProjectObjects();
     return () => {
       isActive = false;
     };
@@ -442,8 +442,8 @@ const UnifiedWorkspace: React.FC = () => {
   // Get mobile subtitle based on current sub-page
   const getMobileSubtitle = () => {
     switch (currentSubPage) {
-      case 'story-object':
-        return tabLabelKeys[activeStoryObjectTab] ? t(tabLabelKeys[activeStoryObjectTab]) : activeStoryObjectTab;
+      case 'story-entity':
+        return tabLabelKeys[activeStoryEntityTab] ? t(tabLabelKeys[activeStoryEntityTab]) : activeStoryEntityTab;
       case 'outline-manager':
         return t('unifiedWorkspace.mobileSubtitle.outlines');
       case 'novel-editor':
@@ -484,11 +484,11 @@ const UnifiedWorkspace: React.FC = () => {
       <div className={`unified-workspace-content ${isAgentVisible ? 'agent-visible' : ''}`}>
         <AgentPanel
           projectId={projectId ?? ''}
-          surface={currentSubPage === 'story-object' ? 'story-entity' : currentSubPage}
+          surface={currentSubPage}
         />
 
-        {currentSubPage === 'story-object' && (
-          <StoryObjectPanel
+        {currentSubPage === 'story-entity' && (
+          <StoryEntityPanel
             globalDisplayLanguage={currentDisplayLanguage}
           />
         )}
@@ -518,8 +518,8 @@ const UnifiedWorkspace: React.FC = () => {
         )}
       </div>
 
-      {/* Sidebar for story-object mode */}
-      {currentSubPage === 'story-object' && (
+      {/* Sidebar for story-entity mode */}
+      {currentSubPage === 'story-entity' && (
         <WorkspaceTabsSidebar
           projectId={projectId ?? ''}
         />

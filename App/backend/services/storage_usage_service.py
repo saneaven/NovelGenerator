@@ -54,7 +54,7 @@ if DEFAULT_STORAGE_QUOTA_BYTES < 0:
     raise RuntimeError("DEFAULT_STORAGE_QUOTA_BYTES must be >= 0")
 
 
-STORY_OBJECT_TYPES = (
+STORY_ENTITY_CONTEXT_TYPES = (
     "basic_info",
     "guidelines",
     "story_entity",
@@ -782,7 +782,7 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
     story_core_rows.extend(db.query(StoryEntity).filter(StoryEntity.project_id == project_id).all())
     story_core_rows.extend(db.query(Outline).filter(Outline.project_id == project_id).all())
     story_bytes = sum(measure_story_core_row(row) for row in story_core_rows)
-    story_bytes += _sum_object_versions(db, ids_by_type=ids_by_type, allowed_types=STORY_OBJECT_TYPES)
+    story_bytes += _sum_object_versions(db, ids_by_type=ids_by_type, allowed_types=STORY_ENTITY_CONTEXT_TYPES)
 
     manuscript_bytes = _sum_object_versions(db, ids_by_type=ids_by_type, allowed_types=("manuscript",))
     manuscript_rows = (

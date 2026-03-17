@@ -22,7 +22,7 @@ from ..models.db_models import (
     Project,
     StoryEntity,
     StoryEntityFolder,
-    StoryObjectAsset,
+    ObjectAssetLink,
 )
 from ..models.translation_models import ObjectVersion
 from ..services.deletion_service import (
@@ -35,7 +35,6 @@ from ..services.deletion_service import (
 )
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.semantic_index_service import index_object, invalidate_object_index
-from ..utils.object_type_aliases import externalize_object_type, normalize_object_type
 from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, require_story_entity_kind
 from .basic_info_utils import normalize_basic_info_data
 from .outline_service import (
@@ -205,7 +204,7 @@ def _resolve_project_user_id(db: Session, *, project_id: UUID) -> UUID:
 
 
 def _model_for_object_type(object_type: str):
-    t = normalize_object_type(object_type)
+    t = object_type
     mapping = {
         "basic_info": BasicInfo,
         "guidelines": Guidelines,
@@ -221,7 +220,7 @@ def _model_for_object_type(object_type: str):
 
 
 def _canonical_object_type(object_type: str) -> str:
-    return normalize_object_type(object_type)
+    return object_type
 
 
 def _latest_version(db: Session, object_type: str, object_id: UUID) -> ObjectVersion | None:
@@ -255,11 +254,11 @@ def _get_metadata(db: Session, obj: Any, object_type: str) -> dict[str, Any]:
         metadata["project_id"] = str(obj.project_id)
         metadata["cover_image_id"] = None
         main_link = (
-            db.query(StoryObjectAsset)
+            db.query(ObjectAssetLink)
             .filter(
-                StoryObjectAsset.object_type == "basic_info",
-                StoryObjectAsset.object_id == obj.id,
-                StoryObjectAsset.is_main == True,
+                ObjectAssetLink.object_type == "basic_info",
+                ObjectAssetLink.object_id == obj.id,
+                ObjectAssetLink.is_main == True,
             )
             .first()
         )
@@ -332,7 +331,7 @@ def _serialize_object(db: Session, object_type: str, obj: Any, language: str | N
 
     serialized = {
         "id": str(obj.id),
-        "type": externalize_object_type(object_type),
+        "type": object_type,
         "metadata": _get_metadata(db, obj, object_type),
         "data": data,
         "version": version,
@@ -502,7 +501,7 @@ class ObjectService:
         created_by: UUID | None = None,
     ) -> dict[str, Any]:
         _ = create_new_version
-        t = normalize_object_type(object_type)
+        t = object_type
         project = db.query(Project).filter(Project.id == project_id).first()
         if project is None:
             raise ValueError("Project not found")
@@ -743,7 +742,7 @@ class ObjectService:
         create_new_version: bool = True,
         created_by: UUID | None = None,
     ) -> dict[str, Any]:
-        t = normalize_object_type(object_type)
+        t = object_type
         storage_type = _canonical_object_type(t)
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
@@ -894,7 +893,7 @@ class ObjectService:
         user_request: str = "Translation",
         created_by: UUID | None = None,
     ) -> dict[str, Any]:
-        t = normalize_object_type(object_type)
+        t = object_type
         storage_type = _canonical_object_type(t)
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
@@ -974,7 +973,7 @@ class ObjectService:
         object_type: str,
         object_id: UUID,
     ) -> list[dict[str, Any]]:
-        t = normalize_object_type(object_type)
+        t = object_type
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             raise ValueError(f"{t} not found")
@@ -1001,7 +1000,7 @@ class ObjectService:
         version_id: UUID,
         created_by: UUID | None = None,
     ) -> dict[str, Any]:
-        t = normalize_object_type(object_type)
+        t = object_type
         storage_type = _canonical_object_type(t)
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
@@ -1087,7 +1086,7 @@ class ObjectService:
         }
 
     def delete_object(self, db: Session, project_id: UUID, object_type: str, object_id: UUID, *, user_id: UUID) -> None:
-        t = normalize_object_type(object_type)
+        t = object_type
         storage_type = _canonical_object_type(t)
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
@@ -1135,10 +1134,10 @@ class ObjectService:
             if entity_ids:
                 owned_assets = (
                     db.query(Asset)
-                    .join(StoryObjectAsset, StoryObjectAsset.asset_id == Asset.id)
+                    .join(ObjectAssetLink, ObjectAssetLink.asset_id == Asset.id)
                     .filter(
-                        StoryObjectAsset.object_type == STORY_ENTITY_TYPE,
-                        StoryObjectAsset.object_id.in_(entity_ids),
+                        ObjectAssetLink.object_type == STORY_ENTITY_TYPE,
+                        ObjectAssetLink.object_id.in_(entity_ids),
                     )
                     .all()
                 )
@@ -1280,8 +1279,8 @@ class ObjectService:
         if storage_type in {"basic_info", STORY_ENTITY_TYPE}:
             owned_assets = (
                 db.query(Asset)
-                .join(StoryObjectAsset, StoryObjectAsset.asset_id == Asset.id)
-                .filter(StoryObjectAsset.object_type == storage_type, StoryObjectAsset.object_id == object_id)
+                .join(ObjectAssetLink, ObjectAssetLink.asset_id == Asset.id)
+                .filter(ObjectAssetLink.object_type == storage_type, ObjectAssetLink.object_id == object_id)
                 .all()
             )
         elif storage_type == "manuscript":
@@ -1374,7 +1373,7 @@ class ObjectService:
         )
 
     def get_object(self, db: Session, object_type: str, object_id: UUID, *, project_id: UUID, language: str | None = None) -> dict[str, Any] | None:
-        t = normalize_object_type(object_type)
+        t = object_type
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             return None
@@ -1389,7 +1388,7 @@ class ObjectService:
         language: str | None = None,
         kinds: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        t = normalize_object_type(object_type)
+        t = object_type
         storage_type = _canonical_object_type(t)
         model_class = _model_for_object_type(t)
 
@@ -1434,7 +1433,7 @@ class ObjectService:
         image_prompt_positive: str | None = None,
         image_prompt_negative: str | None = None,
     ) -> dict[str, Any]:
-        t = normalize_object_type(object_type)
+        t = object_type
         allowed = {"basic_info", STORY_ENTITY_TYPE}
         if t not in allowed:
             raise ValueError(f"Image prompts not supported for {t}")
@@ -1486,7 +1485,7 @@ class ObjectService:
         object_ids: list[UUID],
         user_id: UUID | None = None,
     ) -> int:
-        t = normalize_object_type(object_type)
+        t = object_type
         storage_type = _canonical_object_type(t)
         if storage_type != "outline":
             raise ValueError(f"Reordering not supported for {t}")

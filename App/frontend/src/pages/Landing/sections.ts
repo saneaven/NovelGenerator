@@ -5,7 +5,7 @@ import { AboutAnimation } from './animations/AboutAnimation';
 import { AgentWritingAnimation } from './animations/AgentWritingAnimation';
 import { AgentQueryAnimation } from './animations/AgentQueryAnimation';
 import { SceneImageAnimation } from './animations/SceneImageAnimation';
-import { StoryObjectsAnimation } from './animations/StoryObjectsAnimation';
+import { StoryEntitiesAnimation } from './animations/StoryEntitiesAnimation';
 import { TranslationAnimation } from './animations/TranslationAnimation';
 import { PromptEditorAnimation } from './animations/PromptEditorAnimation';
 
@@ -94,15 +94,15 @@ export const LANDING_SECTIONS: LandingSectionConfig[] = [
     right: { type: 'animation', component: AboutAnimation },
   },
   {
-    id: 'storyObjects',
+    id: 'storyEntities',
     layout: 'split',
     tone: 'inverse',
     background: { type: 'surface', cssVar: '--color-surface-inverse' },
     left: {
-      titleKey: 'landing.storyObjects.title',
-      bodyKey: 'landing.storyObjects.description',
+      titleKey: 'landing.storyEntities.title',
+      bodyKey: 'landing.storyEntities.description',
     },
-    right: { type: 'animation', component: StoryObjectsAnimation },
+    right: { type: 'animation', component: StoryEntitiesAnimation },
   },
   {
     id: 'agentWriting',

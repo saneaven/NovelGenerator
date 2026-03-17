@@ -1,5 +1,5 @@
 /**
- * SortableStoryObjectCard - Wrapper for making story object cards draggable
+ * SortableObjectCard - Wrapper for making object cards draggable
  *
  * Uses @dnd-kit for drag-and-drop functionality.
  * Wraps children and provides drag handle functionality.
@@ -12,14 +12,14 @@ import { CSS } from '@dnd-kit/utilities';
 import type { SpanType } from '../../../hooks/useCardSpanType';
 import DragHandle from '../../ui/DragHandle';
 
-interface SortableStoryObjectCardProps {
+interface SortableObjectCardProps {
   id: string;
   children: (dragHandle: React.ReactNode) => React.ReactNode;
   disabled?: boolean;
   spanType?: SpanType;
 }
 
-export const SortableStoryObjectCard: React.FC<SortableStoryObjectCardProps> = ({
+export const SortableObjectCard: React.FC<SortableObjectCardProps> = ({
   id,
   children,
   disabled = false,
@@ -61,4 +61,4 @@ export const SortableStoryObjectCard: React.FC<SortableStoryObjectCardProps> = (
   );
 };
 
-export default SortableStoryObjectCard;
+export default SortableObjectCard;

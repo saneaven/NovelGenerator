@@ -147,7 +147,7 @@ def test_index_object_commits_before_embedding(monkeypatch) -> None:
     monkeypatch.setattr(
         semantic_index_service,
         "compute_order_meta",
-        lambda *_args, **_kwargs: semantic_index_service.OrderMeta(type_group="story_object"),
+        lambda *_args, **_kwargs: semantic_index_service.OrderMeta(type_group="story_entity"),
     )
     monkeypatch.setattr(semantic_index_service, "_find_source", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(semantic_index_service, "_upsert_source", lambda *_args, **_kwargs: source)
@@ -200,7 +200,7 @@ def test_index_object_returns_stale_when_payload_changes_before_apply(monkeypatc
     monkeypatch.setattr(
         semantic_index_service,
         "compute_order_meta",
-        lambda *_args, **_kwargs: semantic_index_service.OrderMeta(type_group="story_object"),
+        lambda *_args, **_kwargs: semantic_index_service.OrderMeta(type_group="story_entity"),
     )
     monkeypatch.setattr(semantic_index_service, "_find_source", lambda *_args, **_kwargs: None)
 
@@ -301,7 +301,7 @@ def test_index_object_records_error_when_embedding_raises(monkeypatch) -> None:
     monkeypatch.setattr(
         semantic_index_service,
         "compute_order_meta",
-        lambda *_args, **_kwargs: semantic_index_service.OrderMeta(type_group="story_object"),
+        lambda *_args, **_kwargs: semantic_index_service.OrderMeta(type_group="story_entity"),
     )
     monkeypatch.setattr(semantic_index_service, "_find_source", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(

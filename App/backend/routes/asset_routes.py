@@ -12,7 +12,7 @@ from ..models.db_models import (
     User,
     Project,
     Asset,
-    StoryObjectAsset,
+    ObjectAssetLink,
     ManuscriptImage,
     Manuscript,
     Outline,
@@ -22,7 +22,7 @@ from ..models.db_models import (
 from ..models.translation_models import ObjectVersion
 from ..schemas.assets import (
     AssetResponse, AssetListResponse, AssetUpdateRequest,
-    StoryObjectAssetResponse, StoryObjectAssetsResponse, SetMainAssetRequest,
+    ObjectAssetLinkResponse, ObjectAssetLinksResponse, SetMainAssetRequest,
     ManuscriptImageCreate, ManuscriptImageResponse, ManuscriptImagesResponse, ManuscriptImageUpdateRequest,
     ImageProvidersResponse, ImageProviderInfo, ImageModelsResponse, ImageModelInfo,
     SceneAssetResponse, SceneAssetsResponse, ManuscriptInfo,
@@ -34,7 +34,7 @@ from ..schemas.assets import (
 from ..services.asset_change_events import (
     queue_project_assets_change,
     queue_scene_assets_change,
-    queue_story_object_assets_change,
+    queue_object_assets_change,
 )
 from ..services.storage_service import storage_service
 from ..services.deletion_service import delete_assets_with_files
@@ -55,7 +55,6 @@ from ..services.storage_usage_service import (
 from ..services.credential_service import CredentialServiceError, credential_service
 from ..services.ownership import require_owned_manuscript, require_owned_object
 from ..image_providers.registry import ImageProviderRegistry
-from ..utils.object_type_aliases import normalize_object_type
 from ..utils.story_entities import STORY_ENTITY_TYPE
 
 # Import providers to register them
@@ -64,14 +63,14 @@ from ..image_providers import openai_image, gemini_image, xai_image, novelai_ima
 router = APIRouter(prefix="/api/v1/assets", tags=["assets"])
 
 
-# Object types allowed for image ownership binding (asset generation -> StoryObjectAsset)
+# Object types allowed for image ownership binding (asset generation -> ObjectAssetLink)
 OBJECT_BINDING_MODELS = {
     "basic_info": BasicInfo,
     STORY_ENTITY_TYPE: StoryEntity,
 }
 
 
-def _collect_story_object_refs_for_asset_ids(
+def _collect_object_refs_for_asset_ids(
     db: Session,
     *,
     asset_ids: list[UUID],
@@ -79,8 +78,8 @@ def _collect_story_object_refs_for_asset_ids(
     if not asset_ids:
         return []
     rows = (
-        db.query(StoryObjectAsset.object_type, StoryObjectAsset.object_id)
-        .filter(StoryObjectAsset.asset_id.in_(asset_ids))
+        db.query(ObjectAssetLink.object_type, ObjectAssetLink.object_id)
+        .filter(ObjectAssetLink.asset_id.in_(asset_ids))
         .all()
     )
     out: list[tuple[str, UUID]] = []
@@ -90,7 +89,7 @@ def _collect_story_object_refs_for_asset_ids(
     return out
 
 
-def _queue_story_object_updates(
+def _queue_object_updates(
     db: Session,
     *,
     user_id: UUID,
@@ -108,7 +107,7 @@ def _queue_story_object_updates(
         )
 
 
-def _queue_story_object_asset_updates(
+def _queue_object_asset_updates(
     db: Session,
     *,
     user_id: UUID,
@@ -117,7 +116,7 @@ def _queue_story_object_asset_updates(
     action: str = "updated",
 ) -> None:
     for object_type, object_id in set(refs):
-        queue_story_object_assets_change(
+        queue_object_assets_change(
             db,
             user_id=user_id,
             project_id=project_id,
@@ -410,7 +409,7 @@ async def upload_asset(
         raise HTTPException(status_code=400, detail="Invalid file type. Allowed: PNG, JPEG, GIF, WebP, AVIF")
 
     # Validate binding: require either manuscript_id (scene) OR (object_type + object_id) (object/cover)
-    normalized_object_type = normalize_object_type(object_type) if object_type else None
+    normalized_object_type = object_type if object_type else None
     if manuscript_id and (normalized_object_type or object_id):
         raise HTTPException(status_code=400, detail="Provide either manuscript_id or object_type/object_id, not both")
     if (normalized_object_type and not object_id) or (object_id and not normalized_object_type):
@@ -475,13 +474,13 @@ async def upload_asset(
         )
         db.add(asset)
 
-        # If object binding, auto-link to story object
+        # If object binding, auto-link to the canonical object target
         if normalized_object_type and object_id:
-            max_order = db.query(StoryObjectAsset).filter(
-                StoryObjectAsset.object_type == normalized_object_type,
-                StoryObjectAsset.object_id == object_id
+            max_order = db.query(ObjectAssetLink).filter(
+                ObjectAssetLink.object_type == normalized_object_type,
+                ObjectAssetLink.object_id == object_id
             ).count()
-            link = StoryObjectAsset(
+            link = ObjectAssetLink(
                 id=uuid4(),
                 object_type=normalized_object_type,
                 object_id=object_id,
@@ -498,7 +497,7 @@ async def upload_asset(
                 object_id=object_id,
                 action="updated",
             )
-            queue_story_object_assets_change(
+            queue_object_assets_change(
                 db,
                 user_id=current_user.id,
                 project_id=project_id,
@@ -576,7 +575,7 @@ async def update_asset(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
-    affected_refs = _collect_story_object_refs_for_asset_ids(db, asset_ids=[asset_id])
+    affected_refs = _collect_object_refs_for_asset_ids(db, asset_ids=[asset_id])
     scene_manuscript_ids = [asset.manuscript_id] if asset.asset_type == "scene" else []
     before = snapshot_asset_row(asset)
     if request.name is not None:
@@ -584,7 +583,7 @@ async def update_asset(
 
     asset.updated_at = datetime.utcnow()
     queue_project_assets_change(db, user_id=current_user.id, project_id=project_id, action="updated")
-    _queue_story_object_asset_updates(
+    _queue_object_asset_updates(
         db,
         user_id=current_user.id,
         project_id=project_id,
@@ -631,7 +630,7 @@ async def delete_asset(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
-    affected_refs = _collect_story_object_refs_for_asset_ids(db, asset_ids=[asset_id])
+    affected_refs = _collect_object_refs_for_asset_ids(db, asset_ids=[asset_id])
     scene_manuscript_ids = [asset.manuscript_id] if asset.asset_type == "scene" else []
     deleted_asset_before = snapshot_asset_row(asset)
     scrubbed_before = snapshot_rows(
@@ -647,8 +646,8 @@ async def delete_asset(
 
     # Delete from storage + DB, and scrub stale generation_reference_images pointers.
     delete_assets_with_files(db, assets=[asset], scrub_references_in_project_id=project_id)
-    _queue_story_object_updates(db, user_id=current_user.id, project_id=project_id, refs=affected_refs)
-    _queue_story_object_asset_updates(
+    _queue_object_updates(db, user_id=current_user.id, project_id=project_id, refs=affected_refs)
+    _queue_object_asset_updates(
         db,
         user_id=current_user.id,
         project_id=project_id,
@@ -724,8 +723,8 @@ def _candidate_reasons_for_asset(
 
     reasons: List[str] = []
 
-    if policy.delete_non_main_story_object_images and asset.asset_type == "object" and asset.id in story_non_main_assets:
-        reasons.append("story_object_non_main")
+    if policy.delete_non_main_object_images and asset.asset_type == "object" and asset.id in story_non_main_assets:
+        reasons.append("object_non_main")
 
     if (
         policy.delete_unused_manuscript_images
@@ -783,11 +782,11 @@ async def preview_image_cleanup(
     used_in_manuscripts: set[UUID] = {row[0] for row in used_in_manuscripts_rows if row[0]}
 
     story_non_main_rows = (
-        db.query(StoryObjectAsset.asset_id)
-        .join(Asset, Asset.id == StoryObjectAsset.asset_id)
+        db.query(ObjectAssetLink.asset_id)
+        .join(Asset, Asset.id == ObjectAssetLink.asset_id)
         .filter(
             Asset.project_id == project_id,
-            StoryObjectAsset.is_main == False,
+            ObjectAssetLink.is_main == False,
         )
         .all()
     )
@@ -893,11 +892,11 @@ async def execute_image_cleanup(
     used_in_manuscripts: set[UUID] = {row[0] for row in used_in_manuscripts_rows if row[0]}
 
     story_non_main_rows = (
-        db.query(StoryObjectAsset.asset_id)
-        .join(Asset, Asset.id == StoryObjectAsset.asset_id)
+        db.query(ObjectAssetLink.asset_id)
+        .join(Asset, Asset.id == ObjectAssetLink.asset_id)
         .filter(
             Asset.project_id == project_id,
-            StoryObjectAsset.is_main == False,
+            ObjectAssetLink.is_main == False,
         )
         .all()
     )
@@ -953,7 +952,7 @@ async def execute_image_cleanup(
             )
 
     to_delete: List[Asset] = [assets_by_id[a_id] for a_id in delete_ids]
-    affected_story_object_refs = _collect_story_object_refs_for_asset_ids(
+    affected_object_refs = _collect_object_refs_for_asset_ids(
         db,
         asset_ids=[asset.id for asset in to_delete],
     )
@@ -1012,17 +1011,17 @@ async def execute_image_cleanup(
         db.delete(asset)
         deleted.append(str(asset.id))
 
-    _queue_story_object_updates(
+    _queue_object_updates(
         db,
         user_id=current_user.id,
         project_id=project_id,
-        refs=affected_story_object_refs,
+        refs=affected_object_refs,
     )
-    _queue_story_object_asset_updates(
+    _queue_object_asset_updates(
         db,
         user_id=current_user.id,
         project_id=project_id,
-        refs=affected_story_object_refs,
+        refs=affected_object_refs,
         action="deleted",
     )
     scene_manuscript_ids = [asset.manuscript_id for asset in to_delete if asset.asset_type == "scene"]
@@ -1171,16 +1170,15 @@ async def rebuild_manuscript_images_index(
 # STORY OBJECT ASSETS
 # ============================================================================
 
-@router.get("/{project_id}/object/{object_type}/{object_id}", response_model=StoryObjectAssetsResponse)
-async def get_story_object_assets(
+@router.get("/{project_id}/object/{object_type}/{object_id}", response_model=ObjectAssetLinksResponse)
+async def get_object_asset_links(
     project_id: UUID,
     object_type: str,
     object_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get all assets linked to a story object, newest first."""
-    object_type = normalize_object_type(object_type)
+    """Get all assets linked to an object, newest first."""
     require_owned_object(
         db,
         user_id=current_user.id,
@@ -1190,14 +1188,14 @@ async def get_story_object_assets(
     )
 
     rows = (
-        db.query(StoryObjectAsset, Asset)
-        .join(Asset, Asset.id == StoryObjectAsset.asset_id)
+        db.query(ObjectAssetLink, Asset)
+        .join(Asset, Asset.id == ObjectAssetLink.asset_id)
         .filter(
-            StoryObjectAsset.object_type == object_type,
-            StoryObjectAsset.object_id == object_id,
+            ObjectAssetLink.object_type == object_type,
+            ObjectAssetLink.object_id == object_id,
             Asset.project_id == project_id,
         )
-        .order_by(Asset.created_at.desc(), StoryObjectAsset.created_at.desc())
+        .order_by(Asset.created_at.desc(), ObjectAssetLink.created_at.desc())
         .all()
     )
 
@@ -1205,7 +1203,7 @@ async def get_story_object_assets(
     main_asset = None
 
     for link, asset in rows:
-        response = StoryObjectAssetResponse(
+        response = ObjectAssetLinkResponse(
             id=str(link.id),
             object_type=link.object_type,
             object_id=str(link.object_id),
@@ -1219,10 +1217,10 @@ async def get_story_object_assets(
         if link.is_main:
             main_asset = response
 
-    return StoryObjectAssetsResponse(assets=responses, main_asset=main_asset)
+    return ObjectAssetLinksResponse(assets=responses, main_asset=main_asset)
 
 
-@router.patch("/{project_id}/object/{object_type}/{object_id}/main", response_model=StoryObjectAssetResponse)
+@router.patch("/{project_id}/object/{object_type}/{object_id}/main", response_model=ObjectAssetLinkResponse)
 async def set_main_asset(
     project_id: UUID,
     object_type: str,
@@ -1231,8 +1229,7 @@ async def set_main_asset(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Set the main asset for a story object"""
-    object_type = normalize_object_type(object_type)
+    """Set the main asset for an object."""
     require_owned_object(
         db,
         user_id=current_user.id,
@@ -1244,12 +1241,12 @@ async def set_main_asset(
     # Find the link to set as main
     asset_id = UUID(request.asset_id)
     link = (
-        db.query(StoryObjectAsset)
-        .join(Asset, Asset.id == StoryObjectAsset.asset_id)
+        db.query(ObjectAssetLink)
+        .join(Asset, Asset.id == ObjectAssetLink.asset_id)
         .filter(
-            StoryObjectAsset.object_type == object_type,
-            StoryObjectAsset.object_id == object_id,
-            StoryObjectAsset.asset_id == asset_id,
+            ObjectAssetLink.object_type == object_type,
+            ObjectAssetLink.object_id == object_id,
+            ObjectAssetLink.asset_id == asset_id,
             Asset.project_id == project_id,
         )
         .first()
@@ -1258,9 +1255,9 @@ async def set_main_asset(
         raise HTTPException(status_code=404, detail="Asset not linked to this object")
 
     # Unset all mains and set the new one
-    db.query(StoryObjectAsset).filter(
-        StoryObjectAsset.object_type == object_type,
-        StoryObjectAsset.object_id == object_id
+    db.query(ObjectAssetLink).filter(
+        ObjectAssetLink.object_type == object_type,
+        ObjectAssetLink.object_id == object_id
     ).update({"is_main": False})
 
     link.is_main = True
@@ -1272,7 +1269,7 @@ async def set_main_asset(
         object_id=object_id,
         action="updated",
     )
-    queue_story_object_assets_change(
+    queue_object_assets_change(
         db,
         user_id=current_user.id,
         project_id=project_id,
@@ -1287,7 +1284,7 @@ async def set_main_asset(
     if asset is None:
         raise HTTPException(status_code=404, detail="Asset not linked to this object")
 
-    return StoryObjectAssetResponse(
+    return ObjectAssetLinkResponse(
         id=str(link.id),
         object_type=link.object_type,
         object_id=str(link.object_id),
@@ -1347,8 +1344,8 @@ async def get_manuscript_images(
             position=img.position,
             source_type=img.source_type,
             asset_id=str(img.asset_id) if img.asset_id else None,
-            story_object_type=img.story_object_type,
-            story_object_id=str(img.story_object_id) if img.story_object_id else None,
+            story_entity_kind=img.story_entity_kind,
+            object_id=str(img.object_id) if img.object_id else None,
             generation_prompt=img.generation_prompt,
             display_width=img.display_width,
             caption=img.caption,

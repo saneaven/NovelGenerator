@@ -1,5 +1,5 @@
 /**
- * ObjectPicker - Unified component for selecting story objects
+ * ObjectPicker - Unified component for selecting objects
  *
  * Usage:
  * ```tsx

@@ -25,7 +25,7 @@ from .semantic_embedding_service import embed_many
 from .semantic_text_extractors import extract_index_text
 
 
-STORY_OBJECT_TYPES = {"basic_info", "guidelines", STORY_ENTITY_TYPE}
+STORY_ENTITY_CONTEXT_TYPES = {"basic_info", "guidelines", STORY_ENTITY_TYPE}
 EXCLUDED_OBJECT_TYPES = {"basic_info", "guidelines"}
 
 MIN_CHARS = 200
@@ -39,8 +39,8 @@ _MULTI_NL_RE = re.compile(r"\n{3,}")
 @dataclass(frozen=True)
 class OrderMeta:
     type_group: str
-    story_object_type: Optional[str] = None
-    story_object_order: Optional[int] = None
+    story_entity_kind: Optional[str] = None
+    story_entity_order: Optional[int] = None
     outline_order: Optional[int] = None
     act_order: Optional[int] = None
     chapter_order: Optional[int] = None
@@ -137,7 +137,7 @@ def _build_embedding_payloads(
         return [], [], compute_chunks_hash([])
 
     name_prefix: Optional[str] = None
-    if object_type in STORY_OBJECT_TYPES and object_type not in EXCLUDED_OBJECT_TYPES:
+    if object_type in STORY_ENTITY_CONTEXT_TYPES and object_type not in EXCLUDED_OBJECT_TYPES:
         name_prefix = (text_by_field.get("name") or "").strip() or None
 
     embedding_texts: List[str] = []
@@ -209,22 +209,22 @@ def _latest_versions_for_refs(
 
 
 def compute_order_meta(db: Session, *, project_id: UUID, object_type: str, object_id: UUID) -> OrderMeta:
-    if object_type in STORY_OBJECT_TYPES:
-        story_object_order: Optional[int] = 0
-        story_object_type: Optional[str] = object_type
+    if object_type in STORY_ENTITY_CONTEXT_TYPES:
+        story_entity_order: Optional[int] = 0
+        story_entity_kind: Optional[str] = object_type
         if object_type == STORY_ENTITY_TYPE:
             row = (
                 db.query(StoryEntity)
                 .filter(StoryEntity.id == object_id, StoryEntity.project_id == project_id)
                 .first()
             )
-            story_object_order = (row.display_order if row else 0) or 0
-            story_object_type = row.kind if row is not None else None
+            story_entity_order = (row.display_order if row else 0) or 0
+            story_entity_kind = row.kind if row is not None else None
 
         return OrderMeta(
-            type_group="story_object",
-            story_object_type=story_object_type,
-            story_object_order=story_object_order,
+            type_group="story_entity",
+            story_entity_kind=story_entity_kind,
+            story_entity_order=story_entity_order,
         )
 
     if object_type == "outline":
@@ -271,7 +271,7 @@ def compute_order_meta(db: Session, *, project_id: UUID, object_type: str, objec
             chapter_id=manuscript.chapter_id,
         )
 
-    return OrderMeta(type_group="story_object", story_object_type=object_type, story_object_order=0)
+    return OrderMeta(type_group="story_entity", story_entity_kind=object_type, story_entity_order=0)
 
 
 def _build_current_payload(
@@ -406,8 +406,8 @@ def _upsert_source(
             object_id=object_id,
             language=language,
             type_group=order_meta.type_group,
-            story_object_type=order_meta.story_object_type,
-            story_object_order=order_meta.story_object_order,
+            story_entity_kind=order_meta.story_entity_kind,
+            story_entity_order=order_meta.story_entity_order,
             outline_order=order_meta.outline_order,
             act_order=order_meta.act_order,
             chapter_order=order_meta.chapter_order,
@@ -417,8 +417,8 @@ def _upsert_source(
         db.flush()
 
     source.type_group = order_meta.type_group
-    source.story_object_type = order_meta.story_object_type
-    source.story_object_order = order_meta.story_object_order
+    source.story_entity_kind = order_meta.story_entity_kind
+    source.story_entity_order = order_meta.story_entity_order
     source.outline_order = order_meta.outline_order
     source.act_order = order_meta.act_order
     source.chapter_order = order_meta.chapter_order

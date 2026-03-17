@@ -2,7 +2,7 @@
  * GuidelinesManager - Project Guidelines Editor
  *
  * Manages project-level guidelines (authorNote) that are passed to AI prompts.
- * Uses global display language from parent (StoryObjectPanel).
+ * Uses global display language from parent (StoryEntityPanel).
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';

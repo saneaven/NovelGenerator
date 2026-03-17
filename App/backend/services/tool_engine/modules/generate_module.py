@@ -37,7 +37,7 @@ class GenerateToolCallModule(ToolCallModule):
             [
                 ToolSpec(
                     name=IMAGE_OBJECT_TOOL,
-                    description="Generate an image for a specific story object or basic info entry.",
+                    description="Generate an image for a specific story entity or basic info entry.",
                     parameters=obj_schema(
                         {
                             "prompt": {"type": "string", "description": "Image generation prompt."},

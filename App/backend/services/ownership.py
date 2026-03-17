@@ -16,7 +16,6 @@ from ..models.db_models import (
     StoryEntityFolder,
     Thread,
 )
-from ..utils.object_type_aliases import normalize_object_type
 
 OBJECT_TYPE_MODEL_MAP = {
     "basic_info": BasicInfo,
@@ -37,10 +36,9 @@ DIRECT_PROJECT_OBJECT_TYPES = {
 
 
 def get_object_model_class(object_type: str):
-    normalized_type = normalize_object_type(object_type)
-    model_class = OBJECT_TYPE_MODEL_MAP.get(normalized_type)
+    model_class = OBJECT_TYPE_MODEL_MAP.get(object_type)
     if model_class is None:
-        raise HTTPException(status_code=400, detail=f"Unknown object type: {normalized_type}")
+        raise HTTPException(status_code=400, detail=f"Unknown object type: {object_type}")
     return model_class
 
 
@@ -66,7 +64,7 @@ def require_owned_object(
     object_id: UUID,
     project_id: UUID | None = None,
 ) -> Any:
-    normalized_type = normalize_object_type(object_type)
+    normalized_type = object_type
     model_class = get_object_model_class(normalized_type)
     query = db.query(model_class)
 
@@ -115,7 +113,7 @@ def resolve_project_id_for_object(
     object_id: UUID,
     user_id: UUID,
 ) -> UUID:
-    normalized_type = normalize_object_type(object_type)
+    normalized_type = object_type
 
     if normalized_type in DIRECT_PROJECT_OBJECT_TYPES:
         model_class = get_object_model_class(normalized_type)

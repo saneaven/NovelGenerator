@@ -23,7 +23,7 @@ class VersionBase(BaseModel):
 
 
 class BaseMetadata(BaseModel):
-    """Base metadata for all story objects"""
+    """Base metadata for canonical project objects."""
     id: UUID
     createdAt: datetime = Field(alias='created_at')
     updatedAt: datetime = Field(alias='updated_at')

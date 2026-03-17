@@ -8,7 +8,7 @@ function str(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
-function mapStoryObjectData(values: Record<string, unknown>): CardDisplayData {
+function mapObjectCardData(values: Record<string, unknown>): CardDisplayData {
   return {
     name: str(values.name) ?? '',
     description: str(values.description),
@@ -31,6 +31,6 @@ export function mapObjectData(
     case 'guidelines':
       return mapGuidelinesData(values);
     default:
-      return mapStoryObjectData(values);
+      return mapObjectCardData(values);
   }
 }

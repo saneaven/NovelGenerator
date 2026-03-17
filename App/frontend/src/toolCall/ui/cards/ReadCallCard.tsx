@@ -4,7 +4,7 @@ import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useAssetStore } from '../../../store/assetStore';
 import { getAssetUrl } from '../../../utils/assetUrl';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
-import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
+import { ReadOnlyObjectDisplay } from '../displays/ReadOnlyObjectDisplay';
 import { OutlineItemCard, toOutlineItemVariant } from '../../../components/OutlineItemCard';
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
 import { ReadOnlyBasicInfoDisplay } from '../displays/ReadOnlyBasicInfoDisplay';
@@ -28,7 +28,7 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
   const language = useSettingsStore((state) => state.getSettings().mainLanguage);
   const objects = useUnifiedObjectStore((state) => state.objects);
 
-  const fetchStoryObjectAssets = useAssetStore((state) => state.fetchStoryObjectAssets);
+  const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);
   const getMainAsset = useAssetStore((state) => state.getMainAsset);
 
   const snapshot = useMemo(
@@ -39,8 +39,8 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
   const canLoadStoryAsset = Boolean(operation.objectType === 'story_entity' && snapshot.id && projectId);
   useEffect(() => {
     if (!canLoadStoryAsset || !snapshot.id) return;
-    void fetchStoryObjectAssets(projectId, 'story_entity', snapshot.id);
-  }, [canLoadStoryAsset, snapshot.id, projectId, fetchStoryObjectAssets]);
+    void fetchObjectAssetLinks(projectId, 'story_entity', snapshot.id);
+  }, [canLoadStoryAsset, snapshot.id, projectId, fetchObjectAssetLinks]);
 
   const mainAsset = operation.objectType === 'story_entity' && snapshot.id
     ? getMainAsset(projectId, 'story_entity', snapshot.id)
@@ -90,7 +90,7 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
     }
 
     return (
-      <ReadOnlyStoryObjectDisplay
+      <ReadOnlyObjectDisplay
         title={snapshot.displayName || 'Item'}
         values={snapshot.data}
         mode="read"

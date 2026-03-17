@@ -104,12 +104,12 @@ backend/
 ├── routes/
 │   ├── auth_routes.py          # Authentication endpoints
 │   ├── project_routes.py       # Project CRUD
-│   ├── story_routes.py         # Story objects
+│   ├── unified_object_routes.py # Canonical project object CRUD
 │   └── chat_routes.py          # Chat management
 ├── schemas/
 │   ├── auth.py                 # Auth schemas
 │   ├── projects.py             # Project schemas
-│   ├── story_objects.py        # Story object schemas
+│   ├── object_schemas.py       # Canonical project object schemas
 │   ├── chapters.py             # Chapter schemas
 │   └── chats.py                # Chat schemas
 ├── providers/
@@ -138,20 +138,16 @@ The database is designed with a user-centric architecture:
 - **user_settings**: User preferences and LLM configurations
 - **projects**: Story projects (1:N with users)
 
-### Story Objects
+### Project Objects
 - **basic_info**: Project metadata (title, logline, genres, tags)
-- **characters**: Character entities
-- **organizations**: Organization entities
-- **locations**: Location entities
-- **lorebook_entries**: Lorebook entries
-- **outlines**: Story outlines
-- **acts**: Act structure (N:1 with outlines)
-- **chapters**: Chapter structure (N:1 with acts)
+- **guidelines**: Project-level writing guidelines
+- **story_entities**: Canonical story entities with `kind = character|organization|location|lorebook`
+- **story_entity_folders**: Shared mixed-kind folder tree for story entities
+- **outlines**: Unified outline/act/chapter hierarchy via `kind`
+- **manuscripts**: Chapter manuscript content
 
 ### Version History
-- **story_object_versions**: Version history for all story objects
-- **chapter_contents**: Chapter content
-- **chapter_content_versions**: Chapter content versions
+- **object_versions**: Version history for project objects
 
 ### Chat System
 - **chats**: Chat conversations
@@ -280,7 +276,7 @@ pytest --cov=.
 
 ## Multilingual Support
 
-All story objects and chat messages support multiple languages:
+All project objects and chat messages support multiple languages:
 
 ```json
 {
@@ -306,7 +302,7 @@ Data is stored as JSONB:
 
 ## Version History
 
-Every story object maintains version history:
+Every project object maintains version history:
 - Automatic versioning on create/update
 - Multilingual version data
 - User request tracking ("User Edit", "AI Edit", etc.)

@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
-import { StoryObjectCard } from '../../../components/StoryObjectManager/StoryObjectCards/StoryObjectCard';
+import { ObjectCard } from '../../../components/ObjectManager/ObjectCards/ObjectCard';
 import { mapObjectData } from './mapToCardProps';
 
-export interface ReadOnlyStoryObjectDisplayProps {
+export interface ReadOnlyObjectDisplayProps {
   title: string;
   values: Record<string, unknown>;
   mode: 'read' | 'create' | 'replace' | 'delete';
@@ -11,7 +11,7 @@ export interface ReadOnlyStoryObjectDisplayProps {
   objectType?: string;
 }
 
-export const ReadOnlyStoryObjectDisplay: React.FC<ReadOnlyStoryObjectDisplayProps> = ({
+export const ReadOnlyObjectDisplay: React.FC<ReadOnlyObjectDisplayProps> = ({
   title,
   values,
   mode,
@@ -39,7 +39,7 @@ export const ReadOnlyStoryObjectDisplay: React.FC<ReadOnlyStoryObjectDisplayProp
   const hasImage = Boolean(imageUrl);
 
   return (
-    <StoryObjectCard
+    <ObjectCard
       name={title}
       description={showDescription ? mapped.description : undefined}
       content={showContent ? mapped.content : undefined}
@@ -51,4 +51,4 @@ export const ReadOnlyStoryObjectDisplay: React.FC<ReadOnlyStoryObjectDisplayProp
   );
 };
 
-export default ReadOnlyStoryObjectDisplay;
+export default ReadOnlyObjectDisplay;

@@ -4,7 +4,7 @@ import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useAssetStore } from '../../../store/assetStore';
 import { getAssetUrl } from '../../../utils/assetUrl';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
-import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
+import { ReadOnlyObjectDisplay } from '../displays/ReadOnlyObjectDisplay';
 import { OutlineItemCard, toOutlineItemVariant } from '../../../components/OutlineItemCard';
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
 import type { ObjectCardProps } from './types';
@@ -22,7 +22,7 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
   const language = useSettingsStore((state) => state.getSettings().mainLanguage);
   const objects = useUnifiedObjectStore((state) => state.objects);
 
-  const fetchStoryObjectAssets = useAssetStore((state) => state.fetchStoryObjectAssets);
+  const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);
   const getMainAsset = useAssetStore((state) => state.getMainAsset);
 
   const snapshot = useMemo(
@@ -32,8 +32,8 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
 
   useEffect(() => {
     if (operation.objectType !== 'story_entity' || !snapshot.id) return;
-    void fetchStoryObjectAssets(projectId, 'story_entity', snapshot.id);
-  }, [operation.objectType, snapshot.id, fetchStoryObjectAssets, projectId]);
+    void fetchObjectAssetLinks(projectId, 'story_entity', snapshot.id);
+  }, [operation.objectType, snapshot.id, fetchObjectAssetLinks, projectId]);
 
   const mainAsset = operation.objectType === 'story_entity' && snapshot.id
     ? getMainAsset(projectId, 'story_entity', snapshot.id)
@@ -66,7 +66,7 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
     }
 
     return (
-      <ReadOnlyStoryObjectDisplay
+      <ReadOnlyObjectDisplay
         title={title || 'Item'}
         values={snapshot.data}
         mode="delete"

@@ -30,7 +30,6 @@ from ..models.translation_models import ObjectVersion
 from ..services.object_change_events import queue_object_change
 from ..services.object_service import object_service
 from ..services.ownership import require_owned_object, resolve_project_id_for_object
-from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
 from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, require_story_entity_kind
 
 
@@ -143,7 +142,7 @@ async def get_project_translation_status(
 
             status_list.append(TranslationStatus(
                 object_id=str(obj.id),
-                object_type=externalize_object_type(object_type),
+                object_type=object_type,
                 kind=str(obj.kind) if object_type in {STORY_ENTITY_TYPE, 'outline'} else None,
                 available_languages=available_languages,
                 missing_languages=missing_languages,
@@ -247,7 +246,6 @@ async def batch_delete_translations(
     Delete translations for a specific language across multiple objects.
     WARNING: This cannot be undone!
     """
-    object_type = normalize_object_type(object_type)
     deleted_count = 0
 
     for object_id_str in object_ids:
@@ -329,7 +327,7 @@ async def add_translations(
                     detail="target_version_number is not supported for this endpoint",
                 )
 
-            object_type = normalize_object_type(translation_data.object_type)
+            object_type = translation_data.object_type
             if object_type == STORY_ENTITY_TYPE and translation_data.kind is not None:
                 require_story_entity_kind(translation_data.kind)
             object_id = UUID(translation_data.object_id)
@@ -405,7 +403,6 @@ async def get_object_languages(
     """
     Get list of available languages for a specific object.
     """
-    object_type = normalize_object_type(object_type)
     require_owned_object(
         db,
         object_type=object_type,
@@ -423,7 +420,7 @@ async def get_object_languages(
 
     return {
         "object_id": str(object_id),
-        "object_type": externalize_object_type(object_type),
+        "object_type": object_type,
         "languages": languages,
     }
 
@@ -440,7 +437,6 @@ async def delete_translation(
     Delete a specific language translation for an object.
     WARNING: Cannot delete if it's the only language!
     """
-    object_type = normalize_object_type(object_type)
     require_owned_object(
         db,
         object_type=object_type,

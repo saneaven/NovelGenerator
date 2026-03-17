@@ -10,8 +10,6 @@ from uuid import UUID, uuid4
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
-from ..utils.object_type_aliases import externalize_object_type
-
 logger = logging.getLogger(__name__)
 
 _PENDING_OBJECT_CHANGES_KEY = "_pending_object_changes"
@@ -62,7 +60,6 @@ def queue_object_change(
     object_id_str = _as_non_empty_str(object_id, field_name="object_id")
     object_type_text = _as_non_empty_str(object_type, field_name="object_type")
     normalized_action = _normalize_action(action)
-    external_type = externalize_object_type(object_type_text)
 
     pending = db.info.setdefault(_PENDING_OBJECT_CHANGES_KEY, {})
     if not isinstance(pending, dict):
@@ -72,7 +69,7 @@ def queue_object_change(
     key = _ChangeKey(
         user_id=user_id_str,
         project_id=project_id_str,
-        object_type=external_type,
+        object_type=object_type_text,
         object_id=object_id_str,
     )
     current_action = pending.get(key)

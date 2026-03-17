@@ -1,4 +1,4 @@
-import type { SimplifiedStoryObjects } from '../../store/unifiedObjectStore';
+import type { SimplifiedProjectObjects } from '../../store/unifiedObjectStore';
 
 /** Generic act type for name resolution - only needs id, name, and chapters */
 interface ActLike {
@@ -14,10 +14,10 @@ interface ChapterLike {
 }
 
 /**
- * Extracts all acts from SimplifiedStoryObjects.
+ * Extracts all acts from SimplifiedProjectObjects.
  */
-const getAllActs = (storyObjects: SimplifiedStoryObjects): ActLike[] => {
-  const outline = storyObjects.outline;
+const getAllActs = (projectObjects: SimplifiedProjectObjects): ActLike[] => {
+  const outline = projectObjects.outline;
   if (!outline) return [];
   return outline.outlines.flatMap((o) => o.acts || []);
 };
@@ -49,11 +49,11 @@ export const parseToolName = (
 };
 
 /**
- * Resolves an object ID to its human-readable name using storyObjects.
+ * Resolves an object ID to its human-readable name using project objects.
  * Used to display friendly names instead of UUIDs in tool call previews.
  */
-export const resolveStoryObjectName = (
-  storyObjects: SimplifiedStoryObjects,
+export const resolveObjectName = (
+  projectObjects: SimplifiedProjectObjects,
   type?: string,
   id?: string
 ): string | undefined => {
@@ -61,14 +61,14 @@ export const resolveStoryObjectName = (
 
   switch (type) {
     case 'basic_info':
-      return storyObjects.basicInfo?.title || storyObjects.basicInfo?.logline;
+      return projectObjects.basicInfo?.title || projectObjects.basicInfo?.logline;
     case 'story_entity':
-      return storyObjects.storyEntities.find((item) => item.id === id)?.name;
+      return projectObjects.storyEntities.find((item) => item.id === id)?.name;
     case 'outline': {
-      if (storyObjects.outline.outlines.some((outline) => outline.id === id)) {
-        return storyObjects.outline.outlines.find((outline) => outline.id === id)?.name;
+      if (projectObjects.outline.outlines.some((outline) => outline.id === id)) {
+        return projectObjects.outline.outlines.find((outline) => outline.id === id)?.name;
       }
-      const acts = getAllActs(storyObjects);
+      const acts = getAllActs(projectObjects);
       const act = findAct(acts, id);
       if (act) return act.name;
       const chapter = findChapter(acts, id);
@@ -76,7 +76,7 @@ export const resolveStoryObjectName = (
     }
     case 'manuscript': {
       // Manuscripts are tied to chapters - resolve to chapter name
-      const acts = getAllActs(storyObjects);
+      const acts = getAllActs(projectObjects);
       const chapter = findChapter(acts, id);
       return chapter?.name ? `${chapter.name} (Manuscript)` : undefined;
     }

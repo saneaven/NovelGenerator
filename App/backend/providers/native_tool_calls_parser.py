@@ -99,8 +99,8 @@ class _JSONObjectExtractor:
 class _ToolCallArgsStreamer:
     """Incrementally strip the top-level `"tool": ...` field from a JSON object stream.
 
-    Input:  {"tool":"replace_story_object","id":"...","type":"character",...}
-    Output: {"id":"...","type":"character",...}
+    Input:  {"tool":"replace_story_entity","id":"...","kind":"character",...}
+    Output: {"id":"...","kind":"character",...}
 
     Also extracts the tool name (string value of the "tool" key).
 

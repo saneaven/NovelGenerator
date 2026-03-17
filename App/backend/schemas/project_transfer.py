@@ -14,7 +14,7 @@ ImageScope = Literal["used_only", "all", "manual"]
 class ProjectExportOptions(BaseModel):
     include_images: bool = True
     image_scope: ImageScope = "used_only"
-    include_non_main_story_object_images: bool = False
+    include_non_main_object_images: bool = False
     treat_generation_reference_images_as_used: bool = True
 
 

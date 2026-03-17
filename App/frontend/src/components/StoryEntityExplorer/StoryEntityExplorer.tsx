@@ -28,9 +28,9 @@ import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import { DropdownItem, DropdownMenu, DropdownSection } from '../ui/DropdownMenu';
-import { SortableStoryObjectCard } from '../StoryObjectManager/StoryObjectCards/SortableStoryObjectCard';
-import { StoryObjectCard } from '../StoryObjectManager/StoryObjectCards/StoryObjectCard';
-import StoryObjectCardExpanded from '../StoryObjectManager/StoryObjectCards/StoryObjectCardExpanded';
+import { SortableObjectCard } from '../ObjectManager/ObjectCards/SortableObjectCard';
+import { ObjectCard } from '../ObjectManager/ObjectCards/ObjectCard';
+import ObjectCardExpanded from '../ObjectManager/ObjectCards/ObjectCardExpanded';
 import { useGridColumnCount } from '../../hooks/useGridColumnCount';
 import { getSpanType, type SpanType } from '../../hooks/useCardSpanType';
 import { getAssetUrl } from '../../utils/assetUrl';
@@ -54,7 +54,7 @@ import {
   type StoryEntityFolder,
 } from '../../types/storyEntityFolder';
 import type { StoryEntityData, StoryEntityKind, StoryEntityObject } from '../../types/unifiedObject';
-import type { StoryObjectAsset } from '../../api/assetService';
+import type { ObjectAssetLink } from '../../api/assetService';
 import './StoryEntityExplorer.css';
 
 interface StoryEntityExplorerProps {
@@ -175,7 +175,7 @@ function getSortableId(item: MixedGridItem): string {
   return `${item.kind}:${item.id}`;
 }
 
-function getMainAssetFromLinks(links: StoryObjectAsset[] | undefined) {
+function getMainAssetFromLinks(links: ObjectAssetLink[] | undefined) {
   return links?.find((entry) => entry.is_main)?.asset ?? null;
 }
 
@@ -198,8 +198,8 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
   const moveTreeNode = useStoryEntityFolderStore((state) => state.moveTreeNode);
   const deleteFolder = useStoryEntityFolderStore((state) => state.deleteFolder);
 
-  const fetchStoryObjectAssets = useAssetStore((state) => state.fetchStoryObjectAssets);
-  const storyObjectAssetsByKey = useAssetStore((state) => state.storyObjectAssetsByKey);
+  const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);
+  const objectAssetsByKey = useAssetStore((state) => state.objectAssetsByKey);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const columnCount = useGridColumnCount(gridRef);
@@ -299,17 +299,17 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
   const mainAssetsByEntityId = useMemo(() => {
     if (!projectId) return {};
     return currentFolderEntities.reduce<Record<string, ReturnType<typeof getMainAssetFromLinks>>>((acc, entity) => {
-      acc[entity.id] = getMainAssetFromLinks(storyObjectAssetsByKey[`${projectId}:story_entity:${entity.id}`]);
+      acc[entity.id] = getMainAssetFromLinks(objectAssetsByKey[`${projectId}:story_entity:${entity.id}`]);
       return acc;
     }, {});
-  }, [currentFolderEntities, projectId, storyObjectAssetsByKey]);
+  }, [currentFolderEntities, projectId, objectAssetsByKey]);
 
   useEffect(() => {
     if (!projectId || currentFolderEntities.length === 0) return;
     currentFolderEntities.forEach((entity) => {
-      void fetchStoryObjectAssets(projectId, 'story_entity', entity.id);
+      void fetchObjectAssetLinks(projectId, 'story_entity', entity.id);
     });
-  }, [projectId, currentFolderEntities, fetchStoryObjectAssets]);
+  }, [projectId, currentFolderEntities, fetchObjectAssetLinks]);
 
   const breadcrumbs = useMemo(() => folderPath(currentFolderId, foldersById), [currentFolderId, foldersById]);
   const currentFolder = currentFolderId ? foldersById[currentFolderId] ?? null : null;
@@ -767,13 +767,13 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
             >
               <div
                 ref={gridRef}
-                className="story-object-cards-grid story-entity-cards-grid"
+                className="object-cards-grid story-entity-cards-grid"
                 style={{ position: 'relative' }}
               >
                 {currentItems.map((item) => {
                   if (item.kind === 'folder') {
                     return (
-                      <SortableStoryObjectCard key={getSortableId(item)} id={getSortableId(item)} spanType="normal">
+                      <SortableObjectCard key={getSortableId(item)} id={getSortableId(item)} spanType="normal">
                         {(dragHandle) => (
                           <FolderCard
                             name={item.label}
@@ -786,7 +786,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                             onEdit={() => openEditFolderDialog(item.folder)}
                           />
                         )}
-                      </SortableStoryObjectCard>
+                      </SortableObjectCard>
                     );
                   }
 
@@ -795,7 +795,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                   const spanType = (baseSpanType === 'horizontal' && columnCount < 2) ? 'normal' : baseSpanType;
 
                   return (
-                    <SortableStoryObjectCard key={getSortableId(item)} id={getSortableId(item)} spanType={spanType} disabled={expandedEntityId === item.entity.id}>
+                    <SortableObjectCard key={getSortableId(item)} id={getSortableId(item)} spanType={spanType} disabled={expandedEntityId === item.entity.id}>
                       {(dragHandle) => (
                         <EntityCard
                           entity={item.entity}
@@ -812,7 +812,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                           onAnimationComplete={() => handleEntityAnimationComplete(item.entity.id)}
                         />
                       )}
-                    </SortableStoryObjectCard>
+                    </SortableObjectCard>
                   );
                 })}
               </div>
@@ -823,13 +823,13 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
             {currentExpandedEntity && editingEntityDraft ? (
               <motion.div
                 key={`entity-overlay-${currentExpandedEntity.id}`}
-                className="story-object-card-expanded-container"
+                className="object-card-expanded-container"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, transition: { duration: 0.4, delay: 0.15 } }}
                 transition={{ duration: 0.2 }}
               >
-                <StoryObjectCardExpanded
+                <ObjectCardExpanded
                   itemId={currentExpandedEntity.id}
                   itemData={getEntityData(
                     currentExpandedEntity,
@@ -838,7 +838,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                   effectiveLanguage={getEffectiveLanguage(currentExpandedEntity, globalDisplayLanguage, settings.mainLanguage)}
                   versionNumber={currentExpandedEntity.version.number}
                   objectType="story_entity"
-                  mainAsset={getMainAssetFromLinks(storyObjectAssetsByKey[`${projectId}:story_entity:${currentExpandedEntity.id}`])}
+                  mainAsset={getMainAssetFromLinks(objectAssetsByKey[`${projectId}:story_entity:${currentExpandedEntity.id}`])}
                   loading={loading[currentExpandedEntity.id] || false}
                   showSecondaryLanguage={getEffectiveLanguage(currentExpandedEntity, globalDisplayLanguage, settings.mainLanguage) !== globalDisplayLanguage}
                   extraEditFields={(
@@ -886,7 +886,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                     void handleDeleteEntity(currentExpandedEntity.id);
                   }}
                   onAssetChange={() => {
-                    void fetchStoryObjectAssets(projectId, 'story_entity', currentExpandedEntity.id, true);
+                    void fetchObjectAssetLinks(projectId, 'story_entity', currentExpandedEntity.id, true);
                   }}
                 />
               </motion.div>
@@ -895,13 +895,13 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
             {newEntityDraft ? (
               <motion.div
                 key={`new-entity-overlay-${newEntityDraft.kind}`}
-                className="story-object-card-expanded-container"
+                className="object-card-expanded-container"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, transition: { duration: 0.4, delay: 0.15 } }}
                 transition={{ duration: 0.2 }}
               >
-                <StoryObjectCardExpanded
+                <ObjectCardExpanded
                   itemId="new-story-entity"
                   itemData={{ name: '', description: '', content: '' }}
                   effectiveLanguage={settings.mainLanguage}
@@ -946,7 +946,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
             {folderDialog ? (
               <motion.div
                 key={`folder-dialog-${folderDialog.mode}-${folderDialog.folderId ?? 'new'}`}
-                className="story-object-card-expanded-container"
+                className="object-card-expanded-container"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, transition: { duration: 0.2 } }}
@@ -1108,7 +1108,7 @@ const EntityCard: React.FC<{
   onAnimationComplete,
 }) => (
   <div className="story-entity-grid-item" data-span={spanType}>
-    <StoryObjectCard
+    <ObjectCard
       name={itemData.name}
       description={description}
       content={itemData.content}
@@ -1157,7 +1157,7 @@ const FolderCard: React.FC<{
   onEdit,
 }) => (
   <div className="story-entity-grid-item" data-span="normal">
-    <article className="story-object-card story-entity-folder-card" data-has-image="false" data-span="normal">
+    <article className="object-card story-entity-folder-card" data-has-image="false" data-span="normal">
       <span
         className="story-entity-card-kind-badge story-entity-card-kind-badge--folder"
         title="Folder"
@@ -1166,14 +1166,14 @@ const FolderCard: React.FC<{
         <Folder size="sm" />
       </span>
 
-      <div className="story-object-card__content">
-        <div className="story-object-card__drag-slot">
+      <div className="object-card__content">
+        <div className="object-card__drag-slot">
           {dragHandle}
         </div>
-        <div className="story-object-card__body-shell">
-          <header className="story-object-card__header">
+        <div className="object-card__body-shell">
+          <header className="object-card__header">
             <h4
-              className="story-object-card__title story-object-card__title--no-toggle"
+              className="object-card__title object-card__title--no-toggle"
               onClick={onOpen}
               role="button"
               tabIndex={0}
@@ -1186,13 +1186,13 @@ const FolderCard: React.FC<{
             >
               {name}
             </h4>
-            <p className="story-object-card__subtitle">
+            <p className="object-card__subtitle">
               {childFolderCount} folders · {childEntityCount} entities
             </p>
           </header>
 
-          <div className="story-object-card__description-wrapper story-entity-folder-card__description-wrapper">
-            <div className="story-object-card__description">
+          <div className="object-card__description-wrapper story-entity-folder-card__description-wrapper">
+            <div className="object-card__description">
               {description ? (
                 <p>{description}</p>
               ) : previewLabels.length > 0 ? (

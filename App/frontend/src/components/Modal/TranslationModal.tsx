@@ -26,7 +26,7 @@ interface TranslationModalProps {
   preSelectedObjectIds?: string[];  // If provided, skip tree selector and show only these objects
 }
 
-interface StoryObjectToTranslate {
+interface ProjectObjectToTranslate {
   objectType: ObjectType;
   objectKind?: UnifiedObject['kind'];
   objectId: string;
@@ -161,7 +161,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   const availableObjects = useMemo(() => {
     if (!targetLanguage || !sourceLanguage) return [];
 
-    const result: (StoryObjectToTranslate & { label: string; order?: number })[] = [];
+    const result: (ProjectObjectToTranslate & { label: string; order?: number })[] = [];
     const allObjects = Object.values(objects) as UnifiedObject<any>[];
 
     // When preSelectedObjectIds is provided, use those objects regardless of translation status
@@ -274,7 +274,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   }, [isOpen, availableObjectIds, preSelectedObjectIds]);
 
   // Get objects to translate based on selection
-  const objectsToTranslate = useMemo((): StoryObjectToTranslate[] => {
+  const objectsToTranslate = useMemo((): ProjectObjectToTranslate[] => {
     return availableObjects.filter(obj => selectedIds.has(obj.objectId));
   }, [availableObjects, selectedIds]);
 

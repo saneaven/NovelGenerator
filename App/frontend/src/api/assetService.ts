@@ -60,7 +60,7 @@ export interface AssetListResponse {
     total: number;
 }
 
-export interface StoryObjectAsset {
+export interface ObjectAssetLink {
     id: string;
     object_type: string;
     object_id: string;
@@ -71,9 +71,9 @@ export interface StoryObjectAsset {
     asset: Asset;
 }
 
-export interface StoryObjectAssetsResponse {
-    assets: StoryObjectAsset[];
-    main_asset: StoryObjectAsset | null;
+export interface ObjectAssetLinksResponse {
+    assets: ObjectAssetLink[];
+    main_asset: ObjectAssetLink | null;
 }
 
 // Manuscript Asset Usage types (for scene asset tracking)
@@ -96,7 +96,7 @@ export interface SceneAssetsResponse {
 
 // Image cleanup types
 export interface ImageCleanupPolicy {
-    delete_non_main_story_object_images: boolean;
+    delete_non_main_object_images: boolean;
     delete_unused_manuscript_images: boolean;
     keep_recent_days: number;
     treat_reference_images_as_used: boolean;
@@ -381,28 +381,28 @@ export const assetService = {
     // Story Object Assets
 
     /**
-     * Get assets for a story object
+     * Get assets for a object
      */
-    async getStoryObjectAssets(
+    async getObjectAssetLinks(
         projectId: string,
         objectType: string,
         objectId: string
-    ): Promise<StoryObjectAssetsResponse> {
-        return apiClient.get<StoryObjectAssetsResponse>(
+    ): Promise<ObjectAssetLinksResponse> {
+        return apiClient.get<ObjectAssetLinksResponse>(
             `/api/v1/assets/${projectId}/object/${objectType}/${objectId}`
         );
     },
 
     /**
-     * Set main asset for a story object
+     * Set main asset for a object
      */
     async setMainAsset(
         projectId: string,
         objectType: string,
         objectId: string,
         assetId: string
-    ): Promise<StoryObjectAsset> {
-        return apiClient.patch<StoryObjectAsset>(
+    ): Promise<ObjectAssetLink> {
+        return apiClient.patch<ObjectAssetLink>(
             `/api/v1/assets/${projectId}/object/${objectType}/${objectId}/main`,
             { asset_id: assetId }
         );

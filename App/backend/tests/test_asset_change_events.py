@@ -29,7 +29,7 @@ def test_queue_asset_change_deduplicates_by_priority() -> None:
         session,
         user_id=user_id,
         project_id=project_id,
-        scope="story_object_assets",
+        scope="object_asset_links",
         action="updated",
         object_type="character",
         object_id=object_id,
@@ -38,7 +38,7 @@ def test_queue_asset_change_deduplicates_by_priority() -> None:
         session,
         user_id=user_id,
         project_id=project_id,
-        scope="story_object_assets",
+        scope="object_asset_links",
         action="created",
         object_type="character",
         object_id=object_id,
@@ -47,7 +47,7 @@ def test_queue_asset_change_deduplicates_by_priority() -> None:
         session,
         user_id=user_id,
         project_id=project_id,
-        scope="story_object_assets",
+        scope="object_asset_links",
         action="deleted",
         object_type="character",
         object_id=object_id,
@@ -93,7 +93,7 @@ def test_after_commit_emits_batched_asset_changes_per_project(monkeypatch) -> No
         project_id=project_id,
         action="created",
     )
-    asset_change_events.queue_story_object_assets_change(
+    asset_change_events.queue_object_assets_change(
         session,
         user_id=user_id,
         project_id=project_id,
@@ -127,7 +127,7 @@ def test_after_commit_emits_batched_asset_changes_per_project(monkeypatch) -> No
     assert emitted_project_id == str(project_id)
     assert {"scope": "project_assets", "action": "created"} in changes
     assert any(
-        change.get("scope") == "story_object_assets"
+        change.get("scope") == "object_asset_links"
         and change.get("action") == "updated"
         and change.get("object_type") == "character"
         and isinstance(change.get("object_id"), str)

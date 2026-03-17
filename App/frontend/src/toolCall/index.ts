@@ -27,7 +27,7 @@ export type {
   EditCard,
 } from './types';
 
-export { STORY_ENTITY_TYPE_MAP, getObjectData } from './types';
+export { getObjectData } from './types';
 
 // EditCard builder (simplified, no normalizer/validator dependency)
 export { buildEditCardsFromToolCallMetadata } from './editCardBuilder';

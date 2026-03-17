@@ -18,7 +18,7 @@ def test_tool_call_decision_response_has_no_new_objects_field() -> None:
             "assistant_message_id": None,
             "call_seq": 0,
             "llm_call_id": "call_1",
-            "tool_name": "read_story_object",
+            "tool_name": "read_story_entity",
             "arguments": {},
             "status": "applied",
             "reason": None,

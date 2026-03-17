@@ -195,9 +195,9 @@ Delete a project and all associated data.
 
 ---
 
-## Story Objects Endpoints
+## Project Objects Endpoints
 
-All story object endpoints require the `project_id` in the URL path.
+All project object endpoints require the `project_id` in the URL path.
 
 Base path: `/api/v1/projects/{project_id}/`
 
@@ -653,11 +653,11 @@ Event name: `object:changed`
 
 ## Multilingual Support
 
-All story objects and chat messages support multiple languages through JSONB storage.
+All project objects and chat messages support multiple languages through JSONB storage.
 
 ### Version Data Structure
 
-When updating story objects, versions are created with language-specific data:
+When updating project objects, versions are created with language-specific data:
 
 ```json
 {

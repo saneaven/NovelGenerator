@@ -1,4 +1,4 @@
-"""Story object schemas"""
+"""Schemas for canonical project objects."""
 from pydantic import BaseModel, Field
 from datetime import datetime
 from uuid import UUID
@@ -70,7 +70,7 @@ class NameDescriptionResponse(BaseMetadata):
 
 
 class ImagePromptUpdate(BaseModel):
-    """Update image prompts for a story object"""
+    """Update image prompts for a project object."""
     image_prompt: Optional[str] = None
     image_prompt_positive: Optional[str] = None
     image_prompt_negative: Optional[str] = None

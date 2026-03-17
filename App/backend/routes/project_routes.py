@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 
 from ..database import get_db
-from ..models.db_models import User, Project, StoryObjectAsset, Asset, BasicInfo, Guidelines
+from ..models.db_models import User, Project, ObjectAssetLink, Asset, BasicInfo, Guidelines
 from ..models.translation_models import ObjectVersion
 from ..schemas.projects import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse
 from ..schemas.project_transfer import (
@@ -40,12 +40,12 @@ from ..services.storage_service import storage_service
 
 
 def _get_cover_asset(db: Session, project: Project) -> dict | None:
-    """Extract cover asset from project's basic_info using StoryObjectAsset"""
+    """Extract cover asset from project's basic_info using ObjectAssetLink"""
     if project.basic_info:
-        main_link = db.query(StoryObjectAsset).filter(
-            StoryObjectAsset.object_type == 'basic_info',
-            StoryObjectAsset.object_id == project.basic_info.id,
-            StoryObjectAsset.is_main == True
+        main_link = db.query(ObjectAssetLink).filter(
+            ObjectAssetLink.object_type == 'basic_info',
+            ObjectAssetLink.object_id == project.basic_info.id,
+            ObjectAssetLink.is_main == True
         ).first()
         if main_link:
             asset = db.query(Asset).filter(Asset.id == main_link.asset_id).first()
@@ -216,7 +216,7 @@ async def list_projects(
     Returns paginated list of projects owned by the authenticated user.
     Includes cover_asset from BasicInfo if available.
     """
-    # Eager load basic_info (cover asset is fetched via StoryObjectAsset in _get_cover_asset)
+    # Eager load basic_info (cover asset is fetched via ObjectAssetLink in _get_cover_asset)
     projects = db.query(Project).options(
         joinedload(Project.basic_info)
     ).filter(

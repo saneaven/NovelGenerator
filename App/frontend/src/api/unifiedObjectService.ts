@@ -1,7 +1,7 @@
 /**
  * API Service for Unified Object System
  *
- * All story objects use the same endpoints:
+ * All objects use the same endpoints:
  * - GET /api/v1/objects/{type}/{id}?language={lang}
  * - PUT /api/v1/objects/{type}/{id}
  * - POST /api/v1/objects/{type}/{id}/translations

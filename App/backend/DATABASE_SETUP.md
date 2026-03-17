@@ -66,15 +66,15 @@ The database is designed with a user-centric architecture where all data is owne
 2. **user_settings** - User preferences and LLM provider settings
 3. **projects** - Story projects
 4. **basic_info** - Project basic information (title, logline, genres, tags)
-5. **characters, organizations, locations, lorebook_entries** - Story elements
-6. **outlines, acts, chapters** - Story structure
-7. **story_object_versions** - Version history for all story objects
-8. **chapter_contents, chapter_content_versions** - Chapter content with versions
+5. **guidelines** - Project-level writing guidance
+6. **story_entities, story_entity_folders** - Canonical story entities and folder tree
+7. **outlines, manuscripts** - Story structure and chapter prose
+8. **object_versions** - Version history for all project objects
 9. **chats, chat_messages** - Chat conversations
 
 ### Multilingual Support
 
-All story objects and chat messages support multiple languages through JSONB columns:
+All project objects and chat messages support multiple languages through JSONB columns:
 
 ```json
 {

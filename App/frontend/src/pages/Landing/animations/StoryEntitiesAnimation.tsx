@@ -8,7 +8,7 @@ import {
 import { TypingText } from './TypingText';
 import './LandingAnimations.css';
 
-interface StoryObjectsAnimationProps {
+interface StoryEntitiesAnimationProps {
   isActive: boolean;
 }
 
@@ -104,7 +104,7 @@ function PanelCut({ withImage }: { withImage: boolean }) {
     <Stage id={withImage ? 'story-result' : 'story-panel'}>
       <div className="landing-anim-ui-app">
         <Tabs />
-        <div className="landing-anim-ui-body landing-anim-story-objects-body">
+        <div className="landing-anim-ui-body landing-anim-story-entities-body">
           <div className="landing-anim-ui-bar">
             <strong>Characters</strong>
             <span className="landing-anim-ui-button secondary">
@@ -129,12 +129,12 @@ function PanelCut({ withImage }: { withImage: boolean }) {
 function EditorCut({ onDone }: { onDone: () => void }) {
   return (
     <Stage id="story-editor">
-      <div className="landing-anim-ui-panel landing-anim-story-objects-panel">
+      <div className="landing-anim-ui-panel landing-anim-story-entities-panel">
         <div className="landing-anim-ui-panel-tabs">
           <span className="landing-anim-ui-panel-tab is-active">Edit</span>
           <span className="landing-anim-ui-panel-tab">Image</span>
         </div>
-        <div className="landing-anim-ui-panel-body landing-anim-story-objects-panel-body">
+        <div className="landing-anim-ui-panel-body landing-anim-story-entities-panel-body">
           <div className="landing-anim-ui-field">
             <label>Name</label>
             <div className="landing-anim-ui-input">Eleanor Voss</div>
@@ -164,12 +164,12 @@ function EditorCut({ onDone }: { onDone: () => void }) {
 function ImageCut({ onDone }: { onDone: () => void }) {
   return (
     <Stage id="story-image">
-      <div className="landing-anim-ui-panel landing-anim-story-objects-panel">
+      <div className="landing-anim-ui-panel landing-anim-story-entities-panel">
         <div className="landing-anim-ui-panel-tabs">
           <span className="landing-anim-ui-panel-tab">Edit</span>
           <span className="landing-anim-ui-panel-tab is-active">Image</span>
         </div>
-        <div className="landing-anim-ui-panel-body landing-anim-story-objects-panel-body">
+        <div className="landing-anim-ui-panel-body landing-anim-story-entities-panel-body">
           <div className="landing-anim-ui-bar">
             <div className="landing-anim-ui-subtabs">
               <span className="landing-anim-ui-subtab">Library</span>
@@ -192,7 +192,7 @@ function ImageCut({ onDone }: { onDone: () => void }) {
   );
 }
 
-const StoryObjectsContent: React.FC = () => {
+const StoryEntitiesContent: React.FC = () => {
   const [cut, setCut] = useState<Cut>('panel');
   const timeoutIdsRef = useRef<number[]>([]);
 
@@ -231,7 +231,7 @@ const StoryObjectsContent: React.FC = () => {
   return <AnimatePresence mode="wait">{current}</AnimatePresence>;
 };
 
-export const StoryObjectsAnimation: React.FC<StoryObjectsAnimationProps> = ({ isActive }) => {
+export const StoryEntitiesAnimation: React.FC<StoryEntitiesAnimationProps> = ({ isActive }) => {
   const [playKey, setPlayKey] = useState(0);
 
   useEffect(() => {
@@ -245,7 +245,7 @@ export const StoryObjectsAnimation: React.FC<StoryObjectsAnimationProps> = ({ is
       animate={isActive ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.98 }}
       transition={{ duration: 0.35 }}
     >
-      {isActive && <StoryObjectsContent key={playKey} />}
+      {isActive && <StoryEntitiesContent key={playKey} />}
     </motion.div>
   );
 };

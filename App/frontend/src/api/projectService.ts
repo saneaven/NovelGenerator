@@ -10,7 +10,7 @@ export type ProjectExportImageScope = 'used_only' | 'all' | 'manual';
 export interface ProjectExportOptions {
   include_images: boolean;
   image_scope: ProjectExportImageScope;
-  include_non_main_story_object_images: boolean;
+  include_non_main_object_images: boolean;
   treat_generation_reference_images_as_used: boolean;
 }
 

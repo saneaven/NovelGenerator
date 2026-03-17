@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0004_story_entity_folder_localization"
+revision = "0004_story_entity_folder_loc"
 down_revision = "0003_outline_kind"
 branch_labels = None
 depends_on = None

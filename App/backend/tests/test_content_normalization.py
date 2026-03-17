@@ -106,7 +106,7 @@ def test_fallback_snapshot_assembler_reuses_id_key_for_later_index_only_delta() 
                     "index": 0,
                     "id": "call_1",
                     "function": {
-                        "name": "create_story_object",
+                        "name": "create_story_entity",
                         "arguments": '{"name":"Elena","type":"character"',
                     },
                 }
@@ -130,7 +130,7 @@ def test_fallback_snapshot_assembler_reuses_id_key_for_later_index_only_delta() 
 
     assert len(snapshot.tool_calls) == 1
     assert snapshot.tool_calls[0].id == "call_1"
-    assert snapshot.tool_calls[0].tool_name == "create_story_object"
+    assert snapshot.tool_calls[0].tool_name == "create_story_entity"
     assert snapshot.tool_calls[0].arguments == {
         "name": "Elena",
         "type": "character",
@@ -147,7 +147,7 @@ def test_fallback_snapshot_assembler_migrates_index_key_when_id_arrives_later() 
                 {
                     "index": 0,
                     "function": {
-                        "name": "create_story_object",
+                        "name": "create_story_entity",
                         "arguments": '{"name":"Elena"',
                     },
                 }
@@ -172,7 +172,7 @@ def test_fallback_snapshot_assembler_migrates_index_key_when_id_arrives_later() 
 
     assert len(snapshot.tool_calls) == 1
     assert snapshot.tool_calls[0].id == "call_1"
-    assert snapshot.tool_calls[0].tool_name == "create_story_object"
+    assert snapshot.tool_calls[0].tool_name == "create_story_entity"
     assert snapshot.tool_calls[0].arguments == {
         "name": "Elena",
         "type": "character",
@@ -190,7 +190,7 @@ def test_fallback_snapshot_assembler_merges_mixed_id_index_fragments_without_emp
                     "id": "call_1",
                     "extra_content": {"source": "initial"},
                     "function": {
-                        "name": "create_story_object",
+                        "name": "create_story_entity",
                         "arguments": '{"name":"Elena"',
                     },
                 }
@@ -229,7 +229,7 @@ def test_fallback_snapshot_assembler_merges_mixed_id_index_fragments_without_emp
 
     assert len(snapshot.tool_calls) == 1
     assert all(tool_call.tool_name for tool_call in snapshot.tool_calls)
-    assert snapshot.tool_calls[0].tool_name == "create_story_object"
+    assert snapshot.tool_calls[0].tool_name == "create_story_entity"
     assert snapshot.tool_calls[0].extra_content == {
         "source": "initial",
         "phase": "middle",

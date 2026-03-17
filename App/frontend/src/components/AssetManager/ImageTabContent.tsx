@@ -6,7 +6,7 @@ import ImagePromptManager from './ImagePromptManager';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import AuthenticatedImage from '../common/AuthenticatedImage';
-import { assetService, formatStyledPrompt, type Asset, type SceneAsset, type StoryObjectAsset } from '../../api/assetService';
+import { assetService, formatStyledPrompt, type Asset, type SceneAsset, type ObjectAssetLink } from '../../api/assetService';
 import { getAssetUrl } from '../../utils/assetUrl';
 import { Folder, AIAssistMini, Close } from '../icons';
 import { VirtualizedImageGrid } from './VirtualizedImageGrid';
@@ -71,7 +71,7 @@ interface ImageTabContentProps {
     initialGenerationRecipe?: ImageGenerationRecipe | null;
 }
 
-const EMPTY_LINKED_ASSETS: StoryObjectAsset[] = [];
+const EMPTY_LINKED_ASSETS: ObjectAssetLink[] = [];
 const EMPTY_PROJECT_ASSETS: Asset[] = [];
 const EMPTY_SCENE_ASSETS: SceneAsset[] = [];
 
@@ -95,7 +95,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     const isLoading = useAssetStore((state) => state.isLoading);
     const error = useAssetStore((state) => state.error);
     const fetchAssets = useAssetStore((state) => state.fetchAssets);
-    const fetchStoryObjectAssets = useAssetStore((state) => state.fetchStoryObjectAssets);
+    const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);
     const fetchSceneAssets = useAssetStore((state) => state.fetchSceneAssets);
     const uploadAsset = useAssetStore((state) => state.uploadAsset);
     const updateAsset = useAssetStore((state) => state.updateAsset);
@@ -130,7 +130,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     const currentSceneManuscriptId = showAllChapters ? undefined : manuscriptId;
     const linkedAssets = useAssetStore((state) =>
         currentProjectId && mode === 'object' && objectType && objectId
-            ? state.getStoryObjectAssets(currentProjectId, objectType, objectId)
+            ? state.getObjectAssetLinks(currentProjectId, objectType, objectId)
             : EMPTY_LINKED_ASSETS
     );
     const projectAssets = useAssetStore((state) =>
@@ -149,7 +149,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         if (!currentProjectId) return;
 
         if (mode === 'object' && objectType && objectId) {
-            fetchStoryObjectAssets(currentProjectId, objectType, objectId);
+            fetchObjectAssetLinks(currentProjectId, objectType, objectId);
         } else if (mode === 'scene') {
             // If showAllChapters is true, fetch all scene assets (no manuscriptId filter)
             // Otherwise, fetch only assets owned by current manuscript
@@ -158,7 +158,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             // Picker mode: fetch all assets or scene assets
             fetchAssets(currentProjectId);
         }
-    }, [currentProjectId, mode, objectType, objectId, currentSceneManuscriptId, fetchStoryObjectAssets, fetchSceneAssets, fetchAssets]);
+    }, [currentProjectId, mode, objectType, objectId, currentSceneManuscriptId, fetchObjectAssetLinks, fetchSceneAssets, fetchAssets]);
 
     // Auto-open generate panel when an initial recipe is provided (e.g., retry flow)
     useEffect(() => {
@@ -289,7 +289,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             return;
         }
         if (mode === 'object' && (!objectType || !objectId)) {
-            showAlert({ title: 'Import Image', message: 'No object is selected (object assets must be linked to a story object).' });
+            showAlert({ title: 'Import Image', message: 'No object is selected (object assets must be linked to a object).' });
             return;
         }
 
@@ -333,7 +333,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                     return;
                 }
                 if (mode === 'object' && (!objectType || !objectId)) {
-                    showAlert({ title: 'Import Image', message: 'No object is selected (object assets must be linked to a story object).' });
+                    showAlert({ title: 'Import Image', message: 'No object is selected (object assets must be linked to a object).' });
                     return;
                 }
 
@@ -461,7 +461,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             if (mode === 'scene') {
                 await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
             } else if (mode === 'object' && objectType && objectId) {
-                await fetchStoryObjectAssets(currentProjectId, objectType, objectId, true);
+                await fetchObjectAssetLinks(currentProjectId, objectType, objectId, true);
             } else {
                 await fetchAssets(currentProjectId);
             }
@@ -489,7 +489,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             if (mode === 'scene') {
                 await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
             } else if (mode === 'object' && objectType && objectId) {
-                await fetchStoryObjectAssets(currentProjectId, objectType, objectId, true);
+                await fetchObjectAssetLinks(currentProjectId, objectType, objectId, true);
             } else {
                 await fetchAssets(currentProjectId);
             }
@@ -504,7 +504,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         if (!currentProjectId) return;
 
         if (mode === 'object' && objectType && objectId) {
-            await fetchStoryObjectAssets(currentProjectId, objectType, objectId, true);
+            await fetchObjectAssetLinks(currentProjectId, objectType, objectId, true);
         } else if (mode === 'scene') {
             await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
         } else {
@@ -527,7 +527,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             if (mode === 'scene') {
                 await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
             } else if (mode === 'object' && objectType && objectId) {
-                await fetchStoryObjectAssets(currentProjectId, objectType, objectId, true);
+                await fetchObjectAssetLinks(currentProjectId, objectType, objectId, true);
             } else {
                 await fetchAssets(currentProjectId);
             }

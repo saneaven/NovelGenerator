@@ -54,9 +54,9 @@
       "title": "Novel Buds란?",
       "description": "Novel Buds는 AI와 대화하여 캐릭터를 만들고, 세계를 구축하고, 플롯을 개발할 수 있는 지능형 글쓰기 플랫폼입니다. 모든 것이 하나의 아름다운 워크스페이스에서 정리됩니다."
     },
-    "storyObjects": {
-      "title": "스토리 오브젝트를 한곳에서 관리",
-      "description": "캐릭터, 단체, 장소, 로어북을 전용 탭으로 나눠 정리하고 카드로 훑어보며, 확장 편집과 AI 보조, 이미지 연결까지 같은 워크스페이스 안에서 이어서 작업할 수 있습니다."
+    "storyEntities": {
+      "title": "스토리 엔티티를 한곳에서 관리",
+      "description": "캐릭터, 단체, 장소, 로어북을 하나의 엔티티 탐색기에서 정리하고 카드로 훑어보며, 확장 편집과 AI 보조, 이미지 연결까지 같은 워크스페이스 안에서 이어서 작업할 수 있습니다."
     },
     "agentWriting": {
       "title": "에이전트와 함께 세계를 구축하고 글쓰기",
@@ -1143,8 +1143,8 @@
     "patchCount": "{{count}}개 작업",
     "pendingDecisionSummary": "결정 상태: 수락 {{accepted}} / 거절 {{rejected}}"
   },
-  "storyObjectPanel": {
-    "title": "스토리 객체",
+  "storyEntityPanel": {
+    "title": "스토리 엔티티",
     "scrollTabsLeft": "탭 왼쪽으로 스크롤",
     "scrollTabsRight": "탭 오른쪽으로 스크롤",
     "tabs": {
@@ -1247,7 +1247,7 @@
       "config": "설정"
     },
     "subPages": {
-      "storyObjects": "스토리 객체",
+      "storyEntities": "스토리 엔티티",
       "outlineManager": "개요 관리자",
       "novelEditor": "소설 에디터",
       "config": "설정"

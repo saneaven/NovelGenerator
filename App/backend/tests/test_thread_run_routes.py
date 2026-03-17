@@ -499,7 +499,7 @@ def test_list_thread_messages_serializes_latest_run_context_fields(monkeypatch: 
         run_seq=7,
         language="Korean",
         run_mode="planMode",
-        surface="story-object",
+        surface="story-entity",
         created_at=created_at,
         updated_at=updated_at,
         input_payload={"userRequest": "revise tone"},
@@ -514,7 +514,7 @@ def test_list_thread_messages_serializes_latest_run_context_fields(monkeypatch: 
         "thread_runtime_fields",
         lambda *_args, **_kwargs: {
             "parent_id": parent_id,
-            "journey_kind": "storyObjectEdit",
+            "journey_kind": "objectEdit",
             "display_label": "Journey",
         },
     )
@@ -539,7 +539,7 @@ def test_list_thread_messages_serializes_latest_run_context_fields(monkeypatch: 
     assert response.latest_run["journey_target_ids"] == latest_run.journey_target_ids
     assert response.latest_run["language"] == "Korean"
     assert response.latest_run["run_mode"] == "planMode"
-    assert response.latest_run["surface"] == "story-object"
+    assert response.latest_run["surface"] == "story-entity"
 
 
 def _is_column_for(target: object, model: object, key: str) -> bool:

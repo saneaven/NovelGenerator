@@ -12,7 +12,7 @@ interface SubPageConfig {
 }
 
 const SUB_PAGES: SubPageConfig[] = [
-  { id: 'story-object', labelKey: 'unifiedWorkspace.subPages.storyObjects', icon: <Workspace size="lg" /> },
+  { id: 'story-entity', labelKey: 'unifiedWorkspace.subPages.storyEntities', icon: <Workspace size="lg" /> },
   { id: 'outline-manager', labelKey: 'unifiedWorkspace.subPages.outlineManager', icon: <Clipboard size="lg" /> },
   { id: 'novel-editor', labelKey: 'unifiedWorkspace.subPages.novelEditor', icon: <Document size="lg" /> },
   { id: 'config', labelKey: 'unifiedWorkspace.subPages.config', icon: <Configs size="lg" /> },

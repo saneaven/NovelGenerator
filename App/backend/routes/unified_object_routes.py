@@ -1,12 +1,12 @@
 """
-Unified CRUD Routes for New Translation System
+Unified CRUD routes for canonical project objects.
 
-All story objects use the same pattern:
-- GET: Returns object with data from latest object_versions
-- PUT: Updates object, creates new version (or updates latest when create_new_version=false)
-- POST /translations: Adds new language translation
-- GET /versions: Returns version history
-- PATCH /versions/{version_id}/activate: Reverts to previous version
+All project objects use the same pattern:
+- GET: returns data from the latest object_versions row
+- PUT: updates the object and creates a new version unless create_new_version=false
+- POST /translations: adds a new language translation
+- GET /versions: returns version history
+- PATCH /versions/{version_id}/activate: reverts to a previous version
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,8 +20,7 @@ from ..auth import get_current_user
 from ..models.db_models import (
     User,
 )
-from ..schemas.story_objects import ImagePromptUpdate
-from ..utils.object_type_aliases import normalize_object_type
+from ..schemas.object_schemas import ImagePromptUpdate
 from ..utils.story_entities import STORY_ENTITY_TYPE, require_story_entity_kind
 from ..services.object_service import object_service
 from ..services.ownership import (
@@ -39,7 +38,7 @@ router = APIRouter()
 # ============================================================================
 
 class UnifiedObjectResponse(BaseModel):
-    """Standard response for all story objects"""
+    """Standard response for canonical project objects."""
     id: str
     type: str
     kind: Optional[str] = None
@@ -116,7 +115,6 @@ async def get_object(
     Default (no language param): Returns ALL languages in data field.
     With ?language=X: Returns only that language in data field.
     """
-    object_type = normalize_object_type(object_type)
     project_id = resolve_project_id_for_object(
         db,
         object_type=object_type,
@@ -147,7 +145,6 @@ async def update_object(
     Update object in specified language.
     Delegates all write logic to ObjectService (flush-only), then commits in route.
     """
-    object_type = normalize_object_type(object_type)
     project_id = resolve_project_id_for_object(
         db,
         object_type=object_type,
@@ -199,7 +196,6 @@ async def add_translation(
     Updates the latest version in-place so translations remain tied to the
     originating content version rather than spawning a new version entry.
     """
-    object_type = normalize_object_type(object_type)
     project_id = resolve_project_id_for_object(
         db,
         object_type=object_type,
@@ -244,7 +240,6 @@ async def get_versions(
     Get version history for an object.
     Returns all versions in reverse chronological order.
     """
-    object_type = normalize_object_type(object_type)
     project_id = resolve_project_id_for_object(
         db,
         object_type=object_type,
@@ -281,7 +276,6 @@ async def restore_version(
     The restored content becomes the latest version.
     This is NOT a pointer change - it creates a new version entry.
     """
-    object_type = normalize_object_type(object_type)
     project_id = resolve_project_id_for_object(
         db,
         object_type=object_type,
@@ -333,7 +327,6 @@ async def list_objects(
     Default (no language param): Returns ALL languages in data field for each object.
     With ?language=X: Returns only that language in data field.
     """
-    object_type = normalize_object_type(object_type)
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
     normalized_kinds: list[str] | None = None
     if kinds:
@@ -376,8 +369,6 @@ async def create_object(
     Create a new object of a specific type.
     Delegates all write logic to ObjectService (flush-only), then commits in route.
     """
-    object_type = normalize_object_type(object_type)
-
     # Verify project access.
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
 
@@ -422,7 +413,6 @@ async def delete_object(
     Delete an object and all its translations/versions.
     Delegates delete logic to ObjectService (flush-only), then commits in route.
     """
-    object_type = normalize_object_type(object_type)
     project_id = resolve_project_id_for_object(
         db,
         object_type=object_type,
@@ -464,11 +454,10 @@ async def update_image_prompt(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Update image prompts for a story object.
+    Update image prompts for a project object.
     These are stored directly on the object (not versioned).
     Supports both natural language prompts and tag-based prompts (NovelAI).
     """
-    object_type = normalize_object_type(object_type)
     project_id = resolve_project_id_for_object(
         db,
         object_type=object_type,

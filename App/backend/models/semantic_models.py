@@ -64,9 +64,9 @@ class SemanticSource(Base):
     last_error_message = Column(Text, nullable=True)
 
     # Ordering metadata
-    type_group = Column(String(30), nullable=False)  # story_object|outline|manuscript
-    story_object_type = Column(String(50), nullable=True)
-    story_object_order = Column(Integer, nullable=True)
+    type_group = Column(String(30), nullable=False)  # story_entity|outline|manuscript
+    story_entity_kind = Column(String(50), nullable=True)
+    story_entity_order = Column(Integer, nullable=True)
     outline_order = Column(Integer, nullable=True)
     act_order = Column(Integer, nullable=True)
     chapter_order = Column(Integer, nullable=True)
@@ -93,7 +93,7 @@ class SemanticSource(Base):
             "outline_order",
             "act_order",
             "chapter_order",
-            "story_object_order",
+            "story_entity_order",
         ),
     )
 

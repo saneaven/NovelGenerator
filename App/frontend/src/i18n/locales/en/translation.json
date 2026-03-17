@@ -54,9 +54,9 @@
       "title": "What is Novel Buds?",
       "description": "Novel Buds is an intelligent writing platform that helps you bring your stories to life. Chat with AI to create characters, build worlds, and develop plots — all organized in one beautiful workspace."
     },
-    "storyObjects": {
-      "title": "Manage Story Objects in One Workspace",
-      "description": "Organize characters, organizations, locations, and lorebook entries in dedicated tabs, scan them as cards, expand into full editing, use AI assistance, and connect images without leaving the same workspace."
+    "storyEntities": {
+      "title": "Manage Story Entities in One Workspace",
+      "description": "Organize characters, organizations, locations, and lorebook entries in one entity explorer, scan them as cards, expand into full editing, use AI assistance, and connect images without leaving the same workspace."
     },
     "agentWriting": {
       "title": "Build Worlds & Write with Agent",
@@ -64,7 +64,7 @@
     },
     "sceneImage": {
       "title": "Generate Scene Images from Manuscript Context",
-      "description": "Use the current chapter context together with selected story objects to generate scene images that match the mood, staging, and details already established in your manuscript."
+      "description": "Use the current chapter context together with selected objects to generate scene images that match the mood, staging, and details already established in your manuscript."
     },
     "agentQuery": {
       "title": "Ask the Agent",
@@ -407,7 +407,7 @@
         },
         "editAssistant": {
           "label": "Edit Assistant",
-          "description": "Editing and refinement of story objects and manuscript content"
+          "description": "Editing and refinement of objects and manuscript content"
         },
         "imagePrompt": {
           "label": "Image Prompt",
@@ -1143,8 +1143,8 @@
     "patchCount": "{{count}} operation(s)",
     "pendingDecisionSummary": "Decisions: {{accepted}} accept / {{rejected}} reject"
   },
-  "storyObjectPanel": {
-    "title": "Story Objects",
+  "storyEntityPanel": {
+    "title": "Story Entities",
     "scrollTabsLeft": "Scroll tabs left",
     "scrollTabsRight": "Scroll tabs right",
     "tabs": {
@@ -1247,7 +1247,7 @@
       "config": "Config"
     },
     "subPages": {
-      "storyObjects": "Story Objects",
+      "storyEntities": "Story Entities",
       "outlineManager": "Outline Manager",
       "novelEditor": "Novel Editor",
       "config": "Config"
@@ -1315,11 +1315,11 @@
       "hint": "Exports include the latest server-saved state.",
       "includeImages": "Include original images",
       "imageScope": "Image Scope",
-      "imageScopeHint": "Manual selection starts from the used set (manuscripts + story objects) and can be adjusted.",
+      "imageScopeHint": "Manual selection starts from the used set (manuscripts + objects) and can be adjusted.",
       "usedOnly": "Used only",
       "allImages": "All images",
       "manualSelection": "Manual selection",
-      "includeNonMain": "Include non-main story object images",
+      "includeNonMain": "Include non-main object images",
       "includeReferenceImages": "Include generation reference images (recursive)",
       "preview": "Preview",
       "download": "Download .nbproj",
@@ -1344,7 +1344,7 @@
       "days": "days",
       "keepRecentHint": "Assets created within this window are excluded (0 disables).",
       "deleteUnusedScene": "Delete unused scene assets (not referenced in manuscripts)",
-      "deleteNonMain": "Delete non-main story object images (if not used in manuscripts)",
+      "deleteNonMain": "Delete non-main object images (if not used in manuscripts)",
       "treatReferenceAsUsed": "Treat generation reference images as used (block deletion)",
       "referenceWarning": "If disabled, deleting an asset will remove its ID from other assets' generation reference images.",
       "preview": "Preview",

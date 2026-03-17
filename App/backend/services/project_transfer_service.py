@@ -28,7 +28,7 @@ from ..models.db_models import (
     Project,
     StoryEntity,
     StoryEntityFolder,
-    StoryObjectAsset,
+    ObjectAssetLink,
     User,
 )
 from ..models.translation_models import ObjectVersion
@@ -41,7 +41,6 @@ from ..services.storage_usage_service import (
     StorageQuotaExceededError,
     recalculate_project_usage_and_enforce_quota,
 )
-from ..utils.object_type_aliases import externalize_object_type, normalize_object_type
 from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, require_story_entity_kind
 from .outline_service import require_outline_kind
 
@@ -224,20 +223,20 @@ class ProjectTransferService:
             used_ids.add(asset_id)
             add_reason(asset_id, "manuscript_image")
 
-        # 2) Story object images (main-only by default, configurable)
+        # 2) Object-linked images (main-only by default, configurable)
         story_links_query = (
-            db.query(StoryObjectAsset.asset_id, StoryObjectAsset.is_main)
-            .join(Asset, Asset.id == StoryObjectAsset.asset_id)
+            db.query(ObjectAssetLink.asset_id, ObjectAssetLink.is_main)
+            .join(Asset, Asset.id == ObjectAssetLink.asset_id)
             .filter(Asset.project_id == project_id)
         )
-        if not options.include_non_main_story_object_images:
-            story_links_query = story_links_query.filter(StoryObjectAsset.is_main == True)
+        if not options.include_non_main_object_images:
+            story_links_query = story_links_query.filter(ObjectAssetLink.is_main == True)
 
         for asset_id, is_main in story_links_query.all():
             if not asset_id:
                 continue
             used_ids.add(asset_id)
-            add_reason(asset_id, "story_object_main" if is_main else "story_object_linked")
+            add_reason(asset_id, "object_main" if is_main else "object_linked")
 
         # 3) Generation reference images (optional, recursive)
         if options.treat_generation_reference_images_as_used and used_ids:
@@ -376,13 +375,13 @@ class ProjectTransferService:
                 .all()
             )
 
-        links: List[StoryObjectAsset] = []
+        links: List[ObjectAssetLink] = []
         if options.include_images and selected_set:
             links = (
-                db.query(StoryObjectAsset)
-                .join(Asset, Asset.id == StoryObjectAsset.asset_id)
-                .filter(Asset.project_id == project_id, StoryObjectAsset.asset_id.in_(list(selected_set)))
-                .order_by(StoryObjectAsset.created_at.asc())
+                db.query(ObjectAssetLink)
+                .join(Asset, Asset.id == ObjectAssetLink.asset_id)
+                .filter(Asset.project_id == project_id, ObjectAssetLink.asset_id.in_(list(selected_set)))
+                .order_by(ObjectAssetLink.created_at.asc())
                 .all()
             )
 
@@ -395,7 +394,7 @@ class ProjectTransferService:
         links_payload = {
             "links": [
                 {
-                    "object_type": externalize_object_type(str(link.object_type)),
+                    "object_type": str(link.object_type),
                     "object_id": str(link.object_id),
                     "asset_id": str(link.asset_id),
                     "is_main": bool(link.is_main),
@@ -520,7 +519,7 @@ class ProjectTransferService:
 
         latest_versions: Dict[Tuple[str, UUID], ObjectVersion] = {}
         for obj_type, ids in ids_by_type.items():
-            canonical = normalize_object_type(obj_type)
+            canonical = obj_type
             by_id = _latest_versions_by_object_id(db, canonical, ids)
             for o_id, v in by_id.items():
                 latest_versions[(obj_type, o_id)] = v
@@ -840,9 +839,9 @@ class ProjectTransferService:
                 if not new_asset_id or not new_object_id:
                     continue
                 db.add(
-                    StoryObjectAsset(
+                    ObjectAssetLink(
                         id=uuid4(),
-                        object_type=normalize_object_type(export_object_type),
+                        object_type=export_object_type,
                         object_id=new_object_id,
                         asset_id=new_asset_id,
                         is_main=bool(link.get("is_main")),
@@ -883,7 +882,7 @@ class ProjectTransferService:
             db.add(
                 ObjectVersion(
                     id=uuid4(),
-                    object_type=normalize_object_type(obj_type),
+                    object_type=obj_type,
                     object_id=new_obj_id,
                     version_number=1,
                     data=data,

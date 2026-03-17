@@ -93,18 +93,18 @@
   display: block;
 }
 
-.story-entity-folder-card .story-object-card__body-shell {
+.story-entity-folder-card .object-card__body-shell {
   padding-top: calc(var(--spacing-lg) + var(--spacing-sm));
 }
 
-.story-entity-card .story-object-card__full-expand-btn {
+.story-entity-card .object-card__full-expand-btn {
   opacity: 0;
   transform: scale(0.9);
   transition: opacity var(--transition-fast), transform var(--transition-fast);
 }
 
-.story-entity-card:hover .story-object-card__full-expand-btn,
-.story-entity-card:focus-within .story-object-card__full-expand-btn {
+.story-entity-card:hover .object-card__full-expand-btn,
+.story-entity-card:focus-within .object-card__full-expand-btn {
   opacity: 1;
   transform: scale(1);
 }

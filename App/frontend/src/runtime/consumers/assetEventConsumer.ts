@@ -5,10 +5,10 @@ import { useAssetStore } from '../../store/assetStore';
 const FLUSH_DEBOUNCE_MS = 50;
 const SCENE_ALL_KEY = '__all__';
 
-const getStoryObjectKey = (objectType: string, objectId: string) => `${objectType}:${objectId}`;
+const getObjectKey = (objectType: string, objectId: string) => `${objectType}:${objectId}`;
 const getSceneKey = (manuscriptId: string | null) => manuscriptId ?? SCENE_ALL_KEY;
 
-type PendingStoryObject = {
+type PendingObjectRef = {
   objectType: string;
   objectId: string;
 };
@@ -16,7 +16,7 @@ type PendingStoryObject = {
 export class AssetEventConsumer {
   private activeProjectId: string | null = null;
   private pendingProjectAssets = false;
-  private readonly pendingStoryObjectKeys = new Map<string, PendingStoryObject>();
+  private readonly pendingObjectAssetKeys = new Map<string, PendingObjectRef>();
   private readonly pendingSceneKeys = new Set<string>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
@@ -29,7 +29,7 @@ export class AssetEventConsumer {
     }
     this.pendingProjectAssets = false;
     this.activeProjectId = null;
-    this.pendingStoryObjectKeys.clear();
+    this.pendingObjectAssetKeys.clear();
     this.pendingSceneKeys.clear();
   }
 
@@ -55,12 +55,12 @@ export class AssetEventConsumer {
       return;
     }
 
-    if (change.scope === 'story_object_assets') {
+    if (change.scope === 'object_asset_links') {
       const objectType = String(change.object_type ?? '').trim();
       const objectId = String(change.object_id ?? '').trim();
       if (!objectType || !objectId) return;
-      this.pendingStoryObjectKeys.set(
-        getStoryObjectKey(objectType, objectId),
+      this.pendingObjectAssetKeys.set(
+        getObjectKey(objectType, objectId),
         { objectType, objectId },
       );
       return;
@@ -83,11 +83,11 @@ export class AssetEventConsumer {
     if (!projectId) return;
 
     const shouldRefreshProjectAssets = this.pendingProjectAssets;
-    const storyObjects = [...this.pendingStoryObjectKeys.values()];
+    const objectAssetKeys = [...this.pendingObjectAssetKeys.values()];
     const sceneKeys = [...this.pendingSceneKeys];
 
     this.pendingProjectAssets = false;
-    this.pendingStoryObjectKeys.clear();
+    this.pendingObjectAssetKeys.clear();
     this.pendingSceneKeys.clear();
 
     const store = useAssetStore.getState();
@@ -97,9 +97,9 @@ export class AssetEventConsumer {
       tasks.push(store.fetchAssets(projectId, true));
     }
 
-    for (const item of storyObjects) {
-      if (!store.isStoryObjectAssetsLoaded(projectId, item.objectType, item.objectId)) continue;
-      tasks.push(store.fetchStoryObjectAssets(projectId, item.objectType, item.objectId, true));
+    for (const item of objectAssetKeys) {
+      if (!store.isObjectAssetLinksLoaded(projectId, item.objectType, item.objectId)) continue;
+      tasks.push(store.fetchObjectAssetLinks(projectId, item.objectType, item.objectId, true));
     }
 
     for (const sceneKey of sceneKeys) {

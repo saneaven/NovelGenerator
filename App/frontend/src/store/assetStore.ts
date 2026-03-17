@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { assetService } from '../api/assetService';
-import type { Asset, SceneAsset, StoryObjectAsset } from '../api/assetService';
+import type { Asset, SceneAsset, ObjectAssetLink } from '../api/assetService';
 
 type AssetCollectionsByKey<T> = Record<string, T[]>;
 type LoadedFlagsByKey = Record<string, boolean>;
@@ -9,8 +9,8 @@ type AssetStoreSetter = (partial: Partial<AssetStore> | ((state: AssetStore) => 
 interface AssetStore {
     projectAssetsByProject: AssetCollectionsByKey<Asset>;
     projectAssetsLoadedByProject: LoadedFlagsByKey;
-    storyObjectAssetsByKey: AssetCollectionsByKey<StoryObjectAsset>;
-    storyObjectAssetsLoadedByKey: LoadedFlagsByKey;
+    objectAssetsByKey: AssetCollectionsByKey<ObjectAssetLink>;
+    objectAssetsLoadedByKey: LoadedFlagsByKey;
     sceneAssetsByKey: AssetCollectionsByKey<SceneAsset>;
     sceneAssetsLoadedByKey: LoadedFlagsByKey;
     activeRequestCount: number;
@@ -28,7 +28,7 @@ interface AssetStore {
     deleteAsset: (projectId: string, assetId: string) => Promise<void>;
     updateAsset: (projectId: string, assetId: string, name: string) => Promise<void>;
 
-    fetchStoryObjectAssets: (projectId: string, objectType: string, objectId: string, force?: boolean) => Promise<void>;
+    fetchObjectAssetLinks: (projectId: string, objectType: string, objectId: string, force?: boolean) => Promise<void>;
     setMainAsset: (
         projectId: string,
         objectType: string,
@@ -39,11 +39,11 @@ interface AssetStore {
     fetchSceneAssets: (projectId: string, manuscriptId?: string, force?: boolean) => Promise<void>;
 
     getProjectAssets: (projectId: string) => Asset[];
-    getStoryObjectAssets: (projectId: string, objectType: string, objectId: string) => StoryObjectAsset[];
+    getObjectAssetLinks: (projectId: string, objectType: string, objectId: string) => ObjectAssetLink[];
     getSceneAssets: (projectId: string, manuscriptId?: string) => SceneAsset[];
     getMainAsset: (projectId: string, objectType: string, objectId: string) => Asset | null;
     isProjectAssetsLoaded: (projectId: string) => boolean;
-    isStoryObjectAssetsLoaded: (projectId: string, objectType: string, objectId: string) => boolean;
+    isObjectAssetLinksLoaded: (projectId: string, objectType: string, objectId: string) => boolean;
     isSceneAssetsLoaded: (projectId: string, manuscriptId?: string) => boolean;
     refreshLoadedCaches: (projectId: string) => Promise<void>;
     clearError: () => void;
@@ -51,14 +51,14 @@ interface AssetStore {
 }
 
 const EMPTY_ASSETS: Asset[] = [];
-const EMPTY_STORY_OBJECT_ASSETS: StoryObjectAsset[] = [];
+const EMPTY_OBJECT_ASSET_LINKS: ObjectAssetLink[] = [];
 const EMPTY_SCENE_ASSETS: SceneAsset[] = [];
 const SCENE_ALL_KEY = '__all__';
 
-const getStoryObjectKey = (projectId: string, objectType: string, objectId: string) =>
+const getObjectAssetKey = (projectId: string, objectType: string, objectId: string) =>
     `${projectId}:${objectType}:${objectId}`;
 
-const parseStoryObjectKey = (key: string): { projectId: string; objectType: string; objectId: string } | null => {
+const parseObjectAssetKey = (key: string): { projectId: string; objectType: string; objectId: string } | null => {
     const parts = key.split(':');
     if (parts.length !== 3) return null;
     const [projectId, objectType, objectId] = parts;
@@ -97,7 +97,7 @@ function endRequest(set: AssetStoreSetter) {
     });
 }
 
-function updateAssetInStoryObjectEntries(entries: StoryObjectAsset[], updatedAsset: Asset): StoryObjectAsset[] {
+function updateAssetInObjectAssetEntries(entries: ObjectAssetLink[], updatedAsset: Asset): ObjectAssetLink[] {
     let changed = false;
     const next = entries.map((entry) => {
         if (entry.asset.id !== updatedAsset.id) return entry;
@@ -122,7 +122,7 @@ function updateAssetInSceneEntries(entries: SceneAsset[], updatedAsset: Asset): 
     return changed ? next : entries;
 }
 
-function removeAssetFromStoryObjectEntries(entries: StoryObjectAsset[], assetId: string): StoryObjectAsset[] {
+function removeAssetFromObjectAssetEntries(entries: ObjectAssetLink[], assetId: string): ObjectAssetLink[] {
     if (!entries.some((entry) => entry.asset_id === assetId)) return entries;
     return entries.filter((entry) => entry.asset_id !== assetId);
 }
@@ -135,8 +135,8 @@ function removeAssetFromSceneEntries(entries: SceneAsset[], assetId: string): Sc
 export const useAssetStore = create<AssetStore>()((set, get) => ({
     projectAssetsByProject: {},
     projectAssetsLoadedByProject: {},
-    storyObjectAssetsByKey: {},
-    storyObjectAssetsLoadedByKey: {},
+    objectAssetsByKey: {},
+    objectAssetsLoadedByKey: {},
     sceneAssetsByKey: {},
     sceneAssetsLoadedByKey: {},
     activeRequestCount: 0,
@@ -213,10 +213,10 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
                         .filter((asset) => asset.id !== assetId);
                 }
 
-                const nextStoryObjectAssetsByKey = { ...state.storyObjectAssetsByKey };
-                for (const [key, entries] of Object.entries(state.storyObjectAssetsByKey)) {
+                const nextObjectAssetLinksByKey = { ...state.objectAssetsByKey };
+                for (const [key, entries] of Object.entries(state.objectAssetsByKey)) {
                     if (!key.startsWith(`${projectId}:`)) continue;
-                    nextStoryObjectAssetsByKey[key] = removeAssetFromStoryObjectEntries(entries, assetId);
+                    nextObjectAssetLinksByKey[key] = removeAssetFromObjectAssetEntries(entries, assetId);
                 }
 
                 const nextSceneAssetsByKey = { ...state.sceneAssetsByKey };
@@ -227,7 +227,7 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
 
                 return {
                     projectAssetsByProject: nextProjectAssetsByProject,
-                    storyObjectAssetsByKey: nextStoryObjectAssetsByKey,
+                    objectAssetsByKey: nextObjectAssetLinksByKey,
                     sceneAssetsByKey: nextSceneAssetsByKey,
                 };
             });
@@ -252,10 +252,10 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
                         .map((asset) => (asset.id === assetId ? updatedAsset : asset));
                 }
 
-                const nextStoryObjectAssetsByKey = { ...state.storyObjectAssetsByKey };
-                for (const [key, entries] of Object.entries(state.storyObjectAssetsByKey)) {
+                const nextObjectAssetLinksByKey = { ...state.objectAssetsByKey };
+                for (const [key, entries] of Object.entries(state.objectAssetsByKey)) {
                     if (!key.startsWith(`${projectId}:`)) continue;
-                    nextStoryObjectAssetsByKey[key] = updateAssetInStoryObjectEntries(entries, updatedAsset);
+                    nextObjectAssetLinksByKey[key] = updateAssetInObjectAssetEntries(entries, updatedAsset);
                 }
 
                 const nextSceneAssetsByKey = { ...state.sceneAssetsByKey };
@@ -266,7 +266,7 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
 
                 return {
                     projectAssetsByProject: nextProjectAssetsByProject,
-                    storyObjectAssetsByKey: nextStoryObjectAssetsByKey,
+                    objectAssetsByKey: nextObjectAssetLinksByKey,
                     sceneAssetsByKey: nextSceneAssetsByKey,
                 };
             });
@@ -280,29 +280,29 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
         }
     },
 
-    fetchStoryObjectAssets: async (projectId: string, objectType: string, objectId: string, force = false) => {
-        const key = getStoryObjectKey(projectId, objectType, objectId);
-        if (!force && get().storyObjectAssetsLoadedByKey[key]) {
+    fetchObjectAssetLinks: async (projectId: string, objectType: string, objectId: string, force = false) => {
+        const key = getObjectAssetKey(projectId, objectType, objectId);
+        if (!force && get().objectAssetsLoadedByKey[key]) {
             return;
         }
 
         beginRequest(set);
         try {
-            const response = await assetService.getStoryObjectAssets(projectId, objectType, objectId);
+            const response = await assetService.getObjectAssetLinks(projectId, objectType, objectId);
             set((state) => ({
-                storyObjectAssetsByKey: {
-                    ...state.storyObjectAssetsByKey,
+                objectAssetsByKey: {
+                    ...state.objectAssetsByKey,
                     [key]: response.assets,
                 },
-                storyObjectAssetsLoadedByKey: {
-                    ...state.storyObjectAssetsLoadedByKey,
+                objectAssetsLoadedByKey: {
+                    ...state.objectAssetsLoadedByKey,
                     [key]: true,
                 },
             }));
         } catch (error) {
-            console.error('Failed to fetch story object assets:', error);
+            console.error('Failed to fetch object asset links:', error);
             set({
-                error: error instanceof Error ? error.message : 'Failed to fetch story object assets',
+                error: error instanceof Error ? error.message : 'Failed to fetch object asset links',
             });
         } finally {
             endRequest(set);
@@ -318,15 +318,15 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
         beginRequest(set);
         try {
             await assetService.setMainAsset(projectId, objectType, objectId, assetId);
-            const key = getStoryObjectKey(projectId, objectType, objectId);
+            const key = getObjectAssetKey(projectId, objectType, objectId);
             set((state) => {
-                const existing = state.storyObjectAssetsByKey[key] ?? EMPTY_STORY_OBJECT_ASSETS;
+                const existing = state.objectAssetsByKey[key] ?? EMPTY_OBJECT_ASSET_LINKS;
                 if (existing.length === 0) {
                     return {};
                 }
                 return {
-                    storyObjectAssetsByKey: {
-                        ...state.storyObjectAssetsByKey,
+                    objectAssetsByKey: {
+                        ...state.objectAssetsByKey,
                         [key]: existing.map((entry) => ({
                             ...entry,
                             is_main: entry.asset_id === assetId,
@@ -374,9 +374,9 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
 
     getProjectAssets: (projectId: string) => get().projectAssetsByProject[projectId] ?? EMPTY_ASSETS,
 
-    getStoryObjectAssets: (projectId: string, objectType: string, objectId: string) => {
-        const key = getStoryObjectKey(projectId, objectType, objectId);
-        return get().storyObjectAssetsByKey[key] ?? EMPTY_STORY_OBJECT_ASSETS;
+    getObjectAssetLinks: (projectId: string, objectType: string, objectId: string) => {
+        const key = getObjectAssetKey(projectId, objectType, objectId);
+        return get().objectAssetsByKey[key] ?? EMPTY_OBJECT_ASSET_LINKS;
     },
 
     getSceneAssets: (projectId: string, manuscriptId?: string) => {
@@ -385,17 +385,17 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
     },
 
     getMainAsset: (projectId: string, objectType: string, objectId: string) => {
-        const key = getStoryObjectKey(projectId, objectType, objectId);
-        const assets = get().storyObjectAssetsByKey[key] ?? EMPTY_STORY_OBJECT_ASSETS;
+        const key = getObjectAssetKey(projectId, objectType, objectId);
+        const assets = get().objectAssetsByKey[key] ?? EMPTY_OBJECT_ASSET_LINKS;
         const mainLink = assets.find((entry) => entry.is_main);
         return mainLink?.asset ?? null;
     },
 
     isProjectAssetsLoaded: (projectId: string) => Boolean(get().projectAssetsLoadedByProject[projectId]),
 
-    isStoryObjectAssetsLoaded: (projectId: string, objectType: string, objectId: string) => {
-        const key = getStoryObjectKey(projectId, objectType, objectId);
-        return Boolean(get().storyObjectAssetsLoadedByKey[key]);
+    isObjectAssetLinksLoaded: (projectId: string, objectType: string, objectId: string) => {
+        const key = getObjectAssetKey(projectId, objectType, objectId);
+        return Boolean(get().objectAssetsLoadedByKey[key]);
     },
 
     isSceneAssetsLoaded: (projectId: string, manuscriptId?: string) => {
@@ -411,11 +411,11 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
             tasks.push(state.fetchAssets(projectId, true));
         }
 
-        for (const [key, loaded] of Object.entries(state.storyObjectAssetsLoadedByKey)) {
+        for (const [key, loaded] of Object.entries(state.objectAssetsLoadedByKey)) {
             if (!loaded) continue;
-            const parsed = parseStoryObjectKey(key);
+            const parsed = parseObjectAssetKey(key);
             if (!parsed || parsed.projectId !== projectId) continue;
-            tasks.push(state.fetchStoryObjectAssets(projectId, parsed.objectType, parsed.objectId, true));
+            tasks.push(state.fetchObjectAssetLinks(projectId, parsed.objectType, parsed.objectId, true));
         }
 
         for (const [key, loaded] of Object.entries(state.sceneAssetsLoadedByKey)) {
@@ -435,8 +435,8 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
     clearAssets: () => set({
         projectAssetsByProject: {},
         projectAssetsLoadedByProject: {},
-        storyObjectAssetsByKey: {},
-        storyObjectAssetsLoadedByKey: {},
+        objectAssetsByKey: {},
+        objectAssetsLoadedByKey: {},
         sceneAssetsByKey: {},
         sceneAssetsLoadedByKey: {},
         activeRequestCount: 0,

@@ -11,11 +11,11 @@ import AuthenticatedImage from '../../common/AuthenticatedImage';
 import type { Asset } from '../../../api/assetService';
 import { getAssetUrl } from '../../../utils/assetUrl';
 import { confirm } from '../../../store/dialogStore';
-import './StoryObjectCardExpanded.css';
+import './ObjectCardExpanded.css';
 
 type TabType = 'edit' | 'image';
 
-interface StoryObjectCardExpandedProps {
+interface ObjectCardExpandedProps {
     itemId: string;
     itemData: { name: string; description: string; content: string };
     effectiveLanguage: string;
@@ -35,7 +35,7 @@ interface StoryObjectCardExpandedProps {
     onAssetChange?: () => void;
 }
 
-const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
+const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
     itemId,
     itemData,
     effectiveLanguage,
@@ -121,7 +121,7 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
     return (
         <motion.article
             layoutId={`card-${itemId}`}
-            className={`story-object-card-expanded ${hasImage ? 'has-image' : 'no-image'}`}
+            className={`object-card-expanded ${hasImage ? 'has-image' : 'no-image'}`}
             onKeyDown={handleKeyDown}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -306,4 +306,4 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
     );
 };
 
-export default StoryObjectCardExpanded;
+export default ObjectCardExpanded;

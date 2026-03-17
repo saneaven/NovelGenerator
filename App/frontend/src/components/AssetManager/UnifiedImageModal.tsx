@@ -9,7 +9,7 @@ import './UnifiedImageModal.css';
 
 // Modal preset types for common use cases
 export type ModalPreset =
-    | 'objectManager'   // Manage story object images (link/unlink, set main)
+    | 'objectManager'   // Manage object images (link/unlink, set main)
     | 'sceneManager'    // Manage scene assets (delete, view usage)
     | 'assetPicker'     // Pick from all project assets
     | 'referencePicker'; // Pick reference images for image generation

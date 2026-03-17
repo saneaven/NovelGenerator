@@ -1,9 +1,9 @@
 /**
  * Unified ObjectPicker Component
  *
- * A reusable component for selecting story objects across different modals.
+ * A reusable component for selecting objects across different modals.
  * Supports three modes:
- * - story-objects: Characters, Locations, Organizations, Lorebook
+ * - story-entities: Characters, Locations, Organizations, Lorebook
  * - manuscript: Acts and Chapters (manuscripts)
  * - all: All context objects (excludes project meta)
  * - translation: Full object list for translation (includes basic_info, guidelines)

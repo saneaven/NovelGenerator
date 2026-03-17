@@ -10,8 +10,6 @@ from uuid import UUID, uuid4
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
-from ..utils.object_type_aliases import externalize_object_type
-
 logger = logging.getLogger(__name__)
 
 _PENDING_ASSET_CHANGES_KEY = "_pending_asset_changes"
@@ -31,7 +29,7 @@ class _ProjectAssetsKey:
 
 
 @dataclass(frozen=True)
-class _StoryObjectAssetsKey:
+class _ObjectAssetLinksKey:
     user_id: str
     project_id: str
     object_type: str
@@ -45,7 +43,7 @@ class _SceneAssetsKey:
     manuscript_id: str | None
 
 
-AssetChangeKey = _ProjectAssetsKey | _StoryObjectAssetsKey | _SceneAssetsKey
+AssetChangeKey = _ProjectAssetsKey | _ObjectAssetLinksKey | _SceneAssetsKey
 
 
 def _as_non_empty_str(value: UUID | str | Any, *, field_name: str) -> str:
@@ -93,10 +91,10 @@ def queue_asset_change(
 
     if normalized_scope == "project_assets":
         key = _ProjectAssetsKey(user_id=user_id_str, project_id=project_id_str)
-    elif normalized_scope == "story_object_assets":
-        object_type_text = externalize_object_type(_as_non_empty_str(object_type, field_name="object_type"))
+    elif normalized_scope == "object_asset_links":
+        object_type_text = _as_non_empty_str(object_type, field_name="object_type")
         object_id_text = _as_non_empty_str(object_id, field_name="object_id")
-        key = _StoryObjectAssetsKey(
+        key = _ObjectAssetLinksKey(
             user_id=user_id_str,
             project_id=project_id_str,
             object_type=object_type_text,
@@ -141,7 +139,7 @@ def queue_project_assets_change(
     )
 
 
-def queue_story_object_assets_change(
+def queue_object_assets_change(
     db: Session,
     *,
     user_id: UUID | str,
@@ -154,7 +152,7 @@ def queue_story_object_assets_change(
         db,
         user_id=user_id,
         project_id=project_id,
-        scope="story_object_assets",
+        scope="object_asset_links",
         action=action,
         object_type=object_type,
         object_id=object_id,
@@ -202,9 +200,9 @@ def _serialize_change(key: AssetChangeKey, action: str) -> dict[str, Any]:
             "scope": "project_assets",
             "action": action,
         }
-    if isinstance(key, _StoryObjectAssetsKey):
+    if isinstance(key, _ObjectAssetLinksKey):
         return {
-            "scope": "story_object_assets",
+            "scope": "object_asset_links",
             "action": action,
             "object_type": key.object_type,
             "object_id": key.object_id,
@@ -223,7 +221,7 @@ def _after_commit(session: Session) -> None:
 
     grouped_changes: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for key, action in pending.items():
-        if not isinstance(key, (_ProjectAssetsKey, _StoryObjectAssetsKey, _SceneAssetsKey)):
+        if not isinstance(key, (_ProjectAssetsKey, _ObjectAssetLinksKey, _SceneAssetsKey)):
             continue
         action_text = str(action or "").strip().lower()
         if action_text not in _ACTION_PRIORITY:

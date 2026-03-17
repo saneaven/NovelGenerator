@@ -32,7 +32,7 @@ export type ObjectChangedEvent = {
 
 export type AssetChangedChange =
   | { scope: 'project_assets'; action: 'created' | 'updated' | 'deleted' }
-  | { scope: 'story_object_assets'; action: 'created' | 'updated' | 'deleted'; object_type: ObjectType; object_id: string }
+  | { scope: 'object_asset_links'; action: 'created' | 'updated' | 'deleted'; object_type: ObjectType; object_id: string }
   | { scope: 'scene_assets'; action: 'created' | 'updated' | 'deleted'; manuscript_id: string | null };
 
 export interface AssetChangedEventData {

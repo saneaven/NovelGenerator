@@ -4,7 +4,7 @@
    Uses surface-base design pattern
    ======================================== */
 
-.story-object-card-expanded {
+.object-card-expanded {
     position: relative;
     display: grid;
     background: var(--color-surface-base);
@@ -18,13 +18,13 @@
 }
 
 /* WITH IMAGE: 2-column layout (9:16 ratio - image:content) */
-.story-object-card-expanded.has-image {
+.object-card-expanded.has-image {
     grid-template-columns: 9fr 16fr;
     grid-template-rows: 1fr;
 }
 
 /* WITHOUT IMAGE: single column */
-.story-object-card-expanded.no-image {
+.object-card-expanded.no-image {
     grid-template-columns: 1fr;
 }
 
@@ -222,12 +222,12 @@
 
 /* ===== MOBILE RESPONSIVE ===== */
 @media (max-width: 768px) {
-    .story-object-card-expanded {
+    .object-card-expanded {
         max-height: 95vh;
     }
 
     /* Stack layout on mobile (9:16 ratio - image:content) */
-    .story-object-card-expanded.has-image {
+    .object-card-expanded.has-image {
         grid-template-columns: 1fr;
         grid-template-rows: 5fr 16fr;
     }
@@ -251,7 +251,7 @@
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-    .story-object-card-expanded,
+    .object-card-expanded,
     .expanded-close-btn,
     .expanded-ai-btn,
     .expanded-save-btn {

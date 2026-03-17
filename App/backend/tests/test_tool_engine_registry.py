@@ -67,7 +67,7 @@ from App.backend.services.tool_engine.service import ToolEngineService
 
 
 class _DummyModule(ToolCallModule):
-    def __init__(self, prefix: str, spec_name: str = "read_story_object") -> None:
+    def __init__(self, prefix: str, spec_name: str = "read_story_entity") -> None:
         self.prefix = prefix
         self._spec_name = spec_name
 
@@ -110,14 +110,14 @@ def test_tool_registry_register_duplicate_prefix_raises() -> None:
 
 def test_tool_registry_resolves_longest_prefix() -> None:
     registry = ToolRegistry()
-    patch_module = _DummyModule("patch_", "patch_story_object")
-    patch_translation_module = _DummyModule("patch_translation_", "patch_translation_story_object")
+    patch_module = _DummyModule("patch_", "patch_story_entity")
+    patch_translation_module = _DummyModule("patch_translation_", "patch_translation_story_entity")
 
     registry.register_module(patch_module)
     registry.register_module(patch_translation_module)
 
-    assert registry.resolve_module("patch_story_object") is patch_module
-    assert registry.resolve_module("patch_translation_story_object") is patch_translation_module
+    assert registry.resolve_module("patch_story_entity") is patch_module
+    assert registry.resolve_module("patch_translation_story_entity") is patch_translation_module
 
 
 def test_tool_registry_lists_auto_approve_categories_from_modules() -> None:

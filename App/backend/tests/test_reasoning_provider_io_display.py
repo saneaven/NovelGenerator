@@ -377,7 +377,7 @@ def test_openai_convert_messages_tool_call_only_assistant_restores_empty_message
                 {
                     "id": "call_1",
                     "type": "function",
-                    "function": {"name": "read_story_object", "arguments": "{}"},
+                    "function": {"name": "read_story_entity", "arguments": "{}"},
                 }
             ],
             "reasoning_detail": {
@@ -415,7 +415,7 @@ def test_openai_convert_messages_tool_call_only_assistant_with_tool_results_keep
                 {
                     "id": "call_1",
                     "type": "function",
-                    "function": {"name": "read_story_object", "arguments": "{}"},
+                    "function": {"name": "read_story_entity", "arguments": "{}"},
                 }
             ],
             "reasoning_detail": {

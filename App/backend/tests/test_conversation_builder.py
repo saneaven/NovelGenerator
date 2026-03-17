@@ -90,7 +90,7 @@ def test_build_from_runs_keeps_tool_call_only_assistant_and_attached_tool_result
         call_seq=0,
         status="applied",
         llm_call_id="call_1",
-        tool_name="read_story_object",
+        tool_name="read_story_entity",
         arguments={"id": "abc"},
         extra_content=None,
         result={"success": True, "message": "done"},
@@ -115,7 +115,7 @@ def test_build_from_runs_keeps_tool_call_only_assistant_and_attached_tool_result
             "id": "call_1",
             "type": "function",
             "function": {
-                "name": "read_story_object",
+                "name": "read_story_entity",
                 "arguments": '{"id": "abc"}',
             },
         }

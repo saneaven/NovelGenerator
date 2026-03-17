@@ -994,7 +994,7 @@ def test_persist_tool_calls_with_mixed_id_index_deltas_does_not_create_unknown_t
                     "index": 0,
                     "id": "call_1",
                     "function": {
-                        "name": "create_story_object",
+                        "name": "create_story_entity",
                         "arguments": '{"name":"Elena"',
                     },
                 }
@@ -1056,9 +1056,9 @@ def test_persist_tool_calls_with_mixed_id_index_deltas_does_not_create_unknown_t
     )
 
     assert len(snapshot.tool_calls) == 1
-    assert seen_tool_names == ["create_story_object"]
+    assert seen_tool_names == ["create_story_entity"]
     assert len(rows) == 1
-    assert rows[0].tool_name == "create_story_object"
+    assert rows[0].tool_name == "create_story_entity"
     assert rows[0].arguments == {
         "name": "Elena",
         "type": "character",

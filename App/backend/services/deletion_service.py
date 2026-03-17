@@ -15,7 +15,7 @@ from ..models.db_models import (
     Outline,
     RunMessageAttachmentModel,
     StoryEntity,
-    StoryObjectAsset,
+    ObjectAssetLink,
 )
 from ..models.semantic_models import SemanticSource
 from ..models.translation_models import ObjectVersion
@@ -270,7 +270,7 @@ def delete_removed_manuscript_assets(
     return delete_assets_with_files(db, assets=assets, scrub_references_in_project_id=project_id)
 
 
-def delete_story_object_assets_with_files(
+def delete_story_entity_assets_with_files(
     db: Session,
     *,
     project_id: UUID,
@@ -279,8 +279,8 @@ def delete_story_object_assets_with_files(
 ) -> List[UUID]:
     assets = (
         db.query(Asset)
-        .join(StoryObjectAsset, StoryObjectAsset.asset_id == Asset.id)
-        .filter(StoryObjectAsset.object_type == object_type, StoryObjectAsset.object_id == object_id)
+        .join(ObjectAssetLink, ObjectAssetLink.asset_id == Asset.id)
+        .filter(ObjectAssetLink.object_type == object_type, ObjectAssetLink.object_id == object_id)
         .all()
     )
     return delete_assets_with_files(db, assets=assets, scrub_references_in_project_id=project_id)

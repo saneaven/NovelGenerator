@@ -608,10 +608,10 @@ export function useObjects(type: ObjectType, ids: string[]) {
 // ============================================================================
 
 /**
- * Simplified story objects structure used for chat context.
+ * Simplified project object structure used for chat context.
  * This is a lightweight version without full version history metadata.
  */
-export interface SimplifiedStoryObjects {
+export interface SimplifiedProjectObjects {
   basicInfo: {
     id: string;
     title: string;
@@ -669,13 +669,13 @@ function getObjectDataForLanguage(obj: UnifiedObject, language: string): Record<
 }
 
 /**
- * Hook to derive StoryObjects from unified store cache.
+ * Hook to derive project objects from unified store cache.
  * Extracts data for the specified language from each object.
  *
  * @param projectId - The project ID to filter objects by
  * @param language - The language to extract data for (uses mainLanguage for chat context)
  */
-export function useStoryObjects(projectId: string | undefined, language: string): SimplifiedStoryObjects {
+export function useProjectObjects(projectId: string | undefined, language: string): SimplifiedProjectObjects {
   const objects = useUnifiedObjectStore(state => state.objects);
 
   return React.useMemo(() => {

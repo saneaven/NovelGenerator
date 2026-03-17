@@ -21,7 +21,7 @@ from ..models.db_models import (
     Outline,
     RunToolCallModel,
     StoryEntity,
-    StoryObjectAsset,
+    ObjectAssetLink,
     UserSettings,
 )
 from ..schemas.assets import CreateImageRunRequest, ImageRunResponse, StyledPrompt
@@ -48,7 +48,7 @@ from ..services.thread_runtime_sync_service import emit_runtime_sync_events, syn
 from .asset_change_events import (
     queue_project_assets_change,
     queue_scene_assets_change,
-    queue_story_object_assets_change,
+    queue_object_assets_change,
 )
 from ..services.storage_usage_service import (
     StorageQuotaExceededError,
@@ -63,7 +63,6 @@ from ..services.storage_usage_service import (
     snapshot_rows,
     snapshot_tool_call_row,
 )
-from ..utils.object_type_aliases import normalize_object_type
 from ..utils.story_entities import STORY_ENTITY_TYPE
 
 
@@ -303,7 +302,7 @@ def resolve_explicit_object_target(
             language=language,
         )
         if obj is not None:
-            matches.append(normalize_object_type(object_type))
+            matches.append(object_type)
     unique = list(dict.fromkeys(matches))
     if not unique:
         raise ValueError("No target object resolved for image generation")
@@ -514,7 +513,7 @@ class ImageRunService:
             }, "bind_scene_asset"
 
         if target_type == "object":
-            object_type = normalize_object_type(str(target.get("object_type") or ""))
+            object_type = str(target.get("object_type") or "")
             object_id = _parse_uuid(target.get("object_id"), field_name="object_id")
             return {
                 "type": "object",
@@ -1136,14 +1135,14 @@ class ImageRunService:
             raise ValueError("Generated asset not found")
 
         if apply_kind == "bind_object_asset":
-            object_type = normalize_object_type(str(target.get("object_type") or ""))
+            object_type = str(target.get("object_type") or "")
             object_id = _parse_uuid(target.get("object_id"), field_name="object_id")
-            max_order = db.query(StoryObjectAsset).filter(
-                StoryObjectAsset.object_type == object_type,
-                StoryObjectAsset.object_id == object_id,
+            max_order = db.query(ObjectAssetLink).filter(
+                ObjectAssetLink.object_type == object_type,
+                ObjectAssetLink.object_id == object_id,
             ).count()
             db.add(
-                StoryObjectAsset(
+                ObjectAssetLink(
                     id=uuid4(),
                     object_type=object_type,
                     object_id=object_id,
@@ -1162,7 +1161,7 @@ class ImageRunService:
                 action="updated",
             )
             queue_project_assets_change(db, user_id=row.user_id, project_id=row.project_id, action="created")
-            queue_story_object_assets_change(
+            queue_object_assets_change(
                 db,
                 user_id=row.user_id,
                 project_id=row.project_id,
@@ -1196,19 +1195,19 @@ class ImageRunService:
             return
 
         if apply_kind == "set_object_main_image":
-            object_type = normalize_object_type(str(target.get("object_type") or ""))
+            object_type = str(target.get("object_type") or "")
             object_id = _parse_uuid(target.get("object_id"), field_name="object_id")
             existing_count = (
-                db.query(StoryObjectAsset)
-                .filter(StoryObjectAsset.object_type == object_type, StoryObjectAsset.object_id == object_id)
+                db.query(ObjectAssetLink)
+                .filter(ObjectAssetLink.object_type == object_type, ObjectAssetLink.object_id == object_id)
                 .count()
             )
-            db.query(StoryObjectAsset).filter(
-                StoryObjectAsset.object_type == object_type,
-                StoryObjectAsset.object_id == object_id,
+            db.query(ObjectAssetLink).filter(
+                ObjectAssetLink.object_type == object_type,
+                ObjectAssetLink.object_id == object_id,
             ).update({"is_main": False})
             db.add(
-                StoryObjectAsset(
+                ObjectAssetLink(
                     id=uuid4(),
                     object_type=object_type,
                     object_id=object_id,
@@ -1228,7 +1227,7 @@ class ImageRunService:
                 action="updated",
             )
             queue_project_assets_change(db, user_id=row.user_id, project_id=row.project_id, action="created")
-            queue_story_object_assets_change(
+            queue_object_assets_change(
                 db,
                 user_id=row.user_id,
                 project_id=row.project_id,
@@ -1569,7 +1568,7 @@ class ImageRunService:
             return
 
         if target_type == "object":
-            object_type = normalize_object_type(str(target.get("object_type") or ""))
+            object_type = str(target.get("object_type") or "")
             object_id = _parse_uuid(target.get("object_id"), field_name="object_id")
             model_class = OBJECT_BINDING_MODELS.get(object_type)
             if model_class is None:

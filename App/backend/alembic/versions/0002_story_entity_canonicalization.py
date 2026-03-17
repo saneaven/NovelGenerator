@@ -25,6 +25,12 @@ def _table_exists(inspector: sa.Inspector, table_name: str) -> bool:
     return table_name in set(inspector.get_table_names())
 
 
+def _column_names(inspector: sa.Inspector, table_name: str) -> set[str]:
+    if not _table_exists(inspector, table_name):
+        return set()
+    return {column["name"] for column in inspector.get_columns(table_name)}
+
+
 def _ensure_story_entity_tables(inspector: sa.Inspector) -> None:
     if not _table_exists(inspector, "story_entity_folders"):
         op.create_table(
@@ -156,7 +162,7 @@ def _migrate_legacy_story_objects(bind) -> None:
     )
 
 
-def _rewrite_canonical_types(bind) -> None:
+def _rewrite_canonical_types(bind, inspector: sa.Inspector) -> None:
     bind.exec_driver_sql(
         """
         UPDATE object_versions
@@ -164,20 +170,26 @@ def _rewrite_canonical_types(bind) -> None:
         WHERE object_type IN ('character', 'organization', 'location', 'lorebook')
         """
     )
-    bind.exec_driver_sql(
-        """
-        UPDATE story_object_assets
-        SET object_type = 'story_entity'
-        WHERE object_type IN ('character', 'organization', 'location', 'lorebook')
-        """
-    )
-    bind.exec_driver_sql(
-        """
-        UPDATE manuscript_images
-        SET story_object_type = 'story_entity'
-        WHERE story_object_type IN ('character', 'organization', 'location', 'lorebook')
-        """
-    )
+    asset_link_table = "object_asset_links" if _table_exists(inspector, "object_asset_links") else "story_object_assets"
+    if _table_exists(inspector, asset_link_table):
+        asset_link_columns = _column_names(inspector, asset_link_table)
+        asset_link_type_column = "object_type" if "object_type" in asset_link_columns else "story_object_type"
+        bind.exec_driver_sql(
+            f"""
+            UPDATE {asset_link_table}
+            SET {asset_link_type_column} = 'story_entity'
+            WHERE {asset_link_type_column} IN ('character', 'organization', 'location', 'lorebook')
+            """
+        )
+    manuscript_image_columns = _column_names(inspector, "manuscript_images")
+    if "story_object_type" in manuscript_image_columns:
+        bind.exec_driver_sql(
+            """
+            UPDATE manuscript_images
+            SET story_object_type = 'story_entity'
+            WHERE story_object_type IN ('character', 'organization', 'location', 'lorebook')
+            """
+        )
     bind.exec_driver_sql(
         """
         UPDATE semantic_sources
@@ -262,7 +274,7 @@ def upgrade() -> None:
         if bind.exec_driver_sql("SELECT 1 FROM story_entities LIMIT 1").first() is None:
             _migrate_legacy_story_objects(bind)
 
-    _rewrite_canonical_types(bind)
+    _rewrite_canonical_types(bind, inspector)
     _refresh_journey_constraint(inspector)
     _reset_prompt_tables(bind, inspector)
     _drop_legacy_story_object_tables(inspector)
