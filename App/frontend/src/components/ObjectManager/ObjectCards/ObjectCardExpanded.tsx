@@ -23,11 +23,16 @@ interface ObjectCardExpandedProps {
     objectType: 'character' | 'organization' | 'location' | 'lorebook' | 'story_entity';
     mainAsset: Asset | null;
     loading?: boolean;
-    showSecondaryLanguage?: boolean;
     isNewItem?: boolean;
+    readOnly?: boolean;
+    readOnlyReason?: string;
+    primaryActionLabel?: string;
+    saveLabel?: string;
+    hideAIEdit?: boolean;
     extraEditFields?: React.ReactNode;
     onSave: (name: string, description: string, content: string) => void;
     onCancel: () => void;
+    onPrimaryAction?: () => void;
     onAIEdit?: () => void;
     onVersionHistory?: () => void;
     onRetranslate?: () => void;
@@ -43,11 +48,16 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
     objectType,
     mainAsset,
     loading = false,
-    showSecondaryLanguage = false,
     isNewItem = false,
+    readOnly = false,
+    readOnlyReason,
+    primaryActionLabel,
+    saveLabel,
+    hideAIEdit = false,
     extraEditFields,
     onSave,
     onCancel,
+    onPrimaryAction,
     onAIEdit,
     onVersionHistory,
     onRetranslate,
@@ -69,7 +79,11 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
     }, [itemData.name, itemData.description, itemData.content]);
 
     // Use editorRef.hasChanges() for content comparison (handles TipTap normalization)
-    const hasUnsavedChanges = name !== itemData.name || description !== itemData.description || (editorRef.current?.hasChanges() ?? false);
+    const hasUnsavedChanges = !readOnly && (
+        name !== itemData.name
+        || description !== itemData.description
+        || (editorRef.current?.hasChanges() ?? false)
+    );
     const hasImage = Boolean(mainAsset);
 
     const handleTabSwitch = async (tab: TabType) => {
@@ -92,6 +106,9 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
 
     const handleSave = () => {
         if (!name.trim()) {
+            return;
+        }
+        if (readOnly) {
             return;
         }
         onSave(name.trim(), description, content);
@@ -165,6 +182,10 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
                         <div className="expanded-edit-content">
                             {extraEditFields}
 
+                            {readOnlyReason && (
+                                <p className="expanded-readonly-reason">{readOnlyReason}</p>
+                            )}
+
                             {/* Name field */}
                             <div className="expanded-field">
                                 <label htmlFor={`expanded-name-${itemId}`}>Name</label>
@@ -175,6 +196,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
                                     onChange={(e) => setName(e.target.value)}
                                     placeholder="Enter name..."
                                     className="expanded-input expanded-input-name"
+                                    disabled={readOnly}
                                 />
                             </div>
 
@@ -189,6 +211,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
                                     placeholder="One-line summary..."
                                     className="expanded-input expanded-input-description"
                                     maxLength={500}
+                                    disabled={readOnly}
                                 />
                             </div>
 
@@ -201,6 +224,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
                                     initialContent={itemData.content}
                                     onChange={setContent}
                                     placeholder="Enter content..."
+                                    disabled={readOnly}
                                 />
                             </div>
 
@@ -223,7 +247,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
                                                 label="Version History"
                                                 onClick={onVersionHistory}
                                             />
-                                            {showSecondaryLanguage && (
+                                            {onRetranslate && (
                                                 <DropdownItem
                                                     icon={<Refresh size="sm" />}
                                                     label="Retranslate"
@@ -242,7 +266,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
                                     </DropdownMenu>
                                 )}
 
-                                {!isNewItem && onAIEdit && (
+                                {!isNewItem && onAIEdit && !hideAIEdit && !readOnly && (
                                     <TextButton
                                         variant="secondary"
                                         size="sm"
@@ -265,16 +289,28 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
                                     </div>
                                 )}
 
-                                <TextButton
-                                    variant="primary"
-                                    size="sm"
-                                    onClick={handleSave}
-                                    disabled={loading || !name.trim()}
-                                    loading={loading}
-                                    iconLeft={isNewItem ? <Plus size="sm" /> : <Save size="sm" />}
-                                >
-                                    {isNewItem ? 'Create' : 'Save'}
-                                </TextButton>
+                                {readOnly ? (
+                                    primaryActionLabel && onPrimaryAction ? (
+                                        <TextButton
+                                            variant="primary"
+                                            size="sm"
+                                            onClick={onPrimaryAction}
+                                        >
+                                            {primaryActionLabel}
+                                        </TextButton>
+                                    ) : null
+                                ) : (
+                                    <TextButton
+                                        variant="primary"
+                                        size="sm"
+                                        onClick={handleSave}
+                                        disabled={loading || !name.trim()}
+                                        loading={loading}
+                                        iconLeft={isNewItem ? <Plus size="sm" /> : <Save size="sm" />}
+                                    >
+                                        {isNewItem ? 'Create' : (saveLabel || 'Save')}
+                                    </TextButton>
+                                )}
                             </div>
                         </div>
                     )}

@@ -6,7 +6,6 @@ import { useAgentStore } from '../../../store/agentStore';
 import { useAgentUIStore } from '../../../store/agentUIStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
-import { useDisplayLanguageStore } from '../../../store/displayLanguageStore';
 import { useSettings } from '../../../store/settingsStore';
 import { usePresetStore } from '../../../store/presetStore';
 import { useMcpStore } from '../../../store/mcpStore';
@@ -81,6 +80,7 @@ const EMPTY_MESSAGES: ThreadMessage[] = [];
 interface AgentPanelProps {
   projectId: string;
   surface?: string;
+  displayLanguage: string;
 }
 
 interface DisplayMessageInfo {
@@ -530,14 +530,15 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
   );
 });
 
-export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) => {
+export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, displayLanguage }) => {
   const { t } = useTranslation();
   const settings = useSettings();
   const sidebarStore = useSidebarStore();
   const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
-  const preferredDisplayLanguage = useDisplayLanguageStore((state) => state.preferredDisplayLanguage);
-  const primaryLanguage = preferredDisplayLanguage || settings.mainLanguage;
-  const secondaryLanguage = settings.defaultSubLanguage ?? undefined;
+  const sourceLanguage = settings.mainLanguage;
+  const secondaryDisplayLanguage = displayLanguage !== settings.mainLanguage
+    ? displayLanguage
+    : (settings.defaultSubLanguage ?? undefined);
 
   const selectedAgentId = useAgentStore((state) => state.selectedAgentByProject[projectId]);
   const selectedAgent = useAgentStore((state) => state.getSelectedAgent(projectId));
@@ -659,9 +660,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         continue;
       }
 
-      const wantsSecondary = messageLanguageView[msg.id] === 'secondary' && Boolean(secondaryLanguage);
-      const requestedLanguage = wantsSecondary && secondaryLanguage ? secondaryLanguage : primaryLanguage;
-      const fallbackLanguage = wantsSecondary ? primaryLanguage : secondaryLanguage;
+      const wantsSecondary = messageLanguageView[msg.id] === 'secondary' && Boolean(secondaryDisplayLanguage);
+      const requestedLanguage = wantsSecondary && secondaryDisplayLanguage ? secondaryDisplayLanguage : sourceLanguage;
+      const fallbackLanguage = wantsSecondary ? sourceLanguage : secondaryDisplayLanguage;
       const assistantIndexedToolCalls = msg.role === 'assistant'
         ? (toolCallIdsByAssistantMessageId[msg.id] ?? [])
           .map((id) => toolCallsById[id])
@@ -767,8 +768,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     toolCallIdsByAssistantMessageId,
     toolCallsByMessageId,
     messageLanguageView,
-    primaryLanguage,
-    secondaryLanguage,
+    sourceLanguage,
+    secondaryDisplayLanguage,
   ]);
 
   const lastAssistantMessageId = useMemo(() => {
@@ -958,7 +959,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   }, [appendMcpSelection]);
 
   useEffect(() => {
-    if (!secondaryLanguage) return;
+    if (!secondaryDisplayLanguage) return;
     setTranslatingByMessageId((prev) => {
       const keys = Object.keys(prev).filter((k) => prev[k]);
       if (keys.length === 0) return prev;
@@ -966,7 +967,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       let changed = false;
       for (const msgId of keys) {
         const msg = orderedMessages.find((m) => m.id === msgId);
-        if (msg && msg.data[secondaryLanguage]) {
+        if (msg && msg.data[secondaryDisplayLanguage]) {
           changed = true;
         } else {
           next[msgId] = true;
@@ -974,7 +975,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       }
       return changed ? next : prev;
     });
-  }, [orderedMessages, secondaryLanguage]);
+  }, [orderedMessages, secondaryDisplayLanguage]);
+
+  useEffect(() => {
+    if (!editingMessageId || !secondaryDisplayLanguage) return;
+    if (messageLanguageView[editingMessageId] !== 'secondary') return;
+    setEditingMessageId(null);
+    setEditingText('');
+  }, [editingMessageId, messageLanguageView, secondaryDisplayLanguage]);
 
   useEffect(() => {
     hydratedThreadIdsRef.current.clear();
@@ -1071,6 +1079,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       threadType: 'agent',
       inputText,
       request: {
+        language: sourceLanguage,
         run_mode: runMode,
         surface,
         context_object_ids: selectedContextIds,
@@ -1089,6 +1098,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   }, [
     threadId,
     projectId,
+    sourceLanguage,
     runMode,
     surface,
     selectedContextIds,
@@ -1258,13 +1268,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
 
   const handleSaveMessageEdit = useCallback(async (message: ThreadMessage) => {
     if (!threadId || !editingMessageId || editingSaving) return;
+    if (messageLanguageView[message.id] === 'secondary' && secondaryDisplayLanguage) return;
     const content = editingText.trim();
     if (!content) return;
 
     setEditingSaving(true);
     const state = useThreadStore.getState();
     const existing = state.getMessages(threadId).find((m) => m.id === message.id);
-    const existingEntry = existing?.data?.[primaryLanguage]
+    const existingEntry = existing?.data?.[sourceLanguage]
       ?? Object.values(existing?.data ?? {}).find((v) => v && typeof v === 'object');
     const entry = {
       contentParts: [
@@ -1277,14 +1288,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
       state.patchMessage(threadId, message.id, {
         data: {
           ...(existing.data ?? {}),
-          [primaryLanguage]: entry,
+          [sourceLanguage]: entry,
         },
       });
     }
 
     try {
       await threadService.updateMessage(threadId, message.id, {
-        language: primaryLanguage,
+        language: sourceLanguage,
         content_parts: entry.contentParts,
         reasoning_detail: entry.reasoningDetail as any,
       });
@@ -1295,10 +1306,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     } finally {
       setEditingSaving(false);
     }
-  }, [threadId, editingMessageId, editingSaving, editingText, primaryLanguage]);
+  }, [threadId, editingMessageId, editingSaving, editingText, sourceLanguage, messageLanguageView, secondaryDisplayLanguage]);
 
   const handleTranslateMessage = useCallback(async (message: ThreadMessage, sourceContent: string) => {
-    if (!threadId || !secondaryLanguage) return;
+    if (!threadId || !secondaryDisplayLanguage) return;
     const text = sourceContent.trim();
     if (!text) return;
 
@@ -1317,15 +1328,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         projectId,
         sourceThreadId: threadId,
         sourceMessageId: message.id,
-        sourceLanguage: primaryLanguage,
-        targetLanguage: secondaryLanguage,
+        sourceLanguage,
+        targetLanguage: secondaryDisplayLanguage,
         sourceContent: text,
       });
     } catch (error: any) {
       showAlert({ title: 'Translation Failed', message: error?.message ?? 'Failed to translate message.' });
       setTranslatingByMessageId((prev) => ({ ...prev, [message.id]: false }));
     }
-  }, [threadId, projectId, primaryLanguage, secondaryLanguage]);
+  }, [threadId, projectId, sourceLanguage, secondaryDisplayLanguage]);
 
   const handleDeleteMessage = useCallback(async (
     messageId: string,
@@ -1447,13 +1458,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
             const isSameRoleAsPrevious = previousRole === currentRole;
             const isStreamingMessage = message.source.isStreaming === true;
             const showRunError = Boolean(latestRunError) && index === displayItems.length - 1;
-            const translationAvailable = secondaryLanguage
-              ? Boolean(message.source.data[secondaryLanguage])
+            const translationAvailable = secondaryDisplayLanguage
+              ? Boolean(message.source.data[secondaryDisplayLanguage])
               : false;
             const translating = Boolean(translatingByMessageId[message.source.id]);
             const isEditing = editingMessageId === message.source.id;
+            const isSecondaryView = messageLanguageView[message.source.id] === 'secondary' && Boolean(secondaryDisplayLanguage);
             const hasAttachments = message.source.attachments.length > 0;
-            const primaryEntry = message.source.data[primaryLanguage];
+            const primaryEntry = message.source.data[sourceLanguage];
             const primaryPlainContent = collapseContent(
               primaryEntry?.contentParts ?? message.chatMessage.contentParts,
             );
@@ -1579,41 +1591,43 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                       {!isStreamingMessage && !isEditing && (
                         <div className="message-actions">
                           <div className="action-buttons">
-                            {translationAvailable && secondaryLanguage && (
+                            {translationAvailable && secondaryDisplayLanguage && (
                               <IconButton
                                 icon={<Globe size="sm" />}
                                 variant="ghost"
                                 size="sm"
-                                isActive={messageLanguageView[message.source.id] === 'secondary'}
+                                isActive={isSecondaryView}
                                 onClick={() => setMessageLanguageView((prev) => ({
                                   ...prev,
                                   [message.source.id]: prev[message.source.id] === 'secondary' ? 'primary' : 'secondary',
                                 }))}
-                                title={messageLanguageView[message.source.id] === 'secondary'
-                                  ? t('agent.switchToLanguage', { language: primaryLanguage })
-                                  : t('agent.switchToLanguage', { language: secondaryLanguage })}
+                                title={isSecondaryView
+                                  ? t('agent.switchToLanguage', { language: sourceLanguage })
+                                  : t('agent.switchToLanguage', { language: secondaryDisplayLanguage })}
                               />
                             )}
-                            {secondaryLanguage && (
+                            {secondaryDisplayLanguage && (
                               <IconButton
                                 icon={translating ? <CircularArrow size="sm" /> : (translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />)}
                                 onClick={() => void handleTranslateMessage(message.source, primaryPlainContent)}
                                 title={translationAvailable
-                                  ? t('agent.refreshTranslation', { language: secondaryLanguage })
-                                  : t('agent.translateTo', { language: secondaryLanguage })}
+                                  ? t('agent.refreshTranslation', { language: secondaryDisplayLanguage })
+                                  : t('agent.translateTo', { language: secondaryDisplayLanguage })}
                                 variant="ghost"
                                 size="sm"
                                 disabled={translating || !primaryPlainContent}
                               />
                             )}
-                            <IconButton
-                              icon={<Edit size="sm" />}
-                              onClick={() => handleStartMessageEdit(message.source.id, primaryPlainContent)}
-                              disabled={!primaryPlainContent}
-                              title={t('agent.edit')}
-                              variant="ghost"
-                              size="sm"
-                            />
+                            {!isSecondaryView && (
+                              <IconButton
+                                icon={<Edit size="sm" />}
+                                onClick={() => handleStartMessageEdit(message.source.id, primaryPlainContent)}
+                                disabled={!primaryPlainContent}
+                                title={t('agent.edit')}
+                                variant="ghost"
+                                size="sm"
+                              />
+                            )}
                             <IconButton
                               icon={<Trash size="sm" />}
                               onClick={() => void handleDeleteMessage(message.chatMessage.id, 'assistant', item.toolCalls.length)}
@@ -1706,29 +1720,31 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
                     {!isStreamingMessage && !isEditing && (
                       <div className="message-actions">
                         <div className="action-buttons">
-                          {translationAvailable && secondaryLanguage && (
+                          {translationAvailable && secondaryDisplayLanguage && (
                             <IconButton
                               icon={<Globe size="sm" />}
                               variant="ghost"
                               size="sm"
-                              isActive={messageLanguageView[message.source.id] === 'secondary'}
+                              isActive={isSecondaryView}
                               onClick={() => setMessageLanguageView((prev) => ({
                                 ...prev,
                                 [message.source.id]: prev[message.source.id] === 'secondary' ? 'primary' : 'secondary',
                               }))}
-                              title={messageLanguageView[message.source.id] === 'secondary'
-                                ? t('agent.switchToLanguage', { language: primaryLanguage })
-                                : t('agent.switchToLanguage', { language: secondaryLanguage })}
+                              title={isSecondaryView
+                                ? t('agent.switchToLanguage', { language: sourceLanguage })
+                                : t('agent.switchToLanguage', { language: secondaryDisplayLanguage })}
                             />
                           )}
-                          <IconButton
-                            icon={<Edit size="sm" />}
-                            onClick={() => handleStartMessageEdit(message.source.id, primaryPlainContent)}
-                            disabled={!primaryPlainContent}
-                            title={t('agent.edit')}
-                            variant="ghost"
-                            size="sm"
-                          />
+                          {!isSecondaryView && (
+                            <IconButton
+                              icon={<Edit size="sm" />}
+                              onClick={() => handleStartMessageEdit(message.source.id, primaryPlainContent)}
+                              disabled={!primaryPlainContent}
+                              title={t('agent.edit')}
+                              variant="ghost"
+                              size="sm"
+                            />
+                          )}
                           <IconButton
                             icon={<Trash size="sm" />}
                             onClick={() => void handleDeleteMessage(message.chatMessage.id, 'user')}
@@ -1798,7 +1814,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
             selectedIds={selectedContextIds}
             onChange={(ids) => setSelectedContextIds(ids as string[])}
             projectId={projectId}
-            language={primaryLanguage}
+            language={sourceLanguage}
             maxHeight="350px"
             showSearch={true}
             showSelectAll={true}

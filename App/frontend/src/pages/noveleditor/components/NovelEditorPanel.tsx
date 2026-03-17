@@ -48,6 +48,7 @@ import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, 
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
 import { Loading } from '../../../components/common/Loading';
+import { resolveRequestedLanguageState, resolveTranslationSourceLanguage } from '../../../utils/requestedLanguage';
 import './NovelEditorPanel.css';
 
 interface NovelEditorPanelProps {
@@ -119,7 +120,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const [contentIdError, setContentIdError] = useState<string | null>(null);
   const [isAIEditModalOpen, setIsAIEditModalOpen] = useState(false);
   const [aiEditSessionId, setAiEditSessionId] = useState<string | null>(null);
-  const [showRetranslateModal, setShowRetranslateModal] = useState(false);
+  const [showTranslationModal, setShowTranslationModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [cursorContext, setCursorContext] = useState<{ before: string; after: string }>({ before: '', after: '' });
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
@@ -175,29 +176,23 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     return Object.keys(manuscript.data);
   }, [manuscript]);
 
-  // Computed: Check if current language translation is missing
-  const isMissingTranslation = useMemo(() => {
-    if (!manuscript) return false;
-    return !manuscriptLanguages.includes(globalDisplayLanguage);
-  }, [manuscript, manuscriptLanguages, globalDisplayLanguage]);
-
   // Computed: Available source languages for translation
   const availableSourceLanguages = useMemo(() => {
     return manuscriptLanguages;
   }, [manuscriptLanguages]);
 
-  // Compute effective display language with fallback
-  // globalDisplayLanguage is now the actual language string (e.g., 'English', 'Korean')
-  const { effectiveLanguage, isFallback } = useMemo(() => {
-    if (!manuscript) {
-      return { effectiveLanguage: globalDisplayLanguage || settings.mainLanguage, isFallback: false };
-    }
-    if (manuscriptLanguages.includes(globalDisplayLanguage)) {
-      return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
-    }
-    // Fallback to first available or mainLanguage
-    return { effectiveLanguage: manuscriptLanguages[0] || settings.mainLanguage, isFallback: true };
-  }, [manuscript, manuscriptLanguages, globalDisplayLanguage, settings.mainLanguage]);
+  const languageState = useMemo(() => resolveRequestedLanguageState({
+    availableLanguages: manuscriptLanguages,
+    requestedLanguage: globalDisplayLanguage,
+    mainLanguage: settings.mainLanguage,
+  }), [globalDisplayLanguage, manuscriptLanguages, settings.mainLanguage]);
+  const isMissingTranslation = !languageState.canEdit;
+  const effectiveLanguage = languageState.viewLanguage;
+  const isFallback = languageState.isFallbackView;
+  const saveLabel = languageState.isTranslationView
+    ? 'Save Translation'
+    : t('novelEditor.toolbar.save');
+  const canShowAIEdit = languageState.isMainLanguage;
 
   // Helper to get manuscript data for a language
   const getManuscriptData = useCallback((lang: string) => {
@@ -457,9 +452,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
             doc: latestDoc,
             wordCount: latestWordCount,
           },
-          language: effectiveLanguage,
+          language: languageState.requestedLanguage,
           user_request: reason,
-          create_new_version: true, // CREATE VERSION SNAPSHOT
+          create_new_version: languageState.createNewVersion,
         });
 
         setDoc(latestDoc);
@@ -477,7 +472,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         setSavingType(null);
       }
     },
-    [effectiveLanguage, manuscript, manuscriptId, setIsSaving, updateObject]
+    [languageState.createNewVersion, languageState.requestedLanguage, manuscript, manuscriptId, setIsSaving, updateObject]
   );
 
   // ============================================================================
@@ -517,6 +512,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       e.preventDefault();
 
       if (isSaving) return;
+      if (!languageState.canEdit) return;
       if (!editorRef.current?.hasChanges()) return;
 
       void handleManualSave('Manual Save');
@@ -524,7 +520,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleManualSave, isSaving]);
+  }, [handleManualSave, isSaving, languageState.canEdit]);
 
   // Handle image selection from AssetManagerModal
   const handleImageSelect = useCallback((asset: Asset) => {
@@ -775,29 +771,31 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               toolbarActions={
                 <>
                   {/* AI Edit Button */}
-                  <TextButton
-                    variant="primary"
-                    size="sm"
-                    onClick={() => setIsAIEditModalOpen(true)}
-                    disabled={isSaving || !selectedChapter}
-                    title={t('novelEditor.toolbar.objectEditChapter')}
-                    iconLeft={<AIAssist size="sm" />}
-                    className="desktop-only"
-                  >
-                    {t('novelEditor.toolbar.objectEdit')}
-                  </TextButton>
+                  {canShowAIEdit ? (
+                    <TextButton
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setIsAIEditModalOpen(true)}
+                      disabled={isSaving || !selectedChapter}
+                      title={t('novelEditor.toolbar.objectEditChapter')}
+                      iconLeft={<AIAssist size="sm" />}
+                      className="desktop-only"
+                    >
+                      {t('novelEditor.toolbar.objectEdit')}
+                    </TextButton>
+                  ) : null}
 
                   {/* Manual Save Button */}
                   <TextButton
                     variant="secondary"
                     size="sm"
                     onClick={() => handleManualSave('Manual Save')}
-                    disabled={isSaving || !hasUnsavedChanges}
+                    disabled={isSaving || !languageState.canEdit || !hasUnsavedChanges}
                     title={t('novelEditor.toolbar.saveSnapshot')}
                     iconLeft={<Save size="sm" />}
                     className="desktop-only"
                   >
-                    {t('novelEditor.toolbar.save')}
+                    {saveLabel}
                   </TextButton>
 
                   {/* More Actions Dropdown - contains mobile-hidden actions */}
@@ -812,35 +810,36 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     }
                   >
                     {/* AI Edit - accessible via dropdown on mobile */}
-                    <DropdownItem
-                      icon={<AIAssist size="sm" />}
-                      label={t('novelEditor.toolbar.objectEdit')}
-                      onClick={() => setIsAIEditModalOpen(true)}
-                      disabled={isSaving || !selectedChapter}
-                      className="mobile-only-item"
-                    />
+                    {canShowAIEdit ? (
+                      <DropdownItem
+                        icon={<AIAssist size="sm" />}
+                        label={t('novelEditor.toolbar.objectEdit')}
+                        onClick={() => setIsAIEditModalOpen(true)}
+                        disabled={isSaving || !selectedChapter}
+                        className="mobile-only-item"
+                      />
+                    ) : null}
                     {/* Save - accessible via dropdown on mobile */}
                     <DropdownItem
                       icon={<Save size="sm" />}
-                      label={t('novelEditor.toolbar.save')}
+                      label={saveLabel}
                       onClick={() => handleManualSave('Manual Save')}
-                      disabled={isSaving || !hasUnsavedChanges}
+                      disabled={isSaving || !languageState.canEdit || !hasUnsavedChanges}
                       className="mobile-only-item"
                     />
-                    {/* Show Translate/Retranslate only when sub languages exist */}
-                    {settings.subLanguages && settings.subLanguages.length > 0 && (
-                      manuscriptLanguages.includes(globalDisplayLanguage) ? (
+                    {!languageState.isMainLanguage && (
+                      languageState.hasRequestedLanguage ? (
                         <DropdownItem
                           icon={<Refresh size="sm" />}
                           label={t('novelEditor.toolbar.retranslate')}
-                          onClick={() => setShowRetranslateModal(true)}
+                          onClick={() => setShowTranslationModal(true)}
                           disabled={isSaving}
                         />
                       ) : (
                         <DropdownItem
                           icon={<Globe size="sm" />}
                           label={t('novelEditor.toolbar.translate')}
-                          onClick={() => setShowRetranslateModal(true)}
+                          onClick={() => setShowTranslationModal(true)}
                           disabled={isSaving || !manuscript}
                         />
                       )
@@ -866,9 +865,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     {availableSourceLanguages.length > 0 && (
                       <TextButton
                         variant="primary"
-                        onClick={() => setShowRetranslateModal(true)}
+                        onClick={() => setShowTranslationModal(true)}
                       >
-                        {t('novelEditor.overlay.translateFrom', { language: availableSourceLanguages[0] })}
+                        {t('novelEditor.overlay.translateFrom', { language: resolveTranslationSourceLanguage(availableSourceLanguages, settings.mainLanguage) })}
                       </TextButton>
                     )}
                   </div>
@@ -914,16 +913,12 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       {/* Translation Modal */}
       {manuscript && manuscriptId && (
         <TranslationModal
-          isOpen={showRetranslateModal}
-          onClose={() => setShowRetranslateModal(false)}
+          isOpen={showTranslationModal}
+          onClose={() => setShowTranslationModal(false)}
           projectId={projectId}
           preSelectedObjectIds={[manuscriptId]}
-          defaultSourceLanguage={
-            isMissingTranslation && availableSourceLanguages.length > 0
-              ? availableSourceLanguages[0]
-              : manuscriptLanguages[0] || settings.mainLanguage
-          }
-          defaultTargetLanguage={settings.defaultSubLanguage ?? undefined}
+          defaultSourceLanguage={resolveTranslationSourceLanguage(availableSourceLanguages, settings.mainLanguage)}
+          defaultTargetLanguage={languageState.requestedLanguage}
         />
       )}
 

@@ -20,6 +20,10 @@ import { TextButton } from '../TextButton';
 import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal, Save, Close } from '../icons';
 import { Loading } from '../common/Loading';
 import type { GuidelinesObject, GuidelinesData } from '../../types/unifiedObject';
+import {
+  resolveRequestedLanguageState,
+  resolveTranslationSourceLanguage,
+} from '../../utils/requestedLanguage';
 
 interface GuidelinesManagerProps {
   globalDisplayLanguage: string;
@@ -51,7 +55,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
   // Modal state
   const [showAIModal, setShowAIModal] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
-  const [showRetranslateModal, setShowRetranslateModal] = useState(false);
+  const [showTranslationModal, setShowTranslationModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // Helper to get data for a specific language
@@ -66,19 +70,23 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
     return { authorNote: '' };
   }, [guidelines]);
 
-  // Compute effective display language with fallback
-  const { effectiveLanguage, isFallback } = useMemo(() => {
-    if (!guidelines) {
-      return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
-    }
-    const available = Object.keys(guidelines.data);
-    if (available.includes(globalDisplayLanguage)) {
-      return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
-    }
-    return { effectiveLanguage: available[0] || globalDisplayLanguage, isFallback: true };
-  }, [guidelines, globalDisplayLanguage]);
+  const languageState = useMemo(
+    () => resolveRequestedLanguageState({
+      availableLanguages: guidelines ? Object.keys(guidelines.data) : [],
+      requestedLanguage: globalDisplayLanguage,
+      mainLanguage: settings.mainLanguage,
+    }),
+    [guidelines, globalDisplayLanguage, settings.mainLanguage],
+  );
 
-  const currentData = useMemo(() => getDataForLanguage(effectiveLanguage), [getDataForLanguage, effectiveLanguage]);
+  const currentData = useMemo(
+    () => getDataForLanguage(languageState.viewLanguage),
+    [getDataForLanguage, languageState.viewLanguage],
+  );
+
+  const canTranslate = languageState.isTranslationView && !languageState.hasRequestedLanguage;
+  const canRetranslate = languageState.isTranslationView && languageState.hasRequestedLanguage;
+  const showAIEdit = languageState.isMainLanguage;
 
   const initializeGuidelines = useCallback(async () => {
     if (!projectId) {
@@ -124,16 +132,22 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
     }
   }, [currentData, isEditing]);
 
+  useEffect(() => {
+    if (isEditing && !languageState.canEdit) {
+      setIsEditing(false);
+    }
+  }, [isEditing, languageState.canEdit]);
+
   const handleSave = async () => {
-    if (!guidelines || !guidelinesId) return;
+    if (!guidelines || !guidelinesId || !languageState.canEdit) return;
 
     setIsSaving(true);
     try {
       await updateObject('guidelines', guidelinesId, {
         data: editFormData,
-        language: effectiveLanguage,
+        language: languageState.requestedLanguage,
         user_request: 'User Edit',
-        create_new_version: true,
+        create_new_version: languageState.createNewVersion,
       });
 
       setIsEditing(false);
@@ -155,6 +169,10 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
   };
 
   const handleEdit = () => {
+    if (!languageState.canEdit) {
+      setShowTranslationModal(true);
+      return;
+    }
     setEditFormData(currentData);
     setIsEditing(true);
   };
@@ -182,16 +200,18 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
         <h2>Guidelines</h2>
         {!isEditing ? (
           <div className="header-buttons">
-            <TextButton
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowAIModal(true)}
-              disabled={loading}
-              iconLeft={<AIAssist size="xs" />}
-              className="desktop-only"
-            >
-              AI Edit
-            </TextButton>
+            {showAIEdit && (
+              <TextButton
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAIModal(true)}
+                disabled={loading}
+                iconLeft={<AIAssist size="xs" />}
+                className="desktop-only"
+              >
+                AI Edit
+              </TextButton>
+            )}
             <TextButton
               variant="ghost"
               size="sm"
@@ -202,12 +222,11 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
             >
               History
             </TextButton>
-            {settings.defaultSubLanguage &&
-              Object.keys(guidelines.data).includes(settings.defaultSubLanguage) && (
+            {canRetranslate && (
                 <TextButton
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowRetranslateModal(true)}
+                  onClick={() => setShowTranslationModal(true)}
                   disabled={loading}
                   iconLeft={<Refresh size="xs" />}
                   className="desktop-only"
@@ -218,11 +237,11 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
             <TextButton
               variant="secondary"
               size="sm"
-              onClick={handleEdit}
+              onClick={canTranslate ? () => setShowTranslationModal(true) : handleEdit}
               disabled={loading}
               className="desktop-only"
             >
-              Edit
+              {canTranslate ? 'Translate' : 'Edit'}
             </TextButton>
             <DropdownMenu
               trigger={
@@ -237,22 +256,23 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
             >
               <DropdownItem
                 icon={<Edit size="sm" />}
-                label="Edit"
-                onClick={handleEdit}
+                label={canTranslate ? 'Translate' : 'Edit'}
+                onClick={canTranslate ? () => setShowTranslationModal(true) : handleEdit}
                 disabled={loading}
               />
-              <DropdownItem
-                icon={<AIAssist size="sm" />}
-                label="AI Edit"
-                onClick={() => setShowAIModal(true)}
-                disabled={loading}
-              />
-              {settings.defaultSubLanguage &&
-                Object.keys(guidelines.data).includes(settings.defaultSubLanguage) && (
+              {showAIEdit && (
+                <DropdownItem
+                  icon={<AIAssist size="sm" />}
+                  label="AI Edit"
+                  onClick={() => setShowAIModal(true)}
+                  disabled={loading}
+                />
+              )}
+              {canRetranslate && (
                   <DropdownItem
                     icon={<Refresh size="sm" />}
                     label="Retranslate"
-                    onClick={() => setShowRetranslateModal(true)}
+                    onClick={() => setShowTranslationModal(true)}
                     disabled={loading}
                   />
               )}
@@ -279,9 +299,9 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
             <header className="content-header">
               <div className="title-row">
                 <h1 className="title-display">Author Note</h1>
-                {isFallback && (
-                  <span className="language-badge warning" title={`Showing ${effectiveLanguage}`}>
-                    <Warning size="xs" /> {effectiveLanguage}
+                {languageState.isFallbackView && (
+                  <span className="language-badge warning" title={`Showing ${languageState.viewLanguage}`}>
+                    <Warning size="xs" /> {languageState.viewLanguage}
                   </span>
                 )}
               </div>
@@ -325,15 +345,15 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
                   >
                     Cancel
                   </TextButton>
-                  <TextButton
-                    onClick={handleSave}
-                    variant="primary"
-                    size="sm"
-                    loading={isSaving}
-                    disabled={isSaving}
-                    iconLeft={<Save size="sm" />}
-                  >
-                    Save Changes
+                <TextButton
+                  onClick={handleSave}
+                  variant="primary"
+                  size="sm"
+                  loading={isSaving}
+                  disabled={isSaving || !languageState.canEdit}
+                  iconLeft={<Save size="sm" />}
+                >
+                    {languageState.isTranslationView ? 'Save Translation Changes' : 'Save Changes'}
                   </TextButton>
                 </div>
               ) : (
@@ -369,12 +389,12 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
 
       {guidelines && guidelinesId && projectId && (
         <TranslationModal
-          isOpen={showRetranslateModal}
-          onClose={() => setShowRetranslateModal(false)}
+          isOpen={showTranslationModal}
+          onClose={() => setShowTranslationModal(false)}
           projectId={projectId}
           preSelectedObjectIds={[guidelinesId]}
-          defaultSourceLanguage={settings.mainLanguage}
-          defaultTargetLanguage={settings.defaultSubLanguage ?? undefined}
+          defaultSourceLanguage={resolveTranslationSourceLanguage(Object.keys(guidelines.data), settings.mainLanguage)}
+          defaultTargetLanguage={languageState.requestedLanguage}
         />
       )}
     </div>

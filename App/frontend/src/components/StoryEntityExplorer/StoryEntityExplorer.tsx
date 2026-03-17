@@ -55,6 +55,11 @@ import {
 } from '../../types/storyEntityFolder';
 import type { StoryEntityData, StoryEntityKind, StoryEntityObject } from '../../types/unifiedObject';
 import type { ObjectAssetLink } from '../../api/assetService';
+import {
+  resolveRequestedLanguageState,
+  resolveTranslationSourceLanguage,
+  type RequestedLanguageState,
+} from '../../utils/requestedLanguage';
 import './StoryEntityExplorer.css';
 
 interface StoryEntityExplorerProps {
@@ -72,6 +77,9 @@ type FolderDialogState = {
   name: string;
   description: string;
   parentId: string | null;
+  requestedLanguage: string;
+  createNewVersion: boolean;
+  saveLabel: string;
 };
 
 type MixedGridItem =
@@ -93,7 +101,7 @@ type MixedGridItem =
     label: string;
     entity: StoryEntityObject;
     itemData: StoryEntityData;
-    effectiveLanguage: string;
+    languageState: RequestedLanguageState;
     description: string;
   };
 
@@ -141,15 +149,16 @@ function folderPath(folderId: string | null, foldersById: Record<string, StoryEn
   return result;
 }
 
-function getEffectiveLanguage(entity: StoryEntityObject, preferredLanguage: string, fallbackLanguage: string): string {
-  const availableLanguages = Object.keys(entity.data);
-  if (availableLanguages.includes(preferredLanguage)) {
-    return preferredLanguage;
-  }
-  if (availableLanguages.includes(fallbackLanguage)) {
-    return fallbackLanguage;
-  }
-  return availableLanguages[0] ?? preferredLanguage;
+function getEntityLanguageState(
+  entity: StoryEntityObject,
+  requestedLanguage: string,
+  mainLanguage: string,
+): RequestedLanguageState {
+  return resolveRequestedLanguageState({
+    availableLanguages: Object.keys(entity.data),
+    requestedLanguage,
+    mainLanguage,
+  });
 }
 
 function getEntityData(entity: StoryEntityObject, language: string): StoryEntityData {
@@ -169,6 +178,18 @@ function kindIcon(kind: StoryEntityKind): React.ReactNode {
     case 'lorebook':
       return <Books size="sm" />;
   }
+}
+
+function getFolderLanguageState(
+  folder: StoryEntityFolder,
+  requestedLanguage: string,
+  mainLanguage: string,
+): RequestedLanguageState {
+  return resolveRequestedLanguageState({
+    availableLanguages: Object.keys(folder.data),
+    requestedLanguage,
+    mainLanguage,
+  });
 }
 
 function getSortableId(item: MixedGridItem): string {
@@ -217,8 +238,8 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
   const [aiEditTargetId, setAIEditTargetId] = useState<string | undefined>(undefined);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versionHistoryTargetId, setVersionHistoryTargetId] = useState<string | undefined>(undefined);
-  const [showRetranslateModal, setShowRetranslateModal] = useState(false);
-  const [retranslateTargetId, setRetranslateTargetId] = useState<string | undefined>(undefined);
+  const [showTranslationModal, setShowTranslationModal] = useState(false);
+  const [translationTargetId, setTranslationTargetId] = useState<string | undefined>(undefined);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -236,6 +257,13 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
+
+  const isMainLanguageView = globalDisplayLanguage === settings.mainLanguage;
+
+  const openTranslationModalForTarget = useCallback((targetId: string) => {
+    setTranslationTargetId(targetId);
+    setShowTranslationModal(true);
+  }, []);
 
   useEffect(() => {
     if (!projectId) return;
@@ -313,6 +341,9 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
 
   const breadcrumbs = useMemo(() => folderPath(currentFolderId, foldersById), [currentFolderId, foldersById]);
   const currentFolder = currentFolderId ? foldersById[currentFolderId] ?? null : null;
+  const currentFolderLanguageState = currentFolder
+    ? getFolderLanguageState(currentFolder, globalDisplayLanguage, settings.mainLanguage)
+    : null;
 
   const folderOptions = useMemo(
     () => [
@@ -373,8 +404,8 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
       const previewLabels = [
         ...nestedFolders.map((item) => getStoryEntityFolderName(item, globalDisplayLanguage, settings.mainLanguage)),
         ...nestedEntities.map((entity) => {
-          const language = getEffectiveLanguage(entity, globalDisplayLanguage, settings.mainLanguage);
-          return getEntityData(entity, language).name || 'Untitled Entity';
+          const languageState = getEntityLanguageState(entity, globalDisplayLanguage, settings.mainLanguage);
+          return getEntityData(entity, languageState.viewLanguage).name || 'Untitled Entity';
         }),
       ].slice(0, 4);
 
@@ -392,8 +423,8 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
     });
 
     const entityItems = childEntities.map<MixedGridItem>((entity) => {
-      const effectiveLanguage = getEffectiveLanguage(entity, globalDisplayLanguage, settings.mainLanguage);
-      const itemData = getEntityData(entity, effectiveLanguage);
+      const languageState = getEntityLanguageState(entity, globalDisplayLanguage, settings.mainLanguage);
+      const itemData = getEntityData(entity, languageState.viewLanguage);
       return {
         kind: 'entity',
         id: entity.id,
@@ -401,7 +432,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
         label: itemData.name || 'Untitled Entity',
         entity,
         itemData,
-        effectiveLanguage,
+        languageState,
         description: itemData.description || '',
       };
     });
@@ -470,10 +501,11 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
   }, [animatingEntityId]);
 
   const openCreateEntity = useCallback((kind: StoryEntityKind = KIND_ORDER[0]) => {
+    if (!isMainLanguageView) return;
     setExpandedEntityId(null);
     setEditingEntityDraft(null);
     setNewEntityDraft({ kind, folderId: currentFolderId });
-  }, [currentFolderId]);
+  }, [currentFolderId, isMainLanguageView]);
 
   const handleCreateEntity = useCallback(async (name: string, description: string, content: string) => {
     if (!projectId || !newEntityDraft || !name.trim()) return;
@@ -496,6 +528,10 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
 
   const handleSaveEntity = useCallback(async (name: string, description: string, content: string) => {
     if (!expandedEntityId || !editingEntityDraft || !name.trim()) return;
+    const entity = entities.find((item) => item.id === expandedEntityId);
+    if (!entity) return;
+    const languageState = getEntityLanguageState(entity, globalDisplayLanguage, settings.mainLanguage);
+    if (!languageState.canEdit) return;
     try {
       await updateObject('story_entity', expandedEntityId, {
         kind: editingEntityDraft.kind,
@@ -504,8 +540,9 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
           description: description.trim(),
           content: content.trim(),
         },
-        language: globalDisplayLanguage,
+        language: languageState.requestedLanguage,
         user_request: 'User Edit',
+        create_new_version: languageState.createNewVersion,
         metadata: {
           folder_id: editingEntityDraft.folderId,
         },
@@ -515,7 +552,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
       console.error('Failed to save story entity:', error);
       showAlert({ title: 'Save Error', message: 'Failed to save story entity.' });
     }
-  }, [closeEntityEditor, editingEntityDraft, expandedEntityId, globalDisplayLanguage, updateObject]);
+  }, [closeEntityEditor, editingEntityDraft, entities, expandedEntityId, globalDisplayLanguage, settings.mainLanguage, updateObject]);
 
   const handleDeleteEntity = useCallback(async (entityId: string) => {
     const confirmed = await confirm({
@@ -538,24 +575,36 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
   }, [closeEntityEditor, deleteObject, expandedEntityId]);
 
   const openCreateFolderDialog = useCallback(() => {
+    if (!isMainLanguageView) return;
     setFolderDialog({
       mode: 'create',
       name: '',
       description: '',
       parentId: currentFolderId,
+      requestedLanguage: settings.mainLanguage,
+      createNewVersion: true,
+      saveLabel: 'Save Folder',
     });
-  }, [currentFolderId]);
+  }, [currentFolderId, isMainLanguageView, settings.mainLanguage]);
 
   const openEditFolderDialog = useCallback((folder: StoryEntityFolder) => {
-    const folderData = getStoryEntityFolderData(folder, globalDisplayLanguage, settings.mainLanguage);
+    const languageState = getFolderLanguageState(folder, globalDisplayLanguage, settings.mainLanguage);
+    if (!languageState.canEdit) {
+      openTranslationModalForTarget(folder.id);
+      return;
+    }
+    const folderData = getStoryEntityFolderData(folder, languageState.viewLanguage, settings.mainLanguage);
     setFolderDialog({
       mode: 'edit',
       folderId: folder.id,
       name: folderData.name,
       description: folderData.description,
       parentId: folder.parent_id ?? null,
+      requestedLanguage: languageState.requestedLanguage,
+      createNewVersion: languageState.createNewVersion,
+      saveLabel: languageState.isTranslationView ? 'Save Folder Translation' : 'Save Folder',
     });
-  }, [globalDisplayLanguage, settings.mainLanguage]);
+  }, [globalDisplayLanguage, openTranslationModalForTarget, settings.mainLanguage]);
 
   const canSelectFolderParent = useCallback((candidateId: string | null): boolean => {
     if (!folderDialog || folderDialog.mode !== 'edit' || !folderDialog.folderId) return true;
@@ -602,7 +651,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
     try {
       if (folderDialog.mode === 'create') {
         await createFolder(projectId, {
-          language: globalDisplayLanguage || settings.mainLanguage,
+          language: folderDialog.requestedLanguage,
           name: folderDialog.name.trim(),
           description: folderDialog.description.trim(),
           parent_id: folderDialog.parentId,
@@ -610,15 +659,16 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
       } else if (folderDialog.folderId) {
         const folder = foldersById[folderDialog.folderId];
         if (!folder) return;
-        const currentFolderData = getStoryEntityFolderData(folder, globalDisplayLanguage, settings.mainLanguage);
+        const currentFolderData = getStoryEntityFolderData(folder, folderDialog.requestedLanguage, settings.mainLanguage);
         if (
           currentFolderData.name !== folderDialog.name.trim()
           || currentFolderData.description !== folderDialog.description.trim()
         ) {
           await updateFolder(projectId, folderDialog.folderId, {
-            language: globalDisplayLanguage || settings.mainLanguage,
+            language: folderDialog.requestedLanguage,
             name: folderDialog.name.trim(),
             description: folderDialog.description.trim(),
+            create_new_version: folderDialog.createNewVersion,
           });
         }
         if ((folder.parent_id ?? null) !== (folderDialog.parentId ?? null)) {
@@ -632,7 +682,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
     } finally {
       setIsSavingFolder(false);
     }
-  }, [createFolder, folderDialog, foldersById, globalDisplayLanguage, moveFolder, projectId, settings.mainLanguage, updateFolder]);
+  }, [createFolder, folderDialog, foldersById, moveFolder, projectId, settings.mainLanguage, updateFolder]);
 
   const handleDeleteFolder = useCallback(async () => {
     if (!projectId || !folderDialog?.folderId) return;
@@ -661,6 +711,9 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
 
   const currentExpandedEntity = expandedEntityId
     ? entities.find((entity) => entity.id === expandedEntityId) ?? null
+    : null;
+  const currentExpandedEntityLanguageState = currentExpandedEntity
+    ? getEntityLanguageState(currentExpandedEntity, globalDisplayLanguage, settings.mainLanguage)
     : null;
 
   if (!projectId) {
@@ -714,36 +767,38 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
               size="sm"
               onClick={() => openEditFolderDialog(currentFolder)}
             >
-              Edit Folder
+              {currentFolderLanguageState?.canEdit ? 'Edit Folder' : 'Translate Folder'}
             </TextButton>
           ) : null}
 
-          <DropdownMenu
-            align="right"
-            trigger={(
-              <TextButton
-                variant="secondary"
-                size="sm"
-                iconLeft={<Plus size="xs" />}
-                iconRight={<ChevronDown size="xs" />}
-              >
-                Add
-              </TextButton>
-            )}
-          >
-            <DropdownSection>
-              <DropdownItem
-                icon={<Folder size="sm" />}
-                label="Add Folder"
-                onClick={openCreateFolderDialog}
-              />
-              <DropdownItem
-                icon={<Plus size="sm" />}
-                label="Add Entity"
-                onClick={() => openCreateEntity()}
-              />
-            </DropdownSection>
-          </DropdownMenu>
+          {isMainLanguageView ? (
+            <DropdownMenu
+              align="right"
+              trigger={(
+                <TextButton
+                  variant="secondary"
+                  size="sm"
+                  iconLeft={<Plus size="xs" />}
+                  iconRight={<ChevronDown size="xs" />}
+                >
+                  Add
+                </TextButton>
+              )}
+            >
+              <DropdownSection>
+                <DropdownItem
+                  icon={<Folder size="sm" />}
+                  label="Add Folder"
+                  onClick={openCreateFolderDialog}
+                />
+                <DropdownItem
+                  icon={<Plus size="sm" />}
+                  label="Add Entity"
+                  onClick={() => openCreateEntity()}
+                />
+              </DropdownSection>
+            </DropdownMenu>
+          ) : null}
         </div>
       </div>
 
@@ -752,7 +807,11 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
       {currentItems.length === 0 ? (
         <div className="empty-state">
           <p>No folders or entities here.</p>
-          <p>Create a folder or add a new story entity in this location.</p>
+          <p>
+            {isMainLanguageView
+              ? 'Create a folder or add a new story entity in this location.'
+              : `Create new folders and entities in ${settings.mainLanguage}, then translate them into ${globalDisplayLanguage}.`}
+          </p>
         </div>
       ) : (
         <LayoutGroup id={`story-entities-${currentFolderId ?? 'root'}`}>
@@ -780,13 +839,18 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                             description={item.previewDescription}
                             childFolderCount={item.childFolderCount}
                             childEntityCount={item.childEntityCount}
-                            previewLabels={item.previewLabels}
-                            dragHandle={dragHandle}
-                            onOpen={() => setCurrentFolderId(item.folder.id)}
-                            onEdit={() => openEditFolderDialog(item.folder)}
-                          />
-                        )}
-                      </SortableObjectCard>
+                          previewLabels={item.previewLabels}
+                          dragHandle={dragHandle}
+                          onOpen={() => setCurrentFolderId(item.folder.id)}
+                          onEdit={() => openEditFolderDialog(item.folder)}
+                          editLabel={
+                            getFolderLanguageState(item.folder, globalDisplayLanguage, settings.mainLanguage).canEdit
+                              ? 'Edit'
+                              : 'Translate Folder'
+                          }
+                        />
+                      )}
+                    </SortableObjectCard>
                     );
                   }
 
@@ -831,16 +895,24 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
               >
                 <ObjectCardExpanded
                   itemId={currentExpandedEntity.id}
-                  itemData={getEntityData(
-                    currentExpandedEntity,
-                    getEffectiveLanguage(currentExpandedEntity, globalDisplayLanguage, settings.mainLanguage),
-                  )}
-                  effectiveLanguage={getEffectiveLanguage(currentExpandedEntity, globalDisplayLanguage, settings.mainLanguage)}
+                  itemData={getEntityData(currentExpandedEntity, currentExpandedEntityLanguageState?.viewLanguage ?? settings.mainLanguage)}
+                  effectiveLanguage={currentExpandedEntityLanguageState?.viewLanguage ?? settings.mainLanguage}
                   versionNumber={currentExpandedEntity.version.number}
                   objectType="story_entity"
                   mainAsset={getMainAssetFromLinks(objectAssetsByKey[`${projectId}:story_entity:${currentExpandedEntity.id}`])}
                   loading={loading[currentExpandedEntity.id] || false}
-                  showSecondaryLanguage={getEffectiveLanguage(currentExpandedEntity, globalDisplayLanguage, settings.mainLanguage) !== globalDisplayLanguage}
+                  readOnly={!currentExpandedEntityLanguageState?.canEdit}
+                  readOnlyReason={
+                    currentExpandedEntityLanguageState && !currentExpandedEntityLanguageState.canEdit
+                      ? `This ${KIND_SHORT_LABELS[currentExpandedEntity.kind ?? 'character'].toLowerCase()} is only available in ${currentExpandedEntityLanguageState.viewLanguage}. Translate it into ${currentExpandedEntityLanguageState.requestedLanguage} to edit.`
+                      : undefined
+                  }
+                  primaryActionLabel={!currentExpandedEntityLanguageState?.canEdit ? 'Translate' : undefined}
+                  onPrimaryAction={!currentExpandedEntityLanguageState?.canEdit
+                    ? () => openTranslationModalForTarget(currentExpandedEntity.id)
+                    : undefined}
+                  hideAIEdit={!currentExpandedEntityLanguageState?.isMainLanguage}
+                  saveLabel={currentExpandedEntityLanguageState?.isTranslationView ? 'Save Translation' : 'Save'}
                   extraEditFields={(
                     <div className="story-entity-overlay-fields">
                       <div className="expanded-field">
@@ -852,6 +924,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                             kind: event as StoryEntityKind,
                           } : prev)}
                           options={storyEntityKindOptions}
+                          disabled={!currentExpandedEntityLanguageState?.canEdit}
                         />
                       </div>
 
@@ -864,24 +937,24 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                             folderId: value || null,
                           } : prev)}
                           options={storyEntityFolderSelectOptions}
+                          disabled={!currentExpandedEntityLanguageState?.canEdit}
                         />
                       </div>
                     </div>
                   )}
                   onSave={handleSaveEntity}
                   onCancel={closeEntityEditor}
-                  onAIEdit={() => {
+                  onAIEdit={currentExpandedEntityLanguageState?.isMainLanguage ? () => {
                     setAIEditTargetId(currentExpandedEntity.id);
                     setShowAIModal(true);
-                  }}
+                  } : undefined}
                   onVersionHistory={() => {
                     setVersionHistoryTargetId(currentExpandedEntity.id);
                     setShowVersionHistory(true);
                   }}
-                  onRetranslate={() => {
-                    setRetranslateTargetId(currentExpandedEntity.id);
-                    setShowRetranslateModal(true);
-                  }}
+                  onRetranslate={currentExpandedEntityLanguageState?.isTranslationView ? () => {
+                    openTranslationModalForTarget(currentExpandedEntity.id);
+                  } : undefined}
                   onDelete={() => {
                     void handleDeleteEntity(currentExpandedEntity.id);
                   }}
@@ -1030,7 +1103,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                       disabled={!folderDialog.name.trim()}
                       iconLeft={<Save size="xs" />}
                     >
-                      Save Folder
+                      {folderDialog.saveLabel}
                     </TextButton>
                   </div>
                 </div>
@@ -1063,17 +1136,24 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
         />
       ) : null}
 
-      {retranslateTargetId ? (
+      {translationTargetId ? (
         <TranslationModal
-          isOpen={showRetranslateModal}
+          isOpen={showTranslationModal}
           onClose={() => {
-            setShowRetranslateModal(false);
-            setRetranslateTargetId(undefined);
+            setShowTranslationModal(false);
+            setTranslationTargetId(undefined);
           }}
           projectId={projectId}
-          preSelectedObjectIds={[retranslateTargetId]}
-          defaultSourceLanguage={settings.mainLanguage}
-          defaultTargetLanguage={settings.defaultSubLanguage ?? undefined}
+          preSelectedObjectIds={[translationTargetId]}
+          defaultSourceLanguage={resolveTranslationSourceLanguage(
+            translationTargetId
+              ? (foldersById[translationTargetId]
+                ? Object.keys(foldersById[translationTargetId].data)
+                : Object.keys(entities.find((entity) => entity.id === translationTargetId)?.data ?? {}))
+              : [],
+            settings.mainLanguage,
+          )}
+          defaultTargetLanguage={globalDisplayLanguage}
         />
       ) : null}
     </div>
@@ -1146,6 +1226,7 @@ const FolderCard: React.FC<{
   dragHandle: React.ReactNode;
   onOpen: () => void;
   onEdit: () => void;
+  editLabel?: string;
 }> = ({
   name,
   description,
@@ -1155,6 +1236,7 @@ const FolderCard: React.FC<{
   dragHandle,
   onOpen,
   onEdit,
+  editLabel = 'Edit',
 }) => (
   <div className="story-entity-grid-item" data-span="normal">
     <article className="object-card story-entity-folder-card" data-has-image="false" data-span="normal">
@@ -1212,7 +1294,7 @@ const FolderCard: React.FC<{
               Open Folder
             </TextButton>
             <TextButton variant="ghost" size="sm" onClick={onEdit}>
-              Edit
+              {editLabel}
             </TextButton>
           </div>
         </div>

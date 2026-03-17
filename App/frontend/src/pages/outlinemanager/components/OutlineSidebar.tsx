@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -8,8 +8,9 @@ import { BaseSidebar } from '../../../components/BaseSidebar';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
-import { Close, Plus, Edit, Trash, AIAssist, Books, MoreHorizontal } from '../../../components/icons';
+import { Close, Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Refresh } from '../../../components/icons';
 import { Warning } from '../../../components/icons';
+import { resolveRequestedLanguageState } from '../../../utils/requestedLanguage';
 import './OutlineSidebar.css';
 
 interface OutlineSidebarProps {
@@ -18,8 +19,11 @@ interface OutlineSidebarProps {
   onSelectOutline: (outlineId: string) => void;
   displayLanguage: string;
   onEditOutline: (outlineId: string) => void;
+  onTranslateOutline: (outlineId: string) => void;
+  onRetranslateOutline: (outlineId: string) => void;
   onAIEditOutline: (outlineId: string) => void;
   onDeleteOutline: (outlineId: string) => void;
+  canCreateOutline: boolean;
 }
 
 const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
@@ -28,8 +32,11 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
   onSelectOutline,
   displayLanguage,
   onEditOutline,
+  onTranslateOutline,
+  onRetranslateOutline,
   onAIEditOutline,
   onDeleteOutline,
+  canCreateOutline,
 }) => {
   const store = useUnifiedObjectStore();
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
@@ -39,13 +46,18 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
 
+  useEffect(() => {
+    if (canCreateOutline) return;
+    setShowAddForm(false);
+  }, [canCreateOutline]);
+
   const handleClose = () => {
     closeSidebar(projectId);
   };
 
   // Handle add outline form submission
   const handleAddOutline = async () => {
-    if (!formName.trim()) return;
+    if (!formName.trim() || !canCreateOutline) return;
 
     try {
       await store.createObject(
@@ -82,6 +94,12 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
       ? { data: obj.data[available[0]], isFallback: true }
       : { data: fallback, isFallback: true };
   };
+
+  const getLanguageState = (outline: OutlineObject) => resolveRequestedLanguageState({
+    availableLanguages: Object.keys(outline.data),
+    requestedLanguage: displayLanguage,
+    mainLanguage,
+  });
 
   // Get outlines from store
   const outlines = useMemo(() => {
@@ -126,7 +144,7 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
     >
       <div className="outline-list-container">
         {/* Add Outline Form */}
-        {showAddForm && (
+        {showAddForm && canCreateOutline && (
           <div className="sidebar-add-form">
             <h4>Add New Outline</h4>
             <div className="form-group">
@@ -167,10 +185,16 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
             <div className="empty-content">
               <Books size="lg" className="empty-icon" />
               <h4>No Outlines Yet</h4>
-              <p>Create your first outline to start organizing your story.</p>
-              <TextButton onClick={() => setShowAddForm(true)} iconLeft={<Plus size="xs" />} size="sm">
-                Create Outline
-              </TextButton>
+              <p>
+                {canCreateOutline
+                  ? 'Create your first outline to start organizing your story.'
+                  : `Create outlines in ${mainLanguage}, then translate them into ${displayLanguage}.`}
+              </p>
+              {canCreateOutline ? (
+                <TextButton onClick={() => setShowAddForm(true)} iconLeft={<Plus size="xs" />} size="sm">
+                  Create Outline
+                </TextButton>
+              ) : null}
             </div>
           </div>
         )}
@@ -181,6 +205,7 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
             <div className="outline-list">
               {outlines.map((outline, index) => {
                 const { data: outlineData, isFallback } = getLocalizedData(outline, { name: 'Untitled Outline', description: '' });
+                const languageState = getLanguageState(outline);
                 const isSelected = selectedOutlineId === outline.id;
                 const actsCount = Object.values(store.objects).filter(
                   obj => obj?.type === 'outline' && obj?.kind === 'act' && obj?.metadata?.parent_id === outline.id
@@ -222,8 +247,17 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
                           />
                         }
                       >
-                        <DropdownItem icon={<Edit size="sm" />} label="Edit" onClick={() => onEditOutline(outline.id)} />
-                        <DropdownItem icon={<AIAssist size="sm" />} label="AI Edit" onClick={() => onAIEditOutline(outline.id)} />
+                        {languageState.canEdit ? (
+                          <DropdownItem icon={<Edit size="sm" />} label="Edit" onClick={() => onEditOutline(outline.id)} />
+                        ) : (
+                          <DropdownItem icon={<Edit size="sm" />} label="Translate" onClick={() => onTranslateOutline(outline.id)} />
+                        )}
+                        {languageState.isTranslationView && (
+                          <DropdownItem icon={<Refresh size="sm" />} label="Retranslate" onClick={() => onRetranslateOutline(outline.id)} />
+                        )}
+                        {languageState.isMainLanguage && (
+                          <DropdownItem icon={<AIAssist size="sm" />} label="AI Edit" onClick={() => onAIEditOutline(outline.id)} />
+                        )}
                         <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => onDeleteOutline(outline.id)} variant="danger" />
                       </DropdownMenu>
                     </div>
@@ -231,11 +265,13 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
                 );
               })}
             </div>
-            <div className="outline-list-footer">
-              <TextButton onClick={() => setShowAddForm(true)} iconLeft={<Plus size="xs" />} size="sm" variant="ghost">
-                Add Outline
-              </TextButton>
-            </div>
+            {canCreateOutline ? (
+              <div className="outline-list-footer">
+                <TextButton onClick={() => setShowAddForm(true)} iconLeft={<Plus size="xs" />} size="sm" variant="ghost">
+                  Add Outline
+                </TextButton>
+              </div>
+            ) : null}
           </>
         )}
       </div>

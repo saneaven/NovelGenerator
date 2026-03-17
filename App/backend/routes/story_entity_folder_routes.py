@@ -40,6 +40,7 @@ class StoryEntityFolderUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     language: str = "English"
+    create_new_version: bool = True
 
 
 class StoryEntityFolderMoveRequest(BaseModel):
@@ -219,7 +220,7 @@ async def update_story_entity_folder_route(
         language=payload.language,
         user_request="User Edit",
         created_by=current_user.id,
-        create_new_version=True,
+        create_new_version=payload.create_new_version,
     )
     db.commit()
     return _serialize_folder_payload(updated, language=payload.language)

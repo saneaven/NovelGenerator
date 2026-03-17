@@ -26,6 +26,10 @@ import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal, Image, Save, C
 import { Loading } from '../common/Loading';
 import type { BasicInfoObject, BasicInfoData } from '../../types/unifiedObject';
 import { normalizeBasicInfoData } from '../../utils/basicInfo';
+import {
+  resolveRequestedLanguageState,
+  resolveTranslationSourceLanguage,
+} from '../../utils/requestedLanguage';
 
 interface BasicInfoManagerProps {
   globalDisplayLanguage: string;
@@ -62,7 +66,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   // Modal state
   const [showAIModal, setShowAIModal] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
-  const [showRetranslateModal, setShowRetranslateModal] = useState(false);
+  const [showTranslationModal, setShowTranslationModal] = useState(false);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -78,19 +82,23 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     return EMPTY_BASIC_INFO_DATA;
   }, [basicInfo]);
 
-  // Compute effective display language with fallback
-  const { effectiveLanguage, isFallback } = useMemo(() => {
-    if (!basicInfo) {
-      return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
-    }
-    const available = Object.keys(basicInfo.data);
-    if (available.includes(globalDisplayLanguage)) {
-      return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
-    }
-    return { effectiveLanguage: available[0] || globalDisplayLanguage, isFallback: true };
-  }, [basicInfo, globalDisplayLanguage]);
+  const languageState = useMemo(
+    () => resolveRequestedLanguageState({
+      availableLanguages: basicInfo ? Object.keys(basicInfo.data) : [],
+      requestedLanguage: globalDisplayLanguage,
+      mainLanguage: settings.mainLanguage,
+    }),
+    [basicInfo, globalDisplayLanguage, settings.mainLanguage],
+  );
 
-  const currentData = useMemo(() => getDataForLanguage(effectiveLanguage), [getDataForLanguage, effectiveLanguage]);
+  const currentData = useMemo(
+    () => getDataForLanguage(languageState.viewLanguage),
+    [getDataForLanguage, languageState.viewLanguage],
+  );
+
+  const canTranslate = languageState.isTranslationView && !languageState.hasRequestedLanguage;
+  const canRetranslate = languageState.isTranslationView && languageState.hasRequestedLanguage;
+  const showAIEdit = languageState.isMainLanguage;
 
   const initializeBasicInfo = useCallback(async () => {
     if (!projectId) {
@@ -136,16 +144,22 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     }
   }, [currentData, isEditing]);
 
+  useEffect(() => {
+    if (isEditing && !languageState.canEdit) {
+      setIsEditing(false);
+    }
+  }, [isEditing, languageState.canEdit]);
+
   const handleSave = async () => {
-    if (!basicInfo || !basicInfoId) return;
+    if (!basicInfo || !basicInfoId || !languageState.canEdit) return;
 
     setIsSaving(true);
     try {
       await updateObject('basic_info', basicInfoId, {
         data: editFormData,
-        language: effectiveLanguage,
+        language: languageState.requestedLanguage,
         user_request: 'User Edit',
-        create_new_version: true,
+        create_new_version: languageState.createNewVersion,
       });
 
       setIsEditing(false);
@@ -171,6 +185,10 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   };
 
   const handleEdit = () => {
+    if (!languageState.canEdit) {
+      setShowTranslationModal(true);
+      return;
+    }
     setEditFormData(currentData);
     setIsEditing(true);
   };
@@ -210,16 +228,18 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
         <h2>Basic Information</h2>
         {!isEditing ? (
           <div className="header-buttons">
-            <TextButton
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowAIModal(true)}
-              disabled={loading}
-              iconLeft={<AIAssist size="xs" />}
-              className="desktop-only"
-            >
-              AI Edit
-            </TextButton>
+            {showAIEdit && (
+              <TextButton
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAIModal(true)}
+                disabled={loading}
+                iconLeft={<AIAssist size="xs" />}
+                className="desktop-only"
+              >
+                AI Edit
+              </TextButton>
+            )}
             <TextButton
               variant="ghost"
               size="sm"
@@ -230,12 +250,11 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
             >
               History
             </TextButton>
-            {settings.defaultSubLanguage &&
-              Object.keys(basicInfo.data).includes(settings.defaultSubLanguage) && (
+            {canRetranslate && (
                 <TextButton
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowRetranslateModal(true)}
+                  onClick={() => setShowTranslationModal(true)}
                   disabled={loading}
                   iconLeft={<Refresh size="xs" />}
                   className="desktop-only"
@@ -246,11 +265,11 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
             <TextButton
               variant="secondary"
               size="sm"
-              onClick={handleEdit}
+              onClick={canTranslate ? () => setShowTranslationModal(true) : handleEdit}
               disabled={loading}
               className="desktop-only"
             >
-              Edit
+              {canTranslate ? 'Translate' : 'Edit'}
             </TextButton>
             <DropdownMenu
               trigger={
@@ -265,22 +284,23 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
             >
               <DropdownItem
                 icon={<Edit size="sm" />}
-                label="Edit"
-                onClick={handleEdit}
+                label={canTranslate ? 'Translate' : 'Edit'}
+                onClick={canTranslate ? () => setShowTranslationModal(true) : handleEdit}
                 disabled={loading}
               />
-              <DropdownItem
-                icon={<AIAssist size="sm" />}
-                label="AI Edit"
-                onClick={() => setShowAIModal(true)}
-                disabled={loading}
-              />
-              {settings.defaultSubLanguage &&
-                Object.keys(basicInfo.data).includes(settings.defaultSubLanguage) && (
+              {showAIEdit && (
+                <DropdownItem
+                  icon={<AIAssist size="sm" />}
+                  label="AI Edit"
+                  onClick={() => setShowAIModal(true)}
+                  disabled={loading}
+                />
+              )}
+              {canRetranslate && (
                   <DropdownItem
                     icon={<Refresh size="sm" />}
                     label="Retranslate"
-                    onClick={() => setShowRetranslateModal(true)}
+                    onClick={() => setShowTranslationModal(true)}
                     disabled={loading}
                   />
               )}
@@ -343,9 +363,9 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
                     <span className="genre-badge">Uncategorized</span>
                   )
                 )}
-                {isFallback && (
-                  <span className="language-badge warning" title={`Showing ${effectiveLanguage}`}>
-                    <Warning size="xs" /> {effectiveLanguage}
+                {languageState.isFallbackView && (
+                  <span className="language-badge warning" title={`Showing ${languageState.viewLanguage}`}>
+                    <Warning size="xs" /> {languageState.viewLanguage}
                   </span>
                 )}
               </div>
@@ -419,10 +439,10 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
                   variant="primary"
                   size="sm"
                   loading={isSaving}
-                  disabled={isSaving}
+                  disabled={isSaving || !languageState.canEdit}
                   iconLeft={<Save size="sm" />}
                 >
-                  Save Changes
+                  {languageState.isTranslationView ? 'Save Translation Changes' : 'Save Changes'}
                 </TextButton>
               </div>
             ) : (
@@ -458,12 +478,12 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
 
       {basicInfo && basicInfoId && projectId && (
         <TranslationModal
-          isOpen={showRetranslateModal}
-          onClose={() => setShowRetranslateModal(false)}
+          isOpen={showTranslationModal}
+          onClose={() => setShowTranslationModal(false)}
           projectId={projectId}
           preSelectedObjectIds={[basicInfoId]}
-          defaultSourceLanguage={settings.mainLanguage}
-          defaultTargetLanguage={settings.defaultSubLanguage ?? undefined}
+          defaultSourceLanguage={resolveTranslationSourceLanguage(Object.keys(basicInfo.data), settings.mainLanguage)}
+          defaultTargetLanguage={languageState.requestedLanguage}
         />
       )}
 

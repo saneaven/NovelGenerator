@@ -114,6 +114,16 @@
     height: 100%;
 }
 
+.expanded-readonly-reason {
+    margin: 0;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--border-radius-md);
+    background: var(--color-surface-subtle);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+}
+
 /* Form fields */
 .expanded-field {
     display: flex;

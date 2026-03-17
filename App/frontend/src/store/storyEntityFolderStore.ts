@@ -14,7 +14,11 @@ interface StoryEntityFolderStore {
   languageByProject: Record<string, string | undefined>;
   fetchFolders: (projectId: string, language?: string) => Promise<StoryEntityFolder[]>;
   createFolder: (projectId: string, payload: { language: string; name: string; description?: string; parent_id?: string | null }) => Promise<StoryEntityFolder>;
-  updateFolder: (projectId: string, folderId: string, payload: { language: string; name?: string; description?: string }) => Promise<StoryEntityFolder>;
+  updateFolder: (
+    projectId: string,
+    folderId: string,
+    payload: { language: string; name?: string; description?: string; create_new_version?: boolean },
+  ) => Promise<StoryEntityFolder>;
   moveFolder: (projectId: string, folderId: string, payload: { new_parent_id?: string | null; new_index?: number }) => Promise<StoryEntityFolder>;
   deleteFolder: (projectId: string, folderId: string) => Promise<StoryEntityFolderDeleteResponse>;
   moveTreeNode: (projectId: string, payload: StoryEntityTreeMoveRequest) => Promise<void>;

@@ -91,7 +91,27 @@ function objectToItem(obj: UnifiedObject, language: string): ObjectPickerItem {
   };
 }
 
-function buildFolderNodeMap(folders: StoryEntityFolder[]): Map<string, ObjectPickerGroup> {
+function folderToItem(folder: StoryEntityFolder, language: string): ObjectPickerItem {
+  const data = getStoryEntityFolderName(folder, language);
+  const description = getStoryEntityFolderDescription(folder, language);
+
+  return {
+    id: folder.id,
+    name: data || folder.name || 'Unnamed Folder',
+    description: description || undefined,
+    content: description || undefined,
+    type: 'story_entity_folder',
+    parentId: folder.parent_id || undefined,
+    order: folder.display_order,
+    metadata: {
+      parent_id: folder.parent_id,
+      display_order: folder.display_order,
+      project_id: folder.project_id,
+    },
+  };
+}
+
+function buildFolderNodeMap(folders: StoryEntityFolder[], language: string): Map<string, ObjectPickerGroup> {
   const map = new Map<string, ObjectPickerGroup>();
 
   for (const folder of folders) {
@@ -100,7 +120,7 @@ function buildFolderNodeMap(folders: StoryEntityFolder[]): Map<string, ObjectPic
       label: folder.name,
       description: folder.description || undefined,
       type: 'story_entity',
-      items: [],
+      items: [folderToItem(folder, language)],
       childGroups: [],
     });
   }
@@ -134,6 +154,7 @@ function buildStoryEntityGroups(
       name: getStoryEntityFolderName(folder, language),
       description: getStoryEntityFolderDescription(folder, language),
     })),
+    language,
   );
   const rootItems: ObjectPickerItem[] = [];
   const rootGroups: ObjectPickerGroup[] = [];
@@ -345,6 +366,9 @@ function buildGroups(
     if (entityGroups.length > 0) {
       groups.push(...entityGroups);
       availableTypes.push('story_entity');
+      if (folders.length > 0) {
+        availableTypes.push('story_entity_folder');
+      }
     }
   }
 

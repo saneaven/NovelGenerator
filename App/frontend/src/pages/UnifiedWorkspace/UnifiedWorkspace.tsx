@@ -485,6 +485,7 @@ const UnifiedWorkspace: React.FC = () => {
         <AgentPanel
           projectId={projectId ?? ''}
           surface={currentSubPage}
+          displayLanguage={currentDisplayLanguage}
         />
 
         {currentSubPage === 'story-entity' && (

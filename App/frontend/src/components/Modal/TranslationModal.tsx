@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { BaseModal } from '../BaseModal';
 import './TranslationModal.css';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useStoryEntityFolderStore } from '../../store/storyEntityFolderStore';
 import { useSettings } from '../../store/settingsStore';
 import type { UnifiedObject, ObjectType } from '../../types/unifiedObject';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
@@ -15,6 +16,9 @@ import CollapsibleSection from '../ui/CollapsibleSection';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import ToggleSwitch from '../common/ToggleSwitch';
+import {
+  getStoryEntityFolderData,
+} from '../../types/storyEntityFolder';
 
 interface TranslationModalProps {
   isOpen: boolean;
@@ -35,6 +39,9 @@ interface ProjectObjectToTranslate {
 }
 
 function objectDisplayLabel(objectType: ObjectType, objectKind?: UnifiedObject['kind']): string {
+  if (objectType === 'story_entity_folder') {
+    return 'Story Entity Folder';
+  }
   if (objectType === 'story_entity') {
     if (!objectKind) return 'Story Entity';
     return `${objectKind[0].toUpperCase()}${objectKind.slice(1)} Entity`;
@@ -75,6 +82,8 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   // Use selector to only subscribe to objects, preventing re-renders from unrelated store changes
   const objects = useUnifiedObjectStore(useShallow(state => state.objects));
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
+  const foldersById = useStoryEntityFolderStore((state) => state.foldersById);
+  const fetchFolders = useStoryEntityFolderStore((state) => state.fetchFolders);
   const settings = useSettings();
 
   // Ensure all object types are available in store for translation selection (tab-independent)
@@ -89,10 +98,18 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       'manuscript',
     ];
 
-    void Promise.all(types.map(type => listObjects(type, projectId))).catch((err) => {
+    void Promise.all([
+      ...types.map(type => listObjects(type, projectId)),
+      fetchFolders(projectId),
+    ]).catch((err) => {
       console.error('Failed to preload objects for translation:', err);
     });
-  }, [isOpen, projectId, listObjects]);
+  }, [isOpen, projectId, listObjects, fetchFolders]);
+
+  const projectFolders = useMemo(
+    () => Object.values(foldersById).filter((folder) => folder.project_id === projectId),
+    [foldersById, projectId],
+  );
 
   // Build available languages list
   const availableLanguages = useMemo(() => {
@@ -121,8 +138,13 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       ids.push(obj.id);
     });
 
+    projectFolders.forEach((folder) => {
+      if (!folder.data[targetLanguage]) return;
+      ids.push(folder.id);
+    });
+
     return ids;
-  }, [objects, projectId, targetLanguage]);
+  }, [objects, projectId, targetLanguage, projectFolders]);
 
   const hasAnyContext = contextObjectIds.length > 0;
 
@@ -132,6 +154,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     // Also require mainLanguage to be non-empty to avoid infinite loop
     if (isOpen && !sourceLanguage && settings.mainLanguage && settings.subLanguages && settings.subLanguages.length > 0) {
       const allObjects = Object.values(objects) as UnifiedObject<any>[];
+      const allFolders = projectFolders;
 
       // Find the sub language that has the most objects needing translation
       let bestTargetLanguage = settings.subLanguages[0];
@@ -145,6 +168,11 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
             count++;
           }
         });
+        allFolders.forEach((folder) => {
+          if (!Object.keys(folder.data || {}).includes(subLang)) {
+            count++;
+          }
+        });
         if (count > maxObjectsToTranslate) {
           maxObjectsToTranslate = count;
           bestTargetLanguage = subLang;
@@ -155,7 +183,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       setSourceLanguage(settings.mainLanguage);
       setTargetLanguage(bestTargetLanguage);
     }
-  }, [isOpen, settings.mainLanguage, settings.subLanguages, sourceLanguage, objects, projectId]);
+  }, [isOpen, settings.mainLanguage, settings.subLanguages, sourceLanguage, objects, projectId, projectFolders]);
 
   // Get all available objects that need translation (before selection filter)
   const availableObjects = useMemo(() => {
@@ -236,13 +264,33 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       });
     });
 
+    projectFolders.forEach((folder) => {
+      if (preSelectedSet) {
+        if (!preSelectedSet.has(folder.id)) return;
+      } else if (Object.keys(folder.data || {}).includes(targetLanguage)) {
+        return;
+      }
+
+      if (!Object.keys(folder.data || {}).includes(sourceLanguage)) return;
+
+      const sourceData = getStoryEntityFolderData(folder, sourceLanguage);
+      result.push({
+        objectType: 'story_entity_folder',
+        objectId: folder.id,
+        sourceData,
+        versionNumber: folder.version?.number,
+        label: sourceData.name || folder.name || folder.id,
+        order: folder.display_order ?? Number.MAX_SAFE_INTEGER - 2000,
+      });
+    });
+
     // Sort by order for acts and chapters (objects without order will be at the end)
     return result.sort((a, b) => {
       const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
       const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
       return orderA - orderB;
     });
-  }, [objects, projectId, targetLanguage, sourceLanguage, preSelectedObjectIds]);
+  }, [objects, projectId, targetLanguage, sourceLanguage, preSelectedObjectIds, projectFolders]);
 
   // Get IDs of objects that need translation
   const availableObjectIds = useMemo(() => {

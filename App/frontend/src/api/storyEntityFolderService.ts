@@ -27,7 +27,7 @@ export const storyEntityFolderService = {
   async update(
     projectId: string,
     folderId: string,
-    payload: { language: string; name?: string; description?: string },
+    payload: { language: string; name?: string; description?: string; create_new_version?: boolean },
   ): Promise<StoryEntityFolder> {
     return apiClient.patch<StoryEntityFolder>(
       `/api/v1/projects/${projectId}/story-entity-folders/${folderId}`,

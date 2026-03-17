@@ -22,17 +22,19 @@ import { useSettings } from '../../../store/settingsStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import AIEditModal from '../../../components/Modal/AIEditModal';
 import VersionHistoryModal from '../../../components/Modal/VersionHistoryModal';
+import TranslationModal from '../../../components/Modal/TranslationModal';
 import { BaseModal } from '../../../components/BaseModal';
 import OutlineSidebar from './OutlineSidebar';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import DragHandle from '../../../components/ui/DragHandle';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
-import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll } from '../../../components/icons';
+import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll, Refresh } from '../../../components/icons';
 import type { UnifiedObject, OutlineObject } from '../../../types/unifiedObject';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
 import { OutlineItemCard } from '../../../components/OutlineItemCard';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
+import { resolveRequestedLanguageState, resolveTranslationSourceLanguage } from '../../../utils/requestedLanguage';
 import './OutlinePanel.css';
 
 interface OutlinePanelProps {
@@ -54,6 +56,8 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const [editOutlineData, setEditOutlineData] = useState<{ name: string; description: string; content: string }>({ name: '', description: '', content: '' });
   const [showOutlineAIModal, setShowOutlineAIModal] = useState<string | null>(null);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [showTranslationModal, setShowTranslationModal] = useState(false);
+  const [translationTargetId, setTranslationTargetId] = useState<string | null>(null);
 
   // Header description expansion and inline editing state
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
@@ -80,6 +84,13 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const outlineEditorRef = useRef<RichTextEditorRef>(null);
   const actEditorRef = useRef<RichTextEditorRef>(null);
   const chapterEditorRef = useRef<RichTextEditorRef>(null);
+
+  const isMainLanguageView = globalDisplayLanguage === settings.mainLanguage;
+
+  const openTranslationModal = useCallback((objectId: string) => {
+    setTranslationTargetId(objectId);
+    setShowTranslationModal(true);
+  }, []);
 
   // Load outlines, acts, and chapters on mount
   useEffect(() => {
@@ -179,13 +190,11 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     return available.length > 0 ? obj.data[available[0]] : { name: '', description: '' };
   };
 
-  const getEffectiveLanguage = (obj: UnifiedObject) => {
-    const available = Object.keys(obj.data);
-    if (available.includes(globalDisplayLanguage)) {
-      return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
-    }
-    return { effectiveLanguage: available[0] || globalDisplayLanguage, isFallback: true };
-  };
+  const getLanguageState = useCallback((obj: UnifiedObject) => resolveRequestedLanguageState({
+    availableLanguages: Object.keys(obj.data),
+    requestedLanguage: globalDisplayLanguage,
+    mainLanguage: settings.mainLanguage,
+  }), [globalDisplayLanguage, settings.mainLanguage]);
 
   // Auto-select first outline when outlines load
   useEffect(() => {
@@ -204,6 +213,12 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     if (!selectedOutlineId) return null;
     return outlines.find(o => o.id === selectedOutlineId) || null;
   }, [outlines, selectedOutlineId]);
+
+  useEffect(() => {
+    if (isMainLanguageView) return;
+    setShowAddActForm(null);
+    setShowAddChapterForm(null);
+  }, [isMainLanguageView]);
 
   // Toggle expand/collapse for acts
   const toggleActExpand = (actId: string) => {
@@ -237,8 +252,12 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const startEditingOutline = (outlineId: string) => {
     const outline = store.objects[outlineId] as OutlineObject;
     if (!outline) return;
-    const { effectiveLanguage } = getEffectiveLanguage(outline);
-    const data = getDataForLanguage(outline, effectiveLanguage);
+    const languageState = getLanguageState(outline);
+    if (!languageState.canEdit) {
+      openTranslationModal(outlineId);
+      return;
+    }
+    const data = getDataForLanguage(outline, languageState.viewLanguage);
     setEditOutlineData({ name: data.name || '', description: data.description || '', content: data.content || '' });
     setEditingOutline(outlineId);
   };
@@ -249,13 +268,17 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     const outline = store.objects[editingOutline] as OutlineObject;
     if (!outline) return;
 
-    const { effectiveLanguage } = getEffectiveLanguage(outline);
+    const languageState = getLanguageState(outline);
+    if (!languageState.canEdit) {
+      openTranslationModal(editingOutline);
+      return;
+    }
 
     try {
       await store.updateObject('outline', editingOutline, {
         data: { name: editOutlineData.name.trim(), description: editOutlineData.description.trim(), content: editOutlineData.content.trim() },
-        language: effectiveLanguage,
-        create_new_version: true,
+        language: languageState.requestedLanguage,
+        create_new_version: languageState.createNewVersion,
         user_request: 'Manual Edit',
       });
       setEditingOutline(null);
@@ -272,6 +295,12 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
   // Inline description editing handlers
   const handleStartEditDescription = () => {
+    if (!selectedOutlineId || !selectedOutline) return;
+    const languageState = getLanguageState(selectedOutline);
+    if (!languageState.canEdit) {
+      openTranslationModal(selectedOutlineId);
+      return;
+    }
     setEditingDescriptionValue(selectedOutlineData.description || '');
     setIsEditingDescription(true);
   };
@@ -282,7 +311,11 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     const outline = store.objects[selectedOutlineId] as OutlineObject;
     if (!outline) return;
 
-    const { effectiveLanguage } = getEffectiveLanguage(outline);
+    const languageState = getLanguageState(outline);
+    if (!languageState.canEdit) {
+      openTranslationModal(selectedOutlineId);
+      return;
+    }
 
     try {
       await store.updateObject('outline', selectedOutlineId, {
@@ -290,8 +323,8 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           name: selectedOutlineData.name,
           description: editingDescriptionValue.trim()
         },
-        language: effectiveLanguage,
-        create_new_version: true,
+        language: languageState.requestedLanguage,
+        create_new_version: languageState.createNewVersion,
         user_request: 'Manual Edit',
       });
       setIsEditingDescription(false);
@@ -340,7 +373,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   // ========================================================================
 
   const handleAddAct = async (outlineId: string, name: string, description: string, content: string) => {
-    if (!projectId || !name.trim()) return;
+    if (!projectId || !name.trim() || !isMainLanguageView) return;
 
     try {
       const outlineActs = getActsForOutline(outlineId);
@@ -364,8 +397,12 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const startEditingAct = (actId: string) => {
     const act = store.objects[actId] as OutlineObject;
     if (!act) return;
-    const { effectiveLanguage } = getEffectiveLanguage(act);
-    const data = getDataForLanguage(act, effectiveLanguage);
+    const languageState = getLanguageState(act);
+    if (!languageState.canEdit) {
+      openTranslationModal(actId);
+      return;
+    }
+    const data = getDataForLanguage(act, languageState.viewLanguage);
     setEditActData({ name: data.name || '', description: data.description || '', content: data.content || '' });
     setEditingAct(actId);
   };
@@ -376,13 +413,17 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     const act = store.objects[editingAct] as OutlineObject;
     if (!act) return;
 
-    const { effectiveLanguage } = getEffectiveLanguage(act);
+    const languageState = getLanguageState(act);
+    if (!languageState.canEdit) {
+      openTranslationModal(editingAct);
+      return;
+    }
 
     try {
       await store.updateObject('outline', editingAct, {
         data: { name: editActData.name.trim(), description: editActData.description.trim(), content: editActData.content.trim() },
-        language: effectiveLanguage,
-        create_new_version: true,
+        language: languageState.requestedLanguage,
+        create_new_version: languageState.createNewVersion,
         user_request: 'Manual Edit',
       });
       setEditingAct(null);
@@ -421,7 +462,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   // ========================================================================
 
   const handleAddChapter = async (actId: string, name: string, description: string, content: string) => {
-    if (!projectId || !name.trim()) return;
+    if (!projectId || !name.trim() || !isMainLanguageView) return;
 
     try {
       const actChapters = getChaptersForAct(actId);
@@ -445,8 +486,12 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const startEditingChapter = (chapterId: string) => {
     const chapter = store.objects[chapterId] as OutlineObject;
     if (!chapter) return;
-    const { effectiveLanguage } = getEffectiveLanguage(chapter);
-    const data = getDataForLanguage(chapter, effectiveLanguage);
+    const languageState = getLanguageState(chapter);
+    if (!languageState.canEdit) {
+      openTranslationModal(chapterId);
+      return;
+    }
+    const data = getDataForLanguage(chapter, languageState.viewLanguage);
     setEditChapterData({ name: data.name || '', description: data.description || '', content: data.content || '' });
     setEditingChapter(chapterId);
   };
@@ -457,13 +502,17 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     const chapter = store.objects[editingChapter] as OutlineObject;
     if (!chapter) return;
 
-    const { effectiveLanguage } = getEffectiveLanguage(chapter);
+    const languageState = getLanguageState(chapter);
+    if (!languageState.canEdit) {
+      openTranslationModal(editingChapter);
+      return;
+    }
 
     try {
       await store.updateObject('outline', editingChapter, {
         data: { name: editChapterData.name.trim(), description: editChapterData.description.trim(), content: editChapterData.content.trim() },
-        language: effectiveLanguage,
-        create_new_version: true,
+        language: languageState.requestedLanguage,
+        create_new_version: languageState.createNewVersion,
         user_request: 'Manual Edit',
       });
       setEditingChapter(null);
@@ -500,9 +549,19 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   // Get selected outline data for header
   const selectedOutlineData = useMemo(() => {
     if (!selectedOutline) return { name: 'Select Outline', description: '' };
-    const { effectiveLanguage } = getEffectiveLanguage(selectedOutline);
-    return getDataForLanguage(selectedOutline, effectiveLanguage);
-  }, [selectedOutline, globalDisplayLanguage]);
+    const languageState = getLanguageState(selectedOutline);
+    return getDataForLanguage(selectedOutline, languageState.viewLanguage);
+  }, [getLanguageState, selectedOutline]);
+
+  const selectedOutlineLanguageState = useMemo(
+    () => (selectedOutline ? getLanguageState(selectedOutline) : null),
+    [getLanguageState, selectedOutline],
+  );
+  const editingOutlineLanguageState = useMemo(() => {
+    if (!editingOutline) return null;
+    const outline = store.objects[editingOutline] as OutlineObject | undefined;
+    return outline ? getLanguageState(outline) : null;
+  }, [editingOutline, getLanguageState, store.objects]);
 
   // Get acts for selected outline
   const selectedOutlineActs = useMemo(
@@ -565,10 +624,14 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
       try {
         const activeObject = store.objects[active.id as string] as UnifiedObject | undefined;
-        const { effectiveLanguage } = activeObject ? getEffectiveLanguage(activeObject) : { effectiveLanguage: settings.mainLanguage };
+        const languageState = activeObject ? getLanguageState(activeObject) : resolveRequestedLanguageState({
+          availableLanguages: [],
+          requestedLanguage: globalDisplayLanguage,
+          mainLanguage: settings.mainLanguage,
+        });
         await store.updateObject('outline', active.id as string, {
-          data: getDataForLanguage((activeObject as UnifiedObject) || { data: {} } as UnifiedObject, effectiveLanguage),
-          language: effectiveLanguage,
+          data: getDataForLanguage((activeObject as UnifiedObject) || { data: {} } as UnifiedObject, languageState.viewLanguage),
+          language: languageState.viewLanguage,
           metadata: { parent_id: selectedOutlineId, position: newIndex },
           create_new_version: false,
           user_request: 'Reposition act',
@@ -578,7 +641,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
         showAlert({ title: 'Reorder Error', message: 'Failed to reorder acts. Please try again.' });
       }
     },
-    [selectedOutlineActs, actIds, projectId, store]
+    [selectedOutlineActs, actIds, projectId, store, getLanguageState, globalDisplayLanguage, settings.mainLanguage, selectedOutlineId]
   );
 
   const makeChapterDragEndHandler = useCallback(
@@ -594,10 +657,14 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
       try {
         const activeObject = store.objects[active.id as string] as UnifiedObject | undefined;
-        const { effectiveLanguage } = activeObject ? getEffectiveLanguage(activeObject) : { effectiveLanguage: settings.mainLanguage };
+        const languageState = activeObject ? getLanguageState(activeObject) : resolveRequestedLanguageState({
+          availableLanguages: [],
+          requestedLanguage: globalDisplayLanguage,
+          mainLanguage: settings.mainLanguage,
+        });
         await store.updateObject('outline', active.id as string, {
-          data: getDataForLanguage((activeObject as UnifiedObject) || { data: {} } as UnifiedObject, effectiveLanguage),
-          language: effectiveLanguage,
+          data: getDataForLanguage((activeObject as UnifiedObject) || { data: {} } as UnifiedObject, languageState.viewLanguage),
+          language: languageState.viewLanguage,
           metadata: { parent_id: actId, position: newIndex },
           create_new_version: false,
           user_request: 'Reposition chapter',
@@ -607,7 +674,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
         showAlert({ title: 'Reorder Error', message: 'Failed to reorder chapters. Please try again.' });
       }
     },
-    [projectId, store, chaptersByActId]
+    [projectId, store, chaptersByActId, getLanguageState, globalDisplayLanguage, settings.mainLanguage]
   );
 
   // Handle version history
@@ -649,13 +716,15 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           <div className="header-actions">
             {selectedOutlineId && (
               <>
-                <TextButton
-                  onClick={() => setShowAddActForm(selectedOutlineId)}
-                  iconLeft={<Plus size="xs" />}
-                  size="sm"
-                >
-                  Add Act
-                </TextButton>
+                {isMainLanguageView ? (
+                  <TextButton
+                    onClick={() => setShowAddActForm(selectedOutlineId)}
+                    iconLeft={<Plus size="xs" />}
+                    size="sm"
+                  >
+                    Add Act
+                  </TextButton>
+                ) : null}
                 <DropdownMenu
                   trigger={
                     <IconButton
@@ -703,7 +772,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                     Cancel
                   </TextButton>
                   <TextButton size="sm" onClick={handleSaveDescription}>
-                    Save
+                    {selectedOutlineLanguageState?.isTranslationView ? 'Save Translation' : 'Save'}
                   </TextButton>
                 </div>
               </div>
@@ -712,13 +781,19 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                 <p className="description-text">
                   {selectedOutlineData.description || 'No description'}
                 </p>
-                <button
-                  className="description-edit-button"
-                  onClick={handleStartEditDescription}
-                  title="Edit description"
-                >
-                  <Edit size="xs" />
-                </button>
+                {selectedOutlineLanguageState?.canEdit ? (
+                  <button
+                    className="description-edit-button"
+                    onClick={handleStartEditDescription}
+                    title="Edit description"
+                  >
+                    <Edit size="xs" />
+                  </button>
+                ) : (
+                  <TextButton size="sm" variant="ghost" onClick={handleStartEditDescription}>
+                    Translate
+                  </TextButton>
+                )}
               </div>
             )}
           </div>
@@ -733,10 +808,16 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
               <div className="empty-timeline-state">
                 <Books size="lg" className="empty-icon" />
                 <h3>No Outlines Yet</h3>
-                <p>Create your first outline to start organizing your story structure with acts and chapters.</p>
-                <TextButton onClick={handleOpenSidebar} iconLeft={<Plus />}>
-                  Create First Outline
-                </TextButton>
+                <p>
+                  {isMainLanguageView
+                    ? 'Create your first outline to start organizing your story structure with acts and chapters.'
+                    : `Create outlines in ${settings.mainLanguage}, then translate them into ${globalDisplayLanguage}.`}
+                </p>
+                {isMainLanguageView ? (
+                  <TextButton onClick={handleOpenSidebar} iconLeft={<Plus />}>
+                    Create First Outline
+                  </TextButton>
+                ) : null}
               </div>
             )}
 
@@ -767,10 +848,16 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
               <div className="empty-timeline-state">
                 <Books size="md" className="empty-icon" />
                 <h3>No Acts Yet</h3>
-                <p>Add acts to organize your story structure.</p>
-                <TextButton onClick={() => setShowAddActForm(selectedOutlineId)} iconLeft={<Plus />}>
-                  Add First Act
-                </TextButton>
+                <p>
+                  {isMainLanguageView
+                    ? 'Add acts to organize your story structure.'
+                    : `Add acts in ${settings.mainLanguage}, then translate them into ${globalDisplayLanguage}.`}
+                </p>
+                {isMainLanguageView ? (
+                  <TextButton onClick={() => setShowAddActForm(selectedOutlineId)} iconLeft={<Plus />}>
+                    Add First Act
+                  </TextButton>
+                ) : null}
               </div>
             )}
 
@@ -780,8 +867,8 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                   <div className="timeline-track">
                     {selectedOutlineActs.map((act, actIndex) => {
                       const actChapters = getChaptersForAct(act.id);
-                      const { effectiveLanguage: actLang, isFallback: actFallback } = getEffectiveLanguage(act);
-                      const actData = getDataForLanguage(act, actLang);
+                      const actLanguageState = getLanguageState(act);
+                      const actData = getDataForLanguage(act, actLanguageState.viewLanguage);
                       const isActExpanded = !collapsedActs.has(act.id);
 
                       return (
@@ -837,10 +924,12 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                   <TextButton
                                                     variant="ghost"
                                                     size="sm"
-                                                    onClick={() => setShowActAIModal(act.id)}
-                                                    iconLeft={<AIAssist size="xs" />}
+                                                    onClick={actLanguageState.isMainLanguage
+                                                      ? () => setShowActAIModal(act.id)
+                                                      : () => openTranslationModal(act.id)}
+                                                    iconLeft={actLanguageState.isMainLanguage ? <AIAssist size="xs" /> : <Refresh size="xs" />}
                                                   >
-                                                    AI Edit
+                                                    {actLanguageState.isMainLanguage ? 'AI Edit' : 'Retranslate'}
                                                   </TextButton>
                                                   <div className="edit-actions-right">
                                                     <TextButton
@@ -857,7 +946,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                       onClick={handleUpdateAct}
                                                       iconLeft={<Save size="xs" />}
                                                     >
-                                                      Save
+                                                      {actLanguageState.isTranslationView ? 'Save Translation' : 'Save'}
                                                     </TextButton>
                                                   </div>
                                                 </div>
@@ -875,7 +964,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                       content={actData.content}
                                       meta={`${actChapters.length} Chapters`}
                                       expanded={isActExpanded}
-                                      showFallbackWarning={actFallback}
+                                      showFallbackWarning={actLanguageState.isFallbackView}
                                       dragHandle={dragHandle}
                                       onHeaderClick={() => toggleActExpand(act.id)}
                                       footerActions={
@@ -887,15 +976,18 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                               </TextButton>
                                             }
                                           >
+                                            {actLanguageState.isTranslationView && (
+                                              <DropdownItem icon={<Refresh size="sm" />} label="Retranslate" onClick={() => openTranslationModal(act.id)} />
+                                            )}
                                             <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteAct(act.id)} variant="danger" />
                                           </DropdownMenu>
                                           <TextButton
                                             size="sm"
                                             variant="secondary"
                                             iconLeft={<Edit size="xs" />}
-                                            onClick={() => startEditingAct(act.id)}
+                                            onClick={() => (actLanguageState.canEdit ? startEditingAct(act.id) : openTranslationModal(act.id))}
                                           >
-                                            Edit
+                                            {actLanguageState.canEdit ? 'Edit' : 'Translate'}
                                           </TextButton>
                                         </>
                                       }
@@ -912,8 +1004,8 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={makeChapterDragEndHandler(act.id)}>
                                     <SortableContext items={actChapters.map(ch => ch.id)} strategy={verticalListSortingStrategy}>
                                       {actChapters.map((chapter, chapterIndex) => {
-                                        const { effectiveLanguage: chLang, isFallback: chFallback } = getEffectiveLanguage(chapter);
-                                        const chData = getDataForLanguage(chapter, chLang);
+                                        const chapterLanguageState = getLanguageState(chapter);
+                                        const chData = getDataForLanguage(chapter, chapterLanguageState.viewLanguage);
                                         const isChapterExpanded = expandedChapters.has(chapter.id);
                                         const globalChapterIndex = chapterNumberById.get(chapter.id) ?? chapterIndex + 1;
 
@@ -966,10 +1058,12 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                                   <TextButton
                                                                     variant="ghost"
                                                                     size="sm"
-                                                                    onClick={() => setShowChapterAIModal(chapter.id)}
-                                                                    iconLeft={<AIAssist size="xs" />}
+                                                                    onClick={chapterLanguageState.isMainLanguage
+                                                                      ? () => setShowChapterAIModal(chapter.id)
+                                                                      : () => openTranslationModal(chapter.id)}
+                                                                    iconLeft={chapterLanguageState.isMainLanguage ? <AIAssist size="xs" /> : <Refresh size="xs" />}
                                                                   >
-                                                                    AI Edit
+                                                                    {chapterLanguageState.isMainLanguage ? 'AI Edit' : 'Retranslate'}
                                                                   </TextButton>
                                                                   <div className="edit-actions-right">
                                                                     <TextButton
@@ -986,7 +1080,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                                       onClick={handleUpdateChapter}
                                                                       iconLeft={<Save size="xs" />}
                                                                     >
-                                                                      Save
+                                                                      {chapterLanguageState.isTranslationView ? 'Save Translation' : 'Save'}
                                                                     </TextButton>
                                                                   </div>
                                                                 </div>
@@ -1004,7 +1098,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                       content={chData.content}
                                                       chapterIndex={globalChapterIndex}
                                                       expanded={isChapterExpanded}
-                                                      showFallbackWarning={chFallback}
+                                                      showFallbackWarning={chapterLanguageState.isFallbackView}
                                                       dragHandle={chapterDragHandle}
                                                       onHeaderClick={() => toggleChapterExpand(chapter.id)}
                                                       footerActions={
@@ -1016,15 +1110,18 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                               </TextButton>
                                                             }
                                                           >
+                                                            {chapterLanguageState.isTranslationView && (
+                                                              <DropdownItem icon={<Refresh size="sm" />} label="Retranslate" onClick={() => openTranslationModal(chapter.id)} />
+                                                            )}
                                                             <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteChapter(chapter.id)} variant="danger" />
                                                           </DropdownMenu>
                                                           <TextButton
                                                             size="sm"
                                                             variant="secondary"
                                                             iconLeft={<Edit size="xs" />}
-                                                            onClick={() => startEditingChapter(chapter.id)}
+                                                            onClick={() => (chapterLanguageState.canEdit ? startEditingChapter(chapter.id) : openTranslationModal(chapter.id))}
                                                           >
-                                                            Edit
+                                                            {chapterLanguageState.canEdit ? 'Edit' : 'Translate'}
                                                           </TextButton>
                                                         </>
                                                       }
@@ -1040,7 +1137,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                   </DndContext>
 
                                   {/* Add Chapter Button */}
-                                  {showAddChapterForm === act.id ? (
+                                  {isMainLanguageView && showAddChapterForm === act.id ? (
                                     <div className="timeline-chapter-node creation-node">
                                       <div className="chapter-marker creation-marker"><Plus size="xs" /></div>
                                       <div className="chapter-content-wrapper">
@@ -1050,7 +1147,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                         />
                                       </div>
                                     </div>
-                                  ) : (
+                                  ) : isMainLanguageView ? (
                                     <div className="timeline-chapter-node add-chapter-node" onClick={() => setShowAddChapterForm(act.id)}>
                                       <div className="chapter-marker add-marker"><Plus size="xs" /></div>
                                       <div className="chapter-content-wrapper">
@@ -1062,7 +1159,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                         </div>
                                       </div>
                                     </div>
-                                  )}
+                                  ) : null}
                                 </div>
                               </div>
                             </>
@@ -1086,8 +1183,15 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           onSelectOutline={setSelectedOutlineId}
           displayLanguage={globalDisplayLanguage}
           onEditOutline={startEditingOutline}
-          onAIEditOutline={(outlineId) => setShowOutlineAIModal(outlineId)}
+          onTranslateOutline={openTranslationModal}
+          onRetranslateOutline={openTranslationModal}
+          onAIEditOutline={(outlineId) => {
+            const outline = store.objects[outlineId] as OutlineObject | undefined;
+            if (!outline || !getLanguageState(outline).isMainLanguage) return;
+            setShowOutlineAIModal(outlineId);
+          }}
           onDeleteOutline={handleDeleteOutline}
+          canCreateOutline={isMainLanguageView}
         />
       )}
 
@@ -1097,7 +1201,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           isOpen={true}
           onClose={cancelEditingOutline}
           size="medium"
-          title="Edit Outline"
+          title={editingOutlineLanguageState?.isTranslationView ? 'Edit Outline Translation' : 'Edit Outline'}
           footer={
             <div className="form-actions">
               <TextButton variant="ghost" size="sm" onClick={cancelEditingOutline}>
@@ -1109,7 +1213,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                 onClick={handleUpdateOutline}
                 disabled={!editOutlineData.name.trim()}
               >
-                Save
+                {editingOutlineLanguageState?.isTranslationView ? 'Save Translation' : 'Save'}
               </TextButton>
             </div>
           }
@@ -1189,6 +1293,23 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           objectType="outline"
           objectId={selectedOutlineId}
           onRestoreVersion={handleRestoreVersion}
+        />
+      )}
+
+      {translationTargetId && projectId && (
+        <TranslationModal
+          isOpen={showTranslationModal}
+          onClose={() => {
+            setShowTranslationModal(false);
+            setTranslationTargetId(null);
+          }}
+          projectId={projectId}
+          preSelectedObjectIds={[translationTargetId]}
+          defaultSourceLanguage={resolveTranslationSourceLanguage(
+            Object.keys((store.objects[translationTargetId] as UnifiedObject | undefined)?.data ?? {}),
+            settings.mainLanguage,
+          )}
+          defaultTargetLanguage={globalDisplayLanguage}
         />
       )}
     </div>
