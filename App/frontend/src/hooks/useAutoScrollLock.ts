@@ -76,7 +76,7 @@ export function useAutoScrollLock({
     container.addEventListener('scroll', handleScroll);
     handleScroll();
     return () => container.removeEventListener('scroll', handleScroll);
-  });
+  }, [scrollContainerRef, syncScrollState]);
 
   useEffect(() => {
     if (!active) {
@@ -98,7 +98,7 @@ export function useAutoScrollLock({
         const currentContainer = scrollContainerRef.current;
         if (!currentContainer) return;
 
-        if (isNearBottomRef.current) {
+        if (active && isNearBottomRef.current) {
           currentContainer.scrollTo({ top: currentContainer.scrollHeight, behavior: 'auto' });
         }
         syncScrollState();
@@ -114,7 +114,7 @@ export function useAutoScrollLock({
       if (frameId) cancelAnimationFrame(frameId);
       resizeObserver.disconnect();
     };
-  });
+  }, [contentRef, scrollContainerRef, active, syncScrollState]);
 
   return {
     showScrollButton,

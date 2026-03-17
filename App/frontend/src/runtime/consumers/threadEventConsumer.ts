@@ -7,7 +7,6 @@ import { getAutoApproveCategory } from '../../toolCall/registry/autoApprove';
 import { fetchAndReplaceThreadSnapshot } from '../threadHydration';
 import { isLiveThreadStatus, isNonLiveThreadStatus } from '../threadStreamLifecycle';
 import {
-  isPausedLikeThreadStatus,
   toThreadType,
   nowIso,
   type ReasoningDetail,
@@ -666,16 +665,9 @@ export class ThreadEventConsumer {
         return;
       }
 
-      if (isPausedLikeThreadStatus(thread?.status)) {
-        console.debug('[AutoContinue] Skipped: thread is paused-like', { threadId, status: thread?.status });
-        return;
-      }
-
-      const allowedForContinue =
-        thread?.status === 'waiting'
-        || thread?.status === 'done';
-      if (!allowedForContinue) {
-        console.debug('[AutoContinue] Skipped: thread status not allowed', { threadId, status: thread?.status });
+      // Mirror backend resume semantics: only actively running threads should block auto-continue here.
+      if (thread?.status === 'running') {
+        console.debug('[AutoContinue] Skipped: thread still running', { threadId, status: thread?.status });
         return;
       }
 

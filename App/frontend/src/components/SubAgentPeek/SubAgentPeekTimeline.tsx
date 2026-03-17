@@ -215,12 +215,6 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
 
   return (
     <div className="sub-agent-peek-timeline">
-      {threadStatus === 'error' && (
-        <div className="sub-agent-peek-alert sub-agent-peek-alert--error">
-          {thread?.lastError || 'An error occurred during sub-agent execution.'}
-        </div>
-      )}
-
       {messages.map((message, index) => {
         const text = getMessageText(message);
         const reasoningDetail = getMessageReasoningDetail(message);
@@ -327,6 +321,12 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
 
       {!liveView?.hasStreamingMessage && liveView?.noticeKind === 'preexisting_live_run' && (
         <PreexistingLiveRunNotice compact />
+      )}
+
+      {threadStatus === 'error' && (
+        <div className="sub-agent-peek-alert sub-agent-peek-alert--error">
+          {thread?.lastError || 'An error occurred during sub-agent execution.'}
+        </div>
       )}
 
     </div>
