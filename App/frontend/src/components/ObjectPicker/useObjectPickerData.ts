@@ -36,11 +36,13 @@ function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): Ob
       types = ['story_entity'];
       break;
     case 'manuscript':
-      types = ['outline', 'act', 'chapter', 'manuscript'];
+      types = ['outline', 'manuscript'];
       break;
     case 'all':
+      types = ['story_entity', 'outline', 'manuscript'];
+      break;
     case 'translation':
-      types = ['basic_info', 'guidelines', 'story_entity', 'outline', 'act', 'chapter', 'manuscript'];
+      types = ['basic_info', 'guidelines', 'story_entity', 'outline', 'manuscript'];
       break;
     default:
       types = ['story_entity'];
@@ -74,8 +76,9 @@ function objectToItem(obj: UnifiedObject, language: string): ObjectPickerItem {
     description,
     content,
     type: obj.type,
-    parentId: (obj.metadata?.act_id as string) || (obj.metadata?.chapter_id as string) || undefined,
-    order: (obj.metadata?.display_order as number | undefined) ?? (obj.metadata?.order as number | undefined),
+    kind: obj.type === 'outline' ? obj.kind as 'outline' | 'act' | 'chapter' | undefined : undefined,
+    parentId: (obj.metadata?.parent_id as string) || (obj.metadata?.chapter_id as string) || undefined,
+    order: (obj.metadata?.display_order as number | undefined) ?? (obj.metadata?.position as number | undefined),
     wordCount: (data.wordCount as number) || undefined,
     metadata: {
       ...obj.metadata,
@@ -167,7 +170,7 @@ function buildMetaGroups(
   const groups: ObjectPickerGroup[] = [];
   const availableTypes: ObjectType[] = [];
 
-  if (mode !== 'all' && mode !== 'translation') {
+  if (mode !== 'translation') {
     return { groups, availableTypes };
   }
 
@@ -196,13 +199,12 @@ function buildOutlineGroups(
   const groups: ObjectPickerGroup[] = [];
   const availableTypes: ObjectType[] = [];
 
-  const outlines = objects
-    .filter((obj) => obj.type === 'outline')
-    .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0));
-  const acts = objects
-    .filter((obj) => obj.type === 'act')
-    .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0));
-  const chapters = objects.filter((obj) => obj.type === 'chapter');
+  const outlineItems = objects
+    .filter((obj): obj is UnifiedObject => obj.type === 'outline')
+    .sort((a, b) => (a.metadata?.position || 0) - (b.metadata?.position || 0));
+  const outlines = outlineItems.filter((obj) => obj.kind === 'outline');
+  const acts = outlineItems.filter((obj) => obj.kind === 'act');
+  const chapters = outlineItems.filter((obj) => obj.kind === 'chapter');
   const manuscripts = objects.filter((obj) => obj.type === 'manuscript');
 
   if (outlines.length === 0 && acts.length === 0 && chapters.length === 0) {
@@ -210,26 +212,28 @@ function buildOutlineGroups(
   }
 
   if (!includeManuscripts) {
-    const outlineGroups = outlines.map((outline) => {
+    const outlineGroups: ObjectPickerGroup[] = outlines.map((outline) => {
       const outlineData = getObjectDataForLanguage(outline, language);
       const outlineActs = acts
-        .filter((act) => act.metadata?.outline_id === outline.id)
-        .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0));
+        .filter((act) => act.metadata?.parent_id === outline.id)
+        .sort((a, b) => (a.metadata?.position || 0) - (b.metadata?.position || 0));
 
       return {
         id: `outline-${outline.id}`,
         label: (outlineData.name as string) || 'Unnamed Outline',
         type: 'outline' as const,
+        kind: 'outline' as const,
         items: [objectToItem(outline, language)],
         childGroups: outlineActs.map((act) => {
           const actData = getObjectDataForLanguage(act, language);
           const actChapters = chapters
-            .filter((chapter) => chapter.metadata?.act_id === act.id)
-            .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0));
+            .filter((chapter) => chapter.metadata?.parent_id === act.id)
+            .sort((a, b) => (a.metadata?.position || 0) - (b.metadata?.position || 0));
           return {
             id: `outline-${outline.id}-act-${act.id}`,
             label: (actData.name as string) || 'Unnamed Act',
-            type: 'act' as const,
+            type: 'outline' as const,
+            kind: 'act' as const,
             items: [objectToItem(act, language), ...actChapters.map((chapter) => objectToItem(chapter, language))],
           };
         }),
@@ -243,26 +247,27 @@ function buildOutlineGroups(
       items: [],
       childGroups: outlineGroups,
     });
-    availableTypes.push('outline', 'act', 'chapter');
+    availableTypes.push('outline');
     return { groups, availableTypes };
   }
 
   const manuscriptOutlineGroups: ObjectPickerGroup[] = outlines.map((outline) => {
     const outlineData = getObjectDataForLanguage(outline, language);
     const outlineActs = acts
-      .filter((act) => act.metadata?.outline_id === outline.id)
-      .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0));
+      .filter((act) => act.metadata?.parent_id === outline.id)
+      .sort((a, b) => (a.metadata?.position || 0) - (b.metadata?.position || 0));
 
     return {
       id: `manuscript-outline-${outline.id}`,
       label: (outlineData.name as string) || 'Unnamed Outline',
       type: 'outline' as const,
+      kind: 'outline' as const,
       items: [],
       childGroups: outlineActs.map<ObjectPickerGroup>((act) => {
         const actData = getObjectDataForLanguage(act, language);
         const actChapters = chapters
-          .filter((chapter) => chapter.metadata?.act_id === act.id)
-          .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0));
+          .filter((chapter) => chapter.metadata?.parent_id === act.id)
+          .sort((a, b) => (a.metadata?.position || 0) - (b.metadata?.position || 0));
 
         const items: ObjectPickerItem[] = [];
         actChapters.forEach((chapter) => {
@@ -277,7 +282,7 @@ function buildOutlineGroups(
               content: manuscriptData.doc ? docToMarkdown(manuscriptData.doc, { stripImages: true }) : undefined,
               type: 'manuscript' as const,
               parentId: chapter.id,
-              order: chapter.metadata?.order as number | undefined,
+              order: chapter.metadata?.position as number | undefined,
               wordCount: manuscriptData.wordCount as number | undefined,
             });
           });
@@ -285,7 +290,8 @@ function buildOutlineGroups(
         return {
           id: `manuscript-outline-${outline.id}-act-${act.id}`,
           label: (actData.name as string) || 'Unnamed Act',
-          type: 'act' as const,
+          type: 'outline' as const,
+          kind: 'act' as const,
           items,
         };
       }),

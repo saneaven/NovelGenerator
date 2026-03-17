@@ -44,10 +44,6 @@ export function resolveUnifiedType(operation: ObjectOperationVM): UnifiedObjectT
       return 'guidelines';
     case 'outline':
       return 'outline';
-    case 'outline_act':
-      return 'act';
-    case 'outline_chapter':
-      return 'chapter';
     case 'manuscript':
       return 'manuscript';
     case 'story_entity':
@@ -175,7 +171,12 @@ export function resolveObjectTitle(params: {
   language: string;
 }): { type: string; name: string | undefined } {
   const { operation, objects, projectId, language } = params;
-  const type = objectTypeLabel(operation.objectType, operation.storyEntityKind);
+  const resolvedObject = operation.targetId ? objects[operation.targetId] : undefined;
+  const type = objectTypeLabel(
+    operation.objectType,
+    operation.storyEntityKind,
+    operation.outlineKind ?? (resolvedObject?.type === 'outline' ? resolvedObject.kind as 'outline' | 'act' | 'chapter' | undefined : undefined),
+  );
 
   const unifiedType = resolveUnifiedType(operation);
   if (operation.category === 'create') {

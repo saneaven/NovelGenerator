@@ -11,8 +11,6 @@ const OBJECT_TYPE_SET: ReadonlySet<ObjectType> = new Set([
   'guidelines',
   'story_entity',
   'outline',
-  'act',
-  'chapter',
   'manuscript',
 ]);
 

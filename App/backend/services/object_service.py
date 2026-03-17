@@ -9,15 +9,12 @@ from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import event
-from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import SessionLocal
 from ..models.db_models import (
-    Act,
     Asset,
     BasicInfo,
-    Chapter,
     Guidelines,
     Manuscript,
     ManuscriptImage,
@@ -40,6 +37,13 @@ from ..services.semantic_index_service import index_object, invalidate_object_in
 from ..utils.object_type_aliases import externalize_object_type, normalize_object_type
 from ..utils.story_entities import STORY_ENTITY_TYPE, require_story_entity_kind
 from .basic_info_utils import normalize_basic_info_data
+from .outline_service import (
+    insert_outline_position,
+    move_outline,
+    normalize_outline_positions,
+    require_outline_kind,
+    resolve_outline_parent,
+)
 from .asset_change_events import queue_scene_assets_change
 from .object_change_events import queue_object_change
 from .story_entity_tree_service import ensure_valid_parent_folder, move_story_entity, next_story_entity_sibling_order, normalize_story_entity_parent
@@ -197,8 +201,6 @@ def _model_for_object_type(object_type: str):
         "guidelines": Guidelines,
         STORY_ENTITY_TYPE: StoryEntity,
         "outline": Outline,
-        "act": Act,
-        "chapter": Chapter,
         "manuscript": Manuscript,
     }
     model = mapping.get(t)
@@ -207,7 +209,12 @@ def _model_for_object_type(object_type: str):
     return model
 
 
+def _canonical_object_type(object_type: str) -> str:
+    return normalize_object_type(object_type)
+
+
 def _latest_version(db: Session, object_type: str, object_id: UUID) -> ObjectVersion | None:
+    object_type = _canonical_object_type(object_type)
     return (
         db.query(ObjectVersion)
         .filter(ObjectVersion.object_type == object_type, ObjectVersion.object_id == object_id)
@@ -217,6 +224,7 @@ def _latest_version(db: Session, object_type: str, object_id: UUID) -> ObjectVer
 
 
 def _versions_desc(db: Session, object_type: str, object_id: UUID) -> list[ObjectVersion]:
+    object_type = _canonical_object_type(object_type)
     return (
         db.query(ObjectVersion)
         .filter(ObjectVersion.object_type == object_type, ObjectVersion.object_id == object_id)
@@ -260,53 +268,21 @@ def _get_metadata(db: Session, obj: Any, object_type: str) -> dict[str, Any]:
         metadata["image_prompt_negative"] = getattr(obj, "image_prompt_negative", None)
     elif object_type == "outline":
         metadata["project_id"] = str(obj.project_id)
-        metadata["order"] = int(getattr(obj, "order", 0) or 0)
-    elif object_type == "act":
-        outline = getattr(obj, "outline", None)
-        if not outline:
-            outline = db.query(Outline).filter(Outline.id == obj.outline_id).first()
-        if outline is None:
-            raise ValueError("Act is missing outline")
-        metadata["project_id"] = str(outline.project_id)
-        metadata["outline_id"] = str(obj.outline_id)
-        metadata["order"] = int(obj.order)
-    elif object_type == "chapter":
-        act = getattr(obj, "act", None)
-        if act is None:
-            act = db.query(Act).filter(Act.id == obj.act_id).first()
-        if act is None:
-            raise ValueError("Chapter act missing")
-        outline = getattr(act, "outline", None)
-        if outline is None:
-            outline = db.query(Outline).filter(Outline.id == act.outline_id).first()
-        if outline is None:
-            raise ValueError("Chapter outline missing")
+        metadata["kind"] = str(getattr(obj, "kind", ""))
+        metadata["parent_id"] = str(obj.parent_id) if getattr(obj, "parent_id", None) else None
+        metadata["position"] = int(getattr(obj, "position", 0) or 0)
         manuscript = getattr(obj, "manuscript", None)
-        if manuscript is None:
+        if manuscript is None and getattr(obj, "kind", None) == "chapter":
             manuscript = db.query(Manuscript).filter(Manuscript.chapter_id == obj.id).first()
-        if manuscript is None:
-            raise ValueError("Chapter manuscript missing")
-        metadata["project_id"] = str(outline.project_id)
-        metadata["act_id"] = str(obj.act_id)
-        metadata["manuscript_id"] = str(manuscript.id)
-        metadata["order"] = int(obj.order)
+        if manuscript is not None:
+            metadata["manuscript_id"] = str(manuscript.id)
     elif object_type == "manuscript":
         chapter = getattr(obj, "chapter", None)
         if chapter is None:
-            chapter = db.query(Chapter).filter(Chapter.id == obj.chapter_id).first()
+            chapter = db.query(Outline).filter(Outline.id == obj.chapter_id, Outline.kind == "chapter").first()
         if chapter is None:
             raise ValueError("Manuscript chapter missing")
-        act = getattr(chapter, "act", None)
-        if act is None:
-            act = db.query(Act).filter(Act.id == chapter.act_id).first()
-        if act is None:
-            raise ValueError("Manuscript act missing")
-        outline = getattr(act, "outline", None)
-        if outline is None:
-            outline = db.query(Outline).filter(Outline.id == act.outline_id).first()
-        if outline is None:
-            raise ValueError("Manuscript outline missing")
-        metadata["project_id"] = str(outline.project_id)
+        metadata["project_id"] = str(chapter.project_id)
         metadata["chapter_id"] = str(obj.chapter_id)
 
     return metadata
@@ -346,40 +322,28 @@ def _serialize_object(db: Session, object_type: str, obj: Any, language: str | N
         "data": data,
         "version": version,
     }
-    if object_type == STORY_ENTITY_TYPE:
+    if object_type in {"outline", STORY_ENTITY_TYPE}:
         serialized["kind"] = str(getattr(obj, "kind", ""))
     return serialized
 
 
 def _load_owned_object(db: Session, project_id: UUID, object_type: str, object_id: UUID) -> Any | None:
-    if object_type in {"basic_info", "guidelines", STORY_ENTITY_TYPE, "outline"}:
+    if object_type in {"basic_info", "guidelines", STORY_ENTITY_TYPE}:
         model = _model_for_object_type(object_type)
         return db.query(model).filter(model.id == object_id, model.project_id == project_id).first()
-    if object_type == "act":
+    if object_type == "outline":
         return (
-            db.query(Act)
-            .join(Outline, Outline.id == Act.outline_id)
-            .filter(Act.id == object_id, Outline.project_id == project_id)
-            .options(joinedload(Act.outline))
-            .first()
-        )
-    if object_type == "chapter":
-        return (
-            db.query(Chapter)
-            .join(Act, Act.id == Chapter.act_id)
-            .join(Outline, Outline.id == Act.outline_id)
-            .filter(Chapter.id == object_id, Outline.project_id == project_id)
-            .options(joinedload(Chapter.manuscript), joinedload(Chapter.act).joinedload(Act.outline))
+            db.query(Outline)
+            .filter(Outline.id == object_id, Outline.project_id == project_id)
+            .options(joinedload(Outline.parent), joinedload(Outline.children), joinedload(Outline.manuscript))
             .first()
         )
     if object_type == "manuscript":
         return (
             db.query(Manuscript)
-            .join(Chapter, Chapter.id == Manuscript.chapter_id)
-            .join(Act, Act.id == Chapter.act_id)
-            .join(Outline, Outline.id == Act.outline_id)
-            .filter(Manuscript.id == object_id, Outline.project_id == project_id)
-            .options(joinedload(Manuscript.chapter).joinedload(Chapter.act).joinedload(Act.outline))
+            .join(Outline, Outline.id == Manuscript.chapter_id)
+            .filter(Manuscript.id == object_id, Outline.project_id == project_id, Outline.kind == "chapter")
+            .options(joinedload(Manuscript.chapter).joinedload(Outline.parent).joinedload(Outline.parent))
             .first()
         )
     return None
@@ -405,6 +369,7 @@ def _create_or_update_version(
     created_by: UUID | None,
     create_new: bool,
 ) -> ObjectVersion:
+    object_type = _canonical_object_type(object_type)
     if object_type == "basic_info":
         new_data = normalize_basic_info_data(new_data)
 
@@ -468,103 +433,25 @@ def _handle_metadata_update(db: Session, object_type: str, object_id: UUID, obj:
             )
         return
 
-    if object_type == "chapter":
-        requested_act_id = metadata.get("act_id")
-        requested_order = metadata.get("order")
+    if object_type == "outline":
+        if "kind" in metadata and str(metadata.get("kind") or "") != str(obj.kind or ""):
+            raise HTTPException(status_code=400, detail="Outline kind is immutable")
 
-        target_act_id: UUID | None = None
-        if requested_act_id is not None:
-            try:
-                target_act_id = UUID(str(requested_act_id))
-            except (TypeError, ValueError):
-                raise HTTPException(status_code=400, detail="Invalid act_id format")
+        requested_parent_id = obj.parent_id
+        if "parent_id" in metadata:
+            requested_parent_id = _parse_optional_uuid(metadata.get("parent_id"), "parent_id")
+        requested_position = metadata.get("position")
+        if requested_position is not None and (not isinstance(requested_position, int) or requested_position < 0):
+            raise HTTPException(status_code=400, detail="Invalid position value")
 
-        if requested_order is not None and (not isinstance(requested_order, int) or requested_order < 1):
-            raise HTTPException(status_code=400, detail="Invalid order value: must be positive integer")
-
-        current_act_id = obj.act_id
-        current_order = obj.order
-
-        if target_act_id is not None and target_act_id != current_act_id:
-            old_siblings = (
-                db.query(Chapter)
-                .filter(Chapter.act_id == current_act_id, Chapter.id != object_id)
-                .order_by(Chapter.order)
-                .all()
+        if requested_parent_id != obj.parent_id or requested_position is not None:
+            move_outline(
+                db,
+                outline=obj,
+                project_id=obj.project_id,
+                new_parent_id=requested_parent_id,
+                new_position=requested_position if isinstance(requested_position, int) else None,
             )
-            for i, ch in enumerate(old_siblings, start=1):
-                ch.order = i
-
-            target_siblings = (
-                db.query(Chapter)
-                .filter(Chapter.act_id == target_act_id, Chapter.id != object_id)
-                .order_by(Chapter.order)
-                .all()
-            )
-            for i, ch in enumerate(target_siblings, start=1):
-                ch.order = i
-
-            max_order = len(target_siblings) + 1
-            new_order = requested_order if requested_order is not None else max_order
-            new_order = min(new_order, max_order)
-            new_order = max(new_order, 1)
-
-            for ch in target_siblings:
-                if ch.order >= new_order:
-                    ch.order += 1
-
-            obj.act_id = target_act_id
-            obj.order = new_order
-            db.flush()
-
-        elif requested_order is not None and requested_order != current_order:
-            siblings = (
-                db.query(Chapter)
-                .filter(Chapter.act_id == current_act_id, Chapter.id != object_id)
-                .order_by(Chapter.order)
-                .all()
-            )
-            for i, ch in enumerate(siblings, start=1):
-                ch.order = i
-
-            max_order = len(siblings) + 1
-            new_order = min(max(requested_order, 1), max_order)
-            for ch in siblings:
-                if ch.order >= new_order:
-                    ch.order += 1
-
-            obj.order = new_order
-            db.flush()
-
-    elif object_type == "act" and "order" in metadata:
-        new_order = metadata.get("order")
-        if not isinstance(new_order, int) or new_order < 1:
-            raise HTTPException(status_code=400, detail="Invalid order value: must be positive integer")
-
-        current_order = obj.order
-        outline_id = obj.outline_id
-        if new_order != current_order:
-            siblings = (
-                db.query(Act)
-                .filter(Act.outline_id == outline_id, Act.id != object_id)
-                .order_by(Act.order)
-                .all()
-            )
-
-            max_order = len(siblings) + 1
-            new_order = min(max(new_order, 1), max_order)
-
-            if new_order < current_order:
-                for act in siblings:
-                    if new_order <= act.order < current_order:
-                        act.order += 1
-            else:
-                for act in siblings:
-                    if current_order < act.order <= new_order:
-                        act.order -= 1
-
-            obj.order = new_order
-            db.flush()
 
 
 class ObjectService:
@@ -598,10 +485,10 @@ class ObjectService:
             if "content" in data:
                 raise ValueError("Manuscript creation does not accept data.content")
 
-        model_class = _model_for_object_type(t)
         object_id = uuid4()
         manuscript_id: UUID | None = None
         md = metadata or {}
+        storage_type = _canonical_object_type(t)
 
         if t == STORY_ENTITY_TYPE:
             folder_id = _parse_optional_uuid(md.get("folder_id"), "folder_id")
@@ -621,67 +508,24 @@ class ObjectService:
                 updated_at=datetime.utcnow(),
             )
         elif t == "outline":
-            max_order = db.query(func.max(Outline.order)).filter(Outline.project_id == project_id).scalar()
-            if max_order is None:
-                max_order = -1
-            core_obj = Outline(id=object_id, project_id=project_id, order=max_order + 1, created_at=datetime.utcnow(), updated_at=datetime.utcnow())
-        elif t == "act":
-            outline_id_value = md.get("outline_id")
-            if not outline_id_value:
-                raise ValueError("outline_id is required for act creation")
-            try:
-                outline_uuid = UUID(str(outline_id_value))
-            except (TypeError, ValueError):
-                raise ValueError("Invalid outline_id format")
+            outline_kind = require_outline_kind(kind or md.get("kind"))
+            requested_parent_id = _parse_optional_uuid(
+                md.get("parent_id"),
+                "parent_id",
+            )
+            resolve_outline_parent(
+                db,
+                project_id=project_id,
+                child_kind=outline_kind,
+                parent_id=requested_parent_id,
+            )
 
-            outline = db.query(Outline).filter(Outline.id == outline_uuid, Outline.project_id == project_id).first()
-            if outline is None:
-                raise ValueError("Outline not found for project")
-
-            requested_order = md.get("order")
-            if isinstance(requested_order, int):
-                order_value = requested_order
-            else:
-                order_value = db.query(Act).filter(Act.outline_id == outline_uuid).count()
-
-            core_obj = Act(
+            core_obj = Outline(
                 id=object_id,
                 project_id=project_id,
-                outline_id=outline_uuid,
-                order=order_value,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
-            )
-        elif t == "chapter":
-            act_id_value = md.get("act_id")
-            if not act_id_value:
-                raise ValueError("Chapter creation requires act_id")
-            try:
-                act_uuid = UUID(str(act_id_value))
-            except (TypeError, ValueError):
-                raise ValueError("Invalid act_id format")
-
-            act = (
-                db.query(Act)
-                .join(Outline, Outline.id == Act.outline_id)
-                .filter(Act.id == act_uuid, Outline.project_id == project_id)
-                .first()
-            )
-            if act is None:
-                raise ValueError("Act not found for project")
-
-            requested_order = md.get("order")
-            if isinstance(requested_order, int):
-                chapter_order = requested_order
-            else:
-                chapter_count = db.query(Chapter).filter(Chapter.act_id == act_uuid).count()
-                chapter_order = chapter_count + 1
-
-            core_obj = Chapter(
-                id=object_id,
-                project_id=project_id,
-                act_id=act_uuid,
-                order=chapter_order,
+                kind=outline_kind,
+                parent_id=requested_parent_id,
+                position=0,
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow(),
             )
@@ -694,13 +538,11 @@ class ObjectService:
             except (TypeError, ValueError):
                 raise ValueError("Invalid chapter_id format")
 
-            chapter = (
-                db.query(Chapter)
-                .join(Act, Act.id == Chapter.act_id)
-                .join(Outline, Outline.id == Act.outline_id)
-                .filter(Chapter.id == chapter_uuid, Outline.project_id == project_id)
-                .first()
-            )
+            chapter = db.query(Outline).filter(
+                Outline.id == chapter_uuid,
+                Outline.project_id == project_id,
+                Outline.kind == "chapter",
+            ).first()
             if chapter is None:
                 raise ValueError("Chapter not found for project")
 
@@ -714,10 +556,21 @@ class ObjectService:
 
         db.add(core_obj)
         db.flush()
+        if storage_type == "outline":
+            requested_position = md.get("position")
+            if requested_position is not None and (not isinstance(requested_position, int) or requested_position < 0):
+                raise ValueError("Outline position must be a non-negative integer")
+            insert_outline_position(
+                db,
+                outline=core_obj,
+                project_id=project_id,
+                parent_id=core_obj.parent_id,
+                requested_position=requested_position if isinstance(requested_position, int) else None,
+            )
 
         version = ObjectVersion(
             id=uuid4(),
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
             version_number=1,
             data={language: data},
@@ -729,14 +582,14 @@ class ObjectService:
         db.flush()
         deltas = [
             build_object_version_delta(
-                object_type=t,
+                object_type=storage_type,
                 before=None,
                 after=snapshot_object_version_row(version),
             )
         ]
 
         # Chapter creation side effect: auto-create manuscript + v1
-        if t == "chapter":
+        if storage_type == "outline" and getattr(core_obj, "kind", None) == "chapter":
             manuscript_id = uuid4()
             manuscript_obj = Manuscript(id=manuscript_id, chapter_id=object_id, created_at=datetime.utcnow(), updated_at=datetime.utcnow())
             db.add(manuscript_obj)
@@ -764,9 +617,9 @@ class ObjectService:
 
             # refresh chapter relation for metadata manuscript_id
             core_obj = (
-                db.query(Chapter)
-                .filter(Chapter.id == object_id)
-                .options(joinedload(Chapter.manuscript), joinedload(Chapter.act).joinedload(Act.outline))
+                db.query(Outline)
+                .filter(Outline.id == object_id)
+                .options(joinedload(Outline.manuscript), joinedload(Outline.parent).joinedload(Outline.parent))
                 .first()
             )
 
@@ -782,14 +635,14 @@ class ObjectService:
             db,
             user_id=created_by,
             project_id=project_id,
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
         )
         queue_object_change(
             db,
             user_id=event_user_id,
             project_id=project_id,
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
             action="created",
         )
@@ -811,7 +664,7 @@ class ObjectService:
                 deltas=deltas,
                 enforce_quota=True,
             )
-        return _serialize_object(db, t, core_obj, language)
+        return _serialize_object(db, storage_type, core_obj, language)
 
     def update_object(
         self,
@@ -828,6 +681,7 @@ class ObjectService:
         created_by: UUID | None = None,
     ) -> dict[str, Any]:
         t = normalize_object_type(object_type)
+        storage_type = _canonical_object_type(t)
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             raise ValueError(f"{t} not found")
@@ -843,11 +697,13 @@ class ObjectService:
         obj.updated_at = datetime.utcnow()
         if t == STORY_ENTITY_TYPE and kind is not None:
             obj.kind = require_story_entity_kind(kind)
+        elif storage_type == "outline" and kind is not None and str(kind) != str(obj.kind):
+            raise ValueError("Outline kind is immutable")
 
         if metadata:
-            _handle_metadata_update(db, t, object_id, obj, metadata)
+            _handle_metadata_update(db, storage_type, object_id, obj, metadata)
 
-        version_before = None if create_new_version else snapshot_object_version_row(_latest_version(db, t, object_id))
+        version_before = None if create_new_version else snapshot_object_version_row(_latest_version(db, storage_type, object_id))
         manuscript_images_before = None
         manuscript_images_after = None
         if t == "manuscript":
@@ -858,7 +714,7 @@ class ObjectService:
 
         version = _create_or_update_version(
             db,
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
             language=language,
             new_data=data,
@@ -872,9 +728,7 @@ class ObjectService:
             doc = data.get("doc")
             if isinstance(doc, dict):
                 chapter = getattr(obj, "chapter", None)
-                act = getattr(chapter, "act", None) if chapter else None
-                outline = getattr(act, "outline", None) if act else None
-                resolved_project_id = getattr(outline, "project_id", None) if outline else None
+                resolved_project_id = getattr(chapter, "project_id", None) if chapter else None
                 if resolved_project_id:
                     rebuild_manuscript_images_for_language(
                         db=db,
@@ -914,21 +768,21 @@ class ObjectService:
             db,
             user_id=created_by,
             project_id=project_id,
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
         )
         _queue_semantic_index(
             db,
             user_id=created_by,
             project_id=project_id,
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
         )
         queue_object_change(
             db,
             user_id=event_user_id,
             project_id=project_id,
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
             action="updated",
         )
@@ -936,7 +790,7 @@ class ObjectService:
         if created_by is not None:
             deltas = [
                 build_object_version_delta(
-                    object_type=t,
+                    object_type=storage_type,
                     before=version_before if not create_new_version else None,
                     after=snapshot_object_version_row(version),
                 )
@@ -951,7 +805,7 @@ class ObjectService:
                 deltas=deltas,
                 enforce_quota=True,
             )
-        return _serialize_object(db, t, obj)
+        return _serialize_object(db, storage_type, obj)
 
     def add_translation(
         self,
@@ -966,12 +820,13 @@ class ObjectService:
         created_by: UUID | None = None,
     ) -> dict[str, Any]:
         t = normalize_object_type(object_type)
+        storage_type = _canonical_object_type(t)
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             raise ValueError(f"{t} not found")
         event_user_id = created_by or _resolve_project_user_id(db, project_id=project_id)
 
-        latest = _latest_version(db, t, object_id)
+        latest = _latest_version(db, storage_type, object_id)
         if latest is None:
             raise ValueError("No version found for object")
         latest_data = latest.data if isinstance(latest.data, dict) else {}
@@ -981,7 +836,7 @@ class ObjectService:
         version_before = snapshot_object_version_row(latest)
         version = _create_or_update_version(
             db,
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
             language=language,
             new_data=data,
@@ -996,21 +851,21 @@ class ObjectService:
             db,
             user_id=created_by,
             project_id=project_id,
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
         )
         _queue_semantic_index(
             db,
             user_id=created_by,
             project_id=project_id,
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
         )
         queue_object_change(
             db,
             user_id=event_user_id,
             project_id=project_id,
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
             action="updated",
         )
@@ -1020,14 +875,14 @@ class ObjectService:
                 user_id=created_by,
                 project_id=project_id,
                 delta=build_object_version_delta(
-                    object_type=t,
+                    object_type=storage_type,
                     before=version_before,
                     after=snapshot_object_version_row(version),
                 ),
                 enforce_quota=True,
             )
 
-        refreshed_latest = _latest_version(db, t, object_id)
+        refreshed_latest = _latest_version(db, storage_type, object_id)
         if refreshed_latest is None:
             raise ValueError("No version found after translation update")
         return {
@@ -1049,7 +904,7 @@ class ObjectService:
         if obj is None:
             raise ValueError(f"{t} not found")
 
-        versions = _versions_desc(db, t, object_id)
+        versions = _versions_desc(db, _canonical_object_type(t), object_id)
         return [
             {
                 "id": str(v.id),
@@ -1072,6 +927,7 @@ class ObjectService:
         created_by: UUID | None = None,
     ) -> dict[str, Any]:
         t = normalize_object_type(object_type)
+        storage_type = _canonical_object_type(t)
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             raise ValueError(f"{t} not found")
@@ -1081,7 +937,7 @@ class ObjectService:
             db.query(ObjectVersion)
             .filter(
                 ObjectVersion.id == version_id,
-                ObjectVersion.object_type == t,
+                ObjectVersion.object_type == storage_type,
                 ObjectVersion.object_id == object_id,
             )
             .first()
@@ -1097,12 +953,12 @@ class ObjectService:
                 if not isinstance(lang_data, dict) or not isinstance(lang_data.get("doc"), dict):
                     raise ValueError("Cannot restore manuscript version (missing doc)")
 
-        latest = _latest_version(db, t, object_id)
+        latest = _latest_version(db, storage_type, object_id)
         next_version_number = (latest.version_number + 1) if latest else 1
 
         new_version = ObjectVersion(
             id=uuid4(),
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
             version_number=next_version_number,
             data=version_to_restore.data if isinstance(version_to_restore.data, dict) else {},
@@ -1118,21 +974,21 @@ class ObjectService:
             db,
             user_id=created_by,
             project_id=project_id,
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
         )
         _queue_semantic_index(
             db,
             user_id=created_by,
             project_id=project_id,
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
         )
         queue_object_change(
             db,
             user_id=event_user_id,
             project_id=project_id,
-            object_type=t,
+            object_type=storage_type,
             object_id=object_id,
             action="updated",
         )
@@ -1142,7 +998,7 @@ class ObjectService:
                 user_id=created_by,
                 project_id=project_id,
                 delta=build_object_version_delta(
-                    object_type=t,
+                    object_type=storage_type,
                     before=None,
                     after=snapshot_object_version_row(new_version),
                 ),
@@ -1157,24 +1013,17 @@ class ObjectService:
 
     def delete_object(self, db: Session, project_id: UUID, object_type: str, object_id: UUID, *, user_id: UUID) -> None:
         t = normalize_object_type(object_type)
+        storage_type = _canonical_object_type(t)
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             raise ValueError(f"{t} not found")
 
         resolved_project_id: UUID | None = project_id
 
-        ids_by_type: dict[str, list[UUID]] = {t: [object_id]}
+        ids_by_type: dict[str, list[UUID]] = {storage_type: [object_id]}
 
-        if t == "outline":
+        if storage_type == "outline":
             subtree = collect_outline_subtree_object_ids(db, outline_id=object_id)
-            for k, v in subtree.items():
-                ids_by_type.setdefault(k, []).extend(v)
-        elif t == "act":
-            subtree = collect_act_subtree_object_ids(db, act_id=object_id)
-            for k, v in subtree.items():
-                ids_by_type.setdefault(k, []).extend(v)
-        elif t == "chapter":
-            subtree = collect_chapter_subtree_object_ids(db, chapter_id=object_id)
             for k, v in subtree.items():
                 ids_by_type.setdefault(k, []).extend(v)
 
@@ -1182,6 +1031,7 @@ class ObjectService:
         for model_class, key in (
             (BasicInfo, "basic_info"),
             (StoryEntity, STORY_ENTITY_TYPE),
+            (Outline, "outline"),
         ):
             object_ids = ids_by_type.get(key) or []
             if not object_ids:
@@ -1218,27 +1068,27 @@ class ObjectService:
             )
 
         owned_assets: list[Asset] = []
-        if t in {"basic_info", STORY_ENTITY_TYPE}:
+        if storage_type in {"basic_info", STORY_ENTITY_TYPE}:
             owned_assets = (
                 db.query(Asset)
                 .join(StoryObjectAsset, StoryObjectAsset.asset_id == Asset.id)
-                .filter(StoryObjectAsset.object_type == t, StoryObjectAsset.object_id == object_id)
+                .filter(StoryObjectAsset.object_type == storage_type, StoryObjectAsset.object_id == object_id)
                 .all()
             )
-        elif t == "manuscript":
+        elif storage_type == "manuscript":
             owned_assets = (
                 db.query(Asset)
                 .filter(Asset.project_id == resolved_project_id, Asset.manuscript_id == object_id)
                 .all()
             )
-        elif t in {"outline", "act", "chapter"} and manuscript_ids:
+        elif storage_type == "outline" and manuscript_ids:
             owned_assets = (
                 db.query(Asset)
                 .filter(Asset.project_id == resolved_project_id, Asset.manuscript_id.in_(list(manuscript_ids)))
                 .all()
             )
 
-        old_story_entity_parent_id = obj.folder_id if t == STORY_ENTITY_TYPE else None
+        old_story_entity_parent_id = obj.folder_id if storage_type == STORY_ENTITY_TYPE else None
         deleted_asset_ids = [asset.id for asset in owned_assets if isinstance(asset.id, UUID)]
         deleted_asset_before = snapshot_rows(owned_assets, snapshot_asset_row)
         remaining_ref_assets_before = snapshot_rows(
@@ -1271,12 +1121,14 @@ class ObjectService:
 
         db.delete(obj)
         db.flush()
-        if t == STORY_ENTITY_TYPE:
+        if storage_type == STORY_ENTITY_TYPE:
             normalize_story_entity_parent(
                 db,
                 project_id=project_id,
                 parent_folder_id=old_story_entity_parent_id,
             )
+        elif storage_type == "outline":
+            normalize_outline_positions(db, project_id=project_id, parent_id=getattr(obj, "parent_id", None))
         remaining_ref_assets_after = snapshot_rows(
             db.query(Asset)
             .filter(
@@ -1317,7 +1169,7 @@ class ObjectService:
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             return None
-        return _serialize_object(db, t, obj, language)
+        return _serialize_object(db, _canonical_object_type(t), obj, language)
 
     def list_objects(
         self,
@@ -1329,35 +1181,35 @@ class ObjectService:
         kinds: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         t = normalize_object_type(object_type)
+        storage_type = _canonical_object_type(t)
         model_class = _model_for_object_type(t)
 
         query = db.query(model_class)
-        if t in {"basic_info", "guidelines", STORY_ENTITY_TYPE, "outline"}:
+        if storage_type in {"basic_info", "guidelines", STORY_ENTITY_TYPE}:
             query = query.filter(model_class.project_id == project_id)
-            if t == STORY_ENTITY_TYPE:
+            if storage_type == STORY_ENTITY_TYPE:
                 if kinds:
                     query = query.filter(StoryEntity.kind.in_([require_story_entity_kind(kind) for kind in kinds]))
                 query = query.order_by(StoryEntity.display_order.asc())
-        elif t == "act":
-            outline_ids = [o.id for o in db.query(Outline.id).filter(Outline.project_id == project_id).all()]
-            query = query.filter(Act.outline_id.in_(outline_ids)) if outline_ids else query.filter(Act.id == None)
-        elif t == "chapter":
-            outline_ids = [o.id for o in db.query(Outline.id).filter(Outline.project_id == project_id).all()]
-            act_ids = [a.id for a in db.query(Act.id).filter(Act.outline_id.in_(outline_ids)).all()] if outline_ids else []
-            query = query.filter(Chapter.act_id.in_(act_ids)) if act_ids else query.filter(Chapter.id == None)
-        elif t == "manuscript":
-            outline_ids = [o.id for o in db.query(Outline.id).filter(Outline.project_id == project_id).all()]
-            act_ids = [a.id for a in db.query(Act.id).filter(Act.outline_id.in_(outline_ids)).all()] if outline_ids else []
-            chapter_ids = [c.id for c in db.query(Chapter.id).filter(Chapter.act_id.in_(act_ids)).all()] if act_ids else []
-            query = query.filter(Manuscript.chapter_id.in_(chapter_ids)) if chapter_ids else query.filter(Manuscript.id == None)
-
-        if t == "chapter":
-            query = query.options(joinedload(Chapter.manuscript), joinedload(Chapter.act).joinedload(Act.outline))
-        elif t == "manuscript":
-            query = query.options(joinedload(Manuscript.chapter).joinedload(Chapter.act).joinedload(Act.outline))
+        elif storage_type == "outline":
+            query = (
+                db.query(Outline)
+                .filter(Outline.project_id == project_id)
+                .options(joinedload(Outline.manuscript), joinedload(Outline.parent))
+                .order_by(Outline.position.asc(), Outline.created_at.asc(), Outline.id.asc())
+            )
+            if kinds:
+                query = query.filter(Outline.kind.in_([require_outline_kind(kind) for kind in kinds]))
+        elif storage_type == "manuscript":
+            query = (
+                db.query(Manuscript)
+                .join(Outline, Outline.id == Manuscript.chapter_id)
+                .filter(Outline.project_id == project_id, Outline.kind == "chapter")
+                .options(joinedload(Manuscript.chapter).joinedload(Outline.parent).joinedload(Outline.parent))
+            )
 
         rows = query.all()
-        return [_serialize_object(db, t, row, language) for row in rows]
+        return [_serialize_object(db, storage_type, row, language) for row in rows]
 
     def update_image_prompt(
         self,
@@ -1424,22 +1276,30 @@ class ObjectService:
         user_id: UUID | None = None,
     ) -> int:
         t = normalize_object_type(object_type)
-        allowed = {"outline", "act", "chapter"}
-        if t not in allowed:
+        storage_type = _canonical_object_type(t)
+        if storage_type != "outline":
             raise ValueError(f"Reordering not supported for {t}")
         event_user_id = user_id or _resolve_project_user_id(db, project_id=project_id)
+        if not object_ids:
+            return 0
 
-        model_class = _model_for_object_type(t)
+        rows = (
+            db.query(Outline)
+            .filter(Outline.id.in_(object_ids), Outline.project_id == project_id)
+            .all()
+        )
+        if len(rows) != len(object_ids):
+            raise ValueError("One or more outline objects not found in project")
+        parent_ids = {row.parent_id for row in rows}
+        if len(parent_ids) != 1:
+            raise ValueError("All reordered outline objects must share the same parent")
+
         changed_ids: list[UUID] = []
-        for index, object_id in enumerate(object_ids, start=1):
-            obj = (
-                db.query(model_class)
-                .filter(model_class.id == object_id, model_class.project_id == project_id)
-                .first()
-            )
+        for index, object_id in enumerate(object_ids):
+            obj = next((row for row in rows if row.id == object_id), None)
             if obj is None:
                 raise ValueError(f"Object {object_id} not found in project")
-            obj.order = index
+            obj.position = index
             obj.updated_at = datetime.utcnow()
             changed_ids.append(object_id)
 
@@ -1449,7 +1309,7 @@ class ObjectService:
                 db,
                 user_id=event_user_id,
                 project_id=project_id,
-                object_type=t,
+                object_type="outline",
                 object_id=changed_id,
                 action="updated",
             )

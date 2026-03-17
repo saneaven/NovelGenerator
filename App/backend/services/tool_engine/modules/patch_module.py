@@ -10,7 +10,7 @@ from ....services.object_service import object_service
 from ....utils.story_entities import STORY_ENTITY_TYPE
 from .manuscript_access import patch_manuscript, validate_patch_args as validate_manuscript_patch, ensure_manuscript_exists
 from .object_access import (
-    ensure_act_parent_exists,
+    ensure_outline_parent_kind,
     ensure_story_entity_folder_exists,
     extract_lang_data,
     get_primary_object_id,
@@ -32,14 +32,16 @@ from .shared import (
 _ID = {"type": "string", "description": "Object ID"}
 _TEXT_PATCH = {"old": {"type": "string"}, "new": {"type": "string"}}
 _FOLDER_ID = {"type": ["string", "null"], "description": "Parent folder ID. Use null for root."}
+_PARENT_ID = {"type": ["string", "null"], "description": "Parent outline ID. Root outlines use null."}
+_POSITION = {"type": "integer", "description": "0-based sibling position."}
 
 
-def _positive_order(value: Any) -> None:
+def _non_negative_position(value: Any) -> None:
     if value is None:
         return
-    if isinstance(value, int) and value > 0:
+    if isinstance(value, int) and value >= 0:
         return
-    raise ValueError("order must be a positive integer")
+    raise ValueError("position must be a non-negative integer")
 
 
 @tool_call_module(prefix="patch_")
@@ -101,20 +103,8 @@ class PatchToolCallModule(ToolCallModule):
                 [
                     ToolSpec(
                         name="patch_outline",
-                        description="Patch outline by single replacement.",
-                        parameters=obj_schema({"id": _ID, "field": {"type": "string", "enum": ["name", "description", "content"]}, **_TEXT_PATCH}, ["id", "field", "old", "new"]),
-                        auto_approve_category="patch",
-                    ),
-                    ToolSpec(
-                        name="patch_outline_act",
-                        description="Patch act by single replacement.",
-                        parameters=obj_schema({"id": _ID, "field": {"type": "string", "enum": ["name", "description", "content"]}, "order": {"type": "integer"}, **_TEXT_PATCH}, ["id", "field", "old", "new"]),
-                        auto_approve_category="patch",
-                    ),
-                    ToolSpec(
-                        name="patch_outline_chapter",
-                        description="Patch chapter by single replacement.",
-                        parameters=obj_schema({"id": _ID, "field": {"type": "string", "enum": ["name", "description", "content"]}, "actId": {"type": "string"}, "order": {"type": "integer"}, **_TEXT_PATCH}, ["id", "field", "old", "new"]),
+                        description="Patch outline item by single replacement.",
+                        parameters=obj_schema({"id": _ID, "field": {"type": "string", "enum": ["name", "description", "content"]}, "parentId": _PARENT_ID, "position": _POSITION, **_TEXT_PATCH}, ["id", "field", "old", "new"]),
                         auto_approve_category="patch",
                     ),
                 ]
@@ -176,18 +166,19 @@ class PatchToolCallModule(ToolCallModule):
                 patch_object_field(extract_lang_data(current, ctx.language), field=str(field), old=str(args.get("old") or ""), new=str(args.get("new") or ""))
                 return valid_result()
 
-            if tool_name in {"patch_outline", "patch_outline_act", "patch_outline_chapter"}:
+            if tool_name == "patch_outline":
                 field = args.get("field")
                 if field not in {"name", "description", "content"}:
                     raise ValueError("field must be one of name|description|content")
-                object_type = {
-                    "patch_outline": "outline",
-                    "patch_outline_act": "act",
-                    "patch_outline_chapter": "chapter",
-                }[tool_name]
-                _positive_order(args.get("order"))
-                if tool_name == "patch_outline_chapter" and args.get("actId"):
-                    ensure_act_parent_exists(ctx.db, project_id=ctx.project_id, act_id=to_uuid(args.get("actId"), "actId"))
+                _non_negative_position(args.get("position"))
+                if args.get("parentId"):
+                    current = read_object(ctx.db, project_id=ctx.project_id, object_type="outline", object_id=object_id, language=ctx.language)
+                    current_kind = str(current.get("kind") or "")
+                    if current_kind == "act":
+                        ensure_outline_parent_kind(ctx.db, project_id=ctx.project_id, outline_id=to_uuid(args.get("parentId"), "parentId"), expected_kind="outline")
+                    elif current_kind == "chapter":
+                        ensure_outline_parent_kind(ctx.db, project_id=ctx.project_id, outline_id=to_uuid(args.get("parentId"), "parentId"), expected_kind="act")
+                object_type = "outline"
                 current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
                 patch_object_field(extract_lang_data(current, ctx.language), field=str(field), old=str(args.get("old") or ""), new=str(args.get("new") or ""))
                 return valid_result()
@@ -281,12 +272,8 @@ class PatchToolCallModule(ToolCallModule):
                 data={"kind": kind},
             )
 
-        if tool_name in {"patch_outline", "patch_outline_act", "patch_outline_chapter"}:
-            object_type = {
-                "patch_outline": "outline",
-                "patch_outline_act": "act",
-                "patch_outline_chapter": "chapter",
-            }[tool_name]
+        if tool_name == "patch_outline":
+            object_type = "outline"
             current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
             next_data = patch_object_field(
                 extract_lang_data(current, ctx.language),
@@ -295,10 +282,10 @@ class PatchToolCallModule(ToolCallModule):
                 new=str(args.get("new") or ""),
             )
             metadata: dict[str, Any] = {}
-            if tool_name in {"patch_outline_act", "patch_outline_chapter"} and isinstance(args.get("order"), int):
-                metadata["order"] = int(args["order"])
-            if tool_name == "patch_outline_chapter" and isinstance(args.get("actId"), str) and args.get("actId"):
-                metadata["act_id"] = args["actId"]
+            if isinstance(args.get("position"), int):
+                metadata["position"] = int(args["position"])
+            if "parentId" in args:
+                metadata["parent_id"] = args.get("parentId")
             object_service.update_object(
                 ctx.db,
                 project_id=ctx.project_id,
@@ -311,7 +298,12 @@ class PatchToolCallModule(ToolCallModule):
                 created_by=ctx.user_id,
                 create_new_version=True,
             )
-            return make_result(f"Patched {object_type}", object_id=str(object_id), object_type=object_type)
+            return make_result(
+                "Patched outline",
+                object_id=str(object_id),
+                object_type=object_type,
+                data={"kind": current.get("kind")},
+            )
 
         if tool_name == "patch_manuscript":
             await patch_manuscript(

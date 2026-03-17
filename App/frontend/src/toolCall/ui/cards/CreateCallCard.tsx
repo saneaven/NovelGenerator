@@ -16,11 +16,7 @@ function createFieldKeysForObjectType(objectType: ObjectCardProps['operation']['
     case 'story_entity':
       return ['name', 'description', 'content'];
     case 'outline':
-      return ['name', 'description', 'content'];
-    case 'outline_act':
-      return ['outlineId', 'name', 'description', 'content', 'order'];
-    case 'outline_chapter':
-      return ['actId', 'name', 'description', 'content', 'order'];
+      return ['kind', 'parentId', 'position', 'name', 'description', 'content'];
     case 'manuscript':
       return ['content'];
     default:
@@ -52,12 +48,12 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
   const titleValue = name || type;
 
   const renderBody = () => {
-    if (operation.objectType === 'outline' || operation.objectType === 'outline_act' || operation.objectType === 'outline_chapter') {
+    if (operation.objectType === 'outline') {
       const desc = typeof fields.description === 'string' && fields.description.trim() ? fields.description : undefined;
       const body = typeof fields.content === 'string' && fields.content.trim() ? fields.content : undefined;
       return (
         <OutlineItemCard
-          variant={toOutlineItemVariant(operation.objectType)}
+          variant={toOutlineItemVariant(operation.objectType, operation.outlineKind)}
           name={titleValue}
           description={desc}
           content={body}

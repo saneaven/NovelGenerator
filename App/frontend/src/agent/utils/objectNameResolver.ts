@@ -34,9 +34,8 @@ export const parseToolName = (
   const patterns: Array<{ regex: RegExp; objectType: string }> = [
     { regex: /^(create|update|delete)_basic_info$/, objectType: 'basic_info' },
     { regex: /^(create|read|replace|patch|delete|translate)_story_entity$/, objectType: 'story_entity' },
-    { regex: /^(create|update|delete)_act$/, objectType: 'act' },
-    { regex: /^(create|update|delete)_chapter$/, objectType: 'chapter' },
-    { regex: /^(update)_manuscript$/, objectType: 'manuscript' },
+    { regex: /^(create|read|replace|patch|delete|translate)_outline$/, objectType: 'outline' },
+    { regex: /^(read|replace|patch|translate)_manuscript$/, objectType: 'manuscript' },
   ];
 
   for (const { regex, objectType } of patterns) {
@@ -65,12 +64,13 @@ export const resolveStoryObjectName = (
       return storyObjects.basicInfo?.title || storyObjects.basicInfo?.logline;
     case 'story_entity':
       return storyObjects.storyEntities.find((item) => item.id === id)?.name;
-    case 'act': {
+    case 'outline': {
+      if (storyObjects.outline.outlines.some((outline) => outline.id === id)) {
+        return storyObjects.outline.outlines.find((outline) => outline.id === id)?.name;
+      }
       const acts = getAllActs(storyObjects);
-      return findAct(acts, id)?.name;
-    }
-    case 'chapter': {
-      const acts = getAllActs(storyObjects);
+      const act = findAct(acts, id);
+      if (act) return act.name;
       const chapter = findChapter(acts, id);
       return chapter?.name;
     }

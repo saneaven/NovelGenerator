@@ -878,30 +878,25 @@ def _tool_call_target_key(tc: RunToolCallModel | None) -> str:
         return f"manuscript:{target_id}"
     if tc.tool_name in {"patch_story_entity", "replace_story_entity"}:
         return f"story_entity:{args.get('kind', '')}:{target_id}"
-    if tc.tool_name in {
-        "patch_outline", "patch_outline_act", "patch_outline_chapter",
-        "replace_outline", "replace_outline_act", "replace_outline_chapter",
-    }:
-        obj_type = args.get("type", tc.tool_name.replace("patch_", "").replace("replace_", ""))
-        return f"outline:{obj_type}:{target_id}"
+    if tc.tool_name in {"patch_outline", "replace_outline"}:
+        return f"outline:{target_id}"
     # Everything else (sub-agents, reads, creates, deletes) gets a unique key → parallel.
     return f"{tc.tool_name}:{tc.id}"
 
 
-def _resolve_outline_type_from_tool_name(tool_name: str, args: dict) -> str:
-    if "act" in tool_name:
-        return "act"
-    if "chapter" in tool_name:
-        return "chapter"
-    return str(args.get("type") or "outline")
+def _resolve_outline_kind(args: dict) -> str | None:
+    raw = args.get("kind")
+    if isinstance(raw, str) and raw:
+        return raw
+    return None
 
 
-def _extract_outline_metadata(object_type: str, args: dict) -> dict | None:
+def _extract_outline_metadata(args: dict) -> dict | None:
     meta: dict[str, Any] = {}
-    if object_type in {"act", "chapter"} and isinstance(args.get("order"), int):
-        meta["order"] = args["order"]
-    if object_type == "chapter" and isinstance(args.get("actId"), str) and args.get("actId"):
-        meta["act_id"] = args["actId"]
+    if isinstance(args.get("position"), int):
+        meta["position"] = args["position"]
+    if "parentId" in args:
+        meta["parent_id"] = args.get("parentId")
     return meta or None
 
 
@@ -1062,18 +1057,18 @@ async def _execute_batched_patch_group(
 
                 elif tool_name in {
                     "patch_story_entity",
-                    "patch_outline", "patch_outline_act", "patch_outline_chapter",
+                    "patch_outline",
                 }:
                     obj_type = (
                         "story_entity"
                         if tool_name == "patch_story_entity"
-                        else _resolve_outline_type_from_tool_name(tool_name, args)
+                        else "outline"
                     )
                     obj_id = UUID(str(args.get("id")))
                     metadata = (
                         _extract_story_entity_metadata(args)
                         if tool_name == "patch_story_entity"
-                        else _extract_outline_metadata(obj_type, args)
+                        else _extract_outline_metadata(args)
                     )
                     r = object_patch_batch.apply_patch(
                         db=db,
@@ -1098,19 +1093,19 @@ async def _execute_batched_patch_group(
 
                 elif tool_name in {
                     "replace_story_entity",
-                    "replace_outline", "replace_outline_act", "replace_outline_chapter",
+                    "replace_outline",
                 }:
                     obj_type = (
                         "story_entity"
                         if tool_name == "replace_story_entity"
-                        else _resolve_outline_type_from_tool_name(tool_name, args)
+                        else "outline"
                     )
                     obj_id = UUID(str(args.get("id")))
                     fields = {k: args[k] for k in ("name", "description", "content") if k in args}
                     metadata = (
                         _extract_story_entity_metadata(args)
                         if tool_name == "replace_story_entity"
-                        else _extract_outline_metadata(obj_type, args)
+                        else _extract_outline_metadata(args)
                     )
                     r = object_patch_batch.apply_replace(
                         db=db,

@@ -128,9 +128,11 @@ function filterGroups(
   return groups
     .map(group => {
       // Filter by type
-      if (typeFilter && group.type !== typeFilter && group.type !== 'act') {
-        // Allow 'act' groups through when filtering by manuscript
-        if (!(typeFilter === 'manuscript' && group.type === 'manuscript')) {
+      if (typeFilter && group.type !== typeFilter) {
+        const allowOutlineScaffold =
+          (typeFilter === 'outline' && group.type === 'outline') ||
+          (typeFilter === 'manuscript' && (group.type === 'manuscript' || group.type === 'outline'));
+        if (!allowOutlineScaffold) {
           return null;
         }
       }

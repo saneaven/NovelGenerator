@@ -40,19 +40,7 @@ class DeleteToolCallModule(ToolCallModule):
                 [
                     ToolSpec(
                         name="delete_outline",
-                        description="Delete an outline.",
-                        parameters=obj_schema({"id": _ID}, ["id"]),
-                        auto_approve_category="delete",
-                    ),
-                    ToolSpec(
-                        name="delete_outline_act",
-                        description="Delete an act.",
-                        parameters=obj_schema({"id": _ID}, ["id"]),
-                        auto_approve_category="delete",
-                    ),
-                    ToolSpec(
-                        name="delete_outline_chapter",
-                        description="Delete a chapter.",
+                        description="Delete an outline item.",
                         parameters=obj_schema({"id": _ID}, ["id"]),
                         auto_approve_category="delete",
                     ),
@@ -74,10 +62,6 @@ class DeleteToolCallModule(ToolCallModule):
                 return valid_result()
             elif tool_name == "delete_outline":
                 object_type = "outline"
-            elif tool_name == "delete_outline_act":
-                object_type = "act"
-            elif tool_name == "delete_outline_chapter":
-                object_type = "chapter"
             else:
                 return invalid_result("validate_delete_tool_name", f"Unsupported delete tool: {tool_name}")
 
@@ -98,10 +82,6 @@ class DeleteToolCallModule(ToolCallModule):
             object_type = STORY_ENTITY_TYPE
         elif tool_name == "delete_outline":
             object_type = "outline"
-        elif tool_name == "delete_outline_act":
-            object_type = "act"
-        elif tool_name == "delete_outline_chapter":
-            object_type = "chapter"
         else:
             raise ValueError(f"Unsupported delete tool: {tool_name}")
 
@@ -119,4 +99,4 @@ class DeleteToolCallModule(ToolCallModule):
                 object_type=object_type,
                 data={"kind": args.get("kind")},
             )
-        return make_result(f"Deleted {object_type}", object_id=str(object_id), object_type=object_type)
+        return make_result("Deleted outline", object_id=str(object_id), object_type=object_type)

@@ -17,13 +17,12 @@ export type ObjectType =
   | 'basic_info'
   | 'guidelines'
   | 'outline'
-  | 'outline_act'
-  | 'outline_chapter'
   | 'manuscript';
 
 export type SearchType = 'semantic' | 'keyword';
 
 export type StoryEntityKind = 'character' | 'location' | 'organization' | 'lorebook';
+export type OutlineKind = 'outline' | 'act' | 'chapter';
 
 export type HeaderStatus =
   | 'collecting'
@@ -60,6 +59,7 @@ export interface ObjectOperationVM extends OperationBaseVM {
   category: Exclude<OperationCategory, 'search' | 'call' | 'generate'>;
   objectType: ObjectType;
   storyEntityKind?: StoryEntityKind;
+  outlineKind?: OutlineKind;
 }
 
 export interface SearchOperationVM extends OperationBaseVM {

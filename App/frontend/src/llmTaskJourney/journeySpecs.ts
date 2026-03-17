@@ -63,8 +63,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   basic_info: 'Basic Info',
   story_entity: 'Story Entity',
   outline: 'Outline',
-  act: 'Act',
-  chapter: 'Chapter',
   manuscript: 'Manuscript',
 };
 
@@ -75,13 +73,21 @@ const CATEGORY_LABELS: Record<string, string> = {
 type ObjectEditJourneyKind = 'manuscriptEdit' | 'outlineEdit' | 'objectEdit';
 
 function objectEditLabel(input: ObjectEditInput): string {
-  const categoryLabel = CATEGORY_LABELS[input.category] ?? input.category;
+  let categoryLabel = CATEGORY_LABELS[input.category] ?? input.category;
   if (!input.targetId) {
     return `AI Edit: ${categoryLabel}`;
   }
 
   const store = useUnifiedObjectStore.getState();
   const mainLanguage = useSettingsStore.getState().getSettings().mainLanguage;
+
+  if (input.category === 'outline') {
+    const outline = store.getObject(input.targetId);
+    if (outline?.type === 'outline') {
+      if (outline.kind === 'act') categoryLabel = 'Act';
+      else if (outline.kind === 'chapter') categoryLabel = 'Chapter';
+    }
+  }
 
   if (input.category === 'manuscript') {
     const chapter = store.getObject(input.targetId);

@@ -21,9 +21,11 @@ export interface OutlineItemCardProps {
   dragHandle?: React.ReactNode;
 }
 
-export function toOutlineItemVariant(objectType: string): OutlineItemVariant {
-  if (objectType === 'outline_act') return 'act';
-  if (objectType === 'outline_chapter') return 'chapter';
+export function toOutlineItemVariant(objectType: string, kind?: string): OutlineItemVariant {
+  if (objectType === 'outline' && kind === 'act') return 'act';
+  if (objectType === 'outline' && kind === 'chapter') return 'chapter';
+  if (objectType === 'act') return 'act';
+  if (objectType === 'chapter') return 'chapter';
   return 'outline';
 }
 

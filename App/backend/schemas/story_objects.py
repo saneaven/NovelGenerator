@@ -77,73 +77,40 @@ class ImagePromptUpdate(BaseModel):
 
 
 # ============================================================================
-# Outline, Act, Chapter
+# Outline
 # ============================================================================
 
-class ChapterCreate(BaseModel):
-    """Create chapter"""
-    name: str = Field(..., max_length=255)
-    description: str = ""  # One-line summary for object indexes
-    content: str  # Full content
-    order: int
-    language: str = "English"
-
-
-class ChapterUpdate(BaseModel):
-    """Update chapter"""
-    name: Optional[str] = Field(None, max_length=255)
-    description: Optional[str] = None  # One-line summary for object indexes
-    content: Optional[str] = None  # Full content
-    order: Optional[int] = None
-    language: Optional[str] = None
-
-
-class ChapterResponse(BaseMetadata):
-    """Chapter response"""
-    act_id: UUID
-    name: Optional[str]
-    description: Optional[str]  # One-line summary for object indexes
-    content: Optional[str]  # Full content
-    order: int
-
-
-class ActCreate(BaseModel):
-    """Create act"""
-    name: str = Field(..., max_length=255)
-    description: str = ""  # One-line summary for object indexes
-    content: str  # Full content
-    order: int
-    language: str = "English"
-
-
-class ActUpdate(BaseModel):
-    """Update act"""
-    name: Optional[str] = Field(None, max_length=255)
-    description: Optional[str] = None  # One-line summary for object indexes
-    content: Optional[str] = None  # Full content
-    order: Optional[int] = None
-    language: Optional[str] = None
-
-
-class ActResponse(BaseMetadata):
-    """Act response"""
-    outline_id: UUID
-    name: Optional[str]
-    description: Optional[str]  # One-line summary for object indexes
-    content: Optional[str]  # Full content
-    order: int
-    chapters: List[ChapterResponse] = []
-
-
 class OutlineCreate(BaseModel):
-    """Create outline"""
-    pass
+    """Create outline item"""
+    name: str = Field(..., max_length=255)
+    description: str = ""  # One-line summary for object indexes
+    content: str  # Full content
+    kind: str
+    parent_id: Optional[UUID] = None
+    position: int = 0
+    language: str = "English"
+
+
+class OutlineUpdate(BaseModel):
+    """Update outline item"""
+    name: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None  # One-line summary for object indexes
+    content: Optional[str] = None  # Full content
+    parent_id: Optional[UUID] = None
+    position: Optional[int] = None
+    language: Optional[str] = None
 
 
 class OutlineResponse(BaseMetadata):
-    """Outline response"""
+    """Outline item response"""
     project_id: UUID
-    acts: List[ActResponse] = []
+    kind: str
+    parent_id: Optional[UUID]
+    name: Optional[str]
+    description: Optional[str]  # One-line summary for object indexes
+    content: Optional[str]  # Full content
+    position: int
+    manuscript_id: Optional[UUID] = None
 
 
 # ============================================================================

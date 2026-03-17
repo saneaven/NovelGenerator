@@ -17,9 +17,7 @@ from uuid import UUID
 from ..database import get_db
 from ..auth import get_current_user
 from ..models.db_models import (
-    Act,
     BasicInfo,
-    Chapter,
     Guidelines,
     Manuscript,
     Outline,
@@ -103,8 +101,6 @@ async def get_project_translation_status(
         'guidelines': Guidelines,
         STORY_ENTITY_TYPE: StoryEntity,
         'outline': Outline,
-        'act': Act,
-        'chapter': Chapter,
         'manuscript': Manuscript,
     }
 
@@ -117,15 +113,11 @@ async def get_project_translation_status(
         # Filter by project_id (different field names for different types)
         if object_type in ['basic_info', 'guidelines', STORY_ENTITY_TYPE, 'outline']:
             query = query.filter(model_class.project_id == project_id)
-        elif object_type == 'act':
-            # Acts belong to outlines which belong to projects
-            query = query.join(Outline).filter(Outline.project_id == project_id)
-        elif object_type == 'chapter':
-            # Chapters belong to acts which belong to outlines which belong to projects
-            query = query.join(Act).join(Outline).filter(Outline.project_id == project_id)
         elif object_type == 'manuscript':
-            # Manuscripts belong to chapters which belong to acts which belong to outlines
-            query = query.join(Chapter).join(Act).join(Outline).filter(Outline.project_id == project_id)
+            query = query.join(Outline, Manuscript.chapter_id == Outline.id).filter(
+                Outline.project_id == project_id,
+                Outline.kind == 'chapter',
+            )
 
         objects = query.all()
 
@@ -150,7 +142,7 @@ async def get_project_translation_status(
             status_list.append(TranslationStatus(
                 object_id=str(obj.id),
                 object_type=externalize_object_type(object_type),
-                kind=str(obj.kind) if object_type == STORY_ENTITY_TYPE else None,
+                kind=str(obj.kind) if object_type in {STORY_ENTITY_TYPE, 'outline'} else None,
                 available_languages=available_languages,
                 missing_languages=missing_languages,
                 translation_coverage=coverage
@@ -185,22 +177,16 @@ async def get_language_coverage(
     story_entities = db.query(StoryEntity).filter(StoryEntity.project_id == project_id).all()
     object_ids.update([(str(row.id), STORY_ENTITY_TYPE) for row in story_entities])
 
-    # Acts (through outline)
-    outline = db.query(Outline).filter(Outline.project_id == project_id).first()
-    if outline:
-        acts = db.query(Act).filter(Act.outline_id == outline.id).all()
-        object_ids.update([(str(a.id), 'act') for a in acts])
+    outlines = db.query(Outline).filter(Outline.project_id == project_id).all()
+    object_ids.update([(str(row.id), 'outline') for row in outlines])
 
-        # Chapters (through acts)
-        for act in acts:
-            chapters = db.query(Chapter).filter(Chapter.act_id == act.id).all()
-            object_ids.update([(str(c.id), 'chapter') for c in chapters])
-
-            # Manuscripts (through chapters)
-            for chapter in chapters:
-                manuscript = db.query(Manuscript).filter(Manuscript.chapter_id == chapter.id).first()
-                if manuscript:
-                    object_ids.add((str(manuscript.id), 'manuscript'))
+    manuscripts = (
+        db.query(Manuscript)
+        .join(Outline, Manuscript.chapter_id == Outline.id)
+        .filter(Outline.project_id == project_id, Outline.kind == 'chapter')
+        .all()
+    )
+    object_ids.update([(str(row.id), 'manuscript') for row in manuscripts])
 
     total_objects = len(object_ids)
 

@@ -11,7 +11,6 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
@@ -30,7 +29,7 @@ import DragHandle from '../../../components/ui/DragHandle';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
 import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll } from '../../../components/icons';
-import type { UnifiedObject, OutlineObject, ActObject, ChapterObject } from '../../../types/unifiedObject';
+import type { UnifiedObject, OutlineObject } from '../../../types/unifiedObject';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
 import { OutlineItemCard } from '../../../components/OutlineItemCard';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
@@ -89,11 +88,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     let isCancelled = false;
     const loadOutlineData = async () => {
       try {
-        await Promise.all([
-          listObjects('outline', projectId),
-          listObjects('act', projectId),
-          listObjects('chapter', projectId),
-        ]);
+        await listObjects('outline', projectId);
       } catch (error) {
         if (!isCancelled) {
           console.error('Failed to load outline data:', error);
@@ -114,9 +109,9 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     return Object.values(store.objects)
       .filter(
         (obj): obj is OutlineObject =>
-          Boolean(obj && obj.type === 'outline' && obj.metadata?.project_id === projectId)
+          Boolean(obj && obj.type === 'outline' && obj.kind === 'outline' && obj.metadata?.project_id === projectId)
       )
-      .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
+      .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
   }, [store.objects, projectId]);
 
   const acts = useMemo(() => {
@@ -124,10 +119,10 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
     return Object.values(store.objects)
       .filter(
-        (obj): obj is ActObject =>
-          Boolean(obj && obj.type === 'act' && obj.metadata?.project_id === projectId)
+        (obj): obj is OutlineObject =>
+          Boolean(obj && obj.type === 'outline' && obj.kind === 'act' && obj.metadata?.project_id === projectId)
       )
-      .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
+      .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
   }, [store.objects, projectId]);
 
   const chapters = useMemo(() => {
@@ -135,17 +130,17 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
     return Object.values(store.objects)
       .filter(
-        (obj): obj is ChapterObject =>
-          Boolean(obj && obj.type === 'chapter' && obj.metadata?.project_id === projectId)
+        (obj): obj is OutlineObject =>
+          Boolean(obj && obj.type === 'outline' && obj.kind === 'chapter' && obj.metadata?.project_id === projectId)
       )
-      .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
+      .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
   }, [store.objects, projectId]);
 
   // Build parent->children indexes to avoid O(N*M) filters during renders
   const actsByOutlineId = useMemo(() => {
-    const map = new Map<string, ActObject[]>();
+    const map = new Map<string, OutlineObject[]>();
     for (const act of acts) {
-      const outlineId = act.metadata?.outline_id as string | undefined;
+      const outlineId = act.metadata?.parent_id as string | undefined;
       if (!outlineId) continue;
       const list = map.get(outlineId);
       if (list) {
@@ -158,9 +153,9 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   }, [acts]);
 
   const chaptersByActId = useMemo(() => {
-    const map = new Map<string, ChapterObject[]>();
+    const map = new Map<string, OutlineObject[]>();
     for (const chapter of chapters) {
-      const actId = chapter.metadata?.act_id as string | undefined;
+      const actId = chapter.metadata?.parent_id as string | undefined;
       if (!actId) continue;
       const list = map.get(actId);
       if (list) {
@@ -173,8 +168,8 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   }, [chapters]);
 
   // Helper functions
-  const getActsForOutline = (outlineId: string): ActObject[] => actsByOutlineId.get(outlineId) || [];
-  const getChaptersForAct = (actId: string): ChapterObject[] => chaptersByActId.get(actId) || [];
+  const getActsForOutline = (outlineId: string): OutlineObject[] => actsByOutlineId.get(outlineId) || [];
+  const getChaptersForAct = (actId: string): OutlineObject[] => chaptersByActId.get(actId) || [];
 
   // Helper to get data for a specific language with fallback
   const getDataForLanguage = (obj: UnifiedObject, lang: string) => {
@@ -351,11 +346,13 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       const outlineActs = getActsForOutline(outlineId);
       const actOrder = outlineActs.length;
       await store.createObject(
-        'act',
+        'outline',
         projectId,
         { name: name.trim(), description: description.trim(), content: content.trim() },
         settings.mainLanguage,
-        { outline_id: outlineId, order: actOrder }
+        { parent_id: outlineId, position: actOrder },
+        'User Creation',
+        'act'
       );
       setShowAddActForm(null);
     } catch (error) {
@@ -365,7 +362,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   };
 
   const startEditingAct = (actId: string) => {
-    const act = store.objects[actId] as ActObject;
+    const act = store.objects[actId] as OutlineObject;
     if (!act) return;
     const { effectiveLanguage } = getEffectiveLanguage(act);
     const data = getDataForLanguage(act, effectiveLanguage);
@@ -376,13 +373,13 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const handleUpdateAct = async () => {
     if (!editingAct || !editActData.name.trim()) return;
 
-    const act = store.objects[editingAct] as ActObject;
+    const act = store.objects[editingAct] as OutlineObject;
     if (!act) return;
 
     const { effectiveLanguage } = getEffectiveLanguage(act);
 
     try {
-      await store.updateObject('act', editingAct, {
+      await store.updateObject('outline', editingAct, {
         data: { name: editActData.name.trim(), description: editActData.description.trim(), content: editActData.content.trim() },
         language: effectiveLanguage,
         create_new_version: true,
@@ -412,7 +409,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     }
 
     try {
-      await store.deleteObject('act', actId);
+      await store.deleteObject('outline', actId);
     } catch (error) {
       console.error('Failed to delete act:', error);
       showAlert({ title: 'Delete Error', message: 'Failed to delete act. Please try again.' });
@@ -430,11 +427,13 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       const actChapters = getChaptersForAct(actId);
       const chapterOrder = actChapters.length;
       await store.createObject(
-        'chapter',
+        'outline',
         projectId,
         { name: name.trim(), description: description.trim(), content: content.trim() },
         settings.mainLanguage,
-        { act_id: actId, order: chapterOrder }
+        { parent_id: actId, position: chapterOrder },
+        'User Creation',
+        'chapter'
       );
       setShowAddChapterForm(null);
     } catch (error) {
@@ -444,7 +443,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   };
 
   const startEditingChapter = (chapterId: string) => {
-    const chapter = store.objects[chapterId] as ChapterObject;
+    const chapter = store.objects[chapterId] as OutlineObject;
     if (!chapter) return;
     const { effectiveLanguage } = getEffectiveLanguage(chapter);
     const data = getDataForLanguage(chapter, effectiveLanguage);
@@ -455,13 +454,13 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const handleUpdateChapter = async () => {
     if (!editingChapter || !editChapterData.name.trim()) return;
 
-    const chapter = store.objects[editingChapter] as ChapterObject;
+    const chapter = store.objects[editingChapter] as OutlineObject;
     if (!chapter) return;
 
     const { effectiveLanguage } = getEffectiveLanguage(chapter);
 
     try {
-      await store.updateObject('chapter', editingChapter, {
+      await store.updateObject('outline', editingChapter, {
         data: { name: editChapterData.name.trim(), description: editChapterData.description.trim(), content: editChapterData.content.trim() },
         language: effectiveLanguage,
         create_new_version: true,
@@ -491,7 +490,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     }
 
     try {
-      await store.deleteObject('chapter', chapterId);
+      await store.deleteObject('outline', chapterId);
     } catch (error) {
       console.error('Failed to delete chapter:', error);
       showAlert({ title: 'Delete Error', message: 'Failed to delete chapter. Please try again.' });
@@ -564,9 +563,16 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       const newIndex = selectedOutlineActs.findIndex((a) => a.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
 
-      const newOrder = arrayMove(actIds, oldIndex, newIndex);
       try {
-        await store.reorderObjects('act', projectId, newOrder);
+        const activeObject = store.objects[active.id as string] as UnifiedObject | undefined;
+        const { effectiveLanguage } = activeObject ? getEffectiveLanguage(activeObject) : { effectiveLanguage: settings.mainLanguage };
+        await store.updateObject('outline', active.id as string, {
+          data: getDataForLanguage((activeObject as UnifiedObject) || { data: {} } as UnifiedObject, effectiveLanguage),
+          language: effectiveLanguage,
+          metadata: { parent_id: selectedOutlineId, position: newIndex },
+          create_new_version: false,
+          user_request: 'Reposition act',
+        });
       } catch (error) {
         console.error('Failed to reorder acts:', error);
         showAlert({ title: 'Reorder Error', message: 'Failed to reorder acts. Please try again.' });
@@ -586,9 +592,16 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       const newIndex = ids.indexOf(over.id as string);
       if (oldIndex === -1 || newIndex === -1) return;
 
-      const newOrder = arrayMove(ids, oldIndex, newIndex);
       try {
-        await store.reorderObjects('chapter', projectId, newOrder);
+        const activeObject = store.objects[active.id as string] as UnifiedObject | undefined;
+        const { effectiveLanguage } = activeObject ? getEffectiveLanguage(activeObject) : { effectiveLanguage: settings.mainLanguage };
+        await store.updateObject('outline', active.id as string, {
+          data: getDataForLanguage((activeObject as UnifiedObject) || { data: {} } as UnifiedObject, effectiveLanguage),
+          language: effectiveLanguage,
+          metadata: { parent_id: actId, position: newIndex },
+          create_new_version: false,
+          user_request: 'Reposition chapter',
+        });
       } catch (error) {
         console.error('Failed to reorder chapters:', error);
         showAlert({ title: 'Reorder Error', message: 'Failed to reorder chapters. Please try again.' });
@@ -1149,20 +1162,20 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       )}
 
       {showActAIModal && projectId && (
-        <AIEditModal
+      <AIEditModal
           isOpen={true}
           onClose={() => setShowActAIModal(null)}
-          category="act"
+          category="outline"
           projectId={projectId}
           targetId={showActAIModal}
         />
       )}
 
       {showChapterAIModal && projectId && (
-        <AIEditModal
+      <AIEditModal
           isOpen={true}
           onClose={() => setShowChapterAIModal(null)}
-          category="chapter"
+          category="outline"
           projectId={projectId}
           targetId={showChapterAIModal}
         />

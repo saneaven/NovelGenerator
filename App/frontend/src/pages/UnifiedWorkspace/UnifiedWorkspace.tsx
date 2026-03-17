@@ -13,6 +13,7 @@ import { alert as showAlert } from '../../store/dialogStore';
 import { translationService } from '../../api/unifiedObjectService';
 import { bootstrapProjectRuntime } from '../../runtime/projectRuntimeBootstrap';
 import { normalizeBasicInfoData } from '../../utils/basicInfo';
+import type { StoryEntityObject, OutlineObject } from '../../types/unifiedObject';
 
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
 import TranslationModal from '../../components/Modal/TranslationModal';
@@ -178,7 +179,7 @@ const UnifiedWorkspace: React.FC = () => {
   const selectedChapter = useMemo(() => {
     if (!selectedChapterId) return null;
     const chapter = unifiedObjects[selectedChapterId];
-    if (!chapter || chapter.type !== 'chapter') return null;
+    if (!chapter || chapter.type !== 'outline' || chapter.kind !== 'chapter') return null;
 
     const langData = chapter.data[currentDisplayLanguage] || chapter.data[mainLanguage] || chapter.data[Object.keys(chapter.data)[0]] || {};
 
@@ -186,8 +187,8 @@ const UnifiedWorkspace: React.FC = () => {
       id: chapter.id,
       name: langData.name || '',
       description: langData.description || '',
-      order: chapter.metadata.order || 0,
-      actId: chapter.metadata.act_id || '',
+      order: chapter.metadata.position || 0,
+      actId: chapter.metadata.parent_id || '',
     };
   }, [selectedChapterId, unifiedObjects, currentDisplayLanguage, mainLanguage]);
 
@@ -237,8 +238,6 @@ const UnifiedWorkspace: React.FC = () => {
           'basic_info',
           'story_entity',
           'outline',
-          'act',
-          'chapter',
         ]);
       } catch (error) {
         console.error('Failed to load story objects:', error);
@@ -262,12 +261,10 @@ const UnifiedWorkspace: React.FC = () => {
 
     const buildStoryObjects = async () => {
       try {
-        const [basicInfoList, storyEntities, outlines, acts, chapters] = await Promise.all([
+        const [basicInfoList, storyEntities, outlineItems] = await Promise.all([
           listObjects('basic_info', projectId),
           listObjects('story_entity', projectId),
           listObjects('outline', projectId),
-          listObjects('act', projectId),
-          listObjects('chapter', projectId),
         ]);
 
         const basicInfo = basicInfoList.length > 0 ? (() => {
@@ -281,21 +278,37 @@ const UnifiedWorkspace: React.FC = () => {
           };
         })() : null;
 
+        const storyEntityItems = storyEntities.filter(
+          (item): item is StoryEntityObject => item.type === 'story_entity'
+        );
+        const outlineNodes = outlineItems.filter(
+          (item): item is OutlineObject => item.type === 'outline'
+        );
+
+        const outlines = outlineNodes
+          .filter((item): item is OutlineObject => item.kind === 'outline')
+          .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
+        const acts = outlineNodes
+          .filter((item): item is OutlineObject => item.kind === 'act')
+          .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
+        const chapters = outlineNodes
+          .filter((item): item is OutlineObject => item.kind === 'chapter')
+          .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
+
         // Build outline hierarchy: Outline > Acts > Chapters
         const outlineData = {
           outlines: outlines
-            .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
             .map(outline => {
               const oData = getDataForLanguage(outline, mainLanguage);
               const outlineActs = acts
-                .filter(act => act.metadata.outline_id === outline.id)
-                .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
+                .filter(act => act.metadata.parent_id === outline.id)
+                .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
               return {
                 id: outline.id,
                 name: oData.name || '',
                 description: oData.description || '',
                 content: oData.content || '',
-                order: outline.metadata.order || 0,
+                position: outline.metadata.position || 0,
                 acts: outlineActs.map(act => {
                   const actData = getDataForLanguage(act, mainLanguage);
                   return {
@@ -303,11 +316,11 @@ const UnifiedWorkspace: React.FC = () => {
                     name: actData.name || '',
                     description: actData.description || '',
                     content: actData.content || '',
-                    order: act.metadata.order || 0,
-                    outlineId: act.metadata.outline_id || '',
+                    position: act.metadata.position || 0,
+                    parentId: act.metadata.parent_id || '',
                     chapters: chapters
-                      .filter(ch => ch.metadata.act_id === act.id)
-                      .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+                      .filter(ch => ch.metadata.parent_id === act.id)
+                      .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0))
                       .map(chapter => {
                         const chapterData = getDataForLanguage(chapter, mainLanguage);
                         return {
@@ -315,8 +328,8 @@ const UnifiedWorkspace: React.FC = () => {
                           name: chapterData.name || '',
                           description: chapterData.description || '',
                           content: chapterData.content || '',
-                          order: chapter.metadata.order || 0,
-                          actId: chapter.metadata.act_id || '',
+                          position: chapter.metadata.position || 0,
+                          parentId: chapter.metadata.parent_id || '',
                         };
                       }),
                   };
@@ -328,35 +341,35 @@ const UnifiedWorkspace: React.FC = () => {
         if (isActive) {
           setStoryObjects({
             basicInfo,
-            storyEntities: storyEntities.map((entity) => {
+            storyEntities: storyEntityItems.map((entity) => {
               const data = getDataForLanguage(entity, mainLanguage);
               return {
                 id: entity.id,
-                kind: entity.kind || 'character',
+                kind: entity.kind,
                 name: data.name || '',
                 description: data.description || '',
                 content: data.content || '',
               };
             }),
-            characters: storyEntities
+            characters: storyEntityItems
               .filter((entity) => entity.kind === 'character')
               .map((entity) => {
                 const data = getDataForLanguage(entity, mainLanguage);
                 return { id: entity.id, name: data.name || '', description: data.description || '', content: data.content || '' };
               }),
-            organizations: storyEntities
+            organizations: storyEntityItems
               .filter((entity) => entity.kind === 'organization')
               .map((entity) => {
                 const data = getDataForLanguage(entity, mainLanguage);
                 return { id: entity.id, name: data.name || '', description: data.description || '', content: data.content || '' };
               }),
-            locations: storyEntities
+            locations: storyEntityItems
               .filter((entity) => entity.kind === 'location')
               .map((entity) => {
                 const data = getDataForLanguage(entity, mainLanguage);
                 return { id: entity.id, name: data.name || '', description: data.description || '', content: data.content || '' };
               }),
-            lorebook: storyEntities
+            lorebook: storyEntityItems
               .filter((entity) => entity.kind === 'lorebook')
               .map((entity) => {
                 const data = getDataForLanguage(entity, mainLanguage);

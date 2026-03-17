@@ -11,8 +11,6 @@ from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from ..models.db_models import (
-    Act,
-    Chapter,
     Manuscript,
     Outline,
     StoryEntity,
@@ -231,55 +229,45 @@ def compute_order_meta(db: Session, *, project_id: UUID, object_type: str, objec
 
     if object_type == "outline":
         outline = db.query(Outline).filter(Outline.id == object_id, Outline.project_id == project_id).first()
-        outline_order = (outline.order if outline else 0) or 0
-        return OrderMeta(type_group="outline", outline_order=outline_order)
+        if not outline:
+            return OrderMeta(type_group="outline")
 
-    if object_type == "act":
-        act = (
-            db.query(Act)
-            .join(Outline, Outline.id == Act.outline_id)
-            .filter(Act.id == object_id, Outline.project_id == project_id)
-            .first()
-        )
-        outline_order = (act.outline.order if act and act.outline else 0) or 0
-        act_order = (act.order if act else 0) or 0
-        return OrderMeta(type_group="outline", outline_order=outline_order, act_order=act_order)
+        root = outline if outline.kind == "outline" else outline.parent
+        act = None
+        chapter = None
+        if outline.kind == "act":
+            act = outline
+        elif outline.kind == "chapter":
+            chapter = outline
+            act = outline.parent
+        elif outline.kind == "outline":
+            root = outline
 
-    if object_type == "chapter":
-        chapter = (
-            db.query(Chapter)
-            .join(Act, Act.id == Chapter.act_id)
-            .join(Outline, Outline.id == Act.outline_id)
-            .filter(Chapter.id == object_id, Outline.project_id == project_id)
-            .first()
-        )
-        outline_order = (chapter.act.outline.order if chapter and chapter.act and chapter.act.outline else 0) or 0
-        act_order = (chapter.act.order if chapter and chapter.act else 0) or 0
-        chapter_order = (chapter.order if chapter else 0) or 0
         return OrderMeta(
             type_group="outline",
-            outline_order=outline_order,
-            act_order=act_order,
-            chapter_order=chapter_order,
-            chapter_id=object_id,
+            outline_order=int(root.position if root else 0),
+            act_order=int(act.position if act else 0) if act else None,
+            chapter_order=int(chapter.position if chapter else 0) if chapter else None,
+            chapter_id=chapter.id if chapter is not None else None,
         )
 
     if object_type == "manuscript":
         manuscript = (
             db.query(Manuscript)
-            .join(Chapter, Chapter.id == Manuscript.chapter_id)
-            .join(Act, Act.id == Chapter.act_id)
-            .join(Outline, Outline.id == Act.outline_id)
-            .filter(Manuscript.id == object_id, Outline.project_id == project_id)
+            .join(Outline, Outline.id == Manuscript.chapter_id)
+            .filter(Manuscript.id == object_id, Outline.project_id == project_id, Outline.kind == "chapter")
             .first()
         )
-        if not manuscript or not manuscript.chapter or not manuscript.chapter.act or not manuscript.chapter.act.outline:
+        if not manuscript or not manuscript.chapter:
             return OrderMeta(type_group="manuscript")
+        chapter = manuscript.chapter
+        act = chapter.parent
+        root = act.parent if act is not None else None
         return OrderMeta(
             type_group="manuscript",
-            outline_order=manuscript.chapter.act.outline.order,
-            act_order=manuscript.chapter.act.order,
-            chapter_order=manuscript.chapter.order,
+            outline_order=int(root.position if root else 0),
+            act_order=int(act.position if act else 0) if act else None,
+            chapter_order=int(chapter.position if chapter else 0),
             chapter_id=manuscript.chapter_id,
         )
 
@@ -734,16 +722,19 @@ def _project_object_refs(db: Session, *, project_id: UUID) -> List[Tuple[str, UU
     for row in db.query(StoryEntity).filter(StoryEntity.project_id == project_id).order_by(StoryEntity.display_order.asc()).all():
         refs.append((STORY_ENTITY_TYPE, row.id))
 
-    outlines = db.query(Outline).filter(Outline.project_id == project_id).order_by(Outline.order.asc()).all()
+    outlines = db.query(Outline).filter(Outline.project_id == project_id).order_by(Outline.position.asc()).all()
+    manuscripts_by_chapter = {
+        manuscript.chapter_id: manuscript
+        for manuscript in db.query(Manuscript)
+        .join(Outline, Outline.id == Manuscript.chapter_id)
+        .filter(Outline.project_id == project_id, Outline.kind == "chapter")
+        .all()
+    }
     for outline in outlines:
         refs.append(("outline", outline.id))
-        for act in db.query(Act).filter(Act.outline_id == outline.id).order_by(Act.order.asc()).all():
-            refs.append(("act", act.id))
-            for chapter in db.query(Chapter).filter(Chapter.act_id == act.id).order_by(Chapter.order.asc()).all():
-                refs.append(("chapter", chapter.id))
-                manuscript = db.query(Manuscript).filter(Manuscript.chapter_id == chapter.id).first()
-                if manuscript:
-                    refs.append(("manuscript", manuscript.id))
+        manuscript = manuscripts_by_chapter.get(outline.id)
+        if manuscript is not None:
+            refs.append(("manuscript", manuscript.id))
 
     return refs
 

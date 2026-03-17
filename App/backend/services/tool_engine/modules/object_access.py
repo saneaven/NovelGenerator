@@ -5,9 +5,10 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from ....models.db_models import Act, Outline, StoryEntityFolder
+from ....models.db_models import Outline, StoryEntityFolder
 from ....services.object_service import object_service
 from ....services.patch_utils import apply_single_replacement
+from ....services.outline_service import require_outline_kind
 from ....utils.story_entities import STORY_ENTITY_KINDS, STORY_ENTITY_TYPE, require_story_entity_kind
 
 
@@ -93,15 +94,23 @@ def ensure_outline_parent_exists(db: Session, *, project_id: UUID, outline_id: U
         raise ValueError(f"Parent outline not found: {outline_id}")
 
 
-def ensure_act_parent_exists(db: Session, *, project_id: UUID, act_id: UUID) -> None:
+def ensure_outline_parent_kind(
+    db: Session,
+    *,
+    project_id: UUID,
+    outline_id: UUID,
+    expected_kind: str,
+) -> None:
+    required_kind = require_outline_kind(expected_kind)
     row = (
-        db.query(Act)
-        .join(Outline, Outline.id == Act.outline_id)
-        .filter(Act.id == act_id, Outline.project_id == project_id)
+        db.query(Outline)
+        .filter(Outline.id == outline_id, Outline.project_id == project_id)
         .first()
     )
     if row is None:
-        raise ValueError(f"Parent act not found: {act_id}")
+        raise ValueError(f"Parent outline not found: {outline_id}")
+    if row.kind != required_kind:
+        raise ValueError(f"Parent outline must be kind={required_kind}")
 
 
 def ensure_story_entity_folder_exists(

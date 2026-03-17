@@ -15,6 +15,7 @@ import {
   type PromptProjectContentByLanguage,
   type PromptProjectGuidelines,
   type PromptProjectManuscript,
+  type PromptProjectOutlineNode,
   type PromptProjectOutline,
   type PromptProjectStoryEntity,
   type PromptStoryEntityTreeNode,
@@ -56,7 +57,7 @@ export const UNIFIED_SCHEMA = {
       example: PROJECT_SCHEMA_EXAMPLE.storyEntityTree as PromptStoryEntityTreeNode[],
     },
     outline: {
-      desc: "Story outline with acts and chapters",
+      desc: "Story outline as flat nodes plus nested tree",
       example: PROJECT_SCHEMA_EXAMPLE.outline as PromptProjectOutline,
     },
     manuscripts: {
@@ -188,38 +189,20 @@ export const UNIFIED_SCHEMA = {
       example: {
         contextIds: ["story-entity-1"],
         editScope: "selected",
-        outlines: [{
-          id: "outline-1",
-          name: "Main Outline",
-          description: "Primary story spine",
-          content: "High-level story beats",
-          order: 0,
-          acts: [],
-        }],
-        acts: [{
-          id: "act-1",
-          name: "Act I",
-          description: "Setup",
-          content: "Introduce the central conflict",
-          order: 0,
-          outlineId: "outline-1",
-          chapters: [],
-        }],
-        chapters: [{
+        items: [{
           id: "chapter-1",
+          kind: "chapter",
           name: "The Raid",
           description: "Opening conflict",
           content: "Detailed chapter notes",
-          order: 0,
-          actId: "act-1",
+          parentId: "act-1",
+          position: 0,
           manuscriptId: "manuscript-1",
         }],
       } as {
         contextIds?: string[];
         editScope?: string;
-        outlines: PromptProjectOutline['outlines'];
-        acts: PromptProjectOutline['outlines'][number]['acts'];
-        chapters: PromptProjectOutline['outlines'][number]['acts'][number]['chapters'];
+        items: PromptProjectOutlineNode[];
       }
     },
   },

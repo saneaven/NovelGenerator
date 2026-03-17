@@ -133,61 +133,39 @@ export interface NameDescriptionResponse extends BaseMetadata {
 }
 
 // ============================================================================
-// OUTLINE, ACTS, CHAPTERS
+// OUTLINE
 // ============================================================================
+
+export type OutlineKind = 'outline' | 'act' | 'chapter';
+
+export interface OutlineCreate {
+  name: string;
+  description?: string;  // One-line summary for object indexes
+  content: string;  // Full content
+  kind: OutlineKind;
+  parent_id?: string | null;
+  position?: number;
+  language?: string;
+}
+
+export interface OutlineUpdate {
+  name?: string;
+  description?: string;  // One-line summary for object indexes
+  content?: string;  // Full content
+  parent_id?: string | null;
+  position?: number;
+  language?: string;
+}
 
 export interface OutlineResponse extends BaseMetadata {
   project_id: string;
-  acts: ActResponse[];
-}
-
-export interface ActCreate {
-  name: string;
-  description?: string;  // One-line summary for object indexes
-  content: string;  // Full content
-  order: number;
-  language?: string;
-}
-
-export interface ActUpdate {
+  kind: OutlineKind;
+  parent_id: string | null;
   name?: string;
   description?: string;  // One-line summary for object indexes
   content?: string;  // Full content
-  order?: number;
-  language?: string;
-}
-
-export interface ActResponse extends BaseMetadata {
-  outline_id: string;
-  name?: string;
-  description?: string;  // One-line summary for object indexes
-  content?: string;  // Full content
-  order: number;
-  chapters: ChapterResponse[];
-}
-
-export interface ChapterCreate {
-  name: string;
-  description?: string;  // One-line summary for object indexes
-  content: string;  // Full content
-  order: number;
-  language?: string;
-}
-
-export interface ChapterUpdate {
-  name?: string;
-  description?: string;  // One-line summary for object indexes
-  content?: string;  // Full content
-  order?: number;
-  language?: string;
-}
-
-export interface ChapterResponse extends BaseMetadata {
-  act_id: string;
-  name?: string;
-  description?: string;  // One-line summary for object indexes
-  content?: string;  // Full content
-  order: number;
+  position: number;
+  manuscript_id?: string | null;
 }
 
 // ============================================================================

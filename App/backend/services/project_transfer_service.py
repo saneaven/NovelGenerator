@@ -19,10 +19,8 @@ from sqlalchemy import and_, func
 from sqlalchemy.orm import Session, joinedload
 
 from ..models.db_models import (
-    Act,
     Asset,
     BasicInfo,
-    Chapter,
     Guidelines,
     Manuscript,
     ManuscriptImage,
@@ -45,6 +43,7 @@ from ..services.storage_usage_service import (
 )
 from ..utils.object_type_aliases import externalize_object_type, normalize_object_type
 from ..utils.story_entities import STORY_ENTITY_TYPE, require_story_entity_kind
+from .outline_service import require_outline_kind
 
 
 FORMAT_VERSION = "1.0"
@@ -317,24 +316,9 @@ class ProjectTransferService:
         counts += db.query(StoryEntity).filter(StoryEntity.project_id == project_id).count()
         counts += db.query(Outline).filter(Outline.project_id == project_id).count()
         counts += (
-            db.query(Act)
-            .join(Outline, Act.outline_id == Outline.id)
-            .filter(Outline.project_id == project_id)
-            .count()
-        )
-        counts += (
-            db.query(Chapter)
-            .join(Act, Chapter.act_id == Act.id)
-            .join(Outline, Act.outline_id == Outline.id)
-            .filter(Outline.project_id == project_id)
-            .count()
-        )
-        counts += (
             db.query(Manuscript)
-            .join(Chapter, Manuscript.chapter_id == Chapter.id)
-            .join(Act, Chapter.act_id == Act.id)
-            .join(Outline, Act.outline_id == Outline.id)
-            .filter(Outline.project_id == project_id)
+            .join(Outline, Manuscript.chapter_id == Outline.id)
+            .filter(Outline.project_id == project_id, Outline.kind == "chapter")
             .count()
         )
         return int(counts)
@@ -519,9 +503,15 @@ class ProjectTransferService:
     def _build_objects_payload(db: Session, project_id: UUID) -> Dict[str, Any]:
         outlines: List[Outline] = (
             db.query(Outline)
-            .options(joinedload(Outline.acts).joinedload(Act.chapters).joinedload(Chapter.manuscript))
             .filter(Outline.project_id == project_id)
-            .order_by(Outline.order.asc())
+            .options(joinedload(Outline.manuscript))
+            .order_by(Outline.position.asc(), Outline.created_at.asc(), Outline.id.asc())
+            .all()
+        )
+        manuscripts: List[Manuscript] = (
+            db.query(Manuscript)
+            .join(Outline, Manuscript.chapter_id == Outline.id)
+            .filter(Outline.project_id == project_id, Outline.kind == "chapter")
             .all()
         )
 
@@ -538,15 +528,8 @@ class ProjectTransferService:
         objects.extend([("basic_info", o) for o in basic_infos])
         objects.extend([("guidelines", o) for o in guidelines])
         objects.extend([(STORY_ENTITY_TYPE, o) for o in story_entities])
-
-        for outline in outlines:
-            objects.append(("outline", outline))
-            for act in outline.acts:
-                objects.append(("act", act))
-                for chapter in act.chapters:
-                    objects.append(("chapter", chapter))
-                    if chapter.manuscript is not None:
-                        objects.append(("manuscript", chapter.manuscript))
+        objects.extend([("outline", o) for o in outlines])
+        objects.extend([("manuscript", o) for o in manuscripts])
 
         ids_by_type: Dict[str, List[UUID]] = {}
         for obj_type, obj in objects:
@@ -578,12 +561,6 @@ class ProjectTransferService:
             if obj_type in {"basic_info", "guidelines", STORY_ENTITY_TYPE, "outline"}:
                 meta["project_id"] = str(getattr(obj, "project_id"))
 
-            if obj_type == "act":
-                meta["outline_id"] = str(getattr(obj, "outline_id"))
-                meta["order"] = int(getattr(obj, "order"))
-            if obj_type == "chapter":
-                meta["act_id"] = str(getattr(obj, "act_id"))
-                meta["order"] = int(getattr(obj, "order"))
             if obj_type == "manuscript":
                 meta["chapter_id"] = str(getattr(obj, "chapter_id"))
 
@@ -600,12 +577,16 @@ class ProjectTransferService:
                 meta["image_prompt_negative"] = getattr(obj, "image_prompt_negative", None)
 
             if obj_type == "outline":
-                meta["order"] = int(getattr(obj, "order") or 0)
+                meta["parent_id"] = str(getattr(obj, "parent_id")) if getattr(obj, "parent_id", None) is not None else None
+                meta["position"] = int(getattr(obj, "position") or 0)
+                manuscript = getattr(obj, "manuscript", None)
+                if manuscript is not None:
+                    meta["manuscript_id"] = str(manuscript.id)
 
             payload_objects.append(
                 {
                     "type": obj_type,
-                    "kind": str(getattr(obj, "kind", "")) if obj_type == STORY_ENTITY_TYPE else None,
+                    "kind": str(getattr(obj, "kind", "")) if obj_type in {STORY_ENTITY_TYPE, "outline"} else None,
                     "id": str(obj.id),
                     "metadata": meta,
                     "version": version_info,
@@ -744,8 +725,6 @@ class ProjectTransferService:
                 "guidelines": items_of_type("guidelines"),
                 STORY_ENTITY_TYPE: items_of_type(STORY_ENTITY_TYPE),
                 "outline": items_of_type("outline"),
-                "act": items_of_type("act"),
-                "chapter": items_of_type("chapter"),
                 "manuscript": items_of_type("manuscript"),
             },
         )
@@ -942,10 +921,8 @@ class ProjectTransferService:
         # Rebuild manuscript_images index from imported docs
         manuscripts = (
             db.query(Manuscript)
-            .join(Chapter, Manuscript.chapter_id == Chapter.id)
-            .join(Act, Chapter.act_id == Act.id)
-            .join(Outline, Act.outline_id == Outline.id)
-            .filter(Outline.project_id == new_project_id)
+            .join(Outline, Manuscript.chapter_id == Outline.id)
+            .filter(Outline.project_id == new_project_id, Outline.kind == "chapter")
             .all()
         )
 
@@ -1075,51 +1052,15 @@ class ProjectTransferService:
             meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
             if not export_id or not new_id:
                 continue
+            parent_export_id = meta.get("parent_id")
+            parent_id = object_id_map.get(("outline", str(parent_export_id))) if parent_export_id else None
             db.add(
                 Outline(
                     id=new_id,
                     project_id=project_id,
-                    order=int(meta.get("order") or 0),
-                    created_at=meta_dt(meta, "created_at"),
-                    updated_at=meta_dt(meta, "updated_at"),
-                )
-            )
-
-        # acts
-        for item in objects_by_type.get("act", []):
-            export_id = str(item.get("id") or "")
-            new_id = object_id_map.get(("act", export_id))
-            meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
-            export_outline_id = meta.get("outline_id")
-            new_outline_id = object_id_map.get(("outline", str(export_outline_id))) if export_outline_id else None
-            if not export_id or not new_id or not new_outline_id:
-                continue
-            db.add(
-                Act(
-                    id=new_id,
-                    project_id=project_id,
-                    outline_id=new_outline_id,
-                    order=int(meta.get("order") or 0),
-                    created_at=meta_dt(meta, "created_at"),
-                    updated_at=meta_dt(meta, "updated_at"),
-                )
-            )
-
-        # chapters
-        for item in objects_by_type.get("chapter", []):
-            export_id = str(item.get("id") or "")
-            new_id = object_id_map.get(("chapter", export_id))
-            meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
-            export_act_id = meta.get("act_id")
-            new_act_id = object_id_map.get(("act", str(export_act_id))) if export_act_id else None
-            if not export_id or not new_id or not new_act_id:
-                continue
-            db.add(
-                Chapter(
-                    id=new_id,
-                    project_id=project_id,
-                    act_id=new_act_id,
-                    order=int(meta.get("order") or 0),
+                    kind=require_outline_kind(item.get("kind")),
+                    parent_id=parent_id,
+                    position=int(meta.get("position") or 0),
                     created_at=meta_dt(meta, "created_at"),
                     updated_at=meta_dt(meta, "updated_at"),
                 )
@@ -1131,7 +1072,7 @@ class ProjectTransferService:
             new_id = object_id_map.get(("manuscript", export_id))
             meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
             export_chapter_id = meta.get("chapter_id")
-            new_chapter_id = object_id_map.get(("chapter", str(export_chapter_id))) if export_chapter_id else None
+            new_chapter_id = object_id_map.get(("outline", str(export_chapter_id))) if export_chapter_id else None
             if not export_id or not new_id or not new_chapter_id:
                 continue
             db.add(

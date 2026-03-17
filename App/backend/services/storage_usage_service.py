@@ -17,11 +17,9 @@ from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
 from ..models.db_models import (
-    Act,
     Agent,
     Asset,
     BasicInfo,
-    Chapter,
     Guidelines,
     ImageRunModel,
     Manuscript,
@@ -61,8 +59,6 @@ STORY_OBJECT_TYPES = (
     "guidelines",
     "story_entity",
     "outline",
-    "act",
-    "chapter",
 )
 
 
@@ -676,26 +672,10 @@ def _collect_project_object_ids(db: Session, *, project_id: UUID) -> dict[str, l
     guideline_ids = _uuid_rows(db.query(Guidelines.id).filter(Guidelines.project_id == project_id).all())
     story_entity_ids = _uuid_rows(db.query(StoryEntity.id).filter(StoryEntity.project_id == project_id).all())
     outline_ids = _uuid_rows(db.query(Outline.id).filter(Outline.project_id == project_id).all())
-
-    act_ids = _uuid_rows(
-        db.query(Act.id)
-        .join(Outline, Outline.id == Act.outline_id)
-        .filter(Outline.project_id == project_id)
-        .all()
-    )
-    chapter_ids = _uuid_rows(
-        db.query(Chapter.id)
-        .join(Act, Act.id == Chapter.act_id)
-        .join(Outline, Outline.id == Act.outline_id)
-        .filter(Outline.project_id == project_id)
-        .all()
-    )
     manuscript_ids = _uuid_rows(
         db.query(Manuscript.id)
-        .join(Chapter, Chapter.id == Manuscript.chapter_id)
-        .join(Act, Act.id == Chapter.act_id)
-        .join(Outline, Outline.id == Act.outline_id)
-        .filter(Outline.project_id == project_id)
+        .join(Outline, Outline.id == Manuscript.chapter_id)
+        .filter(Outline.project_id == project_id, Outline.kind == "chapter")
         .all()
     )
     return {
@@ -703,8 +683,6 @@ def _collect_project_object_ids(db: Session, *, project_id: UUID) -> dict[str, l
         "guidelines": guideline_ids,
         "story_entity": story_entity_ids,
         "outline": outline_ids,
-        "act": act_ids,
-        "chapter": chapter_ids,
         "manuscript": manuscript_ids,
     }
 
@@ -803,19 +781,6 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
     story_core_rows.extend(db.query(Guidelines).filter(Guidelines.project_id == project_id).all())
     story_core_rows.extend(db.query(StoryEntity).filter(StoryEntity.project_id == project_id).all())
     story_core_rows.extend(db.query(Outline).filter(Outline.project_id == project_id).all())
-    story_core_rows.extend(
-        db.query(Act)
-        .join(Outline, Outline.id == Act.outline_id)
-        .filter(Outline.project_id == project_id)
-        .all()
-    )
-    story_core_rows.extend(
-        db.query(Chapter)
-        .join(Act, Act.id == Chapter.act_id)
-        .join(Outline, Outline.id == Act.outline_id)
-        .filter(Outline.project_id == project_id)
-        .all()
-    )
     story_bytes = sum(measure_story_core_row(row) for row in story_core_rows)
     story_bytes += _sum_object_versions(db, ids_by_type=ids_by_type, allowed_types=STORY_OBJECT_TYPES)
 
@@ -823,10 +788,8 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
     manuscript_rows = (
         db.query(ManuscriptImage)
         .join(Manuscript, Manuscript.id == ManuscriptImage.manuscript_id)
-        .join(Chapter, Chapter.id == Manuscript.chapter_id)
-        .join(Act, Act.id == Chapter.act_id)
-        .join(Outline, Outline.id == Act.outline_id)
-        .filter(Outline.project_id == project_id)
+        .join(Outline, Outline.id == Manuscript.chapter_id)
+        .filter(Outline.project_id == project_id, Outline.kind == "chapter")
         .all()
     )
     manuscript_bytes += sum(measure_manuscript_image_row(row) for row in manuscript_rows)

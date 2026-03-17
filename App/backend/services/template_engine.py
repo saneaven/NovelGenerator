@@ -370,42 +370,11 @@ def _list_manuscripts(bucket: dict[str, Any]) -> list[dict[str, Any]]:
     return [value for value in values if isinstance(value, dict)]
 
 
-def _outline_rows(bucket: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    outline = bucket.get("outline")
-    if not isinstance(outline, dict):
-        return [], [], []
-    outline_items = outline.get("outlines")
-    if not isinstance(outline_items, list):
-        return [], [], []
-
-    outlines: list[dict[str, Any]] = []
-    acts: list[dict[str, Any]] = []
-    chapters: list[dict[str, Any]] = []
-    for outline_item in outline_items:
-        if not isinstance(outline_item, dict):
-            continue
-        outlines.append(outline_item)
-        act_items = outline_item.get("acts")
-        if not isinstance(act_items, list):
-            continue
-        for act_item in act_items:
-            if not isinstance(act_item, dict):
-                continue
-            acts.append(act_item)
-            chapter_items = act_item.get("chapters")
-            if not isinstance(chapter_items, list):
-                continue
-            for chapter_item in chapter_items:
-                if isinstance(chapter_item, dict):
-                    chapters.append(chapter_item)
-    return outlines, acts, chapters
-
-
 def _outline_tree(bucket: dict[str, Any]) -> list[dict[str, Any]]:
     outline = bucket.get("outline")
     if not isinstance(outline, dict):
         return []
-    outlines = outline.get("outlines")
+    outlines = outline.get("tree")
     if not isinstance(outlines, list):
         return []
     return [item for item in outlines if isinstance(item, dict)]
@@ -489,38 +458,27 @@ def _flatten_story_entity_tree(nodes: list[dict[str, Any]]) -> list[dict[str, An
     return items
 
 
-def _prune_outline_tree(outlines: list[dict[str, Any]], wanted: set[str] | None) -> list[dict[str, Any]]:
+def _copy_outline_tree(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    copied: list[dict[str, Any]] = []
+    for node in nodes:
+        children = node.get("children") if isinstance(node.get("children"), list) else []
+        copied.append({**dict(node), "children": _copy_outline_tree(children)})
+    return copied
+
+
+def _prune_outline_tree(nodes: list[dict[str, Any]], wanted: set[str] | None) -> list[dict[str, Any]]:
     if wanted is None:
-        return [dict(outline) for outline in outlines]
+        return _copy_outline_tree(nodes)
 
     pruned: list[dict[str, Any]] = []
-    for outline in outlines:
-        outline_id = str(outline.get("id") or "")
-        acts = outline.get("acts") if isinstance(outline.get("acts"), list) else []
-        if outline_id in wanted:
-            pruned.append(dict(outline))
-            continue
-
-        selected_acts: list[dict[str, Any]] = []
-        for act in acts:
-            if not isinstance(act, dict):
-                continue
-            act_id = str(act.get("id") or "")
-            chapters = act.get("chapters") if isinstance(act.get("chapters"), list) else []
-            if act_id in wanted:
-                selected_acts.append(dict(act))
-                continue
-
-            selected_chapters = [
-                dict(chapter)
-                for chapter in chapters
-                if isinstance(chapter, dict) and str(chapter.get("id") or "") in wanted
-            ]
-            if selected_chapters:
-                selected_acts.append({**dict(act), "chapters": selected_chapters})
-
-        if selected_acts:
-            pruned.append({**dict(outline), "acts": selected_acts})
+    for node in nodes:
+        node_id = str(node.get("id") or "")
+        children = _prune_outline_tree(
+            node.get("children") if isinstance(node.get("children"), list) else [],
+            wanted,
+        )
+        if node_id in wanted or children:
+            pruned.append({**dict(node), "children": children})
     return pruned
 
 

@@ -8,7 +8,5 @@ export const OBJECT_TYPE_CONFIG: Record<ObjectType, { label: string; order: numb
   guidelines: { label: 'Guidelines', order: 0.5 },
   story_entity: { label: 'Story Entities', order: 1 },
   outline: { label: 'Outline', order: 5 },
-  act: { label: 'Acts', order: 6 },
-  chapter: { label: 'Chapters', order: 7 },
-  manuscript: { label: 'Manuscripts', order: 8 },
+  manuscript: { label: 'Manuscripts', order: 6 },
 };

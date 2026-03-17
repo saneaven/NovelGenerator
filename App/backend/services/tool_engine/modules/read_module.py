@@ -47,19 +47,7 @@ class ReadToolCallModule(ToolCallModule):
                 ),
                 ToolSpec(
                     name="read_outline",
-                    description="Read an outline.",
-                    parameters=obj_schema({"id": _ID}, ["id"]),
-                    auto_approve_category="read",
-                ),
-                ToolSpec(
-                    name="read_outline_act",
-                    description="Read an outline act.",
-                    parameters=obj_schema({"id": _ID}, ["id"]),
-                    auto_approve_category="read",
-                ),
-                ToolSpec(
-                    name="read_outline_chapter",
-                    description="Read an outline chapter.",
+                    description="Read an outline item.",
                     parameters=obj_schema({"id": _ID}, ["id"]),
                     auto_approve_category="read",
                 ),
@@ -86,10 +74,6 @@ class ReadToolCallModule(ToolCallModule):
                 return valid_result()
             elif tool_name == "read_outline":
                 object_type = "outline"
-            elif tool_name == "read_outline_act":
-                object_type = "act"
-            elif tool_name == "read_outline_chapter":
-                object_type = "chapter"
             elif tool_name == "read_manuscript":
                 ensure_manuscript_exists(
                     db=ctx.db,
@@ -125,10 +109,6 @@ class ReadToolCallModule(ToolCallModule):
             )
         elif tool_name == "read_outline":
             object_type = "outline"
-        elif tool_name == "read_outline_act":
-            object_type = "act"
-        elif tool_name == "read_outline_chapter":
-            object_type = "chapter"
         elif tool_name == "read_manuscript":
             _, content = await read_manuscript_markdown(
                 db=ctx.db,
@@ -157,5 +137,5 @@ class ReadToolCallModule(ToolCallModule):
             "Read successful",
             object_id=str(object_id),
             object_type=object_type,
-            data={"object": extract_lang_data(obj, ctx.language)},
+            data={"object": {"kind": obj.get("kind"), **extract_lang_data(obj, ctx.language)}},
         )

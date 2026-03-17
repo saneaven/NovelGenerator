@@ -22,7 +22,7 @@ from ..models.db_models import (
 )
 from ..schemas.story_objects import ImagePromptUpdate
 from ..utils.object_type_aliases import normalize_object_type
-from ..utils.story_entities import STORY_ENTITY_TYPE, STORY_ENTITY_KINDS, require_story_entity_kind
+from ..utils.story_entities import STORY_ENTITY_TYPE, require_story_entity_kind
 from ..services.object_service import object_service
 from ..services.ownership import (
     require_owned_project,
@@ -43,7 +43,7 @@ class UnifiedObjectResponse(BaseModel):
     id: str
     type: str
     kind: Optional[str] = None
-    metadata: Dict[str, Any]  # project_id, created_at, updated_at, order (if applicable)
+    metadata: Dict[str, Any]  # project_id, created_at, updated_at, structure metadata
     data: Dict[str, Any]  # Language-keyed data: {"English": {...}, "Korean": {...}}
     # languages field removed - use Object.keys(data) for available, settings.mainLanguage for default
     version: Dict[str, Any]  # id, number, created_at
@@ -59,7 +59,7 @@ class UpdateObjectRequest(BaseModel):
     kind: Optional[str] = None
     user_request: Optional[str] = "User Edit"
     create_new_version: bool = True
-    metadata: Optional[Dict[str, Any]] = None  # For structural updates like order
+    metadata: Optional[Dict[str, Any]] = None  # For structural updates like parent_id/position
 
 
 class AddTranslationRequest(BaseModel):
@@ -84,11 +84,6 @@ class ListObjectsResponse(BaseModel):
     total: int
     page: int
     page_size: int
-
-
-class ReorderObjectsRequest(BaseModel):
-    """Request to reorder objects of a specific type"""
-    object_ids: List[str]  # IDs in desired order
 
 
 class VersionResponse(BaseModel):
@@ -341,8 +336,11 @@ async def list_objects(
     object_type = normalize_object_type(object_type)
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
     normalized_kinds: list[str] | None = None
-    if object_type == STORY_ENTITY_TYPE and kinds:
-        normalized_kinds = [require_story_entity_kind(kind) for kind in kinds]
+    if kinds:
+        if object_type == STORY_ENTITY_TYPE:
+            normalized_kinds = [require_story_entity_kind(kind) for kind in kinds]
+        elif object_type == "outline":
+            normalized_kinds = [str(kind) for kind in kinds]
 
     serialized = object_service.list_objects(
         db,
@@ -384,8 +382,8 @@ async def create_object(
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
 
     try:
-        if object_type == STORY_ENTITY_TYPE and request.kind is None:
-            raise HTTPException(status_code=400, detail=f"{STORY_ENTITY_TYPE} creation requires kind")
+        if object_type in {STORY_ENTITY_TYPE, "outline"} and request.kind is None:
+            raise HTTPException(status_code=400, detail=f"{object_type} creation requires kind")
         created = object_service.create_object(
             db,
             project_id=project_id,
@@ -502,47 +500,3 @@ async def update_image_prompt(
         raise HTTPException(status_code=400, detail=message)
 
 
-# ============================================================================
-# STORY OBJECT REORDERING
-# ============================================================================
-
-@router.patch("/projects/{project_id}/objects/{object_type}/reorder")
-async def reorder_objects(
-    project_id: UUID,
-    object_type: str,
-    request: ReorderObjectsRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Reorder objects of a specific type within a project.
-    Takes an array of object IDs in the desired order.
-    Updates the order field for each object (1-indexed).
-    """
-    object_type = normalize_object_type(object_type)
-    require_owned_project(db, user_id=current_user.id, project_id=project_id)
-
-    object_ids: list[UUID] = []
-    for value in request.object_ids:
-        try:
-            object_ids.append(UUID(value))
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid UUID: {value}")
-
-    try:
-        count = object_service.reorder_objects(
-            db,
-            project_id=project_id,
-            object_type=object_type,
-            object_ids=object_ids,
-            user_id=current_user.id,
-        )
-        db.commit()
-    except ValueError as exc:
-        db.rollback()
-        message = str(exc)
-        if "not found" in message.lower():
-            raise HTTPException(status_code=404, detail=message)
-        raise HTTPException(status_code=400, detail=message)
-
-    return {"success": True, "message": f"Reordered {count} {object_type}(s)"}

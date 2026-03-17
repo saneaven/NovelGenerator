@@ -2,7 +2,7 @@
  * TypeScript interfaces for the unified ObjectPicker component
  */
 
-import type { ObjectType } from '../../types/unifiedObject';
+import type { ObjectType, OutlineKind } from '../../types/unifiedObject';
 
 // ============================================================================
 // OBJECT PICKER TYPES
@@ -17,15 +17,6 @@ export type SelectionMode = 'single' | 'multi';
 /** Selection state for checkboxes */
 export type SelectionState = 'checked' | 'unchecked' | 'indeterminate';
 
-/** Novel structure types (acts and chapters) */
-export type NovelStructureType = 'act' | 'chapter';
-
-/** Chapter hierarchy types for manuscript mode display */
-export type ChapterHierarchyType = 'outline' | 'manuscript';
-
-/** Story entity + outline types */
-export type StoryObjectType = 'story_entity' | NovelStructureType;
-
 // ============================================================================
 // DATA STRUCTURES
 // ============================================================================
@@ -37,7 +28,8 @@ export interface ObjectPickerItem {
   description?: string;      // One-line summary for object indexes
   content?: string;          // Full content
   type: ObjectType;
-  parentId?: string;         // act_id for chapters, chapter_id for manuscripts
+  kind?: OutlineKind;
+  parentId?: string;
   order?: number;
   wordCount?: number;        // For manuscripts
   metadata?: Record<string, unknown>;
@@ -47,7 +39,8 @@ export interface ObjectPickerItem {
 export interface ObjectPickerGroup {
   id: string;
   label: string;
-  type: ObjectType | 'act';
+  type: ObjectType;
+  kind?: OutlineKind;
   items: ObjectPickerItem[];
   childGroups?: ObjectPickerGroup[];  // For acts containing chapters
 }

@@ -6,9 +6,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from ...models.db_models import (
-    Act,
     BasicInfo,
-    Chapter,
     Guidelines,
     Manuscript,
     Outline,
@@ -159,28 +157,16 @@ async def build_project_data(
     )
     story_entity_folders = list_story_entity_folders(db, project_id=project_id)
 
-    outlines = db.query(Outline).filter(Outline.project_id == project_id).order_by(Outline.order.asc()).all()
-    acts = (
-        db.query(Act)
-        .join(Outline, Outline.id == Act.outline_id)
+    outlines = (
+        db.query(Outline)
         .filter(Outline.project_id == project_id)
-        .order_by(Outline.order.asc(), Act.order.asc())
-        .all()
-    )
-    chapters = (
-        db.query(Chapter)
-        .join(Act, Act.id == Chapter.act_id)
-        .join(Outline, Outline.id == Act.outline_id)
-        .filter(Outline.project_id == project_id)
-        .order_by(Outline.order.asc(), Act.order.asc(), Chapter.order.asc())
+        .order_by(Outline.position.asc(), Outline.created_at.asc(), Outline.id.asc())
         .all()
     )
     manuscripts = (
         db.query(Manuscript)
-        .join(Chapter, Chapter.id == Manuscript.chapter_id)
-        .join(Act, Act.id == Chapter.act_id)
-        .join(Outline, Outline.id == Act.outline_id)
-        .filter(Outline.project_id == project_id)
+        .join(Outline, Outline.id == Manuscript.chapter_id)
+        .filter(Outline.project_id == project_id, Outline.kind == "chapter")
         .all()
     )
 
@@ -249,78 +235,71 @@ async def build_project_data(
         )
         return _flatten_story_entity_tree(story_entity_tree), story_entity_tree
 
-    chapter_by_id = {chapter.id: chapter for chapter in chapters}
+    outlines_by_id: dict[UUID, Outline] = {row.id: row for row in outlines}
     manuscript_by_chapter: dict[UUID, Manuscript] = {ms.chapter_id: ms for ms in manuscripts}
 
-    acts_by_outline: dict[UUID, list[Act]] = {}
-    for act in acts:
-        acts_by_outline.setdefault(act.outline_id, []).append(act)
-    for values in acts_by_outline.values():
-        values.sort(key=lambda item: int(item.order or 0))
+    def build_outline_payload(lang: str) -> dict[str, Any]:
+        children_by_parent: dict[UUID | None, list[Outline]] = {}
+        for row in outlines:
+            children_by_parent.setdefault(row.parent_id, []).append(row)
+        for values in children_by_parent.values():
+            values.sort(key=lambda item: (int(item.position or 0), item.created_at, item.id))
 
-    chapters_by_act: dict[UUID, list[Chapter]] = {}
-    for chapter in chapters:
-        chapters_by_act.setdefault(chapter.act_id, []).append(chapter)
-    for values in chapters_by_act.values():
-        values.sort(key=lambda item: int(item.order or 0))
+        def outline_node_payload(row: Outline) -> dict[str, Any]:
+            outline_data = _lang_data(get_latest("outline", row.id), lang)
+            manuscript = manuscript_by_chapter.get(row.id)
+            payload = {
+                "id": str(row.id),
+                "kind": str(row.kind or ""),
+                "parentId": str(row.parent_id) if row.parent_id else None,
+                "position": int(row.position or 0),
+                "name": str(outline_data.get("name") or ""),
+                "description": str(outline_data.get("description") or ""),
+                "content": str(outline_data.get("content") or ""),
+                "manuscriptId": str(manuscript.id) if manuscript is not None else None,
+            }
+            return payload
 
-    def build_outline_payload(lang: str) -> dict[str, Any] | None:
-        outline_items: list[dict[str, Any]] = []
-        for outline in sorted(outlines, key=lambda item: int(item.order or 0)):
-            outline_data = _lang_data(get_latest("outline", outline.id), lang)
-            outline_acts: list[dict[str, Any]] = []
-            for act in acts_by_outline.get(outline.id, []):
-                act_data = _lang_data(get_latest("act", act.id), lang)
-                act_chapters: list[dict[str, Any]] = []
-                for chapter in chapters_by_act.get(act.id, []):
-                    chapter_data = _lang_data(get_latest("chapter", chapter.id), lang)
-                    manuscript = manuscript_by_chapter.get(chapter.id)
-                    act_chapters.append(
-                        {
-                            "id": str(chapter.id),
-                            "name": str(chapter_data.get("name") or ""),
-                            "description": str(chapter_data.get("description") or ""),
-                            "content": str(chapter_data.get("content") or ""),
-                            "order": int(chapter.order or 0),
-                            "actId": str(act.id),
-                            "manuscriptId": str(manuscript.id) if manuscript is not None else "",
-                        }
-                    )
+        def build_tree(parent_id: UUID | None) -> list[dict[str, Any]]:
+            nodes: list[dict[str, Any]] = []
+            for row in children_by_parent.get(parent_id, []):
+                node = outline_node_payload(row)
+                node["children"] = build_tree(row.id)
+                nodes.append(node)
+            return nodes
 
-                outline_acts.append(
-                    {
-                        "id": str(act.id),
-                        "name": str(act_data.get("name") or ""),
-                        "description": str(act_data.get("description") or ""),
-                        "content": str(act_data.get("content") or ""),
-                        "order": int(act.order or 0),
-                        "outlineId": str(outline.id),
-                        "chapters": act_chapters,
-                    }
-                )
+        flat_nodes = [outline_node_payload(row) for row in outlines]
+        return {
+            "nodes": flat_nodes,
+            "tree": build_tree(None),
+        }
 
-            outline_items.append(
-                {
-                    "id": str(outline.id),
-                    "name": str(outline_data.get("name") or ""),
-                    "description": str(outline_data.get("description") or ""),
-                    "content": str(outline_data.get("content") or ""),
-                    "order": int(outline.order or 0),
-                    "acts": outline_acts,
-                }
-            )
-        return {"outlines": outline_items} if outline_items else None
+    def outline_sort_path(row: Outline | None) -> tuple[int, int, int]:
+        if row is None:
+            return (10_000, 10_000, 10_000)
+        if row.kind == "outline":
+            return (int(row.position or 0), 10_000, 10_000)
+        if row.kind == "act":
+            parent = outlines_by_id.get(row.parent_id) if row.parent_id else None
+            return (int(parent.position or 0) if parent else 10_000, int(row.position or 0), 10_000)
+        parent = outlines_by_id.get(row.parent_id) if row.parent_id else None
+        grandparent = outlines_by_id.get(parent.parent_id) if parent and parent.parent_id else None
+        return (
+            int(grandparent.position or 0) if grandparent else 10_000,
+            int(parent.position or 0) if parent else 10_000,
+            int(row.position or 0),
+        )
 
     async def build_manuscripts_payload(lang: str) -> list[dict[str, Any]]:
         sorted_manuscripts = sorted(
             manuscripts,
-            key=lambda ms: int((chapter_by_id.get(ms.chapter_id).order if chapter_by_id.get(ms.chapter_id) else 0) or 0),
+            key=lambda ms: outline_sort_path(outlines_by_id.get(ms.chapter_id)),
         )
         payload: list[dict[str, Any]] = []
         for manuscript in sorted_manuscripts:
             manuscript_data = _lang_data(get_latest("manuscript", manuscript.id), lang)
-            chapter = chapter_by_id.get(manuscript.chapter_id)
-            chapter_data = _lang_data(get_latest("chapter", chapter.id), lang) if chapter is not None else {}
+            chapter = outlines_by_id.get(manuscript.chapter_id)
+            chapter_data = _lang_data(get_latest("outline", chapter.id), lang) if chapter is not None else {}
 
             markdown = ""
             doc = manuscript_data.get("doc")
@@ -348,8 +327,6 @@ async def build_project_data(
         ("guidelines", [guidelines] if guidelines is not None else []),
         (STORY_ENTITY_TYPE, story_entities),
         ("outline", outlines),
-        ("act", acts),
-        ("chapter", chapters),
         ("manuscript", manuscripts),
     ]:
         for row in rows:

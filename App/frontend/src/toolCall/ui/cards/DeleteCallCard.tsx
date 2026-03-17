@@ -47,12 +47,12 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
   const title = name || type;
 
   const renderBody = () => {
-    if (operation.objectType === 'outline' || operation.objectType === 'outline_act' || operation.objectType === 'outline_chapter') {
+    if (operation.objectType === 'outline') {
       const desc = typeof snapshot.data.description === 'string' && snapshot.data.description.trim() ? snapshot.data.description : undefined;
       const body = typeof snapshot.data.content === 'string' && snapshot.data.content.trim() ? snapshot.data.content : undefined;
       return (
         <OutlineItemCard
-          variant={toOutlineItemVariant(operation.objectType)}
+          variant={toOutlineItemVariant(operation.objectType, operation.outlineKind ?? snapshot.object?.kind)}
           name={title || 'Outline'}
           description={desc}
           content={body}

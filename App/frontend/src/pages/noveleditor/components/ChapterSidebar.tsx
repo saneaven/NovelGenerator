@@ -73,21 +73,26 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     const loadOutlineData = async () => {
       if (!projectId) return;
       try {
-        // Load outlines first
-        const outlines = await store.listObjects('outline', projectId);
-        const sortedOutlines = outlines.sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
-        setOutlineIds(sortedOutlines.map(o => o.id));
+        const outlineItems = await store.listObjects('outline', projectId);
+        const outlines = outlineItems
+          .filter((item): item is OutlineObject => item.type === 'outline' && item.kind === 'outline')
+          .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
+        setOutlineIds(outlines.map(o => o.id));
 
         // Auto-select first outline if none selected
-        if (sortedOutlines.length > 0 && !getSelectedOutlineId(projectId)) {
-          selectOutline(projectId, sortedOutlines[0].id);
+        if (outlines.length > 0 && !getSelectedOutlineId(projectId)) {
+          selectOutline(projectId, outlines[0].id);
         }
 
-        const acts = await store.listObjects('act', projectId);
-        setActIds(acts.sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0)).map(a => a.id));
+        const acts = outlineItems
+          .filter((item): item is ActObject => item.type === 'outline' && item.kind === 'act')
+          .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
+        setActIds(acts.map(a => a.id));
 
-        const chapters = await store.listObjects('chapter', projectId);
-        setChapterIds(chapters.sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0)).map(c => c.id));
+        const chapters = outlineItems
+          .filter((item): item is ChapterObject => item.type === 'outline' && item.kind === 'chapter')
+          .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
+        setChapterIds(chapters.map(c => c.id));
 
         await store.listObjects('manuscript', projectId);
       } catch (error) {
@@ -115,13 +120,13 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
       .map(id => store.objects[id] as ActObject)
       .filter(Boolean)
       // Filter acts by selected outline
-      .filter(act => !selectedOutlineId || act.metadata.outline_id === selectedOutlineId);
+      .filter(act => !selectedOutlineId || act.metadata.parent_id === selectedOutlineId);
     const loadedChapters = chapterIds.map(id => store.objects[id] as ChapterObject).filter(Boolean);
 
     const grouped = loadedActs.reduce((acc, act) => {
       acc[act.id] = loadedChapters
-        .filter(c => c.metadata.act_id === act.id)
-        .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
+        .filter(c => c.metadata.parent_id === act.id)
+        .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
       return acc;
     }, {} as Record<string, ChapterObject[]>);
 

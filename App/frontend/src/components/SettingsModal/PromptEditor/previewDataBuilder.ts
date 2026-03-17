@@ -66,30 +66,32 @@ const PREVIEW_STORY_ENTITY = {
 
 const PREVIEW_OUTLINE = {
   id: '[ placeholder-outline-id ]',
+  kind: 'outline' as const,
   name: '[ Placeholder for outline name ]',
   description: '[ Placeholder for outline description ]',
   content: '[ Placeholder for outline content ]',
-  order: 0,
-  acts: [] as any[],
+  parentId: null,
+  position: 0,
 };
 
 const PREVIEW_ACT = {
   id: '[ placeholder-act-id ]',
+  kind: 'act' as const,
   name: '[ Placeholder for act name ]',
   description: '[ Placeholder for act description ]',
   content: '[ Placeholder for act content ]',
-  order: 0,
-  outlineId: '[ placeholder-outline-id ]',
-  chapters: [] as any[],
+  parentId: '[ placeholder-outline-id ]',
+  position: 0,
 };
 
 const PREVIEW_CHAPTER = {
   id: '[ placeholder-chapter-id ]',
+  kind: 'chapter' as const,
   name: '[ Placeholder for chapter name ]',
   description: '[ Placeholder for chapter description ]',
   content: '[ Placeholder for chapter content ]',
-  order: 0,
-  actId: '[ placeholder-act-id ]',
+  parentId: '[ placeholder-act-id ]',
+  position: 0,
   manuscriptId: '[ placeholder-manuscript-id ]',
 };
 
@@ -272,9 +274,7 @@ export function buildModeSpecificData(
             outline: {
               contextIds: [],
               editScope: 'selected',
-              outlines: [],
-              acts: [],
-              chapters: [],
+              items: [],
             },
           },
         };
@@ -298,9 +298,7 @@ export function buildModeSpecificData(
             outline: {
               contextIds: filteredIds.contextIds,
               editScope: 'selected',
-              outlines: [PREVIEW_OUTLINE],
-              acts: [PREVIEW_ACT],
-              chapters: [PREVIEW_CHAPTER],
+              items: [PREVIEW_CHAPTER],
             },
           },
         };
@@ -327,9 +325,7 @@ export function buildModeSpecificData(
             outline: {
               contextIds: [],
               editScope: 'selected',
-              outlines: [],
-              acts: [],
-              chapters: [],
+              items: [],
             },
           },
         };

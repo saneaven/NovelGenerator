@@ -64,19 +64,7 @@ class TranslateToolCallModule(ToolCallModule):
                 ),
                 ToolSpec(
                     name="translate_outline",
-                    description="Translate outline fields.",
-                    parameters=obj_schema({"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}}, ["id", "name", "description", "content"]),
-                    auto_approve_category="translate",
-                ),
-                ToolSpec(
-                    name="translate_outline_act",
-                    description="Translate act fields.",
-                    parameters=obj_schema({"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}}, ["id", "name", "description", "content"]),
-                    auto_approve_category="translate",
-                ),
-                ToolSpec(
-                    name="translate_outline_chapter",
-                    description="Translate chapter fields.",
+                    description="Translate outline item fields.",
                     parameters=obj_schema({"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}}, ["id", "name", "description", "content"]),
                     auto_approve_category="translate",
                 ),
@@ -109,10 +97,6 @@ class TranslateToolCallModule(ToolCallModule):
                 return valid_result()
             elif tool_name == "translate_outline":
                 object_type = "outline"
-            elif tool_name == "translate_outline_act":
-                object_type = "act"
-            elif tool_name == "translate_outline_chapter":
-                object_type = "chapter"
             elif tool_name == "translate_manuscript":
                 ensure_manuscript_exists(db=ctx.db, project_id=ctx.project_id, object_id=object_id, language=ctx.language)
                 return valid_result()
@@ -175,10 +159,6 @@ class TranslateToolCallModule(ToolCallModule):
             )
         elif tool_name == "translate_outline":
             object_type = "outline"
-        elif tool_name == "translate_outline_act":
-            object_type = "act"
-        elif tool_name == "translate_outline_chapter":
-            object_type = "chapter"
         elif tool_name == "translate_manuscript":
             await replace_manuscript(
                 args=args,
@@ -216,4 +196,9 @@ class TranslateToolCallModule(ToolCallModule):
                 object_type=object_type,
                 data={"kind": args.get("kind")},
             )
-        return make_result(f"Translated {object_type}", object_id=str(object_id), object_type=object_type)
+        return make_result(
+            "Translated outline",
+            object_id=str(object_id),
+            object_type=object_type,
+            data={"kind": current.get("kind")},
+        )

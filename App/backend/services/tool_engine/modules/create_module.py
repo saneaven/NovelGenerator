@@ -7,10 +7,10 @@ from ..contracts import ToolCallModule, ToolSpec
 from ..registry import tool_call_module
 from ..result_utils import invalid_result, make_result, valid_result
 from ....services.object_service import object_service
+from ....services.outline_service import require_outline_kind
 from ....utils.story_entities import STORY_ENTITY_TYPE
 from .object_access import (
-    ensure_act_parent_exists,
-    ensure_outline_parent_exists,
+    ensure_outline_parent_kind,
     ensure_story_entity_folder_exists,
     require_story_entity_arg_kind,
     to_uuid,
@@ -22,7 +22,10 @@ _NAME = {"type": "string", "description": "Name"}
 _DESC = {"type": "string", "description": "Description"}
 _CONTENT = {"type": "string", "description": "Content"}
 _ENTITY_KIND = {"type": "string", "enum": ["character", "location", "organization", "lorebook"]}
+_OUTLINE_KIND = {"type": "string", "enum": ["outline", "act", "chapter"]}
 _FOLDER_ID = {"type": ["string", "null"], "description": "Parent folder ID. Use null for root."}
+_PARENT_ID = {"type": ["string", "null"], "description": "Parent outline ID. Root outlines must use null."}
+_POSITION = {"type": "integer", "description": "0-based sibling position."}
 
 
 @tool_call_module(prefix="create_")
@@ -52,25 +55,10 @@ class CreateToolCallModule(ToolCallModule):
                 [
                     ToolSpec(
                         name="create_outline",
-                        description="Create an outline.",
-                        parameters=obj_schema({"name": _NAME, "description": _DESC, "content": _CONTENT}, ["name", "content"]),
-                        auto_approve_category="create",
-                    ),
-                    ToolSpec(
-                        name="create_outline_act",
-                        description="Create an act in outline.",
+                        description="Create an outline, act, or chapter.",
                         parameters=obj_schema(
-                            {"outlineId": {"type": "string"}, "name": _NAME, "description": _DESC, "content": _CONTENT},
-                            ["outlineId", "name", "content"],
-                        ),
-                        auto_approve_category="create",
-                    ),
-                    ToolSpec(
-                        name="create_outline_chapter",
-                        description="Create a chapter in act.",
-                        parameters=obj_schema(
-                            {"actId": {"type": "string"}, "name": _NAME, "description": _DESC, "content": _CONTENT},
-                            ["actId", "name", "content"],
+                            {"kind": _OUTLINE_KIND, "parentId": _PARENT_ID, "position": _POSITION, "name": _NAME, "description": _DESC, "content": _CONTENT},
+                            ["kind", "name", "content"],
                         ),
                         auto_approve_category="create",
                     ),
@@ -87,18 +75,26 @@ class CreateToolCallModule(ToolCallModule):
                     project_id=ctx.project_id,
                     folder_id=args.get("folderId"),
                 )
-            elif tool_name == "create_outline_act":
-                ensure_outline_parent_exists(
-                    ctx.db,
-                    project_id=ctx.project_id,
-                    outline_id=to_uuid(args.get("outlineId"), "outlineId"),
-                )
-            elif tool_name == "create_outline_chapter":
-                ensure_act_parent_exists(
-                    ctx.db,
-                    project_id=ctx.project_id,
-                    act_id=to_uuid(args.get("actId"), "actId"),
-                )
+            elif tool_name == "create_outline":
+                outline_kind = require_outline_kind(args.get("kind"))
+                parent_id = args.get("parentId")
+                if outline_kind == "outline":
+                    if parent_id not in {None, ""}:
+                        raise ValueError("Root outlines cannot have parentId")
+                elif outline_kind == "act":
+                    ensure_outline_parent_kind(
+                        ctx.db,
+                        project_id=ctx.project_id,
+                        outline_id=to_uuid(parent_id, "parentId"),
+                        expected_kind="outline",
+                    )
+                elif outline_kind == "chapter":
+                    ensure_outline_parent_kind(
+                        ctx.db,
+                        project_id=ctx.project_id,
+                        outline_id=to_uuid(parent_id, "parentId"),
+                        expected_kind="act",
+                    )
             return valid_result()
         except ValueError as exc:
             return invalid_result(f"validate_{tool_name}", str(exc))
@@ -131,46 +127,29 @@ class CreateToolCallModule(ToolCallModule):
             )
 
         if tool_name == "create_outline":
+            outline_kind = require_outline_kind(args.get("kind"))
             created = object_service.create_object(
                 ctx.db,
                 project_id=ctx.project_id,
                 object_type="outline",
                 data=payload,
                 language=ctx.language,
+                kind=outline_kind,
+                metadata={
+                    "parent_id": args.get("parentId"),
+                    "position": args.get("position"),
+                },
                 user_request="tool:create_outline",
                 created_by=ctx.user_id,
             )
-            return make_result("Created outline", object_id=created["id"], object_type="outline")
-
-        if tool_name == "create_outline_act":
-            created = object_service.create_object(
-                ctx.db,
-                project_id=ctx.project_id,
-                object_type="act",
-                data=payload,
-                language=ctx.language,
-                metadata={"outline_id": str(args.get("outlineId") or "")},
-                user_request="tool:create_outline_act",
-                created_by=ctx.user_id,
-            )
-            return make_result("Created act", object_id=created["id"], object_type="act")
-
-        if tool_name == "create_outline_chapter":
-            created = object_service.create_object(
-                ctx.db,
-                project_id=ctx.project_id,
-                object_type="chapter",
-                data=payload,
-                language=ctx.language,
-                metadata={"act_id": str(args.get("actId") or "")},
-                user_request="tool:create_outline_chapter",
-                created_by=ctx.user_id,
-            )
             return make_result(
-                "Created chapter",
+                f"Created {outline_kind}",
                 object_id=created["id"],
-                object_type="chapter",
-                data={"manuscriptId": created.get("metadata", {}).get("manuscript_id")},
+                object_type="outline",
+                data={
+                    "kind": outline_kind,
+                    "manuscriptId": created.get("metadata", {}).get("manuscript_id"),
+                },
             )
 
         raise ValueError(f"Unsupported create tool: {tool_name}")

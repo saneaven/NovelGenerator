@@ -14,10 +14,8 @@ from ..image_providers import gemini_image, novelai_image, openai_image, openrou
 from ..image_providers.base import BaseImageProvider, ImageGenerationResult, ReferenceImageData
 from ..image_providers.registry import ImageProviderRegistry
 from ..models.db_models import (
-    Act,
     Asset,
     BasicInfo,
-    Chapter,
     ImageRunModel,
     Manuscript,
     Outline,
@@ -1562,10 +1560,8 @@ class ImageRunService:
             manuscript_id = _parse_uuid(target.get("manuscript_id"), field_name="manuscript_id")
             manuscript = (
                 db.query(Manuscript)
-                .join(Chapter, Manuscript.chapter_id == Chapter.id)
-                .join(Act, Chapter.act_id == Act.id)
-                .join(Outline, Act.outline_id == Outline.id)
-                .filter(Manuscript.id == manuscript_id, Outline.project_id == project_id)
+                .join(Outline, Manuscript.chapter_id == Outline.id)
+                .filter(Manuscript.id == manuscript_id, Outline.project_id == project_id, Outline.kind == "chapter")
                 .first()
             )
             if manuscript is None:

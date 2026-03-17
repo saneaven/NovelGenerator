@@ -4,6 +4,8 @@ export type PromptProjectStoryEntityKind =
   | 'location'
   | 'lorebook';
 
+export type PromptProjectOutlineKind = 'outline' | 'act' | 'chapter';
+
 export interface PromptProjectBasicInfo {
   id: string;
   title: string;
@@ -39,37 +41,24 @@ export type PromptStoryEntityTreeNode =
       entity: PromptProjectStoryEntity;
     };
 
-export interface PromptProjectChapter {
+export interface PromptProjectOutlineNode {
   id: string;
+  kind: PromptProjectOutlineKind;
   name: string;
   description: string;
   content: string;
-  order: number;
-  actId: string;
-  manuscriptId: string;
+  parentId: string | null;
+  position: number;
+  manuscriptId?: string | null;
 }
 
-export interface PromptProjectAct {
-  id: string;
-  name: string;
-  description: string;
-  content: string;
-  order: number;
-  outlineId: string;
-  chapters: PromptProjectChapter[];
-}
-
-export interface PromptProjectOutlineItem {
-  id: string;
-  name: string;
-  description: string;
-  content: string;
-  order: number;
-  acts: PromptProjectAct[];
+export interface PromptProjectOutlineTreeNode extends PromptProjectOutlineNode {
+  children: PromptProjectOutlineTreeNode[];
 }
 
 export interface PromptProjectOutline {
-  outlines: PromptProjectOutlineItem[];
+  nodes: PromptProjectOutlineNode[];
+  tree: PromptProjectOutlineTreeNode[];
 }
 
 export interface PromptProjectManuscript {
@@ -110,9 +99,9 @@ interface PromptProjectSkeletonIds {
   basicInfo: string;
   guidelines: string;
   storyEntity: string;
-  outline: string;
-  act: string;
-  chapter: string;
+  outlineRoot: string;
+  outlineAct: string;
+  outlineChapter: string;
   manuscript: string;
 }
 
@@ -126,9 +115,9 @@ const PLACEHOLDER_IDS: PromptProjectSkeletonIds = {
   basicInfo: '[ placeholder-basic-info-id ]',
   guidelines: '[ placeholder-guidelines-id ]',
   storyEntity: '[ placeholder-story-entity-id ]',
-  outline: '[ placeholder-outline-id ]',
-  act: '[ placeholder-act-id ]',
-  chapter: '[ placeholder-chapter-id ]',
+  outlineRoot: '[ placeholder-outline-id ]',
+  outlineAct: '[ placeholder-act-id ]',
+  outlineChapter: '[ placeholder-chapter-id ]',
   manuscript: '[ placeholder-manuscript-id ]',
 };
 
@@ -239,37 +228,72 @@ function buildStoryEntityTree(ids: PromptProjectSkeletonIds): PromptStoryEntityT
 }
 
 function buildOutline(ids: PromptProjectSkeletonIds): PromptProjectOutline {
-  return {
-    outlines: [
+  const rootOutline: PromptProjectOutlineTreeNode = {
+    id: ids.outlineRoot,
+    kind: 'outline',
+    name: '[ Placeholder for outline name ]',
+    description: '[ Placeholder for outline description ]',
+    content: '[ Placeholder for outline content ]',
+    parentId: null,
+    position: 0,
+    children: [
       {
-        id: ids.outline,
-        name: '[ Placeholder for outline name ]',
-        description: '[ Placeholder for outline description ]',
-        content: '[ Placeholder for outline content ]',
-        order: 0,
-        acts: [
+        id: ids.outlineAct,
+        kind: 'act',
+        name: '[ Placeholder for act name ]',
+        description: '[ Placeholder for act description ]',
+        content: '[ Placeholder for act content ]',
+        parentId: ids.outlineRoot,
+        position: 0,
+        children: [
           {
-            id: ids.act,
-            name: '[ Placeholder for act name ]',
-            description: '[ Placeholder for act description ]',
-            content: '[ Placeholder for act content ]',
-            order: 0,
-            outlineId: ids.outline,
-            chapters: [
-              {
-                id: ids.chapter,
-                name: '[ Placeholder for chapter name ]',
-                description: '[ Placeholder for chapter description ]',
-                content: '[ Placeholder for chapter content ]',
-                order: 0,
-                actId: ids.act,
-                manuscriptId: ids.manuscript,
-              },
-            ],
+            id: ids.outlineChapter,
+            kind: 'chapter',
+            name: '[ Placeholder for chapter name ]',
+            description: '[ Placeholder for chapter description ]',
+            content: '[ Placeholder for chapter content ]',
+            parentId: ids.outlineAct,
+            position: 0,
+            manuscriptId: ids.manuscript,
+            children: [],
           },
         ],
       },
     ],
+  };
+
+  return {
+    nodes: [
+      {
+        id: ids.outlineRoot,
+        kind: 'outline',
+        name: '[ Placeholder for outline name ]',
+        description: '[ Placeholder for outline description ]',
+        content: '[ Placeholder for outline content ]',
+        parentId: null,
+        position: 0,
+      },
+      {
+        id: ids.outlineAct,
+        kind: 'act',
+        name: '[ Placeholder for act name ]',
+        description: '[ Placeholder for act description ]',
+        content: '[ Placeholder for act content ]',
+        parentId: ids.outlineRoot,
+        position: 0,
+      },
+      {
+        id: ids.outlineChapter,
+        kind: 'chapter',
+        name: '[ Placeholder for chapter name ]',
+        description: '[ Placeholder for chapter description ]',
+        content: '[ Placeholder for chapter content ]',
+        parentId: ids.outlineAct,
+        position: 0,
+        manuscriptId: ids.manuscript,
+      },
+    ],
+    tree: [rootOutline],
   };
 }
 
@@ -277,7 +301,7 @@ function buildManuscripts(ids: PromptProjectSkeletonIds): PromptProjectManuscrip
   return [
     {
       id: ids.manuscript,
-      chapterId: ids.chapter,
+      chapterId: ids.outlineChapter,
       chapterName: '[ Placeholder for chapter name ]',
       content: '[ Placeholder for manuscript content ]',
       wordCount: 0,

@@ -17,11 +17,10 @@ export type ObjectType =
   | 'guidelines'
   | 'story_entity'
   | 'outline'
-  | 'act'
-  | 'chapter'
   | 'manuscript';
 
 export type StoryEntityKind = 'character' | 'organization' | 'location' | 'lorebook';
+export type OutlineKind = 'outline' | 'act' | 'chapter';
 
 // ============================================================================
 // UNIFIED OBJECT (Response from API)
@@ -30,7 +29,7 @@ export type StoryEntityKind = 'character' | 'organization' | 'location' | 'loreb
 export interface UnifiedObject<TData = Record<string, any>> {
   id: string;
   type: ObjectType;
-  kind?: StoryEntityKind;
+  kind?: StoryEntityKind | OutlineKind;
   metadata: ObjectMetadata;
   data: Record<string, TData>;  // Language-keyed data: { "English": {...}, "Korean": {...} }
   // languages field removed - use Object.keys(data) for available, settings.mainLanguage for default
@@ -58,15 +57,12 @@ export interface ObjectMetadata {
   id: string;
   created_at: string;
   updated_at: string;
-  // Parent IDs (depends on object type)
   project_id?: string;
-  outline_id?: string;
-  act_id?: string;
+  parent_id?: string | null;
   chapter_id?: string;
   manuscript_id?: string;
   folder_id?: string | null;
-  // Structural data
-  order?: number;  // For acts and chapters
+  position?: number;
   display_order?: number; // For story entities and folders
   // Image prompts (for story objects: character, location, organization, lorebook)
   image_prompt?: string | null;  // Natural language prompt
@@ -129,14 +125,14 @@ export interface GuidelinesData {
 // TYPED UNIFIED OBJECTS
 // ============================================================================
 
-export type BasicInfoObject = UnifiedObject<BasicInfoData>;
-export type StoryEntityObject = UnifiedObject<StoryEntityData>;
+export type BasicInfoObject = UnifiedObject<BasicInfoData> & { type: 'basic_info' };
+export type StoryEntityObject = UnifiedObject<StoryEntityData> & { type: 'story_entity'; kind: StoryEntityKind };
 export type StoryObject = StoryEntityObject;
-export type ManuscriptObject = UnifiedObject<ManuscriptData>;
-export type GuidelinesObject = UnifiedObject<GuidelinesData>;
-export type OutlineObject = UnifiedObject<StoryEntityData>;
-export type ActObject = UnifiedObject<StoryEntityData>;
-export type ChapterObject = UnifiedObject<StoryEntityData>;
+export type ManuscriptObject = UnifiedObject<ManuscriptData> & { type: 'manuscript' };
+export type GuidelinesObject = UnifiedObject<GuidelinesData> & { type: 'guidelines' };
+export type OutlineObject = UnifiedObject<StoryEntityData> & { type: 'outline'; kind: OutlineKind };
+export type ActObject = OutlineObject & { kind: 'act' };
+export type ChapterObject = OutlineObject & { kind: 'chapter' };
 
 // ============================================================================
 // REQUEST TYPES
@@ -145,10 +141,10 @@ export type ChapterObject = UnifiedObject<StoryEntityData>;
 export interface UpdateObjectRequest<TData = Record<string, any>> {
   data: TData;
   language: string;
-  kind?: StoryEntityKind;
+  kind?: StoryEntityKind | OutlineKind;
   user_request?: string;
   create_new_version?: boolean;  // Default: true
-  metadata?: Record<string, any>;  // For structural updates like order
+  metadata?: Record<string, any>;
 }
 
 export interface AddTranslationRequest<TData = Record<string, any>> {
@@ -160,7 +156,7 @@ export interface AddTranslationRequest<TData = Record<string, any>> {
 export interface CreateObjectRequest<TData = Record<string, any>> {
   data: TData;
   language: string;
-  kind?: StoryEntityKind;
+  kind?: StoryEntityKind | OutlineKind;
   user_request?: string;
   metadata?: Record<string, any>;
 }
@@ -172,7 +168,7 @@ export interface CreateObjectRequest<TData = Record<string, any>> {
 export interface TranslationStatus {
   object_id: string;
   object_type: ObjectType;
-  kind?: StoryEntityKind;
+  kind?: StoryEntityKind | OutlineKind;
   available_languages: string[];
   missing_languages: string[];
   translation_coverage: number;  // Percentage

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BaseModal } from '../BaseModal';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
-import type { ObjectType, ChapterObject } from '../../types/unifiedObject';
+import type { ObjectType, OutlineObject } from '../../types/unifiedObject';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import type { ObjectEditInput } from '../../llmTaskJourney/journeySpecs';
 import type { JourneySpec } from '../../llmTaskJourney/types';
@@ -32,8 +32,6 @@ const getCategoryDisplayName = (cat: string): string => {
     basic_info: 'Basic Info',
     story_entity: 'Story Entity',
     outline: 'Outline',
-    act: 'Act',
-    chapter: 'Chapter',
     manuscript: 'Manuscript',
   };
   return names[cat] || cat;
@@ -41,7 +39,7 @@ const getCategoryDisplayName = (cat: string): string => {
 
 function categoryToJourneyKind(category: string): AIEditJourneyKind {
   if (category === 'manuscript') return 'manuscriptEdit';
-  if (['outline', 'act', 'chapter'].includes(category)) return 'outlineEdit';
+  if (category === 'outline') return 'outlineEdit';
   return 'objectEdit';
 }
 
@@ -65,9 +63,14 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const settings = useSettings();
 
   const isManuscriptMode = category === 'manuscript';
-  const categoryDisplayName = getCategoryDisplayName(category);
   const editTypeText = 'Item';
   const mainLanguage = settings.mainLanguage;
+  const targetOutline = (!isManuscriptMode && category === 'outline' && targetId)
+    ? unifiedStore.getObject(targetId) as OutlineObject | null
+    : null;
+  const categoryDisplayName = targetOutline?.kind
+    ? getCategoryDisplayName(targetOutline.kind)
+    : getCategoryDisplayName(category);
 
   // Get item name for title (fetch from store)
   const itemName = useMemo(() => {
@@ -75,7 +78,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 
     if (isManuscriptMode) {
       // For manuscript, targetId is chapterId - get chapter name
-      const chapter = unifiedStore.getObject(targetId) as ChapterObject | null;
+      const chapter = unifiedStore.getObject(targetId) as OutlineObject | null;
       if (chapter?.data) {
         const langData = chapter.data[mainLanguage] || Object.values(chapter.data)[0];
         return langData?.name || null;

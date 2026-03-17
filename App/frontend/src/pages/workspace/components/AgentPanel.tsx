@@ -607,14 +607,20 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
 
   const totalObjectCount = useMemo(() => (
     Object.values(unifiedObjects).filter((obj) => (
-      obj.metadata?.project_id === projectId && obj.type !== 'basic_info'
+      obj.metadata?.project_id === projectId
+      && obj.type !== 'basic_info'
+      && obj.type !== 'guidelines'
     )).length
   ), [unifiedObjects, projectId]);
 
   const contextIdSet = useMemo(() => (
     new Set(
       Object.values(unifiedObjects)
-        .filter((obj) => obj.metadata?.project_id === projectId && obj.type !== 'basic_info')
+        .filter((obj) => (
+          obj.metadata?.project_id === projectId
+          && obj.type !== 'basic_info'
+          && obj.type !== 'guidelines'
+        ))
         .map((obj) => obj.id),
     )
   ), [unifiedObjects, projectId]);

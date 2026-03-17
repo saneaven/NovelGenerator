@@ -55,19 +55,7 @@ class PatchTranslationToolCallModule(ToolCallModule):
                 ),
                 ToolSpec(
                     name="patch_translation_outline",
-                    description="Patch outline translation by single replacement.",
-                    parameters=obj_schema({"id": _ID, "field": {"type": "string", "enum": ["name", "description", "content"]}, **_TEXT_PATCH}, ["id", "field", "old", "new"]),
-                    auto_approve_category="patch_translation",
-                ),
-                ToolSpec(
-                    name="patch_translation_outline_act",
-                    description="Patch act translation by single replacement.",
-                    parameters=obj_schema({"id": _ID, "field": {"type": "string", "enum": ["name", "description", "content"]}, **_TEXT_PATCH}, ["id", "field", "old", "new"]),
-                    auto_approve_category="patch_translation",
-                ),
-                ToolSpec(
-                    name="patch_translation_outline_chapter",
-                    description="Patch chapter translation by single replacement.",
+                    description="Patch outline item translation by single replacement.",
                     parameters=obj_schema({"id": _ID, "field": {"type": "string", "enum": ["name", "description", "content"]}, **_TEXT_PATCH}, ["id", "field", "old", "new"]),
                     auto_approve_category="patch_translation",
                 ),
@@ -118,16 +106,6 @@ class PatchTranslationToolCallModule(ToolCallModule):
                 if field not in {"name", "description", "content"}:
                     raise ValueError("field must be one of name|description|content")
                 object_type = "outline"
-            elif tool_name == "patch_translation_outline_act":
-                field = args.get("field")
-                if field not in {"name", "description", "content"}:
-                    raise ValueError("field must be one of name|description|content")
-                object_type = "act"
-            elif tool_name == "patch_translation_outline_chapter":
-                field = args.get("field")
-                if field not in {"name", "description", "content"}:
-                    raise ValueError("field must be one of name|description|content")
-                object_type = "chapter"
             elif tool_name == "patch_translation_manuscript":
                 ensure_manuscript_exists(db=ctx.db, project_id=ctx.project_id, object_id=object_id, language=ctx.language)
                 await validate_manuscript_patch(args=args, ctx=ctx, object_id=object_id)
@@ -199,10 +177,6 @@ class PatchTranslationToolCallModule(ToolCallModule):
             )
         elif tool_name == "patch_translation_outline":
             object_type = "outline"
-        elif tool_name == "patch_translation_outline_act":
-            object_type = "act"
-        elif tool_name == "patch_translation_outline_chapter":
-            object_type = "chapter"
         elif tool_name == "patch_translation_manuscript":
             await patch_manuscript(
                 args=args,
@@ -243,4 +217,9 @@ class PatchTranslationToolCallModule(ToolCallModule):
                 object_type=object_type,
                 data={"kind": args.get("kind")},
             )
-        return make_result(f"Patched translation {object_type}", object_id=str(object_id), object_type=object_type)
+        return make_result(
+            "Patched translation outline",
+            object_id=str(object_id),
+            object_type=object_type,
+            data={"kind": current.get("kind")},
+        )

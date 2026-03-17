@@ -30,8 +30,6 @@ export type TargetType =
   | 'guidelines'
   | 'story_entity'
   | 'outline'
-  | 'outline_act'
-  | 'outline_chapter'
   | 'manuscript'
   | 'sub_agent'
   | 'scene_image'
@@ -239,8 +237,7 @@ export const STORY_ENTITY_TYPE_MAP: Record<StoryEntityKind, ObjectType> = {
 /** All object types including outline structure (for translation and validation) */
 export const ALL_OBJECT_TYPE_MAP: Record<string, ObjectType> = {
   story_entity: 'story_entity',
-  act: 'act',
-  chapter: 'chapter',
+  outline: 'outline',
 };
 
 /** Helper to get object data for a language with fallback */

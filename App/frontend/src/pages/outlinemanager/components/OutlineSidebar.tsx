@@ -48,13 +48,14 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
     if (!formName.trim()) return;
 
     try {
-      const outlineOrder = outlines.length;
       await store.createObject(
         'outline',
         projectId,
         { name: formName.trim(), description: formDescription.trim() },
         mainLanguage,
-        { order: outlineOrder }
+        { position: outlines.length },
+        'User Creation',
+        'outline'
       );
       // Reset form and close
       setFormName('');
@@ -87,9 +88,9 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
     return Object.values(store.objects)
       .filter(
         (obj): obj is OutlineObject =>
-          Boolean(obj && obj.type === 'outline' && obj.metadata?.project_id === projectId)
+          Boolean(obj && obj.type === 'outline' && obj.kind === 'outline' && obj.metadata?.project_id === projectId)
       )
-      .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
+      .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
   }, [store.objects, projectId]);
 
   const handleOutlineSelect = (outlineId: string) => {
@@ -182,7 +183,7 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
                 const { data: outlineData, isFallback } = getLocalizedData(outline, { name: 'Untitled Outline', description: '' });
                 const isSelected = selectedOutlineId === outline.id;
                 const actsCount = Object.values(store.objects).filter(
-                  obj => obj?.type === 'act' && obj?.metadata?.outline_id === outline.id
+                  obj => obj?.type === 'outline' && obj?.kind === 'act' && obj?.metadata?.parent_id === outline.id
                 ).length;
 
                 return (

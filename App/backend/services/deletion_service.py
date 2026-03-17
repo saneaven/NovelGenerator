@@ -7,10 +7,8 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from ..models.db_models import (
-    Act,
     Asset,
     BasicInfo,
-    Chapter,
     Guidelines,
     Manuscript,
     ManuscriptImage,
@@ -46,27 +44,10 @@ def collect_project_object_ids(db: Session, *, project_id: UUID) -> Dict[str, Li
     story_entity_ids = _ids(db.query(StoryEntity.id).filter(StoryEntity.project_id == project_id).all())
     outline_ids = _ids(db.query(Outline.id).filter(Outline.project_id == project_id).all())
 
-    act_ids = _ids(
-        db.query(Act.id)
-        .join(Outline, Outline.id == Act.outline_id)
-        .filter(Outline.project_id == project_id)
-        .all()
-    )
-
-    chapter_ids = _ids(
-        db.query(Chapter.id)
-        .join(Act, Act.id == Chapter.act_id)
-        .join(Outline, Outline.id == Act.outline_id)
-        .filter(Outline.project_id == project_id)
-        .all()
-    )
-
     manuscript_ids = _ids(
         db.query(Manuscript.id)
-        .join(Chapter, Chapter.id == Manuscript.chapter_id)
-        .join(Act, Act.id == Chapter.act_id)
-        .join(Outline, Outline.id == Act.outline_id)
-        .filter(Outline.project_id == project_id)
+        .join(Outline, Outline.id == Manuscript.chapter_id)
+        .filter(Outline.project_id == project_id, Outline.kind == "chapter")
         .all()
     )
 
@@ -75,46 +56,47 @@ def collect_project_object_ids(db: Session, *, project_id: UUID) -> Dict[str, Li
         "guidelines": guideline_ids,
         STORY_ENTITY_OBJECT_TYPE: story_entity_ids,
         "outline": outline_ids,
-        "act": act_ids,
-        "chapter": chapter_ids,
         "manuscript": manuscript_ids,
     }
 
 
+def _collect_outline_descendant_ids(db: Session, *, root_id: UUID) -> List[UUID]:
+    rows = db.query(Outline.id, Outline.parent_id).all()
+    children_by_parent: dict[UUID | None, list[UUID]] = {}
+    for node_id, parent_id in rows:
+        if isinstance(node_id, UUID):
+            children_by_parent.setdefault(parent_id, []).append(node_id)
+
+    collected: list[UUID] = []
+    pending = list(children_by_parent.get(root_id, []))
+    while pending:
+        current = pending.pop(0)
+        collected.append(current)
+        pending.extend(children_by_parent.get(current, []))
+    return collected
+
+
 def collect_outline_subtree_object_ids(db: Session, *, outline_id: UUID) -> Dict[str, List[UUID]]:
-    act_ids = _ids(db.query(Act.id).filter(Act.outline_id == outline_id).all())
-
+    outline_ids = _collect_outline_descendant_ids(db, root_id=outline_id)
     chapter_ids = _ids(
-        db.query(Chapter.id)
-        .join(Act, Act.id == Chapter.act_id)
-        .filter(Act.outline_id == outline_id)
+        db.query(Outline.id)
+        .filter(Outline.id.in_(outline_ids), Outline.kind == "chapter")
         .all()
-    )
-
+    ) if outline_ids else []
     manuscript_ids = _ids(
         db.query(Manuscript.id)
-        .join(Chapter, Chapter.id == Manuscript.chapter_id)
-        .join(Act, Act.id == Chapter.act_id)
-        .filter(Act.outline_id == outline_id)
+        .filter(Manuscript.chapter_id.in_(chapter_ids))
         .all()
-    )
+    ) if chapter_ids else []
 
     return {
-        "act": act_ids,
-        "chapter": chapter_ids,
+        "outline": outline_ids,
         "manuscript": manuscript_ids,
     }
 
 
 def collect_act_subtree_object_ids(db: Session, *, act_id: UUID) -> Dict[str, List[UUID]]:
-    chapter_ids = _ids(db.query(Chapter.id).filter(Chapter.act_id == act_id).all())
-    manuscript_ids = _ids(
-        db.query(Manuscript.id)
-        .join(Chapter, Chapter.id == Manuscript.chapter_id)
-        .filter(Chapter.act_id == act_id)
-        .all()
-    )
-    return {"chapter": chapter_ids, "manuscript": manuscript_ids}
+    return collect_outline_subtree_object_ids(db, outline_id=act_id)
 
 
 def collect_chapter_subtree_object_ids(db: Session, *, chapter_id: UUID) -> Dict[str, List[UUID]]:

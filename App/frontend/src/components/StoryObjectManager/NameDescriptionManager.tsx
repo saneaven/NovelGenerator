@@ -26,7 +26,6 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   rectSortingStrategy,
@@ -47,7 +46,7 @@ import { TextButton } from '../TextButton';
 import { Expand, Collapse, Plus, MoreHorizontal } from '../icons';
 import { getSpanType, type SpanType } from '../../hooks/useCardSpanType';
 import { useGridColumnCount } from '../../hooks/useGridColumnCount';
-import type { UnifiedObject, ObjectType } from '../../types/unifiedObject';
+import type { UnifiedObject, StoryEntityKind } from '../../types/unifiedObject';
 import type { Asset } from '../../api/assetService';
 import { getAssetUrl } from '../../utils/assetUrl';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
@@ -62,7 +61,7 @@ interface NameDescriptionData {
 type NameDescriptionObject = UnifiedObject<NameDescriptionData>;
 
 interface NameDescriptionManagerProps {
-  category: Extract<ObjectType, 'character' | 'organization' | 'location' | 'lorebook'>;
+  category: StoryEntityKind;
   title: string;
   singularName: string;
   pluralName: string;
@@ -180,7 +179,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
     const fetchItems = async () => {
       try {
-        await listObjects(category, projectId);
+        await listObjects('story_entity', projectId);
       } catch (error) {
         if (!isCancelled) {
           console.error(`Failed to fetch ${category} list:`, error);
@@ -206,13 +205,14 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         (obj): obj is NameDescriptionObject =>
           Boolean(
             obj &&
-            obj.type === category &&
+            obj.type === 'story_entity' &&
+            obj.kind === category &&
             obj.metadata?.project_id === projectId
           )
       )
       .sort((a, b) => {
-        const orderA = a.metadata.order ?? 0;
-        const orderB = b.metadata.order ?? 0;
+        const orderA = a.metadata.display_order ?? 0;
+        const orderB = b.metadata.display_order ?? 0;
         if (orderA === orderB) {
           // Always sort by mainLanguage name (not display language) so order stays consistent
           const aData = a.data[settings.mainLanguage] || a.data[Object.keys(a.data)[0]] || { name: '' };
@@ -234,15 +234,17 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
     if (oldIndex === -1 || newIndex === -1) return;
 
-    // Get new order of IDs
-    const newOrder = arrayMove(
-      items.map(item => item.id),
-      oldIndex,
-      newIndex
-    );
-
     try {
-      await store.reorderObjects(category, projectId, newOrder);
+      const activeItem = items[oldIndex];
+      const { effectiveLanguage } = getEffectiveLanguage(activeItem);
+      const data = getDataForLanguage(activeItem, effectiveLanguage);
+      await store.updateObject('story_entity', activeItem.id, {
+        data,
+        language: effectiveLanguage,
+        metadata: { display_order: newIndex },
+        create_new_version: false,
+        user_request: 'Reposition story entity',
+      });
     } catch (error) {
       console.error('Failed to reorder:', error);
       showAlert({ title: 'Reorder Error', message: 'Failed to reorder items. Please try again.' });
@@ -255,7 +257,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
     // Fire all requests in parallel, don't block render
     items.forEach((item) => {
-      fetchStoryObjectAssets(projectId, category, item.id);
+      fetchStoryObjectAssets(projectId, 'story_entity', item.id);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, category, items.length]);
@@ -269,10 +271,13 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
     try {
       await store.createObject(
-        category,
+        'story_entity',
         projectId,
         { name: name.trim(), description: description.trim(), content: content.trim() },
-        settings.mainLanguage
+        settings.mainLanguage,
+        undefined,
+        undefined,
+        category,
       );
       setIsCreatingNew(false);
     } catch (error) {
@@ -289,7 +294,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
     try {
       const { effectiveLanguage } = getEffectiveLanguage(item);
-      await store.updateObject(category, itemId, {
+      await store.updateObject('story_entity', itemId, {
         data: {
           name: name.trim(),
           description: description.trim(),
@@ -317,7 +322,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     }
 
     try {
-      await store.deleteObject(category, itemId);
+      await store.deleteObject('story_entity', itemId);
     } catch (error) {
       console.error('Failed to delete item:', error);
       showAlert({ title: 'Delete Error', message: 'Failed to delete. Please try again.' });
@@ -369,7 +374,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     if (!versionHistoryTargetId) return;
 
     try {
-      await store.fetchObject(category, versionHistoryTargetId);
+      await store.fetchObject('story_entity', versionHistoryTargetId);
     } catch (error) {
       console.error('Failed to refresh after restore:', error);
     }
@@ -382,7 +387,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   const handleAssetModalClose = () => {
     // Refresh assets when modal closes (in case images were added/changed)
     if (projectId && assetTargetId) {
-      fetchStoryObjectAssets(projectId, category, assetTargetId);
+      fetchStoryObjectAssets(projectId, 'story_entity', assetTargetId);
     }
     setShowAssetModal(false);
     setAssetTargetId(undefined);
@@ -466,7 +471,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
             items={items.map(item => item.id)}
             strategy={rectSortingStrategy}
           >
-            <LayoutGroup id={category}>
+            <LayoutGroup id={`story-entity-${category}`}>
               <div
                 ref={gridRef}
                 className="story-object-cards-grid"
@@ -476,7 +481,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                     const isFullExpanded = expandedCardId === item.id;
                     const { effectiveLanguage } = getEffectiveLanguage(item);
                     const itemData = getDataForLanguage(item, effectiveLanguage);
-                    const mainAsset = projectId ? getMainAsset(projectId, category, item.id) : null;
+                    const mainAsset = projectId ? getMainAsset(projectId, 'story_entity', item.id) : null;
                     const baseSpanType = getSpanType(mainAsset);
                     // When only 1 column fits, horizontal cards should not span 2
                     const spanType = (baseSpanType === 'horizontal' && columnCount < 2) ? 'normal' : baseSpanType;
@@ -513,7 +518,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
               const { effectiveLanguage } = getEffectiveLanguage(item);
               const itemData = getDataForLanguage(item, effectiveLanguage);
-              const mainAsset = projectId ? getMainAsset(projectId, category, item.id) : null;
+              const mainAsset = projectId ? getMainAsset(projectId, 'story_entity', item.id) : null;
               const loading = store.loading[item.id] || false;
               const showSecondaryLanguage = settings.mainLanguage !== globalDisplayLanguage;
 
@@ -552,7 +557,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                     }}
                     onAssetChange={() => {
                       if (projectId) {
-                        fetchStoryObjectAssets(projectId, category, item.id);
+                        fetchStoryObjectAssets(projectId, 'story_entity', item.id);
                       }
                     }}
                   />
@@ -598,7 +603,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
           setShowAIModal(false);
           setAiEditTargetId(null);
         }}
-        category={category}
+        category="story_entity"
         projectId={projectId || ''}
         targetId={aiEditTargetId ?? undefined}
       />
@@ -610,7 +615,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
             setShowVersionHistory(false);
             setVersionHistoryTargetId(undefined);
           }}
-          objectType={category}
+          objectType="story_entity"
           objectId={versionHistoryTargetId!}
           onRestoreVersion={handleRestoreVersion}
         />
@@ -635,7 +640,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
           preset="objectManager"
           isOpen={showAssetModal}
           onClose={handleAssetModalClose}
-          objectType={category}
+          objectType="story_entity"
           objectId={assetTargetId}
           title={`${singularName} Images`}
         />

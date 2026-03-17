@@ -10,7 +10,7 @@ from ....services.object_service import object_service
 from ....utils.story_entities import STORY_ENTITY_TYPE
 from .manuscript_access import ensure_manuscript_exists, replace_manuscript
 from .object_access import (
-    ensure_act_parent_exists,
+    ensure_outline_parent_kind,
     ensure_story_entity_folder_exists,
     extract_lang_data,
     get_primary_object_id,
@@ -30,14 +30,16 @@ from .shared import (
 
 _ID = {"type": "string", "description": "Object ID"}
 _FOLDER_ID = {"type": ["string", "null"], "description": "Parent folder ID. Use null for root."}
+_PARENT_ID = {"type": ["string", "null"], "description": "Parent outline ID. Root outlines use null."}
+_POSITION = {"type": "integer", "description": "0-based sibling position."}
 
 
-def _positive_order(value: Any) -> None:
+def _non_negative_position(value: Any) -> None:
     if value is None:
         return
-    if isinstance(value, int) and value > 0:
+    if isinstance(value, int) and value >= 0:
         return
-    raise ValueError("order must be a positive integer")
+    raise ValueError("position must be a non-negative integer")
 
 
 @tool_call_module(prefix="replace_")
@@ -102,30 +104,15 @@ class ReplaceToolCallModule(ToolCallModule):
                 [
                     ToolSpec(
                         name="replace_outline",
-                        description="Replace outline fields.",
-                        parameters=obj_schema({"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}}, ["id"]),
-                        auto_approve_category="replace",
-                    ),
-                    ToolSpec(
-                        name="replace_outline_act",
-                        description="Replace act fields.",
-                        parameters=obj_schema(
-                            {"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}, "order": {"type": "integer"}},
-                            ["id"],
-                        ),
-                        auto_approve_category="replace",
-                    ),
-                    ToolSpec(
-                        name="replace_outline_chapter",
-                        description="Replace chapter fields.",
+                        description="Replace outline item fields.",
                         parameters=obj_schema(
                             {
                                 "id": _ID,
-                                "actId": {"type": "string"},
+                                "parentId": _PARENT_ID,
                                 "name": {"type": "string"},
                                 "description": {"type": "string"},
                                 "content": {"type": "string"},
-                                "order": {"type": "integer"},
+                                "position": _POSITION,
                             },
                             ["id"],
                         ),
@@ -173,18 +160,6 @@ class ReplaceToolCallModule(ToolCallModule):
                 return valid_result()
             elif tool_name == "replace_outline":
                 object_type = "outline"
-            elif tool_name == "replace_outline_act":
-                object_type = "act"
-                _positive_order(args.get("order"))
-            elif tool_name == "replace_outline_chapter":
-                object_type = "chapter"
-                _positive_order(args.get("order"))
-                if args.get("actId"):
-                    ensure_act_parent_exists(
-                        ctx.db,
-                        project_id=ctx.project_id,
-                        act_id=to_uuid(args.get("actId"), "actId"),
-                    )
             elif tool_name == "replace_manuscript":
                 ensure_manuscript_exists(
                     db=ctx.db,
@@ -195,6 +170,26 @@ class ReplaceToolCallModule(ToolCallModule):
                 return valid_result()
             else:
                 return invalid_result("validate_replace_tool_name", f"Unsupported replace tool: {tool_name}")
+
+            if tool_name == "replace_outline":
+                _non_negative_position(args.get("position"))
+                if args.get("parentId"):
+                    current = read_object(ctx.db, project_id=ctx.project_id, object_type="outline", object_id=object_id, language=ctx.language)
+                    current_kind = str(current.get("kind") or "")
+                    if current_kind == "act":
+                        ensure_outline_parent_kind(
+                            ctx.db,
+                            project_id=ctx.project_id,
+                            outline_id=to_uuid(args.get("parentId"), "parentId"),
+                            expected_kind="outline",
+                        )
+                    elif current_kind == "chapter":
+                        ensure_outline_parent_kind(
+                            ctx.db,
+                            project_id=ctx.project_id,
+                            outline_id=to_uuid(args.get("parentId"), "parentId"),
+                            expected_kind="act",
+                        )
 
             read_object(
                 ctx.db,
@@ -290,22 +285,18 @@ class ReplaceToolCallModule(ToolCallModule):
                 data={"kind": kind},
             )
 
-        if tool_name in {"replace_outline", "replace_outline_act", "replace_outline_chapter"}:
-            object_type = {
-                "replace_outline": "outline",
-                "replace_outline_act": "act",
-                "replace_outline_chapter": "chapter",
-            }[tool_name]
+        if tool_name == "replace_outline":
+            object_type = "outline"
             current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
             next_data = dict(extract_lang_data(current, ctx.language))
             for key in ["name", "description", "content"]:
                 if key in args:
                     next_data[key] = args[key]
             metadata: dict[str, Any] = {}
-            if tool_name in {"replace_outline_act", "replace_outline_chapter"} and isinstance(args.get("order"), int):
-                metadata["order"] = int(args["order"])
-            if tool_name == "replace_outline_chapter" and isinstance(args.get("actId"), str) and args.get("actId"):
-                metadata["act_id"] = args["actId"]
+            if isinstance(args.get("position"), int):
+                metadata["position"] = int(args["position"])
+            if "parentId" in args:
+                metadata["parent_id"] = args.get("parentId")
             object_service.update_object(
                 ctx.db,
                 project_id=ctx.project_id,
@@ -318,7 +309,12 @@ class ReplaceToolCallModule(ToolCallModule):
                 created_by=ctx.user_id,
                 create_new_version=True,
             )
-            return make_result(f"Replaced {object_type}", object_id=str(object_id), object_type=object_type)
+            return make_result(
+                "Replaced outline",
+                object_id=str(object_id),
+                object_type=object_type,
+                data={"kind": current.get("kind")},
+            )
 
         if tool_name == "replace_manuscript":
             await replace_manuscript(

@@ -39,6 +39,11 @@ function objectDisplayLabel(objectType: ObjectType, objectKind?: UnifiedObject['
     if (!objectKind) return 'Story Entity';
     return `${objectKind[0].toUpperCase()}${objectKind.slice(1)} Entity`;
   }
+  if (objectType === 'outline') {
+    if (objectKind === 'act') return 'Act';
+    if (objectKind === 'chapter') return 'Chapter';
+    return 'Outline';
+  }
   return OBJECT_TYPE_CONFIG[objectType]?.label || objectType;
 }
 
@@ -81,8 +86,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       'guidelines',
       'story_entity',
       'outline',
-      'act',
-      'chapter',
       'manuscript',
     ];
 
@@ -187,28 +190,38 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       }
 
       // Calculate hierarchical order for proper sorting
-      let order = obj.metadata.order ?? 0;
+      let order = Number.MAX_SAFE_INTEGER;
 
-      if (objType === 'act') {
-        // Acts: actOrder * 10000 (so they come before their chapters)
-        order = order * 10000;
-      } else if (objType === 'chapter') {
-        // Chapters: actOrder * 10000 + chapterOrder * 10 + 1 (after their parent act)
-        const act = obj.metadata?.act_id ? objects[obj.metadata.act_id as string] : null;
-        const actOrder = act?.metadata?.order ?? 0;
-        order = actOrder * 10000 + order * 10 + 1;
+      if (objType === 'story_entity') {
+        order = obj.metadata.display_order ?? Number.MAX_SAFE_INTEGER - 1000;
+      } else if (objType === 'outline') {
+        const position = obj.metadata.position ?? 0;
+        if (obj.kind === 'outline') {
+          order = position * 1_000_000;
+        } else if (obj.kind === 'act') {
+          const outline = obj.metadata?.parent_id ? objects[obj.metadata.parent_id as string] : null;
+          const outlinePosition = outline?.metadata?.position ?? 0;
+          order = outlinePosition * 1_000_000 + position * 1_000;
+        } else if (obj.kind === 'chapter') {
+          const act = obj.metadata?.parent_id ? objects[obj.metadata.parent_id as string] : null;
+          const outline = act?.metadata?.parent_id ? objects[act.metadata.parent_id as string] : null;
+          const outlinePosition = outline?.metadata?.position ?? 0;
+          const actPosition = act?.metadata?.position ?? 0;
+          order = outlinePosition * 1_000_000 + actPosition * 1_000 + position;
+        }
       } else if (objType === 'manuscript' && obj.metadata?.chapter_id) {
-        // Manuscripts: actOrder * 10000 + chapterOrder * 10 + 2 (after their parent chapter)
         const chapter = objects[obj.metadata.chapter_id as string];
         if (chapter) {
           const chapterData = chapter.data[sourceLanguage] || chapter.data[Object.keys(chapter.data)[0]];
           if (chapterData?.name) {
             label = chapterData.name;
           }
-          const chapterOrder = chapter.metadata?.order ?? 0;
-          const act = chapter.metadata?.act_id ? objects[chapter.metadata.act_id as string] : null;
-          const actOrder = act?.metadata?.order ?? 0;
-          order = actOrder * 10000 + chapterOrder * 10 + 2;
+          const act = chapter.metadata?.parent_id ? objects[chapter.metadata.parent_id as string] : null;
+          const outline = act?.metadata?.parent_id ? objects[act.metadata.parent_id as string] : null;
+          const outlinePosition = outline?.metadata?.position ?? 0;
+          const actPosition = act?.metadata?.position ?? 0;
+          const chapterPosition = chapter.metadata?.position ?? 0;
+          order = outlinePosition * 1_000_000 + actPosition * 1_000 + chapterPosition + 0.5;
         }
       }
 

@@ -22,6 +22,9 @@ import type {
   AddTranslationRequest,
   VersionHistoryEntry,
   StoryEntityKind,
+  OutlineKind,
+  StoryEntityObject,
+  OutlineObject,
 } from '../types/unifiedObject';
 import { normalizeBasicInfoData } from '../utils/basicInfo';
 
@@ -69,7 +72,7 @@ interface UnifiedObjectStore {
     language: string,
     metadata?: Record<string, any>,
     userRequest?: string,
-    kind?: StoryEntityKind
+    kind?: StoryEntityKind | OutlineKind
   ) => Promise<UnifiedObject>;
   deleteObject: (type: ObjectType, id: string) => Promise<void>;
 
@@ -91,13 +94,6 @@ interface UnifiedObjectStore {
       image_prompt_positive?: string;
       image_prompt_negative?: string;
     }
-  ) => Promise<void>;
-
-  // Reordering
-  reorderObjects: (
-    type: ObjectType,
-    projectId: string,
-    objectIds: string[]
   ) => Promise<void>;
 
   // Bulk sync from SSE object change events
@@ -352,7 +348,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     });
   },
 
-  createObject: async (type: ObjectType, projectId: string, data: any, language: string, metadata?: Record<string, any>, userRequest: string = 'User Creation', kind?: StoryEntityKind) => {
+  createObject: async (type: ObjectType, projectId: string, data: any, language: string, metadata?: Record<string, any>, userRequest: string = 'User Creation', kind?: StoryEntityKind | OutlineKind) => {
     try {
       const newObject = await unifiedObjectService.createObject(type, projectId, {
         data,
@@ -367,7 +363,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
         loading: { ...state.loading, [newObject.id]: false },
       }));
 
-      if (type === 'chapter') {
+      if (type === 'outline' && kind === 'chapter') {
         const linkedManuscriptId = newObject.metadata?.manuscript_id;
         if (typeof linkedManuscriptId === 'string' && linkedManuscriptId.length > 0) {
           try {
@@ -529,42 +525,6 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     }
   },
 
-  // ========================================================================
-  // REORDERING
-  // ========================================================================
-
-  reorderObjects: async (type: ObjectType, projectId: string, objectIds: string[]) => {
-    // Save old state for rollback
-    const oldObjects = { ...get().objects };
-
-    // Optimistic update - update local state IMMEDIATELY
-    set((state) => {
-      const newObjects = { ...state.objects };
-      objectIds.forEach((id, index) => {
-        if (newObjects[id]) {
-          newObjects[id] = {
-            ...newObjects[id],
-            metadata: {
-              ...newObjects[id].metadata,
-              order: index + 1,
-            },
-          };
-        }
-      });
-      return { objects: newObjects };
-    });
-
-    // Then call API (if fails, rollback)
-    try {
-      await unifiedObjectService.reorderObjects(type, projectId, objectIds);
-    } catch (error: any) {
-      // Rollback on error
-      set({ objects: oldObjects });
-      console.error('Failed to reorder objects:', error);
-      throw error;
-    }
-  },
-
   applyObjectChanges: ({ upserts = [], deletes = [] }) => {
     if (!upserts.length && !deletes.length) return;
     set((state) => {
@@ -670,21 +630,21 @@ export interface SimplifiedStoryObjects {
       name: string;
       description: string;
       content: string;
-      order: number;
+      position: number;
       acts: Array<{
         id: string;
         name: string;
         description: string;
         content: string;
-        order: number;
-        outlineId: string;
+        position: number;
+        parentId: string;
         chapters: Array<{
           id: string;
           name: string;
           description: string;
           content: string;
-          order: number;
-          actId: string;
+          position: number;
+          parentId: string;
         }>;
       }>;
     }>;
@@ -740,15 +700,16 @@ export function useStoryObjects(projectId: string | undefined, language: string)
     // Group by type
     const basicInfoList = projectObjects.filter(obj => obj.type === 'basic_info');
     const storyEntities = projectObjects
-      .filter(obj => obj.type === 'story_entity')
+      .filter((obj): obj is StoryEntityObject => obj.type === 'story_entity')
       .sort((a, b) => {
         const orderA = a.metadata.display_order ?? 0;
         const orderB = b.metadata.display_order ?? 0;
         return orderA - orderB;
       });
-    const outlines = projectObjects.filter(obj => obj.type === 'outline');
-    const acts = projectObjects.filter(obj => obj.type === 'act');
-    const chapters = projectObjects.filter(obj => obj.type === 'chapter');
+    const outlineItems = projectObjects.filter((obj): obj is OutlineObject => obj.type === 'outline');
+    const outlines = outlineItems.filter((obj): obj is OutlineObject => obj.kind === 'outline');
+    const acts = outlineItems.filter((obj): obj is OutlineObject => obj.kind === 'act');
+    const chapters = outlineItems.filter((obj): obj is OutlineObject => obj.kind === 'chapter');
 
     // Build basic info - extract data for language
     const basicInfo = basicInfoList.length > 0 ? (() => {
@@ -765,7 +726,7 @@ export function useStoryObjects(projectId: string | undefined, language: string)
     // Build outline hierarchy: Outline > Acts > Chapters
     const outline = {
       outlines: outlines
-        .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+        .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0))
         .map(outlineObj => {
           const outlineData = getObjectDataForLanguage(outlineObj, language);
           return {
@@ -773,10 +734,10 @@ export function useStoryObjects(projectId: string | undefined, language: string)
             name: outlineData.name || '',
             description: outlineData.description || '',
             content: outlineData.content || '',
-            order: outlineObj.metadata.order || 0,
+            position: outlineObj.metadata.position || 0,
             acts: acts
-              .filter(act => act.metadata.outline_id === outlineObj.id)
-              .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+              .filter(act => act.metadata.parent_id === outlineObj.id)
+              .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0))
               .map(act => {
                 const actData = getObjectDataForLanguage(act, language);
                 return {
@@ -784,11 +745,11 @@ export function useStoryObjects(projectId: string | undefined, language: string)
                   name: actData.name || '',
                   description: actData.description || '',
                   content: actData.content || '',
-                  order: act.metadata.order || 0,
-                  outlineId: act.metadata.outline_id || '',
+                  position: act.metadata.position || 0,
+                  parentId: act.metadata.parent_id || '',
                   chapters: chapters
-                    .filter(ch => ch.metadata.act_id === act.id)
-                    .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+                    .filter(ch => ch.metadata.parent_id === act.id)
+                    .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0))
                     .map(chapter => {
                       const chapterData = getObjectDataForLanguage(chapter, language);
                       return {
@@ -796,8 +757,8 @@ export function useStoryObjects(projectId: string | undefined, language: string)
                         name: chapterData.name || '',
                         description: chapterData.description || '',
                         content: chapterData.content || '',
-                        order: chapter.metadata.order || 0,
-                        actId: chapter.metadata.act_id || '',
+                        position: chapter.metadata.position || 0,
+                        parentId: chapter.metadata.parent_id || '',
                       };
                     }),
                 };
@@ -812,7 +773,7 @@ export function useStoryObjects(projectId: string | undefined, language: string)
         const data = getObjectDataForLanguage(entity, language);
         return {
           id: entity.id,
-          kind: entity.kind || 'character',
+          kind: entity.kind,
           name: data.name || '',
           description: data.description || '',
           content: data.content || '',

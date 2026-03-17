@@ -484,7 +484,7 @@ class Project(Base):
     guidelines = relationship("Guidelines", back_populates="project", uselist=False, cascade="all, delete-orphan")
     story_entity_folders = relationship("StoryEntityFolder", back_populates="project", cascade="all, delete-orphan", order_by="StoryEntityFolder.display_order")
     story_entities = relationship("StoryEntity", back_populates="project", cascade="all, delete-orphan", order_by="StoryEntity.display_order")
-    outlines = relationship("Outline", back_populates="project", cascade="all, delete-orphan", order_by="Outline.order")
+    outlines = relationship("Outline", back_populates="project", cascade="all, delete-orphan", order_by="Outline.position")
     agents = relationship("Agent", back_populates="project", cascade="all, delete-orphan")
     assets = relationship("Asset", back_populates="project", cascade="all, delete-orphan")
 
@@ -630,56 +630,36 @@ class StoryEntity(Base):
 # ============================================================================
 
 class Outline(Base):
-    """Story outline - structure only (content in object_versions)"""
+    """Story structure node - root outlines, acts, and chapters."""
     __tablename__ = 'outlines'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
-
-    order = Column(Integer, nullable=False, default=0)  # Display order within project
+    kind = Column(String(20), nullable=False, index=True)
+    parent_id = Column(UUID(as_uuid=True), ForeignKey('outlines.id', ondelete='CASCADE'), nullable=True, index=True)
+    position = Column(Integer, nullable=False, default=0)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
     project = relationship("Project", back_populates="outlines")
-    acts = relationship("Act", back_populates="outline", cascade="all, delete-orphan", order_by="Act.order")
-
-
-class Act(Base):
-    """Acts within an outline - structure only (content in object_versions)"""
-    __tablename__ = 'acts'
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
-    outline_id = Column(UUID(as_uuid=True), ForeignKey('outlines.id', ondelete='CASCADE'), nullable=False, index=True)
-
-    order = Column(Integer, nullable=False)  # Structural data, not translatable
-
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    # Relationships
-    outline = relationship("Outline", back_populates="acts")
-    chapters = relationship("Chapter", back_populates="act", cascade="all, delete-orphan", order_by="Chapter.order")
-
-
-class Chapter(Base):
-    """Chapters within an act - structure only (content in object_versions)"""
-    __tablename__ = 'chapters'
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
-    act_id = Column(UUID(as_uuid=True), ForeignKey('acts.id', ondelete='CASCADE'), nullable=False, index=True)
-
-    order = Column(Integer, nullable=False)  # Structural data, not translatable
-
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    # Relationships
-    act = relationship("Act", back_populates="chapters")
+    parent = relationship("Outline", remote_side=[id], back_populates="children", foreign_keys=[parent_id])
+    children = relationship("Outline", back_populates="parent", cascade="all, delete-orphan", order_by="Outline.position")
     manuscript = relationship("Manuscript", back_populates="chapter", uselist=False, cascade="all, delete-orphan")
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('outline', 'act', 'chapter')",
+            name="ck_outlines_kind",
+        ),
+        CheckConstraint(
+            "position >= 0",
+            name="ck_outlines_position_non_negative",
+        ),
+        Index("ix_outlines_project_parent_position", "project_id", "parent_id", "position"),
+        Index("ix_outlines_project_kind", "project_id", "kind"),
+    )
 
 
 # ============================================================================
@@ -691,13 +671,13 @@ class Manuscript(Base):
     __tablename__ = 'manuscripts'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    chapter_id = Column(UUID(as_uuid=True), ForeignKey('chapters.id', ondelete='CASCADE'), nullable=False, unique=True)
+    chapter_id = Column(UUID(as_uuid=True), ForeignKey('outlines.id', ondelete='CASCADE'), nullable=False, unique=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
-    chapter = relationship("Chapter", back_populates="manuscript")
+    chapter = relationship("Outline", back_populates="manuscript")
     owned_assets = relationship("Asset", back_populates="manuscript", foreign_keys="Asset.manuscript_id")
 
 

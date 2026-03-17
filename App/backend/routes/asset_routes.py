@@ -1,6 +1,6 @@
 """Asset management routes"""
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from typing import Optional, List, Dict, Any, cast
 from collections import defaultdict
 from uuid import UUID, uuid4
@@ -15,8 +15,6 @@ from ..models.db_models import (
     StoryObjectAsset,
     ManuscriptImage,
     Manuscript,
-    Chapter,
-    Act,
     Outline,
     BasicInfo,
     StoryEntity,
@@ -318,10 +316,13 @@ async def list_scene_assets(
     manuscript_meta: Dict[UUID, tuple[int, int]] = {}
     manuscript_info_by_id: Dict[UUID, ManuscriptInfo] = {}
     if manuscript_ids:
+        chapter_outline = aliased(Outline)
+        act_outline = aliased(Outline)
         meta_rows = (
-            db.query(Manuscript.id, Chapter.order, Act.order)
-            .join(Chapter, Manuscript.chapter_id == Chapter.id)
-            .join(Act, Chapter.act_id == Act.id)
+            db.query(Manuscript.id, chapter_outline.position, act_outline.position)
+            .join(chapter_outline, Manuscript.chapter_id == chapter_outline.id)
+            .outerjoin(act_outline, chapter_outline.parent_id == act_outline.id)
+            .filter(chapter_outline.kind == "chapter")
             .filter(Manuscript.id.in_(list(manuscript_ids)))
             .all()
         )
@@ -431,10 +432,8 @@ async def upload_asset(
     if manuscript_id:
         manuscript = (
             db.query(Manuscript)
-            .join(Chapter, Manuscript.chapter_id == Chapter.id)
-            .join(Act, Chapter.act_id == Act.id)
-            .join(Outline, Act.outline_id == Outline.id)
-            .filter(Manuscript.id == manuscript_id, Outline.project_id == project_id)
+            .join(Outline, Manuscript.chapter_id == Outline.id)
+            .filter(Manuscript.id == manuscript_id, Outline.project_id == project_id, Outline.kind == "chapter")
             .first()
         )
         if not manuscript:
@@ -1085,10 +1084,8 @@ async def rebuild_manuscript_images_index(
 
     manuscripts = (
         db.query(Manuscript)
-        .join(Chapter, Manuscript.chapter_id == Chapter.id)
-        .join(Act, Chapter.act_id == Act.id)
-        .join(Outline, Act.outline_id == Outline.id)
-        .filter(Outline.project_id == project_id)
+        .join(Outline, Manuscript.chapter_id == Outline.id)
+        .filter(Outline.project_id == project_id, Outline.kind == "chapter")
         .all()
     )
 
@@ -1101,10 +1098,8 @@ async def rebuild_manuscript_images_index(
     manuscript_images_before = snapshot_rows(
         db.query(ManuscriptImage)
         .join(Manuscript, Manuscript.id == ManuscriptImage.manuscript_id)
-        .join(Chapter, Chapter.id == Manuscript.chapter_id)
-        .join(Act, Act.id == Chapter.act_id)
-        .join(Outline, Outline.id == Act.outline_id)
-        .filter(Outline.project_id == project_id)
+        .join(Outline, Outline.id == Manuscript.chapter_id)
+        .filter(Outline.project_id == project_id, Outline.kind == "chapter")
         .all(),
         snapshot_manuscript_image_row,
     )
@@ -1142,10 +1137,8 @@ async def rebuild_manuscript_images_index(
     manuscript_images_after = snapshot_rows(
         db.query(ManuscriptImage)
         .join(Manuscript, Manuscript.id == ManuscriptImage.manuscript_id)
-        .join(Chapter, Chapter.id == Manuscript.chapter_id)
-        .join(Act, Act.id == Chapter.act_id)
-        .join(Outline, Outline.id == Act.outline_id)
-        .filter(Outline.project_id == project_id)
+        .join(Outline, Outline.id == Manuscript.chapter_id)
+        .filter(Outline.project_id == project_id, Outline.kind == "chapter")
         .all(),
         snapshot_manuscript_image_row,
     )

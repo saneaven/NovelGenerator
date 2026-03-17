@@ -19,11 +19,7 @@ function replaceKeysForObjectType(objectType: ObjectCardProps['operation']['obje
     case 'story_entity':
       return ['name', 'description', 'content'];
     case 'outline':
-      return ['name', 'description', 'content'];
-    case 'outline_act':
-      return ['name', 'description', 'content', 'order'];
-    case 'outline_chapter':
-      return ['actId', 'name', 'description', 'content', 'order'];
+      return ['name', 'description', 'content', 'parentId', 'position'];
     case 'manuscript':
       return ['content'];
     default:
@@ -33,12 +29,10 @@ function replaceKeysForObjectType(objectType: ObjectCardProps['operation']['obje
 
 function metadataMapForObjectType(objectType: ObjectCardProps['operation']['objectType']): Record<string, string> {
   switch (objectType) {
-    case 'outline_act':
-      return { order: 'order' };
-    case 'outline_chapter':
+    case 'outline':
       return {
-        actId: 'act_id',
-        order: 'order',
+        parentId: 'parent_id',
+        position: 'position',
       };
     default:
       return {};
@@ -96,7 +90,7 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
   const title = `${resolvedType}${changedFields.length > 0 ? ` (${changedFields.length})` : ''}`;
 
   const renderBody = () => {
-    if (operation.objectType === 'outline' || operation.objectType === 'outline_act' || operation.objectType === 'outline_chapter') {
+    if (operation.objectType === 'outline') {
       const newName = typeof changedValues.name === 'string' && changedValues.name.trim()
         ? changedValues.name
         : undefined;
@@ -104,17 +98,17 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
       const body = typeof changedValues.content === 'string' && changedValues.content.trim() ? changedValues.content : undefined;
 
       const metaParts: string[] = [];
-      if (changedFields.includes('order') && changedValues.order != null) {
-        metaParts.push(`Order: ${changedValues.order}`);
+      if (changedFields.includes('position') && changedValues.position != null) {
+        metaParts.push(`Position: ${changedValues.position}`);
       }
-      if (changedFields.includes('actId') && typeof changedValues.actId === 'string') {
-        metaParts.push('Act reassigned');
+      if (changedFields.includes('parentId')) {
+        metaParts.push(typeof changedValues.parentId === 'string' ? 'Parent reassigned' : 'Moved to root');
       }
       const meta = metaParts.length > 0 ? metaParts.join(' | ') : undefined;
 
       return (
         <OutlineItemCard
-          variant={toOutlineItemVariant(operation.objectType)}
+          variant={toOutlineItemVariant(operation.objectType, operation.outlineKind)}
           name={newName || targetLabel || 'Outline'}
           description={desc}
           content={body}

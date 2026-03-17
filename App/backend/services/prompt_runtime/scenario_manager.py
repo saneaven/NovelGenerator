@@ -82,31 +82,19 @@ def _find_manuscript_by_chapter(project_data: dict[str, Any], chapter_id: str | 
 def _find_outline_target(
     project_data: dict[str, Any],
     object_id: str | None,
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
+) -> dict[str, Any] | None:
     if not object_id:
-        return None, None, None
+        return None
 
     outline_root = project_data.get("outline")
     if not isinstance(outline_root, dict):
-        return None, None, None
+        return None
 
     sid = str(object_id)
-    for outline in outline_root.get("outlines") or []:
-        if not isinstance(outline, dict):
-            continue
-        if str(outline.get("id") or "") == sid:
-            return outline, None, None
-        for act in outline.get("acts") or []:
-            if not isinstance(act, dict):
-                continue
-            if str(act.get("id") or "") == sid:
-                return None, act, None
-            for chapter in act.get("chapters") or []:
-                if not isinstance(chapter, dict):
-                    continue
-                if str(chapter.get("id") or "") == sid:
-                    return None, None, chapter
-    return None, None, None
+    for node in outline_root.get("nodes") or []:
+        if isinstance(node, dict) and str(node.get("id") or "") == sid:
+            return node
+    return None
 
 
 class ScenarioManager:
@@ -212,9 +200,7 @@ class ScenarioManager:
             "outline": {
                 "contextIds": [],
                 "editScope": "selected",
-                "outlines": [],
-                "acts": [],
-                "chapters": [],
+                "items": [],
             },
         }
 
@@ -237,17 +223,15 @@ class ScenarioManager:
                 "outline": defaults["outline"],
             }
 
-        if category in {"outline", "act", "chapter"}:
-            outline, act, chapter = _find_outline_target(project_data, target_id or (journey_target_ids[0] if journey_target_ids else ""))
+        if category == "outline":
+            outline_item = _find_outline_target(project_data, target_id or (journey_target_ids[0] if journey_target_ids else ""))
             return {
                 "manuscript": defaults["manuscript"],
                 "projectData": defaults["projectData"],
                 "outline": {
                     "contextIds": selected_context_ids,
                     "editScope": "selected",
-                    "outlines": [outline] if isinstance(outline, dict) else [],
-                    "acts": [act] if isinstance(act, dict) else [],
-                    "chapters": [chapter] if isinstance(chapter, dict) else [],
+                    "items": [outline_item] if isinstance(outline_item, dict) else [],
                 },
             }
 

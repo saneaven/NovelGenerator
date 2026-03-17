@@ -7,9 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from ..models.db_models import (
-    Act,
     BasicInfo,
-    Chapter,
     Guidelines,
     Manuscript,
     Outline,
@@ -24,8 +22,6 @@ OBJECT_TYPE_MODEL_MAP = {
     "guidelines": Guidelines,
     "story_entity": StoryEntity,
     "outline": Outline,
-    "act": Act,
-    "chapter": Chapter,
     "manuscript": Manuscript,
 }
 
@@ -75,40 +71,16 @@ def require_owned_object(
         query = query.join(Project, Project.id == model_class.project_id).filter(Project.user_id == user_id)
         if project_id is not None:
             query = query.filter(Project.id == project_id)
-    elif normalized_type == "act":
-        query = (
-            query.join(Outline, model_class.outline_id == Outline.id)
-            .join(Project, Project.id == Outline.project_id)
-            .filter(Project.user_id == user_id)
-        )
-        if project_id is not None:
-            query = query.filter(Project.id == project_id)
-    elif normalized_type == "chapter":
-        query = (
-            query.join(Act, model_class.act_id == Act.id)
-            .join(Outline, Act.outline_id == Outline.id)
-            .join(Project, Project.id == Outline.project_id)
-            .filter(Project.user_id == user_id)
-        )
-        if project_id is not None:
-            query = query.filter(Project.id == project_id)
-        query = query.options(
-            joinedload(Chapter.manuscript),
-            joinedload(Chapter.act).joinedload(Act.outline),
-        )
     elif normalized_type == "manuscript":
         query = (
-            query.join(Chapter, model_class.chapter_id == Chapter.id)
-            .join(Act, Chapter.act_id == Act.id)
-            .join(Outline, Act.outline_id == Outline.id)
+            query.join(Outline, model_class.chapter_id == Outline.id)
             .join(Project, Project.id == Outline.project_id)
+            .filter(Outline.kind == "chapter")
             .filter(Project.user_id == user_id)
         )
         if project_id is not None:
             query = query.filter(Project.id == project_id)
-        query = query.options(
-            joinedload(Manuscript.chapter).joinedload(Chapter.act).joinedload(Act.outline),
-        )
+        query = query.options(joinedload(Manuscript.chapter))
 
     obj = query.filter(model_class.id == object_id).first()
     if obj is None:
@@ -154,39 +126,12 @@ def resolve_project_id_for_object(
             return row[0]
         raise HTTPException(status_code=404, detail=f"{normalized_type} not found")
 
-    if normalized_type == "act":
-        row = (
-            db.query(Outline.project_id)
-            .join(Act, Act.outline_id == Outline.id)
-            .join(Project, Project.id == Outline.project_id)
-            .filter(Act.id == object_id, Project.user_id == user_id)
-            .first()
-        )
-        if row and isinstance(row[0], UUID):
-            return row[0]
-        raise HTTPException(status_code=404, detail="act not found")
-
-    if normalized_type == "chapter":
-        row = (
-            db.query(Outline.project_id)
-            .join(Act, Act.outline_id == Outline.id)
-            .join(Chapter, Chapter.act_id == Act.id)
-            .join(Project, Project.id == Outline.project_id)
-            .filter(Chapter.id == object_id, Project.user_id == user_id)
-            .first()
-        )
-        if row and isinstance(row[0], UUID):
-            return row[0]
-        raise HTTPException(status_code=404, detail="chapter not found")
-
     if normalized_type == "manuscript":
         row = (
             db.query(Outline.project_id)
-            .join(Act, Act.outline_id == Outline.id)
-            .join(Chapter, Chapter.act_id == Act.id)
-            .join(Manuscript, Manuscript.chapter_id == Chapter.id)
+            .join(Manuscript, Manuscript.chapter_id == Outline.id)
             .join(Project, Project.id == Outline.project_id)
-            .filter(Manuscript.id == object_id, Project.user_id == user_id)
+            .filter(Manuscript.id == object_id, Outline.kind == "chapter", Project.user_id == user_id)
             .first()
         )
         if row and isinstance(row[0], UUID):

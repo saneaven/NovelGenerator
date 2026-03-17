@@ -1,4 +1,4 @@
-import type { ObjectType, StoryEntityKind } from '../ui/vmTypes';
+import type { ObjectType, OutlineKind, StoryEntityKind } from '../ui/vmTypes';
 
 export function parseStoryEntityKind(raw: unknown): StoryEntityKind | undefined {
   if (typeof raw !== 'string') return undefined;
@@ -8,7 +8,14 @@ export function parseStoryEntityKind(raw: unknown): StoryEntityKind | undefined 
   return undefined;
 }
 
-export function objectTypeLabel(objectType: ObjectType, storyEntityKind?: StoryEntityKind): string {
+export function parseOutlineKind(raw: unknown): OutlineKind | undefined {
+  if (raw === 'outline' || raw === 'act' || raw === 'chapter') {
+    return raw;
+  }
+  return undefined;
+}
+
+export function objectTypeLabel(objectType: ObjectType, storyEntityKind?: StoryEntityKind, outlineKind?: OutlineKind): string {
   switch (objectType) {
     case 'story_entity':
       return storyEntityKind
@@ -19,11 +26,9 @@ export function objectTypeLabel(objectType: ObjectType, storyEntityKind?: StoryE
     case 'guidelines':
       return 'Guidelines';
     case 'outline':
+      if (outlineKind === 'act') return 'Act';
+      if (outlineKind === 'chapter') return 'Chapter';
       return 'Outline';
-    case 'outline_act':
-      return 'Act';
-    case 'outline_chapter':
-      return 'Chapter';
     case 'manuscript':
       return 'Manuscript';
     default:

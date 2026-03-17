@@ -90,16 +90,18 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     ? mainLanguage
     : (availableLangs[0] || 'en');
 
-  const getTypeDisplayName = (type: ObjectType): string => {
+  const getTypeDisplayName = (type: ObjectType, kind?: string): string => {
     const names: Record<ObjectType, string> = {
       basic_info: 'Basic Info',
       story_entity: 'Story Entity',
       outline: 'Outline',
-      act: 'Act',
-      chapter: 'Chapter',
       manuscript: 'Manuscript',
       guidelines: 'Guidelines',
     };
+    if (type === 'outline') {
+      if (kind === 'act') return 'Act';
+      if (kind === 'chapter') return 'Chapter';
+    }
     return names[type] || type;
   };
 
@@ -433,7 +435,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
   // Determine title
   const modalTitle = mode === 'story'
-    ? <><Scroll size="2xl" />{getTypeDisplayName(objectType!)} Version History</>
+    ? <><Scroll size="2xl" />{getTypeDisplayName(objectType!, currentObject?.kind)} Version History</>
     : <><Scroll size="2xl" />{textVersionProps?.title || 'Version History'}</>;
 
   return (
