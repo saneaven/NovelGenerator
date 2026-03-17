@@ -26,6 +26,8 @@ import VersionHistoryModal from '../Modal/VersionHistoryModal';
 import TranslationModal from '../Modal/TranslationModal';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
+import { CustomSelect } from '../ui/CustomSelect';
+import { DropdownItem, DropdownMenu, DropdownSection } from '../ui/DropdownMenu';
 import { SortableStoryObjectCard } from '../StoryObjectManager/StoryObjectCards/SortableStoryObjectCard';
 import { StoryObjectCard } from '../StoryObjectManager/StoryObjectCards/StoryObjectCard';
 import StoryObjectCardExpanded from '../StoryObjectManager/StoryObjectCards/StoryObjectCardExpanded';
@@ -34,6 +36,7 @@ import { getSpanType, type SpanType } from '../../hooks/useCardSpanType';
 import { getAssetUrl } from '../../utils/assetUrl';
 import {
   Books,
+  ChevronDown,
   Collapse,
   Expand,
   Folder,
@@ -299,6 +302,22 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
     [folders, foldersById],
   );
 
+  const storyEntityKindOptions = useMemo(
+    () => KIND_ORDER.map((kind) => ({
+      value: kind,
+      label: KIND_SHORT_LABELS[kind],
+    })),
+    [],
+  );
+
+  const storyEntityFolderSelectOptions = useMemo(
+    () => folderOptions.map((option) => ({
+      value: option.id ?? '',
+      label: option.label,
+    })),
+    [folderOptions],
+  );
+
   const descendantIdsByFolder = useMemo(() => {
     const cache = new Map<string, Set<string>>();
     const visit = (folderId: string): Set<string> => {
@@ -422,7 +441,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
     }
   }, [animatingEntityId]);
 
-  const openCreateEntity = useCallback((kind: StoryEntityKind) => {
+  const openCreateEntity = useCallback((kind: StoryEntityKind = KIND_ORDER[0]) => {
     setExpandedEntityId(null);
     setEditingEntityDraft(null);
     setNewEntityDraft({ kind, folderId: currentFolderId });
@@ -513,6 +532,16 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
     if (!candidateId) return true;
     return !descendantIdsByFolder.get(folderDialog.folderId)?.has(candidateId);
   }, [descendantIdsByFolder, folderDialog]);
+
+  const folderParentSelectOptions = useMemo(
+    () => folderOptions
+      .filter((option) => canSelectFolderParent(option.id))
+      .map((option) => ({
+        value: option.id ?? '',
+        label: option.label,
+      })),
+    [canSelectFolderParent, folderOptions],
+  );
 
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active, over } = event;
@@ -651,26 +680,32 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
             </TextButton>
           ) : null}
 
-          <TextButton
-            variant="secondary"
-            size="sm"
-            onClick={openCreateFolderDialog}
-            iconLeft={<Plus size="xs" />}
+          <DropdownMenu
+            align="right"
+            trigger={(
+              <TextButton
+                variant="secondary"
+                size="sm"
+                iconLeft={<Plus size="xs" />}
+                iconRight={<ChevronDown size="xs" />}
+              >
+                Add
+              </TextButton>
+            )}
           >
-            New Folder
-          </TextButton>
-
-          {KIND_ORDER.map((kind) => (
-            <TextButton
-              key={kind}
-              variant="ghost"
-              size="sm"
-              onClick={() => openCreateEntity(kind)}
-              iconLeft={<Plus size="xs" />}
-            >
-              {`New ${KIND_SHORT_LABELS[kind]}`}
-            </TextButton>
-          ))}
+            <DropdownSection>
+              <DropdownItem
+                icon={<Folder size="sm" />}
+                label="Add Folder"
+                onClick={openCreateFolderDialog}
+              />
+              <DropdownItem
+                icon={<Plus size="sm" />}
+                label="Add Entity"
+                onClick={() => openCreateEntity()}
+              />
+            </DropdownSection>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -770,37 +805,27 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                   extraEditFields={(
                     <div className="story-entity-overlay-fields">
                       <div className="expanded-field">
-                        <label htmlFor={`story-entity-kind-${currentExpandedEntity.id}`}>Kind</label>
-                        <select
-                          id={`story-entity-kind-${currentExpandedEntity.id}`}
+                        <label>Kind</label>
+                        <CustomSelect
                           value={editingEntityDraft.kind}
                           onChange={(event) => setEditingEntityDraft((prev) => prev ? {
                             ...prev,
-                            kind: event.target.value as StoryEntityKind,
+                            kind: event as StoryEntityKind,
                           } : prev)}
-                          className="expanded-input"
-                        >
-                          {KIND_ORDER.map((kind) => (
-                            <option key={kind} value={kind}>{KIND_SHORT_LABELS[kind]}</option>
-                          ))}
-                        </select>
+                          options={storyEntityKindOptions}
+                        />
                       </div>
 
                       <div className="expanded-field">
-                        <label htmlFor={`story-entity-folder-${currentExpandedEntity.id}`}>Parent Folder</label>
-                        <select
-                          id={`story-entity-folder-${currentExpandedEntity.id}`}
+                        <label>Parent Folder</label>
+                        <CustomSelect
                           value={editingEntityDraft.folderId ?? ''}
-                          onChange={(event) => setEditingEntityDraft((prev) => prev ? {
+                          onChange={(value) => setEditingEntityDraft((prev) => prev ? {
                             ...prev,
-                            folderId: event.target.value || null,
+                            folderId: value || null,
                           } : prev)}
-                          className="expanded-input"
-                        >
-                          {folderOptions.map((option) => (
-                            <option key={option.id ?? 'root'} value={option.id ?? ''}>{option.label}</option>
-                          ))}
-                        </select>
+                          options={storyEntityFolderSelectOptions}
+                        />
                       </div>
                     </div>
                   )}
@@ -849,37 +874,27 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
                   extraEditFields={(
                     <div className="story-entity-overlay-fields">
                       <div className="expanded-field">
-                        <label htmlFor="story-entity-new-kind">Kind</label>
-                        <select
-                          id="story-entity-new-kind"
+                        <label>Kind</label>
+                        <CustomSelect
                           value={newEntityDraft.kind}
-                          onChange={(event) => setNewEntityDraft((prev) => prev ? {
+                          onChange={(value) => setNewEntityDraft((prev) => prev ? {
                             ...prev,
-                            kind: event.target.value as StoryEntityKind,
+                            kind: value as StoryEntityKind,
                           } : prev)}
-                          className="expanded-input"
-                        >
-                          {KIND_ORDER.map((kind) => (
-                            <option key={kind} value={kind}>{KIND_SHORT_LABELS[kind]}</option>
-                          ))}
-                        </select>
+                          options={storyEntityKindOptions}
+                        />
                       </div>
 
                       <div className="expanded-field">
-                        <label htmlFor="story-entity-new-folder">Parent Folder</label>
-                        <select
-                          id="story-entity-new-folder"
+                        <label>Parent Folder</label>
+                        <CustomSelect
                           value={newEntityDraft.folderId ?? ''}
-                          onChange={(event) => setNewEntityDraft((prev) => prev ? {
+                          onChange={(value) => setNewEntityDraft((prev) => prev ? {
                             ...prev,
-                            folderId: event.target.value || null,
+                            folderId: value || null,
                           } : prev)}
-                          className="expanded-input"
-                        >
-                          {folderOptions.map((option) => (
-                            <option key={option.id ?? 'root'} value={option.id ?? ''}>{option.label}</option>
-                          ))}
-                        </select>
+                          options={storyEntityFolderSelectOptions}
+                        />
                       </div>
                     </div>
                   )}
@@ -932,23 +947,18 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
 
                     <label className="story-entity-folder-editor__field">
                       <span>Parent Folder</span>
-                      <select
+                      <CustomSelect
                         value={folderDialog.parentId ?? ''}
-                        onChange={(event) => {
-                          const nextId = event.target.value || null;
+                        onChange={(value) => {
+                          const nextId = value || null;
                           if (!canSelectFolderParent(nextId)) return;
                           setFolderDialog((prev) => prev ? {
                             ...prev,
                             parentId: nextId,
                           } : prev);
                         }}
-                      >
-                        {folderOptions
-                          .filter((option) => canSelectFolderParent(option.id))
-                          .map((option) => (
-                            <option key={option.id ?? 'root'} value={option.id ?? ''}>{option.label}</option>
-                          ))}
-                      </select>
+                        options={folderParentSelectOptions}
+                      />
                     </label>
                   </div>
 
