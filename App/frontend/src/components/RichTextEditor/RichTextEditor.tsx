@@ -22,6 +22,15 @@ import { IMAGE_OVERLAY_STORAGE_KEY, type ImageOverlayCallbacks } from './extensi
 import { Image } from '../icons';
 import './RichTextEditor.css';
 
+// Decode HTML entities (e.g. &amp; → &) using browser's native HTML parser.
+let _textarea: HTMLTextAreaElement | null = null;
+function decodeHTMLEntities(text: string): string {
+  if (!text || !text.includes('&')) return text;
+  if (!_textarea) _textarea = document.createElement('textarea');
+  _textarea.innerHTML = text;
+  return _textarea.value;
+}
+
 export interface RichTextEditorRef {
   getHTML: () => string;
   getText: () => string;
@@ -179,12 +188,12 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       // Set markdown content AFTER editor is created
       // The contentType option in useEditor doesn't work properly with @tiptap/markdown
       if (initialContent) {
-        editor.commands.setContent(initialContent, { contentType: 'markdown' });
+        editor.commands.setContent(decodeHTMLEntities(initialContent), { contentType: 'markdown' });
       }
 
       // Capture normalized baseline AFTER TipTap processes the content
       // This ensures hasChanges() compares normalized vs normalized (not raw input)
-      baselineRef.current = editor.isEmpty ? '' : editor.getMarkdown();
+      baselineRef.current = editor.isEmpty ? '' : decodeHTMLEntities(editor.getMarkdown());
 
       // Handle general content changes
       editor.on('update', ({ editor: updatedEditor }) => {
@@ -194,7 +203,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           onChangeRef.current('');
           return;
         }
-        const markdown = updatedEditor.getMarkdown();
+        const markdown = decodeHTMLEntities(updatedEditor.getMarkdown());
         onChangeRef.current(markdown);
       });
 
@@ -206,7 +215,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           onChangeRef.current('');
           return;
         }
-        const markdown = editor.getMarkdown();
+        const markdown = decodeHTMLEntities(editor.getMarkdown());
         onChangeRef.current(markdown);
       });
     },
@@ -288,12 +297,12 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     getTextAroundCursor,
     hasChanges: () => {
       if (!editor || baselineRef.current === null) return false;
-      const currentContent = editor.isEmpty ? '' : editor.getMarkdown();
+      const currentContent = editor.isEmpty ? '' : decodeHTMLEntities(editor.getMarkdown());
       return currentContent !== baselineRef.current;
     },
     resetBaseline: () => {
       if (editor) {
-        baselineRef.current = editor.isEmpty ? '' : editor.getMarkdown();
+        baselineRef.current = editor.isEmpty ? '' : decodeHTMLEntities(editor.getMarkdown());
       }
     },
   }), [editor, insertImage, updateImageSrc, getTextAroundCursor]);
