@@ -114,20 +114,27 @@ const KIND_SHORT_LABELS: Record<StoryEntityKind, string> = {
   lorebook: 'Lorebook',
 };
 
-function sortFolders(a: StoryEntityFolder, b: StoryEntityFolder): number {
-  if (a.display_order === b.display_order) {
-    return a.id.localeCompare(b.id);
-  }
-  return a.display_order - b.display_order;
+function makeSortFolders(language: string, mainLanguage: string) {
+  return (a: StoryEntityFolder, b: StoryEntityFolder): number => {
+    if (a.display_order === b.display_order) {
+      return getStoryEntityFolderName(a, language, mainLanguage)
+        .localeCompare(getStoryEntityFolderName(b, language, mainLanguage));
+    }
+    return a.display_order - b.display_order;
+  };
 }
 
-function sortEntities(a: StoryEntityObject, b: StoryEntityObject): number {
-  const orderA = a.metadata.display_order ?? 0;
-  const orderB = b.metadata.display_order ?? 0;
-  if (orderA === orderB) {
-    return a.id.localeCompare(b.id);
-  }
-  return orderA - orderB;
+function makeSortEntities(language: string, mainLanguage: string) {
+  return (a: StoryEntityObject, b: StoryEntityObject): number => {
+    const orderA = a.metadata.display_order ?? 0;
+    const orderB = b.metadata.display_order ?? 0;
+    if (orderA === orderB) {
+      const nameA = getEntityData(a, language).name || getEntityData(a, mainLanguage).name || '';
+      const nameB = getEntityData(b, language).name || getEntityData(b, mainLanguage).name || '';
+      return nameA.localeCompare(nameB);
+    }
+    return orderA - orderB;
+  };
 }
 
 function buildFolderMap(folders: StoryEntityFolder[]): Record<string, StoryEntityFolder> {
@@ -276,9 +283,12 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
     });
   }, [projectId, listObjects, fetchFolders, globalDisplayLanguage, settings.mainLanguage]);
 
+  const sortFolders = useMemo(() => makeSortFolders(globalDisplayLanguage, settings.mainLanguage), [globalDisplayLanguage, settings.mainLanguage]);
+  const sortEntities = useMemo(() => makeSortEntities(globalDisplayLanguage, settings.mainLanguage), [globalDisplayLanguage, settings.mainLanguage]);
+
   const folders = useMemo(
     () => Object.values(foldersByIdState).filter((folder) => folder.project_id === projectId).sort(sortFolders),
-    [foldersByIdState, projectId],
+    [foldersByIdState, projectId, sortFolders],
   );
   const foldersById = useMemo(() => buildFolderMap(folders), [folders]);
 
@@ -288,7 +298,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
         .filter((object): object is StoryEntityObject => object.type === 'story_entity' && object.metadata.project_id === projectId)
         .sort(sortEntities)
     ),
-    [objects, projectId],
+    [objects, projectId, sortEntities],
   );
 
   useEffect(() => {
@@ -306,7 +316,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
       next.set(key, siblings.sort(sortFolders));
     });
     return next;
-  }, [folders]);
+  }, [folders, sortFolders]);
 
   const entitiesByFolder = useMemo(() => {
     const next = new Map<string | null, StoryEntityObject[]>();
@@ -317,7 +327,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
       next.set(key, siblings.sort(sortEntities));
     });
     return next;
-  }, [entities]);
+  }, [entities, sortEntities]);
 
   const currentFolderEntities = useMemo(
     () => entitiesByFolder.get(currentFolderId) ?? [],
@@ -887,7 +897,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
             {currentExpandedEntity && editingEntityDraft ? (
               <motion.div
                 key={`entity-overlay-${currentExpandedEntity.id}`}
-                className="object-card-expanded-container"
+                className="story-entity-card-expanded-container"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, transition: { duration: 0.4, delay: 0.15 } }}
@@ -968,7 +978,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
             {newEntityDraft ? (
               <motion.div
                 key={`new-entity-overlay-${newEntityDraft.kind}`}
-                className="object-card-expanded-container"
+                className="story-entity-card-expanded-container"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, transition: { duration: 0.4, delay: 0.15 } }}
@@ -1019,7 +1029,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({ globalDisplay
             {folderDialog ? (
               <motion.div
                 key={`folder-dialog-${folderDialog.mode}-${folderDialog.folderId ?? 'new'}`}
-                className="object-card-expanded-container"
+                className="story-entity-card-expanded-container"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, transition: { duration: 0.2 } }}
