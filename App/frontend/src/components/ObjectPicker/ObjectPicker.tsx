@@ -132,9 +132,7 @@ function filterGroups(
         const allowOutlineScaffold =
           (typeFilter === 'outline' && group.type === 'outline') ||
           (typeFilter === 'manuscript' && (group.type === 'manuscript' || group.type === 'outline'));
-        const allowStoryEntityFolderScaffold =
-          typeFilter === 'story_entity_folder' && group.type === 'story_entity';
-        if (!allowOutlineScaffold && !allowStoryEntityFolderScaffold) {
+        if (!allowOutlineScaffold) {
           return null;
         }
       }

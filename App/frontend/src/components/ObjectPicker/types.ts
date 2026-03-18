@@ -42,6 +42,7 @@ export interface ObjectPickerGroup {
   description?: string;
   type: ObjectType;
   kind?: OutlineKind;
+  order?: number;
   items: ObjectPickerItem[];
   childGroups?: ObjectPickerGroup[];  // For acts containing chapters
 }

@@ -6,7 +6,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { ChevronRight } from '../icons';
 import ObjectPickerItem from './ObjectPickerItem';
-import type { ObjectPickerGroupProps, SelectionState, ObjectPickerItem as PickerItem } from './types';
+import type { ObjectPickerGroupProps, ObjectPickerGroup as PickerGroup, SelectionState, ObjectPickerItem as PickerItem } from './types';
 
 interface GroupLike {
   items: PickerItem[];
@@ -26,6 +26,27 @@ function getAllItemIds(group: GroupLike): string[] {
   }
 
   return ids;
+}
+
+type MergedChild =
+  | { kind: 'item'; data: PickerItem; order: number; label: string }
+  | { kind: 'group'; data: PickerGroup; order: number; label: string };
+
+function mergedChildren(items: PickerItem[], childGroups?: PickerGroup[]): MergedChild[] {
+  const merged: MergedChild[] = [];
+  for (const item of items) {
+    merged.push({ kind: 'item', data: item, order: item.order ?? 0, label: item.name });
+  }
+  if (childGroups) {
+    for (const group of childGroups) {
+      merged.push({ kind: 'group', data: group, order: group.order ?? 0, label: group.label });
+    }
+  }
+  merged.sort((a, b) => {
+    if (a.order !== b.order) return a.order - b.order;
+    return a.label.localeCompare(b.label);
+  });
+  return merged;
 }
 
 const ObjectPickerGroup: React.FC<ObjectPickerGroupProps> = ({
@@ -135,39 +156,38 @@ const ObjectPickerGroup: React.FC<ObjectPickerGroupProps> = ({
       {/* Items container - only render when expanded */}
       {isExpanded && (
         <div className="object-picker-items">
-          {/* Render direct items */}
-          {group.items.map(item => (
-            <ObjectPickerItem
-              key={item.id}
-              item={item}
-              isSelected={selectedIds.has(item.id)}
-              isPreSelected={preSelectedIds.has(item.id)}
-              isHighlighted={highlightIds.has(item.id)}
-              isExcluded={excludedIds.has(item.id)}
-              selectionMode={selectionMode}
-              onToggle={onToggleItem}
-              disabled={disabled}
-            />
-          ))}
-
-          {/* Render nested groups (acts containing chapters) */}
-          {group.childGroups?.map(childGroup => (
-            <ObjectPickerGroup
-              key={childGroup.id}
-              group={childGroup}
-              selectionMode={selectionMode}
-              selectedIds={selectedIds}
-              expandedGroups={expandedGroups}
-              onToggleItem={onToggleItem}
-              onToggleGroup={onToggleGroup}
-              onToggleExpand={onToggleExpand}
-              preSelectedIds={preSelectedIds}
-              highlightIds={highlightIds}
-              excludedIds={excludedIds}
-              disabled={disabled}
-              level={level + 1}
-            />
-          ))}
+          {/* Merge items and child groups, sort by display_order then name */}
+          {mergedChildren(group.items, group.childGroups).map(child =>
+            child.kind === 'item' ? (
+              <ObjectPickerItem
+                key={child.data.id}
+                item={child.data}
+                isSelected={selectedIds.has(child.data.id)}
+                isPreSelected={preSelectedIds.has(child.data.id)}
+                isHighlighted={highlightIds.has(child.data.id)}
+                isExcluded={excludedIds.has(child.data.id)}
+                selectionMode={selectionMode}
+                onToggle={onToggleItem}
+                disabled={disabled}
+              />
+            ) : (
+              <ObjectPickerGroup
+                key={child.data.id}
+                group={child.data}
+                selectionMode={selectionMode}
+                selectedIds={selectedIds}
+                expandedGroups={expandedGroups}
+                onToggleItem={onToggleItem}
+                onToggleGroup={onToggleGroup}
+                onToggleExpand={onToggleExpand}
+                preSelectedIds={preSelectedIds}
+                highlightIds={highlightIds}
+                excludedIds={excludedIds}
+                disabled={disabled}
+                level={level + 1}
+              />
+            ),
+          )}
         </div>
       )}
     </div>
