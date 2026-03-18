@@ -1,13 +1,10 @@
 import { buildOperationBase, coerceRecord, defineToolCallUiModule } from '../registry/contracts';
-import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { ImageToolCard } from '../ui/cards/ImageToolCard';
 import type { GenerateOperationVM } from '../ui/vmTypes';
 
 function resolveLanguage(): string {
-  const preferred = useDisplayLanguageStore.getState().preferredDisplayLanguage;
-  if (preferred) return preferred;
   try {
     return useSettingsStore.getState().getSettings().mainLanguage || 'English';
   } catch {

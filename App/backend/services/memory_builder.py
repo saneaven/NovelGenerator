@@ -218,7 +218,6 @@ def build_memory_summary_template_data(
     return {
         "config": {
             "mainLanguage": language,
-            "displayLanguage": language,
             "today": datetime.now(timezone.utc).date().isoformat(),
             "thinking_mode": "off",
             "outputMode": "tool_call",

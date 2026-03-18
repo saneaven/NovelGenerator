@@ -354,7 +354,6 @@ class ScenarioManager:
         template_data: dict[str, Any] = {
             "config": {
                 "mainLanguage": language,
-                "displayLanguage": language,
                 "today": datetime.now(timezone.utc).date().isoformat(),
                 "thinking_mode": str(task_cfg.advanced.get("thinking_mode") or "off"),
                 "outputMode": output_mode,

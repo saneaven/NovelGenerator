@@ -4,7 +4,6 @@ import {
   type ResumeRunRequest,
   type ToolCallDecisionResponse,
 } from '../api/threadService';
-import { useDisplayLanguageStore } from '../store/displayLanguageStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useThreadStore } from '../store/threadStore';
 import { nowIso, toThreadType, type ThreadInfo, type ThreadStatus } from '../types/thread';
@@ -148,7 +147,6 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
 
   const store = useThreadStore.getState();
   const lang = params.request?.language
-    || useDisplayLanguageStore.getState().preferredDisplayLanguage
     || useSettingsStore.getState().getSettings().mainLanguage;
   const existingMessages = store.getMessages(params.threadId);
   const maxSeq = existingMessages.reduce((max, message) => Math.max(max, message.seqInThread), 0);
