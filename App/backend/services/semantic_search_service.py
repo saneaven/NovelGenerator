@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Set, Tuple
 from uuid import UUID
@@ -7,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
+from ..database import SessionLocal
 from ..models.semantic_models import SemanticSource
 from ..models.translation_models import ObjectVersion
 from .embedding_config_service import get_embedding_profile
@@ -166,6 +168,186 @@ def search_project_by_keyword(
     return {"total": total, "results": results}
 
 
+def _row_to_chunk_dict(r, *, distance: float | None) -> Dict[str, Any]:
+    return {
+        "chunk_id": str(r.chunk_id),
+        "source_id": str(r.source_id),
+        "chunk_index": r.chunk_index,
+        "field_path": r.field_path,
+        "text": r.text,
+        "object_type": r.object_type,
+        "object_id": str(r.object_id),
+        "type_group": r.type_group,
+        "story_entity_kind": r.story_entity_kind,
+        "story_entity_order": r.story_entity_order,
+        "outline_order": r.outline_order,
+        "act_order": r.act_order,
+        "chapter_order": r.chapter_order,
+        "chapter_id": str(r.chapter_id) if r.chapter_id else None,
+        "distance": float(distance) if distance is not None else None,
+    }
+
+
+def _sort_key(r: Dict[str, Any]):
+    dist = r.get("distance")
+    dist_missing = dist is None
+    dist_value = float(dist) if dist is not None else 0.0
+    return (
+        1 if dist_missing else 0,
+        dist_value,
+        str(r.get("object_type") or ""),
+        r.get("object_id"),
+        int(r.get("chunk_index") or 0),
+        str(r.get("field_path") or ""),
+    )
+
+
+def _run_vector_queries(
+    *,
+    query_vectors: List[List[float]],
+    user_id: UUID,
+    project_id: UUID,
+    language: str,
+    provider: str,
+    model: str,
+    top_k_per_query: int,
+    neighbor_window: int,
+    max_primary_items: int,
+    max_total_items: int,
+) -> List[Dict[str, Any]]:
+    """Run vector similarity queries in a worker thread with a dedicated DB session.
+
+    This avoids blocking the asyncio event loop with potentially slow
+    full-table-scan vector distance calculations.
+    """
+    db_thread = SessionLocal()
+    try:
+        best: Dict[UUID, Dict[str, Any]] = {}
+
+        stmt = sql_text(
+            """
+            SELECT
+              c.id AS chunk_id,
+              c.source_id AS source_id,
+              c.chunk_index AS chunk_index,
+              c.field_path AS field_path,
+              c.text AS text,
+              s.object_type AS object_type,
+              s.object_id AS object_id,
+              s.type_group AS type_group,
+              s.story_entity_kind AS story_entity_kind,
+              s.story_entity_order AS story_entity_order,
+              s.outline_order AS outline_order,
+              s.act_order AS act_order,
+              s.chapter_order AS chapter_order,
+              s.chapter_id AS chapter_id,
+              (c.embedding <-> (:qv)::vector) AS distance
+            FROM semantic_chunks c
+            JOIN semantic_sources s ON s.id = c.source_id
+            WHERE s.user_id = :user_id
+              AND s.project_id = :project_id
+              AND s.language = :language
+              AND s.indexed_provider = :provider
+              AND s.indexed_model = :model
+            ORDER BY c.embedding <-> (:qv)::vector
+            LIMIT :k
+            """
+        )
+
+        for qv in query_vectors:
+            qv_str = _vec_to_pg(qv)
+            try:
+                rows = db_thread.execute(
+                    stmt,
+                    {
+                        "qv": qv_str,
+                        "user_id": user_id,
+                        "project_id": project_id,
+                        "language": language,
+                        "provider": provider,
+                        "model": model,
+                        "k": int(top_k_per_query),
+                    },
+                ).fetchall()
+            except Exception as exc:
+                db_thread.rollback()
+                msg = str(exc)
+                if "different vector dimensions" in msg or "expected" in msg.lower() and "dimension" in msg.lower():
+                    raise ValueError(
+                        "Vector dimension mismatch — the embedding model may have changed. "
+                        "Please run a full reindex (force=true) to fix this."
+                    ) from exc
+                raise
+
+            for r in rows:
+                chunk_id = r.chunk_id
+                prev = best.get(chunk_id)
+                if prev is None or (r.distance is not None and r.distance < prev.get("distance", 1e18)):
+                    best[chunk_id] = _row_to_chunk_dict(r, distance=r.distance)
+
+        primary_items = list(best.values())
+        primary_items.sort(key=_sort_key)
+        primary_items = primary_items[: max(1, int(max_primary_items))]
+        selected: Dict[str, Dict[str, Any]] = {
+            str(item["chunk_id"]): item
+            for item in primary_items
+        }
+
+        # Neighbor expansion (same source_id, chunk_index +/- window)
+        if neighbor_window > 0 and primary_items:
+            source_to_ranges: Dict[UUID, set[int]] = {}
+            for item in primary_items:
+                sid = item["source_id"]
+                idx = int(item["chunk_index"])
+                s = source_to_ranges.setdefault(sid, set())
+                for j in range(idx - neighbor_window, idx + neighbor_window + 1):
+                    if j >= 0:
+                        s.add(j)
+
+            neighbor_stmt = sql_text(
+                """
+                SELECT
+                  c.id AS chunk_id,
+                  c.source_id AS source_id,
+                  c.chunk_index AS chunk_index,
+                  c.field_path AS field_path,
+                  c.text AS text,
+                  s.object_type AS object_type,
+                  s.object_id AS object_id,
+                  s.type_group AS type_group,
+                  s.story_entity_kind AS story_entity_kind,
+                  s.story_entity_order AS story_entity_order,
+                  s.outline_order AS outline_order,
+                  s.act_order AS act_order,
+                  s.chapter_order AS chapter_order,
+                  s.chapter_id AS chapter_id
+                FROM semantic_chunks c
+                JOIN semantic_sources s ON s.id = c.source_id
+                WHERE c.source_id = :source_id
+                  AND c.chunk_index = ANY(:chunk_indices)
+                """
+            )
+
+            for source_id, indices in source_to_ranges.items():
+                if not indices:
+                    continue
+                rows = db_thread.execute(
+                    neighbor_stmt,
+                    {"source_id": source_id, "chunk_indices": list(indices)},
+                ).fetchall()
+                for r in rows:
+                    if str(r.chunk_id) in selected:
+                        continue
+                    selected[str(r.chunk_id)] = _row_to_chunk_dict(r, distance=None)
+
+        results = list(selected.values())
+        results.sort(key=_sort_key)
+        results = results[: max(1, int(max_total_items))]
+        return results
+    finally:
+        db_thread.close()
+
+
 async def search_project(
     db: Session,
     *,
@@ -192,172 +374,19 @@ async def search_project(
         purpose="query",
     )
 
-    best: Dict[UUID, Dict[str, Any]] = {}
-
-    stmt = sql_text(
-        """
-        SELECT
-          c.id AS chunk_id,
-          c.source_id AS source_id,
-          c.chunk_index AS chunk_index,
-          c.field_path AS field_path,
-          c.text AS text,
-          s.object_type AS object_type,
-          s.object_id AS object_id,
-          s.type_group AS type_group,
-          s.story_entity_kind AS story_entity_kind,
-          s.story_entity_order AS story_entity_order,
-          s.outline_order AS outline_order,
-          s.act_order AS act_order,
-          s.chapter_order AS chapter_order,
-          s.chapter_id AS chapter_id,
-          (c.embedding <-> (:qv)::vector) AS distance
-        FROM semantic_chunks c
-        JOIN semantic_sources s ON s.id = c.source_id
-        WHERE s.user_id = :user_id
-          AND s.project_id = :project_id
-          AND s.language = :language
-          AND s.indexed_provider = :provider
-          AND s.indexed_model = :model
-        ORDER BY c.embedding <-> (:qv)::vector
-        LIMIT :k
-        """
+    results = await asyncio.to_thread(
+        _run_vector_queries,
+        query_vectors=query_vectors,
+        user_id=user_id,
+        project_id=project_id,
+        language=language,
+        provider=str(profile["provider"]),
+        model=str(profile["model"]),
+        top_k_per_query=top_k_per_query,
+        neighbor_window=neighbor_window,
+        max_primary_items=max_primary_items,
+        max_total_items=max_total_items,
     )
-
-    for qv in query_vectors:
-        qv_str = _vec_to_pg(qv)
-        try:
-            rows = db.execute(
-                stmt,
-                {
-                    "qv": qv_str,
-                    "user_id": user_id,
-                    "project_id": project_id,
-                    "language": language,
-                    "provider": str(profile["provider"]),
-                    "model": str(profile["model"]),
-                    "k": int(top_k_per_query),
-                },
-            ).fetchall()
-        except Exception as exc:
-            db.rollback()
-            msg = str(exc)
-            if "different vector dimensions" in msg or "expected" in msg.lower() and "dimension" in msg.lower():
-                raise ValueError(
-                    "Vector dimension mismatch — the embedding model may have changed. "
-                    "Please run a full reindex (force=true) to fix this."
-                ) from exc
-            raise
-
-        for r in rows:
-            chunk_id = r.chunk_id
-            prev = best.get(chunk_id)
-            if prev is None or (r.distance is not None and r.distance < prev.get("distance", 1e18)):
-                best[chunk_id] = {
-                    "chunk_id": str(r.chunk_id),
-                    "source_id": str(r.source_id),
-                    "chunk_index": r.chunk_index,
-                    "field_path": r.field_path,
-                    "text": r.text,
-                    "object_type": r.object_type,
-                    "object_id": str(r.object_id),
-                    "type_group": r.type_group,
-                    "story_entity_kind": r.story_entity_kind,
-                    "story_entity_order": r.story_entity_order,
-                    "outline_order": r.outline_order,
-                    "act_order": r.act_order,
-                    "chapter_order": r.chapter_order,
-                    "chapter_id": str(r.chapter_id) if r.chapter_id else None,
-                    "distance": float(r.distance) if r.distance is not None else None,
-                }
-
-    def sort_key(r: Dict[str, Any]):
-        dist = r.get("distance")
-        dist_missing = dist is None
-        dist_value = float(dist) if dist is not None else 0.0
-        return (
-            1 if dist_missing else 0,
-            dist_value,
-            str(r.get("object_type") or ""),
-            r.get("object_id"),
-            int(r.get("chunk_index") or 0),
-            str(r.get("field_path") or ""),
-        )
-
-    primary_items = list(best.values())
-    primary_items.sort(key=sort_key)
-    primary_items = primary_items[: max(1, int(max_primary_items))]
-    selected: Dict[str, Dict[str, Any]] = {
-        str(item["chunk_id"]): item
-        for item in primary_items
-    }
-
-    # Neighbor expansion (same source_id, chunk_index +/- window)
-    if neighbor_window > 0 and primary_items:
-        source_to_ranges: Dict[UUID, set[int]] = {}
-        for item in primary_items:
-            sid = item["source_id"]
-            idx = int(item["chunk_index"])
-            s = source_to_ranges.setdefault(sid, set())
-            for j in range(idx - neighbor_window, idx + neighbor_window + 1):
-                if j >= 0:
-                    s.add(j)
-
-        neighbor_stmt = sql_text(
-            """
-            SELECT
-              c.id AS chunk_id,
-              c.source_id AS source_id,
-              c.chunk_index AS chunk_index,
-              c.field_path AS field_path,
-              c.text AS text,
-              s.object_type AS object_type,
-              s.object_id AS object_id,
-              s.type_group AS type_group,
-              s.story_entity_kind AS story_entity_kind,
-              s.story_entity_order AS story_entity_order,
-              s.outline_order AS outline_order,
-              s.act_order AS act_order,
-              s.chapter_order AS chapter_order,
-              s.chapter_id AS chapter_id
-            FROM semantic_chunks c
-            JOIN semantic_sources s ON s.id = c.source_id
-            WHERE c.source_id = :source_id
-              AND c.chunk_index = ANY(:chunk_indices)
-            """
-        )
-
-        for source_id, indices in source_to_ranges.items():
-            if not indices:
-                continue
-            rows = db.execute(
-                neighbor_stmt,
-                {"source_id": source_id, "chunk_indices": list(indices)},
-            ).fetchall()
-            for r in rows:
-                if str(r.chunk_id) in selected:
-                    continue
-                selected[str(r.chunk_id)] = {
-                    "chunk_id": str(r.chunk_id),
-                    "source_id": str(r.source_id),
-                    "chunk_index": r.chunk_index,
-                    "field_path": r.field_path,
-                    "text": r.text,
-                    "object_type": r.object_type,
-                    "object_id": str(r.object_id),
-                    "type_group": r.type_group,
-                    "story_entity_kind": r.story_entity_kind,
-                    "story_entity_order": r.story_entity_order,
-                    "outline_order": r.outline_order,
-                    "act_order": r.act_order,
-                    "chapter_order": r.chapter_order,
-                    "chapter_id": str(r.chapter_id) if r.chapter_id else None,
-                    "distance": None,
-                }
-
-    results = list(selected.values())
-    results.sort(key=sort_key)
-    results = results[: max(1, int(max_total_items))]
     return results
 
 
