@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSubAgentStore } from '../../../store/subAgentStore';
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import type { CallAgentCardProps } from './types';
@@ -11,7 +12,10 @@ export const CallAgentCard: React.FC<CallAgentCardProps> = ({
   onAccept,
   onReject,
 }) => {
-  const title = operation.displayName;
+  const storeDisplayName = useSubAgentStore(
+    (state) => state.subAgents.find((s) => s.agent_name === operation.agentName)?.display_name,
+  );
+  const title = storeDisplayName ?? operation.displayName;
   const input = operation.input?.trim() ? operation.input : '(no input)';
 
   return (

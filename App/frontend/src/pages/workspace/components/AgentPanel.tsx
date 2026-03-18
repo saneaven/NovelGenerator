@@ -10,6 +10,7 @@ import { useSettings } from '../../../store/settingsStore';
 import { usePresetStore } from '../../../store/presetStore';
 import { useMcpStore } from '../../../store/mcpStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
+import { useSubAgentStore } from '../../../store/subAgentStore';
 import { useThreadStore } from '../../../store/threadStore';
 import { threadService } from '../../../api/threadService';
 import { runMessageTranslation } from '../../../agent/messageTranslation';
@@ -851,6 +852,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     if (displayItems.length === 0) return undefined;
     return thread.lastError || 'An error occurred during generation.';
   }, [thread?.status, thread?.lastError, displayItems.length]);
+
+  useEffect(() => {
+    void useSubAgentStore.getState().ensureLoaded();
+  }, []);
 
   useEffect(() => {
     if (!projectId || !selectedAgentId) return;

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
+import { useSubAgentStore } from '../../store/subAgentStore';
 import { useThreadStore } from '../../store/threadStore';
 import type { ThreadInfo, ThreadToolCall } from '../../types/thread';
 import {
@@ -86,6 +87,8 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     })),
   );
 
+  const subAgents = useSubAgentStore((state) => state.subAgents);
+
   const setPeekOpen = useFunctionCallUIStore((state) => state.setPeekOpen);
   const setSelectedPeekRun = useFunctionCallUIStore((state) => state.setSelectedPeekRun);
 
@@ -110,10 +113,12 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
       if (!tc.toolName.startsWith('call_') || !tc.childThreadId) continue;
       const thread = threadsById[tc.childThreadId];
       if (!thread) continue;
+      const agentName = tc.toolName.slice(5);
+      const def = subAgents.find((s) => s.agent_name === agentName);
       result.push({
         key: tc.childThreadId,
         childThreadId: tc.childThreadId,
-        displayName: tc.toolName.slice(5),
+        displayName: def?.display_name ?? agentName,
         thread,
         callSeq: tc.callSeq,
       });
@@ -121,7 +126,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
     result.sort((a, b) => a.callSeq - b.callSeq);
     return result;
-  }, [toolCallIdsByAssistantMessageId, toolCallsById, parentMessageId, threadsById]);
+  }, [toolCallIdsByAssistantMessageId, toolCallsById, parentMessageId, threadsById, subAgents]);
 
   const pendingCountByKey = useMemo(() => {
     const map: Record<string, number> = {};
