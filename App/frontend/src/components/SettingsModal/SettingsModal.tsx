@@ -129,6 +129,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [isSyncingCredentials, setIsSyncingCredentials] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [promptUnsavedCount, setPromptUnsavedCount] = useState(0);
+  const promptUnsavedCountRef = useRef(0);
   const [hasMountedPromptsPanel, setHasMountedPromptsPanel] = useState(false);
   const [promptsPanelKey, setPromptsPanelKey] = useState(0);
   const [toast, setToast] = useState<{ kind: SettingsToastKind; message: string } | null>(null);
@@ -153,6 +154,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setActiveSearchMemoryTarget('general');
       settingsSnapshotRef.current = JSON.stringify(settings);
       credentialsSnapshotRef.current = JSON.stringify(DEFAULT_CREDENTIAL_DRAFT);
+      promptUnsavedCountRef.current = 0;
       setPromptUnsavedCount(0);
       setHasMountedPromptsPanel(mainTab === 'prompts' && !settings.demoModeEnabled);
       void apiClient
@@ -163,6 +165,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  const handlePromptUnsavedCountChange = useCallback((count: number) => {
+    promptUnsavedCountRef.current = count;
+    setPromptUnsavedCount(count);
+  }, []);
 
   const showToast = useCallback((kind: SettingsToastKind, message: string, durationMs?: number) => {
     if (toastTimeoutRef.current) {
@@ -402,6 +409,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setLocalSettings(nextSettings);
       setLocalCredentials(DEFAULT_CREDENTIAL_DRAFT);
       credentialsSnapshotRef.current = JSON.stringify(DEFAULT_CREDENTIAL_DRAFT);
+      promptUnsavedCountRef.current = 0;
       setPromptUnsavedCount(0);
       setHasMountedPromptsPanel(false);
       setPromptsPanelKey((prev) => prev + 1);
@@ -480,6 +488,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
         const promptSummary = await promptSavePromise;
         if (promptSummary.attempted > 0 && promptSummary.failed === 0) {
+          promptUnsavedCountRef.current = 0;
+          setPromptUnsavedCount(0);
           showToast('success', `Saved ${promptSummary.saved} prompt items`);
         } else if (promptSummary.failed > 0) {
           showToast('error', `Saved ${promptSummary.saved}/${promptSummary.attempted} prompt items. ${promptSummary.failed} failed.`);
@@ -498,6 +508,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           );
 
       if (promptSummary.attempted > 0 && promptSummary.failed === 0) {
+        promptUnsavedCountRef.current = 0;
+        setPromptUnsavedCount(0);
         showToast('success', `Saved ${promptSummary.saved} prompt items`);
       } else if (promptSummary.failed > 0) {
         showToast('error', `Saved ${promptSummary.saved}/${promptSummary.attempted} prompt items. ${promptSummary.failed} failed.`);
@@ -514,7 +526,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     const credentialsDirty =
       !localSettings.demoModeEnabled &&
       JSON.stringify(localCredentials) !== credentialsSnapshotRef.current;
-    const promptDirty = promptUnsavedCount;
+    const promptDirty = promptUnsavedCountRef.current;
     return promptDirty + (settingsDirty ? 1 : 0) + (credentialsDirty ? 1 : 0);
   }, [localCredentials, localSettings, promptUnsavedCount]);
 
@@ -973,7 +985,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             <PromptsTemplatesPanel
               key={promptsPanelKey}
               ref={promptsPanelRef}
-              onUnsavedCountChange={setPromptUnsavedCount}
+              onUnsavedCountChange={handlePromptUnsavedCountChange}
             />
           </div>
         )}
