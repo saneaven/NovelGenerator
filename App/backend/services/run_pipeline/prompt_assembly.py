@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ...models.db_models import RunModel, Thread, UserSettings
+from ...models.db_models import RunMessageModel, RunModel, Thread, UserSettings
 from ..mcp import McpMessageAssembler
 from ..prompt_runtime.project_data_builder import build_project_data
 from ..prompt_runtime.scenario_manager import ScenarioManager
@@ -113,6 +113,21 @@ async def assemble_resume(
     if thread.captured_history_conversation_json is None:
         # Cache invalidated (e.g. message deleted) — full rebuild through the
         # same rendering pipeline as create so conversation blocks are applied.
+        return await assemble_create(
+            db, run=run, thread=thread, settings=settings,
+            create_ctx=CreateContext(input_text="", input_payload=input_payload),
+        )
+
+    # If the last message in this run is a user turn, break the cache
+    # and do a full re-render so the prompt reflects the latest context.
+    last_msg_role = (
+        db.query(RunMessageModel.role)
+        .filter(RunMessageModel.run_id == run.id)
+        .order_by(RunMessageModel.seq.desc())
+        .limit(1)
+        .scalar()
+    )
+    if last_msg_role == "user":
         return await assemble_create(
             db, run=run, thread=thread, settings=settings,
             create_ctx=CreateContext(input_text="", input_payload=input_payload),
