@@ -50,6 +50,8 @@ export interface PromptProjectOutlineNode {
   content: string;
   parentId: string | null;
   position: number;
+  actNumber?: number | null;
+  chapterNumber?: number | null;
   manuscriptId?: string | null;
 }
 
@@ -66,6 +68,8 @@ export interface PromptProjectManuscript {
   id: string;
   chapterId: string;
   chapterName: string;
+  actNumber?: number | null;
+  chapterNumber?: number | null;
   content: string;
   wordCount: number;
 }
@@ -248,6 +252,7 @@ function buildOutline(ids: PromptProjectSkeletonIds): PromptProjectOutline {
         content: '[ Placeholder for act content ]',
         parentId: ids.outlineRoot,
         position: 0,
+        actNumber: 1,
         children: [
           {
             id: ids.outlineChapter,
@@ -257,6 +262,8 @@ function buildOutline(ids: PromptProjectSkeletonIds): PromptProjectOutline {
             content: '[ Placeholder for chapter content ]',
             parentId: ids.outlineAct,
             position: 0,
+            actNumber: 1,
+            chapterNumber: 1,
             manuscriptId: ids.manuscript,
             children: [],
           },
@@ -284,6 +291,7 @@ function buildOutline(ids: PromptProjectSkeletonIds): PromptProjectOutline {
         content: '[ Placeholder for act content ]',
         parentId: ids.outlineRoot,
         position: 0,
+        actNumber: 1,
       },
       {
         id: ids.outlineChapter,
@@ -293,6 +301,8 @@ function buildOutline(ids: PromptProjectSkeletonIds): PromptProjectOutline {
         content: '[ Placeholder for chapter content ]',
         parentId: ids.outlineAct,
         position: 0,
+        actNumber: 1,
+        chapterNumber: 1,
         manuscriptId: ids.manuscript,
       },
     ],
@@ -306,6 +316,8 @@ function buildManuscripts(ids: PromptProjectSkeletonIds): PromptProjectManuscrip
       id: ids.manuscript,
       chapterId: ids.outlineChapter,
       chapterName: '[ Placeholder for chapter name ]',
+      actNumber: 1,
+      chapterNumber: 1,
       content: '[ Placeholder for manuscript content ]',
       wordCount: 0,
     },

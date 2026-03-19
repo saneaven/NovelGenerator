@@ -82,3 +82,23 @@ def test_default_prompt_story_entity_tool_docs_include_folder_id() -> None:
     assert "`folderId` can be used together with create, replace, or patch to place or move a story entity." in project_data_ops
     assert '"folderId": "folder-main-cast"' in project_data_native
     assert '"folderId": null' in project_data_native
+
+
+def test_default_prompt_outline_and_manuscript_fragments_include_number_attributes() -> None:
+    document = _load_default_prompt_document()
+
+    common_context = document["fragments"]["common"]["objectContext"]["content"]
+    common_index = document["fragments"]["common"]["objectIndex"]["content"]
+    translation_context = document["fragments"]["translation"]["objectContext"]["content"]
+    translation_reference = document["fragments"]["translation"]["referenceContext"]["content"]
+
+    for fragment in (common_context, common_index, translation_context, translation_reference):
+        assert 'act-number="{{ node.actNumber|e }}"' in fragment
+        assert 'chapter-number="{{ node.chapterNumber|e }}"' in fragment
+
+    for fragment in (common_context, common_index, translation_context):
+        assert 'act-number="{{ manuscript.actNumber|e }}"' in fragment
+        assert 'chapter-number="{{ manuscript.chapterNumber|e }}"' in fragment
+
+    assert 'act-number="{{ this.actNumber|e }}"' in translation_reference
+    assert 'chapter-number="{{ this.chapterNumber|e }}"' in translation_reference

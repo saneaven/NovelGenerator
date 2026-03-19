@@ -1063,6 +1063,8 @@
     "searchPlaceholder": "객체 검색...",
     "allTypes": "전체 유형",
     "clearSearch": "검색 지우기",
+    "actPrefix": "막",
+    "chapterPrefix": "챕터",
     "selectAll": "전체 선택",
     "tokenCount": "{{count}} 토큰",
     "tokenEstimateHint": "tiktoken으로 추정 (실제 API 결과와 다를 수 있음)",

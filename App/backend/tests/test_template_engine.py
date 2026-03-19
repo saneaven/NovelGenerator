@@ -52,6 +52,7 @@ def _project_fixture() -> dict[str, object]:
                     "content": "Act content",
                     "parentId": "outline-1",
                     "position": 0,
+                    "actNumber": 1,
                     "children": [
                         {
                             "id": "chapter-1",
@@ -61,11 +62,39 @@ def _project_fixture() -> dict[str, object]:
                             "content": "Chapter content",
                             "parentId": "act-1",
                             "position": 0,
+                            "actNumber": 1,
+                            "chapterNumber": 1,
                             "manuscriptId": "ms-1",
                             "children": [],
                         }
                     ],
                 }
+                ,
+                {
+                    "id": "act-2",
+                    "kind": "act",
+                    "name": "Counterattack",
+                    "description": "Escalation movement",
+                    "content": "Act two content",
+                    "parentId": "outline-1",
+                    "position": 1,
+                    "actNumber": 2,
+                    "children": [
+                        {
+                            "id": "chapter-2",
+                            "kind": "chapter",
+                            "name": "The Escape",
+                            "description": "Second chapter",
+                            "content": "Chapter two content",
+                            "parentId": "act-2",
+                            "position": 0,
+                            "actNumber": 2,
+                            "chapterNumber": 2,
+                            "manuscriptId": "ms-2",
+                            "children": [],
+                        }
+                    ],
+                },
             ],
         }
     ]
@@ -87,6 +116,7 @@ def _project_fixture() -> dict[str, object]:
             "content": "Act content",
             "parentId": "outline-1",
             "position": 0,
+            "actNumber": 1,
         },
         {
             "id": "chapter-1",
@@ -96,7 +126,31 @@ def _project_fixture() -> dict[str, object]:
             "content": "Chapter content",
             "parentId": "act-1",
             "position": 0,
+            "actNumber": 1,
+            "chapterNumber": 1,
             "manuscriptId": "ms-1",
+        },
+        {
+            "id": "act-2",
+            "kind": "act",
+            "name": "Counterattack",
+            "description": "Escalation movement",
+            "content": "Act two content",
+            "parentId": "outline-1",
+            "position": 1,
+            "actNumber": 2,
+        },
+        {
+            "id": "chapter-2",
+            "kind": "chapter",
+            "name": "The Escape",
+            "description": "Second chapter",
+            "content": "Chapter two content",
+            "parentId": "act-2",
+            "position": 0,
+            "actNumber": 2,
+            "chapterNumber": 2,
+            "manuscriptId": "ms-2",
         },
     ]
     return {
@@ -132,8 +186,19 @@ def _project_fixture() -> dict[str, object]:
                 "id": "ms-1",
                 "chapterId": "chapter-1",
                 "chapterName": "The Raid",
+                "actNumber": 1,
+                "chapterNumber": 1,
                 "content": "Scene text",
                 "wordCount": 100,
+            },
+            {
+                "id": "ms-2",
+                "chapterId": "chapter-2",
+                "chapterName": "The Escape",
+                "actNumber": 2,
+                "chapterNumber": 2,
+                "content": "Scene two text",
+                "wordCount": 120,
             }
         ],
         "contentByLang": {
@@ -250,9 +315,9 @@ def test_render_template_supports_local_tree_macros_for_xml() -> None:
         '{% if node.kind == "outline" %}'
         '<outline id="{{ node.id|e }}" name="{{ node.name|e }}">{{ render_outline_nodes(node.children or []) }}</outline>'
         '{% elif node.kind == "act" %}'
-        '<outline-act id="{{ node.id|e }}" name="{{ node.name|e }}">{{ render_outline_nodes(node.children or []) }}</outline-act>'
+        '<outline-act id="{{ node.id|e }}" name="{{ node.name|e }}"{% if node.actNumber is defined and node.actNumber is not none %} act-number="{{ node.actNumber|e }}"{% endif %}>{{ render_outline_nodes(node.children or []) }}</outline-act>'
         '{% elif node.kind == "chapter" %}'
-        '<outline-chapter id="{{ node.id|e }}" name="{{ node.name|e }}"{% if node.manuscriptId is defined and node.manuscriptId %} manuscript-id="{{ node.manuscriptId|e }}"{% endif %}>{{ render_outline_nodes(node.children or []) }}</outline-chapter>'
+        '<outline-chapter id="{{ node.id|e }}" name="{{ node.name|e }}"{% if node.actNumber is defined and node.actNumber is not none %} act-number="{{ node.actNumber|e }}"{% endif %}{% if node.chapterNumber is defined and node.chapterNumber is not none %} chapter-number="{{ node.chapterNumber|e }}"{% endif %}{% if node.manuscriptId is defined and node.manuscriptId %} manuscript-id="{{ node.manuscriptId|e }}"{% endif %}>{{ render_outline_nodes(node.children or []) }}</outline-chapter>'
         '{% endif %}'
         '{% endfor %}'
         '{%- endmacro %}'
@@ -265,7 +330,8 @@ def test_render_template_supports_local_tree_macros_for_xml() -> None:
     assert '<folder id="folder-1" name="Characters">' in rendered
     assert '<story-entity id="entity-1" kind="character">' in rendered
     assert '<content>Detailed content</content>' in rendered
-    assert '<outline-chapter id="chapter-1" name="The Raid" manuscript-id="ms-1">' in rendered
+    assert '<outline-act id="act-1" name="Setup" act-number="1">' in rendered
+    assert '<outline-chapter id="chapter-1" name="The Raid" act-number="1" chapter-number="1" manuscript-id="ms-1">' in rendered
     assert "Port Meridian" not in rendered
 
 
@@ -293,6 +359,40 @@ def test_render_template_supports_local_tree_macros_for_markdown() -> None:
     assert "## Folder: Characters" in rendered
     assert "- character: Ari" in rendered
     assert "- location: Port Meridian" in rendered
+
+
+def test_render_template_preserves_canonical_selected_outline_and_manuscript_numbers() -> None:
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% macro render_outline_nodes(nodes) -%}'
+        '{% for node in nodes %}'
+        '{% if node.kind == "outline" %}'
+        '<outline id="{{ node.id|e }}" name="{{ node.name|e }}">{{ render_outline_nodes(node.children or []) }}</outline>'
+        '{% elif node.kind == "act" %}'
+        '<outline-act id="{{ node.id|e }}" name="{{ node.name|e }}"{% if node.actNumber is defined and node.actNumber is not none %} act-number="{{ node.actNumber|e }}"{% endif %}>{{ render_outline_nodes(node.children or []) }}</outline-act>'
+        '{% elif node.kind == "chapter" %}'
+        '<outline-chapter id="{{ node.id|e }}" name="{{ node.name|e }}"{% if node.actNumber is defined and node.actNumber is not none %} act-number="{{ node.actNumber|e }}"{% endif %}{% if node.chapterNumber is defined and node.chapterNumber is not none %} chapter-number="{{ node.chapterNumber|e }}"{% endif %}{% if node.manuscriptId is defined and node.manuscriptId %} manuscript-id="{{ node.manuscriptId|e }}"{% endif %}></outline-chapter>'
+        '{% endif %}'
+        '{% endfor %}'
+        '{%- endmacro %}'
+        '{% macro render_manuscripts(manuscripts) -%}'
+        '{% for manuscript in manuscripts %}'
+        '<manuscript id="{{ manuscript.id|e }}" chapter-id="{{ manuscript.chapterId|e }}" chapter-name="{{ manuscript.chapterName|e }}"{% if manuscript.actNumber is defined and manuscript.actNumber is not none %} act-number="{{ manuscript.actNumber|e }}"{% endif %}{% if manuscript.chapterNumber is defined and manuscript.chapterNumber is not none %} chapter-number="{{ manuscript.chapterNumber|e }}"{% endif %}></manuscript>'
+        '{% endfor %}'
+        '{%- endmacro %}'
+        '{% set ctx = select_object_context(project, ["chapter-2", "ms-2"]) %}'
+        '<outline-structure>{{ render_outline_nodes(ctx.outlineTree) }}</outline-structure>'
+        '<manuscripts>{{ render_manuscripts(ctx.manuscripts) }}</manuscripts>',
+        {"project": project},
+    )
+
+    assert '<outline-act id="act-2" name="Counterattack" act-number="2">' in rendered
+    assert '<outline-chapter id="chapter-2" name="The Escape" act-number="2" chapter-number="2" manuscript-id="ms-2"></outline-chapter>' in rendered
+    assert '<manuscript id="ms-2" chapter-id="chapter-2" chapter-name="The Escape" act-number="2" chapter-number="2"></manuscript>' in rendered
+    assert 'chapter-number="1"' not in rendered
 
 
 def test_create_environment_does_not_register_format_specific_renderers() -> None:

@@ -197,6 +197,8 @@ export const UNIFIED_SCHEMA = {
           content: "Detailed chapter notes",
           parentId: "act-1",
           position: 0,
+          actNumber: 1,
+          chapterNumber: 1,
           manuscriptId: "manuscript-1",
         }],
       } as {

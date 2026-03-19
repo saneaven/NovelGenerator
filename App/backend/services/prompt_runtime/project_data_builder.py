@@ -147,6 +147,49 @@ def _flatten_story_entity_tree(tree: list[dict[str, Any]]) -> list[dict[str, Any
     return ordered
 
 
+def _outline_sort_key(row: Outline) -> tuple[int, Any, str]:
+    return (int(row.position or 0), row.created_at, str(row.id))
+
+
+def _build_outline_numbering(outlines: list[Outline]) -> dict[UUID, dict[str, int | None]]:
+    """Compute canonical act/chapter numbers per root outline.
+
+    Numbers are structural metadata derived from the full outline tree, not from
+    whatever subset might later be rendered into prompt context.
+    """
+    children_by_parent: dict[UUID | None, list[Outline]] = {}
+    for row in outlines:
+        children_by_parent.setdefault(row.parent_id, []).append(row)
+    for values in children_by_parent.values():
+        values.sort(key=_outline_sort_key)
+
+    numbering: dict[UUID, dict[str, int | None]] = {}
+    for root in children_by_parent.get(None, []):
+        if str(root.kind or "") != "outline":
+            continue
+
+        act_number = 0
+        chapter_number = 0
+        for act in children_by_parent.get(root.id, []):
+            if str(act.kind or "") != "act":
+                continue
+
+            act_number += 1
+            numbering[act.id] = {"actNumber": act_number, "chapterNumber": None}
+
+            for chapter in children_by_parent.get(act.id, []):
+                if str(chapter.kind or "") != "chapter":
+                    continue
+
+                chapter_number += 1
+                numbering[chapter.id] = {
+                    "actNumber": act_number,
+                    "chapterNumber": chapter_number,
+                }
+
+    return numbering
+
+
 async def build_project_data(
     db: Session,
     project_id: UUID,
@@ -254,17 +297,19 @@ async def build_project_data(
 
     outlines_by_id: dict[UUID, Outline] = {row.id: row for row in outlines}
     manuscript_by_chapter: dict[UUID, Manuscript] = {ms.chapter_id: ms for ms in manuscripts}
+    outline_numbering = _build_outline_numbering(outlines)
 
     def build_outline_payload(lang: str) -> dict[str, Any]:
         children_by_parent: dict[UUID | None, list[Outline]] = {}
         for row in outlines:
             children_by_parent.setdefault(row.parent_id, []).append(row)
         for values in children_by_parent.values():
-            values.sort(key=lambda item: (int(item.position or 0), item.created_at, item.id))
+            values.sort(key=_outline_sort_key)
 
         def outline_node_payload(row: Outline) -> dict[str, Any]:
             outline_data = _lang_data(get_latest("outline", row.id), lang)
             manuscript = manuscript_by_chapter.get(row.id)
+            numbering = outline_numbering.get(row.id, {})
             payload = {
                 "id": str(row.id),
                 "kind": str(row.kind or ""),
@@ -274,6 +319,8 @@ async def build_project_data(
                 "description": str(outline_data.get("description") or ""),
                 "content": str(outline_data.get("content") or ""),
                 "manuscriptId": str(manuscript.id) if manuscript is not None else None,
+                "actNumber": numbering.get("actNumber"),
+                "chapterNumber": numbering.get("chapterNumber"),
             }
             return payload
 
@@ -317,6 +364,7 @@ async def build_project_data(
             manuscript_data = _lang_data(get_latest("manuscript", manuscript.id), lang)
             chapter = outlines_by_id.get(manuscript.chapter_id)
             chapter_data = _lang_data(get_latest("outline", chapter.id), lang) if chapter is not None else {}
+            numbering = outline_numbering.get(chapter.id, {}) if chapter is not None else {}
 
             markdown = ""
             doc = manuscript_data.get("doc")
@@ -328,6 +376,8 @@ async def build_project_data(
                     "id": str(manuscript.id),
                     "chapterId": str(manuscript.chapter_id),
                     "chapterName": str(chapter_data.get("name") or ""),
+                    "actNumber": numbering.get("actNumber"),
+                    "chapterNumber": numbering.get("chapterNumber"),
                     "content": markdown,
                     "wordCount": int(manuscript_data.get("wordCount") or len(markdown.split())),
                 }

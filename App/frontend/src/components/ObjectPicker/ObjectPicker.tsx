@@ -116,6 +116,85 @@ function findGroup(groups: Group[], groupId: string): Group | null {
 /**
  * Filter groups based on search query and type filter
  */
+function isAllowedGroupType(groupType: ObjectType, typeFilter: ObjectType | null): boolean {
+  if (!typeFilter) return true;
+  if (groupType === typeFilter) return true;
+  return (
+    (typeFilter === 'outline' && groupType === 'outline') ||
+    (typeFilter === 'manuscript' && (groupType === 'manuscript' || groupType === 'outline'))
+  );
+}
+
+function matchesSearchValue(value: string | undefined, normalizedQuery: string): boolean {
+  if (!normalizedQuery) return true;
+  return value?.toLowerCase().includes(normalizedQuery) ?? false;
+}
+
+function itemMatchesSearch(item: PickerItem, normalizedQuery: string): boolean {
+  if (!normalizedQuery) return true;
+  return (
+    matchesSearchValue(item.name, normalizedQuery) ||
+    matchesSearchValue(item.description, normalizedQuery) ||
+    matchesSearchValue(item.content, normalizedQuery)
+  );
+}
+
+function filterGroupByType(group: Group, typeFilter: ObjectType | null): Group | null {
+  if (!isAllowedGroupType(group.type, typeFilter)) {
+    return null;
+  }
+
+  const filteredItems = group.items.filter((item) => !typeFilter || item.type === typeFilter);
+  const filteredChildGroups = group.childGroups
+    ?.map((childGroup) => filterGroupByType(childGroup, typeFilter))
+    .filter(Boolean) as Group[] | undefined;
+
+  const hasItems = filteredItems.length > 0;
+  const hasChildGroups = filteredChildGroups && filteredChildGroups.length > 0;
+
+  if (!hasItems && !hasChildGroups) {
+    return null;
+  }
+
+  return {
+    ...group,
+    items: filteredItems,
+    childGroups: hasChildGroups ? filteredChildGroups : undefined,
+  };
+}
+
+function filterGroupBySearch(group: Group, normalizedQuery: string): Group | null {
+  if (!normalizedQuery) {
+    return group;
+  }
+
+  const groupMatchesSearch =
+    matchesSearchValue(group.label, normalizedQuery) ||
+    matchesSearchValue(group.description, normalizedQuery);
+
+  if (groupMatchesSearch) {
+    return group;
+  }
+
+  const filteredItems = group.items.filter((item) => itemMatchesSearch(item, normalizedQuery));
+  const filteredChildGroups = group.childGroups
+    ?.map((childGroup) => filterGroupBySearch(childGroup, normalizedQuery))
+    .filter(Boolean) as Group[] | undefined;
+
+  const hasItems = filteredItems.length > 0;
+  const hasChildGroups = filteredChildGroups && filteredChildGroups.length > 0;
+
+  if (!hasItems && !hasChildGroups) {
+    return null;
+  }
+
+  return {
+    ...group,
+    items: filteredItems,
+    childGroups: hasChildGroups ? filteredChildGroups : undefined,
+  };
+}
+
 function filterGroups(
   groups: Group[],
   searchQuery: string,
@@ -124,60 +203,16 @@ function filterGroups(
   if (!searchQuery && !typeFilter) return groups;
 
   const normalizedQuery = searchQuery.toLowerCase().trim();
+  const groupsFilteredByType = groups
+    .map((group) => filterGroupByType(group, typeFilter))
+    .filter(Boolean) as Group[];
 
-  return groups
-    .map(group => {
-      // Filter by type
-      if (typeFilter && group.type !== typeFilter) {
-        const allowOutlineScaffold =
-          (typeFilter === 'outline' && group.type === 'outline') ||
-          (typeFilter === 'manuscript' && (group.type === 'manuscript' || group.type === 'outline'));
-        if (!allowOutlineScaffold) {
-          return null;
-        }
-      }
+  if (!normalizedQuery) {
+    return groupsFilteredByType;
+  }
 
-      // Filter items by search query
-      const filteredItems = group.items.filter(item => {
-        const matchesSearch = !normalizedQuery ||
-          item.name.toLowerCase().includes(normalizedQuery) ||
-          item.description?.toLowerCase().includes(normalizedQuery) ||
-          item.content?.toLowerCase().includes(normalizedQuery);
-        const matchesType = !typeFilter || item.type === typeFilter;
-        return matchesSearch && matchesType;
-      });
-
-      // Filter child groups
-      const filteredChildGroups = group.childGroups?.map(childGroup => {
-        const childFilteredItems = childGroup.items.filter(item => {
-          const matchesSearch = !normalizedQuery ||
-            item.name.toLowerCase().includes(normalizedQuery) ||
-            item.description?.toLowerCase().includes(normalizedQuery) ||
-            item.content?.toLowerCase().includes(normalizedQuery);
-          const matchesType = !typeFilter || item.type === typeFilter;
-          return matchesSearch && matchesType;
-        });
-
-        if (childFilteredItems.length === 0) return null;
-
-        return {
-          ...childGroup,
-          items: childFilteredItems,
-        };
-      }).filter(Boolean) as Group[] | undefined;
-
-      // Include group if it has matching items or child groups
-      const hasItems = filteredItems.length > 0;
-      const hasChildGroups = filteredChildGroups && filteredChildGroups.length > 0;
-
-      if (!hasItems && !hasChildGroups) return null;
-
-      return {
-        ...group,
-        items: filteredItems,
-        childGroups: filteredChildGroups,
-      };
-    })
+  return groupsFilteredByType
+    .map((group) => filterGroupBySearch(group, normalizedQuery))
     .filter(Boolean) as Group[];
 }
 

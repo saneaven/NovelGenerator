@@ -3,6 +3,8 @@
  */
 
 import { useMemo, useEffect, useState } from 'react';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import type { ObjectType, UnifiedObject } from '../../types/unifiedObject';
 import type {
@@ -21,6 +23,12 @@ import {
   type StoryEntityFolder,
 } from '../../types/storyEntityFolder';
 import { getProjectStoryEntityFolders } from '../../utils/storyEntityTree';
+
+type OutlineNumbering = {
+  actNumberById: Map<string, number>;
+  chapterNumberById: Map<string, number>;
+  actNumberByChapterId: Map<string, number>;
+};
 
 function getObjectDataForLanguage(obj: UnifiedObject, language: string): Record<string, unknown> {
   if (obj.data[language]) {
@@ -53,6 +61,102 @@ function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): Ob
       break;
   }
   return types.filter((type) => !excludeTypes.includes(type));
+}
+
+function compareOutlineItems(a: UnifiedObject, b: UnifiedObject): number {
+  const positionA = Number(a.metadata?.position ?? 0);
+  const positionB = Number(b.metadata?.position ?? 0);
+  if (positionA !== positionB) {
+    return positionA - positionB;
+  }
+
+  const createdAtA = typeof a.metadata?.created_at === 'string' ? a.metadata.created_at : '';
+  const createdAtB = typeof b.metadata?.created_at === 'string' ? b.metadata.created_at : '';
+  if (createdAtA !== createdAtB) {
+    return createdAtA.localeCompare(createdAtB);
+  }
+
+  return a.id.localeCompare(b.id);
+}
+
+function getDisplayName(rawName: unknown, fallbackName: string): string {
+  if (typeof rawName === 'string' && rawName.trim().length > 0) {
+    return rawName;
+  }
+  return fallbackName;
+}
+
+function getOutlineObjectName(
+  obj: UnifiedObject,
+  language: string,
+  fallbackName: string,
+): string {
+  const data = getObjectDataForLanguage(obj, language);
+  return getDisplayName(data.name, fallbackName);
+}
+
+function formatActDisplayName(baseName: string, actNumber: number | undefined, t: TFunction): string {
+  if (actNumber === undefined) {
+    return baseName;
+  }
+  return `${t('objectPicker.actPrefix')} ${actNumber} ${baseName}`;
+}
+
+function formatChapterDisplayName(baseName: string, chapterNumber: number | undefined, t: TFunction): string {
+  if (chapterNumber === undefined) {
+    return baseName;
+  }
+  return `${t('objectPicker.chapterPrefix')} ${chapterNumber} ${baseName}`;
+}
+
+function buildOutlineNumbering(outlineItems: UnifiedObject[]): OutlineNumbering {
+  const actNumberById = new Map<string, number>();
+  const chapterNumberById = new Map<string, number>();
+  const actNumberByChapterId = new Map<string, number>();
+  const childrenByParent = new Map<string | null, UnifiedObject[]>();
+
+  outlineItems.forEach((item) => {
+    const parentId = (item.metadata?.parent_id as string | undefined) ?? null;
+    const siblings = childrenByParent.get(parentId) ?? [];
+    siblings.push(item);
+    childrenByParent.set(parentId, siblings);
+  });
+
+  childrenByParent.forEach((items) => items.sort(compareOutlineItems));
+
+  for (const root of childrenByParent.get(null) ?? []) {
+    if (root.kind !== 'outline') {
+      continue;
+    }
+
+    let actNumber = 0;
+    let chapterNumber = 0;
+
+    for (const act of childrenByParent.get(root.id) ?? []) {
+      if (act.kind !== 'act') {
+        continue;
+      }
+
+      actNumber += 1;
+      actNumberById.set(act.id, actNumber);
+
+      for (const chapter of childrenByParent.get(act.id) ?? []) {
+        if (chapter.kind !== 'chapter') {
+          continue;
+        }
+
+        chapterNumber += 1;
+        chapterNumberById.set(chapter.id, chapterNumber);
+        actNumberByChapterId.set(chapter.id, actNumber);
+      }
+    }
+  }
+
+  return {
+    actNumberById,
+    chapterNumberById,
+    actNumberByChapterId,
+  };
 }
 
 function objectToItem(obj: UnifiedObject, language: string): ObjectPickerItem {
@@ -223,17 +327,22 @@ function buildOutlineGroups(
   objects: UnifiedObject[],
   language: string,
   includeManuscripts: boolean,
+  t: TFunction,
 ): { groups: ObjectPickerGroup[]; availableTypes: ObjectType[] } {
   const groups: ObjectPickerGroup[] = [];
   const availableTypes: ObjectType[] = [];
 
   const outlineItems = objects
     .filter((obj): obj is UnifiedObject => obj.type === 'outline')
-    .sort((a, b) => (a.metadata?.position || 0) - (b.metadata?.position || 0));
+    .sort(compareOutlineItems);
   const outlines = outlineItems.filter((obj) => obj.kind === 'outline');
   const acts = outlineItems.filter((obj) => obj.kind === 'act');
   const chapters = outlineItems.filter((obj) => obj.kind === 'chapter');
   const manuscripts = objects.filter((obj) => obj.type === 'manuscript');
+  const { actNumberById, chapterNumberById } = buildOutlineNumbering(outlineItems);
+  const untitledOutline = t('outline.untitledOutline');
+  const untitledAct = t('outline.untitledAct');
+  const untitledChapter = t('outline.untitledChapter');
 
   if (outlines.length === 0 && acts.length === 0 && chapters.length === 0) {
     return { groups, availableTypes };
@@ -241,30 +350,52 @@ function buildOutlineGroups(
 
   if (!includeManuscripts) {
     const outlineGroups: ObjectPickerGroup[] = outlines.map((outline) => {
-      const outlineData = getObjectDataForLanguage(outline, language);
+      const outlineLabel = getOutlineObjectName(outline, language, untitledOutline);
+      const outlineItem = {
+        ...objectToItem(outline, language),
+        name: outlineLabel,
+      };
       const outlineActs = acts
         .filter((act) => act.metadata?.parent_id === outline.id)
-        .sort((a, b) => (a.metadata?.position || 0) - (b.metadata?.position || 0));
+        .sort(compareOutlineItems);
 
       return {
         id: `outline-${outline.id}`,
-        label: (outlineData.name as string) || 'Unnamed Outline',
+        label: outlineLabel,
         type: 'outline' as const,
         kind: 'outline' as const,
         order: outline.metadata?.position as number | undefined,
-        items: [objectToItem(outline, language)],
+        items: [outlineItem],
         childGroups: outlineActs.map((act) => {
-          const actData = getObjectDataForLanguage(act, language);
+          const actName = formatActDisplayName(
+            getOutlineObjectName(act, language, untitledAct),
+            actNumberById.get(act.id),
+            t,
+          );
           const actChapters = chapters
             .filter((chapter) => chapter.metadata?.parent_id === act.id)
-            .sort((a, b) => (a.metadata?.position || 0) - (b.metadata?.position || 0));
+            .sort(compareOutlineItems);
+
+          const actItem = {
+            ...objectToItem(act, language),
+            name: actName,
+          };
+          const chapterItems = actChapters.map((chapter) => ({
+            ...objectToItem(chapter, language),
+            name: formatChapterDisplayName(
+              getOutlineObjectName(chapter, language, untitledChapter),
+              chapterNumberById.get(chapter.id),
+              t,
+            ),
+          }));
+
           return {
             id: `outline-${outline.id}-act-${act.id}`,
-            label: (actData.name as string) || 'Unnamed Act',
+            label: actName,
             type: 'outline' as const,
             kind: 'act' as const,
             order: act.metadata?.position as number | undefined,
-            items: [objectToItem(act, language), ...actChapters.map((chapter) => objectToItem(chapter, language))],
+            items: [actItem, ...chapterItems],
           };
         }),
       };
@@ -281,46 +412,65 @@ function buildOutlineGroups(
     return { groups, availableTypes };
   }
 
+  const manuscriptsByChapterId = new Map<string, UnifiedObject>();
+  manuscripts.forEach((manuscript) => {
+    const chapterId = manuscript.metadata?.chapter_id as string | undefined;
+    if (chapterId) {
+      manuscriptsByChapterId.set(chapterId, manuscript);
+    }
+  });
+
   const manuscriptOutlineGroups: ObjectPickerGroup[] = outlines.map((outline) => {
-    const outlineData = getObjectDataForLanguage(outline, language);
+    const outlineLabel = getOutlineObjectName(outline, language, untitledOutline);
     const outlineActs = acts
       .filter((act) => act.metadata?.parent_id === outline.id)
-      .sort((a, b) => (a.metadata?.position || 0) - (b.metadata?.position || 0));
+      .sort(compareOutlineItems);
 
     return {
       id: `manuscript-outline-${outline.id}`,
-      label: (outlineData.name as string) || 'Unnamed Outline',
+      label: outlineLabel,
       type: 'outline' as const,
       kind: 'outline' as const,
       order: outline.metadata?.position as number | undefined,
       items: [],
       childGroups: outlineActs.map<ObjectPickerGroup>((act) => {
-        const actData = getObjectDataForLanguage(act, language);
+        const actName = formatActDisplayName(
+          getOutlineObjectName(act, language, untitledAct),
+          actNumberById.get(act.id),
+          t,
+        );
         const actChapters = chapters
           .filter((chapter) => chapter.metadata?.parent_id === act.id)
-          .sort((a, b) => (a.metadata?.position || 0) - (b.metadata?.position || 0));
+          .sort(compareOutlineItems);
 
         const items: ObjectPickerItem[] = [];
         actChapters.forEach((chapter) => {
-            const chapterData = getObjectDataForLanguage(chapter, language);
-            const manuscript = manuscripts.find((item) => item.metadata?.chapter_id === chapter.id);
-            if (!manuscript) return;
-            const manuscriptData = getObjectDataForLanguage(manuscript, language);
-            items.push({
-              id: manuscript.id,
-              name: (chapterData.name as string) || 'Unnamed Chapter',
-              description: chapterData.description as string | undefined,
-              content: manuscriptData.doc ? docToMarkdown(manuscriptData.doc, { stripImages: true }) : undefined,
-              type: 'manuscript' as const,
-              parentId: chapter.id,
-              order: chapter.metadata?.position as number | undefined,
-              wordCount: manuscriptData.wordCount as number | undefined,
-            });
+          const chapterData = getObjectDataForLanguage(chapter, language);
+          const manuscript = manuscriptsByChapterId.get(chapter.id);
+          if (!manuscript) return;
+          const manuscriptData = getObjectDataForLanguage(manuscript, language);
+          items.push({
+            id: manuscript.id,
+            name: formatChapterDisplayName(
+              getDisplayName(chapterData.name, untitledChapter),
+              chapterNumberById.get(chapter.id),
+              t,
+            ),
+            description: chapterData.description as string | undefined,
+            content: manuscriptData.doc ? docToMarkdown(manuscriptData.doc, { stripImages: true }) : undefined,
+            type: 'manuscript' as const,
+            parentId: chapter.id,
+            order: chapter.metadata?.position as number | undefined,
+            wordCount: manuscriptData.wordCount as number | undefined,
+            metadata: {
+              ...manuscript.metadata,
+            },
           });
+        });
 
         return {
           id: `manuscript-outline-${outline.id}-act-${act.id}`,
-          label: (actData.name as string) || 'Unnamed Act',
+          label: actName,
           type: 'outline' as const,
           kind: 'act' as const,
           order: act.metadata?.position as number | undefined,
@@ -349,6 +499,7 @@ function buildGroups(
   folders: StoryEntityFolder[],
   language: string,
   mode: ObjectPickerMode,
+  t: TFunction,
 ): { groups: ObjectPickerGroup[]; availableTypes: ObjectType[] } {
   const groups: ObjectPickerGroup[] = [];
   const availableTypes: ObjectType[] = [];
@@ -371,13 +522,13 @@ function buildGroups(
   }
 
   if (mode === 'all' || mode === 'translation') {
-    const outline = buildOutlineGroups(objects, language, false);
+    const outline = buildOutlineGroups(objects, language, false, t);
     groups.push(...outline.groups);
     availableTypes.push(...outline.availableTypes);
   }
 
   if (mode === 'manuscript' || mode === 'all' || mode === 'translation') {
-    const manuscriptGroups = buildOutlineGroups(objects, language, true);
+    const manuscriptGroups = buildOutlineGroups(objects, language, true, t);
     groups.push(...manuscriptGroups.groups);
     availableTypes.push(...manuscriptGroups.availableTypes);
   }
@@ -397,9 +548,16 @@ export function useObjectPickerData({
   mode,
   excludeTypes = [],
 }: UseObjectPickerDataOptions): UseObjectPickerDataResult {
-  const objectStore = useUnifiedObjectStore();
+  const { t } = useTranslation();
+  const objects = useUnifiedObjectStore((state) => state.objects);
+  const listObjects = useUnifiedObjectStore((state) => state.listObjects);
+  const refreshStoryEntityTree = useUnifiedObjectStore((state) => state.refreshStoryEntityTree);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const typesToInclude = useMemo(
+    () => getTypesForMode(mode, excludeTypes),
+    [mode, excludeTypes],
+  );
 
   useEffect(() => {
     const fetchData = async () => {
@@ -407,12 +565,11 @@ export function useObjectPickerData({
       setError(null);
 
       try {
-        const typesToFetch = getTypesForMode(mode, excludeTypes);
         await Promise.all(
-          typesToFetch.map((type) => (
+          typesToInclude.map((type) => (
             type === 'story_entity'
-              ? objectStore.refreshStoryEntityTree(projectId)
-              : objectStore.listObjects(type, projectId)
+              ? refreshStoryEntityTree(projectId)
+              : listObjects(type, projectId)
           )),
         );
       } catch (err) {
@@ -425,17 +582,16 @@ export function useObjectPickerData({
     if (projectId) {
       fetchData();
     }
-  }, [projectId, mode, language, JSON.stringify(excludeTypes)]);
+  }, [projectId, language, listObjects, refreshStoryEntityTree, typesToInclude]);
 
   const { groups, availableTypes } = useMemo(() => {
-    const projectObjects = (Object.values(objectStore.objects) as UnifiedObject[]).filter(
+    const projectObjects = (Object.values(objects) as UnifiedObject[]).filter(
       (obj) => obj.metadata?.project_id === projectId,
     );
-    const typesToInclude = getTypesForMode(mode, excludeTypes);
     const filteredObjects = projectObjects.filter((obj) => typesToInclude.includes(obj.type));
-    const folders = getProjectStoryEntityFolders(objectStore.objects, projectId);
-    return buildGroups(filteredObjects, folders, language, mode);
-  }, [objectStore.objects, projectId, language, mode, JSON.stringify(excludeTypes)]);
+    const folders = getProjectStoryEntityFolders(objects, projectId);
+    return buildGroups(filteredObjects, folders, language, mode, t);
+  }, [objects, projectId, language, mode, t, typesToInclude]);
 
   return { groups, availableTypes, isLoading, error };
 }

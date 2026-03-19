@@ -82,6 +82,7 @@ const PREVIEW_ACT = {
   content: '[ Placeholder for act content ]',
   parentId: '[ placeholder-outline-id ]',
   position: 0,
+  actNumber: 1,
 };
 
 const PREVIEW_CHAPTER = {
@@ -92,6 +93,8 @@ const PREVIEW_CHAPTER = {
   content: '[ Placeholder for chapter content ]',
   parentId: '[ placeholder-act-id ]',
   position: 0,
+  actNumber: 1,
+  chapterNumber: 1,
   manuscriptId: '[ placeholder-manuscript-id ]',
 };
 

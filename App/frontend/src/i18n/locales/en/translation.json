@@ -1063,6 +1063,8 @@
     "searchPlaceholder": "Search objects...",
     "allTypes": "All Types",
     "clearSearch": "Clear search",
+    "actPrefix": "Act",
+    "chapterPrefix": "Chapter",
     "selectAll": "Select All",
     "tokenCount": "{{count}} tokens",
     "tokenEstimateHint": "Estimated using tiktoken (may differ from actual API count)",
