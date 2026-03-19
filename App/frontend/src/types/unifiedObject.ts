@@ -22,6 +22,7 @@ export type ObjectType =
 
 export type StoryEntityKind = 'character' | 'organization' | 'location' | 'lorebook';
 export type OutlineKind = 'outline' | 'act' | 'chapter';
+export type StoryEntityStructureObjectType = 'story_entity_folder' | 'story_entity';
 
 // ============================================================================
 // UNIFIED OBJECT (Response from API)
@@ -163,6 +164,15 @@ export interface CreateObjectRequest<TData = Record<string, any>> {
   kind?: StoryEntityKind | OutlineKind;
   user_request?: string;
   metadata?: Record<string, any>;
+}
+
+export interface StructurePatchRequest {
+  metadata: Record<string, any>;
+}
+
+export interface StoryEntityTreeResponse {
+  folders: StoryEntityFolderObject[];
+  entities: StoryEntityObject[];
 }
 
 // ============================================================================

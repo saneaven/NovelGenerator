@@ -179,3 +179,78 @@ def test_update_object_manuscript_path_uses_manuscript_image_model(monkeypatch) 
             "object_id": object_id,
         }
     ]
+
+
+def test_update_object_structure_story_entity_folder_skips_versioning(monkeypatch) -> None:
+    db = FakeSession()
+    project_id = uuid4()
+    object_id = uuid4()
+    user_id = uuid4()
+
+    folder = SimpleNamespace(
+        id=object_id,
+        project_id=project_id,
+        parent_id=None,
+        display_order=0,
+        updated_at=None,
+    )
+
+    metadata_calls: list[dict[str, object]] = []
+    change_calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(object_service_module, "_load_owned_object", lambda *_args, **_kwargs: folder)
+    monkeypatch.setattr(
+        object_service_module,
+        "_handle_metadata_update",
+        lambda _db, object_type, incoming_object_id, obj, metadata: metadata_calls.append(
+            {
+                "object_type": object_type,
+                "object_id": incoming_object_id,
+                "object": obj,
+                "metadata": metadata,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        object_service_module,
+        "queue_object_change",
+        lambda *_args, **kwargs: change_calls.append(kwargs),
+    )
+    monkeypatch.setattr(
+        object_service_module,
+        "_serialize_object",
+        lambda *_args, **_kwargs: {"id": str(object_id), "type": "story_entity_folder"},
+    )
+    monkeypatch.setattr(
+        object_service_module,
+        "_create_or_update_version",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("version update should not run")),
+    )
+
+    result = object_service_module.object_service.update_object_structure(
+        db,
+        project_id=project_id,
+        object_type="story_entity_folder",
+        object_id=object_id,
+        metadata={"parent_id": None, "display_order": 3},
+        created_by=user_id,
+    )
+
+    assert result == {"id": str(object_id), "type": "story_entity_folder"}
+    assert metadata_calls == [
+        {
+            "object_type": "story_entity_folder",
+            "object_id": object_id,
+            "object": folder,
+            "metadata": {"parent_id": None, "display_order": 3},
+        }
+    ]
+    assert change_calls == [
+        {
+            "user_id": user_id,
+            "project_id": project_id,
+            "object_type": "story_entity_folder",
+            "object_id": object_id,
+            "action": "updated",
+        }
+    ]

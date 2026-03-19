@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DropdownMenu, DropdownItem, DropdownSection } from '../../../components/ui/DropdownMenu';
-import { Workspace, Clipboard, Document, Configs, ChevronDown, Home, Folder } from '../../../components/icons';
+import { Clipboard, Document, Configs, ChevronDown, Home, Folder } from '../../../components/icons';
 import type { SubPageType } from '../hooks/useWorkspaceSubPage';
 import './WorkspaceHeaderDropdown.css';
 

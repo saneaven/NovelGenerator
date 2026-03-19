@@ -21,6 +21,9 @@ import type {
   CreateObjectRequest,
   StoryEntityKind,
   OutlineKind,
+  StoryEntityStructureObjectType,
+  StructurePatchRequest,
+  StoryEntityTreeResponse,
 } from '../types/unifiedObject';
 
 type QueryParamValue = string | number | boolean | null | undefined;
@@ -85,6 +88,14 @@ export const unifiedObjectService = {
     request: UpdateObjectRequest<TData>
   ): Promise<UnifiedObject<TData>> {
     return apiClient.put<UnifiedObject<TData>>(`/api/v1/objects/${type}/${id}`, request);
+  },
+
+  async patchObjectStructure<TData = Record<string, any>>(
+    type: StoryEntityStructureObjectType,
+    id: string,
+    request: StructurePatchRequest,
+  ): Promise<UnifiedObject<TData>> {
+    return apiClient.patch<UnifiedObject<TData>>(`/api/v1/objects/${type}/${id}/structure`, request);
   },
 
   /**
@@ -240,6 +251,18 @@ export const unifiedObjectService = {
       image_prompt_positive: string | null;
       image_prompt_negative: string | null;
     }>(`/api/v1/objects/${type}/${id}/image-prompt`, prompts);
+  },
+
+  async getStoryEntityTree(
+    projectId: string,
+    options?: {
+      language?: string;
+    },
+  ): Promise<StoryEntityTreeResponse> {
+    const query = buildQueryString({
+      language: options?.language,
+    });
+    return apiClient.get<StoryEntityTreeResponse>(`/api/v1/projects/${projectId}/story-entity-tree${query}`);
   },
 
 };

@@ -22,7 +22,6 @@ import {
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { useParams } from 'react-router-dom';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useStoryEntityFolderStore } from '../../store/storyEntityFolderStore';
 import { useSettings } from '../../store/settingsStore';
 import { useAssetStore } from '../../store/assetStore';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
@@ -59,6 +58,12 @@ import {
   resolveTranslationSourceLanguage,
   type RequestedLanguageState,
 } from '../../utils/requestedLanguage';
+import {
+  applyStoryEntityStructurePatch,
+  buildFolderPathLabel,
+  getProjectStoryEntityFolders,
+  getProjectStoryEntities,
+} from '../../utils/storyEntityTree';
 import FolderTreeContent from './FolderTreeContent';
 import './StoryEntityExplorer.css';
 
@@ -163,14 +168,11 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
 
   const objects = useUnifiedObjectStore((state) => state.objects);
   const loading = useUnifiedObjectStore((state) => state.loading);
-  const listObjects = useUnifiedObjectStore((state) => state.listObjects);
+  const refreshStoryEntityTree = useUnifiedObjectStore((state) => state.refreshStoryEntityTree);
   const createObject = useUnifiedObjectStore((state) => state.createObject);
   const updateObject = useUnifiedObjectStore((state) => state.updateObject);
+  const patchObjectStructure = useUnifiedObjectStore((state) => state.patchObjectStructure);
   const deleteObject = useUnifiedObjectStore((state) => state.deleteObject);
-
-  const fetchFolders = useStoryEntityFolderStore((state) => state.fetchFolders);
-  const foldersByIdState = useStoryEntityFolderStore((state) => state.foldersById);
-  const moveTreeNode = useStoryEntityFolderStore((state) => state.moveTreeNode);
 
   const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);
   const objectAssetsByKey = useAssetStore((state) => state.objectAssetsByKey);
@@ -236,20 +238,17 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
 
   useEffect(() => {
     if (!projectId) return;
-    void Promise.all([
-      listObjects('story_entity', projectId),
-      fetchFolders(projectId, globalDisplayLanguage || settings.mainLanguage),
-    ]).catch((error) => {
+    void refreshStoryEntityTree(projectId).catch((error) => {
       console.error('Failed to load story entities:', error);
       showAlert({ title: 'Load Error', message: 'Failed to load story entities.' });
     });
-  }, [projectId, listObjects, fetchFolders, globalDisplayLanguage, settings.mainLanguage]);
+  }, [projectId, refreshStoryEntityTree]);
 
   const sortEntities = useMemo(() => makeSortEntities(globalDisplayLanguage, settings.mainLanguage), [globalDisplayLanguage, settings.mainLanguage]);
 
   const folders = useMemo(
-    () => Object.values(foldersByIdState).filter((f) => f.project_id === projectId),
-    [foldersByIdState, projectId],
+    () => getProjectStoryEntityFolders(objects, projectId),
+    [objects, projectId],
   );
 
   const foldersById = useMemo(
@@ -258,11 +257,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   );
 
   const entities = useMemo(
-    () => (
-      Object.values(objects)
-        .filter((object): object is StoryEntityObject => object.type === 'story_entity' && object.metadata.project_id === projectId)
-        .sort(sortEntities)
-    ),
+    () => getProjectStoryEntities(objects, projectId).sort(sortEntities),
     [objects, projectId, sortEntities],
   );
 
@@ -281,15 +276,15 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     if (showUncategorized) return [];
     const parentId = showAllEntities ? null : effectiveFolderId;
     return folders
-      .filter((f) => (f.parent_id ?? null) === parentId)
-      .sort((a, b) => a.display_order - b.display_order);
+      .filter((f) => (f.metadata.parent_id ?? null) === parentId)
+      .sort((a, b) => (a.metadata.display_order ?? 0) - (b.metadata.display_order ?? 0));
   }, [folders, showAllEntities, showUncategorized, effectiveFolderId]);
 
   const parentInfo = useMemo(() => {
     if (showAllEntities || showUncategorized || !effectiveFolderId) return null;
     const currentFolder = foldersById[effectiveFolderId];
     if (!currentFolder) return null;
-    const pid = currentFolder.parent_id ?? null;
+    const pid = currentFolder.metadata.parent_id ?? null;
     const parentName = pid && foldersById[pid]
       ? getStoryEntityFolderName(foldersById[pid], globalDisplayLanguage, settings.mainLanguage)
       : 'All Entities';
@@ -315,15 +310,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   const folderOptions = useMemo(
     () => {
       const buildFolderPath = (folderId: string): string => {
-        const parts: string[] = [];
-        let currentId: string | null = folderId;
-        while (currentId) {
-          const f: StoryEntityFolder | undefined = foldersById[currentId];
-          if (!f) break;
-          parts.unshift(getStoryEntityFolderName(f, globalDisplayLanguage, settings.mainLanguage));
-          currentId = f.parent_id;
-        }
-        return parts.join(' / ');
+        return buildFolderPathLabel(folderId, foldersById, globalDisplayLanguage, settings.mainLanguage);
       };
       return [
         { value: '', label: 'Root' },
@@ -350,7 +337,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
       id: f.id,
       sortId: `folder:${f.id}`,
       folder: f,
-      order: f.display_order,
+      order: f.metadata.display_order ?? 0,
       name: getStoryEntityFolderName(f, globalDisplayLanguage, settings.mainLanguage),
     }));
     const entityItems: GridItem[] = filteredEntities.map((entity) => {
@@ -368,7 +355,15 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
         description: itemData.description || '',
       };
     });
-    return [...folderItems, ...entityItems].sort((a, b) => a.order - b.order);
+    return [...folderItems, ...entityItems].sort((a, b) => {
+      if (a.order === b.order) {
+        if (a.type !== b.type) {
+          return a.type === 'folder' ? -1 : 1;
+        }
+        return a.id.localeCompare(b.id);
+      }
+      return a.order - b.order;
+    });
   }, [childFolders, filteredEntities, globalDisplayLanguage, settings.mainLanguage]);
 
   const currentEntityIds = useMemo(
@@ -453,7 +448,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   }, [createObject, newEntityDraft, projectId, settings.mainLanguage]);
 
   const handleSaveEntity = useCallback(async (name: string, description: string, content: string) => {
-    if (!expandedEntityId || !editingEntityDraft || !name.trim()) return;
+    if (!projectId || !expandedEntityId || !editingEntityDraft || !name.trim()) return;
     const entity = entities.find((item) => item.id === expandedEntityId);
     if (!entity) return;
     const languageState = getEntityLanguageState(entity, globalDisplayLanguage, settings.mainLanguage);
@@ -469,16 +464,21 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
         language: languageState.requestedLanguage,
         user_request: 'User Edit',
         create_new_version: languageState.createNewVersion,
-        metadata: {
-          folder_id: editingEntityDraft.folderId,
-        },
       });
+      if ((entity.metadata.folder_id ?? null) !== editingEntityDraft.folderId) {
+        await patchObjectStructure('story_entity', expandedEntityId, {
+          folder_id: editingEntityDraft.folderId,
+        });
+        void refreshStoryEntityTree(projectId).catch((error) => {
+          console.error('Failed to reconcile story entity tree after structure update:', error);
+        });
+      }
       closeEntityEditor();
     } catch (error) {
       console.error('Failed to save story entity:', error);
       showAlert({ title: 'Save Error', message: 'Failed to save story entity.' });
     }
-  }, [closeEntityEditor, editingEntityDraft, entities, expandedEntityId, globalDisplayLanguage, settings.mainLanguage, updateObject]);
+  }, [closeEntityEditor, editingEntityDraft, entities, expandedEntityId, globalDisplayLanguage, patchObjectStructure, projectId, refreshStoryEntityTree, settings.mainLanguage, updateObject]);
 
   const handleDeleteEntity = useCallback(async (entityId: string) => {
     const confirmed = await confirm({
@@ -499,6 +499,34 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
       showAlert({ title: 'Delete Error', message: 'Failed to delete story entity.' });
     }
   }, [closeEntityEditor, deleteObject, expandedEntityId]);
+
+  const performStructureMove = useCallback(async (
+    objectType: 'story_entity_folder' | 'story_entity',
+    objectId: string,
+    metadata: Record<string, string | number | null>,
+    errorMessage: string,
+  ) => {
+    if (!projectId) return;
+    const previousObjects = useUnifiedObjectStore.getState().objects;
+    const optimisticObjects = applyStoryEntityStructurePatch(previousObjects, projectId, {
+      objectType,
+      objectId,
+      metadata,
+    });
+
+    useUnifiedObjectStore.setState({ objects: optimisticObjects });
+
+    try {
+      await patchObjectStructure(objectType, objectId, metadata);
+      void refreshStoryEntityTree(projectId).catch((error) => {
+        console.error('Failed to reconcile story entity tree after move:', error);
+      });
+    } catch (error) {
+      useUnifiedObjectStore.setState({ objects: previousObjects });
+      showAlert({ title: 'Move Error', message: errorMessage });
+      throw error;
+    }
+  }, [patchObjectStructure, projectId, refreshStoryEntityTree]);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveDragId(String(event.active.id));
@@ -521,14 +549,16 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     if (overId.startsWith('drop-folder:')) {
       const targetFolderId = overId.slice('drop-folder:'.length);
       try {
-        await moveTreeNode(projectId, {
-          node_kind: activeNodeKind,
-          node_id: activeRawId,
-          new_parent_folder_id: targetFolderId,
-          new_index: 0,
-        });
+        await performStructureMove(
+          activeNodeKind === 'folder' ? 'story_entity_folder' : 'story_entity',
+          activeRawId,
+          activeNodeKind === 'folder'
+            ? { parent_id: targetFolderId, display_order: 0 }
+            : { folder_id: targetFolderId, display_order: 0 },
+          'Failed to move item into folder.',
+        );
       } catch {
-        showAlert({ title: 'Move Error', message: 'Failed to move item into folder.' });
+        // handled in performStructureMove
       }
       return;
     }
@@ -536,14 +566,16 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     // Dropped on parent folder bar → move item to parent folder
     if (overId === 'drop-parent-folder' && parentInfo) {
       try {
-        await moveTreeNode(projectId, {
-          node_kind: activeNodeKind,
-          node_id: activeRawId,
-          new_parent_folder_id: parentInfo.parentId,
-          new_index: 0,
-        });
+        await performStructureMove(
+          activeNodeKind === 'folder' ? 'story_entity_folder' : 'story_entity',
+          activeRawId,
+          activeNodeKind === 'folder'
+            ? { parent_id: parentInfo.parentId, display_order: 0 }
+            : { folder_id: parentInfo.parentId, display_order: 0 },
+          'Failed to move item to parent folder.',
+        );
       } catch {
-        showAlert({ title: 'Move Error', message: 'Failed to move item to parent folder.' });
+        // handled in performStructureMove
       }
       return;
     }
@@ -554,26 +586,24 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     const newMixedIndex = gridItems.findIndex((item) => item.sortId === overId);
     if (oldIndex === -1 || newMixedIndex === -1) return;
 
-    // gridItems is a mixed array of folders + entities, but moveTreeNode
-    // operates on same-type siblings only. Calculate the type-specific index
-    // by simulating the reorder and finding the item's position among its type.
+    // gridItems mirrors the backend's mixed sibling list. Reorder by the mixed
+    // index so folders/entities share one authoritative display_order space.
     const reordered = arrayMove(gridItems, oldIndex, newMixedIndex);
-    const sameTypeItems = reordered.filter((gi) =>
-      isActiveFolder ? gi.type === 'folder' : gi.type === 'entity',
-    );
-    const typeNewIndex = sameTypeItems.findIndex((gi) => gi.sortId === activeId);
+    const mixedNewIndex = reordered.findIndex((gi) => gi.sortId === activeId);
 
     try {
-      await moveTreeNode(projectId, {
-        node_kind: activeNodeKind,
-        node_id: activeRawId,
-        new_parent_folder_id: showAllEntities ? null : effectiveFolderId,
-        new_index: typeNewIndex,
-      });
+      await performStructureMove(
+        activeNodeKind === 'folder' ? 'story_entity_folder' : 'story_entity',
+        activeRawId,
+        activeNodeKind === 'folder'
+          ? { parent_id: showAllEntities ? null : effectiveFolderId, display_order: mixedNewIndex }
+          : { folder_id: showAllEntities ? null : effectiveFolderId, display_order: mixedNewIndex },
+        'Failed to reorder item.',
+      );
     } catch {
-      showAlert({ title: 'Reorder Error', message: 'Failed to reorder item.' });
+      // handled in performStructureMove
     }
-  }, [gridItems, effectiveFolderId, moveTreeNode, parentInfo, projectId, showAllEntities]);
+  }, [effectiveFolderId, gridItems, parentInfo, performStructureMove, projectId, showAllEntities]);
 
   const currentExpandedEntity = expandedEntityId
     ? entities.find((entity) => entity.id === expandedEntityId) ?? null

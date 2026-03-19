@@ -3,7 +3,6 @@ import { useShallow } from 'zustand/react/shallow';
 import { BaseModal } from '../BaseModal';
 import './TranslationModal.css';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useStoryEntityFolderStore } from '../../store/storyEntityFolderStore';
 import { useSettings } from '../../store/settingsStore';
 import type { UnifiedObject, ObjectType } from '../../types/unifiedObject';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
@@ -19,6 +18,7 @@ import ToggleSwitch from '../common/ToggleSwitch';
 import {
   getStoryEntityFolderData,
 } from '../../types/storyEntityFolder';
+import { getProjectStoryEntityFolders } from '../../utils/storyEntityTree';
 
 interface TranslationModalProps {
   isOpen: boolean;
@@ -83,8 +83,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   // Use selector to only subscribe to objects, preventing re-renders from unrelated store changes
   const objects = useUnifiedObjectStore(useShallow(state => state.objects));
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
-  const foldersById = useStoryEntityFolderStore((state) => state.foldersById);
-  const fetchFolders = useStoryEntityFolderStore((state) => state.fetchFolders);
+  const refreshStoryEntityTree = useUnifiedObjectStore((state) => state.refreshStoryEntityTree);
   const settings = useSettings();
 
   // Ensure all object types are available in store for translation selection (tab-independent)
@@ -101,15 +100,15 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
 
     void Promise.all([
       ...types.map(type => listObjects(type, projectId)),
-      fetchFolders(projectId),
+      refreshStoryEntityTree(projectId),
     ]).catch((err) => {
       console.error('Failed to preload objects for translation:', err);
     });
-  }, [isOpen, projectId, listObjects, fetchFolders]);
+  }, [isOpen, projectId, listObjects, refreshStoryEntityTree]);
 
   const projectFolders = useMemo(
-    () => Object.values(foldersById).filter((folder) => folder.project_id === projectId),
-    [foldersById, projectId],
+    () => getProjectStoryEntityFolders(objects, projectId),
+    [objects, projectId],
   );
 
   // Build available languages list
@@ -280,8 +279,8 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
         objectId: folder.id,
         sourceData,
         versionNumber: folder.version?.number,
-        label: sourceData.name || folder.name || folder.id,
-        order: folder.display_order ?? Number.MAX_SAFE_INTEGER - 2000,
+        label: sourceData.name || folder.id,
+        order: folder.metadata.display_order ?? Number.MAX_SAFE_INTEGER - 2000,
       });
     });
 

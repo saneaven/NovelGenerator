@@ -235,6 +235,7 @@ const UnifiedWorkspace: React.FC = () => {
       try {
         await refreshProjectObjects(projectId, [
           'basic_info',
+          'story_entity_folder',
           'story_entity',
           'outline',
         ]);

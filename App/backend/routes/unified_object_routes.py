@@ -77,6 +77,11 @@ class CreateObjectRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
+class StructurePatchRequest(BaseModel):
+    """Request to update structural metadata without creating a version."""
+    metadata: Dict[str, Any]
+
+
 class ListObjectsResponse(BaseModel):
     """Response for list objects endpoint"""
     objects: List[UnifiedObjectResponse]
@@ -399,6 +404,46 @@ async def create_object(
             raise HTTPException(status_code=404, detail=message)
         if "requires data.doc" in message or "does not accept data.content" in message:
             raise HTTPException(status_code=422, detail=message)
+        raise HTTPException(status_code=400, detail=message)
+
+
+@router.patch("/objects/{object_type}/{object_id}/structure", response_model=UnifiedObjectResponse)
+async def patch_object_structure(
+    object_type: str,
+    object_id: UUID,
+    request: StructurePatchRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update structural metadata for tree-backed objects without creating a new version.
+    """
+    project_id = resolve_project_id_for_object(
+        db,
+        object_type=object_type,
+        object_id=object_id,
+        user_id=current_user.id,
+    )
+
+    try:
+        updated = object_service.update_object_structure(
+            db,
+            project_id=project_id,
+            object_type=object_type,
+            object_id=object_id,
+            metadata=request.metadata,
+            created_by=current_user.id,
+        )
+        db.commit()
+        return UnifiedObjectResponse(**updated)
+    except HTTPException:
+        db.rollback()
+        raise
+    except ValueError as exc:
+        db.rollback()
+        message = str(exc)
+        if "not found" in message.lower():
+            raise HTTPException(status_code=404, detail=message)
         raise HTTPException(status_code=400, detail=message)
 
 

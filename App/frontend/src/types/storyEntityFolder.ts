@@ -1,45 +1,14 @@
-import type { StoryEntityKind, UnifiedObject } from './unifiedObject';
+import type {
+  StoryEntityFolderData as UnifiedStoryEntityFolderData,
+  StoryEntityFolderObject,
+  StoryEntityKind,
+  StoryEntityTreeResponse,
+  UnifiedObject,
+} from './unifiedObject';
 
-export interface StoryEntityFolderData {
-  name: string;
-  description: string;
-}
-
-export interface StoryEntityFolderVersionInfo {
-  id: string | null;
-  number: number;
-  created_at: string | null;
-}
-
-export interface StoryEntityFolder {
-  id: string;
-  project_id: string;
-  name: string;
-  description: string;
-  parent_id: string | null;
-  display_order: number;
-  created_at: string | null;
-  updated_at: string | null;
-  data: Record<string, StoryEntityFolderData>;
-  version: StoryEntityFolderVersionInfo;
-}
-
-export interface StoryEntityFolderListResponse {
-  folders: StoryEntityFolder[];
-}
-
-export interface StoryEntityFolderDeleteResponse {
-  success: boolean;
-  deleted_folder_ids: string[];
-  deleted_entity_ids: string[];
-}
-
-export interface StoryEntityTreeMoveRequest {
-  node_kind: 'folder' | 'entity';
-  node_id: string;
-  new_parent_folder_id?: string | null;
-  new_index?: number;
-}
+export type StoryEntityFolderData = UnifiedStoryEntityFolderData;
+export type StoryEntityFolder = StoryEntityFolderObject;
+export type StoryEntityTreePayload = StoryEntityTreeResponse;
 
 export interface StoryEntityTreeNode {
   id: string;
@@ -71,8 +40,8 @@ export function getStoryEntityFolderData(
     return data[firstLanguage];
   }
   return {
-    name: folder.name || '',
-    description: folder.description || '',
+    name: '',
+    description: '',
   };
 }
 
@@ -81,7 +50,7 @@ export function getStoryEntityFolderName(
   preferredLanguage?: string | null,
   fallbackLanguage?: string | null,
 ): string {
-  return getStoryEntityFolderData(folder, preferredLanguage, fallbackLanguage).name || folder.name || '';
+  return getStoryEntityFolderData(folder, preferredLanguage, fallbackLanguage).name || '';
 }
 
 export function getStoryEntityFolderDescription(
@@ -89,5 +58,5 @@ export function getStoryEntityFolderDescription(
   preferredLanguage?: string | null,
   fallbackLanguage?: string | null,
 ): string {
-  return getStoryEntityFolderData(folder, preferredLanguage, fallbackLanguage).description || folder.description || '';
+  return getStoryEntityFolderData(folder, preferredLanguage, fallbackLanguage).description || '';
 }

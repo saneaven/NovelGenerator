@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { useStoryEntityFolderStore } from '../../store/storyEntityFolderStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
@@ -15,10 +14,16 @@ import {
   ChevronRight,
 } from '../icons';
 import {
+  getStoryEntityFolderData,
   getStoryEntityFolderName,
   type StoryEntityFolder,
 } from '../../types/storyEntityFolder';
-import type { StoryEntityObject } from '../../types/unifiedObject';
+import {
+  buildEntityCountByFolder,
+  buildFolderChildrenMap,
+  getProjectStoryEntities,
+  getProjectStoryEntityFolders,
+} from '../../utils/storyEntityTree';
 import './FolderTreeContent.css';
 
 interface FolderTreeContentProps {
@@ -38,11 +43,10 @@ const FolderTreeContent: React.FC<FolderTreeContentProps> = ({
   const mainLanguage = settings.mainLanguage;
   const isMainLanguageView = displayLanguage === mainLanguage;
 
-  const foldersById = useStoryEntityFolderStore((state) => state.foldersById);
-  const createFolder = useStoryEntityFolderStore((state) => state.createFolder);
-  const updateFolder = useStoryEntityFolderStore((state) => state.updateFolder);
-  const deleteFolder = useStoryEntityFolderStore((state) => state.deleteFolder);
   const objects = useUnifiedObjectStore((state) => state.objects);
+  const createObject = useUnifiedObjectStore((state) => state.createObject);
+  const updateObject = useUnifiedObjectStore((state) => state.updateObject);
+  const deleteObject = useUnifiedObjectStore((state) => state.deleteObject);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [addFormParentId, setAddFormParentId] = useState<string | null>(null);
@@ -52,38 +56,30 @@ const FolderTreeContent: React.FC<FolderTreeContentProps> = ({
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
   const folders = useMemo(
-    () => Object.values(foldersById)
-      .filter((f) => f.project_id === projectId)
-      .sort((a, b) => a.display_order - b.display_order),
-    [foldersById, projectId],
+    () => getProjectStoryEntityFolders(objects, projectId),
+    [objects, projectId],
+  );
+
+  const foldersById = useMemo(
+    () => folders.reduce<Record<string, StoryEntityFolder>>((acc, folder) => {
+      acc[folder.id] = folder;
+      return acc;
+    }, {}),
+    [folders],
   );
 
   const entities = useMemo(
-    () => Object.values(objects).filter(
-      (o): o is StoryEntityObject => o.type === 'story_entity' && o.metadata.project_id === projectId,
-    ),
+    () => getProjectStoryEntities(objects, projectId),
     [objects, projectId],
   );
 
   const entityCountByFolder = useMemo(() => {
-    const counts = new Map<string | null, number>();
-    entities.forEach((e) => {
-      const key = e.metadata.folder_id ?? null;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    });
-    return counts;
+    return buildEntityCountByFolder(entities);
   }, [entities]);
 
   const folderChildren = useMemo(() => {
-    const map = new Map<string | null, StoryEntityFolder[]>();
-    folders.forEach((f) => {
-      const key = f.parent_id ?? null;
-      const siblings = map.get(key) ?? [];
-      siblings.push(f);
-      map.set(key, siblings);
-    });
-    return map;
-  }, [folders]);
+    return buildFolderChildrenMap(folders, displayLanguage, mainLanguage);
+  }, [displayLanguage, folders, mainLanguage]);
 
   const rootFolders = useMemo(() => folderChildren.get(null) ?? [], [folderChildren]);
   const uncategorizedCount = entityCountByFolder.get(null) ?? 0;
@@ -104,19 +100,24 @@ const FolderTreeContent: React.FC<FolderTreeContentProps> = ({
   const handleCreateFolder = useCallback(async () => {
     if (!formName.trim()) return;
     try {
-      await createFolder(projectId, {
-        language: mainLanguage,
-        name: formName.trim(),
-        description: '',
-        parent_id: addFormParentId,
-      });
+      await createObject(
+        'story_entity_folder',
+        projectId,
+        {
+          name: formName.trim(),
+          description: '',
+        },
+        mainLanguage,
+        { parent_id: addFormParentId },
+        'User Creation',
+      );
       setFormName('');
       setShowAddForm(false);
       setAddFormParentId(null);
     } catch {
       showAlert({ title: 'Create Error', message: 'Failed to create folder.' });
     }
-  }, [addFormParentId, createFolder, formName, mainLanguage, projectId]);
+  }, [addFormParentId, createObject, formName, mainLanguage, projectId]);
 
   const handleRename = useCallback(async (folderId: string) => {
     if (!renameValue.trim()) {
@@ -124,16 +125,22 @@ const FolderTreeContent: React.FC<FolderTreeContentProps> = ({
       return;
     }
     try {
-      await updateFolder(projectId, folderId, {
+      const folder = foldersById[folderId];
+      await updateObject('story_entity_folder', folderId, {
         language: mainLanguage,
-        name: renameValue.trim(),
-        description: '',
+        data: {
+          name: renameValue.trim(),
+          description: folder
+            ? getStoryEntityFolderData(folder, mainLanguage, mainLanguage).description
+            : '',
+        },
+        user_request: 'User Edit',
       });
     } catch {
       showAlert({ title: 'Rename Error', message: 'Failed to rename folder.' });
     }
     setRenamingFolderId(null);
-  }, [mainLanguage, projectId, renameValue, updateFolder]);
+  }, [foldersById, mainLanguage, renameValue, updateObject]);
 
   const handleDeleteFolder = useCallback(async (folderId: string) => {
     const confirmed = await confirm({
@@ -144,14 +151,14 @@ const FolderTreeContent: React.FC<FolderTreeContentProps> = ({
     });
     if (!confirmed) return;
     try {
-      await deleteFolder(projectId, folderId);
+      await deleteObject('story_entity_folder', folderId);
       if (selectedFolderId === folderId) {
         onSelectFolder(null);
       }
     } catch {
       showAlert({ title: 'Delete Error', message: 'Failed to delete folder.' });
     }
-  }, [deleteFolder, onSelectFolder, projectId, selectedFolderId]);
+  }, [deleteObject, onSelectFolder, selectedFolderId]);
 
   const startAddSubfolder = useCallback((parentId: string) => {
     setAddFormParentId(parentId);

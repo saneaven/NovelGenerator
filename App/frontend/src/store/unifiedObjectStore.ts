@@ -25,8 +25,48 @@ import type {
   OutlineKind,
   StoryEntityObject,
   OutlineObject,
+  StoryEntityStructureObjectType,
 } from '../types/unifiedObject';
 import { normalizeBasicInfoData } from '../utils/basicInfo';
+import { collectStoryEntitySubtreeIds } from '../utils/storyEntityTree';
+
+const STORY_ENTITY_TREE_TYPES: ObjectType[] = ['story_entity_folder', 'story_entity'];
+
+function isStoryEntityTreeType(type: ObjectType): type is StoryEntityStructureObjectType {
+  return type === 'story_entity_folder' || type === 'story_entity';
+}
+
+function reconcileProjectObjects(
+  currentObjects: Record<string, UnifiedObject>,
+  projectId: string,
+  objects: UnifiedObject[],
+  types: ObjectType[],
+): Record<string, UnifiedObject> {
+  const nextObjects = { ...currentObjects };
+  const refreshedIdsByType = new Map<ObjectType, Set<string>>();
+
+  for (const type of types) {
+    refreshedIdsByType.set(type, new Set<string>());
+  }
+
+  for (const object of objects) {
+    nextObjects[object.id] = object;
+    const ids = refreshedIdsByType.get(object.type) ?? new Set<string>();
+    ids.add(object.id);
+    refreshedIdsByType.set(object.type, ids);
+  }
+
+  for (const [objectId, object] of Object.entries(currentObjects)) {
+    if (!object || object.metadata?.project_id !== projectId) continue;
+    const refreshedIds = refreshedIdsByType.get(object.type);
+    if (!refreshedIds) continue;
+    if (!refreshedIds.has(objectId)) {
+      delete nextObjects[objectId];
+    }
+  }
+
+  return nextObjects;
+}
 
 // ============================================================================
 // STORE INTERFACE
@@ -65,6 +105,7 @@ interface UnifiedObjectStore {
   // List & Collection operations
   listObjects: (type: ObjectType, projectId: string) => Promise<UnifiedObject[]>;
   refreshProjectObjects: (projectId: string, types: ObjectType[]) => Promise<void>;
+  refreshStoryEntityTree: (projectId: string) => Promise<void>;
   createObject: (
     type: ObjectType,
     projectId: string,
@@ -74,6 +115,11 @@ interface UnifiedObjectStore {
     userRequest?: string,
     kind?: StoryEntityKind | OutlineKind
   ) => Promise<UnifiedObject>;
+  patchObjectStructure: (
+    type: StoryEntityStructureObjectType,
+    id: string,
+    metadata: Record<string, any>,
+  ) => Promise<void>;
   deleteObject: (type: ObjectType, id: string) => Promise<void>;
 
   // Utilities
@@ -277,6 +323,20 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
   listObjects: async (type: ObjectType, projectId: string) => {
     try {
+      if (isStoryEntityTreeType(type)) {
+        const cachedTreeObjects = Object.values(get().objects).filter(
+          (object) => object.metadata?.project_id === projectId && STORY_ENTITY_TREE_TYPES.includes(object.type),
+        );
+        if (cachedTreeObjects.some((object) => object.type === type)) {
+          return cachedTreeObjects.filter((object) => object.type === type);
+        }
+
+        await get().refreshStoryEntityTree(projectId);
+        return Object.values(get().objects).filter(
+          (object) => object.metadata?.project_id === projectId && object.type === type,
+        );
+      }
+
       // Check if we already have objects of this type for this project in cache
       const state = get();
       const cachedObjects = Object.values(state.objects).filter(
@@ -308,44 +368,51 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     }
   },
 
+  refreshStoryEntityTree: async (projectId: string) => {
+    if (!projectId) return;
+
+    const response = await unifiedObjectService.getStoryEntityTree(projectId);
+    const treeObjects = [...response.folders, ...response.entities];
+
+    set((state) => ({
+      objects: reconcileProjectObjects(state.objects, projectId, treeObjects, STORY_ENTITY_TREE_TYPES),
+    }));
+  },
+
   refreshProjectObjects: async (projectId: string, types: ObjectType[]) => {
     if (!projectId || types.length === 0) return;
 
     const uniqueTypes = [...new Set(types)];
+    const treeRequested = uniqueTypes.some((type) => isStoryEntityTreeType(type));
+    const directTypes = uniqueTypes.filter((type) => !isStoryEntityTreeType(type));
+    const fetchedObjects: UnifiedObject[] = [];
+    const reconciledTypes: ObjectType[] = [...directTypes];
+
+    if (treeRequested) {
+      const treeResponse = await unifiedObjectService.getStoryEntityTree(projectId);
+      fetchedObjects.push(...treeResponse.folders, ...treeResponse.entities);
+      reconciledTypes.push(...STORY_ENTITY_TREE_TYPES);
+    }
+
     const responses = await Promise.all(
-      uniqueTypes.map(async (type) => ({
+      directTypes.map(async (type) => ({
         type,
         response: await unifiedObjectService.listObjects(type, projectId, {}),
       })),
     );
 
-    set((state) => {
-      const nextObjects = { ...state.objects };
-      const refreshedIdsByType = new Map<ObjectType, Set<string>>();
+    for (const { response } of responses) {
+      fetchedObjects.push(...response.objects);
+    }
 
-      for (const { type, response } of responses) {
-        const ids = new Set<string>();
-        for (const obj of response.objects) {
-          ids.add(obj.id);
-          nextObjects[obj.id] = obj;
-        }
-        refreshedIdsByType.set(type, ids);
-      }
-
-      for (const [objectId, object] of Object.entries(state.objects)) {
-        if (!object) continue;
-        if (object.metadata?.project_id !== projectId) continue;
-        const refreshedIds = refreshedIdsByType.get(object.type);
-        if (!refreshedIds) continue;
-        if (!refreshedIds.has(objectId)) {
-          delete nextObjects[objectId];
-        }
-      }
-
-      return {
-        objects: nextObjects,
-      };
-    });
+    set((state) => ({
+      objects: reconcileProjectObjects(
+        state.objects,
+        projectId,
+        fetchedObjects,
+        [...new Set(reconciledTypes)],
+      ),
+    }));
   },
 
   createObject: async (type: ObjectType, projectId: string, data: any, language: string, metadata?: Record<string, any>, userRequest: string = 'User Creation', kind?: StoryEntityKind | OutlineKind) => {
@@ -380,6 +447,27 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     }
   },
 
+  patchObjectStructure: async (type: StoryEntityStructureObjectType, id: string, metadata: Record<string, any>) => {
+    set((state) => ({
+      loading: { ...state.loading, [id]: true },
+      errors: { ...state.errors, [id]: null },
+    }));
+
+    try {
+      const updatedObject = await unifiedObjectService.patchObjectStructure(type, id, { metadata });
+      set((state) => ({
+        objects: { ...state.objects, [updatedObject.id]: updatedObject },
+        loading: { ...state.loading, [id]: false },
+      }));
+    } catch (error: any) {
+      set((state) => ({
+        errors: { ...state.errors, [id]: error.message || 'Failed to update object structure' },
+        loading: { ...state.loading, [id]: false },
+      }));
+      throw error;
+    }
+  },
+
   deleteObject: async (type: ObjectType, id: string) => {
     set((state) => ({
       loading: { ...state.loading, [id]: true },
@@ -387,6 +475,14 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     }));
 
     try {
+      const existingObject = get().objects[id];
+      const projectId = existingObject?.metadata?.project_id;
+      const deletedSubtree = (
+        type === 'story_entity_folder'
+        && projectId
+        && existingObject
+      ) ? collectStoryEntitySubtreeIds(get().objects, projectId, id) : null;
+
       await unifiedObjectService.deleteObject(type, id);
 
       // Remove object from cache
@@ -394,13 +490,24 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
         const newObjects = { ...state.objects };
         const newLoading = { ...state.loading };
         const newErrors = { ...state.errors };
+        const removedIds = deletedSubtree
+          ? [...deletedSubtree.folderIds, ...deletedSubtree.entityIds]
+          : [id];
 
-        delete newObjects[id];
-        delete newLoading[id];
-        delete newErrors[id];
+        for (const removedId of removedIds) {
+          delete newObjects[removedId];
+          delete newLoading[removedId];
+          delete newErrors[removedId];
+        }
 
         return { objects: newObjects, loading: newLoading, errors: newErrors };
       });
+
+      if (type === 'story_entity_folder' && projectId) {
+        void get().refreshStoryEntityTree(projectId).catch((refreshError) => {
+          console.error('Failed to reconcile story entity tree after folder delete:', refreshError);
+        });
+      }
     } catch (error: any) {
       set((state) => ({
         errors: { ...state.errors, [id]: error.message || 'Failed to delete object' },

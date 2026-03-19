@@ -881,6 +881,45 @@ class ObjectService:
             )
         return _serialize_object(db, storage_type, obj)
 
+    def update_object_structure(
+        self,
+        db: Session,
+        project_id: UUID,
+        object_type: str,
+        object_id: UUID,
+        *,
+        metadata: dict[str, Any],
+        created_by: UUID | None = None,
+    ) -> dict[str, Any]:
+        t = object_type
+        storage_type = _canonical_object_type(t)
+        if storage_type not in {STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE}:
+            raise ValueError(f"Structure updates not supported for {t}")
+
+        if not metadata:
+            raise ValueError("Structure update requires metadata")
+
+        obj = _load_owned_object(db, project_id, t, object_id)
+        if obj is None:
+            raise ValueError(f"{t} not found")
+        event_user_id = created_by or _resolve_project_user_id(db, project_id=project_id)
+
+        _handle_metadata_update(db, storage_type, object_id, obj, metadata)
+
+        obj = _load_owned_object(db, project_id, t, object_id)
+        if obj is None:
+            raise ValueError(f"{t} not found after structure update")
+
+        queue_object_change(
+            db,
+            user_id=event_user_id,
+            project_id=project_id,
+            object_type=storage_type,
+            object_id=object_id,
+            action="updated",
+        )
+        return _serialize_object(db, storage_type, obj)
+
     def add_translation(
         self,
         db: Session,

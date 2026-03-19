@@ -4,7 +4,6 @@
 
 import { useMemo, useEffect, useState } from 'react';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useStoryEntityFolderStore } from '../../store/storyEntityFolderStore';
 import type { ObjectType, UnifiedObject } from '../../types/unifiedObject';
 import type {
   ObjectPickerMode,
@@ -21,6 +20,7 @@ import {
   getStoryEntityFolderName,
   type StoryEntityFolder,
 } from '../../types/storyEntityFolder';
+import { getProjectStoryEntityFolders } from '../../utils/storyEntityTree';
 
 function getObjectDataForLanguage(obj: UnifiedObject, language: string): Record<string, unknown> {
   if (obj.data[language]) {
@@ -91,16 +91,19 @@ function objectToItem(obj: UnifiedObject, language: string): ObjectPickerItem {
   };
 }
 
-function buildFolderNodeMap(folders: StoryEntityFolder[]): Map<string, ObjectPickerGroup> {
+function buildFolderNodeMap(
+  folders: StoryEntityFolder[],
+  language?: string,
+): Map<string, ObjectPickerGroup> {
   const map = new Map<string, ObjectPickerGroup>();
 
   for (const folder of folders) {
     map.set(folder.id, {
       id: `story-entity-folder-${folder.id}`,
-      label: folder.name,
-      description: folder.description || undefined,
+      label: getStoryEntityFolderName(folder, language),
+      description: getStoryEntityFolderDescription(folder, language) || undefined,
       type: 'story_entity',
-      order: folder.display_order,
+      order: folder.metadata.display_order ?? 0,
       items: [],
       childGroups: [],
     });
@@ -116,10 +119,12 @@ function buildStoryEntityGroups(
   mode: ObjectPickerMode,
 ): ObjectPickerGroup[] {
   const sortedFolders = [...folders].sort((a, b) => {
-    if (a.display_order === b.display_order) {
+    const orderA = a.metadata.display_order ?? 0;
+    const orderB = b.metadata.display_order ?? 0;
+    if (orderA === orderB) {
       return getStoryEntityFolderName(a, language).localeCompare(getStoryEntityFolderName(b, language));
     }
-    return a.display_order - b.display_order;
+    return orderA - orderB;
   });
   const sortedEntities = [...entities].sort((a, b) => {
     const orderA = a.metadata?.display_order ?? 0;
@@ -130,13 +135,7 @@ function buildStoryEntityGroups(
     return orderA - orderB;
   });
 
-  const folderMap = buildFolderNodeMap(
-    sortedFolders.map((folder) => ({
-      ...folder,
-      name: getStoryEntityFolderName(folder, language),
-      description: getStoryEntityFolderDescription(folder, language),
-    })),
-  );
+  const folderMap = buildFolderNodeMap(sortedFolders, language);
   const rootItems: ObjectPickerItem[] = [];
   const rootGroups: ObjectPickerGroup[] = [];
 
@@ -160,7 +159,7 @@ function buildStoryEntityGroups(
         name: getStoryEntityFolderName(folder, language),
         description: getStoryEntityFolderDescription(folder, language),
         type: 'story_entity_folder',
-        order: folder.display_order,
+        order: folder.metadata.display_order ?? 0,
       });
     }
   }
@@ -168,8 +167,9 @@ function buildStoryEntityGroups(
   for (const folder of sortedFolders) {
     const group = folderMap.get(folder.id);
     if (!group) continue;
-    if (folder.parent_id && folderMap.has(folder.parent_id)) {
-      folderMap.get(folder.parent_id)?.childGroups?.push(group);
+    const parentId = (folder.metadata.parent_id as string | null | undefined) ?? null;
+    if (parentId && folderMap.has(parentId)) {
+      folderMap.get(parentId)?.childGroups?.push(group);
     } else {
       rootGroups.push(group);
     }
@@ -398,7 +398,6 @@ export function useObjectPickerData({
   excludeTypes = [],
 }: UseObjectPickerDataOptions): UseObjectPickerDataResult {
   const objectStore = useUnifiedObjectStore();
-  const folderStore = useStoryEntityFolderStore();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -409,10 +408,13 @@ export function useObjectPickerData({
 
       try {
         const typesToFetch = getTypesForMode(mode, excludeTypes);
-        await Promise.all(typesToFetch.map((type) => objectStore.listObjects(type, projectId)));
-        if (typesToFetch.includes('story_entity')) {
-          await folderStore.fetchFolders(projectId, language);
-        }
+        await Promise.all(
+          typesToFetch.map((type) => (
+            type === 'story_entity'
+              ? objectStore.refreshStoryEntityTree(projectId)
+              : objectStore.listObjects(type, projectId)
+          )),
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load objects');
       } finally {
@@ -431,9 +433,9 @@ export function useObjectPickerData({
     );
     const typesToInclude = getTypesForMode(mode, excludeTypes);
     const filteredObjects = projectObjects.filter((obj) => typesToInclude.includes(obj.type));
-    const folders = Object.values(folderStore.foldersById).filter((folder) => folder.project_id === projectId);
+    const folders = getProjectStoryEntityFolders(objectStore.objects, projectId);
     return buildGroups(filteredObjects, folders, language, mode);
-  }, [objectStore.objects, folderStore.foldersById, projectId, language, mode, JSON.stringify(excludeTypes)]);
+  }, [objectStore.objects, projectId, language, mode, JSON.stringify(excludeTypes)]);
 
   return { groups, availableTypes, isLoading, error };
 }
