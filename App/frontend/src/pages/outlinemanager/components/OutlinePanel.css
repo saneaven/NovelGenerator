@@ -282,7 +282,7 @@
 
 .outline-manager .timeline-act-node {
   display: flex;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-sm);
   align-items: flex-start;
   opacity: 0;
   transform: translateY(calc(-1 * var(--spacing-md)));

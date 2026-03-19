@@ -311,3 +311,16 @@
 .outline-item-card--readonly .chapter-info {
   cursor: default;
 }
+
+@media (max-width: 768px) {
+  .outline-item-card .chapter-expand-wrapper{
+    padding: 0;
+  }
+  .outline-item-card .chapter-expand-wrapper.is-expanded {
+    padding: 0;
+  }
+
+  .outline-item-card .markdown-content{
+    margin: var(--spacing-lg) var(--spacing-sm);
+  }
+}
