@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user
 from ..database import get_db
 from ..models.db_models import User
-from ..services.demo_policy import require_demo_off
 from ..services.object_service import object_service
 from ..services.ownership import require_owned_project
 from ..services.story_entity_tree_service import (
@@ -132,7 +131,6 @@ def _serialize_folder_payload(payload: dict[str, Any], *, language: str | None =
 async def get_story_entity_folders(
     project_id: UUID,
     language: str | None = Query(None),
-    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -161,7 +159,6 @@ async def get_story_entity_folders(
 async def create_story_entity_folder_route(
     project_id: UUID,
     payload: StoryEntityFolderCreateRequest,
-    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -191,7 +188,6 @@ async def update_story_entity_folder_route(
     project_id: UUID,
     folder_id: UUID,
     payload: StoryEntityFolderUpdateRequest,
-    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -234,7 +230,6 @@ async def move_story_entity_folder_route(
     project_id: UUID,
     folder_id: UUID,
     payload: StoryEntityFolderMoveRequest,
-    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -260,7 +255,6 @@ async def move_story_entity_folder_route(
 async def delete_story_entity_folder_route(
     project_id: UUID,
     folder_id: UUID,
-    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -291,7 +285,6 @@ async def delete_story_entity_folder_route(
 async def move_story_entity_tree_node(
     project_id: UUID,
     payload: StoryEntityTreeMoveRequest,
-    _demo_guard: None = Depends(require_demo_off),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

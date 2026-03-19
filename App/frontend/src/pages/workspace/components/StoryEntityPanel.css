@@ -1,9 +1,8 @@
 /* ========================================
-   STORY OBJECT PANEL STYLES
-   Panel header, tabs, and content container
+   STORY ENTITY PANEL STYLES
+   Container for StoryEntityExplorer
    ======================================== */
 
-/* ===== Story Object Panel ===== */
 .story-entity-panel {
     flex: 1 1 auto;
     background: var(--color-surface-base);
@@ -13,125 +12,13 @@
     overflow: hidden;
 }
 
-/* ===== Story Object Tabs ===== */
-.story-entity-tabs-container {
-    padding-top: var(--spacing-lg);
-    position: relative;
-    background: var(--color-surface-subtle);
-    flex-shrink: 0;
-}
-
-.story-entity-tabs {
-    display: flex;
-    padding: 0 var(--spacing-lg);
-    gap: var(--spacing-xs);
-    overflow-x: auto;
-    flex-shrink: 0;
-    scrollbar-width: none;
-    scroll-behavior: smooth;
-}
-
-.story-entity-tabs::-webkit-scrollbar {
-    display: none;
-}
-
-/* Navigation Buttons */
-.story-entity-tab-nav-button {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    background: var(--color-surface-elevated);
-    border: 1px solid var(--color-border-default);
-    color: var(--color-text-secondary);
-    width: 2rem;
-    height: 2rem;
-    border-radius: var(--border-radius-md);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all var(--transition-base);
-    z-index: var(--z-content);
-    box-shadow: var(--shadow-md);
-    font-size: var(--font-size-base);
-    opacity: 0;
-    visibility: hidden;
-}
-
-.story-entity-tab-nav-button.visible {
-    opacity: 1;
-    visibility: visible;
-}
-
-.story-entity-tab-nav-button:hover {
-    background: var(--color-surface-hover);
-    border-color: var(--color-border-medium);
-    color: var(--color-text-primary);
-    box-shadow: var(--shadow-lg);
-    transform: translateY(-50%) scale(1.05);
-}
-
-.story-entity-tab-nav-button:active {
-    transform: translateY(-50%) scale(0.95);
-}
-
-.story-entity-tab-nav-button.left {
-    left: var(--spacing-xs);
-}
-
-.story-entity-tab-nav-button.right {
-    right: var(--spacing-xs);
-}
-
-.story-entity-tab-button {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md) var(--spacing-lg);
-    border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    color: var(--color-text-tertiary);
-    border-bottom: 3px solid transparent;
-    white-space: nowrap;
-    transition: all var(--transition-base);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    position: relative;
-    box-shadow: var(--shadow-sm);
-}
-
-.story-entity-tab-button:hover {
-    color: var(--color-text-secondary);
-    background: var(--color-surface-hover);
-}
-
-.story-entity-tab-button.active {
-    color: var(--color-brand-accent);
-    border-bottom-color: var(--color-brand-accent);
-    background: var(--color-surface-base);
-    font-weight: var(--font-weight-semibold);
-}
-
-.story-entity-tab-icon {
-    font-size: var(--font-size-lg);
-    line-height: 1;
-}
-
-.story-entity-tab-label {
-    line-height: 1;
-}
-
 .story-entity-content {
     flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: var(--spacing-xl);
+    overflow: hidden;
     background: var(--color-surface-base);
     position: relative;
     display: flex;
-    flex-direction: column;
+    min-height: 0;
 }
 
 /* Story Object Card Expanded Overlay - State 3 full edit mode */
@@ -156,40 +43,19 @@
 
 /* ===== Responsive Design ===== */
 @media (max-width: 768px) {
-    /* Hide tabs container on mobile - use sidebar instead */
-    .story-entity-tabs-container {
-        display: none;
+    .story-entity-manager__top {
+        padding: var(--spacing-lg) var(--spacing-lg) 0;
     }
 
-    .story-entity-tabs {
-        padding: 0 var(--spacing-sm);
-    }
-
-    .story-entity-tab-button {
-        padding: var(--spacing-sm) var(--spacing-md);
-        font-size: var(--font-size-xs);
-    }
-
-    .story-entity-tab-icon {
-        font-size: var(--font-size-base);
-    }
-
-    .story-entity-content {
-        padding: var(--spacing-lg);
+    .story-entity-manager__body {
+        padding: 0 var(--spacing-lg) var(--spacing-lg);
     }
 
     /* Prevent last content line/card from being hidden behind fixed MobileFooter */
-    .story-entity-content::after {
+    .story-entity-manager__body::after {
         content: '';
         display: block;
         height: var(--size-mobile-footer-height);
         flex-shrink: 0;
-    }
-
-}
-
-@media (min-width: 769px) and (max-width: 1024px) {
-    .story-entity-content {
-        padding: var(--spacing-xl);
     }
 }

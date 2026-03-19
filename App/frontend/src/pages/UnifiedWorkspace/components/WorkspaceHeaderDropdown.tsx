@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DropdownMenu, DropdownItem, DropdownSection } from '../../../components/ui/DropdownMenu';
-import { Workspace, Clipboard, Document, Configs, ChevronDown, Home } from '../../../components/icons';
+import { Workspace, Clipboard, Document, Configs, ChevronDown, Home, Folder } from '../../../components/icons';
 import type { SubPageType } from '../hooks/useWorkspaceSubPage';
 import './WorkspaceHeaderDropdown.css';
 
@@ -12,7 +12,8 @@ interface SubPageConfig {
 }
 
 const SUB_PAGES: SubPageConfig[] = [
-  { id: 'story-entity', labelKey: 'unifiedWorkspace.subPages.storyEntities', icon: <Workspace size="lg" /> },
+  { id: 'project-home', labelKey: 'unifiedWorkspace.subPages.projectHome', icon: <Home size="lg" /> },
+  { id: 'story-entity', labelKey: 'unifiedWorkspace.subPages.storyEntities', icon: <Folder size="lg" /> },
   { id: 'outline-manager', labelKey: 'unifiedWorkspace.subPages.outlineManager', icon: <Clipboard size="lg" /> },
   { id: 'novel-editor', labelKey: 'unifiedWorkspace.subPages.novelEditor', icon: <Document size="lg" /> },
   { id: 'config', labelKey: 'unifiedWorkspace.subPages.config', icon: <Configs size="lg" /> },

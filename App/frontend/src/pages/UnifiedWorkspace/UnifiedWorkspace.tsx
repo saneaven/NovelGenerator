@@ -18,15 +18,16 @@ import type { StoryEntityObject, OutlineObject } from '../../types/unifiedObject
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
 import TranslationModal from '../../components/Modal/TranslationModal';
 import AgentPanel from '../workspace/components/AgentPanel';
+import ProjectHomePanel, { type ProjectHomeTab } from '../workspace/components/ProjectHomePanel';
+import ProjectHomeSidebar from '../workspace/components/ProjectHomeSidebar';
 import StoryEntityPanel from '../workspace/components/StoryEntityPanel';
 import OutlinePanel from '../outlinemanager/components/OutlinePanel';
 import NovelEditorPanel from '../noveleditor/components/NovelEditorPanel';
-import WorkspaceTabsSidebar from '../workspace/components/WorkspaceTabsSidebar';
 import WorkspaceConfigPanel from './components/WorkspaceConfigPanel';
+import EntityFolderSidebar from '../../components/StoryEntityExplorer/EntityFolderSidebar';
 import { PageHeader, MobileFooter } from '../../components/layout';
 
 import { useWorkspaceSubPage, type SubPageType } from './hooks/useWorkspaceSubPage';
-import { useStoryEntityTab } from '../workspace/hooks/useStoryEntityTab';
 
 import './UnifiedWorkspace.css';
 import '../workspace/styles/AgentPanel.css';
@@ -36,24 +37,19 @@ import '../workspace/styles/MessageEdit.css';
 import '../workspace/styles/AgentInput.css';
 import '../../components/Agent/MobileAgent.css';
 
-// Tab label keys for mobile subtitle (story-entity mode) - will be localized in component
-const tabLabelKeys: Record<string, string> = {
-  basicInfo: 'storyEntityPanel.tabs.basicInfo',
-  storyEntities: 'storyEntityPanel.tabs.storyEntities',
-  guidelines: 'storyEntityPanel.tabs.guidelines',
-};
-
 // Get sidebar type from sub-page
 function getSidebarType(subPage: SubPageType): string {
   switch (subPage) {
+    case 'project-home':
+      return 'project-home';
     case 'story-entity':
-      return 'workspace-tabs';
+      return 'story-entity-folder';
     case 'outline-manager':
       return 'outline';
     case 'novel-editor':
       return 'chapter';
     case 'config':
-      return 'workspace-tabs';
+      return 'config';
   }
 }
 
@@ -111,8 +107,11 @@ const UnifiedWorkspace: React.FC = () => {
   // Settings modal state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Story object tab state (for mobile subtitle)
-  const { activeTab: activeStoryEntityTab } = useStoryEntityTab();
+  // Project home tab state
+  const [projectHomeTab, setProjectHomeTab] = useState<ProjectHomeTab>('basicInfo');
+
+  // Story entity folder selection
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
 
   // Translation modal state
   const [showTranslateModal, setShowTranslateModal] = useState(false);
@@ -442,8 +441,10 @@ const UnifiedWorkspace: React.FC = () => {
   // Get mobile subtitle based on current sub-page
   const getMobileSubtitle = () => {
     switch (currentSubPage) {
+      case 'project-home':
+        return projectHomeTab === 'basicInfo' ? 'Basic Info' : 'Guidelines';
       case 'story-entity':
-        return tabLabelKeys[activeStoryEntityTab] ? t(tabLabelKeys[activeStoryEntityTab]) : activeStoryEntityTab;
+        return t('unifiedWorkspace.mobileSubtitle.storyEntities', 'Story Entities');
       case 'outline-manager':
         return t('unifiedWorkspace.mobileSubtitle.outlines');
       case 'novel-editor':
@@ -488,9 +489,19 @@ const UnifiedWorkspace: React.FC = () => {
           displayLanguage={currentDisplayLanguage}
         />
 
+        {currentSubPage === 'project-home' && (
+          <ProjectHomePanel
+            globalDisplayLanguage={currentDisplayLanguage}
+            activeTab={projectHomeTab}
+            onTabChange={setProjectHomeTab}
+          />
+        )}
+
         {currentSubPage === 'story-entity' && (
           <StoryEntityPanel
             globalDisplayLanguage={currentDisplayLanguage}
+            selectedFolderId={selectedFolderId}
+            onSelectFolder={setSelectedFolderId}
           />
         )}
 
@@ -519,10 +530,20 @@ const UnifiedWorkspace: React.FC = () => {
         )}
       </div>
 
-      {/* Sidebar for story-entity mode */}
-      {currentSubPage === 'story-entity' && (
-        <WorkspaceTabsSidebar
+      {currentSubPage === 'project-home' && (
+        <ProjectHomeSidebar
           projectId={projectId ?? ''}
+          activeTab={projectHomeTab}
+          onTabChange={setProjectHomeTab}
+        />
+      )}
+
+      {currentSubPage === 'story-entity' && (
+        <EntityFolderSidebar
+          projectId={projectId ?? ''}
+          selectedFolderId={selectedFolderId}
+          onSelectFolder={setSelectedFolderId}
+          displayLanguage={currentDisplayLanguage}
         />
       )}
 

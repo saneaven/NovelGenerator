@@ -1,0 +1,183 @@
+/* FolderTreeContent.css - shared tree node styles */
+
+.folder-tree-content {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Tree Node */
+.folder-tree-node {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding-right: var(--spacing-sm);
+  min-height: 36px;
+  cursor: default;
+  transition: background-color var(--transition-base);
+}
+
+.folder-tree-node:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.folder-tree-node--selected {
+  background-color: var(--color-surface-subtle);
+}
+
+.folder-tree-node--selected:hover {
+  background-color: var(--color-surface-subtle);
+}
+
+/* Toggle chevron */
+.folder-tree-node__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--transition-base), color var(--transition-base);
+}
+
+.folder-tree-node__toggle:hover {
+  color: var(--color-text-primary);
+}
+
+.folder-tree-node__toggle--open {
+  transform: rotate(90deg);
+}
+
+.folder-tree-node__toggle--hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Folder icon */
+.folder-tree-node__icon {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.folder-tree-node--selected .folder-tree-node__icon {
+  color: var(--color-brand-primary);
+}
+
+/* Name */
+.folder-tree-node__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family-base);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+  cursor: pointer;
+  padding: var(--spacing-xs) 0;
+  line-height: 1.4;
+}
+
+.folder-tree-node--selected .folder-tree-node__name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-brand-primary);
+}
+
+.folder-tree-node--special .folder-tree-node__name {
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Count badge */
+.folder-tree-node__count {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-family-mono);
+  min-width: 20px;
+  text-align: right;
+}
+
+/* Actions */
+.folder-tree-node__actions {
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.folder-tree-node:hover .folder-tree-node__actions {
+  opacity: 1;
+}
+
+/* Rename input */
+.folder-tree-node__rename-input {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family-base);
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-base);
+  border: 1px solid var(--color-brand-primary);
+  border-radius: var(--border-radius-sm);
+  padding: 2px var(--spacing-xs);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-brand-primary-soft);
+}
+
+/* Divider */
+.folder-tree-content__divider {
+  height: 1px;
+  background-color: var(--color-border-subtle);
+  margin: var(--spacing-sm) var(--spacing-md);
+}
+
+/* Add form */
+.folder-tree-content__add-form {
+  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-sm) 12px;
+}
+
+.folder-tree-content__add-form input {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family-base);
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-base);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  box-sizing: border-box;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.folder-tree-content__add-form input:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
+  box-shadow: 0 0 0 2px var(--color-brand-primary-soft);
+}
+
+.folder-tree-content__add-form input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.folder-tree-content__add-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+/* Footer */
+.folder-tree-content__footer {
+  padding: var(--spacing-md);
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: var(--spacing-sm);
+}

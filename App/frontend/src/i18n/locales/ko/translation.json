@@ -1247,6 +1247,7 @@
       "config": "설정"
     },
     "subPages": {
+      "projectHome": "프로젝트 홈",
       "storyEntities": "스토리 엔티티",
       "outlineManager": "개요 관리자",
       "novelEditor": "소설 에디터",

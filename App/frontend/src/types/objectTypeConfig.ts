@@ -1,8 +1,5 @@
 import type { ObjectType } from './unifiedObject';
 
-// UI tab types for the story entity workspace panel
-export type StoryEntityTabType = 'basicInfo' | 'guidelines' | 'storyEntities' | 'outline';
-
 export const OBJECT_TYPE_CONFIG: Record<ObjectType, { label: string; order: number }> = {
   basic_info: { label: 'Basic Info', order: 0 },
   guidelines: { label: 'Guidelines', order: 0.5 },

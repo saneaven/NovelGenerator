@@ -1247,6 +1247,7 @@
       "config": "Config"
     },
     "subPages": {
+      "projectHome": "Project Home",
       "storyEntities": "Story Entities",
       "outlineManager": "Outline Manager",
       "novelEditor": "Novel Editor",
