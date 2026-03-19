@@ -284,10 +284,9 @@
   display: flex;
   gap: var(--spacing-sm);
   align-items: flex-start;
-  opacity: 0;
-  transform: translateY(calc(-1 * var(--spacing-md)));
-  animation: actSlideIn 0.35s ease forwards;
+  animation: actSlideIn 0.35s ease;
   animation-delay: calc(var(--act-index, 0) * 80ms);
+  animation-fill-mode: backwards;
 }
 
 @keyframes actSlideIn {
@@ -498,10 +497,9 @@
   display: flex;
   align-items: flex-start;
   gap: var(--spacing-lg);
-  opacity: 0;
-  transform: translateY(calc(-1 * var(--spacing-md)));
-  animation: chapterSlideIn 0.35s ease forwards;
+  animation: chapterSlideIn 0.35s ease;
   animation-delay: calc(var(--chapter-index, 0) * 60ms);
+  animation-fill-mode: backwards;
 }
 
 @keyframes chapterSlideIn {
@@ -713,6 +711,19 @@
 .outline-manager .timeline-chapter-node.is-dragging {
   animation: none;
   opacity: inherit;
+}
+
+/* ============================================================================
+   DRAG OVERLAY
+   ============================================================================ */
+
+.outline-drag-overlay {
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.outline-drag-overlay .content-card {
+  box-shadow: var(--shadow-xl);
 }
 
 /* ============================================================================

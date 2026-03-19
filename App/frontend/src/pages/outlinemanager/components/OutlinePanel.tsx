@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom';
 import {
   DndContext,
+  DragOverlay,
   closestCenter,
   KeyboardSensor,
   PointerSensor,
@@ -9,12 +10,14 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
   useSortable,
+  arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
@@ -609,6 +612,16 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     })
   );
 
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveDragId(event.active.id as string);
+  }, []);
+
+  const handleDragCancel = useCallback(() => {
+    setActiveDragId(null);
+  }, []);
+
   const actIds = useMemo(
     () => selectedOutlineActs.map((act) => act.id),
     [selectedOutlineActs]
@@ -616,6 +629,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
   const handleActDragEnd = useCallback(
     async (event: DragEndEvent) => {
+      setActiveDragId(null);
       const { active, over } = event;
       if (!over || active.id === over.id || !projectId) return;
 
@@ -623,8 +637,20 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       const newIndex = selectedOutlineActs.findIndex((a) => a.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
 
+      // Optimistic update: reorder and assign new positions immediately
+      const reordered = arrayMove(selectedOutlineActs, oldIndex, newIndex);
+      const previousObjects = { ...useUnifiedObjectStore.getState().objects };
+      const optimisticObjects = { ...previousObjects };
+      reordered.forEach((act, i) => {
+        optimisticObjects[act.id] = {
+          ...act,
+          metadata: { ...act.metadata, position: i },
+        };
+      });
+      useUnifiedObjectStore.setState({ objects: optimisticObjects });
+
       try {
-        const activeObject = store.objects[active.id as string] as UnifiedObject | undefined;
+        const activeObject = previousObjects[active.id as string] as UnifiedObject | undefined;
         const languageState = activeObject ? getLanguageState(activeObject) : resolveRequestedLanguageState({
           availableLanguages: [],
           requestedLanguage: globalDisplayLanguage,
@@ -638,15 +664,17 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           user_request: 'Reposition act',
         });
       } catch (error) {
+        useUnifiedObjectStore.setState({ objects: previousObjects });
         console.error('Failed to reorder acts:', error);
         showAlert({ title: 'Reorder Error', message: 'Failed to reorder acts. Please try again.' });
       }
     },
-    [selectedOutlineActs, actIds, projectId, store, getLanguageState, globalDisplayLanguage, settings.mainLanguage, selectedOutlineId]
+    [selectedOutlineActs, projectId, store, getLanguageState, globalDisplayLanguage, settings.mainLanguage, selectedOutlineId]
   );
 
   const makeChapterDragEndHandler = useCallback(
     (actId: string) => async (event: DragEndEvent) => {
+      setActiveDragId(null);
       const { active, over } = event;
       if (!over || active.id === over.id || !projectId) return;
 
@@ -656,8 +684,20 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       const newIndex = ids.indexOf(over.id as string);
       if (oldIndex === -1 || newIndex === -1) return;
 
+      // Optimistic update: reorder and assign new positions immediately
+      const reordered = arrayMove(actChapters, oldIndex, newIndex);
+      const previousObjects = { ...useUnifiedObjectStore.getState().objects };
+      const optimisticObjects = { ...previousObjects };
+      reordered.forEach((ch, i) => {
+        optimisticObjects[ch.id] = {
+          ...ch,
+          metadata: { ...ch.metadata, position: i },
+        };
+      });
+      useUnifiedObjectStore.setState({ objects: optimisticObjects });
+
       try {
-        const activeObject = store.objects[active.id as string] as UnifiedObject | undefined;
+        const activeObject = previousObjects[active.id as string] as UnifiedObject | undefined;
         const languageState = activeObject ? getLanguageState(activeObject) : resolveRequestedLanguageState({
           availableLanguages: [],
           requestedLanguage: globalDisplayLanguage,
@@ -671,6 +711,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           user_request: 'Reposition chapter',
         });
       } catch (error) {
+        useUnifiedObjectStore.setState({ objects: previousObjects });
         console.error('Failed to reorder chapters:', error);
         showAlert({ title: 'Reorder Error', message: 'Failed to reorder chapters. Please try again.' });
       }
@@ -868,7 +909,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
             )}
 
             {selectedOutline && selectedOutlineActs.length > 0 && (
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleActDragEnd}>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleActDragEnd} onDragCancel={handleDragCancel}>
                 <SortableContext items={actIds} strategy={verticalListSortingStrategy}>
                   <div className="timeline-track">
                     {selectedOutlineActs.map((act, actIndex) => {
@@ -1003,7 +1044,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                 <div className="timeline-chapter-stream">
                                   <div className="stream-line"></div>
 
-                                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={makeChapterDragEndHandler(act.id)}>
+                                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={makeChapterDragEndHandler(act.id)} onDragCancel={handleDragCancel}>
                                     <SortableContext items={actChapters.map(ch => ch.id)} strategy={verticalListSortingStrategy}>
                                       {actChapters.map((chapter, chapterIndex) => {
                                         const chapterLanguageState = getLanguageState(chapter);
@@ -1167,6 +1208,47 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                     })}
                   </div>
                 </SortableContext>
+
+                <DragOverlay dropAnimation={null}>
+                  {activeDragId && (() => {
+                    const act = selectedOutlineActs.find(a => a.id === activeDragId);
+                    if (act) {
+                      const ls = getLanguageState(act);
+                      const d = getDataForLanguage(act, ls.viewLanguage);
+                      const actChapters = getChaptersForAct(act.id);
+                      return (
+                        <div className="outline-drag-overlay">
+                          <OutlineItemCard
+                            variant="act"
+                            name={d.name || 'Untitled Act'}
+                            description={d.description}
+                            meta={`${actChapters.length} Chapters`}
+                            readOnly
+                          />
+                        </div>
+                      );
+                    }
+                    for (const [, chapters] of chaptersByActId) {
+                      const ch = chapters.find(c => c.id === activeDragId);
+                      if (ch) {
+                        const ls = getLanguageState(ch);
+                        const d = getDataForLanguage(ch, ls.viewLanguage);
+                        return (
+                          <div className="outline-drag-overlay">
+                            <OutlineItemCard
+                              variant="chapter"
+                              name={d.name || 'Untitled Chapter'}
+                              description={d.description}
+                              chapterIndex={chapterNumberById.get(ch.id)}
+                              readOnly
+                            />
+                          </div>
+                        );
+                      }
+                    }
+                    return null;
+                  })()}
+                </DragOverlay>
               </DndContext>
             )}
           </div>
