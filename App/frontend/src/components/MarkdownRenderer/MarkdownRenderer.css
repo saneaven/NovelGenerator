@@ -24,3 +24,25 @@
   width: max-content;
   min-width: 100%;
 }
+
+/* Table cells */
+.markdown-content table {
+  margin: var(--spacing-sm) 0;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid var(--color-border-default);
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-content th {
+  background: var(--color-surface-elevated);
+  font-weight: var(--font-weight-semibold);
+}
+
+.markdown-content tr:hover td {
+  background: var(--color-surface-subtle);
+}

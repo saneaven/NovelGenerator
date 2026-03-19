@@ -29,7 +29,9 @@ import AIEditModal from '../Modal/AIEditModal';
 import VersionHistoryModal from '../Modal/VersionHistoryModal';
 import TranslationModal from '../Modal/TranslationModal';
 import { TextButton } from '../TextButton';
+import { IconButton } from '../IconButton';
 import { CustomSelect } from '../ui/CustomSelect';
+import { DropdownMenu, DropdownItem } from '../ui/DropdownMenu';
 import { SortableObjectCard } from '../ObjectManager/ObjectCards/SortableObjectCard';
 import { ObjectCard } from '../ObjectManager/ObjectCards/ObjectCard';
 import ObjectCardExpanded from '../ObjectManager/ObjectCards/ObjectCardExpanded';
@@ -40,14 +42,18 @@ import {
   Books,
   ChevronRight,
   Collapse,
+  Edit,
   Expand,
   Folder,
   Map as MapIcon,
+  MoreHorizontal,
   Organization,
   People,
   Plus,
+  Trash,
 } from '../icons';
 import {
+  getStoryEntityFolderDescription,
   getStoryEntityFolderName,
   type StoryEntityFolder,
 } from '../../types/storyEntityFolder';
@@ -85,6 +91,7 @@ type FolderGridItem = {
   folder: StoryEntityFolder;
   order: number;
   name: string;
+  description: string;
 };
 
 type EntityGridItem = {
@@ -185,6 +192,12 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   const [animatingEntityId, setAnimatingEntityId] = useState<string | null>(null);
   const [newEntityDraft, setNewEntityDraft] = useState<EntityDraftState | null>(null);
   const [editingEntityDraft, setEditingEntityDraft] = useState<EntityDraftState | null>(null);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderDescription, setNewFolderDescription] = useState('');
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [renameFolderValue, setRenameFolderValue] = useState('');
+  const [renameFolderDescription, setRenameFolderDescription] = useState('');
 
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
@@ -244,6 +257,15 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     });
   }, [projectId, refreshStoryEntityTree]);
 
+  useEffect(() => {
+    setIsCreatingFolder(false);
+    setNewFolderName('');
+    setNewFolderDescription('');
+    setRenamingFolderId(null);
+    setRenameFolderValue('');
+    setRenameFolderDescription('');
+  }, [selectedFolderId]);
+
   const sortEntities = useMemo(() => makeSortEntities(globalDisplayLanguage, settings.mainLanguage), [globalDisplayLanguage, settings.mainLanguage]);
 
   const folders = useMemo(
@@ -255,41 +277,33 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     () => folders.reduce<Record<string, StoryEntityFolder>>((acc, f) => { acc[f.id] = f; return acc; }, {}),
     [folders],
   );
-
   const entities = useMemo(
     () => getProjectStoryEntities(objects, projectId).sort(sortEntities),
     [objects, projectId, sortEntities],
   );
 
-  // Resolve which folder ID to actually filter by
-  const effectiveFolderId = selectedFolderId === '__uncategorized__' ? null : selectedFolderId;
-  const showAllEntities = selectedFolderId === null;
-  const showUncategorized = selectedFolderId === '__uncategorized__';
+  const effectiveFolderId = selectedFolderId;
 
   const filteredEntities = useMemo(() => {
-    if (showAllEntities) return entities;
-    if (showUncategorized) return entities.filter((e) => !e.metadata.folder_id);
     return entities.filter((e) => e.metadata.folder_id === effectiveFolderId);
-  }, [entities, showAllEntities, showUncategorized, effectiveFolderId]);
+  }, [entities, effectiveFolderId]);
 
   const childFolders = useMemo(() => {
-    if (showUncategorized) return [];
-    const parentId = showAllEntities ? null : effectiveFolderId;
     return folders
-      .filter((f) => (f.metadata.parent_id ?? null) === parentId)
+      .filter((f) => (f.metadata.parent_id ?? null) === effectiveFolderId)
       .sort((a, b) => (a.metadata.display_order ?? 0) - (b.metadata.display_order ?? 0));
-  }, [folders, showAllEntities, showUncategorized, effectiveFolderId]);
+  }, [folders, effectiveFolderId]);
 
   const parentInfo = useMemo(() => {
-    if (showAllEntities || showUncategorized || !effectiveFolderId) return null;
+    if (!effectiveFolderId) return null;
     const currentFolder = foldersById[effectiveFolderId];
     if (!currentFolder) return null;
     const pid = currentFolder.metadata.parent_id ?? null;
     const parentName = pid && foldersById[pid]
       ? getStoryEntityFolderName(foldersById[pid], globalDisplayLanguage, settings.mainLanguage)
-      : 'All Entities';
+      : 'Root';
     return { parentId: pid, parentName };
-  }, [showAllEntities, showUncategorized, effectiveFolderId, foldersById, globalDisplayLanguage, settings.mainLanguage]);
+  }, [effectiveFolderId, foldersById, globalDisplayLanguage, settings.mainLanguage]);
 
   const mainAssetsByEntityId = useMemo(() => {
     if (!projectId) return {};
@@ -339,6 +353,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
       folder: f,
       order: f.metadata.display_order ?? 0,
       name: getStoryEntityFolderName(f, globalDisplayLanguage, settings.mainLanguage),
+      description: getStoryEntityFolderDescription(f, globalDisplayLanguage, settings.mainLanguage),
     }));
     const entityItems: GridItem[] = filteredEntities.map((entity) => {
       const languageState = getEntityLanguageState(entity, globalDisplayLanguage, settings.mainLanguage);
@@ -425,8 +440,23 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     if (!isMainLanguageView) return;
     setExpandedEntityId(null);
     setEditingEntityDraft(null);
-    setNewEntityDraft({ kind, folderId: showAllEntities ? null : effectiveFolderId });
-  }, [effectiveFolderId, isMainLanguageView, showAllEntities]);
+    setIsCreatingFolder(false);
+    setNewFolderName('');
+    setNewEntityDraft({ kind, folderId: effectiveFolderId });
+  }, [effectiveFolderId, isMainLanguageView]);
+
+  const openCreateFolder = useCallback(() => {
+    if (!isMainLanguageView) return;
+    setExpandedEntityId(null);
+    setEditingEntityDraft(null);
+    setNewEntityDraft(null);
+    setRenamingFolderId(null);
+    setRenameFolderValue('');
+    setRenameFolderDescription('');
+    setNewFolderName('');
+    setNewFolderDescription('');
+    setIsCreatingFolder(true);
+  }, [isMainLanguageView]);
 
   const handleCreateEntity = useCallback(async (name: string, description: string, content: string) => {
     if (!projectId || !newEntityDraft || !name.trim()) return;
@@ -446,6 +476,74 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
       showAlert({ title: 'Create Error', message: 'Failed to create story entity.' });
     }
   }, [createObject, newEntityDraft, projectId, settings.mainLanguage]);
+
+  const handleCreateFolder = useCallback(async () => {
+    if (!projectId || !newFolderName.trim()) return;
+    try {
+      await createObject(
+        'story_entity_folder',
+        projectId,
+        {
+          name: newFolderName.trim(),
+          description: newFolderDescription.trim(),
+        },
+        settings.mainLanguage,
+        { parent_id: effectiveFolderId },
+        'User Creation',
+      );
+      setIsCreatingFolder(false);
+      setNewFolderName('');
+      setNewFolderDescription('');
+    } catch (error) {
+      console.error('Failed to create story entity folder:', error);
+      showAlert({ title: 'Create Error', message: 'Failed to create folder.' });
+    }
+  }, [createObject, effectiveFolderId, newFolderDescription, newFolderName, projectId, settings.mainLanguage]);
+
+  const startRenameFolder = useCallback((folder: StoryEntityFolder) => {
+    if (!isMainLanguageView) return;
+    setIsCreatingFolder(false);
+    setNewEntityDraft(null);
+    setNewFolderName('');
+    setNewFolderDescription('');
+    setRenamingFolderId(folder.id);
+    setRenameFolderValue(
+      getStoryEntityFolderName(folder, globalDisplayLanguage, settings.mainLanguage),
+    );
+    setRenameFolderDescription(
+      getStoryEntityFolderDescription(folder, globalDisplayLanguage, settings.mainLanguage),
+    );
+  }, [globalDisplayLanguage, isMainLanguageView, settings.mainLanguage]);
+
+  const cancelRenameFolder = useCallback(() => {
+    setRenamingFolderId(null);
+    setRenameFolderValue('');
+    setRenameFolderDescription('');
+  }, []);
+
+  const handleRenameFolder = useCallback(async (folderId: string) => {
+    if (!renameFolderValue.trim()) {
+      cancelRenameFolder();
+      return;
+    }
+    try {
+      const folder = foldersById[folderId];
+      await updateObject('story_entity_folder', folderId, {
+        language: settings.mainLanguage,
+        data: {
+          name: renameFolderValue.trim(),
+          description: folder
+            ? renameFolderDescription.trim()
+            : '',
+        },
+        user_request: 'User Edit',
+      });
+      cancelRenameFolder();
+    } catch (error) {
+      console.error('Failed to rename story entity folder:', error);
+      showAlert({ title: 'Rename Error', message: 'Failed to rename folder.' });
+    }
+  }, [cancelRenameFolder, foldersById, renameFolderDescription, renameFolderValue, settings.mainLanguage, updateObject]);
 
   const handleSaveEntity = useCallback(async (name: string, description: string, content: string) => {
     if (!projectId || !expandedEntityId || !editingEntityDraft || !name.trim()) return;
@@ -499,6 +597,26 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
       showAlert({ title: 'Delete Error', message: 'Failed to delete story entity.' });
     }
   }, [closeEntityEditor, deleteObject, expandedEntityId]);
+
+  const handleDeleteFolder = useCallback(async (folder: StoryEntityFolder) => {
+    const confirmed = await confirm({
+      title: 'Delete Folder',
+      message: 'Delete this folder, its descendant folders, and all nested story entities?',
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
+
+    try {
+      await deleteObject('story_entity_folder', folder.id);
+      if (renamingFolderId === folder.id) {
+        cancelRenameFolder();
+      }
+    } catch (error) {
+      console.error('Failed to delete story entity folder:', error);
+      showAlert({ title: 'Delete Error', message: 'Failed to delete folder.' });
+    }
+  }, [cancelRenameFolder, deleteObject, renamingFolderId]);
 
   const performStructureMove = useCallback(async (
     objectType: 'story_entity_folder' | 'story_entity',
@@ -596,14 +714,14 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
         activeNodeKind === 'folder' ? 'story_entity_folder' : 'story_entity',
         activeRawId,
         activeNodeKind === 'folder'
-          ? { parent_id: showAllEntities ? null : effectiveFolderId, display_order: mixedNewIndex }
-          : { folder_id: showAllEntities ? null : effectiveFolderId, display_order: mixedNewIndex },
+          ? { parent_id: effectiveFolderId, display_order: mixedNewIndex }
+          : { folder_id: effectiveFolderId, display_order: mixedNewIndex },
         'Failed to reorder item.',
       );
     } catch {
       // handled in performStructureMove
     }
-  }, [effectiveFolderId, gridItems, parentInfo, performStructureMove, projectId, showAllEntities]);
+  }, [effectiveFolderId, gridItems, parentInfo, performStructureMove, projectId]);
 
   const currentExpandedEntity = expandedEntityId
     ? entities.find((entity) => entity.id === expandedEntityId) ?? null
@@ -614,13 +732,23 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
 
   // Get the selected folder name for the header
   const selectedFolderName = useMemo(() => {
-    if (showAllEntities) return 'Story Entities';
-    if (showUncategorized) return 'Uncategorized';
     if (effectiveFolderId && foldersById[effectiveFolderId]) {
       return getStoryEntityFolderName(foldersById[effectiveFolderId], globalDisplayLanguage, settings.mainLanguage);
     }
-    return 'Story Entities';
-  }, [showAllEntities, showUncategorized, effectiveFolderId, foldersById, globalDisplayLanguage, settings.mainLanguage]);
+    return 'Root';
+  }, [effectiveFolderId, foldersById, globalDisplayLanguage, settings.mainLanguage]);
+
+  const selectedFolderDescription = useMemo(() => {
+    if (effectiveFolderId && foldersById[effectiveFolderId]) {
+      return getStoryEntityFolderDescription(
+        foldersById[effectiveFolderId],
+        globalDisplayLanguage,
+        settings.mainLanguage,
+      );
+    }
+    return '';
+  }, [effectiveFolderId, foldersById, globalDisplayLanguage, settings.mainLanguage]);
+  const hasSelectedFolderDescription = selectedFolderDescription.trim().length > 0;
 
   if (!projectId) {
     return (
@@ -637,8 +765,11 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
       <div className="story-entity-manager__main">
         <div className="story-entity-manager__top">
           <div className="section-header story-entity-manager__header">
-            <div className="story-entity-manager__heading">
+            <div className={`story-entity-manager__heading${hasSelectedFolderDescription ? '' : ' story-entity-manager__heading--title-only'}`}>
               <h2>{selectedFolderName}</h2>
+              {hasSelectedFolderDescription ? (
+                <p className="story-entity-manager__description">{selectedFolderDescription}</p>
+              ) : null}
             </div>
 
             <div className="header-buttons story-entity-manager__actions">
@@ -655,14 +786,28 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
               ) : null}
 
               {isMainLanguageView ? (
-                <TextButton
-                  variant="secondary"
-                  size="sm"
-                  iconLeft={<Plus size="xs" />}
-                  onClick={() => openCreateEntity()}
+                <DropdownMenu
+                  trigger={(
+                    <TextButton
+                      variant="secondary"
+                      size="sm"
+                      iconLeft={<Plus size="xs" />}
+                    >
+                      Add
+                    </TextButton>
+                  )}
                 >
-                  Add Entity
-                </TextButton>
+                  <DropdownItem
+                    icon={<People size="sm" />}
+                    label="Entity"
+                    onClick={() => openCreateEntity()}
+                  />
+                  <DropdownItem
+                    icon={<Folder size="sm" />}
+                    label="Folder"
+                    onClick={openCreateFolder}
+                  />
+                </DropdownMenu>
               ) : null}
             </div>
           </div>
@@ -684,17 +829,17 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
               />
             )}
 
-            {gridItems.length === 0 ? (
+            {gridItems.length === 0 && !isCreatingFolder ? (
               <div className="empty-state">
-                <p>No entities here.</p>
+                <p>No items here.</p>
                 <p>
                   {isMainLanguageView
-                    ? 'Add a new story entity to get started.'
-                    : `Create new entities in ${settings.mainLanguage}, then translate them into ${globalDisplayLanguage}.`}
+                    ? 'Add a folder or story entity to get started.'
+                    : `Create folders and entities in ${settings.mainLanguage}, then translate entities into ${globalDisplayLanguage}.`}
                 </p>
               </div>
             ) : (
-              <LayoutGroup id={`story-entities-${selectedFolderId ?? 'all'}`}>
+              <LayoutGroup id={`story-entities-${selectedFolderId ?? 'root'}`}>
                 <SortableContext
                   items={gridItems.map((item) => item.sortId)}
                   strategy={rectSortingStrategy}
@@ -704,17 +849,54 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
                     className="object-cards-grid story-entity-cards-grid"
                     style={{ position: 'relative' }}
                   >
+                    {isCreatingFolder ? (
+                      <FolderInlineCard
+                        name={newFolderName}
+                        description={newFolderDescription}
+                        submitLabel="Create"
+                        onChange={setNewFolderName}
+                        onDescriptionChange={setNewFolderDescription}
+                        onSubmit={() => { void handleCreateFolder(); }}
+                        onCancel={() => {
+                          setIsCreatingFolder(false);
+                          setNewFolderName('');
+                          setNewFolderDescription('');
+                        }}
+                      />
+                    ) : null}
                     {gridItems.map((item) => {
                       if (item.type === 'folder') {
+                        const isEditingFolder = renamingFolderId === item.id;
                         return (
-                          <SortableObjectCard key={item.sortId} id={item.sortId} spanType="normal">
+                          <SortableObjectCard
+                            key={item.sortId}
+                            id={item.sortId}
+                            spanType="normal"
+                            disabled={isEditingFolder}
+                          >
                             {(dragHandle) => (
-                              <FolderGridCard
-                                folderId={item.id}
-                                name={item.name}
-                                dragHandle={dragHandle}
-                                onClick={() => onSelectFolder?.(item.id)}
-                              />
+                              isEditingFolder ? (
+                                <FolderInlineCard
+                                  name={renameFolderValue}
+                                  description={renameFolderDescription}
+                                  submitLabel="Save"
+                                  onChange={setRenameFolderValue}
+                                  onDescriptionChange={setRenameFolderDescription}
+                                  onSubmit={() => { void handleRenameFolder(item.id); }}
+                                  onCancel={cancelRenameFolder}
+                                />
+                              ) : (
+                                <FolderGridCard
+                                  folderId={item.id}
+                                  name={item.name}
+                                  description={item.description}
+                                  dragHandle={dragHandle}
+                                  isEditable={isMainLanguageView}
+                                  onClick={() => onSelectFolder?.(item.id)}
+                                  onEdit={() => startRenameFolder(item.folder)}
+                                  onDelete={() => { void handleDeleteFolder(item.folder); }}
+                                />
+                              )
                             )}
                           </SortableObjectCard>
                         );
@@ -1014,9 +1196,13 @@ const EntityCard: React.FC<{
 const FolderGridCard: React.FC<{
   folderId: string;
   name: string;
+  description: string;
   dragHandle: React.ReactNode;
+  isEditable: boolean;
   onClick: () => void;
-}> = ({ folderId, name, dragHandle, onClick }) => {
+  onEdit: () => void;
+  onDelete: () => void;
+}> = ({ folderId, name, description, dragHandle, isEditable, onClick, onEdit, onDelete }) => {
   const { setNodeRef, isOver } = useDroppable({
     id: `drop-folder:${folderId}`,
   });
@@ -1031,16 +1217,101 @@ const FolderGridCard: React.FC<{
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
     >
+      {isEditable ? (
+        <div
+          className="story-entity-folder-card__menu"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <DropdownMenu
+            trigger={(
+              <IconButton
+                icon={<MoreHorizontal size="xs" />}
+                size="sm"
+                variant="ghost"
+                title="Folder actions"
+                className="story-entity-folder-card__menu-button"
+              />
+            )}
+          >
+            <DropdownItem
+              icon={<Edit size="sm" />}
+              label="Edit"
+              onClick={onEdit}
+            />
+            <DropdownItem
+              icon={<Trash size="sm" />}
+              label="Delete"
+              variant="danger"
+              onClick={onDelete}
+            />
+          </DropdownMenu>
+        </div>
+      ) : null}
       <div className="story-entity-folder-card__drag-slot">
         {dragHandle}
       </div>
       <span className="story-entity-folder-card__icon">
         <Folder size="2xl" />
       </span>
-      <span className="story-entity-folder-card__name">{name}</span>
+      <div className="story-entity-folder-card__text">
+        <span className="story-entity-folder-card__name">{name}</span>
+        {description ? (
+          <span className="story-entity-folder-card__description">{description}</span>
+        ) : null}
+      </div>
     </div>
   );
 };
+
+const FolderInlineCard: React.FC<{
+  name: string;
+  description: string;
+  submitLabel: string;
+  onChange: (value: string) => void;
+  onDescriptionChange: (value: string) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+}> = ({ name, description, submitLabel, onChange, onDescriptionChange, onSubmit, onCancel }) => (
+  <div className="story-entity-grid-item" data-span="normal">
+    <div className="story-entity-folder-card story-entity-folder-draft-card">
+      <span className="story-entity-folder-card__icon">
+        <Folder size="2xl" />
+      </span>
+      <input
+        className="story-entity-folder-draft-card__input"
+        type="text"
+        value={name}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            onSubmit();
+          }
+          if (event.key === 'Escape') {
+            onCancel();
+          }
+        }}
+        placeholder="Folder name"
+        autoFocus
+      />
+      <textarea
+        className="story-entity-folder-draft-card__textarea"
+        value={description}
+        onChange={(event) => onDescriptionChange(event.target.value)}
+        placeholder="Folder description"
+        rows={3}
+      />
+      <div className="story-entity-folder-draft-card__actions">
+        <TextButton variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </TextButton>
+        <TextButton variant="secondary" size="sm" onClick={onSubmit} disabled={!name.trim()}>
+          {submitLabel}
+        </TextButton>
+      </div>
+    </div>
+  </div>
+);
 
 const DroppableParentBar: React.FC<{
   parentName: string;
