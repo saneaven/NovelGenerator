@@ -108,7 +108,7 @@
 }
 
 .outline-item-card .card-body-wrapper.is-expanded .card-body-content {
-  overflow: visible;
+  overflow: hidden;
 }
 
 .outline-item-card .card-body-content p {
@@ -189,7 +189,7 @@
 }
 
 .outline-item-card .chapter-expand-wrapper.is-expanded .chapter-expand-content {
-  overflow: visible;
+  overflow: hidden;
 }
 
 .outline-item-card .chapter-footer-actions {
