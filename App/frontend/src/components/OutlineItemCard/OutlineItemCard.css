@@ -5,32 +5,27 @@
    ============================================================================ */
 
 .outline-item-card {
+  position: relative;
   width: 100%;
 }
 
-.outline-item-card__layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.outline-item-card[data-has-drag-handle="true"] .outline-item-card__layout {
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: var(--spacing-sm);
-  align-items: stretch;
-}
-
 .outline-item-card__drag-slot {
-  display: flex;
-  align-items: stretch;
-  justify-content: center;
-  min-height: 100%;
+  position: absolute;
+  top: var(--spacing-sm);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
 }
 
-.outline-item-card__main {
-  min-width: 0;
+.outline-item-card:hover .outline-item-card__drag-slot,
+.outline-item-card:focus-within .outline-item-card__drag-slot {
+  opacity: 1;
 }
 
 .outline-item-card .content-card {
+  position: relative;
   background-color: var(--color-surface-base);
   border: 1px solid var(--color-border-default);
   border-radius: var(--border-radius-lg);

@@ -883,13 +883,11 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
                                 <div className="act-content-wrapper">
                                   {editingAct === act.id ? (
-                                    <div className="outline-item-card" data-has-drag-handle="true">
-                                      <div className="outline-item-card__layout">
-                                        <div className="outline-item-card__drag-slot">
-                                          {dragHandle}
-                                        </div>
-                                        <div className="outline-item-card__main">
+                                    <div className="outline-item-card">
                                           <div className="content-card act-card is-editing">
+                                            <div className="outline-item-card__drag-slot">
+                                              {dragHandle}
+                                            </div>
                                             <div className="card-header">
                                               <div className="card-title-section" style={{ flex: 1 }}>
                                                 <input
@@ -953,8 +951,6 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                               </div>
                                             </div>
                                           </div>
-                                        </div>
-                                      </div>
                                     </div>
                                   ) : (
                                     <OutlineItemCard
@@ -1016,13 +1012,11 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                 <div className="chapter-marker"></div>
                                                 <div className="chapter-content-wrapper">
                                                   {editingChapter === chapter.id ? (
-                                                    <div className="outline-item-card" data-has-drag-handle="true">
-                                                      <div className="outline-item-card__layout">
+                                                    <div className="outline-item-card">
+                                                      <div className="content-card chapter-card is-editing">
                                                         <div className="outline-item-card__drag-slot">
                                                           {chapterDragHandle}
                                                         </div>
-                                                        <div className="outline-item-card__main">
-                                                          <div className="content-card chapter-card is-editing">
                                                             <div className="chapter-header">
                                                               <div className="chapter-info" style={{ flex: 1 }}>
                                                                 <span className="chapter-index">CH {globalChapterIndex}</span>
@@ -1086,8 +1080,6 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                                 </div>
                                                               </div>
                                                             </div>
-                                                          </div>
-                                                        </div>
                                                       </div>
                                                     </div>
                                                   ) : (
@@ -1482,7 +1474,7 @@ const SortableActGroup: React.FC<SortableActGroupProps> = ({ id, disabled, isExp
 
   const dragHandle = (
     <DragHandle
-      orientation="vertical"
+      orientation="horizontal"
       disabled={disabled}
       handleProps={{ ...attributes, ...listeners } as React.HTMLAttributes<HTMLDivElement>}
     />
@@ -1526,7 +1518,7 @@ const SortableChapterNode: React.FC<SortableChapterNodeProps> = ({ id, disabled,
 
   const dragHandle = (
     <DragHandle
-      orientation="vertical"
+      orientation="horizontal"
       disabled={disabled}
       handleProps={{ ...attributes, ...listeners } as React.HTMLAttributes<HTMLDivElement>}
     />

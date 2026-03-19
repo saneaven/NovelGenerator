@@ -235,6 +235,7 @@ function buildOutlineGroups(
         label: (outlineData.name as string) || 'Unnamed Outline',
         type: 'outline' as const,
         kind: 'outline' as const,
+        order: outline.metadata?.position as number | undefined,
         items: [objectToItem(outline, language)],
         childGroups: outlineActs.map((act) => {
           const actData = getObjectDataForLanguage(act, language);
@@ -246,6 +247,7 @@ function buildOutlineGroups(
             label: (actData.name as string) || 'Unnamed Act',
             type: 'outline' as const,
             kind: 'act' as const,
+            order: act.metadata?.position as number | undefined,
             items: [objectToItem(act, language), ...actChapters.map((chapter) => objectToItem(chapter, language))],
           };
         }),
@@ -274,6 +276,7 @@ function buildOutlineGroups(
       label: (outlineData.name as string) || 'Unnamed Outline',
       type: 'outline' as const,
       kind: 'outline' as const,
+      order: outline.metadata?.position as number | undefined,
       items: [],
       childGroups: outlineActs.map<ObjectPickerGroup>((act) => {
         const actData = getObjectDataForLanguage(act, language);
@@ -304,6 +307,7 @@ function buildOutlineGroups(
           label: (actData.name as string) || 'Unnamed Act',
           type: 'outline' as const,
           kind: 'act' as const,
+          order: act.metadata?.position as number | undefined,
           items,
         };
       }),
