@@ -113,6 +113,7 @@ function buildStoryEntityGroups(
   entities: UnifiedObject[],
   folders: StoryEntityFolder[],
   language: string,
+  mode: ObjectPickerMode,
 ): ObjectPickerGroup[] {
   const sortedFolders = [...folders].sort((a, b) => {
     if (a.display_order === b.display_order) {
@@ -146,6 +147,21 @@ function buildStoryEntityGroups(
       folderMap.get(folderId)?.items.push(item);
     } else {
       rootItems.push(item);
+    }
+  }
+
+  // In translation mode, add folders as selectable items (like acts in outlines)
+  if (mode === 'translation') {
+    for (const folder of sortedFolders) {
+      const group = folderMap.get(folder.id);
+      if (!group) continue;
+      group.items.unshift({
+        id: folder.id,
+        name: getStoryEntityFolderName(folder, language),
+        description: getStoryEntityFolderDescription(folder, language),
+        type: 'story_entity_folder',
+        order: folder.display_order,
+      });
     }
   }
 
@@ -346,6 +362,7 @@ function buildGroups(
       objects.filter((obj) => obj.type === 'story_entity'),
       folders,
       language,
+      mode,
     );
     if (entityGroups.length > 0) {
       groups.push(...entityGroups);

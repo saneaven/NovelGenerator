@@ -219,6 +219,7 @@
 .outline-item-card .markdown-content {
   max-height: 400px;
   overflow-y: auto;
+  overflow-x: hidden;
   margin: var(--spacing-lg);
   font-size: var(--font-size-base);
   line-height: var(--line-height-relaxed);

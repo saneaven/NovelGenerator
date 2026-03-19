@@ -32,6 +32,7 @@ import { TextButton } from '../../../components/TextButton';
 import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll, Refresh } from '../../../components/icons';
 import type { UnifiedObject, OutlineObject } from '../../../types/unifiedObject';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
+import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
 import { OutlineItemCard } from '../../../components/OutlineItemCard';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import { resolveRequestedLanguageState, resolveTranslationSourceLanguage } from '../../../utils/requestedLanguage';
@@ -794,6 +795,11 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                     Translate
                   </TextButton>
                 )}
+              </div>
+            )}
+            {selectedOutlineData.content && (
+              <div className="outline-header-content">
+                <MarkdownRenderer>{selectedOutlineData.content}</MarkdownRenderer>
               </div>
             )}
           </div>

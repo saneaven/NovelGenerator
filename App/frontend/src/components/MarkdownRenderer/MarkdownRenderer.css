@@ -1,6 +1,7 @@
 .markdown-content {
   overflow-wrap: anywhere;
   word-break: break-word;
+  min-width: 0;
 }
 
 .markdown-content pre {
@@ -8,17 +9,18 @@
   word-break: normal;
 }
 
-.markdown-content .md-x-scroll {
+/* Table scroll — not scoped to .markdown-content so it works with any className */
+.md-x-scroll {
   max-width: 100%;
 }
 
-.markdown-content .md-x-scroll--table {
+.md-x-scroll--table {
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
 }
 
-.markdown-content .md-x-scroll--table > table {
+.md-x-scroll--table > table {
   width: max-content;
   min-width: 100%;
 }

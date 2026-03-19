@@ -79,6 +79,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   const [rawMode, setRawMode] = useState(false);
 
   const hasInitializedSelectionRef = useRef(false);
+  const hasInitializedContextRef = useRef(false);
   // Use selector to only subscribe to objects, preventing re-renders from unrelated store changes
   const objects = useUnifiedObjectStore(useShallow(state => state.objects));
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
@@ -297,6 +298,12 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     return availableObjects.map(obj => obj.objectId);
   }, [availableObjects]);
 
+  // Context folder IDs (folders in contextObjectIds that the picker can't display)
+  const contextFolderIds = useMemo(() => {
+    const folderIdSet = new Set(projectFolders.map(f => f.id));
+    return new Set(contextObjectIds.filter(id => folderIdSet.has(id)));
+  }, [contextObjectIds, projectFolders]);
+
   // Manage selectedIds: initialize on open, sync when objects change
   useEffect(() => {
     if (!isOpen) return;
@@ -320,6 +327,22 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       });
     }
   }, [isOpen, availableObjectIds, preSelectedObjectIds]);
+
+  // Manage selectedContextIds: initialize on open, sync when context objects change
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (!hasInitializedContextRef.current && contextObjectIds.length > 0) {
+      setSelectedContextIds(new Set(contextObjectIds));
+      hasInitializedContextRef.current = true;
+    } else if (hasInitializedContextRef.current) {
+      const contextSet = new Set(contextObjectIds);
+      setSelectedContextIds(prev => {
+        const filtered = new Set([...prev].filter(id => contextSet.has(id)));
+        return filtered.size === prev.size ? prev : filtered;
+      });
+    }
+  }, [isOpen, contextObjectIds]);
 
   // Get objects to translate based on selection
   const objectsToTranslate = useMemo((): ProjectObjectToTranslate[] => {
@@ -347,6 +370,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       setSelectedIds(preSelectedObjectIds ? new Set(preSelectedObjectIds) : new Set());
       setSelectedContextIds(new Set());
       hasInitializedSelectionRef.current = false;
+      hasInitializedContextRef.current = false;
       // Reset languages so they re-initialize from props on next open
       setSourceLanguage(defaultSourceLanguage || '');
       setTargetLanguage(defaultTargetLanguage || '');
@@ -420,13 +444,8 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     setTargetLanguage(temp);
   };
 
-  // Handle ObjectPicker selection changes
   const handleSelectionChange = (ids: string[] | string) => {
-    if (Array.isArray(ids)) {
-      setSelectedIds(new Set(ids));
-    } else {
-      setSelectedIds(new Set([ids]));
-    }
+    setSelectedIds(new Set(Array.isArray(ids) ? ids : [ids]));
   };
 
   return (
@@ -526,7 +545,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               showSearch={false}
               maxHeight="300px"
               emptyMessage="No objects available for translation"
-              selectAllOnLoad={true}
             />
           </CollapsibleSection>
         )}
@@ -578,7 +596,13 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               selectedIds={Array.from(selectedContextIds)}
               onChange={(ids) => {
                 if (Array.isArray(ids)) {
-                  setSelectedContextIds(new Set(ids));
+                  const pickerIds = new Set(ids);
+                  for (const id of selectedContextIds) {
+                    if (contextFolderIds.has(id)) {
+                      pickerIds.add(id);
+                    }
+                  }
+                  setSelectedContextIds(pickerIds);
                 }
               }}
               projectId={projectId}
@@ -587,7 +611,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               showSearch={false}
               maxHeight="200px"
               emptyMessage="No translated objects available"
-              selectAllOnLoad={true}
             />
           </CollapsibleSection>
         )}

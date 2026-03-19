@@ -179,6 +179,7 @@
     border-radius: var(--border-radius-xl) var(--border-radius-xl) var(--border-radius-sm) var(--border-radius-xl);
     padding: var(--spacing-lg) var(--spacing-xl);
     word-wrap: break-word;
+    overflow: hidden;
     box-shadow: var(--shadow-sm);
     line-height: var(--line-height-relaxed);
     font-size: var(--font-size-base);
@@ -304,6 +305,7 @@
     line-height: var(--line-height-relaxed);
     font-size: var(--font-size-base);
     word-wrap: break-word;
+    overflow: hidden;
     box-shadow: var(--shadow-sm);
 }
 
@@ -570,6 +572,7 @@
 /* ===== Markdown Content Styles ===== */
 .message-content .message-text {
     color: inherit;
+    min-width: 0;
 }
 
 /* Lists - restore bullets/numbers */

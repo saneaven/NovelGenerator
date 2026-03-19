@@ -70,9 +70,20 @@
 }
 
 .outline-panel-header .description-section.expanded {
-  max-height: 200px;
+  max-height: 600px;
   opacity: 1;
   margin-top: var(--spacing-sm);
+  overflow-y: auto;
+}
+
+.outline-panel-header .outline-header-content {
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-border-default);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  max-height: 400px;
+  overflow-y: auto;
 }
 
 .outline-panel-header .description-display {
