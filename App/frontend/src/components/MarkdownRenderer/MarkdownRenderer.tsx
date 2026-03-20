@@ -10,6 +10,19 @@ interface MarkdownRendererProps {
   className?: string;
 }
 
+const markdownRemarkPlugins = [remarkGfm, remarkBreaks];
+
+const markdownComponents = {
+  table: ({ node: _node, ...props }: React.ComponentProps<'table'> & { node?: unknown }) => (
+    <div className="md-x-scroll md-x-scroll--table">
+      <table {...props} />
+    </div>
+  ),
+  img: ({ node: _node, ...props }: React.ComponentProps<typeof AuthenticatedImage> & { node?: unknown }) => (
+    <AuthenticatedImage {...props} />
+  ),
+};
+
 export const MarkdownRenderer = React.memo(function MarkdownRenderer({
   children,
   className = 'markdown-content',
@@ -17,17 +30,8 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({
   return (
     <div className={className}>
       <Markdown
-        remarkPlugins={[remarkGfm, remarkBreaks]}
-        components={{
-          table: ({ node: _node, ...props }) => (
-            <div className="md-x-scroll md-x-scroll--table">
-              <table {...props} />
-            </div>
-          ),
-          img: ({ node: _node, ...props }) => (
-            <AuthenticatedImage {...props} />
-          ),
-        }}
+        remarkPlugins={markdownRemarkPlugins}
+        components={markdownComponents}
       >
         {children}
       </Markdown>

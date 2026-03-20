@@ -281,6 +281,10 @@
    ============================================================================ */
 
 .outline-manager .timeline-act-node {
+  width: 100%;
+}
+
+.outline-manager .timeline-act-node-motion {
   display: flex;
   gap: var(--spacing-sm);
   align-items: flex-start;
@@ -482,7 +486,7 @@
 }
 
 /* Closing state - all fade out together */
-.outline-manager .timeline-act-group.is-collapsed .timeline-chapter-node {
+.outline-manager .timeline-act-group.is-collapsed .timeline-chapter-node-motion {
   opacity: 0;
   transform: translateY(calc(-1 * var(--spacing-sm)));
   animation: none;
@@ -494,9 +498,15 @@
 
 .outline-manager .timeline-chapter-node {
   position: relative;
+  width: 100%;
+}
+
+.outline-manager .timeline-chapter-node-motion {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: var(--spacing-lg);
+  width: 100%;
   animation: chapterSlideIn 0.35s ease;
   animation-delay: calc(var(--chapter-index, 0) * 60ms);
   animation-fill-mode: backwards;
@@ -707,8 +717,8 @@
    ============================================================================ */
 
 /* Neutralize entrance animations on sortable items so dnd-kit transforms work */
-.outline-manager .timeline-act-group.is-dragging .timeline-act-node,
-.outline-manager .timeline-chapter-node.is-dragging {
+.outline-manager .timeline-act-group.is-dragging .timeline-act-node-motion,
+.outline-manager .timeline-chapter-node.is-dragging .timeline-chapter-node-motion {
   animation: none;
   opacity: inherit;
 }

@@ -923,119 +923,124 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                           {(dragHandle) => (
                             <>
                               {/* Act Node */}
-                              <div className="timeline-act-node" style={{ '--act-index': actIndex } as React.CSSProperties}>
-                                <div className="node-marker">
-                                  <span className="act-index">{actIndex + 1}</span>
-                                </div>
+                              <div className="timeline-act-node">
+                                <div
+                                  className="timeline-act-node-motion"
+                                  style={{ '--act-index': actIndex } as React.CSSProperties}
+                                >
+                                  <div className="node-marker">
+                                    <span className="act-index">{actIndex + 1}</span>
+                                  </div>
 
-                                <div className="act-content-wrapper">
-                                  {editingAct === act.id ? (
-                                    <div className="outline-item-card">
-                                          <div className="content-card act-card is-editing">
-                                            <div className="outline-item-card__drag-slot">
-                                              {dragHandle}
-                                            </div>
-                                            <div className="card-header">
-                                              <div className="card-title-section" style={{ flex: 1 }}>
-                                                <input
-                                                  type="text"
-                                                  className="inline-title-input"
-                                                  value={editActData.name}
-                                                  onChange={(e) => setEditActData(prev => ({ ...prev, name: e.target.value }))}
-                                                  placeholder="Act Title"
-                                                  autoFocus
-                                                />
+                                  <div className="act-content-wrapper">
+                                    {editingAct === act.id ? (
+                                      <div className="outline-item-card">
+                                            <div className="content-card act-card is-editing">
+                                              <div className="outline-item-card__drag-slot">
+                                                {dragHandle}
                                               </div>
-                                            </div>
-                                            <div className="card-body-wrapper is-expanded">
-                                              <div className="card-body-content">
-                                                <textarea
-                                                  className="inline-description-input"
-                                                  value={editActData.description}
-                                                  onChange={(e) => setEditActData(prev => ({ ...prev, description: e.target.value }))}
-                                                  placeholder="Describe the main events that happen in this act"
-                                                  rows={4}
-                                                />
-                                                <div className="inline-content-editor">
-                                                  <RichTextEditor
-                                                    ref={actEditorRef}
-                                                    key={editingAct}
-                                                    initialContent={editActData.content}
-                                                    onChange={(markdown) => setEditActData(prev => ({ ...prev, content: markdown }))}
-                                                    placeholder="Full act content..."
+                                              <div className="card-header">
+                                                <div className="card-title-section" style={{ flex: 1 }}>
+                                                  <input
+                                                    type="text"
+                                                    className="inline-title-input"
+                                                    value={editActData.name}
+                                                    onChange={(e) => setEditActData(prev => ({ ...prev, name: e.target.value }))}
+                                                    placeholder="Act Title"
+                                                    autoFocus
                                                   />
                                                 </div>
-                                                <div className="edit-actions-split">
-                                                  <TextButton
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={actLanguageState.isMainLanguage
-                                                      ? () => setShowActAIModal(act.id)
-                                                      : () => openTranslationModal(act.id)}
-                                                    iconLeft={actLanguageState.isMainLanguage ? <AIAssist size="xs" /> : <Refresh size="xs" />}
-                                                  >
-                                                    {actLanguageState.isMainLanguage ? 'AI Edit' : 'Retranslate'}
-                                                  </TextButton>
-                                                  <div className="edit-actions-right">
+                                              </div>
+                                              <div className="card-body-wrapper is-expanded">
+                                                <div className="card-body-content">
+                                                  <textarea
+                                                    className="inline-description-input"
+                                                    value={editActData.description}
+                                                    onChange={(e) => setEditActData(prev => ({ ...prev, description: e.target.value }))}
+                                                    placeholder="Describe the main events that happen in this act"
+                                                    rows={4}
+                                                  />
+                                                  <div className="inline-content-editor">
+                                                    <RichTextEditor
+                                                      ref={actEditorRef}
+                                                      key={editingAct}
+                                                      initialContent={editActData.content}
+                                                      onChange={(markdown) => setEditActData(prev => ({ ...prev, content: markdown }))}
+                                                      placeholder="Full act content..."
+                                                    />
+                                                  </div>
+                                                  <div className="edit-actions-split">
                                                     <TextButton
                                                       variant="ghost"
                                                       size="sm"
-                                                      onClick={cancelEditingAct}
-                                                      iconLeft={<Close size="xs" />}
+                                                      onClick={actLanguageState.isMainLanguage
+                                                        ? () => setShowActAIModal(act.id)
+                                                        : () => openTranslationModal(act.id)}
+                                                      iconLeft={actLanguageState.isMainLanguage ? <AIAssist size="xs" /> : <Refresh size="xs" />}
                                                     >
-                                                      Cancel
+                                                      {actLanguageState.isMainLanguage ? 'AI Edit' : 'Retranslate'}
                                                     </TextButton>
-                                                    <TextButton
-                                                      variant="secondary"
-                                                      size="sm"
-                                                      onClick={handleUpdateAct}
-                                                      iconLeft={<Save size="xs" />}
-                                                    >
-                                                      {actLanguageState.isTranslationView ? 'Save Translation' : 'Save'}
-                                                    </TextButton>
+                                                    <div className="edit-actions-right">
+                                                      <TextButton
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={cancelEditingAct}
+                                                        iconLeft={<Close size="xs" />}
+                                                      >
+                                                        Cancel
+                                                      </TextButton>
+                                                      <TextButton
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        onClick={handleUpdateAct}
+                                                        iconLeft={<Save size="xs" />}
+                                                      >
+                                                        {actLanguageState.isTranslationView ? 'Save Translation' : 'Save'}
+                                                      </TextButton>
+                                                    </div>
                                                   </div>
                                                 </div>
                                               </div>
                                             </div>
-                                          </div>
-                                    </div>
-                                  ) : (
-                                    <OutlineItemCard
-                                      variant="act"
-                                      name={actData.name || 'Untitled Act'}
-                                      description={actData.description}
-                                      content={actData.content}
-                                      meta={`${actChapters.length} Chapters`}
-                                      expanded={isActExpanded}
-                                      showFallbackWarning={actLanguageState.isFallbackView}
-                                      dragHandle={dragHandle}
-                                      onHeaderClick={() => toggleActExpand(act.id)}
-                                      footerActions={
-                                        <>
-                                          <DropdownMenu
-                                            trigger={
-                                              <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
-                                                More
-                                              </TextButton>
-                                            }
-                                          >
-                                            {actLanguageState.isTranslationView && (
-                                              <DropdownItem icon={<Refresh size="sm" />} label="Retranslate" onClick={() => openTranslationModal(act.id)} />
-                                            )}
-                                            <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteAct(act.id)} variant="danger" />
-                                          </DropdownMenu>
-                                          <TextButton
-                                            size="sm"
-                                            variant="secondary"
-                                            iconLeft={<Edit size="xs" />}
-                                            onClick={() => (actLanguageState.canEdit ? startEditingAct(act.id) : openTranslationModal(act.id))}
-                                          >
-                                            {actLanguageState.canEdit ? 'Edit' : 'Translate'}
-                                          </TextButton>
-                                        </>
-                                      }
-                                    />
-                                  )}
+                                      </div>
+                                    ) : (
+                                      <OutlineItemCard
+                                        variant="act"
+                                        name={actData.name || 'Untitled Act'}
+                                        description={actData.description}
+                                        content={actData.content}
+                                        meta={`${actChapters.length} Chapters`}
+                                        expanded={isActExpanded}
+                                        showFallbackWarning={actLanguageState.isFallbackView}
+                                        dragHandle={dragHandle}
+                                        onHeaderClick={() => toggleActExpand(act.id)}
+                                        footerActions={
+                                          <>
+                                            <DropdownMenu
+                                              trigger={
+                                                <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
+                                                  More
+                                                </TextButton>
+                                              }
+                                            >
+                                              {actLanguageState.isTranslationView && (
+                                                <DropdownItem icon={<Refresh size="sm" />} label="Retranslate" onClick={() => openTranslationModal(act.id)} />
+                                              )}
+                                              <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteAct(act.id)} variant="danger" />
+                                            </DropdownMenu>
+                                            <TextButton
+                                              size="sm"
+                                              variant="secondary"
+                                              iconLeft={<Edit size="xs" />}
+                                              onClick={() => (actLanguageState.canEdit ? startEditingAct(act.id) : openTranslationModal(act.id))}
+                                            >
+                                              {actLanguageState.canEdit ? 'Edit' : 'Translate'}
+                                            </TextButton>
+                                          </>
+                                        }
+                                      />
+                                    )}
+                                  </div>
                                 </div>
                               </div>
 
@@ -1178,22 +1183,26 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                   {/* Add Chapter Button */}
                                   {isMainLanguageView && showAddChapterForm === act.id ? (
                                     <div className="timeline-chapter-node creation-node">
-                                      <div className="chapter-marker creation-marker"><Plus size="xs" /></div>
-                                      <div className="chapter-content-wrapper">
-                                        <AddChapterForm
-                                          onAdd={(name, desc, content) => handleAddChapter(act.id, name, desc, content)}
-                                          onCancel={() => setShowAddChapterForm(null)}
-                                        />
+                                      <div className="timeline-chapter-node-motion">
+                                        <div className="chapter-marker creation-marker"><Plus size="xs" /></div>
+                                        <div className="chapter-content-wrapper">
+                                          <AddChapterForm
+                                            onAdd={(name, desc, content) => handleAddChapter(act.id, name, desc, content)}
+                                            onCancel={() => setShowAddChapterForm(null)}
+                                          />
+                                        </div>
                                       </div>
                                     </div>
                                   ) : isMainLanguageView ? (
                                     <div className="timeline-chapter-node add-chapter-node" onClick={() => setShowAddChapterForm(act.id)}>
-                                      <div className="chapter-marker add-marker"><Plus size="xs" /></div>
-                                      <div className="chapter-content-wrapper">
-                                        <div className="content-card add-chapter-card">
-                                          <div className="add-chapter-content">
-                                            <Plus size="sm" />
-                                            <span>Add Chapter</span>
+                                      <div className="timeline-chapter-node-motion">
+                                        <div className="chapter-marker add-marker"><Plus size="xs" /></div>
+                                        <div className="chapter-content-wrapper">
+                                          <div className="content-card add-chapter-card">
+                                            <div className="add-chapter-content">
+                                              <Plus size="sm" />
+                                              <span>Add Chapter</span>
+                                            </div>
                                           </div>
                                         </div>
                                       </div>
@@ -1618,7 +1627,9 @@ const SortableChapterNode: React.FC<SortableChapterNodeProps> = ({ id, disabled,
       style={style}
       className={`timeline-chapter-node ${isDragging ? 'is-dragging' : ''}`}
     >
-      {children(dragHandle)}
+      <div className="timeline-chapter-node-motion">
+        {children(dragHandle)}
+      </div>
     </div>
   );
 };

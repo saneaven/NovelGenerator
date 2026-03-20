@@ -29,7 +29,30 @@ export function toOutlineItemVariant(objectType: string, kind?: string): Outline
   return 'outline';
 }
 
-export const OutlineItemCard: React.FC<OutlineItemCardProps> = ({
+interface OutlineCardMarkdownProps {
+  content?: string;
+  className?: string;
+}
+
+const OutlineCardMarkdown = React.memo(function OutlineCardMarkdown({
+  content,
+  className,
+}: OutlineCardMarkdownProps) {
+  if (content) {
+    return (
+      <MarkdownRenderer className={className}>
+        {content}
+      </MarkdownRenderer>
+    );
+  }
+
+  return <p className="placeholder-text">No content provided.</p>;
+}, (prevProps, nextProps) => (
+  prevProps.content === nextProps.content &&
+  prevProps.className === nextProps.className
+));
+
+const OutlineItemCardInner: React.FC<OutlineItemCardProps> = ({
   variant,
   name,
   description,
@@ -74,13 +97,7 @@ export const OutlineItemCard: React.FC<OutlineItemCardProps> = ({
           )}
           <div className={`chapter-expand-wrapper ${isExpanded ? 'is-expanded' : ''}`}>
             <div className="chapter-expand-content">
-              {content ? (
-                <MarkdownRenderer className="markdown-content chapter-content">
-                  {content}
-                </MarkdownRenderer>
-              ) : (
-                <p className="placeholder-text">No content provided.</p>
-              )}
+              <OutlineCardMarkdown content={content} className="markdown-content chapter-content" />
               {!readOnly && footerActions && (
                 <div className="chapter-footer-actions">
                   {footerActions}
@@ -122,11 +139,7 @@ export const OutlineItemCard: React.FC<OutlineItemCardProps> = ({
         )}
         <div className={`card-body-wrapper ${isExpanded ? 'is-expanded' : ''}`}>
           <div className="card-body-content">
-            {content ? (
-              <MarkdownRenderer>{content}</MarkdownRenderer>
-            ) : (
-              <p className="placeholder-text">No content provided.</p>
-            )}
+            <OutlineCardMarkdown content={content} className="markdown-content" />
             {!readOnly && footerActions && (
               <div className="card-footer-actions">
                 {footerActions}
@@ -138,3 +151,5 @@ export const OutlineItemCard: React.FC<OutlineItemCardProps> = ({
     </div>
   );
 };
+
+export const OutlineItemCard = React.memo(OutlineItemCardInner);
