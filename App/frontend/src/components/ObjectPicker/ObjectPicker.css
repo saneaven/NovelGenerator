@@ -311,6 +311,15 @@
   background: var(--color-warning-light);
 }
 
+.object-picker-item.structural {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.object-picker-item.structural:hover {
+  background: transparent;
+}
+
 .object-picker-item.disabled {
   opacity: 0.4;
   cursor: not-allowed;

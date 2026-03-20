@@ -12,25 +12,27 @@ const ObjectPickerItem: React.FC<ObjectPickerItemProps> = ({
   isPreSelected = false,
   isHighlighted = false,
   isExcluded = false,
+  isStructural = false,
   selectionMode,
   onToggle,
   disabled = false,
 }) => {
+  const notSelectable = disabled || isPreSelected || isExcluded || isStructural;
+
   const handleClick = useCallback((e: React.MouseEvent) => {
     // Don't toggle if clicking on checkbox directly (it handles itself)
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
 
-    // Excluded items are not selectable
-    if (!disabled && !isPreSelected && !isExcluded) {
+    if (!notSelectable) {
       onToggle(item.id);
     }
-  }, [item.id, onToggle, disabled, isPreSelected, isExcluded]);
+  }, [item.id, onToggle, notSelectable]);
 
   const handleCheckboxChange = useCallback(() => {
-    if (!disabled && !isPreSelected && !isExcluded) {
+    if (!notSelectable) {
       onToggle(item.id);
     }
-  }, [item.id, onToggle, disabled, isPreSelected, isExcluded]);
+  }, [item.id, onToggle, notSelectable]);
 
   const itemClasses = [
     'object-picker-item',
@@ -38,6 +40,7 @@ const ObjectPickerItem: React.FC<ObjectPickerItemProps> = ({
     isPreSelected && 'pre-selected',
     isHighlighted && 'highlighted',
     isExcluded && 'excluded',
+    isStructural && 'structural',
     disabled && 'disabled',
   ].filter(Boolean).join(' ');
 
@@ -68,8 +71,8 @@ const ObjectPickerItem: React.FC<ObjectPickerItemProps> = ({
         </span>
       )}
 
-      {/* Checkbox/Radio on the right - excluded items don't show */}
-      {!isExcluded && (
+      {/* Checkbox/Radio on the right - excluded and structural items don't show */}
+      {!isExcluded && !isStructural && (
         <input
           type={selectionMode === 'single' ? 'radio' : 'checkbox'}
           checked={isSelected}

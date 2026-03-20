@@ -10,6 +10,7 @@ import { useJourneyStore } from '../../store/journeyStore';
 import { journeyService } from '../../api/journeyService';
 import { Document } from '../icons';
 import { ObjectPicker } from '../ObjectPicker';
+import { computeParentClosure } from '../../utils/parentClosure';
 import { TextButton } from '../TextButton';
 import ToggleSwitch from '../common/ToggleSwitch';
 import './AIEditModal.css';
@@ -197,7 +198,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         input_payload: inputPayload,
         surface: 'story-entity',
         journey_target_ids: [targetId],
-        context_object_ids: selectedContextIds,
+        context_object_ids: computeParentClosure(selectedContextIds, unifiedStore.objects),
       });
       useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
     } catch (error: any) {

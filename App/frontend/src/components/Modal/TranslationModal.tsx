@@ -303,12 +303,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     return availableObjects.map(obj => obj.objectId);
   }, [availableObjects]);
 
-  // Context folder IDs (folders in contextObjectIds that the picker can't display)
-  const contextFolderIds = useMemo(() => {
-    const folderIdSet = new Set(projectFolders.map(f => f.id));
-    return new Set(contextObjectIds.filter(id => folderIdSet.has(id)));
-  }, [contextObjectIds, projectFolders]);
-
   // Manage selectedIds: initialize on open, sync when objects change
   useEffect(() => {
     if (!isOpen) return;
@@ -602,13 +596,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               selectedIds={Array.from(selectedContextIds)}
               onChange={(ids) => {
                 if (Array.isArray(ids)) {
-                  const pickerIds = new Set(ids);
-                  for (const id of selectedContextIds) {
-                    if (contextFolderIds.has(id)) {
-                      pickerIds.add(id);
-                    }
-                  }
-                  setSelectedContextIds(pickerIds);
+                  setSelectedContextIds(new Set(ids));
                 }
               }}
               projectId={projectId}

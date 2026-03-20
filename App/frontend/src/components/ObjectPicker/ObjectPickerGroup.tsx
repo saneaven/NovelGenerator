@@ -14,10 +14,13 @@ interface GroupLike {
 }
 
 /**
- * Get all item IDs from a group (recursively including all nested levels)
+ * Get all selectable item IDs from a group (recursively including all nested levels).
+ * Structural items are excluded since they are not selectable.
  */
 function getAllItemIds(group: GroupLike): string[] {
-  const ids: string[] = group.items.map(item => item.id);
+  const ids: string[] = group.items
+    .filter(item => !item.isStructural)
+    .map(item => item.id);
 
   if (group.childGroups) {
     group.childGroups.forEach(childGroup => {
@@ -166,6 +169,7 @@ const ObjectPickerGroup: React.FC<ObjectPickerGroupProps> = ({
                 isPreSelected={preSelectedIds.has(child.data.id)}
                 isHighlighted={highlightIds.has(child.data.id)}
                 isExcluded={excludedIds.has(child.data.id)}
+                isStructural={child.data.isStructural}
                 selectionMode={selectionMode}
                 onToggle={onToggleItem}
                 disabled={disabled}

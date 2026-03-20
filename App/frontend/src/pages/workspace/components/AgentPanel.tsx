@@ -15,6 +15,7 @@ import { useThreadStore } from '../../../store/threadStore';
 import { threadService } from '../../../api/threadService';
 import { runMessageTranslation } from '../../../agent/messageTranslation';
 import { isUuid } from '../../../utils/idUtils';
+import { computeParentClosure } from '../../../utils/parentClosure';
 import {
   cancelThread,
   sendThreadMessage,
@@ -1115,7 +1116,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
         language: sourceLanguage,
         run_mode: runMode,
         surface,
-        context_object_ids: selectedContextIds,
+        context_object_ids: computeParentClosure(selectedContextIds, unifiedObjects),
         input_payload: focusedManuscriptId
           ? { agent_focus: { manuscript_id: focusedManuscriptId } }
           : undefined,
@@ -1135,6 +1136,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     runMode,
     surface,
     selectedContextIds,
+    unifiedObjects,
     focusedManuscriptId,
     pendingAttachments,
     selectedMcpSelections,

@@ -491,10 +491,154 @@ def _select_single(item: Any, wanted: set[str] | None) -> dict[str, Any] | None:
     return item if item_id and item_id in wanted else None
 
 
-def _select_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) -> dict[str, Any]:
+# ---------------------------------------------------------------------------
+# Exact helper — flat list of selected objects only, no tree, no parents
+# ---------------------------------------------------------------------------
+
+
+def _collect_story_entities_by_id(
+    nodes: list[dict[str, Any]], wanted: set[str]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Walk story entity tree and collect matching entities and folders into flat lists."""
+    entities: list[dict[str, Any]] = []
+    folders: list[dict[str, Any]] = []
+    for node in nodes:
+        node_type = str(node.get("nodeType") or "")
+        if node_type == "folder":
+            folder_id = str(node.get("id") or "")
+            if folder_id in wanted:
+                folders.append(
+                    {
+                        "id": folder_id,
+                        "name": str(node.get("name") or ""),
+                        "description": str(node.get("description") or ""),
+                    }
+                )
+            children = node.get("children")
+            if isinstance(children, list):
+                child_entities, child_folders = _collect_story_entities_by_id(children, wanted)
+                entities.extend(child_entities)
+                folders.extend(child_folders)
+        else:
+            entity = node.get("entity")
+            if isinstance(entity, dict) and str(entity.get("id") or "") in wanted:
+                entities.append(dict(entity))
+    return entities, folders
+
+
+def _collect_outline_items_by_id(
+    nodes: list[dict[str, Any]], wanted: set[str]
+) -> list[dict[str, Any]]:
+    """Walk outline tree and collect matching outline/act/chapter into flat list."""
+    items: list[dict[str, Any]] = []
+    for node in nodes:
+        node_id = str(node.get("id") or "")
+        if node_id in wanted:
+            item = {k: v for k, v in node.items() if k != "children"}
+            items.append(item)
+        children = node.get("children")
+        if isinstance(children, list):
+            items.extend(_collect_outline_items_by_id(children, wanted))
+    return items
+
+
+def _exact_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) -> dict[str, Any]:
     wanted = _ids_set(ids)
-    story_entity_tree = _prune_story_entity_tree(_list_story_entity_tree(bucket), wanted)
-    outline_tree = _prune_outline_tree(_outline_tree(bucket), wanted)
+    if wanted is None:
+        wanted = set()
+
+    story_entities, story_entity_folders = _collect_story_entities_by_id(
+        _list_story_entity_tree(bucket), wanted
+    )
+    outline_items = _collect_outline_items_by_id(_outline_tree(bucket), wanted)
+    manuscripts = _filter_selected(_list_manuscripts(bucket), wanted)
+
+    return {
+        "basicInfo": _select_single(bucket.get("basicInfo"), wanted or None),
+        "guidelines": _select_single(bucket.get("guidelines"), wanted or None),
+        "storyEntities": story_entities,
+        "storyEntityFolders": story_entity_folders,
+        "outlineItems": outline_items,
+        "manuscripts": manuscripts,
+    }
+
+
+def _exact_object_context(project: dict[str, Any], ids: Any = None) -> dict[str, Any]:
+    return _exact_object_context_from_bucket(_as_bucket(project), ids)
+
+
+def _exact_object_context_by_lang(project: dict[str, Any], lang: str, ids: Any = None) -> dict[str, Any]:
+    return _exact_object_context_from_bucket(_as_bucket(project, lang), ids)
+
+
+# ---------------------------------------------------------------------------
+# Tree helper — pruned tree with selected flag, no auto-parent ID injection
+# ---------------------------------------------------------------------------
+
+
+def _prune_and_mark_story_entity_tree(
+    nodes: list[dict[str, Any]], wanted: set[str] | None
+) -> list[dict[str, Any]]:
+    """Prune branches with no selected nodes, add ``selected`` flag to survivors."""
+    if wanted is None:
+        return _copy_story_entity_tree(nodes)
+
+    pruned: list[dict[str, Any]] = []
+    for node in nodes:
+        node_type = str(node.get("nodeType") or "")
+        if node_type == "folder":
+            children = _prune_and_mark_story_entity_tree(
+                node.get("children") if isinstance(node.get("children"), list) else [],
+                wanted,
+            )
+            folder_id = str(node.get("id") or "")
+            folder_selected = folder_id in wanted
+            if children or folder_selected:
+                pruned.append(
+                    {
+                        "nodeType": "folder",
+                        "id": folder_id,
+                        "name": str(node.get("name") or ""),
+                        "description": str(node.get("description") or ""),
+                        "selected": folder_selected,
+                        "children": children,
+                    }
+                )
+            continue
+
+        entity = node.get("entity")
+        if not isinstance(entity, dict):
+            continue
+        entity_id = str(entity.get("id") or "")
+        if entity_id in wanted:
+            pruned.append({"nodeType": "story_entity", "entity": dict(entity), "selected": True})
+    return pruned
+
+
+def _prune_and_mark_outline_tree(
+    nodes: list[dict[str, Any]], wanted: set[str] | None
+) -> list[dict[str, Any]]:
+    """Prune branches with no selected nodes, add ``selected`` flag to survivors."""
+    if wanted is None:
+        return _copy_outline_tree(nodes)
+
+    pruned: list[dict[str, Any]] = []
+    for node in nodes:
+        node_id = str(node.get("id") or "")
+        children = _prune_and_mark_outline_tree(
+            node.get("children") if isinstance(node.get("children"), list) else [],
+            wanted,
+        )
+        node_selected = node_id in wanted
+        if node_selected or children:
+            pruned.append({**dict(node), "children": children, "selected": node_selected})
+    return pruned
+
+
+def _tree_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) -> dict[str, Any]:
+    wanted = _ids_set(ids)
+    story_entity_tree = _prune_and_mark_story_entity_tree(_list_story_entity_tree(bucket), wanted)
+    outline_tree = _prune_and_mark_outline_tree(_outline_tree(bucket), wanted)
     manuscripts = _filter_selected(_list_manuscripts(bucket), wanted)
 
     return {
@@ -507,12 +651,29 @@ def _select_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) 
     }
 
 
+def _tree_object_context(project: dict[str, Any], ids: Any = None) -> dict[str, Any]:
+    return _tree_object_context_from_bucket(_as_bucket(project), ids)
+
+
+def _tree_object_context_by_lang(project: dict[str, Any], lang: str, ids: Any = None) -> dict[str, Any]:
+    return _tree_object_context_from_bucket(_as_bucket(project, lang), ids)
+
+
+# ---------------------------------------------------------------------------
+# Legacy aliases — keep old names working for unmigrated prompts
+# ---------------------------------------------------------------------------
+
+
+def _select_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) -> dict[str, Any]:
+    return _tree_object_context_from_bucket(bucket, ids)
+
+
 def _select_object_context(project: dict[str, Any], ids: Any = None) -> dict[str, Any]:
-    return _select_object_context_from_bucket(_as_bucket(project), ids)
+    return _tree_object_context(project, ids)
 
 
 def _select_object_context_by_lang(project: dict[str, Any], lang: str, ids: Any = None) -> dict[str, Any]:
-    return _select_object_context_from_bucket(_as_bucket(project, lang), ids)
+    return _tree_object_context_by_lang(project, lang, ids)
 
 
 def create_environment(fragment_map: Mapping[str, str] | None = None) -> Environment:
@@ -531,6 +692,10 @@ def create_environment(fragment_map: Mapping[str, str] | None = None) -> Environ
 
     env.globals["select_object_context"] = _select_object_context
     env.globals["select_object_context_by_lang"] = _select_object_context_by_lang
+    env.globals["select_exact_object_context"] = _exact_object_context
+    env.globals["select_exact_object_context_by_lang"] = _exact_object_context_by_lang
+    env.globals["select_tree_object_context"] = _tree_object_context
+    env.globals["select_tree_object_context_by_lang"] = _tree_object_context_by_lang
 
     return env
 

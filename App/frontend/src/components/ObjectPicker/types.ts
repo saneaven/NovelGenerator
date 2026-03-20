@@ -32,6 +32,7 @@ export interface ObjectPickerItem {
   parentId?: string;
   order?: number;
   wordCount?: number;        // For manuscripts
+  isStructural?: boolean;    // Structural-only item (no checkbox, not selectable)
   metadata?: Record<string, unknown>;
 }
 
@@ -110,6 +111,7 @@ export interface ObjectPickerItemProps {
   isPreSelected?: boolean;
   isHighlighted?: boolean;         // Whether to highlight this item
   isExcluded?: boolean;            // Whether this item is an edit target (no checkbox)
+  isStructural?: boolean;          // Structural-only item (label only, no checkbox, no badge)
   selectionMode: SelectionMode;
   onToggle: (id: string) => void;
   disabled?: boolean;

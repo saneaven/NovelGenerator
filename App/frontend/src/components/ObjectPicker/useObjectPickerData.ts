@@ -330,6 +330,7 @@ function buildOutlineGroups(
   language: string,
   includeManuscripts: boolean,
   t: TFunction,
+  mode: ObjectPickerMode = 'all',
 ): { groups: ObjectPickerGroup[]; availableTypes: ObjectType[] } {
   const groups: ObjectPickerGroup[] = [];
   const availableTypes: ObjectType[] = [];
@@ -350,12 +351,17 @@ function buildOutlineGroups(
     return { groups, availableTypes };
   }
 
+  // In 'all' mode, outline and act items are structural-only (no checkbox).
+  // In 'translation' mode, all items are directly selectable.
+  const markStructural = mode === 'all' || mode === 'manuscript';
+
   if (!includeManuscripts) {
     const outlineGroups: ObjectPickerGroup[] = outlines.map((outline) => {
       const outlineLabel = getOutlineObjectName(outline, language, untitledOutline);
       const outlineItem = {
         ...objectToItem(outline, language),
         name: outlineLabel,
+        ...(markStructural ? { isStructural: true } : {}),
       };
       const outlineActs = acts
         .filter((act) => act.metadata?.parent_id === outline.id)
@@ -381,6 +387,7 @@ function buildOutlineGroups(
           const actItem = {
             ...objectToItem(act, language),
             name: actName,
+            ...(markStructural ? { isStructural: true } : {}),
           };
           const chapterItems = actChapters.map((chapter) => ({
             ...objectToItem(chapter, language),
@@ -524,13 +531,13 @@ function buildGroups(
   }
 
   if (mode === 'all' || mode === 'translation') {
-    const outline = buildOutlineGroups(objects, language, false, t);
+    const outline = buildOutlineGroups(objects, language, false, t, mode);
     groups.push(...outline.groups);
     availableTypes.push(...outline.availableTypes);
   }
 
   if (mode === 'manuscript' || mode === 'all' || mode === 'translation') {
-    const manuscriptGroups = buildOutlineGroups(objects, language, true, t);
+    const manuscriptGroups = buildOutlineGroups(objects, language, true, t, mode);
     groups.push(...manuscriptGroups.groups);
     availableTypes.push(...manuscriptGroups.availableTypes);
   }

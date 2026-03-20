@@ -458,6 +458,132 @@ def test_render_template_blocks_mutation_methods() -> None:
         render_template(env, '{{ data.update({"x": 1}) }}', {"data": {}})
 
 
+def test_select_exact_object_context_returns_flat_selected_only() -> None:
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% set ctx = select_exact_object_context(project, ["entity-1", "chapter-2", "ms-1"]) %}'
+        "entities={{ ctx.storyEntities|length }}"
+        ",folders={{ ctx.storyEntityFolders|length }}"
+        ",outlines={{ ctx.outlineItems|length }}"
+        ",manuscripts={{ ctx.manuscripts|length }}"
+        ",entity_name={{ ctx.storyEntities[0].name }}"
+        ",outline_kind={{ ctx.outlineItems[0].kind }}"
+        ",ms_chapter={{ ctx.manuscripts[0].chapterName }}",
+        {"project": project},
+    )
+
+    assert "entities=1" in rendered
+    assert "folders=0" in rendered
+    assert "outlines=1" in rendered
+    assert "manuscripts=1" in rendered
+    assert "entity_name=Ari" in rendered
+    assert "outline_kind=chapter" in rendered
+    assert "ms_chapter=The Raid" in rendered
+
+
+def test_select_exact_object_context_no_parent_auto_inclusion() -> None:
+    """Selecting a chapter must NOT auto-include its parent act or outline."""
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% set ctx = select_exact_object_context(project, ["chapter-2"]) %}'
+        "outlines={{ ctx.outlineItems|length }}"
+        ",kind={{ ctx.outlineItems[0].kind }}",
+        {"project": project},
+    )
+
+    assert "outlines=1" in rendered
+    assert "kind=chapter" in rendered
+
+
+def test_select_exact_object_context_includes_folder_when_selected() -> None:
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% set ctx = select_exact_object_context(project, ["folder-1"]) %}'
+        "folders={{ ctx.storyEntityFolders|length }}"
+        ",entities={{ ctx.storyEntities|length }}"
+        ",folder_name={{ ctx.storyEntityFolders[0].name }}",
+        {"project": project},
+    )
+
+    assert "folders=1" in rendered
+    assert "entities=0" in rendered
+    assert "folder_name=Characters" in rendered
+
+
+def test_select_exact_object_context_by_lang() -> None:
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% set ctx = select_exact_object_context_by_lang(project, "Korean", ["entity-1"]) %}'
+        "{{ ctx.storyEntities[0].name }}",
+        {"project": project},
+    )
+
+    assert rendered.strip() == "아리"
+
+
+def test_select_tree_object_context_marks_selected_flag() -> None:
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% set ctx = select_tree_object_context(project, ["chapter-2", "ms-2"]) %}'
+        "outline_selected={{ ctx.outlineTree[0].selected }}"
+        ",act_selected={{ ctx.outlineTree[0].children[0].selected }}"
+        ",chapter_selected={{ ctx.outlineTree[0].children[0].children[0].selected }}",
+        {"project": project},
+    )
+
+    assert "outline_selected=False" in rendered
+    assert "act_selected=False" in rendered
+    assert "chapter_selected=True" in rendered
+
+
+def test_select_tree_object_context_prunes_empty_branches() -> None:
+    """Act-1 branch has no selected nodes so it should be pruned."""
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% set ctx = select_tree_object_context(project, ["chapter-2"]) %}'
+        "acts={{ ctx.outlineTree[0].children|length }}"
+        ",act_name={{ ctx.outlineTree[0].children[0].name }}",
+        {"project": project},
+    )
+
+    assert "acts=1" in rendered
+    assert "act_name=Counterattack" in rendered
+
+
+def test_select_tree_object_context_story_entity_selected_flag() -> None:
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% set ctx = select_tree_object_context(project, ["entity-1"]) %}'
+        "folder_selected={{ ctx.storyEntityTree[0].selected }}"
+        ",entity_selected={{ ctx.storyEntityTree[0].children[0].selected }}",
+        {"project": project},
+    )
+
+    assert "folder_selected=False" in rendered
+    assert "entity_selected=True" in rendered
+
+
 def test_render_template_raises_fragment_not_found_for_bare_paths() -> None:
     env = create_environment(fragment_map={"common/objectContext": "Object context"})
 

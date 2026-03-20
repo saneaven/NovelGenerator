@@ -63,7 +63,7 @@ function getAllItemIds(groups: Group[]): string[] {
   const ids: string[] = [];
 
   function collectIds(group: Group) {
-    ids.push(...group.items.map(item => item.id));
+    ids.push(...group.items.filter(item => !item.isStructural).map(item => item.id));
     if (group.childGroups) {
       group.childGroups.forEach(childGroup => collectIds(childGroup));
     }
@@ -309,16 +309,33 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
     return 'indeterminate';
   }, [groups, selectedIdSet, excludedIdSet, preSelectedIdSet]);
 
-  // Calculate combined content from selected items for token counting
+  // Calculate combined content from selected items for token counting.
+  // In "all" mode, include content from structural ancestor items (closure parents).
   const selectedItemsContent = useMemo(() => {
     if (!showTokenCount) return '';
     const allItems = getAllItems(groups);
-    const selectedItems = allItems.filter(item => selectedIdSet.has(item.id));
-    return selectedItems
+    let relevantIds = selectedIdSet;
+
+    if (mode === 'all' || mode === 'manuscript') {
+      // Build closure: add parent IDs for selected items
+      const itemsById = new Map(allItems.map(item => [item.id, item]));
+      const closureIds = new Set(selectedIdSet);
+      for (const id of selectedIdSet) {
+        let parentId = itemsById.get(id)?.parentId;
+        while (parentId) {
+          closureIds.add(parentId);
+          parentId = itemsById.get(parentId)?.parentId;
+        }
+      }
+      relevantIds = closureIds;
+    }
+
+    const relevantItems = allItems.filter(item => relevantIds.has(item.id));
+    return relevantItems
       .map(item => item.content || item.description || '')
       .filter(content => content.length > 0)
       .join('\n\n');
-  }, [groups, selectedIdSet, showTokenCount]);
+  }, [groups, selectedIdSet, showTokenCount, mode]);
 
   // Token counting for selected items
   const {
@@ -428,9 +445,9 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
     const group = findGroup(filteredGroups, groupId);
     if (!group) return;
 
-    // Recursively collect all item IDs from this group and nested child groups
+    // Recursively collect all selectable item IDs from this group and nested child groups
     function collectGroupItemIds(g: Group): string[] {
-      const ids = g.items.map(item => item.id);
+      const ids = g.items.filter(item => !item.isStructural).map(item => item.id);
       if (g.childGroups) {
         g.childGroups.forEach(cg => {
           ids.push(...collectGroupItemIds(cg));
