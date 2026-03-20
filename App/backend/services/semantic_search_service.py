@@ -34,6 +34,41 @@ def _escape_like_pattern(value: str, *, escape_char: str = "!") -> str:
     return value
 
 
+def _has_searchable_semantic_chunks(
+    db: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+    language: str,
+    provider: str,
+    model: str,
+) -> bool:
+    stmt = sql_text(
+        """
+        SELECT 1
+        FROM semantic_chunks c
+        JOIN semantic_sources s ON s.id = c.source_id
+        WHERE s.user_id = :user_id
+          AND s.project_id = :project_id
+          AND s.language = :language
+          AND s.indexed_provider = :provider
+          AND s.indexed_model = :model
+        LIMIT 1
+        """
+    )
+    row = db.execute(
+        stmt,
+        {
+            "user_id": user_id,
+            "project_id": project_id,
+            "language": language,
+            "provider": provider,
+            "model": model,
+        },
+    ).first()
+    return row is not None
+
+
 def search_project_by_keyword(
     db: Session,
     *,
@@ -365,10 +400,22 @@ async def search_project(
         raise ValueError("Semantic embedding profile is not configured")
 
     language = get_main_language(db, user_id=user_id)
+    provider = str(profile["provider"])
+    model = str(profile["model"])
+
+    if not _has_searchable_semantic_chunks(
+        db,
+        user_id=user_id,
+        project_id=project_id,
+        language=language,
+        provider=provider,
+        model=model,
+    ):
+        return []
 
     query_vectors = await embed_many(
-        provider=profile["provider"],
-        model=profile["model"],
+        provider=provider,
+        model=model,
         inputs=queries,
         config=provider_config,
         purpose="query",
@@ -380,8 +427,8 @@ async def search_project(
         user_id=user_id,
         project_id=project_id,
         language=language,
-        provider=str(profile["provider"]),
-        model=str(profile["model"]),
+        provider=provider,
+        model=model,
         top_k_per_query=top_k_per_query,
         neighbor_window=neighbor_window,
         max_primary_items=max_primary_items,
