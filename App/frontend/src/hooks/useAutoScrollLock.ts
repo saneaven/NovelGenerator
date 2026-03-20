@@ -35,7 +35,7 @@ export function useAutoScrollLock({
   const syncScrollState = useCallback(() => {
     const isNearBottom = measureNearBottom();
     isNearBottomRef.current = isNearBottom;
-    setShowScrollButton(active && !isNearBottom);
+    setShowScrollButton(!isNearBottom);
   }, [active, measureNearBottom]);
 
   const scrollToBottom = useCallback((options?: ScrollToBottomOptions) => {
@@ -79,10 +79,6 @@ export function useAutoScrollLock({
   }, [scrollContainerRef, syncScrollState]);
 
   useEffect(() => {
-    if (!active) {
-      setShowScrollButton(false);
-      return;
-    }
     syncScrollState();
   }, [active, syncScrollState]);
 

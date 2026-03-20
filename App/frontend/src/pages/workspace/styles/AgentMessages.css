@@ -417,26 +417,26 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
-    background: var(--color-brand-primary);
-    color: var(--color-text-inverse);
-    border: none;
+    background: var(--color-surface-elevated);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border-default);
     cursor: pointer;
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-md);
     z-index: 10;
     transition: transform var(--transition-base), box-shadow var(--transition-base);
     animation: fadeInUp var(--transition-base) ease-out;
 }
 
 .scroll-to-bottom-button:hover {
-    transform: translateX(-50%) scale(1.1);
-    box-shadow: var(--shadow-xl);
+    transform: translateX(-50%) translateY(-2px);
+    box-shadow: var(--shadow-lg);
 }
 
 .scroll-to-bottom-button:active {
-    transform: translateX(-50%) scale(0.95);
+    transform: translateX(-50%) translateY(0);
 }
 
 @keyframes fadeInUp {

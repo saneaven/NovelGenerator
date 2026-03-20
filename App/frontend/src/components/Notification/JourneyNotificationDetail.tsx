@@ -575,7 +575,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
             icon={<ChevronDown size="sm" />}
             onClick={() => scrollToBottom()}
             title="Scroll to bottom"
-            variant="primary"
+            variant="secondary"
           />
         )}
       </div>

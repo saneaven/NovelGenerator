@@ -320,7 +320,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
               icon={<ChevronDown size="sm" />}
               onClick={() => scrollToBottom()}
               title={t('agent.scrollToBottom')}
-              variant="primary"
+              variant="secondary"
             />
           )}
         </div>
