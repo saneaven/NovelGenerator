@@ -31,9 +31,75 @@ import { normalizeBasicInfoData } from '../utils/basicInfo';
 import { collectStoryEntitySubtreeIds } from '../utils/storyEntityTree';
 
 const STORY_ENTITY_TREE_TYPES: ObjectType[] = ['story_entity_folder', 'story_entity'];
+const STORY_ENTITY_TREE_HYDRATION_KEY = '__story_entity_tree__';
+
+type ProjectHydrationKey = ObjectType | typeof STORY_ENTITY_TREE_HYDRATION_KEY;
+type ProjectHydrationState = Partial<Record<ProjectHydrationKey, boolean>>;
+
+const collectionRequestInflight = new Map<string, Promise<void>>();
 
 function isStoryEntityTreeType(type: ObjectType): type is StoryEntityStructureObjectType {
   return type === 'story_entity_folder' || type === 'story_entity';
+}
+
+function getProjectHydration(
+  projectHydration: Record<string, ProjectHydrationState>,
+  projectId: string,
+): ProjectHydrationState {
+  return projectHydration[projectId] ?? {};
+}
+
+function isProjectHydrated(
+  projectHydration: Record<string, ProjectHydrationState>,
+  projectId: string,
+  key: ProjectHydrationKey,
+): boolean {
+  return Boolean(getProjectHydration(projectHydration, projectId)[key]);
+}
+
+function setProjectHydrationState(
+  projectHydration: Record<string, ProjectHydrationState>,
+  projectId: string,
+  keys: ProjectHydrationKey[],
+  hydrated: boolean,
+): Record<string, ProjectHydrationState> {
+  const currentProjectHydration = getProjectHydration(projectHydration, projectId);
+  const nextProjectHydration: ProjectHydrationState = { ...currentProjectHydration };
+  let changed = false;
+
+  for (const key of keys) {
+    if (hydrated) {
+      if (!nextProjectHydration[key]) {
+        nextProjectHydration[key] = true;
+        changed = true;
+      }
+      continue;
+    }
+
+    if (nextProjectHydration[key]) {
+      delete nextProjectHydration[key];
+      changed = true;
+    }
+  }
+
+  if (!changed) {
+    return projectHydration;
+  }
+
+  if (Object.keys(nextProjectHydration).length === 0) {
+    const nextProjectHydrationByProject = { ...projectHydration };
+    delete nextProjectHydrationByProject[projectId];
+    return nextProjectHydrationByProject;
+  }
+
+  return {
+    ...projectHydration,
+    [projectId]: nextProjectHydration,
+  };
+}
+
+function getCollectionRequestKey(projectId: string, key: ProjectHydrationKey): string {
+  return `${projectId}:${key}`;
 }
 
 function reconcileProjectObjects(
@@ -75,6 +141,7 @@ function reconcileProjectObjects(
 interface UnifiedObjectStore {
   // Single object storage by ID - contains ALL languages per object
   objects: Record<string, UnifiedObject>;
+  projectHydration: Record<string, ProjectHydrationState>;
 
   // Loading states
   loading: Record<string, boolean>;
@@ -105,7 +172,10 @@ interface UnifiedObjectStore {
   // List & Collection operations
   listObjects: (type: ObjectType, projectId: string) => Promise<UnifiedObject[]>;
   refreshProjectObjects: (projectId: string, types: ObjectType[]) => Promise<void>;
-  refreshStoryEntityTree: (projectId: string) => Promise<void>;
+  refreshStoryEntityTree: (
+    projectId: string,
+    options?: { force?: boolean },
+  ) => Promise<void>;
   createObject: (
     type: ObjectType,
     projectId: string,
@@ -154,8 +224,40 @@ interface UnifiedObjectStore {
 // ============================================================================
 
 export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
+  const getProjectObjectsByType = (
+    projectId: string,
+    type: ObjectType,
+    objects: Record<string, UnifiedObject> = get().objects,
+  ): UnifiedObject[] => (
+    Object.values(objects).filter(
+      (object) => object.type === type && object.metadata?.project_id === projectId,
+    )
+  );
+
+  const withCollectionRequestDeduped = async (
+    projectId: string,
+    key: ProjectHydrationKey,
+    run: () => Promise<void>,
+  ): Promise<void> => {
+    const requestKey = getCollectionRequestKey(projectId, key);
+    const existing = collectionRequestInflight.get(requestKey);
+    if (existing) {
+      await existing;
+      return;
+    }
+
+    const request = run().finally(() => {
+      if (collectionRequestInflight.get(requestKey) === request) {
+        collectionRequestInflight.delete(requestKey);
+      }
+    });
+    collectionRequestInflight.set(requestKey, request);
+    await request;
+  };
+
   return ({
   objects: {},
+  projectHydration: {},
   loading: {},
   errors: {},
   translating: {},
@@ -323,96 +425,80 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
   listObjects: async (type: ObjectType, projectId: string) => {
     try {
+      if (!projectId) {
+        return [];
+      }
+
       if (isStoryEntityTreeType(type)) {
-        const cachedTreeObjects = Object.values(get().objects).filter(
-          (object) => object.metadata?.project_id === projectId && STORY_ENTITY_TREE_TYPES.includes(object.type),
-        );
-        if (cachedTreeObjects.some((object) => object.type === type)) {
-          return cachedTreeObjects.filter((object) => object.type === type);
-        }
-
         await get().refreshStoryEntityTree(projectId);
-        return Object.values(get().objects).filter(
-          (object) => object.metadata?.project_id === projectId && object.type === type,
-        );
+        return getProjectObjectsByType(projectId, type);
       }
 
-      // Check if we already have objects of this type for this project in cache
       const state = get();
-      const cachedObjects = Object.values(state.objects).filter(
-        obj => obj.type === type && obj.metadata?.project_id === projectId
-      );
-
-      // If we have cached data, return it without making API call
-      if (cachedObjects.length > 0) {
-        return cachedObjects;
+      if (isProjectHydrated(state.projectHydration, projectId, type)) {
+        return getProjectObjectsByType(projectId, type, state.objects);
       }
 
-      // Fetch all languages (no language param = returns all languages)
-      const response = await unifiedObjectService.listObjects(type, projectId, {});
-
-      // Store all objects in the objects map
-      const objectsMap: Record<string, UnifiedObject> = {};
-      response.objects.forEach((obj) => {
-        objectsMap[obj.id] = obj;
+      await withCollectionRequestDeduped(projectId, type, async () => {
+        const response = await unifiedObjectService.listObjects(type, projectId, {});
+        set((currentState) => ({
+          objects: reconcileProjectObjects(currentState.objects, projectId, response.objects, [type]),
+          projectHydration: setProjectHydrationState(
+            currentState.projectHydration,
+            projectId,
+            [type],
+            true,
+          ),
+        }));
       });
 
-      set((state) => ({
-        objects: { ...state.objects, ...objectsMap },
-      }));
-
-      return response.objects;
+      return getProjectObjectsByType(projectId, type);
     } catch (error: any) {
       console.error('Failed to list objects:', error);
       throw error;
     }
   },
 
-  refreshStoryEntityTree: async (projectId: string) => {
+  refreshStoryEntityTree: async (projectId: string, options?: { force?: boolean }) => {
     if (!projectId) return;
 
-    const response = await unifiedObjectService.getStoryEntityTree(projectId);
-    const treeObjects = [...response.folders, ...response.entities];
+    const state = get();
+    if (!options?.force && isProjectHydrated(state.projectHydration, projectId, STORY_ENTITY_TREE_HYDRATION_KEY)) {
+      return;
+    }
 
-    set((state) => ({
-      objects: reconcileProjectObjects(state.objects, projectId, treeObjects, STORY_ENTITY_TREE_TYPES),
-    }));
+    await withCollectionRequestDeduped(projectId, STORY_ENTITY_TREE_HYDRATION_KEY, async () => {
+      const response = await unifiedObjectService.getStoryEntityTree(projectId);
+      const treeObjects = [...response.folders, ...response.entities];
+
+      set((currentState) => ({
+        objects: reconcileProjectObjects(currentState.objects, projectId, treeObjects, STORY_ENTITY_TREE_TYPES),
+        projectHydration: setProjectHydrationState(
+          currentState.projectHydration,
+          projectId,
+          [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+          true,
+        ),
+      }));
+    });
   },
 
   refreshProjectObjects: async (projectId: string, types: ObjectType[]) => {
     if (!projectId || types.length === 0) return;
 
     const uniqueTypes = [...new Set(types)];
-    const treeRequested = uniqueTypes.some((type) => isStoryEntityTreeType(type));
+    const requests: Promise<unknown>[] = [];
     const directTypes = uniqueTypes.filter((type) => !isStoryEntityTreeType(type));
-    const fetchedObjects: UnifiedObject[] = [];
-    const reconciledTypes: ObjectType[] = [...directTypes];
 
-    if (treeRequested) {
-      const treeResponse = await unifiedObjectService.getStoryEntityTree(projectId);
-      fetchedObjects.push(...treeResponse.folders, ...treeResponse.entities);
-      reconciledTypes.push(...STORY_ENTITY_TREE_TYPES);
+    if (uniqueTypes.some((type) => isStoryEntityTreeType(type))) {
+      requests.push(get().refreshStoryEntityTree(projectId));
     }
 
-    const responses = await Promise.all(
-      directTypes.map(async (type) => ({
-        type,
-        response: await unifiedObjectService.listObjects(type, projectId, {}),
-      })),
-    );
-
-    for (const { response } of responses) {
-      fetchedObjects.push(...response.objects);
+    for (const type of directTypes) {
+      requests.push(get().listObjects(type, projectId));
     }
 
-    set((state) => ({
-      objects: reconcileProjectObjects(
-        state.objects,
-        projectId,
-        fetchedObjects,
-        [...new Set(reconciledTypes)],
-      ),
-    }));
+    await Promise.all(requests);
   },
 
   createObject: async (type: ObjectType, projectId: string, data: any, language: string, metadata?: Record<string, any>, userRequest: string = 'User Creation', kind?: StoryEntityKind | OutlineKind) => {
@@ -428,6 +514,14 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       set((state) => ({
         objects: { ...state.objects, [newObject.id]: newObject },
         loading: { ...state.loading, [newObject.id]: false },
+        projectHydration: isStoryEntityTreeType(type)
+          ? setProjectHydrationState(
+            state.projectHydration,
+            projectId,
+            [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+            false,
+          )
+          : state.projectHydration,
       }));
 
       if (type === 'outline' && kind === 'chapter') {
@@ -458,6 +552,14 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       set((state) => ({
         objects: { ...state.objects, [updatedObject.id]: updatedObject },
         loading: { ...state.loading, [id]: false },
+        projectHydration: updatedObject.metadata?.project_id
+          ? setProjectHydrationState(
+            state.projectHydration,
+            updatedObject.metadata.project_id,
+            [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+            false,
+          )
+          : state.projectHydration,
       }));
     } catch (error: any) {
       set((state) => ({
@@ -500,7 +602,21 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
           delete newErrors[removedId];
         }
 
-        return { objects: newObjects, loading: newLoading, errors: newErrors };
+        return {
+          objects: newObjects,
+          loading: newLoading,
+          errors: newErrors,
+          projectHydration: (
+            projectId && isStoryEntityTreeType(type)
+              ? setProjectHydrationState(
+                state.projectHydration,
+                projectId,
+                [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+                false,
+              )
+              : state.projectHydration
+          ),
+        };
       });
 
       if (type === 'story_entity_folder' && projectId) {
@@ -539,6 +655,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
   clearObject: (id: string) => {
     set((state) => {
+      const existingObject = state.objects[id];
       const newObjects = { ...state.objects };
       const newLoading = { ...state.loading };
       const newErrors = { ...state.errors };
@@ -547,12 +664,27 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       delete newLoading[id];
       delete newErrors[id];
 
-      return { objects: newObjects, loading: newLoading, errors: newErrors };
+      return {
+        objects: newObjects,
+        loading: newLoading,
+        errors: newErrors,
+        projectHydration: (
+          existingObject?.metadata?.project_id && isStoryEntityTreeType(existingObject.type)
+            ? setProjectHydrationState(
+              state.projectHydration,
+              existingObject.metadata.project_id,
+              [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+              false,
+            )
+            : state.projectHydration
+        ),
+      };
     });
   },
 
   clearAllObjects: () => {
-    set({ objects: {}, loading: {}, errors: {}, translating: {} });
+    collectionRequestInflight.clear();
+    set({ objects: {}, projectHydration: {}, loading: {}, errors: {}, translating: {} });
   },
 
   // ========================================================================
@@ -639,19 +771,42 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       const nextLoading = { ...state.loading };
       const nextErrors = { ...state.errors };
       const nextTranslating = { ...state.translating };
+      let nextProjectHydration = state.projectHydration;
+      const touchedTreeProjects = new Set<string>();
 
       for (const obj of upserts) {
         nextObjects[obj.id] = obj;
+        if (isStoryEntityTreeType(obj.type) && obj.metadata?.project_id) {
+          touchedTreeProjects.add(obj.metadata.project_id);
+        }
       }
       for (const id of deletes) {
+        const existingObject = state.objects[id];
+        if (
+          existingObject
+          && isStoryEntityTreeType(existingObject.type)
+          && existingObject.metadata?.project_id
+        ) {
+          touchedTreeProjects.add(existingObject.metadata.project_id);
+        }
         delete nextObjects[id];
         delete nextLoading[id];
         delete nextErrors[id];
         delete nextTranslating[id];
       }
 
+      touchedTreeProjects.forEach((projectId) => {
+        nextProjectHydration = setProjectHydrationState(
+          nextProjectHydration,
+          projectId,
+          [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+          false,
+        );
+      });
+
       return {
         objects: nextObjects,
+        projectHydration: nextProjectHydration,
         loading: nextLoading,
         errors: nextErrors,
         translating: nextTranslating,

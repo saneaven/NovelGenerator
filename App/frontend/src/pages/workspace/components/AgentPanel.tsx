@@ -557,6 +557,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   const setRunMode = useAgentUIStore((state) => state.setRunMode);
   const setInput = useAgentUIStore((state) => state.setInput);
   const unifiedObjects = useUnifiedObjectStore((state) => state.objects);
+  const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
   const selectedChapterId = useNovelEditorStore((state) => state.selectedChapterByProject[projectId]);
 
   const [isDesktop, setIsDesktop] = useState(() => (
@@ -564,6 +565,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   ));
   const [isOverlayClosing, setIsOverlayClosing] = useState(false);
   const [isContextDropdownOpen, setIsContextDropdownOpen] = useState(false);
+  const [isContextPickerLoading, setIsContextPickerLoading] = useState(false);
   const [selectedContextIds, setSelectedContextIds] = useState<string[]>([]);
   const [messageLanguageView, setMessageLanguageView] = useState<Record<string, 'primary' | 'secondary'>>({});
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -1023,6 +1025,32 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     if (selectedContextIds.length === 0) return;
     setSelectedContextIds((prev) => prev.filter((id) => contextIdSet.has(id)));
   }, [contextIdSet, selectedContextIds.length]);
+
+  useEffect(() => {
+    if (!isContextDropdownOpen || !projectId) {
+      setIsContextPickerLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsContextPickerLoading(true);
+
+    void refreshProjectObjects(projectId, [
+      'story_entity',
+      'outline',
+      'manuscript',
+    ]).catch((loadError) => {
+      console.error('Failed to preload agent context objects:', loadError);
+    }).finally(() => {
+      if (!cancelled) {
+        setIsContextPickerLoading(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isContextDropdownOpen, projectId, refreshProjectObjects]);
 
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth > 768);
@@ -1813,18 +1841,21 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
         )}
 
         <div className={`agent-context-dropdown-menu ${isContextDropdownOpen ? '' : 'hidden'}`}>
-          <ObjectPicker
-            mode="all"
-            selectionMode="multi"
-            selectedIds={selectedContextIds}
-            onChange={(ids) => setSelectedContextIds(ids as string[])}
-            projectId={projectId}
-            language={sourceLanguage}
-            maxHeight="350px"
-            showSearch={true}
-            showSelectAll={true}
-            showTokenCount={true}
-          />
+          {isContextDropdownOpen && (
+            <ObjectPicker
+              mode="all"
+              selectionMode="multi"
+              selectedIds={selectedContextIds}
+              onChange={(ids) => setSelectedContextIds(ids as string[])}
+              projectId={projectId}
+              language={sourceLanguage}
+              loading={isContextPickerLoading}
+              maxHeight="350px"
+              showSearch={true}
+              showSelectAll={true}
+              showTokenCount={true}
+            />
+          )}
         </div>
 
         <div className="agent-controls-row">

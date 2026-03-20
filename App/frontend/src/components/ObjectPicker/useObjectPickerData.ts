@@ -1,8 +1,8 @@
 /**
- * Hook for fetching and organizing data for the ObjectPicker component.
+ * Hook for organizing store-backed data for the ObjectPicker component.
  */
 
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
@@ -23,6 +23,8 @@ import {
   type StoryEntityFolder,
 } from '../../types/storyEntityFolder';
 import { getProjectStoryEntityFolders } from '../../utils/storyEntityTree';
+
+const EMPTY_OBJECT_TYPES: ObjectType[] = [];
 
 type OutlineNumbering = {
   actNumberById: Map<string, number>;
@@ -546,43 +548,14 @@ export function useObjectPickerData({
   projectId,
   language,
   mode,
-  excludeTypes = [],
+  excludeTypes = EMPTY_OBJECT_TYPES,
 }: UseObjectPickerDataOptions): UseObjectPickerDataResult {
   const { t } = useTranslation();
   const objects = useUnifiedObjectStore((state) => state.objects);
-  const listObjects = useUnifiedObjectStore((state) => state.listObjects);
-  const refreshStoryEntityTree = useUnifiedObjectStore((state) => state.refreshStoryEntityTree);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const typesToInclude = useMemo(
     () => getTypesForMode(mode, excludeTypes),
     [mode, excludeTypes],
   );
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        await Promise.all(
-          typesToInclude.map((type) => (
-            type === 'story_entity'
-              ? refreshStoryEntityTree(projectId)
-              : listObjects(type, projectId)
-          )),
-        );
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load objects');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (projectId) {
-      fetchData();
-    }
-  }, [projectId, language, listObjects, refreshStoryEntityTree, typesToInclude]);
 
   const { groups, availableTypes } = useMemo(() => {
     const projectObjects = (Object.values(objects) as UnifiedObject[]).filter(
@@ -593,7 +566,7 @@ export function useObjectPickerData({
     return buildGroups(filteredObjects, folders, language, mode, t);
   }, [objects, projectId, language, mode, t, typesToInclude]);
 
-  return { groups, availableTypes, isLoading, error };
+  return { groups, availableTypes, isLoading: false, error: null };
 }
 
 export default useObjectPickerData;

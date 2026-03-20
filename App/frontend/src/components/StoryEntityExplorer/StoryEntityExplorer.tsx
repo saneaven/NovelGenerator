@@ -250,14 +250,6 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   }, []);
 
   useEffect(() => {
-    if (!projectId) return;
-    void refreshStoryEntityTree(projectId).catch((error) => {
-      console.error('Failed to load story entities:', error);
-      showAlert({ title: 'Load Error', message: 'Failed to load story entities.' });
-    });
-  }, [projectId, refreshStoryEntityTree]);
-
-  useEffect(() => {
     setIsCreatingFolder(false);
     setNewFolderName('');
     setNewFolderDescription('');

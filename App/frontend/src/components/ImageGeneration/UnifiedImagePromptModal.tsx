@@ -72,11 +72,13 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   const { currentProjectId } = useProjectStore();
   const settings = useSettings();
   const unifiedStore = useUnifiedObjectStore();
+  const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
 
   const [userRequest, setUserRequest] = useState(defaultUserRequest || '');
   const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>(
     defaultSelectedEntityIds ?? []
   );
+  const [pickerLoading, setPickerLoading] = useState(false);
   const [activeJourneyId, setActiveJourneyId] = useState<string | null>(null);
 
   // Get threadId from journey metadata
@@ -113,8 +115,28 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     if (!isOpen) {
       setUserRequest(defaultUserRequest || '');
       setSelectedEntityIds(defaultSelectedEntityIds ?? []);
+      setPickerLoading(false);
     }
   }, [isOpen, defaultUserRequest, defaultSelectedEntityIds]);
+
+  useEffect(() => {
+    if (!isOpen || contextType !== 'scene' || !currentProjectId) return;
+
+    let cancelled = false;
+    setPickerLoading(true);
+
+    void refreshProjectObjects(currentProjectId, ['story_entity']).catch((loadError) => {
+      console.error('Failed to preload story entities for image prompt modal:', loadError);
+    }).finally(() => {
+      if (!cancelled) {
+        setPickerLoading(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, contextType, currentProjectId, refreshProjectObjects]);
 
   useEffect(() => {
     if (!activeJourneyId) return;
@@ -335,6 +357,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
               selectedIds={selectedEntityIds}
               onChange={(ids) => setSelectedEntityIds(Array.isArray(ids) ? ids : [ids])}
               selectionMode="multi"
+              loading={pickerLoading}
               maxHeight="200px"
               showSearch={false}
               selectAllOnLoad={!defaultSelectedEntityIds?.length}

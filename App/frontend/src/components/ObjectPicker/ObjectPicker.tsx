@@ -21,6 +21,9 @@ import { useResolvedTaskConfig } from '../../store/settingsStore';
 import type { ObjectPickerProps, ObjectPickerItem as PickerItem, ObjectPickerGroup as Group, SelectionState } from './types';
 import './ObjectPicker.css';
 
+const EMPTY_OBJECT_TYPES: ObjectType[] = [];
+const EMPTY_STRING_ARRAY: string[] = [];
+
 /**
  * Filter groups to only include items with IDs in the filterIds set
  * Recursively handles all levels of nested childGroups
@@ -225,11 +228,11 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   language,
   showPreview = false,
   previewPosition = 'side',
-  excludeTypes = [],
+  excludeTypes = EMPTY_OBJECT_TYPES,
   filterIds,
-  preSelectedIds = [],
-  highlightIds = [],
-  excludedIds = [],
+  preSelectedIds = EMPTY_STRING_ARRAY,
+  highlightIds = EMPTY_STRING_ARRAY,
+  excludedIds = EMPTY_STRING_ARRAY,
   disabled = false,
   loading: externalLoading,
   customGroups,
@@ -266,7 +269,8 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   // Use custom groups if provided, otherwise use fetched groups
   const baseGroups = customGroups ?? fetchedGroups;
   const availableTypes = customGroups ? [] : fetchedTypes;
-  const isLoading = customGroups ? false : fetchLoading;
+  const internalLoading = customGroups ? false : fetchLoading;
+  const loading = externalLoading ?? internalLoading;
 
   // Apply filterIds filtering if provided
   const groups = useMemo(() => {
@@ -276,10 +280,10 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
 
   // Notify when loading completes
   useEffect(() => {
-    if (!isLoading && onLoadComplete) {
+    if (!loading && onLoadComplete) {
       onLoadComplete();
     }
-  }, [isLoading, onLoadComplete]);
+  }, [loading, onLoadComplete]);
 
   // Derived state
   const selectedIdSet = useMemo(() => {
@@ -344,7 +348,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
 
   // Select all items on load if selectAllOnLoad is true (only on first load)
   useEffect(() => {
-    if (selectAllOnLoad && !isLoading && groups.length > 0 && selectionMode === 'multi' && !hasInitializedSelectionRef.current) {
+    if (selectAllOnLoad && !loading && groups.length > 0 && selectionMode === 'multi' && !hasInitializedSelectionRef.current) {
       const allIds = getAllItemIds(groups);
       // Filter out excluded and pre-selected IDs
       const selectableIds = allIds.filter(
@@ -355,7 +359,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
         onChange(selectableIds);
       }
     }
-  }, [selectAllOnLoad, isLoading, groups, selectionMode, excludedIdSet, preSelectedIdSet, onChange]);
+  }, [selectAllOnLoad, loading, groups, selectionMode, excludedIdSet, preSelectedIdSet, onChange]);
 
   // Keep "Select All" sticky: when everything was selected and new items are added, auto-select the new items.
   useEffect(() => {
@@ -463,9 +467,6 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
       return next;
     });
   }, []);
-
-  const loading = externalLoading ?? isLoading;
-
   const containerClasses = [
     'object-picker',
     className,

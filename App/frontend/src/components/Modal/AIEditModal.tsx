@@ -60,6 +60,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const [rawMode, setRawMode] = useState(false);
 
   const unifiedStore = useUnifiedObjectStore();
+  const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
   const settings = useSettings();
 
   const isManuscriptMode = category === 'manuscript';
@@ -106,6 +107,29 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     }
   }, [isOpen, defaultUserRequest]);
 
+  useEffect(() => {
+    if (!isOpen || !projectId) return;
+
+    let cancelled = false;
+    setPickerLoading(true);
+
+    void refreshProjectObjects(projectId, [
+      'story_entity',
+      'outline',
+      'manuscript',
+    ]).catch((loadError) => {
+      console.error('Failed to preload AI edit context objects:', loadError);
+    }).finally(() => {
+      if (!cancelled) {
+        setPickerLoading(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, projectId, refreshProjectObjects]);
+
   // Simple handler for context selection
   const handleContextChange = useCallback((ids: string[] | string) => {
     setSelectedContextIds(Array.isArray(ids) ? ids : [ids]);
@@ -123,11 +147,6 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 
     return [targetId];
   }, [targetId, isManuscriptMode, unifiedStore]);
-
-  // On picker load complete
-  const handlePickerLoadComplete = useCallback(() => {
-    setPickerLoading(false);
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,10 +254,10 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
               projectId={projectId}
               language={mainLanguage}
               excludedIds={excludedIds}
+              loading={pickerLoading}
               showSearch={true}
               maxHeight="300px"
               emptyMessage="No context objects available"
-              onLoadComplete={handlePickerLoadComplete}
               selectAllOnLoad={true}
             />
           </div>

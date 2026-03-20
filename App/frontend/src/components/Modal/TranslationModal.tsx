@@ -77,34 +77,40 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
 
   // Raw output mode
   const [rawMode, setRawMode] = useState(false);
+  const [pickerLoading, setPickerLoading] = useState(false);
 
   const hasInitializedSelectionRef = useRef(false);
   const hasInitializedContextRef = useRef(false);
   // Use selector to only subscribe to objects, preventing re-renders from unrelated store changes
   const objects = useUnifiedObjectStore(useShallow(state => state.objects));
-  const listObjects = useUnifiedObjectStore(state => state.listObjects);
-  const refreshStoryEntityTree = useUnifiedObjectStore((state) => state.refreshStoryEntityTree);
+  const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
   const settings = useSettings();
 
   // Ensure all object types are available in store for translation selection (tab-independent)
   useEffect(() => {
     if (!isOpen || !projectId) return;
 
-    const types: ObjectType[] = [
+    let cancelled = false;
+    setPickerLoading(true);
+
+    void refreshProjectObjects(projectId, [
       'basic_info',
       'guidelines',
       'story_entity',
       'outline',
       'manuscript',
-    ];
-
-    void Promise.all([
-      ...types.map(type => listObjects(type, projectId)),
-      refreshStoryEntityTree(projectId),
     ]).catch((err) => {
       console.error('Failed to preload objects for translation:', err);
+    }).finally(() => {
+      if (!cancelled) {
+        setPickerLoading(false);
+      }
     });
-  }, [isOpen, projectId, listObjects, refreshStoryEntityTree]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, projectId, refreshProjectObjects]);
 
   const projectFolders = useMemo(
     () => getProjectStoryEntityFolders(objects, projectId),
@@ -124,7 +130,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   const contextObjectIds = useMemo((): string[] => {
     if (!targetLanguage) return [];
 
-    const ids: string[] = [];
+    const ids = new Set<string>();
     const allObjects = Object.values(objects) as UnifiedObject<any>[];
 
     allObjects.forEach(obj => {
@@ -135,15 +141,15 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       // Skip manuscript and basic_info for context
       if (objType === 'manuscript' || objType === 'basic_info') return;
 
-      ids.push(obj.id);
+      ids.add(obj.id);
     });
 
     projectFolders.forEach((folder) => {
       if (!folder.data[targetLanguage]) return;
-      ids.push(folder.id);
+      ids.add(folder.id);
     });
 
-    return ids;
+    return Array.from(ids);
   }, [objects, projectId, targetLanguage, projectFolders]);
 
   const hasAnyContext = contextObjectIds.length > 0;
@@ -541,6 +547,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               projectId={projectId}
               language={sourceLanguage}
               filterIds={availableObjectIds}
+              loading={pickerLoading}
               showSearch={false}
               maxHeight="300px"
               emptyMessage="No objects available for translation"
@@ -607,6 +614,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               projectId={projectId}
               language={targetLanguage}
               filterIds={contextObjectIds}
+              loading={pickerLoading}
               showSearch={false}
               maxHeight="200px"
               emptyMessage="No translated objects available"
