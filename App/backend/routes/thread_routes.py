@@ -1300,14 +1300,50 @@ async def decide_tool_calls_batch(
         else:
             tasks.append(run_single_group(items))
 
-    all_results = await asyncio.gather(*tasks)
+    try:
+        all_results = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=120.0,
+        )
+    except asyncio.TimeoutError:
+        # Safety net: return the current DB state for each tool call rather
+        # than hanging the HTTP response forever.
+        db_timeout = SessionLocal()
+        try:
+            all_results = []
+            for _key, items in target_groups.items():
+                group: list[tuple[UUID, dict]] = []
+                for item in items:
+                    tc = db_timeout.query(RunToolCallModel).filter(
+                        RunToolCallModel.id == item.tool_call_id,
+                    ).first()
+                    if tc is not None:
+                        group.append((item.tool_call_id, {"tool_call": _serialize_tool_call(tc)}))
+                all_results.append(group)
+        finally:
+            db_timeout.close()
 
     # Step 3: Reorder results to match input order.
     result_map: dict[UUID, dict] = {}
     for group in all_results:
+        if isinstance(group, BaseException):
+            continue
         for tc_id, r in group:
             result_map[tc_id] = r
-    ordered = [result_map[item.tool_call_id] for item in payload.decisions]
+    # Fall back to a minimal entry for any tool call missing from the map
+    # (can happen when a task raised an exception via return_exceptions).
+    ordered: list[dict] = []
+    for item in payload.decisions:
+        if item.tool_call_id in result_map:
+            ordered.append(result_map[item.tool_call_id])
+        else:
+            db_fb = SessionLocal()
+            try:
+                tc = db_fb.query(RunToolCallModel).filter(RunToolCallModel.id == item.tool_call_id).first()
+                if tc is not None:
+                    ordered.append({"tool_call": _serialize_tool_call(tc)})
+            finally:
+                db_fb.close()
     return ToolCallBatchDecisionResponse(results=[ToolCallDecisionResponse(**r) for r in ordered])
 
 

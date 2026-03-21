@@ -302,7 +302,14 @@ class ToolEngineService:
             tool_call.status = "processing"
             tool_call.accepted_at = tool_call.accepted_at or datetime.utcnow()
             tool_call.updated_at = datetime.utcnow()
-            db.flush()
+            # Commit (not flush) so the row lock is released before the async
+            # module.execute() call.  A bare flush() would hold a write lock on
+            # this tool-call row across the await boundary; if any other request
+            # then does SELECT FOR UPDATE on the same row the synchronous
+            # SQLAlchemy call blocks the asyncio event loop, deadlocking the
+            # entire server.
+            db.commit()
+            db.refresh(tool_call)
 
             args = tool_call.arguments if isinstance(tool_call.arguments, dict) else {}
             allowed_tool_names, allowed_sub_agent_ids = self._resolve_sub_agent_permissions(
@@ -330,6 +337,9 @@ class ToolEngineService:
 
             raw_result = await module.execute(tool_name, args, exec_ctx)
             continue_as, extra_patch, result = self._extract_execution_controls(raw_result)
+            # Re-read the row to pick up any changes made while the lock was
+            # released during module.execute().
+            db.refresh(tool_call)
             before = snapshot_tool_call_row(tool_call)
 
             if extra_patch is not None:

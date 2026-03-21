@@ -27,6 +27,13 @@ engine = create_engine(
     pool_size=10,  # Connection pool size
     max_overflow=20,  # Max overflow connections
     echo=False,  # Set to True for SQL query logging during development
+    # Safety net: prevent synchronous SELECT FOR UPDATE from blocking the
+    # asyncio event loop forever when another transaction holds a row lock.
+    # Without these, a sync-in-async deadlock freezes the entire server with
+    # no error logs and no automatic recovery.
+    connect_args={
+        "options": "-c lock_timeout=20000 -c statement_timeout=30000"
+    },
 )
 
 # Create SessionLocal class

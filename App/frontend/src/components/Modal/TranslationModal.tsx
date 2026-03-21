@@ -139,7 +139,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
 
       const objType = obj.type;
       // Skip manuscript and basic_info for context
-      if (objType === 'manuscript' || objType === 'basic_info') return;
+      if (objType === 'basic_info') return;
 
       ids.add(obj.id);
     });
@@ -216,6 +216,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       if (!Object.keys(obj.data || {}).includes(sourceLanguage)) return; // Skip if no source language data
 
       const objType = obj.type;
+      if (objType === 'story_entity_folder') return; // handled by projectFolders.forEach with correct ordering
 
       const sourceData = obj.data[sourceLanguage] || obj.data[Object.keys(obj.data)[0]] || {};
       let label = sourceData.name || sourceData.title || obj.id;
@@ -329,7 +330,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
 
   // Manage selectedContextIds: initialize on open, sync when context objects change
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || pickerLoading) return;
 
     if (!hasInitializedContextRef.current && contextObjectIds.length > 0) {
       setSelectedContextIds(new Set(contextObjectIds));
@@ -341,7 +342,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
         return filtered.size === prev.size ? prev : filtered;
       });
     }
-  }, [isOpen, contextObjectIds]);
+  }, [isOpen, contextObjectIds, pickerLoading]);
 
   // Get objects to translate based on selection
   const objectsToTranslate = useMemo((): ProjectObjectToTranslate[] => {

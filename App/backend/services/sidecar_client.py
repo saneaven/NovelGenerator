@@ -21,6 +21,8 @@ class SidecarConversionError(SidecarError):
 
 
 class SidecarClient:
+    # NOTE: 600s timeout is intentional. TipTap doc-to-markdown conversion for
+    # large manuscripts can take several minutes. Do not reduce this value.
     def __init__(self, base_url: str | None = None, timeout: float = 600.0):
         self.base_url = (base_url or os.getenv("SIDECAR_URL") or "http://localhost:3001").rstrip("/")
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout)
