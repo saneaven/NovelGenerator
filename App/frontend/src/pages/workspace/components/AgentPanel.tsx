@@ -1446,7 +1446,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     useSidebarStore.getState().closeSidebar(projectId);
   }, [projectId]);
 
-  return (
+  const panelContent = (
     <div className={`agent-panel ${isAgentVisible ? 'visible' : 'hidden'}`}>
       <div className="agent-header">
         <div className="agent-header-left">
@@ -1940,6 +1940,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
       )}
     </div>
   );
+
+  return !isDesktop ? createPortal(panelContent, document.body) : panelContent;
 };
 
 export default AgentPanel;

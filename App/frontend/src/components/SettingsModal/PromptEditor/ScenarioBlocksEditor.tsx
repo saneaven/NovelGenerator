@@ -2,21 +2,18 @@ import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom';
 import {
   DndContext,
-  KeyboardSensor,
-  PointerSensor,
   closestCenter,
-  useSensor,
-  useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext,
   arrayMove,
-  sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
+import { useDndSensors } from '../../../hooks/useDndSensors';
 import { CSS } from '@dnd-kit/utilities';
+import DragHandle from '../../ui/DragHandle';
 import { ChevronDown, ChevronUp, Clock, Copy, Eye, Lightning, MoreHorizontal, Plus, Trash } from '../../icons';
 import { IconButton } from '../../IconButton';
 import { DropdownMenu, DropdownItem, DropdownDivider } from '../../ui/DropdownMenu';
@@ -132,9 +129,11 @@ const SortableBlockCard: React.FC<SortableBlockCardProps> = ({
   return (
     <div ref={setNodeRef} style={style} className={`scenario-block-card ${pinned ? 'is-pinned' : ''}`}>
       <div className="scenario-block-card__drag-row">
-        <div className="scenario-block-card__drag-bar" {...attributes} {...listeners}>
-          <span className="scenario-block-card__drag-bar-indicator" />
-        </div>
+        <DragHandle
+          orientation="horizontal"
+          disabled={pinned}
+          handleProps={{ ...attributes, ...listeners } as React.HTMLAttributes<HTMLDivElement>}
+        />
       </div>
       <div className="scenario-block-card__content">{children}</div>
     </div>
@@ -191,10 +190,7 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
     isMemoryPrompt: boolean;
   }>({ open: false, content: '', injectedInputKey: null, isMemoryPrompt: false });
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
+  const sensors = useDndSensors();
 
   const setBlocks = (next: ScenarioBlock[]) => onBlocksChange(normalizeBlockOrders(next));
 

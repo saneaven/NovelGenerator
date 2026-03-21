@@ -4,7 +4,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Iterable
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
@@ -38,6 +38,7 @@ from ..services.semantic_index_service import index_object, invalidate_object_in
 from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, require_story_entity_kind
 from .basic_info_utils import normalize_basic_info_data
 from .outline_service import (
+    collect_affected_outline_rows,
     insert_outline_position,
     move_outline,
     normalize_outline_positions,
@@ -486,6 +487,28 @@ def _handle_metadata_update(db: Session, object_type: str, object_id: UUID, obj:
             )
 
 
+def _is_outline_structure_metadata(metadata: dict[str, Any] | None) -> bool:
+    return bool(metadata) and ("position" in metadata or "parent_id" in metadata)
+
+
+def _queue_outline_row_updates(
+    db: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+    rows: Iterable[Outline],
+) -> None:
+    for row in rows:
+        queue_object_change(
+            db,
+            user_id=user_id,
+            project_id=project_id,
+            object_type="outline",
+            object_id=row.id,
+            action="updated",
+        )
+
+
 class ObjectService:
     def create_object(
         self,
@@ -700,6 +723,15 @@ class ObjectService:
             object_type=storage_type,
             object_id=object_id,
         )
+        affected_outline_rows = (
+            collect_affected_outline_rows(
+                db,
+                project_id=project_id,
+                parent_ids=[core_obj.parent_id],
+            )
+            if storage_type == "outline"
+            else []
+        )
         queue_object_change(
             db,
             user_id=event_user_id,
@@ -708,6 +740,13 @@ class ObjectService:
             object_id=object_id,
             action="created",
         )
+        if storage_type == "outline":
+            _queue_outline_row_updates(
+                db,
+                user_id=event_user_id,
+                project_id=project_id,
+                rows=(row for row in affected_outline_rows if row.id != object_id),
+            )
         if manuscript_id is not None:
             queue_object_change(
                 db,
@@ -748,6 +787,8 @@ class ObjectService:
         if obj is None:
             raise ValueError(f"{t} not found")
         event_user_id = created_by or _resolve_project_user_id(db, project_id=project_id)
+        is_outline_structure_write = storage_type == "outline" and _is_outline_structure_metadata(metadata)
+        previous_outline_parent_id = obj.parent_id if storage_type == "outline" else None
 
         if t == "manuscript":
             doc = data.get("doc")
@@ -852,14 +893,28 @@ class ObjectService:
             object_type=storage_type,
             object_id=object_id,
         )
-        queue_object_change(
-            db,
-            user_id=event_user_id,
-            project_id=project_id,
-            object_type=storage_type,
-            object_id=object_id,
-            action="updated",
-        )
+        if is_outline_structure_write:
+            affected_outline_rows = collect_affected_outline_rows(
+                db,
+                project_id=project_id,
+                parent_ids=[previous_outline_parent_id, obj.parent_id],
+                include_ids=[object_id],
+            )
+            _queue_outline_row_updates(
+                db,
+                user_id=event_user_id,
+                project_id=project_id,
+                rows=affected_outline_rows,
+            )
+        else:
+            queue_object_change(
+                db,
+                user_id=event_user_id,
+                project_id=project_id,
+                object_type=storage_type,
+                object_id=object_id,
+                action="updated",
+            )
 
         if created_by is not None:
             deltas = [
@@ -1336,6 +1391,7 @@ class ObjectService:
             )
 
         old_story_entity_parent_id = obj.folder_id if storage_type == STORY_ENTITY_TYPE else None
+        former_outline_parent_id = obj.parent_id if storage_type == "outline" else None
         deleted_asset_ids = [asset.id for asset in owned_assets if isinstance(asset.id, UUID)]
         deleted_asset_before = snapshot_rows(owned_assets, snapshot_asset_row)
         remaining_ref_assets_before = snapshot_rows(
@@ -1375,7 +1431,17 @@ class ObjectService:
                 parent_folder_id=old_story_entity_parent_id,
             )
         elif storage_type == "outline":
-            normalize_outline_positions(db, project_id=project_id, parent_id=getattr(obj, "parent_id", None))
+            normalize_outline_positions(db, project_id=project_id, parent_id=former_outline_parent_id)
+            _queue_outline_row_updates(
+                db,
+                user_id=user_id,
+                project_id=project_id,
+                rows=collect_affected_outline_rows(
+                    db,
+                    project_id=project_id,
+                    parent_ids=[former_outline_parent_id],
+                ),
+            )
         remaining_ref_assets_after = snapshot_rows(
             db.query(Asset)
             .filter(

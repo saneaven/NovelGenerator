@@ -28,6 +28,27 @@ export function formatNotificationStatusLabelFor(
     }
   }
 
+  if (sourceKind === 'agent' || sourceKind === 'subAgent') {
+    switch (status) {
+      case 'running':
+        return 'Running';
+      case 'processing':
+        return 'Applying changes';
+      case 'waiting':
+        return 'Needs confirmation';
+      case 'paused':
+        return 'Paused';
+      case 'done':
+        return 'Completed';
+      case 'error':
+        return 'Error';
+      case 'canceled':
+        return 'Canceled';
+      default:
+        return '';
+    }
+  }
+
   if (sourceKind === 'imageRun') {
     switch (status) {
       case 'queued':
@@ -74,6 +95,14 @@ export function getNotificationToneFor(
   status: NotificationStatus,
 ): NotificationTone {
   if (sourceKind === 'journey') {
+    if (status === 'running' || status === 'processing') return 'active';
+    if (status === 'waiting' || status === 'paused') return 'attention';
+    if (status === 'done') return 'success';
+    if (status === 'error') return 'error';
+    return 'neutral';
+  }
+
+  if (sourceKind === 'agent' || sourceKind === 'subAgent') {
     if (status === 'running' || status === 'processing') return 'active';
     if (status === 'waiting' || status === 'paused') return 'attention';
     if (status === 'done') return 'success';

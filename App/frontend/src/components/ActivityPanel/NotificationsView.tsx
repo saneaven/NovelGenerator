@@ -2,7 +2,10 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { notificationService } from '../../api/notificationService';
+import { useAgentStore } from '../../store/agentStore';
+import { useAgentUIStore } from '../../store/agentUIStore';
 import { useNotificationStore } from '../../store/notificationStore';
+import { useFunctionCallUIStore } from '../../toolCall/ui';
 import NotificationItem from '../Notification/NotificationItem';
 import { useScroll } from 'motion/react';
 
@@ -73,6 +76,30 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobil
     (id: string) => {
       const notification = notificationsMap[id];
       if (!notification) return;
+      if (notification.target.kind === 'agent' && notification.target.project_id) {
+        document.dispatchEvent(new Event('activity-panel:close'));
+        const agentId = notification.target.agent_id;
+        if (agentId) {
+          useAgentStore.getState().selectAgent(notification.target.project_id, agentId);
+          useAgentUIStore.getState().setAgentVisible(notification.target.project_id, true);
+        }
+        // Open peek dock for sub agent notifications
+        if ((notification.source as { kind: string }).kind === 'subAgent' && notification.meta) {
+          const parentThreadId = notification.meta.parent_thread_id as string | undefined;
+          const parentMessageId = notification.meta.parent_message_id as string | undefined;
+          const childThreadId = notification.meta.child_thread_id as string | undefined;
+          if (parentThreadId && parentMessageId) {
+            const peekKey = `${parentThreadId}:${parentMessageId}:peek`;
+            const fcStore = useFunctionCallUIStore.getState();
+            fcStore.setPeekOpen(peekKey, true);
+            if (childThreadId) {
+              fcStore.setSelectedPeekRun(peekKey, childThreadId);
+            }
+          }
+        }
+        navigate(`/project/${notification.target.project_id}`);
+        return;
+      }
       if (notification.target.kind === 'project' && notification.target.project_id) {
         navigate(`/project/${notification.target.project_id}`);
         return;

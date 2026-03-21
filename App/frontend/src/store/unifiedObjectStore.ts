@@ -29,14 +29,17 @@ import type {
 } from '../types/unifiedObject';
 import { normalizeBasicInfoData } from '../utils/basicInfo';
 import { collectStoryEntitySubtreeIds } from '../utils/storyEntityTree';
+import { sortOutlineObjects } from '../utils/outlineOrdering';
 
 const STORY_ENTITY_TREE_TYPES: ObjectType[] = ['story_entity_folder', 'story_entity'];
 const STORY_ENTITY_TREE_HYDRATION_KEY = '__story_entity_tree__';
+const OUTLINE_COLLECTION_PAGE_SIZE = 100;
 
 type ProjectHydrationKey = ObjectType | typeof STORY_ENTITY_TREE_HYDRATION_KEY;
 type ProjectHydrationState = Partial<Record<ProjectHydrationKey, boolean>>;
 
 const collectionRequestInflight = new Map<string, Promise<void>>();
+const outlineCollectionRevision = new Map<string, number>();
 
 function isStoryEntityTreeType(type: ObjectType): type is StoryEntityStructureObjectType {
   return type === 'story_entity_folder' || type === 'story_entity';
@@ -255,6 +258,53 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     await request;
   };
 
+  const isOutlineStructureMetadata = (metadata?: Record<string, unknown>): boolean => {
+    if (!metadata) return false;
+    return 'position' in metadata || 'parent_id' in metadata;
+  };
+
+  const fetchAllOutlinePages = async (projectId: string): Promise<UnifiedObject[]> => {
+    const outlineObjects: UnifiedObject[] = [];
+    let page = 1;
+    let total = 0;
+
+    do {
+      const response = await unifiedObjectService.listObjects('outline', projectId, {
+        page,
+        page_size: OUTLINE_COLLECTION_PAGE_SIZE,
+      });
+      total = response.total;
+      outlineObjects.push(...response.objects);
+      page += 1;
+    } while (outlineObjects.length < total);
+
+    return outlineObjects;
+  };
+
+  const reloadOutlineObjects = async (projectId: string): Promise<UnifiedObject[]> => {
+    if (!projectId) return [];
+
+    const nextRevision = (outlineCollectionRevision.get(projectId) ?? 0) + 1;
+    outlineCollectionRevision.set(projectId, nextRevision);
+
+    const outlineObjects = await fetchAllOutlinePages(projectId);
+    if ((outlineCollectionRevision.get(projectId) ?? 0) !== nextRevision) {
+      return getProjectObjectsByType(projectId, 'outline');
+    }
+
+    set((currentState) => ({
+      objects: reconcileProjectObjects(currentState.objects, projectId, outlineObjects, ['outline']),
+      projectHydration: setProjectHydrationState(
+        currentState.projectHydration,
+        projectId,
+        ['outline'],
+        true,
+      ),
+    }));
+
+    return outlineObjects;
+  };
+
   return ({
   objects: {},
   projectHydration: {},
@@ -321,11 +371,29 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
     try {
       const updatedObject = await unifiedObjectService.updateObject(type, id, request);
+      const outlineProjectId = type === 'outline' ? updatedObject.metadata?.project_id : undefined;
+      const shouldReloadOutlineCollection = (
+        type === 'outline'
+        && isOutlineStructureMetadata(request.metadata as Record<string, unknown> | undefined)
+        && typeof outlineProjectId === 'string'
+      );
 
       set((state) => ({
         objects: { ...state.objects, [id]: updatedObject },
         loading: { ...state.loading, [id]: false },
+        projectHydration: shouldReloadOutlineCollection
+          ? setProjectHydrationState(
+            state.projectHydration,
+            outlineProjectId,
+            ['outline'],
+            false,
+          )
+          : state.projectHydration,
       }));
+
+      if (shouldReloadOutlineCollection) {
+        await reloadOutlineObjects(outlineProjectId);
+      }
     } catch (error: any) {
       set((state) => ({
         errors: { ...state.errors, [id]: error.message || 'Failed to update object' },
@@ -429,6 +497,14 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
         return [];
       }
 
+      if (type === 'outline') {
+        const state = get();
+        if (isProjectHydrated(state.projectHydration, projectId, type)) {
+          return getProjectObjectsByType(projectId, type, state.objects);
+        }
+        return await reloadOutlineObjects(projectId);
+      }
+
       if (isStoryEntityTreeType(type)) {
         await get().refreshStoryEntityTree(projectId);
         return getProjectObjectsByType(projectId, type);
@@ -514,15 +590,28 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       set((state) => ({
         objects: { ...state.objects, [newObject.id]: newObject },
         loading: { ...state.loading, [newObject.id]: false },
-        projectHydration: isStoryEntityTreeType(type)
-          ? setProjectHydrationState(
-            state.projectHydration,
-            projectId,
-            [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
-            false,
-          )
-          : state.projectHydration,
+        projectHydration: (
+          isStoryEntityTreeType(type)
+            ? setProjectHydrationState(
+              state.projectHydration,
+              projectId,
+              [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+              false,
+            )
+            : type === 'outline'
+              ? setProjectHydrationState(
+                state.projectHydration,
+                projectId,
+                ['outline'],
+                false,
+              )
+              : state.projectHydration
+        ),
       }));
+
+      if (type === 'outline') {
+        await reloadOutlineObjects(projectId);
+      }
 
       if (type === 'outline' && kind === 'chapter') {
         const linkedManuscriptId = newObject.metadata?.manuscript_id;
@@ -607,13 +696,22 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
           loading: newLoading,
           errors: newErrors,
           projectHydration: (
-            projectId && isStoryEntityTreeType(type)
-              ? setProjectHydrationState(
-                state.projectHydration,
-                projectId,
-                [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
-                false,
-              )
+            projectId
+              ? isStoryEntityTreeType(type)
+                ? setProjectHydrationState(
+                  state.projectHydration,
+                  projectId,
+                  [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+                  false,
+                )
+                : type === 'outline'
+                  ? setProjectHydrationState(
+                    state.projectHydration,
+                    projectId,
+                    ['outline'],
+                    false,
+                  )
+                  : state.projectHydration
               : state.projectHydration
           ),
         };
@@ -623,6 +721,9 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
         void get().refreshStoryEntityTree(projectId).catch((refreshError) => {
           console.error('Failed to reconcile story entity tree after folder delete:', refreshError);
         });
+      }
+      if (type === 'outline' && projectId) {
+        await reloadOutlineObjects(projectId);
       }
     } catch (error: any) {
       set((state) => ({
@@ -669,13 +770,22 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
         loading: newLoading,
         errors: newErrors,
         projectHydration: (
-          existingObject?.metadata?.project_id && isStoryEntityTreeType(existingObject.type)
-            ? setProjectHydrationState(
-              state.projectHydration,
-              existingObject.metadata.project_id,
-              [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
-              false,
-            )
+          existingObject?.metadata?.project_id
+            ? isStoryEntityTreeType(existingObject.type)
+              ? setProjectHydrationState(
+                state.projectHydration,
+                existingObject.metadata.project_id,
+                [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+                false,
+              )
+              : existingObject.type === 'outline'
+                ? setProjectHydrationState(
+                  state.projectHydration,
+                  existingObject.metadata.project_id,
+                  ['outline'],
+                  false,
+                )
+                : state.projectHydration
             : state.projectHydration
         ),
       };
@@ -684,6 +794,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
   clearAllObjects: () => {
     collectionRequestInflight.clear();
+    outlineCollectionRevision.clear();
     set({ objects: {}, projectHydration: {}, loading: {}, errors: {}, translating: {} });
   },
 
@@ -773,11 +884,15 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       const nextTranslating = { ...state.translating };
       let nextProjectHydration = state.projectHydration;
       const touchedTreeProjects = new Set<string>();
+      const touchedOutlineProjects = new Set<string>();
 
       for (const obj of upserts) {
         nextObjects[obj.id] = obj;
         if (isStoryEntityTreeType(obj.type) && obj.metadata?.project_id) {
           touchedTreeProjects.add(obj.metadata.project_id);
+        }
+        if (obj.type === 'outline' && obj.metadata?.project_id) {
+          touchedOutlineProjects.add(obj.metadata.project_id);
         }
       }
       for (const id of deletes) {
@@ -788,6 +903,13 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
           && existingObject.metadata?.project_id
         ) {
           touchedTreeProjects.add(existingObject.metadata.project_id);
+        }
+        if (
+          existingObject
+          && existingObject.type === 'outline'
+          && existingObject.metadata?.project_id
+        ) {
+          touchedOutlineProjects.add(existingObject.metadata.project_id);
         }
         delete nextObjects[id];
         delete nextLoading[id];
@@ -800,6 +922,14 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
           nextProjectHydration,
           projectId,
           [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+          false,
+        );
+      });
+      touchedOutlineProjects.forEach((projectId) => {
+        nextProjectHydration = setProjectHydrationState(
+          nextProjectHydration,
+          projectId,
+          ['outline'],
           false,
         );
       });
@@ -987,8 +1117,7 @@ export function useProjectObjects(projectId: string | undefined, language: strin
 
     // Build outline hierarchy: Outline > Acts > Chapters
     const outline = {
-      outlines: outlines
-        .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0))
+      outlines: sortOutlineObjects(outlines)
         .map(outlineObj => {
           const outlineData = getObjectDataForLanguage(outlineObj, language);
           return {
@@ -997,9 +1126,9 @@ export function useProjectObjects(projectId: string | undefined, language: strin
             description: outlineData.description || '',
             content: outlineData.content || '',
             position: outlineObj.metadata.position || 0,
-            acts: acts
-              .filter(act => act.metadata.parent_id === outlineObj.id)
-              .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0))
+            acts: sortOutlineObjects(
+              acts.filter(act => act.metadata.parent_id === outlineObj.id)
+            )
               .map(act => {
                 const actData = getObjectDataForLanguage(act, language);
                 return {
@@ -1009,9 +1138,9 @@ export function useProjectObjects(projectId: string | undefined, language: strin
                   content: actData.content || '',
                   position: act.metadata.position || 0,
                   parentId: act.metadata.parent_id || '',
-                  chapters: chapters
-                    .filter(ch => ch.metadata.parent_id === act.id)
-                    .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0))
+                  chapters: sortOutlineObjects(
+                    chapters.filter(ch => ch.metadata.parent_id === act.id)
+                  )
                     .map(chapter => {
                       const chapterData = getObjectDataForLanguage(chapter, language);
                       return {

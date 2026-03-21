@@ -2,7 +2,10 @@ import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../store/projectStore';
+import { useAgentStore } from '../store/agentStore';
+import { useAgentUIStore } from '../store/agentUIStore';
 import { useNotificationStore } from '../store/notificationStore';
+import { useFunctionCallUIStore } from '../toolCall/ui';
 import './Home.css';
 import { useAuthStore } from '../store/authStore';
 import { useSettings } from '../store/settingsStore';
@@ -104,6 +107,28 @@ const Home: React.FC = () => {
   const handleNotificationClick = (notificationId: string) => {
     const notification = notificationsMap[notificationId];
     if (!notification) return;
+    if (notification.target.kind === 'agent' && notification.target.project_id) {
+      const agentId = notification.target.agent_id;
+      if (agentId) {
+        useAgentStore.getState().selectAgent(notification.target.project_id, agentId);
+        useAgentUIStore.getState().setAgentVisible(notification.target.project_id, true);
+      }
+      if (notification.source.kind === 'subAgent' && notification.meta) {
+        const parentThreadId = notification.meta.parent_thread_id as string | undefined;
+        const parentMessageId = notification.meta.parent_message_id as string | undefined;
+        const childThreadId = notification.meta.child_thread_id as string | undefined;
+        if (parentThreadId && parentMessageId) {
+          const peekKey = `${parentThreadId}:${parentMessageId}:peek`;
+          const fcStore = useFunctionCallUIStore.getState();
+          fcStore.setPeekOpen(peekKey, true);
+          if (childThreadId) {
+            fcStore.setSelectedPeekRun(peekKey, childThreadId);
+          }
+        }
+      }
+      navigate(`/project/${notification.target.project_id}`);
+      return;
+    }
     if (notification.target.kind === 'project' && notification.target.project_id) {
       navigate(`/project/${notification.target.project_id}`);
       return;

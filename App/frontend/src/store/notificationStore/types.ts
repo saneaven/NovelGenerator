@@ -18,6 +18,8 @@ export type ImageRunNotificationStatus =
   Extract<ServerNotificationStatus, 'queued' | 'running' | 'review' | 'applying' | 'applied' | 'rejected' | 'failed' | 'canceled'>;
 export type SystemNotificationStatus =
   Extract<ServerNotificationStatus, 'running' | 'done' | 'error' | 'canceled'>;
+export type AgentNotificationStatus =
+  Extract<ServerNotificationStatus, 'running' | 'waiting' | 'processing' | 'paused' | 'done' | 'error' | 'canceled'>;
 
 export type JourneyNotificationSource = NotificationSourceDTO & {
   kind: 'journey';
@@ -37,10 +39,23 @@ export type SystemNotificationSource = NotificationSourceDTO & {
   kind: 'system';
 };
 
+export type AgentNotificationSource = NotificationSourceDTO & {
+  kind: 'agent';
+  thread_id?: string | null;
+  agent_id?: string | null;
+};
+
+export type SubAgentNotificationSource = NotificationSourceDTO & {
+  kind: 'subAgent';
+  thread_id?: string | null;
+};
+
 export type NotificationSource =
   | JourneyNotificationSource
   | ImageRunNotificationSource
-  | SystemNotificationSource;
+  | SystemNotificationSource
+  | AgentNotificationSource
+  | SubAgentNotificationSource;
 
 export interface NotificationProgress {
   current?: number;
@@ -75,8 +90,12 @@ interface NotificationEntryBase<S extends NotificationSource, T extends ServerNo
 export type JourneyNotificationEntry = NotificationEntryBase<JourneyNotificationSource, JourneyNotificationStatus>;
 export type ImageRunNotificationEntry = NotificationEntryBase<ImageRunNotificationSource, ImageRunNotificationStatus>;
 export type SystemNotificationEntry = NotificationEntryBase<SystemNotificationSource, SystemNotificationStatus>;
+export type AgentNotificationEntry = NotificationEntryBase<AgentNotificationSource, AgentNotificationStatus>;
+export type SubAgentNotificationEntry = NotificationEntryBase<SubAgentNotificationSource, AgentNotificationStatus>;
 
 export type NotificationEntry =
   | JourneyNotificationEntry
   | ImageRunNotificationEntry
-  | SystemNotificationEntry;
+  | SystemNotificationEntry
+  | AgentNotificationEntry
+  | SubAgentNotificationEntry;

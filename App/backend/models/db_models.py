@@ -1128,7 +1128,7 @@ class NotificationModel(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     __table_args__ = (
-        CheckConstraint("source_kind IN ('journey','imageRun','system')", name="ck_notifications_source_kind"),
+        CheckConstraint("source_kind IN ('journey','imageRun','system','agent','subAgent')", name="ck_notifications_source_kind"),
         CheckConstraint(
             "status IN ("
             "'running','waiting','processing','paused','done','error','canceled',"

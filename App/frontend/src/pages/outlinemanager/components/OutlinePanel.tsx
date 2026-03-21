@@ -4,21 +4,16 @@ import {
   DndContext,
   DragOverlay,
   closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext,
-  sortableKeyboardCoordinates,
   verticalListSortingStrategy,
   useSortable,
   arrayMove,
 } from '@dnd-kit/sortable';
+import { useDndSensors } from '../../../hooks/useDndSensors';
 import { CSS } from '@dnd-kit/utilities';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettings } from '../../../store/settingsStore';
@@ -39,6 +34,7 @@ import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
 import { OutlineItemCard } from '../../../components/OutlineItemCard';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import { resolveRequestedLanguageState, resolveTranslationSourceLanguage } from '../../../utils/requestedLanguage';
+import { sortOutlineObjects } from '../../../utils/outlineOrdering';
 import './OutlinePanel.css';
 
 interface OutlinePanelProps {
@@ -121,34 +117,34 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const outlines = useMemo(() => {
     if (!projectId) return [];
 
-    return Object.values(store.objects)
-      .filter(
+    return sortOutlineObjects(
+      Object.values(store.objects).filter(
         (obj): obj is OutlineObject =>
           Boolean(obj && obj.type === 'outline' && obj.kind === 'outline' && obj.metadata?.project_id === projectId)
       )
-      .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
+    );
   }, [store.objects, projectId]);
 
   const acts = useMemo(() => {
     if (!projectId) return [];
 
-    return Object.values(store.objects)
-      .filter(
+    return sortOutlineObjects(
+      Object.values(store.objects).filter(
         (obj): obj is OutlineObject =>
           Boolean(obj && obj.type === 'outline' && obj.kind === 'act' && obj.metadata?.project_id === projectId)
       )
-      .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
+    );
   }, [store.objects, projectId]);
 
   const chapters = useMemo(() => {
     if (!projectId) return [];
 
-    return Object.values(store.objects)
-      .filter(
+    return sortOutlineObjects(
+      Object.values(store.objects).filter(
         (obj): obj is OutlineObject =>
           Boolean(obj && obj.type === 'outline' && obj.kind === 'chapter' && obj.metadata?.project_id === projectId)
       )
-      .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
+    );
   }, [store.objects, projectId]);
 
   // Build parent->children indexes to avoid O(N*M) filters during renders
@@ -600,17 +596,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   // DRAG AND DROP
   // ========================================================================
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 5 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
+  const sensors = useDndSensors();
 
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 

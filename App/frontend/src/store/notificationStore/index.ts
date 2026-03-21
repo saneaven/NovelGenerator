@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 import type {
+  AgentNotificationEntry,
   ImageRunNotificationEntry,
   JourneyNotificationEntry,
   NotificationCustomSlot,
   NotificationEntry,
   NotificationServerDTO,
+  SubAgentNotificationEntry,
   SystemNotificationEntry,
 } from './types';
 
@@ -86,6 +88,20 @@ function isSystemStatus(value: string): value is SystemNotificationEntry['status
   return (SYSTEM_STATUSES as readonly string[]).includes(value);
 }
 
+const AGENT_STATUSES = [
+  'running',
+  'waiting',
+  'processing',
+  'paused',
+  'done',
+  'error',
+  'canceled',
+] as const;
+
+function isAgentStatus(value: string): value is AgentNotificationEntry['status'] {
+  return (AGENT_STATUSES as readonly string[]).includes(value);
+}
+
 function toEntryBase(dto: NotificationServerDTO) {
   return {
     id: String(dto.id),
@@ -95,6 +111,7 @@ function toEntryBase(dto: NotificationServerDTO) {
       project_id: dto.target?.project_id ? String(dto.target.project_id) : null,
       thread_id: dto.target?.thread_id ? String(dto.target.thread_id) : null,
       journey_id: dto.target?.journey_id ? String(dto.target.journey_id) : null,
+      agent_id: dto.target?.agent_id ? String(dto.target.agent_id) : null,
     },
     important: Boolean(dto.important),
     label: String(dto.label || 'Notification'),
@@ -161,6 +178,33 @@ function toEntry(dto: NotificationServerDTO): NotificationEntry | null {
       source: {
         kind: 'system',
         id: String(source.id),
+      },
+      status,
+    };
+    return entry;
+  }
+
+  if (source.kind === 'agent' && isAgentStatus(status)) {
+    const entry: AgentNotificationEntry = {
+      ...base,
+      source: {
+        kind: 'agent',
+        id: String(source.id),
+        thread_id: source.thread_id ? String(source.thread_id) : null,
+        agent_id: source.agent_id ? String(source.agent_id) : null,
+      },
+      status,
+    };
+    return entry;
+  }
+
+  if (source.kind === 'subAgent' && isAgentStatus(status)) {
+    const entry: SubAgentNotificationEntry = {
+      ...base,
+      source: {
+        kind: 'subAgent',
+        id: String(source.id),
+        thread_id: source.thread_id ? String(source.thread_id) : null,
       },
       status,
     };
@@ -325,6 +369,8 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
           (entry.source.kind === 'journey' && (entry.status === 'running' || entry.status === 'processing'))
           || (entry.source.kind === 'imageRun' && (entry.status === 'queued' || entry.status === 'running' || entry.status === 'applying'))
           || (entry.source.kind === 'system' && entry.status === 'running')
+          || (entry.source.kind === 'agent' && (entry.status === 'running' || entry.status === 'processing'))
+          || (entry.source.kind === 'subAgent' && (entry.status === 'running' || entry.status === 'processing'))
         ),
     ),
 }));

@@ -102,10 +102,17 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
     };
   }, [isOpen]);
 
-  // Close on scroll
+  // Close on scroll (only when an ancestor of the trigger scrolls)
   useEffect(() => {
     if (isOpen) {
-      const handleScroll = () => setIsOpen(false);
+      const handleScroll = (e: Event) => {
+        const scrollTarget = e.target;
+        if (menuRef.current?.contains(scrollTarget as Node)) return;
+        if (scrollTarget instanceof Node && triggerRef.current
+          && (scrollTarget.contains(triggerRef.current) || scrollTarget === document)) {
+          setIsOpen(false);
+        }
+      };
       window.addEventListener('scroll', handleScroll, true);
       return () => window.removeEventListener('scroll', handleScroll, true);
     }

@@ -1,6 +1,6 @@
 import { apiClient } from './client';
 
-export type NotificationSourceKind = 'journey' | 'imageRun' | 'system';
+export type NotificationSourceKind = 'journey' | 'imageRun' | 'system' | 'agent' | 'subAgent';
 export type NotificationStatus =
   | 'running'
   | 'waiting'
@@ -15,7 +15,7 @@ export type NotificationStatus =
   | 'applied'
   | 'rejected'
   | 'failed';
-export type NotificationTargetKind = 'none' | 'project' | 'thread' | 'journey';
+export type NotificationTargetKind = 'none' | 'project' | 'thread' | 'journey' | 'agent';
 
 export interface NotificationProgressDTO {
   current?: number | null;
@@ -39,6 +39,7 @@ export interface NotificationSourceDTO {
   journey_kind?: string | null;
   tool_call_id?: string | null;
   review_mode?: 'auto' | 'manual' | null;
+  agent_id?: string | null;
 }
 
 export interface NotificationTargetDTO {
@@ -46,6 +47,7 @@ export interface NotificationTargetDTO {
   project_id?: string | null;
   thread_id?: string | null;
   journey_id?: string | null;
+  agent_id?: string | null;
 }
 
 export interface NotificationDTO {

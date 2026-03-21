@@ -13,6 +13,7 @@ import { alert as showAlert } from '../../store/dialogStore';
 import { translationService } from '../../api/unifiedObjectService';
 import { bootstrapProjectRuntime } from '../../runtime/projectRuntimeBootstrap';
 import { normalizeBasicInfoData } from '../../utils/basicInfo';
+import { sortOutlineObjects } from '../../utils/outlineOrdering';
 import type { StoryEntityObject, OutlineObject } from '../../types/unifiedObject';
 
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
@@ -285,24 +286,24 @@ const UnifiedWorkspace: React.FC = () => {
           (item): item is OutlineObject => item.type === 'outline'
         );
 
-        const outlines = outlineNodes
-          .filter((item): item is OutlineObject => item.kind === 'outline')
-          .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
-        const acts = outlineNodes
-          .filter((item): item is OutlineObject => item.kind === 'act')
-          .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
-        const chapters = outlineNodes
-          .filter((item): item is OutlineObject => item.kind === 'chapter')
-          .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
+        const outlines = sortOutlineObjects(
+          outlineNodes.filter((item): item is OutlineObject => item.kind === 'outline')
+        );
+        const acts = sortOutlineObjects(
+          outlineNodes.filter((item): item is OutlineObject => item.kind === 'act')
+        );
+        const chapters = sortOutlineObjects(
+          outlineNodes.filter((item): item is OutlineObject => item.kind === 'chapter')
+        );
 
         // Build outline hierarchy: Outline > Acts > Chapters
         const outlineData = {
           outlines: outlines
             .map(outline => {
               const oData = getDataForLanguage(outline, mainLanguage);
-              const outlineActs = acts
-                .filter(act => act.metadata.parent_id === outline.id)
-                .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
+              const outlineActs = sortOutlineObjects(
+                acts.filter(act => act.metadata.parent_id === outline.id)
+              );
               return {
                 id: outline.id,
                 name: oData.name || '',
@@ -318,9 +319,9 @@ const UnifiedWorkspace: React.FC = () => {
                     content: actData.content || '',
                     position: act.metadata.position || 0,
                     parentId: act.metadata.parent_id || '',
-                    chapters: chapters
-                      .filter(ch => ch.metadata.parent_id === act.id)
-                      .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0))
+                    chapters: sortOutlineObjects(
+                      chapters.filter(ch => ch.metadata.parent_id === act.id)
+                    )
                       .map(chapter => {
                         const chapterData = getDataForLanguage(chapter, mainLanguage);
                         return {

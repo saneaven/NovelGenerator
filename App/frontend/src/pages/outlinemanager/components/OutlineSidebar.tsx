@@ -11,6 +11,7 @@ import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu'
 import { Close, Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Refresh } from '../../../components/icons';
 import { Warning } from '../../../components/icons';
 import { resolveRequestedLanguageState } from '../../../utils/requestedLanguage';
+import { sortOutlineObjects } from '../../../utils/outlineOrdering';
 import './OutlineSidebar.css';
 
 interface OutlineSidebarProps {
@@ -103,12 +104,12 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
 
   // Get outlines from store
   const outlines = useMemo(() => {
-    return Object.values(store.objects)
-      .filter(
+    return sortOutlineObjects(
+      Object.values(store.objects).filter(
         (obj): obj is OutlineObject =>
           Boolean(obj && obj.type === 'outline' && obj.kind === 'outline' && obj.metadata?.project_id === projectId)
       )
-      .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
+    );
   }, [store.objects, projectId]);
 
   const handleOutlineSelect = (outlineId: string) => {

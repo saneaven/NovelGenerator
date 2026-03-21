@@ -252,6 +252,18 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen, isClosing, handleClose]);
 
+  // Close on custom event (e.g. notification click navigating away)
+  useEffect(() => {
+    const handleForceClose = () => {
+      if (isOpen && !isClosing) {
+        handleClose();
+      }
+    };
+
+    document.addEventListener('activity-panel:close', handleForceClose);
+    return () => document.removeEventListener('activity-panel:close', handleForceClose);
+  }, [isOpen, isClosing, handleClose]);
+
   const buttonSize = position === 'mobile' ? 'md' : 'lg';
   const isMobile = position === 'mobile';
   const panel = isOpen && typeof document !== 'undefined'

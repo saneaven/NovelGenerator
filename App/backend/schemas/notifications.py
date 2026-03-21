@@ -6,7 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-NotificationSourceKind = Literal["journey", "imageRun", "system"]
+NotificationSourceKind = Literal["journey", "imageRun", "system", "agent", "subAgent"]
 NotificationStatus = Literal[
     "running",
     "waiting",
@@ -22,7 +22,7 @@ NotificationStatus = Literal[
     "rejected",
     "failed",
 ]
-NotificationTargetKind = Literal["none", "project", "thread", "journey"]
+NotificationTargetKind = Literal["none", "project", "thread", "journey", "agent"]
 
 
 class NotificationProgress(BaseModel):
@@ -47,6 +47,7 @@ class NotificationSource(BaseModel):
     journey_kind: str | None = None
     tool_call_id: str | None = None
     review_mode: str | None = None
+    agent_id: str | None = None
 
 
 class NotificationTarget(BaseModel):
@@ -54,6 +55,7 @@ class NotificationTarget(BaseModel):
     project_id: str | None = None
     thread_id: str | None = None
     journey_id: str | None = None
+    agent_id: str | None = None
 
 
 class NotificationResponse(BaseModel):

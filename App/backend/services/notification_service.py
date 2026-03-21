@@ -9,12 +9,14 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..models.db_models import (
+    Agent,
     ImageRunModel,
     Journey,
     NotificationModel,
     RunMessageModel,
     RunModel,
     RunToolCallModel,
+    SubAgentDefinitionModel,
     Thread,
 )
 from .storage_usage_service import (
@@ -34,17 +36,20 @@ from .storage_usage_service import (
     snapshot_tool_call_row,
 )
 
-NOTIFICATION_SOURCE_KIND_VALUES = {"journey", "imageRun", "system"}
+NOTIFICATION_SOURCE_KIND_VALUES = {"journey", "imageRun", "system", "agent", "subAgent"}
 JOURNEY_NOTIFICATION_STATUS_VALUES = {"running", "waiting", "processing", "paused", "done", "error", "canceled"}
 IMAGE_RUN_NOTIFICATION_STATUS_VALUES = {"queued", "running", "review", "applying", "applied", "rejected", "failed", "canceled"}
 SYSTEM_NOTIFICATION_STATUS_VALUES = {"running", "done", "error", "canceled"}
+AGENT_NOTIFICATION_STATUS_VALUES = {"running", "waiting", "processing", "paused", "done", "error", "canceled"}
 NOTIFICATION_ALLOWED_STATUSES_BY_SOURCE = {
     "journey": JOURNEY_NOTIFICATION_STATUS_VALUES,
     "imageRun": IMAGE_RUN_NOTIFICATION_STATUS_VALUES,
     "system": SYSTEM_NOTIFICATION_STATUS_VALUES,
+    "agent": AGENT_NOTIFICATION_STATUS_VALUES,
+    "subAgent": AGENT_NOTIFICATION_STATUS_VALUES,
 }
 NOTIFICATION_STATUS_VALUES = set().union(*NOTIFICATION_ALLOWED_STATUSES_BY_SOURCE.values())
-NOTIFICATION_TARGET_KIND_VALUES = {"none", "project", "thread", "journey"}
+NOTIFICATION_TARGET_KIND_VALUES = {"none", "project", "thread", "journey", "agent"}
 ACTIVE_THREAD_DELETE_STATUSES = {"running", "waiting", "processing"}
 
 
@@ -169,6 +174,17 @@ def _normalize_target_json(
             return out
         return {"kind": "none"}
 
+    if kind == "agent":
+        agent_id_value = value.get("agent_id")
+        agent_id_text = str(agent_id_value).strip() if agent_id_value is not None else None
+        if project_id_text and agent_id_text:
+            return {
+                "kind": "agent",
+                "project_id": project_id_text,
+                "agent_id": agent_id_text,
+            }
+        return {"kind": "none"}
+
     return {"kind": "none"}
 
 
@@ -261,6 +277,97 @@ def build_journey_notification_snapshot(
             "run_id": str(run.id),
             "journey_kind": journey.kind,
             "project_id": str(journey.project_id),
+        },
+        important=status in {"waiting", "error"},
+    )
+
+
+def _agent_message_for_status(*, status: str, error: str | None = None) -> str:
+    if status == "running":
+        return "Running..."
+    if status == "processing":
+        return "Applying changes..."
+    if status == "waiting":
+        return "Needs confirmation"
+    if status == "paused":
+        return "Paused"
+    if status == "done":
+        return "Completed"
+    if status == "error":
+        return error or "An error occurred"
+    if status == "canceled":
+        return "Canceled"
+    return "Running..."
+
+
+def build_agent_notification_snapshot(
+    *,
+    agent: "Agent",
+    thread: Thread,
+    run: RunModel,
+    error: str | None,
+) -> NotificationSourceSnapshot:
+    status = str(run.status or "").strip() or "running"
+    return NotificationSourceSnapshot(
+        user_id=thread.user_id,
+        project_id=agent.project_id,
+        source_kind="agent",
+        source_id=str(agent.id),
+        status=status,
+        label=str(agent.name or "").strip() or "Agent",
+        message=_agent_message_for_status(status=status, error=error),
+        warning=error if status == "error" else None,
+        progress=None,
+        custom_slot={"type": "none"},
+        target={
+            "kind": "agent",
+            "project_id": str(agent.project_id),
+            "agent_id": str(agent.id),
+        },
+        meta={
+            "agent_id": str(agent.id),
+            "thread_id": str(thread.id),
+            "run_id": str(run.id),
+            "project_id": str(agent.project_id),
+        },
+        important=status in {"waiting", "error"},
+    )
+
+
+def build_sub_agent_notification_snapshot(
+    *,
+    definition: SubAgentDefinitionModel,
+    parent_agent: Agent,
+    parent_thread_id: str,
+    parent_message_id: str,
+    thread: Thread,
+    run: RunModel,
+    error: str | None,
+) -> NotificationSourceSnapshot:
+    status = str(run.status or "").strip() or "running"
+    return NotificationSourceSnapshot(
+        user_id=thread.user_id,
+        project_id=thread.project_id,
+        source_kind="subAgent",
+        source_id=str(definition.id),
+        status=status,
+        label=str(definition.display_name or "").strip() or "Sub Agent",
+        message=_agent_message_for_status(status=status, error=error),
+        warning=error if status == "error" else None,
+        progress=None,
+        custom_slot={"type": "none"},
+        target={
+            "kind": "agent",
+            "project_id": str(thread.project_id),
+            "agent_id": str(parent_agent.id),
+        },
+        meta={
+            "agent_id": str(parent_agent.id),
+            "parent_thread_id": parent_thread_id,
+            "parent_message_id": parent_message_id,
+            "child_thread_id": str(thread.id),
+            "run_id": str(run.id),
+            "project_id": str(thread.project_id),
         },
         important=status in {"waiting", "error"},
     )
@@ -388,6 +495,14 @@ def _serialize_source_payload(*, row: NotificationModel, meta: dict[str, Any] | 
             payload["tool_call_id"] = str(meta.get("tool_call_id")).strip()
         if isinstance(meta, dict) and meta.get("review_mode"):
             payload["review_mode"] = str(meta.get("review_mode")).strip()
+    elif row.source_kind == "agent":
+        if isinstance(meta, dict) and meta.get("thread_id"):
+            payload["thread_id"] = str(meta.get("thread_id")).strip()
+        if isinstance(meta, dict) and meta.get("agent_id"):
+            payload["agent_id"] = str(meta.get("agent_id")).strip()
+    elif row.source_kind == "subAgent":
+        if isinstance(meta, dict) and meta.get("child_thread_id"):
+            payload["thread_id"] = str(meta.get("child_thread_id")).strip()
     return payload
 
 

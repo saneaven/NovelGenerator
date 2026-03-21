@@ -2,23 +2,18 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
-  TouchSensor,
   closestCenter,
   pointerWithin,
   useDroppable,
   type DragEndEvent,
   type DragStartEvent,
-  useSensor,
-  useSensors,
 } from '@dnd-kit/core';
 import {
   SortableContext,
   arrayMove,
   rectSortingStrategy,
-  sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
+import { useDndSensors } from '../../hooks/useDndSensors';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { useParams } from 'react-router-dom';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
@@ -208,22 +203,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   const [showTranslationModal, setShowTranslationModal] = useState(false);
   const [translationTargetId, setTranslationTargetId] = useState<string | undefined>(undefined);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: {
-        delay: 200,
-        tolerance: 5,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
+  const sensors = useDndSensors();
 
   const folderAwareCollision = useCallback((args: Parameters<typeof closestCenter>[0]) => {
     const activeId = String(args.active.id);

@@ -8,6 +8,7 @@ from ..database import get_db
 from ..models.db_models import User, Project, Agent, Thread
 from ..schemas.agents import AgentCreate, AgentUpdate, AgentResponse
 from ..auth import get_current_user
+from ..services.notification_service import delete_notification_source
 from ..services.storage_usage_service import (
     StorageQuotaExceededError,
     apply_project_usage_delta,
@@ -221,6 +222,12 @@ async def delete_agent(
             detail="Agent not found"
         )
 
+    delete_notification_source(
+        db,
+        user_id=current_user.id,
+        source_kind="agent",
+        source_id=agent.id,
+    )
     before = snapshot_agent_row(agent)
     db.delete(agent)
     apply_project_usage_delta(

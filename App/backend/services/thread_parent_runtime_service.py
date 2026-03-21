@@ -5,8 +5,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ..models.db_models import Journey, NotificationModel, RunModel, SubAgentDefinitionModel, Thread
-from .notification_service import build_journey_notification_snapshot, upsert_notification_source
+from ..models.db_models import Agent, Journey, NotificationModel, RunModel, RunToolCallModel, SubAgentDefinitionModel, Thread
+from .notification_service import (
+    build_agent_notification_snapshot,
+    build_journey_notification_snapshot,
+    build_sub_agent_notification_snapshot,
+    upsert_notification_source,
+)
 
 
 @dataclass(frozen=True)
@@ -78,24 +83,75 @@ def apply_parent_runtime_snapshot(
     error: str | None,
 ) -> NotificationModel | None:
     parent = resolve_parent(db, thread)
-    if parent.thread_type != "journey" or parent.journey is None:
-        return None
 
-    journey = parent.journey
-    journey.status = run.status
-    journey.last_error = error if run.status == "error" else None
+    if parent.thread_type == "journey" and parent.journey is not None:
+        journey = parent.journey
+        journey.status = run.status
+        journey.last_error = error if run.status == "error" else None
 
-    row = upsert_notification_source(
-        db,
-        snapshot=build_journey_notification_snapshot(
-            journey=journey,
-            thread=thread,
-            run=run,
-            error=error,
-        ),
-    )
-    db.flush()
-    return row
+        row = upsert_notification_source(
+            db,
+            snapshot=build_journey_notification_snapshot(
+                journey=journey,
+                thread=thread,
+                run=run,
+                error=error,
+            ),
+        )
+        db.flush()
+        return row
+
+    if parent.thread_type == "agent" and parent.agent_id is not None:
+        agent = db.query(Agent).filter(Agent.id == parent.agent_id).first()
+        if agent is None:
+            return None
+
+        row = upsert_notification_source(
+            db,
+            snapshot=build_agent_notification_snapshot(
+                agent=agent,
+                thread=thread,
+                run=run,
+                error=error,
+            ),
+        )
+        db.flush()
+        return row
+
+    if parent.thread_type == "subAgent" and parent.sub_agent_definition is not None:
+        # Find parent agent via the tool call that spawned this sub agent thread
+        parent_tc = (
+            db.query(RunToolCallModel)
+            .filter(RunToolCallModel.child_thread_id == thread.id)
+            .first()
+        )
+        if parent_tc is None:
+            return None
+
+        parent_thread = db.query(Thread).filter(Thread.id == parent_tc.thread_id).first()
+        if parent_thread is None or parent_thread.thread_type != "agent":
+            return None
+
+        parent_agent = db.query(Agent).filter(Agent.id == parent_thread.parent_id).first()
+        if parent_agent is None:
+            return None
+
+        row = upsert_notification_source(
+            db,
+            snapshot=build_sub_agent_notification_snapshot(
+                definition=parent.sub_agent_definition,
+                parent_agent=parent_agent,
+                parent_thread_id=str(parent_tc.thread_id),
+                parent_message_id=str(parent_tc.assistant_message_id) if parent_tc.assistant_message_id else "",
+                thread=thread,
+                run=run,
+                error=error,
+            ),
+        )
+        db.flush()
+        return row
+
+    return None
 
 
 def thread_runtime_fields(db: Session, thread: Thread) -> dict[str, Any]:

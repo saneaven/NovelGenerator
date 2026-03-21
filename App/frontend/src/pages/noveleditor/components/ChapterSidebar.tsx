@@ -9,6 +9,7 @@ import { BaseSidebar } from '../../../components/BaseSidebar';
 import { IconButton } from '../../../components/IconButton';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { Close, ChevronDown } from '../../../components/icons';
+import { sortOutlineObjects } from '../../../utils/outlineOrdering';
 import './ChapterSidebar.css';
 
 interface ChapterSidebarProps {
@@ -47,9 +48,6 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     return available.length > 0 ? obj.data[available[0]] : fallback;
   };
 
-  const [outlineIds, setOutlineIds] = useState<string[]>([]);
-  const [actIds, setActIds] = useState<string[]>([]);
-  const [chapterIds, setChapterIds] = useState<string[]>([]);
   const [collapsedActs, setCollapsedActs] = useState<Set<string>>(new Set());
   const [expandCount, setExpandCount] = useState<Record<string, number>>({});
 
@@ -73,41 +71,31 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     const loadOutlineData = async () => {
       if (!projectId) return;
       try {
-        const outlineItems = await store.listObjects('outline', projectId);
-        const outlines = outlineItems
-          .filter((item): item is OutlineObject => item.type === 'outline' && item.kind === 'outline')
-          .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
-        setOutlineIds(outlines.map(o => o.id));
-
-        // Auto-select first outline if none selected
-        if (outlines.length > 0 && !getSelectedOutlineId(projectId)) {
-          selectOutline(projectId, outlines[0].id);
-        }
-
-        const acts = outlineItems
-          .filter((item): item is ActObject => item.type === 'outline' && item.kind === 'act')
-          .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
-        setActIds(acts.map(a => a.id));
-
-        const chapters = outlineItems
-          .filter((item): item is ChapterObject => item.type === 'outline' && item.kind === 'chapter')
-          .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
-        setChapterIds(chapters.map(c => c.id));
-
+        await store.listObjects('outline', projectId);
         await store.listObjects('manuscript', projectId);
       } catch (error) {
         console.error('Failed to load outline data:', error);
       }
     };
     loadOutlineData();
-  }, [projectId, store, selectOutline, getSelectedOutlineId]);
+  }, [projectId, store]);
 
   // Get outlines for dropdown
   const outlines = useMemo(() => {
-    return outlineIds
-      .map(id => store.objects[id] as OutlineObject)
-      .filter(Boolean);
-  }, [outlineIds, store.objects]);
+    return sortOutlineObjects(
+      Object.values(store.objects).filter(
+        (obj): obj is OutlineObject =>
+          Boolean(obj && obj.type === 'outline' && obj.kind === 'outline' && obj.metadata?.project_id === projectId)
+      )
+    );
+  }, [projectId, store.objects]);
+
+  useEffect(() => {
+    if (outlines.length === 0) return;
+    if (!selectedOutlineId || !outlines.some((outline) => outline.id === selectedOutlineId)) {
+      selectOutline(projectId, outlines[0].id);
+    }
+  }, [outlines, projectId, selectOutline, selectedOutlineId]);
 
   // Get selected outline
   const selectedOutline = useMemo(() => {
@@ -116,22 +104,32 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   }, [outlines, selectedOutlineId]);
 
   const { acts, chaptersByAct } = useMemo(() => {
-    const loadedActs = actIds
-      .map(id => store.objects[id] as ActObject)
-      .filter(Boolean)
-      // Filter acts by selected outline
-      .filter(act => !selectedOutlineId || act.metadata.parent_id === selectedOutlineId);
-    const loadedChapters = chapterIds.map(id => store.objects[id] as ChapterObject).filter(Boolean);
+    const loadedActs = sortOutlineObjects(
+      Object.values(store.objects).filter(
+        (obj): obj is ActObject =>
+          Boolean(
+            obj
+            && obj.type === 'outline'
+            && obj.kind === 'act'
+            && obj.metadata?.project_id === projectId
+            && (!selectedOutlineId || obj.metadata.parent_id === selectedOutlineId)
+          )
+      )
+    );
+    const loadedChapters = sortOutlineObjects(
+      Object.values(store.objects).filter(
+        (obj): obj is ChapterObject =>
+          Boolean(obj && obj.type === 'outline' && obj.kind === 'chapter' && obj.metadata?.project_id === projectId)
+      )
+    );
 
     const grouped = loadedActs.reduce((acc, act) => {
-      acc[act.id] = loadedChapters
-        .filter(c => c.metadata.parent_id === act.id)
-        .sort((a, b) => (a.metadata.position || 0) - (b.metadata.position || 0));
+      acc[act.id] = loadedChapters.filter(c => c.metadata.parent_id === act.id);
       return acc;
     }, {} as Record<string, ChapterObject[]>);
 
     return { acts: loadedActs, chaptersByAct: grouped };
-  }, [actIds, chapterIds, store.objects, selectedOutlineId]);
+  }, [projectId, store.objects, selectedOutlineId]);
 
   // Get selected outline name
   const selectedOutlineName = selectedOutline

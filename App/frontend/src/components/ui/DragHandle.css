@@ -55,3 +55,34 @@
   min-height: 100%;
   border-radius: 999px;
 }
+
+/* Long-press visual feedback for touch */
+@keyframes dragHandleFill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes dragHandleFillVertical {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+.drag-handle.is-touch-pending .drag-handle__indicator {
+  position: relative;
+  overflow: hidden;
+}
+
+.drag-handle.is-touch-pending .drag-handle__indicator::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--color-brand-primary);
+  border-radius: inherit;
+  transform-origin: left center;
+  animation: dragHandleFill 500ms linear forwards;
+}
+
+.drag-handle--vertical.is-touch-pending .drag-handle__indicator::after {
+  transform-origin: center bottom;
+  animation-name: dragHandleFillVertical;
+}

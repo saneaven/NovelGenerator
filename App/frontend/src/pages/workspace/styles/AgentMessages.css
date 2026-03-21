@@ -430,12 +430,12 @@
     animation: fadeInUp var(--transition-base) ease-out;
 }
 
-.scroll-to-bottom-button:hover {
+.scroll-to-bottom-button.scroll-to-bottom-button:hover {
     transform: translateX(-50%) translateY(-2px);
     box-shadow: var(--shadow-lg);
 }
 
-.scroll-to-bottom-button:active {
+.scroll-to-bottom-button.scroll-to-bottom-button:active {
     transform: translateX(-50%) translateY(0);
 }
 

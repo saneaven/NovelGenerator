@@ -109,6 +109,34 @@ class FakeSession:
         return FakeQuery()
 
 
+class FakeFirstQuery:
+    def __init__(self, row: object | None) -> None:
+        self._row = row
+
+    def filter(self, *_args: object, **_kwargs: object) -> "FakeFirstQuery":
+        return self
+
+    def first(self) -> object | None:
+        return self._row
+
+
+class FakeCreateSession:
+    def __init__(self, project: object) -> None:
+        self.project = project
+        self.added: list[object] = []
+
+    def query(self, model: object) -> FakeFirstQuery:
+        if model is object_service_module.Project:
+            return FakeFirstQuery(self.project)
+        return FakeFirstQuery(None)
+
+    def add(self, obj: object) -> None:
+        self.added.append(obj)
+
+    def flush(self) -> None:
+        return None
+
+
 def test_update_object_manuscript_path_uses_manuscript_image_model(monkeypatch) -> None:
     db = FakeSession()
     project_id = uuid4()
@@ -253,4 +281,157 @@ def test_update_object_structure_story_entity_folder_skips_versioning(monkeypatc
             "object_id": object_id,
             "action": "updated",
         }
+    ]
+
+
+def test_create_outline_queues_updated_events_for_affected_siblings(monkeypatch) -> None:
+    project_id = uuid4()
+    project_user_id = uuid4()
+    sibling_id = uuid4()
+    db = FakeCreateSession(SimpleNamespace(id=project_id, user_id=project_user_id))
+
+    queue_calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(object_service_module, "resolve_outline_parent", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(object_service_module, "insert_outline_position", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(object_service_module, "_queue_semantic_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        object_service_module,
+        "collect_affected_outline_rows",
+        lambda *_args, **_kwargs: [
+            db.added[0],
+            SimpleNamespace(id=sibling_id),
+        ],
+    )
+    monkeypatch.setattr(
+        object_service_module,
+        "queue_object_change",
+        lambda *_args, **kwargs: queue_calls.append(kwargs),
+    )
+    monkeypatch.setattr(
+        object_service_module,
+        "_serialize_object",
+        lambda _db, _storage_type, obj, _language=None: {"id": str(obj.id), "type": "outline"},
+    )
+
+    result = object_service_module.object_service.create_object(
+        db,
+        project_id=project_id,
+        object_type="outline",
+        data={"name": "Outline", "description": "", "content": ""},
+        language="English",
+        kind="outline",
+        created_by=None,
+    )
+
+    assert result["type"] == "outline"
+    assert queue_calls[0]["action"] == "created"
+    assert queue_calls[0]["object_type"] == "outline"
+    assert queue_calls[0]["object_id"] == db.added[0].id
+    assert queue_calls[1:] == [
+        {
+            "user_id": project_user_id,
+            "project_id": project_id,
+            "object_type": "outline",
+            "object_id": sibling_id,
+            "action": "updated",
+        }
+    ]
+
+
+def test_update_outline_structure_queues_updated_events_for_affected_siblings(monkeypatch) -> None:
+    db = FakeSession()
+    project_id = uuid4()
+    object_id = uuid4()
+    user_id = uuid4()
+    old_parent_id = uuid4()
+    new_parent_id = uuid4()
+    sibling_a_id = uuid4()
+    sibling_b_id = uuid4()
+
+    outline_before = SimpleNamespace(
+        id=object_id,
+        project_id=project_id,
+        kind="chapter",
+        parent_id=old_parent_id,
+        updated_at=None,
+    )
+    outline_after = SimpleNamespace(
+        id=object_id,
+        project_id=project_id,
+        kind="chapter",
+        parent_id=new_parent_id,
+        updated_at=None,
+    )
+
+    load_calls = {"count": 0}
+    queue_calls: list[dict[str, object]] = []
+
+    def fake_load(*_args: object, **_kwargs: object) -> object:
+        load_calls["count"] += 1
+        return outline_before if load_calls["count"] == 1 else outline_after
+
+    monkeypatch.setattr(object_service_module, "_load_owned_object", fake_load)
+    monkeypatch.setattr(object_service_module, "_handle_metadata_update", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        object_service_module,
+        "_serialize_object",
+        lambda *_args, **_kwargs: {
+            "id": str(object_id),
+            "type": "outline",
+            "data": {"English": {"name": "Chapter", "description": "", "content": ""}},
+        },
+    )
+    monkeypatch.setattr(object_service_module, "_create_or_update_version", lambda *_args, **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(object_service_module, "_invalidate_semantic_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(object_service_module, "_queue_semantic_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        object_service_module,
+        "collect_affected_outline_rows",
+        lambda *_args, **_kwargs: [
+            SimpleNamespace(id=sibling_a_id),
+            outline_after,
+            SimpleNamespace(id=sibling_b_id),
+        ],
+    )
+    monkeypatch.setattr(
+        object_service_module,
+        "queue_object_change",
+        lambda *_args, **kwargs: queue_calls.append(kwargs),
+    )
+
+    result = object_service_module.object_service.update_object(
+        db,
+        project_id=project_id,
+        object_type="outline",
+        object_id=object_id,
+        data={},
+        language="English",
+        metadata={"parent_id": str(new_parent_id), "position": 0},
+        created_by=user_id,
+    )
+
+    assert result["type"] == "outline"
+    assert queue_calls == [
+        {
+            "user_id": user_id,
+            "project_id": project_id,
+            "object_type": "outline",
+            "object_id": sibling_a_id,
+            "action": "updated",
+        },
+        {
+            "user_id": user_id,
+            "project_id": project_id,
+            "object_type": "outline",
+            "object_id": object_id,
+            "action": "updated",
+        },
+        {
+            "user_id": user_id,
+            "project_id": project_id,
+            "object_type": "outline",
+            "object_id": sibling_b_id,
+            "action": "updated",
+        },
     ]

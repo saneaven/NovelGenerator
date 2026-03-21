@@ -39,30 +39,15 @@
   padding: 4px 0 0 0;
 }
 
-.scenario-block-card__drag-bar {
+.scenario-block-card__drag-row .drag-handle {
   flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 4px 0;
-  cursor: grab;
 }
 
-.scenario-block-card.is-pinned .scenario-block-card__drag-bar {
-  cursor: not-allowed;
-  opacity: 0.35;
-}
-
-.scenario-block-card__drag-bar-indicator {
-  display: block;
-  width: 36px;
-  height: 4px;
-  border-radius: 2px;
+.scenario-block-card__drag-row .drag-handle__indicator {
   background: var(--color-border-medium);
-  transition: background 0.15s;
 }
 
-.scenario-block-card__drag-bar:hover .scenario-block-card__drag-bar-indicator {
+.scenario-block-card__drag-row .drag-handle:not(.is-disabled):hover .drag-handle__indicator {
   background: var(--color-border-strong);
 }
 

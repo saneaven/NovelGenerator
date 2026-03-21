@@ -106,11 +106,17 @@ const LanguageDropdown: React.FC<LanguageDropdownProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
+  // Close on scroll (only when an ancestor of the trigger scrolls)
   useEffect(() => {
     if (!isOpen) return undefined;
 
-    const handleScroll = () => {
-      setIsOpen(false);
+    const handleScroll = (e: Event) => {
+      const scrollTarget = e.target;
+      if (panelRef.current?.contains(scrollTarget as Node)) return;
+      if (scrollTarget instanceof Node && triggerRef.current
+        && (scrollTarget.contains(triggerRef.current) || scrollTarget === document)) {
+        setIsOpen(false);
+      }
     };
 
     window.addEventListener('scroll', handleScroll, true);

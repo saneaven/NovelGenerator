@@ -41,6 +41,40 @@ def list_outline_siblings(
     return query.all()
 
 
+def collect_affected_outline_rows(
+    db: Session,
+    *,
+    project_id: UUID,
+    parent_ids: Iterable[UUID | None],
+    include_ids: Iterable[UUID] = (),
+) -> list[Outline]:
+    rows: list[Outline] = []
+    seen_ids: set[UUID] = set()
+
+    for parent_id in parent_ids:
+        siblings = list_outline_siblings(db, project_id=project_id, parent_id=parent_id)
+        for sibling in siblings:
+            if sibling.id in seen_ids:
+                continue
+            rows.append(sibling)
+            seen_ids.add(sibling.id)
+
+    for outline_id in include_ids:
+        if outline_id in seen_ids:
+            continue
+        row = (
+            db.query(Outline)
+            .filter(Outline.project_id == project_id, Outline.id == outline_id)
+            .first()
+        )
+        if row is None or row.id in seen_ids:
+            continue
+        rows.append(row)
+        seen_ids.add(row.id)
+
+    return rows
+
+
 def normalize_outline_positions(
     db: Session,
     *,
