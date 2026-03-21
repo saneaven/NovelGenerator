@@ -92,24 +92,44 @@ def test_default_prompt_outline_and_manuscript_fragments_include_number_attribut
     translation_context = document["fragments"]["translation"]["objectContext"]["content"]
     translation_reference = document["fragments"]["translation"]["referenceContext"]["content"]
 
-    # common fragments use tree-based rendering with node variable
+    # common fragments use tree-based rendering, so outline numbering is emitted directly
     for fragment in (common_context, common_index):
         assert 'act-number="{{ node.actNumber|e }}"' in fragment
         assert 'chapter-number="{{ node.chapterNumber|e }}"' in fragment
+        assert 'node.actNumber is defined' not in fragment
+        assert 'node.chapterNumber is defined' not in fragment
+        assert 'node.actNumber is not none' not in fragment
+        assert 'node.chapterNumber is not none' not in fragment
 
-    # translation fragments use exact/flat rendering with item variable
+    # translation fragments use exact/flat rendering, so None guards remain but defined guards do not
     for fragment in (translation_context, translation_reference):
         assert 'act-number="{{ item.actNumber|e }}"' in fragment
         assert 'chapter-number="{{ item.chapterNumber|e }}"' in fragment
+        assert 'item.actNumber is defined' not in fragment
+        assert 'item.chapterNumber is defined' not in fragment
+        assert 'item.actNumber is not none' in fragment
+        assert 'item.chapterNumber is not none' in fragment
 
     for fragment in (common_context, common_index):
         assert 'act-number="{{ manuscript.actNumber|e }}"' in fragment
         assert 'chapter-number="{{ manuscript.chapterNumber|e }}"' in fragment
+        assert 'manuscript.actNumber is defined' not in fragment
+        assert 'manuscript.chapterNumber is defined' not in fragment
+        assert 'manuscript.actNumber is not none' in fragment
+        assert 'manuscript.chapterNumber is not none' in fragment
 
     # translation objectContext uses manuscript variable
     assert 'act-number="{{ manuscript.actNumber|e }}"' in translation_context
     assert 'chapter-number="{{ manuscript.chapterNumber|e }}"' in translation_context
+    assert 'manuscript.actNumber is defined' not in translation_context
+    assert 'manuscript.chapterNumber is defined' not in translation_context
+    assert 'manuscript.actNumber is not none' in translation_context
+    assert 'manuscript.chapterNumber is not none' in translation_context
 
     # translation referenceContext uses this variable
     assert 'act-number="{{ this.actNumber|e }}"' in translation_reference
     assert 'chapter-number="{{ this.chapterNumber|e }}"' in translation_reference
+    assert 'this.actNumber is defined' not in translation_reference
+    assert 'this.chapterNumber is defined' not in translation_reference
+    assert 'this.actNumber is not none' in translation_reference
+    assert 'this.chapterNumber is not none' in translation_reference
