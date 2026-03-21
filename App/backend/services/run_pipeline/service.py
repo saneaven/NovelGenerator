@@ -986,6 +986,21 @@ class RunPipeline:
                 raise
         except Exception as exc:  # noqa: BLE001
             logger.error("Run %s failed: %s", run_id, exc, exc_info=True)
+            # Fail any open LLM log before rollback (uses its own session)
+            if assistant_message_state.llm_log_id is not None:
+                try:
+                    import time as _time
+                    from ..llm_log_service import llm_log_service
+                    _elapsed = int((_time.monotonic() - (assistant_message_state.llm_log_start or 0)) * 1000)
+                    llm_log_service.fail_log(
+                        assistant_message_state.llm_log_id,
+                        raw_output=None,
+                        error=str(exc),
+                        meta={"response_time_ms": _elapsed},
+                    )
+                    assistant_message_state.llm_log_id = None
+                except Exception:
+                    logger.warning("LLM log fail_log in error handler failed", exc_info=True)
             db.rollback()
             user_error = _format_user_run_error(exc)
             run = db.query(RunModel).filter(RunModel.id == run_id).first()

@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from .registry import ToolRegistry, registered_module_factories
-from .modules import call_module, create_module, delete_module, generate_module, mcp_module, patch_module, patch_translation_module, read_module, replace_module, search_module, translate_module
+from .modules import call_module, create_module, delete_module, generate_module, mcp_module, patch_module, patch_translation_module, read_module, replace_module, search_module, translate_module, tree_module
 
 
 def build_registry() -> ToolRegistry:
@@ -19,6 +19,7 @@ def build_registry() -> ToolRegistry:
         replace_module,
         search_module,
         translate_module,
+        tree_module,
     )
     registry = ToolRegistry()
     for factory in registered_module_factories():

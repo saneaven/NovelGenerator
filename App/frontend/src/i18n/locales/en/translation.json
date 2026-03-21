@@ -304,7 +304,8 @@
       "storageCategoryManuscripts": "Manuscripts",
       "storageCategoryChat": "Chat",
       "storageCategoryNotifications": "Notifications",
-      "storageCategoryImageRuns": "Image runs"
+      "storageCategoryImageRuns": "Image runs",
+      "storageCategoryLLMLogs": "LLM logs"
     },
     "theme": {
       "title": "Theme Settings",
@@ -499,7 +500,17 @@
       },
       "llmLogging": {
         "title": "LLM Request Logging",
-        "description": "Debug LLM requests and responses. Logs are stored in memory and cleared on page refresh."
+        "enable": "Enable LLM request logging",
+        "hint": "When enabled, all LLM requests and responses are logged to the database for debugging. Logs count toward your storage quota.",
+        "viewLogs": "View Logs",
+        "viewerTitle": "LLM Request Logs",
+        "refresh": "Refresh",
+        "totalLogs": "{{count}} logs",
+        "clearAll": "Clear All",
+        "clearConfirmTitle": "Clear All Logs",
+        "clearConfirmMessage": "Are you sure you want to delete all LLM logs? This action cannot be undone.",
+        "noLogs": "No logs yet. Enable logging and make an LLM request to see logs here.",
+        "loadMore": "Load More"
       }
     },
     "imageGen": {

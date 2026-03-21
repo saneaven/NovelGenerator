@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any, Awaitable, Callable
 
 from sqlalchemy.orm import Session
@@ -46,6 +48,9 @@ from .contracts import AssistantMessageExecutionState, ToolDeltaState
 from .text_utils import extract_last_texts
 from . import memory_preflight as _mem
 from . import raw_output as _raw
+from ..llm_log_service import llm_log_service
+
+_llm_log_logger = logging.getLogger(__name__)
 
 EmitFn = Callable[..., Awaitable[None]]
 PersistToolCallsFn = Callable[..., Awaitable[list[RunToolCallModel]]]
@@ -488,6 +493,33 @@ async def run_llm(
 
     retry_cfg = normalize_retry_config(settings_service.get_retry_config(db, run.user_id))
 
+    # --- LLM logging state ---
+    _llm_logging_enabled = bool(getattr(settings, "llm_logging_enabled", False))
+    _llm_log_id: Any = None  # UUID | None
+    _llm_log_start: float | None = None
+
+    def _fail_llm_log(error_msg: str) -> None:
+        """Fail the open LLM log with partial data.  Safe to call unconditionally."""
+        nonlocal _llm_log_id
+        if not _llm_logging_enabled or _llm_log_id is None:
+            return
+        try:
+            _elapsed = int((time.monotonic() - (_llm_log_start or 0)) * 1000)
+            partial: dict[str, Any] | None = None
+            if assembler._content_parts:
+                partial = {"content_parts": assembler._content_parts}
+                if merged_meta and merged_meta.usage:
+                    partial["usage"] = merged_meta.usage
+            llm_log_service.fail_log(
+                _llm_log_id,
+                raw_output=partial,
+                error=error_msg,
+                meta={"response_time_ms": _elapsed},
+            )
+            _llm_log_id = None
+        except Exception:
+            _llm_log_logger.warning("LLM log fail_log failed", exc_info=True)
+
     def _create_stream():
         return provider.stream_chat(
             messages=provider_messages,
@@ -510,149 +542,196 @@ async def run_llm(
     content_normalizer = StreamContentNormalizer()
     native_final = None
     merged_meta: MetaPayload | None = None
+    # NOTE: The try block below covers streaming + snapshot finalization.
+    # LLM log is closed (complete or fail) within this block so that
+    # post-stream processing errors don't affect the log.
     raw_response: dict[str, Any] | None = None
 
     delta_state_by_key: dict[str, ToolDeltaState] = {}
     state_key_by_index: dict[int, str] = {}
     anonymous_tool_call_counter = 0
 
-    async for event in stream:
-        if event.raw_request is not None:
-            await emit_fn(
-                user_id=run.user_id,
-                project_id=run.project_id,
-                thread_id=thread.id,
-                event_name="llm:request",
-                data={
-                    "run_id": str(run.id),
-                    "message_id": str(assistant_message.id),
-                    "provider": task_config.provider,
-                    "model": task_config.model,
-                    "raw_request": event.raw_request,
-                },
-            )
-            continue
-        if event.raw_response is not None:
-            raw_response = event.raw_response
-        if event.kind == "delta" and event.delta is not None:
-            delta: DeltaPayload = content_normalizer.normalize_delta(event.delta)
-            assembler.apply_delta(delta)
-            if not has_effective_delta(delta):
+    try:
+        async for event in stream:
+            if event.raw_request is not None:
+                # --- LLM logging: create or reset on retry ---
+                if _llm_logging_enabled:
+                    try:
+                        if _llm_log_id is None:
+                            _llm_log_start = time.monotonic()
+                            _llm_log_id = llm_log_service.create_log(
+                                user_id=run.user_id,
+                                project_id=run.project_id,
+                                provider=task_config.provider,
+                                model=task_config.model,
+                                raw_input=event.raw_request,
+                            )
+                        else:
+                            # Retry attempt: reset existing log with new request
+                            llm_log_service.reset_log(_llm_log_id, raw_input=event.raw_request)
+                            _llm_log_start = time.monotonic()
+                        # Expose to service.py for error handling
+                        assistant_message_state_out.llm_log_id = _llm_log_id
+                        assistant_message_state_out.llm_log_start = _llm_log_start
+                    except Exception:
+                        _llm_log_logger.warning("LLM log create/reset failed", exc_info=True)
+                await emit_fn(
+                    user_id=run.user_id,
+                    project_id=run.project_id,
+                    thread_id=thread.id,
+                    event_name="llm:request",
+                    data={
+                        "run_id": str(run.id),
+                        "message_id": str(assistant_message.id),
+                        "provider": task_config.provider,
+                        "model": task_config.model,
+                        "raw_request": event.raw_request,
+                    },
+                )
                 continue
-
-            if delta.content_delta:
-                await emit_fn(
-                    user_id=run.user_id,
-                    project_id=run.project_id,
-                    thread_id=thread.id,
-                    event_name="content:delta",
-                    data={
-                        "run_id": str(run.id),
-                        "message_id": str(assistant_message.id),
-                        "text": delta.content_delta,
-                    },
-                )
-
-            if thinking_mode != "off" and delta.thinking_delta and stream_thinking_display:
-                await emit_fn(
-                    user_id=run.user_id,
-                    project_id=run.project_id,
-                    thread_id=thread.id,
-                    event_name="thinking:delta",
-                    data={
-                        "run_id": str(run.id),
-                        "message_id": str(assistant_message.id),
-                        "text": delta.thinking_delta,
-                        "thinking_display": stream_thinking_display,
-                    },
-                )
-
-            for tc_delta in delta.tool_call_deltas:
-                if not isinstance(tc_delta, dict):
+            if event.raw_response is not None:
+                raw_response = event.raw_response
+            if event.kind == "delta" and event.delta is not None:
+                delta: DeltaPayload = content_normalizer.normalize_delta(event.delta)
+                assembler.apply_delta(delta)
+                if not has_effective_delta(delta):
                     continue
-                stream_key, llm_call_id, idx, anonymous_tool_call_counter = _resolve_stream_key(
-                    tc_delta,
-                    delta_state_by_key=delta_state_by_key,
-                    state_key_by_index=state_key_by_index,
-                    anonymous_counter=anonymous_tool_call_counter,
-                )
-                state = delta_state_by_key.get(stream_key)
-                if state is None:
-                    state = ToolDeltaState(
-                        stream_key=stream_key,
-                        llm_call_id=llm_call_id,
-                        name="",
-                        raw_arguments="",
-                        index=idx,
+
+                if delta.content_delta:
+                    await emit_fn(
+                        user_id=run.user_id,
+                        project_id=run.project_id,
+                        thread_id=thread.id,
+                        event_name="content:delta",
+                        data={
+                            "run_id": str(run.id),
+                            "message_id": str(assistant_message.id),
+                            "text": delta.content_delta,
+                        },
                     )
-                    delta_state_by_key[stream_key] = state
+
+                if thinking_mode != "off" and delta.thinking_delta and stream_thinking_display:
+                    await emit_fn(
+                        user_id=run.user_id,
+                        project_id=run.project_id,
+                        thread_id=thread.id,
+                        event_name="thinking:delta",
+                        data={
+                            "run_id": str(run.id),
+                            "message_id": str(assistant_message.id),
+                            "text": delta.thinking_delta,
+                            "thinking_display": stream_thinking_display,
+                        },
+                    )
+
+                for tc_delta in delta.tool_call_deltas:
+                    if not isinstance(tc_delta, dict):
+                        continue
+                    stream_key, llm_call_id, idx, anonymous_tool_call_counter = _resolve_stream_key(
+                        tc_delta,
+                        delta_state_by_key=delta_state_by_key,
+                        state_key_by_index=state_key_by_index,
+                        anonymous_counter=anonymous_tool_call_counter,
+                    )
+                    state = delta_state_by_key.get(stream_key)
+                    if state is None:
+                        state = ToolDeltaState(
+                            stream_key=stream_key,
+                            llm_call_id=llm_call_id,
+                            name="",
+                            raw_arguments="",
+                            index=idx,
+                        )
+                        delta_state_by_key[stream_key] = state
+                        if idx is not None:
+                            state_key_by_index[idx] = stream_key
+                        await emit_fn(
+                            user_id=run.user_id,
+                            project_id=run.project_id,
+                            thread_id=thread.id,
+                            event_name="tool_call:start",
+                            data={
+                                "run_id": str(run.id),
+                                "stream_key": stream_key,
+                                "tool_call_id": llm_call_id,
+                                "message_id": "",
+                                "assistant_message_id": str(assistant_message.id),
+                                "index": idx,
+                                "name": "",
+                            },
+                        )
+
+                    state.stream_key = stream_key
+                    state.llm_call_id = llm_call_id
                     if idx is not None:
+                        state.index = idx
                         state_key_by_index[idx] = stream_key
-                    await emit_fn(
-                        user_id=run.user_id,
-                        project_id=run.project_id,
-                        thread_id=thread.id,
-                        event_name="tool_call:start",
-                        data={
-                            "run_id": str(run.id),
-                            "stream_key": stream_key,
-                            "tool_call_id": llm_call_id,
-                            "message_id": "",
-                            "assistant_message_id": str(assistant_message.id),
-                            "index": idx,
-                            "name": "",
-                        },
-                    )
 
-                state.stream_key = stream_key
-                state.llm_call_id = llm_call_id
-                if idx is not None:
-                    state.index = idx
-                    state_key_by_index[idx] = stream_key
+                    fn = tc_delta.get("function") if isinstance(tc_delta.get("function"), dict) else {}
+                    if isinstance(fn.get("name"), str):
+                        state.name = fn["name"]
+                    if isinstance(fn.get("arguments"), str):
+                        state.raw_arguments += fn["arguments"]
+                        await emit_fn(
+                            user_id=run.user_id,
+                            project_id=run.project_id,
+                            thread_id=thread.id,
+                            event_name="tool_call:delta",
+                            data={
+                                "run_id": str(run.id),
+                                "stream_key": stream_key,
+                                "tool_call_id": state.llm_call_id,
+                                "index": idx,
+                                "name": state.name,
+                                "arguments_delta": fn["arguments"],
+                            },
+                        )
 
-                fn = tc_delta.get("function") if isinstance(tc_delta.get("function"), dict) else {}
-                if isinstance(fn.get("name"), str):
-                    state.name = fn["name"]
-                if isinstance(fn.get("arguments"), str):
-                    state.raw_arguments += fn["arguments"]
-                    await emit_fn(
-                        user_id=run.user_id,
-                        project_id=run.project_id,
-                        thread_id=thread.id,
-                        event_name="tool_call:delta",
-                        data={
-                            "run_id": str(run.id),
-                            "stream_key": stream_key,
-                            "tool_call_id": state.llm_call_id,
-                            "index": idx,
-                            "name": state.name,
-                            "arguments_delta": fn["arguments"],
-                        },
-                    )
+            elif event.kind == "meta" and event.meta is not None:
+                assembler.apply_meta(event.meta)
+                merged_meta = merge_meta_payload(merged_meta, event.meta)
+            elif event.kind == "final_native" and event.final_native is not None:
+                native_final = event.final_native
+            elif event.kind == "error":
+                err: ProviderErrorPayload = event.error or ProviderErrorPayload(message="Unknown provider error", status=None)
+                _fail_llm_log(err.message)
+                raise RuntimeError(err.message)
 
-        elif event.kind == "meta" and event.meta is not None:
-            assembler.apply_meta(event.meta)
-            merged_meta = merge_meta_payload(merged_meta, event.meta)
-        elif event.kind == "final_native" and event.final_native is not None:
-            native_final = event.final_native
-        elif event.kind == "error":
-            err: ProviderErrorPayload = event.error or ProviderErrorPayload(message="Unknown provider error", status=None)
-            raise RuntimeError(err.message)
+        if hasattr(stream, "aclose"):
+            await stream.aclose()
+    except Exception as _stream_exc:
+        _fail_llm_log(str(_stream_exc))
+        raise
 
-    if hasattr(stream, "aclose"):
-        await stream.aclose()
+    try:
+        if native_final is not None:
+            final_snapshot = patch_snapshot_with_meta(native_final, merged_meta)
+        else:
+            final_snapshot = assembler.finalize_or_raise()
 
-    if native_final is not None:
-        final_snapshot = patch_snapshot_with_meta(native_final, merged_meta)
-    else:
-        final_snapshot = assembler.finalize_or_raise()
+        if raw_response is not None and final_snapshot.raw_native_response is None:
+            final_snapshot.raw_native_response = raw_response
 
-    if raw_response is not None and final_snapshot.raw_native_response is None:
-        final_snapshot.raw_native_response = raw_response
+        if native_tool_call_mode:
+            final_snapshot = extract_native_tool_calls_from_snapshot(final_snapshot)
+        final_snapshot = normalize_final_snapshot_content(final_snapshot)
+    except Exception as _finalize_exc:
+        _fail_llm_log(str(_finalize_exc))
+        raise
 
-    if native_tool_call_mode:
-        final_snapshot = extract_native_tool_calls_from_snapshot(final_snapshot)
-    final_snapshot = normalize_final_snapshot_content(final_snapshot)
+    # --- LLM logging: mark success right after stream finalize ---
+    if _llm_logging_enabled and _llm_log_id is not None:
+        try:
+            _elapsed = int((time.monotonic() - (_llm_log_start or 0)) * 1000)
+            llm_log_service.complete_log(
+                _llm_log_id,
+                raw_output=final_snapshot.raw_native_response or raw_response,
+                meta={"response_time_ms": _elapsed},
+            )
+            _llm_log_id = None  # prevent double-close in error handler
+            assistant_message_state_out.llm_log_id = None
+        except Exception:
+            _llm_log_logger.warning("LLM log complete failed", exc_info=True)
 
     if output_mode == "raw_output" and final_snapshot.tool_calls:
         raise RuntimeError("Raw output mode cannot include tool calls")

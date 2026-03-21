@@ -504,6 +504,7 @@ class ProjectStorageUsage(Base):
     notification_bytes = Column(BigInteger, nullable=False, default=0)
     image_run_bytes = Column(BigInteger, nullable=False, default=0)
     image_bytes = Column(BigInteger, nullable=False, default=0)
+    llm_log_bytes = Column(BigInteger, nullable=False, default=0)
     total_bytes = Column(BigInteger, nullable=False, default=0)
     needs_reconcile = Column(Boolean, nullable=False, default=False, server_default=sa_text("false"))
     last_reconciled_at = Column(DateTime, nullable=True)
@@ -1258,4 +1259,30 @@ class ManuscriptImage(Base):
     __table_args__ = (
         Index("ix_manuscript_images_manuscript_id_language", "manuscript_id", "language"),
         Index("ix_manuscript_images_asset_id", "asset_id"),
+    )
+
+
+# ============================================================================
+# LLM LOGGING
+# ============================================================================
+
+class LLMLog(Base):
+    """Persisted LLM request/response log entry."""
+    __tablename__ = "llm_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    provider = Column(String(50), nullable=False)
+    model = Column(String(200), nullable=False)
+    raw_input = Column(JSONB, nullable=False)
+    raw_output = Column(JSONB, nullable=True)
+    error = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+    meta = Column(JSONB, nullable=True)
+
+    __table_args__ = (
+        Index("ix_llm_logs_user_created", "user_id", created_at.desc()),
     )

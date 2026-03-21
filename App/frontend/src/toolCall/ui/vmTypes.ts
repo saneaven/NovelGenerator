@@ -10,7 +10,8 @@ export type OperationCategory =
   | 'patch_translation'
   | 'search'
   | 'call'
-  | 'generate';
+  | 'generate'
+  | 'get';
 
 export type ObjectType =
   | 'story_entity_folder'

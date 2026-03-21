@@ -304,7 +304,8 @@
       "storageCategoryManuscripts": "원고",
       "storageCategoryChat": "채팅",
       "storageCategoryNotifications": "알림",
-      "storageCategoryImageRuns": "이미지 실행"
+      "storageCategoryImageRuns": "이미지 실행",
+      "storageCategoryLLMLogs": "LLM 로그"
     },
     "theme": {
       "title": "테마 설정",
@@ -499,7 +500,17 @@
       },
       "llmLogging": {
         "title": "LLM 요청 로깅",
-        "description": "LLM 요청 및 응답을 디버그합니다. 로그는 메모리에 저장되며 페이지 새로고침 시 삭제됩니다."
+        "enable": "LLM 요청 로깅 활성화",
+        "hint": "활성화하면 모든 LLM 요청 및 응답이 데이터베이스에 기록됩니다. 로그는 저장 용량에 포함됩니다.",
+        "viewLogs": "로그 보기",
+        "viewerTitle": "LLM 요청 로그",
+        "refresh": "새로고침",
+        "totalLogs": "{{count}}개 로그",
+        "clearAll": "전체 삭제",
+        "clearConfirmTitle": "전체 로그 삭제",
+        "clearConfirmMessage": "모든 LLM 로그를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+        "noLogs": "아직 로그가 없습니다. 로깅을 활성화하고 LLM 요청을 하면 여기에 로그가 표시됩니다.",
+        "loadMore": "더 보기"
       }
     },
     "imageGen": {

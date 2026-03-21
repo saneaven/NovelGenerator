@@ -19,6 +19,7 @@ import AdvancedPanel from './AdvancedPanel';
 import ImageGenPanel from './ImageGenPanel';
 import ProfilePanel from './ProfilePanel';
 import SearchMemoryPanel from './SearchMemoryPanel';
+import LLMLogViewer from './LLMLogViewer';
 import { SettingsToastProvider, type SettingsToastApi, type SettingsToastKind } from './SettingsToastContext';
 import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu, People, List, Star } from '../icons';
 import { TextButton } from '../TextButton';
@@ -133,6 +134,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [hasMountedPromptsPanel, setHasMountedPromptsPanel] = useState(false);
   const [promptsPanelKey, setPromptsPanelKey] = useState(0);
   const [toast, setToast] = useState<{ kind: SettingsToastKind; message: string } | null>(null);
+  const [showLlmLogViewer, setShowLlmLogViewer] = useState(false);
   const toastTimeoutRef = useRef<number | null>(null);
   const [mainTab, setMainTab] = useState<MainTab>('profile');
   const [activeGeneralTarget, setActiveGeneralTarget] = useState<GeneralConfigTarget>('general');
@@ -1012,11 +1014,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             onToolCallAutoApproveChange={(config) =>
               setLocalSettings(prev => ({ ...prev, toolCallAutoApprove: config }))
             }
+            llmLoggingEnabled={localSettings.llmLoggingEnabled}
+            onLlmLoggingEnabledChange={(enabled) =>
+              setLocalSettings(prev => ({ ...prev, llmLoggingEnabled: enabled }))
+            }
+            onViewLlmLogs={() => setShowLlmLogViewer(true)}
           />
         )}
         </div>
       </div>
       </BaseModal>
+
+    {showLlmLogViewer && (
+      <LLMLogViewer onClose={() => setShowLlmLogViewer(false)} />
+    )}
 
     </SettingsToastProvider>
   );

@@ -54,6 +54,12 @@ function formatProjectStorageDetails(
       value: formatBytes(project.categories.image_run_bytes),
       bytes: project.categories.image_run_bytes,
     },
+    {
+      id: 'llm-logs',
+      label: t('settings.profile.storageCategoryLLMLogs'),
+      value: formatBytes(project.categories.llm_log_bytes),
+      bytes: project.categories.llm_log_bytes,
+    },
   ];
 
   return items

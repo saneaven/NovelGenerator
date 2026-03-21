@@ -20,6 +20,9 @@ interface AdvancedPanelProps {
     onThinkingHistoryLimitChange: (limit: number) => void;
     toolCallAutoApprove: ToolCallAutoApproveConfig;
     onToolCallAutoApproveChange: (config: ToolCallAutoApproveConfig) => void;
+    llmLoggingEnabled: boolean;
+    onLlmLoggingEnabledChange: (enabled: boolean) => void;
+    onViewLlmLogs: () => void;
 }
 
 const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
@@ -33,6 +36,9 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     onThinkingHistoryLimitChange,
     toolCallAutoApprove,
     onToolCallAutoApproveChange,
+    llmLoggingEnabled,
+    onLlmLoggingEnabledChange,
+    onViewLlmLogs,
 }) => {
     const [newErrorCode, setNewErrorCode] = useState('');
     const autoApproveCategories = listAutoApproveCategories();
@@ -281,6 +287,30 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                         <span>{t('settings.advanced.thinkingHistory.all')}</span>
                     </div>
                     <p className="field-hint">{t('settings.advanced.thinkingHistory.hint')}</p>
+                </div>
+            </div>
+
+            {/* LLM Logging */}
+            <div className="settings-panel-card">
+                <h3>{t('settings.advanced.llmLogging.title')}</h3>
+                <div className="form-field">
+                    <ToggleSwitch
+                        checked={llmLoggingEnabled}
+                        onChange={onLlmLoggingEnabledChange}
+                        label={t('settings.advanced.llmLogging.enable')}
+                        icon={<Document size="sm" />}
+                    />
+                    <p className="field-hint">{t('settings.advanced.llmLogging.hint')}</p>
+                </div>
+                <div className="form-field">
+                    <TextButton
+                        variant="secondary"
+                        size="sm"
+                        type="button"
+                        onClick={onViewLlmLogs}
+                    >
+                        {t('settings.advanced.llmLogging.viewLogs')}
+                    </TextButton>
                 </div>
             </div>
 

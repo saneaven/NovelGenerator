@@ -22,6 +22,7 @@ from ..models.db_models import (
     BasicInfo,
     Guidelines,
     ImageRunModel,
+    LLMLog,
     Manuscript,
     ManuscriptImage,
     NotificationModel,
@@ -71,6 +72,7 @@ class StorageUsageBreakdown:
     notification_bytes: int = 0
     image_run_bytes: int = 0
     image_bytes: int = 0
+    llm_log_bytes: int = 0
 
     @property
     def total_bytes(self) -> int:
@@ -82,6 +84,7 @@ class StorageUsageBreakdown:
             + int(self.notification_bytes)
             + int(self.image_run_bytes)
             + int(self.image_bytes)
+            + int(self.llm_log_bytes)
         )
 
     def as_dict(self) -> dict[str, int]:
@@ -93,6 +96,7 @@ class StorageUsageBreakdown:
             "notification_bytes": int(self.notification_bytes),
             "image_run_bytes": int(self.image_run_bytes),
             "image_bytes": int(self.image_bytes),
+            "llm_log_bytes": int(self.llm_log_bytes),
             "total_bytes": int(self.total_bytes),
         }
 
@@ -106,6 +110,7 @@ class StorageUsageDelta:
     notification_bytes: int = 0
     image_run_bytes: int = 0
     image_bytes: int = 0
+    llm_log_bytes: int = 0
 
     @property
     def total_bytes(self) -> int:
@@ -117,6 +122,7 @@ class StorageUsageDelta:
             + int(self.notification_bytes)
             + int(self.image_run_bytes)
             + int(self.image_bytes)
+            + int(self.llm_log_bytes)
         )
 
     @property
@@ -140,6 +146,7 @@ class StorageUsageDelta:
             notification_bytes=int(right.notification_bytes) - int(left.notification_bytes),
             image_run_bytes=int(right.image_run_bytes) - int(left.image_run_bytes),
             image_bytes=int(right.image_bytes) - int(left.image_bytes),
+            llm_log_bytes=int(right.llm_log_bytes) - int(left.llm_log_bytes),
         )
 
 
@@ -728,6 +735,7 @@ def _breakdown_from_usage_row(row: ProjectStorageUsage | None) -> StorageUsageBr
         notification_bytes=int(row.notification_bytes or 0),
         image_run_bytes=int(row.image_run_bytes or 0),
         image_bytes=int(row.image_bytes or 0),
+        llm_log_bytes=int(row.llm_log_bytes or 0),
     )
 
 
@@ -763,6 +771,7 @@ def _set_usage_row_breakdown(
     row.notification_bytes = int(breakdown.notification_bytes)
     row.image_run_bytes = int(breakdown.image_run_bytes)
     row.image_bytes = int(breakdown.image_bytes)
+    row.llm_log_bytes = int(breakdown.llm_log_bytes)
     row.total_bytes = int(breakdown.total_bytes)
     row.needs_reconcile = bool(needs_reconcile)
     row.last_reconciled_at = last_reconciled_at
@@ -832,6 +841,10 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
     assets = db.query(Asset).filter(Asset.project_id == project_id).all()
     image_bytes = sum(measure_asset_row(row) for row in assets)
 
+    from .llm_log_service import _measure_log_row
+    llm_logs = db.query(LLMLog).filter(LLMLog.project_id == project_id).all()
+    llm_log_bytes = sum(_measure_log_row(row) for row in llm_logs)
+
     return StorageUsageBreakdown(
         project_meta_bytes=int(project_meta_bytes),
         story_bytes=int(story_bytes),
@@ -840,6 +853,7 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
         notification_bytes=int(notification_bytes),
         image_run_bytes=int(image_run_bytes),
         image_bytes=int(image_bytes),
+        llm_log_bytes=int(llm_log_bytes),
     )
 
 
@@ -918,6 +932,7 @@ def apply_project_usage_delta(
         "notification_bytes",
         "image_run_bytes",
         "image_bytes",
+        "llm_log_bytes",
     ):
         current_value = int(getattr(row, field) or 0)
         next_value = current_value + int(getattr(delta, field))
@@ -934,6 +949,7 @@ def apply_project_usage_delta(
         + int(row.notification_bytes or 0)
         + int(row.image_run_bytes or 0)
         + int(row.image_bytes or 0)
+        + int(row.llm_log_bytes or 0)
     )
     if clamped:
         row.needs_reconcile = True

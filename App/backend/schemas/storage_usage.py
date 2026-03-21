@@ -16,6 +16,7 @@ class StorageCategoryBreakdown(BaseModel):
     notification_bytes: int
     image_run_bytes: int
     image_bytes: int
+    llm_log_bytes: int
     total_bytes: int
 
 

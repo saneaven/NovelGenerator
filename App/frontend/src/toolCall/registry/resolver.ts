@@ -9,9 +9,11 @@ import readModule from '../modules/readModule';
 import replaceModule from '../modules/replaceModule';
 import searchModule from '../modules/searchModule';
 import translateModule from '../modules/translateModule';
+import getModule from '../modules/getModule';
 
 const REGISTERED_MODULES: ToolCallUiModule[] = [
   readModule,
+  getModule,
   searchModule,
   createModule,
   replaceModule,

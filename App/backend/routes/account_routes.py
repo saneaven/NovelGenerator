@@ -49,6 +49,7 @@ async def get_account_storage(
             func.coalesce(ProjectStorageUsage.notification_bytes, 0).label("notification_bytes"),
             func.coalesce(ProjectStorageUsage.image_run_bytes, 0).label("image_run_bytes"),
             func.coalesce(ProjectStorageUsage.image_bytes, 0).label("image_bytes"),
+            func.coalesce(ProjectStorageUsage.llm_log_bytes, 0).label("llm_log_bytes"),
             func.coalesce(ProjectStorageUsage.total_bytes, 0).label("used_bytes"),
         )
         .outerjoin(ProjectStorageUsage, ProjectStorageUsage.project_id == Project.id)
@@ -72,6 +73,7 @@ async def get_account_storage(
                 notification_bytes=int(notification_bytes or 0),
                 image_run_bytes=int(image_run_bytes or 0),
                 image_bytes=int(image_bytes or 0),
+                llm_log_bytes=int(llm_log_bytes or 0),
                 total_bytes=int(project_used_bytes or 0),
             ),
         )
@@ -86,6 +88,7 @@ async def get_account_storage(
             notification_bytes,
             image_run_bytes,
             image_bytes,
+            llm_log_bytes,
             project_used_bytes,
         ) in rows
         if isinstance(project_id, UUID)

@@ -425,6 +425,7 @@ export interface ProjectStorageBreakdown {
     notification_bytes: number;
     image_run_bytes: number;
     image_bytes: number;
+    llm_log_bytes: number;
     total_bytes: number;
   };
 }

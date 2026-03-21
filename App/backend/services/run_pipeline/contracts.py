@@ -17,6 +17,8 @@ class ToolDeltaState:
 class AssistantMessageExecutionState:
     message_id: Any | None = None
     finalized: bool = False
+    llm_log_id: Any | None = None
+    llm_log_start: float | None = None
 
 
 @dataclass
