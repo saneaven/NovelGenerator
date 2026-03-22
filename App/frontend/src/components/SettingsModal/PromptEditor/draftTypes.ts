@@ -1,4 +1,4 @@
-import type { TaskType } from '../../../types/scenarios';
+import type { ScenarioDocument, TaskType } from '../../../types/scenarios';
 
 export type DraftKey = string;
 
@@ -71,4 +71,53 @@ export type SaveSummary = {
   saved: number;
   failed: number;
   failures: SaveFailure[];
+};
+
+export type SubTab = 'prompts' | 'fragments' | 'variables' | 'subAgents' | 'mcp';
+
+export interface SelectedFragment {
+  folderId: string | null;
+  fragmentName: string;
+  fullPath: string;
+}
+
+export interface TemplateValidationResult {
+  valid: boolean;
+  errors: Array<{ message: string; line?: number; column?: number; severity: string }>;
+  warnings: Array<{ message: string; line?: number; column?: number; severity: string }>;
+}
+
+export type ScenarioDraft = {
+  key: string;
+  label: string;
+  nodeId?: string;
+  taskType: TaskType;
+  taskSubtype: string;
+  isLoading: boolean;
+  loadError?: string;
+  originalScenario: ScenarioDocument;
+  scenario: ScenarioDocument;
+  dirty: boolean;
+  saveWarnings: string[];
+};
+
+export type FragmentDraft = {
+  key: string;
+  label: string;
+  folderId: string | null;
+  sourceFolderId: string | null;
+  sourceFragmentName: string | null;
+  folderPath: string;
+  fragmentName: string;
+  fullPath: string;
+  isLoading: boolean;
+  isNew: boolean;
+  loadError?: string;
+  originalContent: string;
+  originalDescription: string;
+  content: string;
+  description: string;
+  dirty: boolean;
+  validation: TemplateValidationResult | null;
+  isDeleting: boolean;
 };
