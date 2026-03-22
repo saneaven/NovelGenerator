@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from uuid import UUID
 
@@ -354,7 +355,28 @@ async def build_project_data(
             int(row.position or 0),
         )
 
-    async def build_manuscripts_payload(lang: str) -> list[dict[str, Any]]:
+    # Pre-convert all manuscript docs to markdown in parallel, then cache results.
+    # The TipTap doc is language-independent so we only need to convert each once.
+    markdown_cache: dict[UUID, str] = {}
+
+    async def _convert_manuscript_doc(manuscript: Manuscript) -> None:
+        manuscript_versions = get_latest("manuscript", manuscript.id)
+        doc: dict[str, Any] | None = None
+        for lang_blob in manuscript_versions.values():
+            if isinstance(lang_blob, dict):
+                candidate = lang_blob.get("doc")
+                if isinstance(candidate, dict):
+                    doc = candidate
+                    break
+        if doc is not None:
+            markdown_cache[manuscript.id] = await sidecar_client.doc_to_markdown(doc)
+        else:
+            markdown_cache[manuscript.id] = ""
+
+    if manuscripts:
+        await asyncio.gather(*[_convert_manuscript_doc(ms) for ms in manuscripts])
+
+    def build_manuscripts_payload(lang: str) -> list[dict[str, Any]]:
         sorted_manuscripts = sorted(
             manuscripts,
             key=lambda ms: outline_sort_path(outlines_by_id.get(ms.chapter_id)),
@@ -366,10 +388,7 @@ async def build_project_data(
             chapter_data = _lang_data(get_latest("outline", chapter.id), lang) if chapter is not None else {}
             numbering = outline_numbering.get(chapter.id, {}) if chapter is not None else {}
 
-            markdown = ""
-            doc = manuscript_data.get("doc")
-            if isinstance(doc, dict):
-                markdown = await sidecar_client.doc_to_markdown(doc)
+            markdown = markdown_cache.get(manuscript.id, "")
 
             payload.append(
                 {
@@ -386,7 +405,7 @@ async def build_project_data(
 
     story_entities_payload, story_entity_tree_payload = build_story_entities_payload(language)
     outline_payload = build_outline_payload(language)
-    manuscripts_payload = await build_manuscripts_payload(language)
+    manuscripts_payload = build_manuscripts_payload(language)
 
     all_languages: set[str] = set()
     for object_type, rows in [
@@ -413,7 +432,7 @@ async def build_project_data(
             "storyEntities": lang_story_entities,
             "storyEntityTree": lang_story_entity_tree,
             "outline": build_outline_payload(lang),
-            "manuscripts": await build_manuscripts_payload(lang),
+            "manuscripts": build_manuscripts_payload(lang),
         }
 
     return {

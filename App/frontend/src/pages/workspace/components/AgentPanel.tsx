@@ -615,6 +615,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
       obj.metadata?.project_id === projectId
       && obj.type !== 'basic_info'
       && obj.type !== 'guidelines'
+      && !(obj.type === 'outline' && obj.metadata?.kind !== 'chapter')
     )).length
   ), [unifiedObjects, projectId]);
 
