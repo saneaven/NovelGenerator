@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ....models.db_models import RunMessageModel, RunModel, Thread
 from ....providers.contracts import FinalSnapshot
+from ...tool_engine import tool_engine
 from .contracts import LLMExecutionCallbacks
 
 
@@ -238,4 +239,11 @@ async def emit_terminal_events(
             "run_id": str(run.id),
             "final_status": run.status,
         },
+    )
+
+    await tool_engine.propagate_child_terminal_state_to_parent(
+        db,
+        thread=thread,
+        run=run,
+        emit=callbacks.emit_fn,
     )
