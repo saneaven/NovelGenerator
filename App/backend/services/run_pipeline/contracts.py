@@ -5,23 +5,6 @@ from typing import Any
 
 
 @dataclass
-class ToolDeltaState:
-    stream_key: str
-    llm_call_id: str
-    name: str
-    raw_arguments: str
-    index: int | None
-
-
-@dataclass
-class AssistantMessageExecutionState:
-    message_id: Any | None = None
-    finalized: bool = False
-    llm_log_id: Any | None = None
-    llm_log_start: float | None = None
-
-
-@dataclass
 class CreateContext:
     input_text: str
     input_payload: dict[str, Any]

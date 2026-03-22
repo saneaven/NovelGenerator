@@ -162,9 +162,45 @@ def _install_import_stubs() -> None:
     )
     sys.modules["App.backend.services.tool_engine.result_utils"] = fake_tool_engine_result_utils
 
-    fake_llm_executor = types.ModuleType("App.backend.services.run_pipeline.llm_executor")
-    fake_llm_executor.run_llm = lambda *_args, **_kwargs: None
-    sys.modules["App.backend.services.run_pipeline.llm_executor"] = fake_llm_executor
+    fake_llm_execution = types.ModuleType("App.backend.services.run_pipeline.llm_execution")
+    fake_llm_execution.__path__ = []  # type: ignore[attr-defined]
+
+    @dataclass
+    class ExecutionCheckpoint:
+        message_id: object | None = None
+        finalized: bool = False
+
+    @dataclass(frozen=True)
+    class LLMExecutionCallbacks:
+        emit_fn: object
+        persist_tool_calls_fn: object
+        sync_status_fn: object
+
+    @dataclass(frozen=True)
+    class LLMExecutionRequest:
+        db: object
+        run: object
+        thread: object
+        settings: object
+        system_prompt: str
+        conversation: list[dict[str, object]]
+        scenario_bundle: object
+        input_payload: dict[str, object]
+        checkpoint: ExecutionCheckpoint
+
+    class LLMExecutionOrchestrator:
+        async def execute(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    fake_llm_execution.ExecutionCheckpoint = ExecutionCheckpoint
+    fake_llm_execution.LLMExecutionCallbacks = LLMExecutionCallbacks
+    fake_llm_execution.LLMExecutionOrchestrator = LLMExecutionOrchestrator
+    fake_llm_execution.LLMExecutionRequest = LLMExecutionRequest
+    sys.modules["App.backend.services.run_pipeline.llm_execution"] = fake_llm_execution
+
+    fake_llm_execution_orchestrator = types.ModuleType("App.backend.services.run_pipeline.llm_execution.orchestrator")
+    fake_llm_execution_orchestrator.LLMExecutionOrchestrator = LLMExecutionOrchestrator
+    sys.modules["App.backend.services.run_pipeline.llm_execution.orchestrator"] = fake_llm_execution_orchestrator
 
     fake_prompt_assembly = types.ModuleType("App.backend.services.run_pipeline.prompt_assembly")
     fake_prompt_assembly.assemble_create = lambda *_args, **_kwargs: ("", [], {})
@@ -185,7 +221,7 @@ def _install_import_stubs() -> None:
 
 _install_import_stubs()
 
-from App.backend.models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thread, UserSettings
+from App.backend.models.db_models import Agent, RunMessageModel, RunModel, RunToolCallModel, Thread, UserSettings
 from App.backend.providers.contracts import DeltaPayload, FinalToolCall
 from App.backend.providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from App.backend.services.run_pipeline import service as run_service
@@ -240,6 +276,8 @@ class FakeSession:
         self.closed = False
 
     def query(self, model: object) -> FakeQuery:
+        if model is Agent:
+            return FakeQuery(None)
         if model is RunModel:
             return FakeQuery(lambda: self._run)
         if model is Thread:
@@ -341,6 +379,8 @@ class FakeActiveRunQuery:
             return self._db.run
         if self._model is Thread:
             return self._db.thread
+        if self._model is Agent:
+            return None
         if getattr(self._model, "__name__", "") == "SubAgentDefinitionModel":
             return None
         raise AssertionError(f"Unexpected model query: {self._model!r}")
@@ -385,6 +425,8 @@ class FakeResumeRunQuery:
             return self._db.thread
         if self._model is RunModel:
             return self._db.run
+        if self._model is Agent:
+            return None
         if getattr(self._model, "class_", None) is RunToolCallModel:
             return self._db.unresolved_tool
         raise AssertionError(f"Unexpected model query: {self._model!r}")
@@ -491,12 +533,12 @@ def test_execute_loop_formats_template_errors_for_user(monkeypatch: pytest.Monke
     async def _raise_fragment_not_found(*_args: object, **_kwargs: object) -> object:
         raise FragmentNotFoundError("fragment:missing/path")
 
-    async def _should_not_run_llm(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("run_llm should not be called when prompt assembly fails")
+    async def _should_not_execute(_self: object, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("execute should not be called when prompt assembly fails")
 
     monkeypatch.setattr(run_service.settings_service, "_get_settings", lambda *_args, **_kwargs: UserSettings())
     monkeypatch.setattr(run_service.prompt_assembly, "assemble_create", _raise_fragment_not_found)
-    monkeypatch.setattr(run_service.llm_executor, "run_llm", _should_not_run_llm)
+    monkeypatch.setattr(run_service.LLMExecutionOrchestrator, "execute", _should_not_execute)
     monkeypatch.setattr(run_service, "recalculate_project_usage", lambda *_args, **_kwargs: None, raising=False)
 
     asyncio.run(
@@ -791,15 +833,14 @@ def test_execute_loop_midstream_failure_emits_message_error_and_discards_placeho
     async def _assemble_create(*_args: object, **_kwargs: object) -> tuple[str, list[dict[str, object]], None]:
         return "system", [], None
 
-    async def _failing_llm(*_args: object, **kwargs: object) -> None:
-        assistant_state = kwargs["assistant_message_state_out"]
-        assistant_state.message_id = assistant_message.id
-        assistant_state.finalized = False
+    async def _failing_execute(_self: object, request: object, _callbacks: object) -> None:
+        request.checkpoint.message_id = assistant_message.id
+        request.checkpoint.finalized = False
         raise RuntimeError("stream blew up")
 
     monkeypatch.setattr(run_service.settings_service, "_get_settings", lambda *_args, **_kwargs: UserSettings())
     monkeypatch.setattr(run_service.prompt_assembly, "assemble_create", _assemble_create)
-    monkeypatch.setattr(run_service.llm_executor, "run_llm", _failing_llm)
+    monkeypatch.setattr(run_service.LLMExecutionOrchestrator, "execute", _failing_execute)
 
     asyncio.run(
         pipeline.execute_loop(
@@ -845,12 +886,10 @@ def test_execute_loop_finalized_failure_keeps_message_without_message_error(
     async def _assemble_create(*_args: object, **_kwargs: object) -> tuple[str, list[dict[str, object]], None]:
         return "system", [], None
 
-    async def _finalized_then_fail(*_args: object, **kwargs: object) -> None:
-        assistant_state = kwargs["assistant_message_state_out"]
-        emit_fn = kwargs["emit_fn"]
-        assistant_state.message_id = assistant_message.id
-        assistant_state.finalized = True
-        await emit_fn(
+    async def _finalized_then_fail(_self: object, request: object, callbacks: object) -> None:
+        request.checkpoint.message_id = assistant_message.id
+        request.checkpoint.finalized = True
+        await callbacks.emit_fn(
             user_id=run.user_id,
             project_id=run.project_id,
             thread_id=thread.id,
@@ -867,7 +906,7 @@ def test_execute_loop_finalized_failure_keeps_message_without_message_error(
 
     monkeypatch.setattr(run_service.settings_service, "_get_settings", lambda *_args, **_kwargs: UserSettings())
     monkeypatch.setattr(run_service.prompt_assembly, "assemble_create", _assemble_create)
-    monkeypatch.setattr(run_service.llm_executor, "run_llm", _finalized_then_fail)
+    monkeypatch.setattr(run_service.LLMExecutionOrchestrator, "execute", _finalized_then_fail)
 
     asyncio.run(
         pipeline.execute_loop(
@@ -1206,16 +1245,14 @@ def test_execute_loop_cancelled_error_preserves_paused_status(monkeypatch: pytes
     async def _assemble_create(*_args: object, **_kwargs: object) -> tuple[str, list[dict[str, object]], None]:
         return "system", [], None
 
-    async def _cancelled_llm(*_args: object, **kwargs: object) -> None:
-        llm_run = kwargs["run"]
-        llm_thread = kwargs["thread"]
-        llm_run.status = "paused"
-        llm_thread.status = "paused"
+    async def _cancelled_execute(_self: object, request: object, _callbacks: object) -> None:
+        request.run.status = "paused"
+        request.thread.status = "paused"
         raise asyncio.CancelledError()
 
     monkeypatch.setattr(run_service.settings_service, "_get_settings", lambda *_args, **_kwargs: UserSettings())
     monkeypatch.setattr(run_service.prompt_assembly, "assemble_create", _assemble_create)
-    monkeypatch.setattr(run_service.llm_executor, "run_llm", _cancelled_llm)
+    monkeypatch.setattr(run_service.LLMExecutionOrchestrator, "execute", _cancelled_execute)
 
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(

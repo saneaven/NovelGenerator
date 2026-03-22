@@ -35,6 +35,15 @@ def _install_import_stubs() -> None:
     fake_demo_policy.require_demo_off = lambda: None
     sys.modules["App.backend.services.demo_policy"] = fake_demo_policy
 
+    fake_chat_attachment_service = types.ModuleType("App.backend.services.chat_attachment_service")
+    fake_chat_attachment_service.ChatAttachmentValidationError = ValueError
+    fake_chat_attachment_service.IncomingMessageAttachment = object
+    fake_chat_attachment_service.chat_attachment_service = SimpleNamespace(
+        ingest_message_attachments=lambda *_args, **_kwargs: [],
+        serialize_attachment=lambda row: row,
+    )
+    sys.modules["App.backend.services.chat_attachment_service"] = fake_chat_attachment_service
+
     fake_tool_engine = types.ModuleType("App.backend.services.tool_engine")
     fake_tool_engine.tool_engine = SimpleNamespace(
         _registry=SimpleNamespace(list_static_tool_names=lambda *_args, **_kwargs: []),
@@ -50,6 +59,11 @@ def _install_import_stubs() -> None:
     fake_settings_service = types.ModuleType("App.backend.services.settings_service")
     fake_settings_service.settings_service = SimpleNamespace(_get_settings=lambda *_args, **_kwargs: SimpleNamespace())
     sys.modules["App.backend.services.settings_service"] = fake_settings_service
+
+    fake_mcp = types.ModuleType("App.backend.services.mcp")
+    fake_mcp.mcp_policy_service = SimpleNamespace(build_runtime_context=lambda *_args, **_kwargs: None)
+    fake_mcp.mcp_resolver = SimpleNamespace(resolve_selections=lambda *_args, **_kwargs: None)
+    sys.modules["App.backend.services.mcp"] = fake_mcp
 
     fake_storage_usage_service = types.ModuleType("App.backend.services.storage_usage_service")
 
@@ -100,9 +114,22 @@ def _install_import_stubs() -> None:
     fake_runtime_event_dispatcher.runtime_event_dispatcher = SimpleNamespace(emit_project_event=lambda *_args, **_kwargs: None)
     sys.modules["App.backend.services.runtime_event_dispatcher"] = fake_runtime_event_dispatcher
 
-    fake_llm_executor = types.ModuleType("App.backend.services.run_pipeline.llm_executor")
-    fake_llm_executor.run_llm = lambda *_args, **_kwargs: None
-    sys.modules["App.backend.services.run_pipeline.llm_executor"] = fake_llm_executor
+    fake_llm_execution = types.ModuleType("App.backend.services.run_pipeline.llm_execution")
+    fake_llm_execution.__path__ = []  # type: ignore[attr-defined]
+
+    class LLMExecutionOrchestrator:
+        async def execute(self, *_args, **_kwargs) -> None:
+            return None
+
+    fake_llm_execution.ExecutionCheckpoint = object
+    fake_llm_execution.LLMExecutionCallbacks = object
+    fake_llm_execution.LLMExecutionRequest = object
+    fake_llm_execution.LLMExecutionOrchestrator = LLMExecutionOrchestrator
+    sys.modules["App.backend.services.run_pipeline.llm_execution"] = fake_llm_execution
+
+    fake_llm_execution_orchestrator = types.ModuleType("App.backend.services.run_pipeline.llm_execution.orchestrator")
+    fake_llm_execution_orchestrator.LLMExecutionOrchestrator = LLMExecutionOrchestrator
+    sys.modules["App.backend.services.run_pipeline.llm_execution.orchestrator"] = fake_llm_execution_orchestrator
 
     fake_prompt_assembly = types.ModuleType("App.backend.services.run_pipeline.prompt_assembly")
     fake_prompt_assembly.assemble_create = lambda *_args, **_kwargs: ("", [], {})

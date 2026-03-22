@@ -37,8 +37,13 @@ from ..thread_runtime_sync_service import emit_runtime_sync_events, sync_explici
 from ..template_engine import FragmentNotFoundError, TemplateRenderLimitError, format_template_error
 from ..tool_engine import tool_engine
 from ..tool_engine.contracts import ToolOffer
-from .contracts import AssistantMessageExecutionState, CreateContext
-from . import llm_executor
+from .contracts import CreateContext
+from .llm_execution import (
+    ExecutionCheckpoint,
+    LLMExecutionCallbacks,
+    LLMExecutionOrchestrator,
+    LLMExecutionRequest,
+)
 from . import prompt_assembly
 
 logger = logging.getLogger(__name__)
@@ -98,6 +103,7 @@ class RunPipeline:
     def __init__(self, db_factory: Callable[[], Session], event_dispatcher: RuntimeEventDispatcher):
         self._db_factory = db_factory
         self._event_dispatcher = event_dispatcher
+        self._llm_execution_orchestrator = LLMExecutionOrchestrator()
         self._tasks: dict[UUID, asyncio.Task] = {}
         self._task_lock = asyncio.Lock()
         self._thread_locks: dict[UUID, asyncio.Lock] = {}
@@ -252,10 +258,10 @@ class RunPipeline:
         db: Session,
         *,
         run: RunModel,
-        assistant_message_state: AssistantMessageExecutionState,
+        execution_checkpoint: ExecutionCheckpoint,
     ) -> UUID | None:
-        message_id = assistant_message_state.message_id
-        if message_id is None or assistant_message_state.finalized:
+        message_id = execution_checkpoint.message_id
+        if message_id is None or execution_checkpoint.finalized:
             return None
 
         assistant_message = (
@@ -914,7 +920,7 @@ class RunPipeline:
 
     async def execute_loop(self, run_id: UUID, *, create_ctx: CreateContext | None = None) -> None:
         db = self._db_factory()
-        assistant_message_state = AssistantMessageExecutionState()
+        execution_checkpoint = ExecutionCheckpoint()
         try:
             run = db.query(RunModel).filter(RunModel.id == run_id).first()
             if run is None:
@@ -953,19 +959,23 @@ class RunPipeline:
             if run.status in {"canceled", "paused"}:
                 return
 
-            await llm_executor.run_llm(
-                db,
-                run=run,
-                thread=thread,
-                settings=settings,
-                system_prompt=system_prompt,
-                conversation=conversation,
-                scenario_bundle=scenario_bundle,
-                input_payload=create_ctx.input_payload if create_ctx is not None else restored_payload,
-                assistant_message_state_out=assistant_message_state,
-                emit_fn=self._emit,
-                persist_tool_calls_fn=self._persist_tool_calls,
-                sync_status_fn=self._sync_status_side_effects,
+            await self._llm_execution_orchestrator.execute(
+                LLMExecutionRequest(
+                    db=db,
+                    run=run,
+                    thread=thread,
+                    settings=settings,
+                    system_prompt=system_prompt,
+                    conversation=conversation,
+                    scenario_bundle=scenario_bundle,
+                    input_payload=create_ctx.input_payload if create_ctx is not None else restored_payload,
+                    checkpoint=execution_checkpoint,
+                ),
+                LLMExecutionCallbacks(
+                    emit_fn=self._emit,
+                    persist_tool_calls_fn=self._persist_tool_calls,
+                    sync_status_fn=self._sync_status_side_effects,
+                ),
             )
         except asyncio.CancelledError:
             try:
@@ -986,21 +996,6 @@ class RunPipeline:
                 raise
         except Exception as exc:  # noqa: BLE001
             logger.error("Run %s failed: %s", run_id, exc, exc_info=True)
-            # Fail any open LLM log before rollback (uses its own session)
-            if assistant_message_state.llm_log_id is not None:
-                try:
-                    import time as _time
-                    from ..llm_log_service import llm_log_service
-                    _elapsed = int((_time.monotonic() - (assistant_message_state.llm_log_start or 0)) * 1000)
-                    llm_log_service.fail_log(
-                        assistant_message_state.llm_log_id,
-                        raw_output=None,
-                        error=str(exc),
-                        meta={"response_time_ms": _elapsed},
-                    )
-                    assistant_message_state.llm_log_id = None
-                except Exception:
-                    logger.warning("LLM log fail_log in error handler failed", exc_info=True)
             db.rollback()
             user_error = _format_user_run_error(exc)
             run = db.query(RunModel).filter(RunModel.id == run_id).first()
@@ -1010,7 +1005,7 @@ class RunPipeline:
                     discarded_message_id = self._discard_unfinished_assistant_message(
                         db,
                         run=run,
-                        assistant_message_state=assistant_message_state,
+                        execution_checkpoint=execution_checkpoint,
                     )
                     pre_emit_events = (
                         [(
