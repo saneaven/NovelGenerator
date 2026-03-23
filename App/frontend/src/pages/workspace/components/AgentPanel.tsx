@@ -798,11 +798,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   const {
     showScrollButton,
     scrollToBottom,
+    resetToBottom,
   } = useAutoScrollLock({
     scrollContainerRef,
     contentRef: scrollContentRef,
     active: isMessageRunActive,
   });
+
+  useEffect(() => {
+    if (!threadId) return;
+    resetToBottom();
+  }, [threadId, resetToBottom]);
 
   const sendBlockingState: SendBlockingState = useMemo(() => {
     const missingAgent = !selectedAgentId;

@@ -24,6 +24,8 @@ export function useAutoScrollLock({
   bottomThreshold = 100,
 }: UseAutoScrollLockOptions): UseAutoScrollLockResult {
   const isNearBottomRef = useRef(true);
+  const programmaticScrollRef = useRef(false);
+  const pendingResetRef = useRef(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
 
   const measureNearBottom = useCallback(() => {
@@ -47,6 +49,7 @@ export function useAutoScrollLock({
     }
 
     isNearBottomRef.current = true;
+    programmaticScrollRef.current = true;
     container.scrollTo({
       top: container.scrollHeight,
       behavior: options?.behavior ?? 'smooth',
@@ -56,11 +59,13 @@ export function useAutoScrollLock({
 
   const resetToBottom = useCallback(() => {
     isNearBottomRef.current = true;
+    pendingResetRef.current = true;
     setShowScrollButton(false);
 
     requestAnimationFrame(() => {
       const container = scrollContainerRef.current;
       if (!container) return;
+      programmaticScrollRef.current = true;
       container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
     });
   }, [scrollContainerRef]);
@@ -70,6 +75,10 @@ export function useAutoScrollLock({
     if (!container) return;
 
     const handleScroll = () => {
+      if (programmaticScrollRef.current) {
+        programmaticScrollRef.current = false;
+        return;
+      }
       syncScrollState();
     };
 
@@ -87,18 +96,16 @@ export function useAutoScrollLock({
     const container = scrollContainerRef.current;
     if (!content || !container) return;
 
-    let frameId = 0;
     const handleResize = () => {
-      if (frameId) cancelAnimationFrame(frameId);
-      frameId = requestAnimationFrame(() => {
-        const currentContainer = scrollContainerRef.current;
-        if (!currentContainer) return;
+      const currentContainer = scrollContainerRef.current;
+      if (!currentContainer) return;
 
-        if (active && isNearBottomRef.current) {
-          currentContainer.scrollTo({ top: currentContainer.scrollHeight, behavior: 'auto' });
-        }
-        syncScrollState();
-      });
+      if ((active || pendingResetRef.current) && isNearBottomRef.current) {
+        programmaticScrollRef.current = true;
+        currentContainer.scrollTo({ top: currentContainer.scrollHeight, behavior: 'auto' });
+        pendingResetRef.current = false;
+      }
+      syncScrollState();
     };
 
     const resizeObserver = new ResizeObserver(handleResize);
@@ -107,7 +114,6 @@ export function useAutoScrollLock({
     handleResize();
 
     return () => {
-      if (frameId) cancelAnimationFrame(frameId);
       resizeObserver.disconnect();
     };
   }, [contentRef, scrollContainerRef, active, syncScrollState]);
