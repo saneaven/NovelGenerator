@@ -33,6 +33,7 @@ export interface ObjectPickerItem {
   order?: number;
   wordCount?: number;        // For manuscripts
   isStructural?: boolean;    // Structural-only item (no checkbox, not selectable)
+  isGroupParent?: boolean;   // Parent object shown as item in its own group (sorts first)
   metadata?: Record<string, unknown>;
 }
 

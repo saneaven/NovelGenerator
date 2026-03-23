@@ -266,6 +266,7 @@ function buildStoryEntityGroups(
         description: getStoryEntityFolderDescription(folder, language),
         type: 'story_entity_folder',
         order: folder.metadata.display_order ?? 0,
+        isGroupParent: true,
       });
     }
   }
@@ -362,6 +363,7 @@ function buildOutlineGroups(
         ...objectToItem(outline, language),
         name: outlineLabel,
         ...(markStructural ? { isStructural: true } : {}),
+        isGroupParent: true,
       };
       const outlineActs = acts
         .filter((act) => act.metadata?.parent_id === outline.id)
@@ -388,6 +390,7 @@ function buildOutlineGroups(
             ...objectToItem(act, language),
             name: actName,
             ...(markStructural ? { isStructural: true } : {}),
+            isGroupParent: true,
           };
           const chapterItems = actChapters.map((chapter) => ({
             ...objectToItem(chapter, language),

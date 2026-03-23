@@ -46,6 +46,10 @@ function mergedChildren(items: PickerItem[], childGroups?: PickerGroup[]): Merge
     }
   }
   merged.sort((a, b) => {
+    // Parent items (isGroupParent) always sort first
+    const aParent = a.kind === 'item' && a.data.isGroupParent ? 1 : 0;
+    const bParent = b.kind === 'item' && b.data.isGroupParent ? 1 : 0;
+    if (aParent !== bParent) return bParent - aParent;
     if (a.order !== b.order) return a.order - b.order;
     return a.label.localeCompare(b.label);
   });
