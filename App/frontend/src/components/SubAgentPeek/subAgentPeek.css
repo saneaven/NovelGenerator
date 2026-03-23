@@ -156,7 +156,6 @@
 .sub-agent-peek-dock__body-inner {
   overflow-y: auto;
   min-height: 0;
-  max-height: 600px;
 }
 
 .sub-agent-peek-dock__body-content {

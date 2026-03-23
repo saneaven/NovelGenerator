@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useSubAgentStore } from '../../store/subAgentStore';
@@ -225,8 +225,11 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
   const selectedChildThreadId = selectedEntry?.childThreadId;
   const selectedLiveView = useThreadLiveViewState(selectedChildThreadId);
+  const dockRef = useRef<HTMLDivElement | null>(null);
   const peekBodyRef = useRef<HTMLDivElement | null>(null);
   const peekContentRef = useRef<HTMLDivElement | null>(null);
+  const prevPeekOpenRef = useRef(peekOpen);
+  const [bodyMaxHeight, setBodyMaxHeight] = useState(600);
 
   // Reset action state when switching threads
   useEffect(() => {
@@ -259,6 +262,36 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     if (!peekOpen) return;
     resetToBottom();
   }, [peekOpen, selectedChildThreadId, resetToBottom]);
+
+  // Dynamic max-height: 75% of agent panel viewport
+  useLayoutEffect(() => {
+    const dock = dockRef.current;
+    if (!dock) return;
+    const container = dock.closest('.agent-messages') as HTMLElement | null;
+    if (!container) return;
+
+    const update = () => setBodyMaxHeight(Math.round(container.clientHeight * 0.75));
+    update();
+
+    const ro = new ResizeObserver(update);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
+
+  // Scroll-to-center on expand (false -> true transition only)
+  useEffect(() => {
+    const wasOpen = prevPeekOpenRef.current;
+    prevPeekOpenRef.current = peekOpen;
+    if (!peekOpen || wasOpen) return;
+
+    const dock = dockRef.current;
+    if (!dock) return;
+
+    const timerId = setTimeout(() => {
+      dock.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 280);
+    return () => clearTimeout(timerId);
+  }, [peekOpen]);
 
   const handlePause = useCallback(() => {
     if (actionInFlight || !selectedChildThreadId) return;
@@ -298,7 +331,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   const showFooter = peekOpen && isBlocking;
 
   return (
-    <div className="sub-agent-peek-dock">
+    <div className="sub-agent-peek-dock" ref={dockRef}>
       <SubAgentPeekHeader
         open={peekOpen}
         onToggle={() => setPeekOpen(peekKey, !peekOpen)}
@@ -307,7 +340,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
       />
 
       <div className={`sub-agent-peek-dock__body${peekOpen ? ' sub-agent-peek-dock__body--open' : ''}`}>
-        <div className="sub-agent-peek-dock__body-inner" ref={peekBodyRef}>
+        <div className="sub-agent-peek-dock__body-inner" ref={peekBodyRef} style={{ maxHeight: bodyMaxHeight, minHeight: peekOpen ? bodyMaxHeight : undefined }}>
           <div className="sub-agent-peek-dock__body-content" ref={peekContentRef}>
             <SubAgentPeekTimeline
               childThreadId={selectedEntry.childThreadId}
