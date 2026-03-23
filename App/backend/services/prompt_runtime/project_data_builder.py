@@ -45,6 +45,26 @@ def _lang_data(all_data: dict[str, Any], language: str) -> dict[str, Any]:
     return {}
 
 
+def _resolve_manuscript_lang_data(
+    all_data: dict[str, Any],
+    language: str,
+) -> dict[str, Any]:
+    requested_entry = all_data.get(language)
+    if isinstance(requested_entry, dict) and isinstance(requested_entry.get("doc"), dict):
+        return dict(requested_entry)
+
+    for candidate_language, value in all_data.items():
+        if candidate_language == language or not isinstance(value, dict):
+            continue
+        if not isinstance(value.get("doc"), dict):
+            continue
+        return dict(value)
+
+    if isinstance(requested_entry, dict):
+        return dict(requested_entry)
+    return {}
+
+
 def _story_entity_payload(
     row: StoryEntity,
     *,
@@ -228,6 +248,17 @@ async def build_project_data(
             latest[key] = _latest_version_data(db, object_type, object_id)
         return latest[key]
 
+    all_languages: set[str] = {language}
+    for object_type, rows in [
+        ("basic_info", [basic] if basic is not None else []),
+        ("guidelines", [guidelines] if guidelines is not None else []),
+        (STORY_ENTITY_TYPE, story_entities),
+        ("outline", outlines),
+        ("manuscript", manuscripts),
+    ]:
+        for row in rows:
+            all_languages.update(get_latest(object_type, row.id).keys())
+
     def _basic_info_payload(lang: str) -> tuple[dict[str, Any], dict[str, Any] | None]:
         if basic is None:
             return {"id": "", "title": "", "logline": "", "genres": [], "tags": []}, None
@@ -355,26 +386,32 @@ async def build_project_data(
             int(row.position or 0),
         )
 
-    # Pre-convert all manuscript docs to markdown in parallel, then cache results.
-    # The TipTap doc is language-independent so we only need to convert each once.
-    markdown_cache: dict[UUID, str] = {}
+    # Pre-convert manuscript docs to markdown per requested language.
+    markdown_cache: dict[tuple[UUID, str], str] = {}
+    manuscript_lang_cache: dict[tuple[UUID, str], dict[str, Any]] = {}
 
-    async def _convert_manuscript_doc(manuscript: Manuscript) -> None:
+    async def _convert_manuscript_doc(manuscript: Manuscript, lang: str) -> None:
+        key = (manuscript.id, lang)
         manuscript_versions = get_latest("manuscript", manuscript.id)
-        doc: dict[str, Any] | None = None
-        for lang_blob in manuscript_versions.values():
-            if isinstance(lang_blob, dict):
-                candidate = lang_blob.get("doc")
-                if isinstance(candidate, dict):
-                    doc = candidate
-                    break
+        manuscript_data = _resolve_manuscript_lang_data(
+            manuscript_versions,
+            lang,
+        )
+        manuscript_lang_cache[key] = manuscript_data
+        doc = manuscript_data.get("doc") if isinstance(manuscript_data.get("doc"), dict) else None
         if doc is not None:
-            markdown_cache[manuscript.id] = await sidecar_client.doc_to_markdown(doc)
+            markdown_cache[key] = await sidecar_client.doc_to_markdown(doc)
         else:
-            markdown_cache[manuscript.id] = ""
+            markdown_cache[key] = ""
 
     if manuscripts:
-        await asyncio.gather(*[_convert_manuscript_doc(ms) for ms in manuscripts])
+        await asyncio.gather(
+            *[
+                _convert_manuscript_doc(ms, lang)
+                for ms in manuscripts
+                for lang in all_languages
+            ]
+        )
 
     def build_manuscripts_payload(lang: str) -> list[dict[str, Any]]:
         sorted_manuscripts = sorted(
@@ -383,12 +420,19 @@ async def build_project_data(
         )
         payload: list[dict[str, Any]] = []
         for manuscript in sorted_manuscripts:
-            manuscript_data = _lang_data(get_latest("manuscript", manuscript.id), lang)
+            manuscript_key = (manuscript.id, lang)
+            manuscript_data = dict(
+                manuscript_lang_cache.get(manuscript_key)
+                or _resolve_manuscript_lang_data(
+                    get_latest("manuscript", manuscript.id),
+                    lang,
+                )
+            )
             chapter = outlines_by_id.get(manuscript.chapter_id)
             chapter_data = _lang_data(get_latest("outline", chapter.id), lang) if chapter is not None else {}
             numbering = outline_numbering.get(chapter.id, {}) if chapter is not None else {}
 
-            markdown = markdown_cache.get(manuscript.id, "")
+            markdown = markdown_cache.get(manuscript_key, "")
 
             payload.append(
                 {
@@ -406,19 +450,6 @@ async def build_project_data(
     story_entities_payload, story_entity_tree_payload = build_story_entities_payload(language)
     outline_payload = build_outline_payload(language)
     manuscripts_payload = build_manuscripts_payload(language)
-
-    all_languages: set[str] = set()
-    for object_type, rows in [
-        ("basic_info", [basic] if basic is not None else []),
-        ("guidelines", [guidelines] if guidelines is not None else []),
-        (STORY_ENTITY_TYPE, story_entities),
-        ("outline", outlines),
-        ("manuscript", manuscripts),
-    ]:
-        for row in rows:
-            all_languages.update(get_latest(object_type, row.id).keys())
-    if not all_languages:
-        all_languages.add(language)
 
     content_by_lang: dict[str, Any] = {}
     for lang in sorted(all_languages):

@@ -168,6 +168,12 @@ class _FakeSidecar:
         return str(doc.get("markdown") or "")
 
 
+def _stub_story_entity_tree_helpers(monkeypatch) -> None:
+    monkeypatch.setattr(project_data_builder_module, "list_story_entity_folders", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(project_data_builder_module, "build_story_entity_folder_path_map", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(project_data_builder_module, "build_story_entity_folder_content_map", lambda *_args, **_kwargs: {})
+
+
 def test_build_outline_numbering_resets_per_root_outline_and_ignores_invalid_hierarchy() -> None:
     project_id = uuid4()
 
@@ -263,9 +269,7 @@ def test_build_project_data_adds_canonical_outline_and_manuscript_numbers(monkey
         outlines=[outline, act_1, chapter_1, act_2, chapter_2],
     )
 
-    monkeypatch.setattr(project_data_builder_module, "list_story_entity_folders", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(project_data_builder_module, "build_story_entity_folder_path_map", lambda *_args, **_kwargs: {})
-    monkeypatch.setattr(project_data_builder_module, "build_story_entity_folder_content_map", lambda *_args, **_kwargs: {})
+    _stub_story_entity_tree_helpers(monkeypatch)
 
     project = asyncio.run(build_project_data(db, project_id, "English", _FakeSidecar()))
 
@@ -290,3 +294,119 @@ def test_build_project_data_adds_canonical_outline_and_manuscript_numbers(monkey
     assert manuscripts[1]["chapterName"] == "The Escape"
     assert manuscripts[1]["actNumber"] == 2
     assert manuscripts[1]["chapterNumber"] == 2
+
+
+def test_build_project_data_uses_requested_manuscript_language_per_payload(monkeypatch) -> None:
+    project_id = uuid4()
+
+    outline = _outline(project_id=project_id, kind="outline", position=0, created_offset=0)
+    act = _outline(project_id=project_id, kind="act", parent_id=outline.id, position=0, created_offset=1)
+    chapter = _outline(project_id=project_id, kind="chapter", parent_id=act.id, position=0, created_offset=2)
+    manuscript = Manuscript(id=uuid4(), chapter_id=chapter.id)
+
+    db = _FakeDb(
+        rows={
+            BasicInfo: [],
+            Guidelines: [],
+            StoryEntity: [],
+            Outline: [outline, act, chapter],
+            Manuscript: [manuscript],
+            ObjectVersion: [
+                _object_version(
+                    object_type="outline",
+                    object_id=outline.id,
+                    data={
+                        "English": {"name": "Main Outline", "description": "Outline", "content": "Root"},
+                        "Korean": {"name": "메인 아웃라인", "description": "개요", "content": "루트"},
+                    },
+                ),
+                _object_version(
+                    object_type="outline",
+                    object_id=act.id,
+                    data={
+                        "English": {"name": "Act One", "description": "Act", "content": "Act content"},
+                        "Korean": {"name": "1막", "description": "막", "content": "막 내용"},
+                    },
+                ),
+                _object_version(
+                    object_type="outline",
+                    object_id=chapter.id,
+                    data={
+                        "English": {"name": "Chapter One", "description": "Chapter", "content": "Chapter content"},
+                        "Korean": {"name": "1장", "description": "장", "content": "장 내용"},
+                    },
+                ),
+                _object_version(
+                    object_type="manuscript",
+                    object_id=manuscript.id,
+                    data={
+                        "Korean": {"doc": {"markdown": "한국어 원고"}, "wordCount": 2},
+                        "English": {"doc": {"markdown": "English manuscript"}, "wordCount": 2},
+                    },
+                ),
+            ],
+        },
+        outlines=[outline, act, chapter],
+    )
+
+    _stub_story_entity_tree_helpers(monkeypatch)
+
+    project = asyncio.run(build_project_data(db, project_id, "English", _FakeSidecar()))
+
+    assert project["manuscripts"][0]["content"] == "English manuscript"
+    assert project["manuscripts"][0]["wordCount"] == 2
+    assert project["contentByLang"]["English"]["manuscripts"][0]["content"] == "English manuscript"
+    assert project["contentByLang"]["Korean"]["manuscripts"][0]["content"] == "한국어 원고"
+    assert project["manuscripts"][0]["chapterId"] == str(chapter.id)
+
+
+def test_build_project_data_falls_back_when_requested_manuscript_language_has_no_doc(monkeypatch) -> None:
+    project_id = uuid4()
+
+    outline = _outline(project_id=project_id, kind="outline", position=0, created_offset=0)
+    act = _outline(project_id=project_id, kind="act", parent_id=outline.id, position=0, created_offset=1)
+    chapter = _outline(project_id=project_id, kind="chapter", parent_id=act.id, position=0, created_offset=2)
+    manuscript = Manuscript(id=uuid4(), chapter_id=chapter.id)
+
+    db = _FakeDb(
+        rows={
+            BasicInfo: [],
+            Guidelines: [],
+            StoryEntity: [],
+            Outline: [outline, act, chapter],
+            Manuscript: [manuscript],
+            ObjectVersion: [
+                _object_version(
+                    object_type="outline",
+                    object_id=outline.id,
+                    data={"English": {"name": "Main Outline", "description": "Outline", "content": "Root"}},
+                ),
+                _object_version(
+                    object_type="outline",
+                    object_id=act.id,
+                    data={"English": {"name": "Act One", "description": "Act", "content": "Act content"}},
+                ),
+                _object_version(
+                    object_type="outline",
+                    object_id=chapter.id,
+                    data={"English": {"name": "Chapter One", "description": "Chapter", "content": "Chapter content"}},
+                ),
+                _object_version(
+                    object_type="manuscript",
+                    object_id=manuscript.id,
+                    data={
+                        "English": {"wordCount": 99},
+                        "Korean": {"doc": {"markdown": "대체 원고"}, "wordCount": 2},
+                    },
+                ),
+            ],
+        },
+        outlines=[outline, act, chapter],
+    )
+
+    _stub_story_entity_tree_helpers(monkeypatch)
+
+    project = asyncio.run(build_project_data(db, project_id, "English", _FakeSidecar()))
+
+    assert project["manuscripts"][0]["content"] == "대체 원고"
+    assert project["manuscripts"][0]["wordCount"] == 2
