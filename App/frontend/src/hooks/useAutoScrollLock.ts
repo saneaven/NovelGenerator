@@ -79,6 +79,7 @@ export function useAutoScrollLock({
         programmaticScrollRef.current = false;
         return;
       }
+      pendingResetRef.current = false;
       syncScrollState();
     };
 
@@ -103,7 +104,6 @@ export function useAutoScrollLock({
       if ((active || pendingResetRef.current) && isNearBottomRef.current) {
         programmaticScrollRef.current = true;
         currentContainer.scrollTo({ top: currentContainer.scrollHeight, behavior: 'auto' });
-        pendingResetRef.current = false;
       }
       syncScrollState();
     };

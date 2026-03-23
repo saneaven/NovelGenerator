@@ -511,13 +511,6 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
             <PreexistingLiveRunNotice className="journey-detail-notice" compact />
           )}
 
-          {isRunning && !liveView?.hasStreamingMessage && liveView?.noticeKind !== 'preexisting_live_run' && displayMessages.length > 0 && (
-            <div className="journey-detail-typing">
-              <div className="loading-track">
-                <div className="loading-bar" />
-              </div>
-            </div>
-          )}
 
           {/* Feedback area */}
           {!isRunning && displayMessages.length > 0 && (
