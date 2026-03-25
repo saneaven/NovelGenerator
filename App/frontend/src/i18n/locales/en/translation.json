@@ -478,13 +478,17 @@
         "hint": "Auto-approve selected tool call types. Auto-approval only happens when an assistant response contains exclusively auto-approved operation types. If any non-approved operation is present, confirmation is required.",
         "create": "Auto-approve Create",
         "delete": "Auto-approve Delete",
+        "generate": "Auto-approve Image Generation",
+        "mcp": "Auto-approve MCP Tools",
         "patch": "Auto-approve Patch",
         "patch_translation": "Auto-approve Translation Patch",
+        "sub_agent": "Auto-approve Sub-Agent Calls",
         "replace": "Auto-approve Replace",
         "read": "Auto-approve Read",
         "search": "Auto-approve Search",
         "translate": "Auto-approve Translate",
-        "call": "Auto-approve Agent Calls"
+        "call": "Auto-approve Agent Calls",
+        "write": "Auto-approve General Writes"
       },
       "toolCallHistory": {
         "title": "Tool Call History",

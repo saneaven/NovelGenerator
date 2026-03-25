@@ -50,7 +50,6 @@ NOTIFICATION_ALLOWED_STATUSES_BY_SOURCE = {
 }
 NOTIFICATION_STATUS_VALUES = set().union(*NOTIFICATION_ALLOWED_STATUSES_BY_SOURCE.values())
 NOTIFICATION_TARGET_KIND_VALUES = {"none", "project", "thread", "journey", "agent"}
-ACTIVE_THREAD_DELETE_STATUSES = {"running", "waiting", "processing"}
 
 
 @dataclass(frozen=True)

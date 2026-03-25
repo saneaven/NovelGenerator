@@ -10,6 +10,7 @@ from jinja2.sandbox import SecurityError
 from sqlalchemy.orm import Session
 
 from ...models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thread, UserSettings
+from ..run_status_policy import RUN_EXECUTION_NOOP_STATUSES
 from ..settings_service import settings_service
 from ..storage_usage_service import (
     apply_project_usage_deltas,
@@ -142,7 +143,7 @@ class RunPipelineExecutionLoop:
             if thread is None:
                 return
 
-            if run.status in {"canceled", "paused"}:
+            if run.status in RUN_EXECUTION_NOOP_STATUSES:
                 return
 
             await self._runtime.emit(
@@ -174,7 +175,7 @@ class RunPipelineExecutionLoop:
                 )
 
             db.refresh(run)
-            if run.status in {"canceled", "paused"}:
+            if run.status in RUN_EXECUTION_NOOP_STATUSES:
                 return
 
             await self._llm_execution_orchestrator.execute(
@@ -203,7 +204,7 @@ class RunPipelineExecutionLoop:
                 run = db.query(RunModel).filter(RunModel.id == run_id).first()
                 if run is not None:
                     thread = run.thread
-                    if run.status not in {"canceled", "paused"} and thread is not None:
+                    if run.status not in RUN_EXECUTION_NOOP_STATUSES and thread is not None:
                         await self._status_transitions.apply_status_transition(
                             db,
                             run=run,

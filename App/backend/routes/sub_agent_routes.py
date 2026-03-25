@@ -10,14 +10,15 @@ from typing import List
 from ..database import get_db
 from ..auth import get_current_user
 from ..models.db_models import User
-from ..schemas.sub_agents import SubAgentCreate, SubAgentDefinition, SubAgentUpdate
+from ..schemas.sub_agents import SubAgentCreate, SubAgentDefinition, SubAgentToolGrantCatalogItem, SubAgentUpdate
 from ..services.demo_policy import require_demo_off
-from ..services.notification_service import ACTIVE_THREAD_DELETE_STATUSES, collect_thread_delete_deltas, delete_threads
+from ..services.notification_service import collect_thread_delete_deltas, delete_threads
+from ..services.run_status_policy import THREAD_DELETE_PRE_CLEANUP_STATUSES
 from ..services.run_pipeline import run_pipeline
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..services.storage_usage_service import apply_project_usage_deltas
 from ..services.sub_agent_service import sub_agent_service
-from ..services.tool_engine import tool_engine
+from ..services.tool_engine.grant_catalog import TOOL_GRANT_CATALOG
 
 
 router = APIRouter(prefix="/api/v1/sub_agents", tags=["sub_agents"])
@@ -45,7 +46,7 @@ async def _cancel_linked_sub_agent_threads_for_delete(
         if (
             not isinstance(thread_id, uuid.UUID)
             or thread_id in seen
-            or thread_status not in ACTIVE_THREAD_DELETE_STATUSES
+            or thread_status not in THREAD_DELETE_PRE_CLEANUP_STATUSES
         ):
             continue
         seen.add(thread_id)
@@ -61,13 +62,24 @@ async def list_sub_agents(
     return sub_agent_service.list_sub_agents(db=db, user_id=current_user.id, preset_id=preset_id)
 
 
-@router.get("/available_tools", response_model=List[str])
-async def list_available_tools(
+@router.get("/tool_grants_catalog", response_model=List[SubAgentToolGrantCatalogItem])
+async def list_tool_grants_catalog(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    _db: Session = Depends(get_db),
 ):
-    preset_id = get_active_preset_id(current_user)
-    return tool_engine.list_static_tool_names_for_agent(db, user_id=current_user.id, preset_id=preset_id)
+    _ = get_active_preset_id(current_user)
+    return [
+        SubAgentToolGrantCatalogItem(
+            feature_key=feature_key,
+            display_name=str(item.get("display_name") or feature_key),
+            supported_categories=[
+                str(category)
+                for category in (item.get("supported_categories") or ())
+                if isinstance(category, str)
+            ],
+        )
+        for feature_key, item in TOOL_GRANT_CATALOG.items()
+    ]
 
 
 @router.post("", response_model=SubAgentDefinition, status_code=status.HTTP_201_CREATED)

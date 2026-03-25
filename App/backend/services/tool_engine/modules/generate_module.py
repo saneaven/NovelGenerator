@@ -125,7 +125,6 @@ class GenerateToolCallModule(ToolCallModule):
             language=ctx.language,
         )
         return {
-            "__continue_as": "working",
             "success": True,
             "message": "Image generation started.",
             "image_run_id": str(image_run.id),

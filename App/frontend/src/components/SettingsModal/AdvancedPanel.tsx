@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RetryConfig, ToolCallAutoApproveConfig } from '../../store/settingsStore';
-import { listAutoApproveCategories } from '../../toolCall/registry';
+import { TOOL_CALL_AUTO_APPROVE_CATEGORIES } from '../../store/settingsStore';
 
 import ToggleSwitch from '../common/ToggleSwitch';
 import { TextButton } from '../TextButton';
@@ -41,7 +41,7 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     onViewLlmLogs,
 }) => {
     const [newErrorCode, setNewErrorCode] = useState('');
-    const autoApproveCategories = listAutoApproveCategories();
+    const autoApproveCategories = TOOL_CALL_AUTO_APPROVE_CATEGORIES;
 
     const handleMaxRetriesChange = (value: number) => {
         onRetryConfigChange({

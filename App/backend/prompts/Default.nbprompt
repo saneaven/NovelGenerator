@@ -626,12 +626,23 @@
         "agentMode",
         "subAgent"
       ],
-      "allowed_tool_names": [
-        "read_story_entity",
-        "read_outline",
-        "read_manuscript",
-        "search_keyword",
-        "search_semantic"
+      "tool_grants": [
+        {
+          "feature_key": "story_entity",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "outline",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "manuscript",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "search",
+          "categories": ["read"]
+        }
       ],
       "allowed_sub_agent_ids": [],
       "allowed_mcp_server_ids": [],
@@ -649,10 +660,19 @@
         "agentMode",
         "subAgent"
       ],
-      "allowed_tool_names": [
-        "read_outline",
-        "read_story_entity",
-        "read_manuscript"
+      "tool_grants": [
+        {
+          "feature_key": "story_entity",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "outline",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "manuscript",
+          "categories": ["read"]
+        }
       ],
       "allowed_sub_agent_ids": [],
       "allowed_mcp_server_ids": [],
@@ -670,12 +690,23 @@
         "agentMode",
         "subAgent"
       ],
-      "allowed_tool_names": [
-        "read_story_entity",
-        "read_outline",
-        "read_manuscript",
-        "search_keyword",
-        "search_semantic"
+      "tool_grants": [
+        {
+          "feature_key": "story_entity",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "outline",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "manuscript",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "search",
+          "categories": ["read"]
+        }
       ],
       "allowed_sub_agent_ids": [],
       "allowed_mcp_server_ids": [],
@@ -693,12 +724,23 @@
         "agentMode",
         "subAgent"
       ],
-      "allowed_tool_names": [
-        "read_story_entity",
-        "read_outline",
-        "read_manuscript",
-        "search_keyword",
-        "search_semantic"
+      "tool_grants": [
+        {
+          "feature_key": "story_entity",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "outline",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "manuscript",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "search",
+          "categories": ["read"]
+        }
       ],
       "allowed_sub_agent_ids": [],
       "allowed_mcp_server_ids": [],
@@ -715,14 +757,23 @@
         "agentMode",
         "subAgent"
       ],
-      "allowed_tool_names": [
-        "read_manuscript",
-        "patch_manuscript",
-        "replace_manuscript",
-        "read_story_entity",
-        "read_outline",
-        "search_keyword",
-        "search_semantic"
+      "tool_grants": [
+        {
+          "feature_key": "story_entity",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "outline",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "manuscript",
+          "categories": ["read", "write"]
+        },
+        {
+          "feature_key": "search",
+          "categories": ["read"]
+        }
       ],
       "allowed_sub_agent_ids": [],
       "allowed_mcp_server_ids": [],
@@ -740,12 +791,23 @@
         "agentMode",
         "subAgent"
       ],
-      "allowed_tool_names": [
-        "read_story_entity",
-        "read_outline",
-        "read_manuscript",
-        "search_keyword",
-        "search_semantic"
+      "tool_grants": [
+        {
+          "feature_key": "story_entity",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "outline",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "manuscript",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "search",
+          "categories": ["read"]
+        }
       ],
       "allowed_sub_agent_ids": [],
       "allowed_mcp_server_ids": [],
@@ -763,12 +825,23 @@
         "agentMode",
         "subAgent"
       ],
-      "allowed_tool_names": [
-        "read_story_entity",
-        "read_outline",
-        "read_manuscript",
-        "search_keyword",
-        "search_semantic"
+      "tool_grants": [
+        {
+          "feature_key": "story_entity",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "outline",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "manuscript",
+          "categories": ["read"]
+        },
+        {
+          "feature_key": "search",
+          "categories": ["read"]
+        }
       ],
       "allowed_sub_agent_ids": [],
       "allowed_mcp_server_ids": [],

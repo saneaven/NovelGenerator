@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, ConfigDict
 import uuid
 
 from .settings import TaskAIConfig
+from ..services.tool_engine.grant_catalog import FeatureKey, ToolCategory
 
 
 class SubAgentPromptTemplates(BaseModel):
@@ -15,6 +16,21 @@ class SubAgentPromptTemplates(BaseModel):
 
     system_prompt: Optional[str] = Field(None, min_length=1)
     user_prompt: Optional[str] = Field(None, min_length=1)
+
+
+class SubAgentToolGrant(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    feature_key: FeatureKey
+    categories: List[ToolCategory]
+
+
+class SubAgentToolGrantCatalogItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    feature_key: FeatureKey
+    display_name: str = Field(..., min_length=1, max_length=200)
+    supported_categories: List[ToolCategory]
 
 
 class SubAgentDefinition(BaseModel):
@@ -28,8 +44,7 @@ class SubAgentDefinition(BaseModel):
     enabled: bool = True
 
     allowed_invocation_modes: List[str]
-    # Static tool names only (create_*/read_*/patch_*/replace_* etc). Never store call_* here.
-    allowed_tool_names: List[str]
+    tool_grants: List[SubAgentToolGrant]
     # UUID list of other Sub Agents that this Sub Agent is allowed to call.
     allowed_sub_agent_ids: List[uuid.UUID]
     allowed_mcp_server_ids: List[uuid.UUID]
@@ -51,7 +66,7 @@ class SubAgentCreate(BaseModel):
     enabled: bool = True
 
     allowed_invocation_modes: List[str]
-    allowed_tool_names: List[str]
+    tool_grants: List[SubAgentToolGrant]
     allowed_sub_agent_ids: List[uuid.UUID]
     allowed_mcp_server_ids: List[uuid.UUID]
 
@@ -70,7 +85,7 @@ class SubAgentUpdate(BaseModel):
     enabled: Optional[bool] = None
 
     allowed_invocation_modes: Optional[List[str]] = None
-    allowed_tool_names: Optional[List[str]] = None
+    tool_grants: Optional[List[SubAgentToolGrant]] = None
     allowed_sub_agent_ids: Optional[List[uuid.UUID]] = None
     allowed_mcp_server_ids: Optional[List[uuid.UUID]] = None
     use_custom_llm_config: Optional[bool] = None

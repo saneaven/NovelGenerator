@@ -12,12 +12,12 @@ from sqlalchemy.orm import Session
 from ..models.db_models import Journey, RunMessageModel, RunModel, RunToolCallModel, Thread
 from ..services.chat_attachment_service import IncomingMessageAttachment
 from ..services.notification_service import (
-    ACTIVE_THREAD_DELETE_STATUSES,
     NotificationDeleteRow,
     default_journey_label,
     delete_notification_source,
     serialize_notification,
 )
+from ..services.run_status_policy import THREAD_DELETE_PRE_CLEANUP_STATUSES
 from ..services.run_pipeline.contracts import CreateContext
 from ..services.runtime_event_dispatcher import RuntimeEventDispatcher
 from ..services.settings_service import settings_service
@@ -403,7 +403,7 @@ class JourneyService:
             thread = self.get_child_thread(discovery_db, journey_id=journey.id)
             active_thread_id = (
                 thread.id
-                if thread is not None and thread.status in ACTIVE_THREAD_DELETE_STATUSES
+                if thread is not None and thread.status in THREAD_DELETE_PRE_CLEANUP_STATUSES
                 else None
             )
         finally:
@@ -470,7 +470,7 @@ class JourneyService:
             active_thread_ids = [
                 thread.id
                 for thread in thread_by_journey_id.values()
-                if thread.status in ACTIVE_THREAD_DELETE_STATUSES
+                if thread.status in THREAD_DELETE_PRE_CLEANUP_STATUSES
             ]
         finally:
             discovery_db.close()

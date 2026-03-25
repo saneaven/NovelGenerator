@@ -411,7 +411,10 @@ export function useSubAgentDrafts() {
           description: d.current.description.trim(),
           enabled: d.current.enabled,
           allowed_invocation_modes: d.current.allowed_invocation_modes,
-          allowed_tool_names: d.current.allowed_tool_names.filter((n) => !n.startsWith('call_')),
+          tool_grants: d.current.tool_grants.map((item) => ({
+            feature_key: item.feature_key,
+            categories: [...item.categories],
+          })),
           allowed_sub_agent_ids: d.current.allowed_sub_agent_ids,
           allowed_mcp_server_ids: d.current.allowed_mcp_server_ids,
           use_custom_llm_config: d.current.use_custom_llm_config,
@@ -443,7 +446,10 @@ export function useSubAgentDrafts() {
             description: updated.description,
             enabled: updated.enabled,
             allowed_invocation_modes: [...updated.allowed_invocation_modes],
-            allowed_tool_names: [...updated.allowed_tool_names],
+            tool_grants: [...updated.tool_grants].map((item) => ({
+              feature_key: item.feature_key,
+              categories: [...item.categories],
+            })),
             allowed_sub_agent_ids: [...updated.allowed_sub_agent_ids],
             allowed_mcp_server_ids: [...updated.allowed_mcp_server_ids],
             use_custom_llm_config: updated.use_custom_llm_config,
@@ -458,7 +464,7 @@ export function useSubAgentDrafts() {
               current: {
                 ...base,
                 allowed_invocation_modes: [...base.allowed_invocation_modes],
-                allowed_tool_names: [...base.allowed_tool_names],
+                tool_grants: [...base.tool_grants].map((item) => ({ feature_key: item.feature_key, categories: [...item.categories] })),
                 allowed_sub_agent_ids: [...base.allowed_sub_agent_ids],
                 allowed_mcp_server_ids: [...base.allowed_mcp_server_ids],
               },
@@ -570,7 +576,7 @@ export function useSubAgentDrafts() {
           current: {
             ...d.original,
             allowed_invocation_modes: [...d.original.allowed_invocation_modes],
-            allowed_tool_names: [...d.original.allowed_tool_names],
+            tool_grants: [...d.original.tool_grants].map((item) => ({ feature_key: item.feature_key, categories: [...item.categories] })),
             allowed_sub_agent_ids: [...d.original.allowed_sub_agent_ids],
             allowed_mcp_server_ids: [...d.original.allowed_mcp_server_ids],
           },

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import inspect
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Awaitable, Callable
 from uuid import UUID, uuid4
@@ -12,15 +12,26 @@ from ..settings_service import settings_service
 from ..sidecar_client import sidecar_client
 from ..storage_usage_service import (
     apply_project_usage_delta,
+    apply_project_usage_deltas,
     build_tool_call_delta,
     snapshot_tool_call_row,
 )
 from ..run_pipeline.status_logic import derive_run_status
-from .contexts import ToolExecutionContext, ToolModuleContext, ToolValidationContext
-from .contracts import ToolOffer, ValidationResult
+from .contexts import ToolAccessPolicy, ToolExecutionContext, ToolGroupExecutionContext, ToolModuleContext, ToolValidationContext
+from .contracts import PersistedToolMeta, ToolDecisionGroup, ToolDecisionItem, ToolExecutionOutcome, ToolExecutionResult, ToolOffer, ValidationResult
+from .grant_catalog import TOOL_GRANT_CATALOG
 from .registry import ToolRegistry
 from .result_utils import invalid_result, valid_result
 from .schema_validation import validate_args_is_object, validate_schema_required_enum_additional_properties
+
+
+@dataclass(frozen=True)
+class AppliedToolCallResult:
+    tool_call_id: UUID
+    status: str
+    child_thread_id: UUID | None = None
+    child_input_text: str | None = None
+    image_run_id: UUID | None = None
 
 
 class ToolEngineService:
@@ -36,14 +47,54 @@ class ToolEngineService:
         return "agentMode"
 
     @staticmethod
-    def _resolve_sub_agent_permissions(
+    def _parse_allowed_sub_agent_ids(raw_items: Any) -> frozenset[UUID]:
+        out: set[UUID] = set()
+        if not isinstance(raw_items, list):
+            return frozenset()
+        for raw in raw_items:
+            try:
+                out.add(UUID(str(raw)))
+            except (TypeError, ValueError):
+                continue
+        return frozenset(out)
+
+    @staticmethod
+    def _normalize_feature_categories(raw_items: Any) -> dict[str, frozenset[str]]:
+        out: dict[str, frozenset[str]] = {}
+        if not isinstance(raw_items, list):
+            return out
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+            feature_key = str(item.get("feature_key") or "").strip()
+            if feature_key not in TOOL_GRANT_CATALOG:
+                continue
+            supported = {
+                str(value)
+                for value in (TOOL_GRANT_CATALOG[feature_key].get("supported_categories") or ())
+                if isinstance(value, str) and value
+            }
+            categories_raw = item.get("categories")
+            if not isinstance(categories_raw, list):
+                continue
+            categories = frozenset(
+                str(value)
+                for value in categories_raw
+                if isinstance(value, str) and str(value) in supported
+            )
+            if categories:
+                out[feature_key] = categories
+        return out
+
+    def build_access_policy(
+        self,
         db: Session,
         *,
         thread: Thread,
         user_id: UUID,
-    ) -> tuple[set[str] | None, set[UUID] | None]:
+    ) -> ToolAccessPolicy:
         if thread.thread_type != "subAgent":
-            return None, None
+            return ToolAccessPolicy(feature_categories=None, allowed_sub_agent_ids=None)
 
         definition = (
             db.query(SubAgentDefinitionModel)
@@ -55,22 +106,12 @@ class ToolEngineService:
             .first()
         )
         if definition is None:
-            return set(), set()
+            return ToolAccessPolicy(feature_categories={}, allowed_sub_agent_ids=frozenset())
 
-        allowed_tool_names = {
-            str(name).strip()
-            for name in (definition.allowed_tool_names or [])
-            if isinstance(name, str) and str(name).strip()
-        }
-
-        allowed_sub_agent_ids: set[UUID] = set()
-        for raw in definition.allowed_sub_agent_ids or []:
-            try:
-                allowed_sub_agent_ids.add(UUID(str(raw)))
-            except (TypeError, ValueError):
-                continue
-
-        return allowed_tool_names, allowed_sub_agent_ids
+        return ToolAccessPolicy(
+            feature_categories=self._normalize_feature_categories(definition.tool_grants),
+            allowed_sub_agent_ids=self._parse_allowed_sub_agent_ids(definition.allowed_sub_agent_ids),
+        )
 
     def build_module_context(
         self,
@@ -85,10 +126,11 @@ class ToolEngineService:
         input_payload: dict[str, Any],
         vector_storage_enabled: bool,
     ) -> ToolModuleContext:
-        allowed_tool_names, allowed_sub_agent_ids = self._resolve_sub_agent_permissions(
-            db,
-            thread=thread,
-            user_id=user_id,
+        access_policy = self.build_access_policy(db, thread=thread, user_id=user_id)
+        compat_allowed_sub_agents = (
+            set(access_policy.allowed_sub_agent_ids)
+            if access_policy.allowed_sub_agent_ids is not None
+            else None
         )
         return ToolModuleContext(
             db=db,
@@ -101,8 +143,115 @@ class ToolEngineService:
             input_payload=input_payload,
             vector_storage_enabled=vector_storage_enabled,
             invocation_mode=self.invocation_mode_for_run(thread, run),
-            allowed_tool_names=allowed_tool_names,
-            allowed_sub_agent_ids=allowed_sub_agent_ids,
+            access_policy=access_policy,
+            allowed_sub_agent_ids=compat_allowed_sub_agents,
+        )
+
+    def _build_validation_context(
+        self,
+        *,
+        db: Session,
+        thread: Thread,
+        run: RunModel,
+        settings: UserSettings,
+        user_id: UUID,
+        project_id: UUID,
+        language: str,
+        preset_id: UUID | None,
+        input_payload: dict[str, Any],
+        vector_storage_enabled: bool,
+    ) -> ToolValidationContext:
+        access_policy = self.build_access_policy(db, thread=thread, user_id=user_id)
+        compat_allowed_sub_agents = (
+            set(access_policy.allowed_sub_agent_ids)
+            if access_policy.allowed_sub_agent_ids is not None
+            else None
+        )
+        return ToolValidationContext(
+            db=db,
+            thread=thread,
+            run=run,
+            settings=settings,
+            user_id=user_id,
+            project_id=project_id,
+            language=language,
+            sidecar=sidecar_client,
+            preset_id=preset_id,
+            input_payload=input_payload,
+            vector_storage_enabled=vector_storage_enabled,
+            invocation_mode=self.invocation_mode_for_run(thread, run),
+            access_policy=access_policy,
+            allowed_sub_agent_ids=compat_allowed_sub_agents,
+        )
+
+    def _build_execution_context(
+        self,
+        *,
+        db: Session,
+        thread: Thread,
+        run: RunModel,
+        settings: UserSettings,
+        tool_call_row: RunToolCallModel,
+        user_id: UUID,
+        project_id: UUID,
+        language: str,
+        preset_id: UUID | None,
+        input_payload: dict[str, Any],
+        vector_storage_enabled: bool,
+    ) -> ToolExecutionContext:
+        access_policy = self.build_access_policy(db, thread=thread, user_id=user_id)
+        compat_allowed_sub_agents = (
+            set(access_policy.allowed_sub_agent_ids)
+            if access_policy.allowed_sub_agent_ids is not None
+            else None
+        )
+        return ToolExecutionContext(
+            db=db,
+            thread=thread,
+            run=run,
+            settings=settings,
+            tool_call_row=tool_call_row,
+            user_id=user_id,
+            project_id=project_id,
+            language=language,
+            sidecar=sidecar_client,
+            preset_id=preset_id,
+            input_payload=input_payload,
+            vector_storage_enabled=vector_storage_enabled,
+            invocation_mode=self.invocation_mode_for_run(thread, run),
+            access_policy=access_policy,
+            allowed_sub_agent_ids=compat_allowed_sub_agents,
+        )
+
+    def _build_group_execution_context(
+        self,
+        *,
+        db: Session,
+        thread: Thread,
+        run: RunModel,
+        settings: UserSettings,
+        user_id: UUID,
+        project_id: UUID,
+        language: str,
+        preset_id: UUID | None,
+        input_payload: dict[str, Any],
+        vector_storage_enabled: bool,
+    ) -> ToolGroupExecutionContext:
+        access_policy = self.build_access_policy(db, thread=thread, user_id=user_id)
+        return ToolGroupExecutionContext(
+            db=db,
+            thread=thread,
+            run=run,
+            settings=settings,
+            user_id=user_id,
+            project_id=project_id,
+            language=language,
+            sidecar=sidecar_client,
+            preset_id=preset_id,
+            input_payload=input_payload,
+            vector_storage_enabled=vector_storage_enabled,
+            invocation_mode=self.invocation_mode_for_run(thread, run),
+            access_policy=access_policy,
         )
 
     def build_offer_for_run(
@@ -157,7 +306,7 @@ class ToolEngineService:
             run_mode="agentMode",
             input_payload={},
         )
-        ctx = self.build_module_context(
+        offer = self.build_offer_for_run(
             db,
             thread=thread,
             run=run,
@@ -168,23 +317,99 @@ class ToolEngineService:
             input_payload={},
             vector_storage_enabled=True,
         )
-        return self._registry.list_static_tool_names(ctx)
+        return sorted(
+            name
+            for name in offer.specs_by_name
+            if not (name.startswith("call_") or name.startswith("mcp__"))
+        )
 
     @staticmethod
-    async def _await_if_needed(value: Any) -> Any:
-        if inspect.isawaitable(value):
-            return await value
-        return value
+    def _parse_persisted_meta(raw: Any) -> PersistedToolMeta | None:
+        if not isinstance(raw, dict):
+            return None
+        feature_key = raw.get("feature_key")
+        category = raw.get("category")
+        op = raw.get("op")
+        target_kind = raw.get("target_kind")
+        if not all(isinstance(value, str) and value for value in (feature_key, category, op, target_kind)):
+            return None
+        target_id = raw.get("target_id")
+        if target_id is not None and not isinstance(target_id, str):
+            target_id = str(target_id)
+        merge_key = raw.get("merge_key")
+        if merge_key is not None and not isinstance(merge_key, str):
+            merge_key = str(merge_key)
+        return PersistedToolMeta(
+            feature_key=feature_key,
+            category=category,
+            op=op,
+            target_kind=target_kind,
+            target_id=target_id,
+            merge_key=merge_key,
+        )
 
     @staticmethod
-    def _extract_execution_controls(result: Any) -> tuple[str | None, dict[str, Any] | None, Any]:
-        if not isinstance(result, dict):
-            return None, None, result
-        continue_as_raw = result.get("__continue_as")
-        continue_as = str(continue_as_raw) if isinstance(continue_as_raw, str) else None
-        extra_patch = result.get("__extra_content")
-        safe_result = {k: v for k, v in result.items() if k not in {"__continue_as", "__extra_content"}}
-        return continue_as, extra_patch if isinstance(extra_patch, dict) else None, safe_result
+    def _normalize_execution_outcome(raw: Any) -> ToolExecutionOutcome:
+        if isinstance(raw, ToolExecutionOutcome):
+            return raw
+        if not isinstance(raw, dict):
+            raise ValueError(f"Legacy tool execution returned invalid type: {type(raw)!r}")
+
+        extra_content_patch = raw.get("__extra_content")
+        safe_result = {k: v for k, v in raw.items() if k != "__extra_content"}
+
+        child_thread_id: UUID | None = None
+        image_run_id: UUID | None = None
+        for field_name, target in (("child_thread_id", "child"), ("image_run_id", "image")):
+            value = safe_result.get(field_name)
+            if value is None:
+                continue
+            try:
+                parsed = UUID(str(value))
+            except (TypeError, ValueError):
+                parsed = None
+            if target == "child":
+                child_thread_id = parsed
+            else:
+                image_run_id = parsed
+
+        child_input_text = safe_result.get("input_text")
+        if not isinstance(child_input_text, str):
+            child_input_text = None
+
+        return ToolExecutionOutcome(
+            lifecycle="applied",
+            result=safe_result,
+            extra_content_patch=extra_content_patch if isinstance(extra_content_patch, dict) else None,
+            child_thread_id=child_thread_id,
+            child_input_text=child_input_text,
+            image_run_id=image_run_id,
+        )
+
+    @staticmethod
+    def _apply_execution_outcome(row: RunToolCallModel, outcome: ToolExecutionOutcome) -> None:
+        base_extra = row.extra_content if isinstance(row.extra_content, dict) else {}
+        if outcome.extra_content_patch:
+            row.extra_content = {**base_extra, **outcome.extra_content_patch}
+        elif not isinstance(row.extra_content, dict):
+            row.extra_content = base_extra
+
+        if outcome.child_thread_id is not None:
+            row.child_thread_id = outcome.child_thread_id
+        if outcome.image_run_id is not None:
+            row.image_run_id = outcome.image_run_id
+
+        row.status = "working" if outcome.lifecycle == "working" else "applied"
+        row.result = outcome.result if isinstance(outcome.result, dict) else None
+        row.reason = None
+        row.updated_at = datetime.utcnow()
+
+    @staticmethod
+    def _mark_failed(row: RunToolCallModel, reason: str) -> None:
+        row.status = "failed"
+        row.reason = reason
+        row.result = {"success": False, "message": reason, "error": reason}
+        row.updated_at = datetime.utcnow()
 
     async def validate_tool_call(
         self,
@@ -208,20 +433,16 @@ class ToolEngineService:
             return base
 
         arg_map = args if isinstance(args, dict) else {}
-
-        module = self._registry.resolve_module(tool_name)
-        if module is None:
-            return invalid_result("validate_tool_prefix", f"Unknown tool prefix: {tool_name}")
-
         spec = offer.specs_by_name.get(tool_name)
-        if spec is None:
+        binding = offer.bindings_by_name.get(tool_name)
+        if spec is None or binding is None:
             return invalid_result("validate_tool_is_in_offer", f"Tool not available in this session: {tool_name}")
 
         schema_result = validate_schema_required_enum_additional_properties(arg_map, spec.parameters)
         if not schema_result.valid:
             return schema_result
 
-        validation_ctx = ToolValidationContext(
+        validation_ctx = self._build_validation_context(
             db=db,
             thread=thread,
             run=run,
@@ -229,21 +450,375 @@ class ToolEngineService:
             user_id=user_id,
             project_id=project_id,
             language=language,
-            sidecar=sidecar_client,
             preset_id=preset_id,
             input_payload=input_payload,
             vector_storage_enabled=vector_storage_enabled,
-            invocation_mode=self.invocation_mode_for_run(thread, run),
-            allowed_tool_names=self._resolve_sub_agent_permissions(db, thread=thread, user_id=user_id)[0],
-            allowed_sub_agent_ids=self._resolve_sub_agent_permissions(db, thread=thread, user_id=user_id)[1],
         )
-        outcome = await self._await_if_needed(module.validate(tool_name, arg_map, validation_ctx))
+        outcome = await binding.validate(arg_map, validation_ctx)
         if not isinstance(outcome, ValidationResult):
             return invalid_result(
                 "validate_tool_module_validator",
                 f"Validator returned invalid type for tool {tool_name}",
             )
         return outcome if not outcome.valid else valid_result()
+
+    async def _execute_immediate_item(
+        self,
+        db: Session,
+        *,
+        thread: Thread,
+        run: RunModel,
+        settings: UserSettings,
+        row: RunToolCallModel,
+        item: ToolDecisionItem,
+        user_id: UUID,
+        project_id: UUID,
+        language: str,
+        preset_id: UUID,
+        input_payload: dict[str, Any],
+        vector_storage_enabled: bool,
+    ) -> AppliedToolCallResult:
+        before = snapshot_tool_call_row(row)
+        try:
+            exec_ctx = self._build_execution_context(
+                db=db,
+                thread=thread,
+                run=run,
+                settings=settings,
+                tool_call_row=row,
+                user_id=user_id,
+                project_id=project_id,
+                language=language,
+                preset_id=preset_id,
+                input_payload=input_payload,
+                vector_storage_enabled=vector_storage_enabled,
+            )
+            outcome = await item.binding.execute(item.args, exec_ctx)
+            if not isinstance(outcome, ToolExecutionOutcome):
+                outcome = self._normalize_execution_outcome(outcome)
+            self._apply_execution_outcome(row, outcome)
+            apply_project_usage_delta(
+                db,
+                user_id=user_id,
+                project_id=project_id,
+                delta=build_tool_call_delta(before, snapshot_tool_call_row(row)),
+                enforce_quota=True,
+            )
+            db.commit()
+            db.refresh(row)
+            return AppliedToolCallResult(
+                tool_call_id=row.id,
+                status=row.status,
+                child_thread_id=outcome.child_thread_id,
+                child_input_text=outcome.child_input_text,
+                image_run_id=outcome.image_run_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            failed_row = db.query(RunToolCallModel).filter(RunToolCallModel.id == row.id).first()
+            if failed_row is None:
+                raise
+            failed_before = snapshot_tool_call_row(failed_row)
+            self._mark_failed(failed_row, str(exc))
+            apply_project_usage_delta(
+                db,
+                user_id=user_id,
+                project_id=project_id,
+                delta=build_tool_call_delta(failed_before, snapshot_tool_call_row(failed_row)),
+                enforce_quota=False,
+            )
+            db.commit()
+            db.refresh(failed_row)
+            return AppliedToolCallResult(tool_call_id=failed_row.id, status=failed_row.status)
+
+    async def _execute_group(
+        self,
+        db: Session,
+        *,
+        thread: Thread,
+        run: RunModel,
+        settings: UserSettings,
+        rows_by_id: dict[UUID, RunToolCallModel],
+        group: ToolDecisionGroup,
+        user_id: UUID,
+        project_id: UUID,
+        language: str,
+        preset_id: UUID,
+        input_payload: dict[str, Any],
+        vector_storage_enabled: bool,
+    ) -> list[AppliedToolCallResult]:
+        module = self._registry.get_feature_module(group.feature_key)
+        try:
+            group_ctx = self._build_group_execution_context(
+                db=db,
+                thread=thread,
+                run=run,
+                settings=settings,
+                user_id=user_id,
+                project_id=project_id,
+                language=language,
+                preset_id=preset_id,
+                input_payload=input_payload,
+                vector_storage_enabled=vector_storage_enabled,
+            )
+            execution_results = await module.apply_group(group=group, ctx=group_ctx)
+            deltas = []
+            out: list[AppliedToolCallResult] = []
+            for execution_result in execution_results:
+                row = rows_by_id.get(execution_result.tool_call_id)
+                if row is None:
+                    continue
+                before = snapshot_tool_call_row(row)
+                outcome = execution_result.outcome
+                self._apply_execution_outcome(row, outcome)
+                deltas.append(build_tool_call_delta(before, snapshot_tool_call_row(row)))
+                out.append(
+                    AppliedToolCallResult(
+                        tool_call_id=row.id,
+                        status=row.status,
+                        child_thread_id=outcome.child_thread_id,
+                        child_input_text=outcome.child_input_text,
+                        image_run_id=outcome.image_run_id,
+                    )
+                )
+            if deltas:
+                apply_project_usage_deltas(
+                    db,
+                    user_id=user_id,
+                    project_id=project_id,
+                    deltas=deltas,
+                    enforce_quota=True,
+                )
+            db.commit()
+            for row in rows_by_id.values():
+                db.refresh(row)
+            return out
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            deltas = []
+            out: list[AppliedToolCallResult] = []
+            for item in group.items:
+                row = db.query(RunToolCallModel).filter(RunToolCallModel.id == item.tool_call_id).first()
+                if row is None:
+                    continue
+                before = snapshot_tool_call_row(row)
+                self._mark_failed(row, str(exc))
+                deltas.append(build_tool_call_delta(before, snapshot_tool_call_row(row)))
+                out.append(AppliedToolCallResult(tool_call_id=row.id, status=row.status))
+            if deltas:
+                apply_project_usage_deltas(
+                    db,
+                    user_id=user_id,
+                    project_id=project_id,
+                    deltas=deltas,
+                    enforce_quota=False,
+                )
+            db.commit()
+            return out
+
+    async def apply_tool_call_ids(
+        self,
+        db_factory: Callable[[], Session],
+        *,
+        thread_id: UUID,
+        user_id: UUID,
+        tool_call_ids: list[UUID],
+    ) -> list[AppliedToolCallResult]:
+        if not tool_call_ids:
+            return []
+
+        ordered_ids = list(dict.fromkeys(tool_call_ids))
+        db = db_factory()
+        try:
+            thread = db.query(Thread).filter(Thread.id == thread_id, Thread.user_id == user_id).first()
+            if thread is None:
+                raise ValueError("Thread not found")
+
+            settings = settings_service._get_settings(db, user_id)  # pylint: disable=protected-access
+            preset_id = settings_service.get_active_preset_id(db, user_id)
+            if preset_id is None:
+                raise ValueError("No active preset configured")
+            vector_storage_enabled = settings_service.is_vector_storage_enabled(db, user_id)
+
+            locked_rows = (
+                db.query(RunToolCallModel)
+                .with_for_update()
+                .filter(
+                    RunToolCallModel.thread_id == thread.id,
+                    RunToolCallModel.id.in_(ordered_ids),
+                )
+                .all()
+            )
+            row_by_id = {row.id: row for row in locked_rows}
+
+            now = datetime.utcnow()
+            for tool_call_id in ordered_ids:
+                row = row_by_id.get(tool_call_id)
+                if row is None:
+                    continue
+                if row.status not in {"pending", "validating", "streaming"}:
+                    continue
+                row.status = "processing"
+                row.reason = None
+                row.accepted_at = row.accepted_at or now
+                row.updated_at = now
+            db.commit()
+
+            run_ids = {
+                row.run_id
+                for row in db.query(RunToolCallModel)
+                .filter(
+                    RunToolCallModel.thread_id == thread.id,
+                    RunToolCallModel.id.in_(ordered_ids),
+                )
+                .all()
+                if row.run_id is not None
+            }
+            runs_by_id = (
+                {
+                    run.id: run
+                    for run in db.query(RunModel)
+                    .filter(
+                        RunModel.thread_id == thread.id,
+                        RunModel.id.in_(run_ids),
+                    )
+                    .all()
+                }
+                if run_ids
+                else {}
+            )
+            results_by_id: dict[UUID, AppliedToolCallResult] = {}
+
+            for run_id, run in runs_by_id.items():
+                run_rows = (
+                    db.query(RunToolCallModel)
+                    .filter(
+                        RunToolCallModel.thread_id == thread.id,
+                        RunToolCallModel.run_id == run_id,
+                        RunToolCallModel.id.in_(ordered_ids),
+                    )
+                    .order_by(RunToolCallModel.call_seq.asc())
+                    .all()
+                )
+                if not run_rows:
+                    continue
+                input_payload = run.input_payload if isinstance(run.input_payload, dict) else {}
+                effective_project_id = run.project_id
+                offer = self.build_offer_for_run(
+                    db,
+                    thread=thread,
+                    run=run,
+                    settings=settings,
+                    preset_id=preset_id,
+                    user_id=user_id,
+                    project_id=effective_project_id,
+                    input_payload=input_payload,
+                    vector_storage_enabled=vector_storage_enabled,
+                )
+                module_ctx = self.build_module_context(
+                    db,
+                    thread=thread,
+                    run=run,
+                    settings=settings,
+                    preset_id=preset_id,
+                    user_id=user_id,
+                    project_id=effective_project_id,
+                    input_payload=input_payload,
+                    vector_storage_enabled=vector_storage_enabled,
+                )
+
+                immediate_items: list[tuple[RunToolCallModel, ToolDecisionItem]] = []
+                grouped_items: dict[tuple[str, str], list[ToolDecisionItem]] = {}
+                run_row_by_id = {row.id: row for row in run_rows}
+
+                for row in run_rows:
+                    if row.status not in {"processing", "pending", "validating", "streaming"}:
+                        results_by_id[row.id] = AppliedToolCallResult(
+                            tool_call_id=row.id,
+                            status=row.status,
+                        )
+                        continue
+
+                    binding = offer.bindings_by_name.get(str(row.tool_name))
+                    if binding is None:
+                        before = snapshot_tool_call_row(row)
+                        self._mark_failed(row, f"Tool not available in this session: {row.tool_name}")
+                        apply_project_usage_delta(
+                            db,
+                            user_id=user_id,
+                            project_id=effective_project_id,
+                            delta=build_tool_call_delta(before, snapshot_tool_call_row(row)),
+                            enforce_quota=False,
+                        )
+                        db.commit()
+                        results_by_id[row.id] = AppliedToolCallResult(tool_call_id=row.id, status=row.status)
+                        continue
+
+                    args = row.arguments if isinstance(row.arguments, dict) else {}
+                    extra_content = row.extra_content if isinstance(row.extra_content, dict) else {}
+                    persisted = self._parse_persisted_meta(extra_content.get("__tool_meta"))
+                    if persisted is None:
+                        persisted = binding.build_persisted_meta(module_ctx, args)
+                        row.extra_content = {**extra_content, "__tool_meta": persisted.__dict__}
+                        db.flush()
+
+                    item = ToolDecisionItem(
+                        tool_call_id=row.id,
+                        binding=binding,
+                        args=args,
+                        meta=persisted,
+                        call_seq=int(row.call_seq or 0),
+                    )
+                    if persisted.merge_key:
+                        grouped_items.setdefault((persisted.feature_key, persisted.merge_key), []).append(item)
+                    else:
+                        immediate_items.append((row, item))
+
+                for row, item in immediate_items:
+                    results_by_id[row.id] = await self._execute_immediate_item(
+                        db,
+                        thread=thread,
+                        run=run,
+                        settings=settings,
+                        row=row,
+                        item=item,
+                        user_id=user_id,
+                        project_id=effective_project_id,
+                        language=run.language,
+                        preset_id=preset_id,
+                        input_payload=input_payload,
+                        vector_storage_enabled=vector_storage_enabled,
+                    )
+
+                for (feature_key, merge_key), items in grouped_items.items():
+                    group = ToolDecisionGroup(
+                        feature_key=feature_key,
+                        merge_key=merge_key,
+                        items=tuple(sorted(items, key=lambda item: item.call_seq)),
+                    )
+                    group_results = await self._execute_group(
+                        db,
+                        thread=thread,
+                        run=run,
+                        settings=settings,
+                        rows_by_id=run_row_by_id,
+                        group=group,
+                        user_id=user_id,
+                        project_id=effective_project_id,
+                        language=run.language,
+                        preset_id=preset_id,
+                        input_payload=input_payload,
+                        vector_storage_enabled=vector_storage_enabled,
+                    )
+                    for result in group_results:
+                        results_by_id[result.tool_call_id] = result
+
+            return [
+                results_by_id.get(tool_call_id, AppliedToolCallResult(tool_call_id=tool_call_id, status="failed"))
+                for tool_call_id in ordered_ids
+            ]
+        finally:
+            db.close()
 
     async def execute_tool_call_by_id(
         self,
@@ -256,139 +831,22 @@ class ToolEngineService:
     ) -> dict[str, Any]:
         db = db_factory()
         try:
-            tool_call = db.query(RunToolCallModel).filter(RunToolCallModel.id == tool_call_id).first()
-            if tool_call is None:
-                raise ValueError("Tool call not found")
-
-            thread = db.query(Thread).filter(Thread.id == tool_call.thread_id, Thread.user_id == user_id).first()
-            if thread is None:
-                raise ValueError("Thread not found")
-
-            run = db.query(RunModel).filter(RunModel.id == tool_call.run_id).first()
-            if run is None:
-                raise ValueError("Run not found")
-            effective_project_id = run.project_id
-
-            if tool_call.status in {"applied", "failed", "rejected"}:
-                return {"tool_call": tool_call}
-
-            settings = settings_service._get_settings(db, user_id)  # pylint: disable=protected-access
-            preset_id = settings_service.get_active_preset_id(db, user_id)
-            if preset_id is None:
-                raise ValueError("No active preset configured")
-
-            tool_name = str(tool_call.tool_name)
-            module = self._registry.resolve_module(tool_name)
-            if module is None:
-                raise ValueError(f"Unknown tool prefix: {tool_name}")
-
-            vector_storage_enabled = settings_service.is_vector_storage_enabled(db, user_id)
-            input_payload = run.input_payload if isinstance(run.input_payload, dict) else {}
-            offer = self.build_offer_for_run(
-                db,
-                thread=thread,
-                run=run,
-                settings=settings,
-                preset_id=preset_id,
-                user_id=user_id,
-                project_id=effective_project_id,
-                input_payload=input_payload,
-                vector_storage_enabled=vector_storage_enabled,
-            )
-            spec = offer.specs_by_name.get(tool_name)
-            if spec is None:
-                raise ValueError(f"Tool not available in this session: {tool_name}")
-
-            tool_call.status = "processing"
-            tool_call.accepted_at = tool_call.accepted_at or datetime.utcnow()
-            tool_call.updated_at = datetime.utcnow()
-            # Commit (not flush) so the row lock is released before the async
-            # module.execute() call.  A bare flush() would hold a write lock on
-            # this tool-call row across the await boundary; if any other request
-            # then does SELECT FOR UPDATE on the same row the synchronous
-            # SQLAlchemy call blocks the asyncio event loop, deadlocking the
-            # entire server.
-            db.commit()
-            db.refresh(tool_call)
-
-            args = tool_call.arguments if isinstance(tool_call.arguments, dict) else {}
-            allowed_tool_names, allowed_sub_agent_ids = self._resolve_sub_agent_permissions(
-                db,
-                thread=thread,
-                user_id=user_id,
-            )
-            exec_ctx = ToolExecutionContext(
-                db=db,
-                thread=thread,
-                run=run,
-                settings=settings,
-                tool_call_row=tool_call,
-                user_id=user_id,
-                project_id=effective_project_id,
-                language=language,
-                sidecar=sidecar_client,
-                preset_id=preset_id,
-                input_payload=input_payload,
-                vector_storage_enabled=vector_storage_enabled,
-                invocation_mode=self.invocation_mode_for_run(thread, run),
-                allowed_tool_names=allowed_tool_names,
-                allowed_sub_agent_ids=allowed_sub_agent_ids,
-            )
-
-            raw_result = await module.execute(tool_name, args, exec_ctx)
-            continue_as, extra_patch, result = self._extract_execution_controls(raw_result)
-            # Re-read the row to pick up any changes made while the lock was
-            # released during module.execute().
-            db.refresh(tool_call)
-            before = snapshot_tool_call_row(tool_call)
-
-            if extra_patch is not None:
-                base_extra = tool_call.extra_content if isinstance(tool_call.extra_content, dict) else {}
-                tool_call.extra_content = {**base_extra, **extra_patch}
-
-            if continue_as in {"working"} and tool_call.status == "processing":
-                tool_call.status = continue_as
-                tool_call.result = result if isinstance(result, dict) else None
-                tool_call.reason = None
-                tool_call.updated_at = datetime.utcnow()
-            else:
-                tool_call.status = "applied"
-                tool_call.result = result
-                tool_call.reason = None
-                tool_call.updated_at = datetime.utcnow()
-
-            db.flush()
-            apply_project_usage_delta(
-                db,
-                user_id=user_id,
-                project_id=effective_project_id,
-                delta=build_tool_call_delta(before, snapshot_tool_call_row(tool_call)),
-                enforce_quota=True,
-            )
-            db.commit()
-            db.refresh(tool_call)
-            return {"tool_call": tool_call, "result": result}
-
-        except Exception as exc:  # noqa: BLE001
-            db.rollback()
             row = db.query(RunToolCallModel).filter(RunToolCallModel.id == tool_call_id).first()
-            if row is not None:
-                before = snapshot_tool_call_row(row)
-                row.status = "failed"
-                row.reason = str(exc)
-                row.result = {"success": False, "message": str(exc), "error": str(exc)}
-                row.updated_at = datetime.utcnow()
-                apply_project_usage_delta(
-                    db,
-                    user_id=user_id,
-                    project_id=row.run.project_id if row.run is not None else project_id,
-                    delta=build_tool_call_delta(before, snapshot_tool_call_row(row)),
-                    enforce_quota=False,
-                )
-                db.commit()
-                db.refresh(row)
-                return {"tool_call": row, "result": row.result}
-            raise
+            if row is None:
+                raise ValueError("Tool call not found")
+            thread_id = row.thread_id
+        finally:
+            db.close()
+        results = await self.apply_tool_call_ids(
+            db_factory,
+            thread_id=thread_id,
+            user_id=user_id,
+            tool_call_ids=[tool_call_id],
+        )
+        db = db_factory()
+        try:
+            row = db.query(RunToolCallModel).filter(RunToolCallModel.id == tool_call_id).first()
+            return {"tool_call": row, "result": row.result if row is not None and isinstance(row.result, dict) else None}
         finally:
             db.close()
 

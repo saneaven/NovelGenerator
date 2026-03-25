@@ -69,9 +69,9 @@ function failureCode(result: unknown): string | undefined {
     : undefined;
 }
 
-const generateModule = defineToolCallUiModule({
-  prefix: 'generate_',
-  autoApproveCategories: [],
+const imageModule = defineToolCallUiModule({
+  key: 'image',
+  toolNames: ['generate_object_image', 'generate_scene_image'],
   mapOperation(params) {
     const args = coerceRecord(params.args);
     const language = resolveLanguage();
@@ -132,4 +132,4 @@ const generateModule = defineToolCallUiModule({
   },
 });
 
-export default generateModule;
+export default imageModule;

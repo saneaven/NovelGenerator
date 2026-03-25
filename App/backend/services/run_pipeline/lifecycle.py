@@ -13,6 +13,11 @@ from ..chat_attachment_service import (
     chat_attachment_service,
 )
 from ..mcp import mcp_policy_service, mcp_resolver
+from ..run_status_policy import (
+    RUN_CANCELABLE_STATUSES,
+    RUN_PAUSABLE_STATUSES,
+    RUN_RESUME_BLOCKED_STATUSES,
+)
 from ..settings_service import settings_service
 from ..storage_usage_service import (
     StorageQuotaExceededError,
@@ -116,7 +121,7 @@ class RunPipelineLifecycle:
                     raise HTTPException(status_code=409, detail="Pending tool call exists in thread")
 
                 latest = self._latest_run_for_thread(db, thread_id=thread.id)
-                if latest is not None and latest.status in {"running", "waiting", "processing"}:
+                if latest is not None and latest.status in RUN_PAUSABLE_STATUSES:
                     latest_active_run_id = latest.id
             finally:
                 db.close()
@@ -147,7 +152,7 @@ class RunPipelineLifecycle:
                 preset_id = settings_service.get_active_preset_id(db, command.user_id)
 
                 latest = self._latest_run_for_thread(db, thread_id=thread.id)
-                if latest is not None and latest.status in {"running", "waiting", "processing"}:
+                if latest is not None and latest.status in RUN_PAUSABLE_STATUSES:
                     latest.status = "canceled"
 
                 run = RunModel(
@@ -319,7 +324,7 @@ class RunPipelineLifecycle:
                         detail="Unresolved tool call exists in latest run",
                     )
 
-                if run.status in {"running"}:
+                if run.status in RUN_RESUME_BLOCKED_STATUSES:
                     raise HTTPException(
                         status_code=409,
                         detail=f"Run status '{run.status}' is not resumable",
@@ -369,7 +374,7 @@ class RunPipelineLifecycle:
                     raise HTTPException(status_code=409, detail="No run exists to pause")
                 if run.status == "paused":
                     return
-                if run.status not in {"running", "waiting", "processing"}:
+                if run.status not in RUN_PAUSABLE_STATUSES:
                     raise HTTPException(
                         status_code=409,
                         detail=f"Run status '{run.status}' is not pausable",
@@ -400,7 +405,7 @@ class RunPipelineLifecycle:
                     .filter(
                         Thread.id == thread_id,
                         Thread.user_id == user_id,
-                        RunModel.status.in_(["queued", "running", "waiting", "processing", "paused"]),
+                        RunModel.status.in_(list(RUN_CANCELABLE_STATUSES)),
                     )
                     .order_by(RunModel.created_at.desc())
                     .first()
@@ -471,7 +476,7 @@ class RunPipelineLifecycle:
                     .filter(
                         Thread.id == thread_id,
                         Thread.user_id == user_id,
-                        RunModel.status.in_(["queued", "running", "waiting", "processing"]),
+                        RunModel.status.in_(list(RUN_CANCELABLE_STATUSES)),
                     )
                     .order_by(RunModel.created_at.desc())
                     .first()

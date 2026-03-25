@@ -118,7 +118,26 @@ export interface RetryConfig {
 }
 
 // Tool call auto-approve configuration (confirmation bypass)
-export type ToolCallAutoApproveConfig = Record<string, boolean>;
+export type ToolCallAutoApproveCategory =
+  | 'read'
+  | 'write'
+  | 'delete'
+  | 'translate'
+  | 'sub_agent'
+  | 'generate'
+  | 'mcp';
+
+export const TOOL_CALL_AUTO_APPROVE_CATEGORIES: ToolCallAutoApproveCategory[] = [
+  'read',
+  'write',
+  'delete',
+  'translate',
+  'sub_agent',
+  'generate',
+  'mcp',
+];
+
+export type ToolCallAutoApproveConfig = Record<ToolCallAutoApproveCategory, boolean>;
 
 // Custom image style for natural language providers (prefix/postfix)
 export interface NaturalImageStyle {

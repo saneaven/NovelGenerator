@@ -215,18 +215,23 @@ def test_delete_all_project_journeys_cancels_active_threads_and_emits_bulk_event
     project_id = uuid4()
     journey_a_id = uuid4()
     journey_b_id = uuid4()
+    journey_c_id = uuid4()
     thread_a_id = uuid4()
     thread_b_id = uuid4()
+    thread_c_id = uuid4()
     notif_a_id = uuid4()
     notif_b_id = uuid4()
+    notif_c_id = uuid4()
 
     journey_a = _journey(journey_id=journey_a_id, project_id=project_id, user_id=user_id, status="running")
     journey_b = _journey(journey_id=journey_b_id, project_id=project_id, user_id=user_id, status="paused")
+    journey_c = _journey(journey_id=journey_c_id, project_id=project_id, user_id=user_id, status="error")
     thread_a = _thread(thread_id=thread_a_id, project_id=project_id, user_id=user_id, journey_id=journey_a_id, status="running")
     thread_b = _thread(thread_id=thread_b_id, project_id=project_id, user_id=user_id, journey_id=journey_b_id, status="paused")
+    thread_c = _thread(thread_id=thread_c_id, project_id=project_id, user_id=user_id, journey_id=journey_c_id, status="error")
 
-    discovery_db = FakeSession({Journey: [journey_a, journey_b], Thread: [thread_a, thread_b]})
-    delete_db = FakeSession({Journey: [journey_a, journey_b], Thread: [thread_a, thread_b]})
+    discovery_db = FakeSession({Journey: [journey_a, journey_b, journey_c], Thread: [thread_a, thread_b, thread_c]})
+    delete_db = FakeSession({Journey: [journey_a, journey_b, journey_c], Thread: [thread_a, thread_b, thread_c]})
     db_factory = SessionFactory([discovery_db, delete_db])
 
     canceled_thread_ids: list[object] = []
@@ -254,6 +259,7 @@ def test_delete_all_project_journeys_cancels_active_threads_and_emits_bulk_event
     notifications_by_source = {
         str(journey_a_id): journey_service_module.NotificationDeleteRow(id=str(notif_a_id), project_id=str(project_id)),
         str(journey_b_id): journey_service_module.NotificationDeleteRow(id=str(notif_b_id), project_id=str(project_id)),
+        str(journey_c_id): journey_service_module.NotificationDeleteRow(id=str(notif_c_id), project_id=str(project_id)),
     }
 
     def _fake_delete_notification_source(_db: object, *, user_id: object, source_kind: str, source_id: object):
@@ -268,24 +274,24 @@ def test_delete_all_project_journeys_cancels_active_threads_and_emits_bulk_event
         )
     )
 
-    assert deleted == 2
-    assert canceled_thread_ids == [thread_a_id]
+    assert deleted == 3
+    assert canceled_thread_ids == [thread_a_id, thread_b_id, thread_c_id]
     assert delete_db.committed is True
     assert delete_db.rolled_back is False
     assert discovery_db.closed is True
     assert delete_db.closed is True
-    assert delete_db.deleted == [thread_a, journey_a, thread_b, journey_b]
+    assert delete_db.deleted == [thread_a, journey_a, thread_b, journey_b, thread_c, journey_c]
     assert emitted_user == [
         (
             "notification:bulk_delete",
-            {"ids": [str(notif_a_id), str(notif_b_id)]},
+            {"ids": [str(notif_a_id), str(notif_b_id), str(notif_c_id)]},
             project_id,
         )
     ]
     assert emitted_project == [
         (
             "thread:bulk_delete",
-            {"ids": [str(thread_a_id), str(thread_b_id)]},
+            {"ids": [str(thread_a_id), str(thread_b_id), str(thread_c_id)]},
         )
     ]
 

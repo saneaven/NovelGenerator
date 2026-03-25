@@ -3,7 +3,6 @@ import type { ThreadRuntimeEvent } from '../../api/sseClient';
 import { useJourneyStore } from '../../store/journeyStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useThreadStore } from '../../store/threadStore';
-import { getAutoApproveCategory } from '../../toolCall/registry/autoApprove';
 import { fetchAndReplaceThreadSnapshot } from '../threadHydration';
 import { isLiveThreadStatus, isNonLiveThreadStatus } from '../threadStreamLifecycle';
 import {
@@ -20,6 +19,23 @@ import { getByDotPath, setByDotPath } from '../../utils/dotPath';
 import { revokeMessageAttachmentObjectUrls, toMessageAttachment } from '../../utils/threadAttachments';
 
 type AutoApproveConfig = Record<string, boolean>;
+
+function getToolCategory(toolCall: ThreadToolCall): string | null {
+  const meta = toolCall.extraContent?.__tool_meta;
+  if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+    const category = (meta as Record<string, unknown>).category;
+    if (typeof category === 'string' && category) return category;
+  }
+
+  const toolName = toolCall.toolName;
+  if (toolName.startsWith('read_') || toolName.startsWith('search_') || toolName === 'get_project_tree') return 'read';
+  if (toolName.startsWith('delete_')) return 'delete';
+  if (toolName.startsWith('translate_') || toolName.startsWith('patch_translation_')) return 'translate';
+  if (toolName.startsWith('call_')) return 'sub_agent';
+  if (toolName.startsWith('generate_')) return 'generate';
+  if (toolName.startsWith('mcp__')) return 'mcp';
+  return 'write';
+}
 
 function isPendingToolStatus(status: ToolCallStatus): boolean {
   return status === 'pending' || status === 'streaming' || status === 'validating' || status === 'processing' || status === 'working';
@@ -588,8 +604,8 @@ export class ThreadEventConsumer {
     }
   }
 
-  private isToolAutoApprovable(toolName: string, config: AutoApproveConfig): boolean {
-    const category = getAutoApproveCategory(toolName);
+  private isToolAutoApprovable(toolCall: ThreadToolCall, config: AutoApproveConfig): boolean {
+    const category = getToolCategory(toolCall);
     return category !== null && Boolean(config[category]);
   }
 
@@ -603,7 +619,7 @@ export class ThreadEventConsumer {
     const pending = toolCalls.filter((tc) => tc.status === 'pending');
     if (pending.length === 0) return;
 
-    const allAllowed = pending.every((tc) => this.isToolAutoApprovable(tc.toolName, config));
+    const allAllowed = pending.every((tc) => this.isToolAutoApprovable(tc, config));
     if (!allAllowed) return;
 
     this.autoAcceptLockByThread.add(threadId);

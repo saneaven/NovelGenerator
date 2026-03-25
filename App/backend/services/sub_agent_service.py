@@ -16,7 +16,8 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from ..models.db_models import PromptScenarioVersion, SubAgentDefinitionModel, Thread
-from ..schemas.sub_agents import SubAgentCreate, SubAgentDefinition, SubAgentUpdate
+from ..schemas.sub_agents import SubAgentCreate, SubAgentDefinition, SubAgentToolGrant, SubAgentUpdate
+from .tool_engine.grant_catalog import TOOL_GRANT_CATALOG, ordered_feature_keys
 
 
 _AGENT_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,49}$")
@@ -54,6 +55,52 @@ def _resolve_prompt_template_content(
 
 class SubAgentService:
     @staticmethod
+    def _normalize_tool_grants(items: Optional[List[SubAgentToolGrant]]) -> list[dict[str, object]]:
+        if not items:
+            return []
+
+        by_feature: dict[str, set[str]] = {}
+        for item in items:
+            feature_key = str(item.feature_key)
+            if feature_key in by_feature:
+                raise ValueError(f"Duplicate tool grant feature: {feature_key}")
+            catalog_entry = TOOL_GRANT_CATALOG.get(feature_key)
+            if catalog_entry is None:
+                raise ValueError(f"Unsupported tool grant feature: {feature_key}")
+            supported = {
+                str(category)
+                for category in (catalog_entry.get("supported_categories") or ())
+                if isinstance(category, str)
+            }
+            categories = {str(category) for category in item.categories}
+            unknown = sorted(category for category in categories if category not in supported)
+            if unknown:
+                raise ValueError(
+                    f"Unsupported tool grant categories for {feature_key}: {', '.join(unknown)}"
+                )
+            if categories:
+                by_feature[feature_key] = categories
+
+        ordered_features = ordered_feature_keys()
+        out: list[dict[str, object]] = []
+        for feature_key in ordered_features:
+            categories = by_feature.get(feature_key)
+            if not categories:
+                continue
+            supported_order = tuple(
+                str(category)
+                for category in (TOOL_GRANT_CATALOG[feature_key].get("supported_categories") or ())
+                if isinstance(category, str)
+            )
+            out.append(
+                {
+                    "feature_key": feature_key,
+                    "categories": [category for category in supported_order if category in categories],
+                }
+            )
+        return out
+
+    @staticmethod
     def list_sub_agents(db: Session, user_id: uuid.UUID, preset_id: uuid.UUID) -> List[SubAgentDefinition]:
         items = db.query(SubAgentDefinitionModel).filter(
             and_(
@@ -69,7 +116,7 @@ class SubAgentService:
                 description=(i.description or i.display_name).strip(),
                 enabled=i.enabled,
                 allowed_invocation_modes=i.allowed_invocation_modes,
-                allowed_tool_names=i.allowed_tool_names,
+                tool_grants=i.tool_grants or [],
                 allowed_sub_agent_ids=i.allowed_sub_agent_ids,
                 allowed_mcp_server_ids=i.allowed_mcp_server_ids,
                 use_custom_llm_config=i.use_custom_llm_config,
@@ -164,6 +211,7 @@ class SubAgentService:
         )
         if use_custom_llm_config and not llm_config_override:
             raise ValueError("llm_config_override is required when use_custom_llm_config is true")
+        normalized_tool_grants = SubAgentService._normalize_tool_grants(data.tool_grants)
 
         if prompt_templates is None and data.prompt_templates is not None:
             prompt_templates = {}
@@ -192,7 +240,7 @@ class SubAgentService:
             description=description,
             enabled=data.enabled,
             allowed_invocation_modes=data.allowed_invocation_modes,
-            allowed_tool_names=data.allowed_tool_names,
+            tool_grants=normalized_tool_grants,
             allowed_sub_agent_ids=[str(x) for x in data.allowed_sub_agent_ids],
             allowed_mcp_server_ids=[str(x) for x in data.allowed_mcp_server_ids],
             use_custom_llm_config=use_custom_llm_config,
@@ -249,7 +297,7 @@ class SubAgentService:
             description=(model.description or model.display_name).strip(),
             enabled=model.enabled,
             allowed_invocation_modes=model.allowed_invocation_modes,
-            allowed_tool_names=model.allowed_tool_names,
+            tool_grants=model.tool_grants or [],
             allowed_sub_agent_ids=model.allowed_sub_agent_ids,
             allowed_mcp_server_ids=model.allowed_mcp_server_ids,
             use_custom_llm_config=model.use_custom_llm_config,
@@ -309,8 +357,8 @@ class SubAgentService:
             model.enabled = data.enabled
         if data.allowed_invocation_modes is not None:
             model.allowed_invocation_modes = data.allowed_invocation_modes
-        if data.allowed_tool_names is not None:
-            model.allowed_tool_names = data.allowed_tool_names
+        if data.tool_grants is not None:
+            model.tool_grants = SubAgentService._normalize_tool_grants(data.tool_grants)
         if data.allowed_sub_agent_ids is not None:
             model.allowed_sub_agent_ids = [str(x) for x in data.allowed_sub_agent_ids]
         if data.allowed_mcp_server_ids is not None:
@@ -335,7 +383,7 @@ class SubAgentService:
             description=(model.description or model.display_name).strip(),
             enabled=model.enabled,
             allowed_invocation_modes=model.allowed_invocation_modes,
-            allowed_tool_names=model.allowed_tool_names,
+            tool_grants=model.tool_grants or [],
             allowed_sub_agent_ids=model.allowed_sub_agent_ids,
             allowed_mcp_server_ids=model.allowed_mcp_server_ids,
             use_custom_llm_config=model.use_custom_llm_config,

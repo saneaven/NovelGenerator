@@ -27,6 +27,7 @@ sys.modules.setdefault("App.backend.services.sidecar_client", fake_sidecar_clien
 
 fake_storage_usage_service = types.ModuleType("App.backend.services.storage_usage_service")
 fake_storage_usage_service.apply_project_usage_delta = lambda *_args, **_kwargs: None
+fake_storage_usage_service.apply_project_usage_deltas = lambda *_args, **_kwargs: None
 fake_storage_usage_service.build_tool_call_delta = lambda *_args, **_kwargs: None
 fake_storage_usage_service.snapshot_tool_call_row = lambda row: row
 sys.modules.setdefault("App.backend.services.storage_usage_service", fake_storage_usage_service)
@@ -56,32 +57,50 @@ def _derive_run_status(*, current_status: str | None, tool_call_statuses: list[s
 fake_run_pipeline_status_logic.derive_run_status = _derive_run_status
 sys.modules.setdefault("App.backend.services.run_pipeline.status_logic", fake_run_pipeline_status_logic)
 
+fake_pil = types.ModuleType("PIL")
+fake_pil.Image = object
+fake_pil.ImageOps = object
+sys.modules.setdefault("PIL", fake_pil)
+
 from App.backend.models.db_models import RunModel, Thread
 from App.backend.models.db_models import RunMessageModel, RunToolCallModel
 from App.backend.services.tool_engine import service as tool_service
 from App.backend.services.tool_engine.contexts import ToolModuleContext
-from App.backend.services.tool_engine.contracts import ToolCallModule, ToolOffer, ToolSpec
+from App.backend.services.tool_engine.contracts import ToolBinding, ToolBindingMeta, ToolFeatureModule, ToolOffer, ToolSpec
 from App.backend.services.tool_engine.registry import ToolRegistry
 from App.backend.services.tool_engine.schema_validation import validate_schema_required_enum_additional_properties
 from App.backend.services.tool_engine.service import ToolEngineService
+from App.backend.services.tool_engine.result_utils import valid_result
 
 
-class _DummyModule(ToolCallModule):
-    def __init__(self, prefix: str, spec_name: str = "read_story_entity") -> None:
-        self.prefix = prefix
+class _DummyModule(ToolFeatureModule):
+    def __init__(self, feature_key: str, spec_name: str = "read_story_entity") -> None:
+        self.feature_key = feature_key
         self._spec_name = spec_name
 
-    def list_auto_approve_categories(self) -> tuple[str, ...]:
-        return ("read",)
+    def list_bindings(self, _ctx: ToolModuleContext) -> list[ToolBinding]:
+        spec = _make_spec(self._spec_name)
 
-    def list_tools(self, _ctx: ToolModuleContext) -> list[ToolSpec]:
-        return [_make_spec(self._spec_name)]
+        async def _validate(_args, _ctx):
+            return valid_result()
 
-    async def validate(self, _tool_name, _args, _ctx):
-        raise NotImplementedError
+        async def _execute(_args, _ctx):
+            raise NotImplementedError
 
-    async def execute(self, _tool_name, _args, _ctx):
-        raise NotImplementedError
+        return [
+            ToolBinding(
+                spec=spec,
+                meta=ToolBindingMeta(
+                    feature_key=self.feature_key,
+                    category="read",
+                    op="read",
+                    target_kind="story_entity",
+                ),
+                validate=_validate,
+                execute=_execute,
+                build_persisted_meta=lambda _ctx, _args: None,  # type: ignore[arg-type]
+            )
+        ]
 
 
 def _make_spec(name: str) -> ToolSpec:
@@ -96,39 +115,26 @@ def _make_spec(name: str) -> ToolSpec:
             },
             "required": ["value"],
         },
-        auto_approve_category="read",
     )
 
 
-def test_tool_registry_register_duplicate_prefix_raises() -> None:
+def test_tool_registry_register_duplicate_feature_key_raises() -> None:
     registry = ToolRegistry()
-    registry.register_module(_DummyModule("read_"))
+    registry.register_module(_DummyModule("story_entity"))
 
-    with pytest.raises(ValueError, match="Duplicate tool module prefix"):
-        registry.register_module(_DummyModule("read_"))
+    with pytest.raises(ValueError, match="Duplicate tool feature module"):
+        registry.register_module(_DummyModule("story_entity"))
 
 
-def test_tool_registry_resolves_longest_prefix() -> None:
+def test_tool_registry_build_offer_rejects_duplicate_tool_name() -> None:
     registry = ToolRegistry()
-    patch_module = _DummyModule("patch_", "patch_story_entity")
-    patch_translation_module = _DummyModule("patch_translation_", "patch_translation_story_entity")
+    registry.register_module(_DummyModule("story_entity", "read_story_entity"))
+    registry.register_module(_DummyModule("outline", "read_story_entity"))
 
-    registry.register_module(patch_module)
-    registry.register_module(patch_translation_module)
+    with pytest.raises(ValueError, match="Duplicate tool registration in offer"):
+        registry.build_offer(SimpleNamespace())
 
-    assert registry.resolve_module("patch_story_entity") is patch_module
-    assert registry.resolve_module("patch_translation_story_entity") is patch_translation_module
-
-
-def test_tool_registry_lists_auto_approve_categories_from_modules() -> None:
-    registry = ToolRegistry()
-    registry.register_module(_DummyModule("read_"))
-    registry.register_module(_DummyModule("search_", "search_keyword"))
-
-    assert registry.list_auto_approve_categories() == ["read"]
-
-
-def test_validate_unknown_tool_prefix_fails() -> None:
+def test_validate_unknown_tool_name_fails() -> None:
     service = ToolEngineService(ToolRegistry())
 
     thread = Thread(
@@ -149,7 +155,6 @@ def test_validate_unknown_tool_prefix_fails() -> None:
     offer = ToolOffer(
         specs_by_name={},
         provider_tools=[],
-        auto_approve_category_by_name={},
     )
 
     result = asyncio.run(
@@ -171,7 +176,7 @@ def test_validate_unknown_tool_prefix_fails() -> None:
     )
 
     assert result.valid is False
-    assert result.validator == "validate_tool_prefix"
+    assert result.validator == "validate_tool_is_in_offer"
 
 
 def test_validate_schema_rejects_additional_properties() -> None:

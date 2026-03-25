@@ -7,8 +7,8 @@ function searchTypeForTool(toolName: string): SearchOperationVM['searchType'] {
 }
 
 const searchModule = defineToolCallUiModule({
-  prefix: 'search_',
-  autoApproveCategories: ['search'],
+  key: 'search',
+  toolNames: ['search_keyword', 'search_semantic'],
   mapOperation(params) {
     const args = coerceRecord(params.args);
     const searchType = searchTypeForTool(params.toolName);

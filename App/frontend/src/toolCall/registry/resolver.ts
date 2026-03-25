@@ -1,52 +1,41 @@
 import type { ToolCallUiModule } from './contracts';
-import callModule from '../modules/callModule';
-import createModule from '../modules/createModule';
-import deleteModule from '../modules/deleteModule';
-import generateModule from '../modules/generateModule';
-import patchModule from '../modules/patchModule';
-import patchTranslationModule from '../modules/patchTranslationModule';
-import readModule from '../modules/readModule';
-import replaceModule from '../modules/replaceModule';
+import imageModule from '../modules/imageModule';
+import manuscriptModule from '../modules/manuscriptModule';
+import mcpModule from '../modules/mcpModule';
+import outlineModule from '../modules/outlineModule';
+import projectDataModule from '../modules/projectDataModule';
+import projectTreeModule from '../modules/projectTreeModule';
 import searchModule from '../modules/searchModule';
-import translateModule from '../modules/translateModule';
-import getModule from '../modules/getModule';
+import storyEntityModule from '../modules/storyEntityModule';
+import subAgentModule from '../modules/subAgentModule';
 
 const REGISTERED_MODULES: ToolCallUiModule[] = [
-  readModule,
-  getModule,
+  projectDataModule,
+  storyEntityModule,
+  outlineModule,
+  manuscriptModule,
   searchModule,
-  createModule,
-  replaceModule,
-  patchModule,
-  deleteModule,
-  translateModule,
-  patchTranslationModule,
-  callModule,
-  generateModule,
+  projectTreeModule,
+  imageModule,
+  subAgentModule,
+  mcpModule,
 ];
 
-const RESOLUTION_MODULES = [...REGISTERED_MODULES].sort((a, b) => b.prefix.length - a.prefix.length);
-
 export function resolveToolUiModule(toolName: string): ToolCallUiModule {
-  for (const module of RESOLUTION_MODULES) {
-    if (toolName.startsWith(module.prefix)) return module;
+  const exact = REGISTERED_MODULES.filter((module) => module.toolNames?.includes(toolName));
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) {
+    throw new Error(`Multiple exact tool UI modules registered for tool: ${toolName}`);
+  }
+
+  const dynamic = REGISTERED_MODULES.filter((module) => module.matches?.(toolName) === true);
+  if (dynamic.length === 1) return dynamic[0];
+  if (dynamic.length > 1) {
+    throw new Error(`Multiple dynamic tool UI modules registered for tool: ${toolName}`);
   }
   throw new Error(`Unknown tool UI module for tool: ${toolName}`);
 }
 
 export function getToolUiModules(): ToolCallUiModule[] {
   return [...REGISTERED_MODULES];
-}
-
-export function listAutoApproveCategories(): string[] {
-  const categories: string[] = [];
-  const seen = new Set<string>();
-  for (const module of REGISTERED_MODULES) {
-    for (const category of module.autoApproveCategories) {
-      if (seen.has(category)) continue;
-      categories.push(category);
-      seen.add(category);
-    }
-  }
-  return categories;
 }

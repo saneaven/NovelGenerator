@@ -9,6 +9,16 @@ export interface PatchGroup {
 }
 
 function buildPatchGroupKey(operation: ObjectOperationVM): string {
+  const meta = operation.extraContent?.__tool_meta;
+  if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+    const record = meta as Record<string, unknown>;
+    const featureKey = typeof record.feature_key === 'string' ? record.feature_key : null;
+    const mergeKey = typeof record.merge_key === 'string' ? record.merge_key : null;
+    if (featureKey && mergeKey) {
+      return `${featureKey}:${mergeKey}`;
+    }
+  }
+
   if (operation.objectType === 'basic_info') {
     return 'basic_info:project';
   }

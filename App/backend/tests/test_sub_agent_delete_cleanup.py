@@ -45,12 +45,20 @@ def _install_import_stubs() -> None:
     sys.modules["App.backend.services.chat_attachment_service"] = fake_chat_attachment_service
 
     fake_tool_engine = types.ModuleType("App.backend.services.tool_engine")
+    fake_tool_engine.__path__ = []  # type: ignore[attr-defined]
     fake_tool_engine.tool_engine = SimpleNamespace(
         _registry=SimpleNamespace(list_static_tool_names=lambda *_args, **_kwargs: []),
         propagate_child_terminal_state_to_parent=lambda *_args, **_kwargs: None,
         complete_parent_tool_call=lambda *_args, **_kwargs: None,
     )
     sys.modules["App.backend.services.tool_engine"] = fake_tool_engine
+
+    fake_tool_engine_grant_catalog = types.ModuleType("App.backend.services.tool_engine.grant_catalog")
+    fake_tool_engine_grant_catalog.FeatureKey = str
+    fake_tool_engine_grant_catalog.ToolCategory = str
+    fake_tool_engine_grant_catalog.TOOL_GRANT_CATALOG = {}
+    fake_tool_engine_grant_catalog.ordered_feature_keys = lambda: []
+    sys.modules["App.backend.services.tool_engine.grant_catalog"] = fake_tool_engine_grant_catalog
 
     fake_tool_engine_contracts = types.ModuleType("App.backend.services.tool_engine.contracts")
     fake_tool_engine_contracts.ToolOffer = object
@@ -335,6 +343,7 @@ def test_delete_sub_agent_cleans_threads_across_projects_and_emits_grouped_event
     thread_a = uuid4()
     thread_b = uuid4()
     thread_c = uuid4()
+    thread_d = uuid4()
     db = FakeRouteDb()
     operations: list[tuple[str, object]] = []
     applied: list[tuple[object, list[object]]]= []
@@ -344,6 +353,7 @@ def test_delete_sub_agent_cleans_threads_across_projects_and_emits_grouped_event
         SimpleNamespace(id=thread_a, project_id=project_a, status="processing"),
         SimpleNamespace(id=thread_b, project_id=project_b, status="done"),
         SimpleNamespace(id=thread_c, project_id=project_b, status="waiting"),
+        SimpleNamespace(id=thread_d, project_id=project_b, status="error"),
     ]
     project_a_deltas = [object()]
     project_b_deltas = [object(), object()]
@@ -368,7 +378,7 @@ def test_delete_sub_agent_cleans_threads_across_projects_and_emits_grouped_event
         "delete_threads",
         lambda *_args, **_kwargs: {
             project_a: [str(thread_a)],
-            project_b: [str(thread_b), str(thread_c)],
+            project_b: [str(thread_b), str(thread_c), str(thread_d)],
         },
     )
     monkeypatch.setattr(
@@ -400,6 +410,7 @@ def test_delete_sub_agent_cleans_threads_across_projects_and_emits_grouped_event
     assert operations == [
         ("cancel", thread_a),
         ("cancel", thread_c),
+        ("cancel", thread_d),
         ("delete_sub_agent", sub_agent_id),
     ]
     assert applied == [
@@ -408,5 +419,5 @@ def test_delete_sub_agent_cleans_threads_across_projects_and_emits_grouped_event
     ]
     assert emitted == [
         ("thread:delete", {"id": str(thread_a)}),
-        ("thread:bulk_delete", {"ids": [str(thread_b), str(thread_c)]}),
+        ("thread:bulk_delete", {"ids": [str(thread_b), str(thread_c), str(thread_d)]}),
     ]

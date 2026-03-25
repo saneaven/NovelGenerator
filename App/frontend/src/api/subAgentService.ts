@@ -2,7 +2,12 @@
  * API service for Sub Agents (per active preset)
  */
 import { apiClient } from './client';
-import type { SubAgentCreatePayload, SubAgentDefinition, SubAgentUpdate } from '../types/subAgents';
+import type {
+  SubAgentCreatePayload,
+  SubAgentDefinition,
+  SubAgentToolGrantCatalogItem,
+  SubAgentUpdate,
+} from '../types/subAgents';
 
 const BASE_PATH = '/api/v1/sub_agents';
 
@@ -23,7 +28,7 @@ export const subAgentService = {
     await apiClient.delete(`${BASE_PATH}/${encodeURIComponent(id)}`);
   },
 
-  async listAvailableTools(): Promise<string[]> {
-    return await apiClient.get<string[]>(`${BASE_PATH}/available_tools`);
+  async listToolGrantCatalog(): Promise<SubAgentToolGrantCatalogItem[]> {
+    return await apiClient.get<SubAgentToolGrantCatalogItem[]>(`${BASE_PATH}/tool_grants_catalog`);
   },
 };

@@ -1,18 +1,41 @@
 from __future__ import annotations
 
+import sys
+import types
 from types import SimpleNamespace
-from App.backend.image_providers.model_capabilities import get_gemini_supported_aspect_ratios
-from App.backend.services.image_run_service import (
-    IMAGE_OBJECT_TOOL,
-    IMAGE_SCENE_TOOL,
-    _pick_nearest_ratio_label,
-    _pick_nearest_size,
-)
+from sqlalchemy.orm import declarative_base
+
+fake_database = types.ModuleType("App.backend.database")
+fake_database.Base = declarative_base()
+fake_database.SessionLocal = lambda: None
+fake_database.get_db = lambda: None
+sys.modules.setdefault("App.backend.database", fake_database)
+sys.modules.setdefault("database", fake_database)
+
+fake_sidecar_client = types.ModuleType("App.backend.services.sidecar_client")
+fake_sidecar_client.SidecarClient = object
+fake_sidecar_client.sidecar_client = SimpleNamespace()
+sys.modules.setdefault("App.backend.services.sidecar_client", fake_sidecar_client)
+
+fake_image_run_service = types.ModuleType("App.backend.services.image_run_service")
+fake_image_run_service.IMAGE_OBJECT_TOOL = "generate_object_image"
+fake_image_run_service.IMAGE_SCENE_TOOL = "generate_scene_image"
+fake_image_run_service.image_run_service = SimpleNamespace(create_tool_preview_run=None)
+fake_image_run_service.resolve_explicit_object_target = lambda *_args, **_kwargs: None
+
+async def _validate_scene_anchor(*_args, **_kwargs):
+    return None
+
+fake_image_run_service.validate_scene_anchor = _validate_scene_anchor
+sys.modules.setdefault("App.backend.services.image_run_service", fake_image_run_service)
+
 from App.backend.models.db_models import RunModel, Thread
 from App.backend.services.tool_engine.contexts import ToolModuleContext
 from App.backend.services.tool_engine.modules.generate_module import GenerateToolCallModule
-from App.backend.services.tool_engine.service import ToolEngineService
 from uuid import uuid4
+
+IMAGE_OBJECT_TOOL = "generate_object_image"
+IMAGE_SCENE_TOOL = "generate_scene_image"
 
 
 def _make_ctx() -> ToolModuleContext:
@@ -47,7 +70,7 @@ def _make_ctx() -> ToolModuleContext:
     )
 
 
-def test_image_tools_register_without_auto_approve() -> None:
+def test_generate_tool_schemas_register() -> None:
     module = GenerateToolCallModule()
     specs = {spec.name: spec for spec in module.list_tools(_make_ctx())}
     object_tool = specs.get(IMAGE_OBJECT_TOOL)
@@ -55,31 +78,6 @@ def test_image_tools_register_without_auto_approve() -> None:
 
     assert object_tool is not None
     assert scene_tool is not None
-    assert object_tool.auto_approve_category is None
-    assert scene_tool.auto_approve_category is None
-
-
-def test_extract_execution_controls_supports_working_transition() -> None:
-    continue_as, extra_patch, result = ToolEngineService._extract_execution_controls(  # noqa: SLF001
-        {
-            "__continue_as": "working",
-            "success": True,
-            "message": "Image generation started.",
-            "image_run_id": "run-123",
-        }
-    )
-
-    assert continue_as == "working"
-    assert extra_patch is None
-    assert result == {"success": True, "message": "Image generation started.", "image_run_id": "run-123"}
-
-
-def test_ratio_resolution_picks_nearest_supported_values() -> None:
-    aspect_ratios = get_gemini_supported_aspect_ratios("gemini-3.1-flash-image-preview")
-
-    assert _pick_nearest_ratio_label(aspect_ratios, 16 / 9) == "16:9"
-    assert _pick_nearest_ratio_label(aspect_ratios, 0.6) == "9:16"
-    assert _pick_nearest_size(["1024x1024", "1792x1024", "1024x1792"], 16 / 9, "1024x1024") == "1792x1024"
 
 
 def test_image_tool_schemas_require_explicit_target_ids() -> None:

@@ -17,7 +17,8 @@ def obj_schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any
 
 
 def allow_tool(ctx: ToolModuleContext, tool_name: str) -> bool:
-    return ctx.allowed_tool_names is None or tool_name in ctx.allowed_tool_names
+    allowed_tool_names = getattr(ctx, "allowed_tool_names", None)
+    return allowed_tool_names is None or tool_name in allowed_tool_names
 
 
 def filter_allowed_specs(ctx: ToolModuleContext, specs: list[ToolSpec]) -> list[ToolSpec]:

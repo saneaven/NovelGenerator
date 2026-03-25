@@ -11,7 +11,8 @@ export type OperationCategory =
   | 'search'
   | 'call'
   | 'generate'
-  | 'get';
+  | 'get'
+  | 'mcp';
 
 export type ObjectType =
   | 'story_entity_folder'

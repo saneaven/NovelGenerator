@@ -180,7 +180,7 @@ export const FunctionCallsThread: React.FC<FunctionCallsThreadProps> = ({
 
     for (const operation of operations) {
       const module = resolveToolUiModule(operation.toolName);
-      const key = module.prefix;
+      const key = module.key;
       const existing = grouped.get(key);
       if (existing) {
         existing.operations.push(operation);

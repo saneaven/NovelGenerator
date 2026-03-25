@@ -2,16 +2,23 @@ import { buildOperationBase, defineToolCallUiModule } from '../registry/contract
 import { FunctionCallCardShell } from '../ui/FunctionCallCardShell';
 import type { OperationBaseVM, OperationVM } from '../ui/vmTypes';
 
-interface GetOperationVM extends OperationBaseVM {
-  category: 'get';
+interface McpOperationVM extends OperationBaseVM {
+  category: 'mcp';
 }
 
-const getModule = defineToolCallUiModule({
-  prefix: 'get_',
-  autoApproveCategories: ['read'],
+function mcpTitle(toolName: string): string {
+  const stripped = toolName.replace(/^mcp__/, '');
+  return stripped ? `MCP: ${stripped}` : 'MCP Tool';
+}
+
+const mcpModule = defineToolCallUiModule({
+  key: 'mcp',
+  matches(toolName) {
+    return toolName.startsWith('mcp__');
+  },
   mapOperation(params) {
-    const base = buildOperationBase(params, 'Project Tree');
-    return { ...base, category: 'get' } as GetOperationVM as OperationVM;
+    const base = buildOperationBase(params, mcpTitle(params.toolName));
+    return { ...base, category: 'mcp' } as McpOperationVM as OperationVM;
   },
   buildRenderItems(operations, ctx) {
     return operations.map((operation) => {
@@ -24,7 +31,7 @@ const getModule = defineToolCallUiModule({
             key={operation.id}
             scopeKey={ctx.scopeKey}
             cardId={operation.id}
-            category={'get'}
+            category="mcp"
             status={operation.status}
             title={operation.title}
             subtitle={operation.status === 'failed' && operation.reason ? operation.reason : undefined}
@@ -38,8 +45,8 @@ const getModule = defineToolCallUiModule({
     });
   },
   getEditMeta(toolName) {
-    return { title: 'Project Tree', type: 'init' };
+    return { title: mcpTitle(toolName), type: 'init' };
   },
 });
 
-export default getModule;
+export default mcpModule;

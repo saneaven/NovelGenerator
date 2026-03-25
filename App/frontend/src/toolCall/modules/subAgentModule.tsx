@@ -10,9 +10,11 @@ function getCallDisplay(toolName: string): { agentName: string; displayName: str
   return { agentName, displayName };
 }
 
-const callModule = defineToolCallUiModule({
-  prefix: 'call_',
-  autoApproveCategories: ['call'],
+const subAgentModule = defineToolCallUiModule({
+  key: 'sub_agent',
+  matches(toolName) {
+    return toolName.startsWith('call_');
+  },
   mapOperation(params) {
     const args = coerceRecord(params.args);
     const { agentName, displayName } = getCallDisplay(params.toolName);
@@ -58,4 +60,4 @@ const callModule = defineToolCallUiModule({
   },
 });
 
-export default callModule;
+export default subAgentModule;

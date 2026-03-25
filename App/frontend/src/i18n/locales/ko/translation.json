@@ -478,13 +478,17 @@
         "hint": "선택한 도구 호출 타입을 자동 승인합니다. 자동 승인은 어시스턴트 응답이 자동 승인으로 설정된 오퍼레이션만 포함할 때만 실행됩니다. 하나라도 비자동 승인 오퍼레이션이 섞이면 확인이 필요합니다.",
         "create": "생성(Create) 자동 승인",
         "delete": "삭제(Delete) 자동 승인",
+        "generate": "이미지 생성 자동 승인",
+        "mcp": "MCP 도구 자동 승인",
         "patch": "부분 수정(Patch) 자동 승인",
         "patch_translation": "번역 패치 자동 승인",
+        "sub_agent": "서브 에이전트 호출 자동 승인",
         "replace": "전체 교체(Replace) 자동 승인",
         "read": "읽기(Read) 자동 승인",
         "search": "검색(Search) 자동 승인",
         "translate": "번역(Translate) 자동 승인",
-        "call": "에이전트 호출 자동 승인"
+        "call": "에이전트 호출 자동 승인",
+        "write": "일반 수정 자동 승인"
       },
       "toolCallHistory": {
         "title": "도구 호출 기록",

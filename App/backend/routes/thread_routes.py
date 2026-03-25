@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 from dataclasses import dataclass
 from datetime import datetime
@@ -39,7 +38,7 @@ from ..services.chat_attachment_service import (
 from ..services.deletion_service import delete_chat_attachments_with_files
 from ..services.run_event_bus import run_event_bus
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
-from ..services.notification_service import ACTIVE_THREAD_DELETE_STATUSES, collect_thread_delete_deltas, delete_threads
+from ..services.notification_service import collect_thread_delete_deltas, delete_threads
 from ..services.run_pipeline import run_pipeline
 from ..services.tool_engine import tool_engine
 from ..services.sidecar_client import sidecar_client
@@ -375,11 +374,8 @@ async def _apply_tool_decision(
     reason: str | None,
 ) -> dict:
     db = SessionLocal()
-    project_id: UUID | None = None
-    run_language = "English"
     try:
         thread = require_owned_thread(db, thread_id=thread_id, user_id=user_id)
-        project_id = thread.project_id
         tool_call = (
             db.query(RunToolCallModel)
             .with_for_update()
@@ -388,9 +384,6 @@ async def _apply_tool_decision(
         )
         if tool_call is None:
             raise HTTPException(status_code=404, detail="Tool call not found")
-        run = db.query(RunModel).filter(RunModel.id == tool_call.run_id).first()
-        if run is not None and isinstance(run.language, str) and run.language.strip():
-            run_language = run.language
 
         if decision == "reject":
             if tool_call.status in {"processing", "working"}:
@@ -420,125 +413,141 @@ async def _apply_tool_decision(
         if decision != "accept":
             raise HTTPException(status_code=422, detail="Invalid decision")
 
-        if tool_call.status in {"applied", "failed", "processing", "working"}:
+        if tool_call.status in {"applied", "failed", "processing", "working", "rejected"}:
             return {
                 "tool_call": _serialize_tool_call(tool_call),
             }
         if tool_call.status not in {"pending", "validating", "streaming"}:
             raise HTTPException(status_code=409, detail=f"Cannot accept tool call in status={tool_call.status}")
-
-        tool_call.status = "processing"
-        tool_call.reason = None
-        tool_call.accepted_at = tool_call.accepted_at or datetime.utcnow()
-        tool_call.updated_at = datetime.utcnow()
-        sync_result = sync_run_thread_status(db, run_id=tool_call.run_id)
-        db.commit()
-        db.refresh(tool_call)
-
-        if sync_result.thread is not None:
-            await _emit_tool_call_status(thread=sync_result.thread, tool_call=tool_call)
-        await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
     finally:
         db.close()
 
-    if project_id is None:
-        raise HTTPException(status_code=404, detail="Thread not found")
-
-    execution = await tool_engine.execute_tool_call_by_id(
+    applied_results = await tool_engine.apply_tool_call_ids(
         SessionLocal,
-        tool_call_id,
         user_id=user_id,
-        project_id=project_id,
-        language=run_language,
+        thread_id=thread_id,
+        tool_call_ids=[tool_call_id],
     )
+    await _start_applied_tool_call_followups(
+        user_id=user_id,
+        thread_id=thread_id,
+        applied_results=applied_results,
+    )
+    result_map = await _finalize_applied_tool_calls(
+        user_id=user_id,
+        thread_id=thread_id,
+        tool_call_ids=[tool_call_id],
+    )
+    return result_map.get(tool_call_id, {"tool_call": None})
 
-    db2 = SessionLocal()
+async def _finalize_applied_tool_calls(
+    *,
+    user_id: UUID,
+    thread_id: UUID,
+    tool_call_ids: list[UUID],
+) -> dict[UUID, dict]:
+    db = SessionLocal()
     try:
-        thread2 = require_owned_thread(db2, thread_id=thread_id, user_id=user_id)
-        executed_row = (
-            db2.query(RunToolCallModel)
+        thread = require_owned_thread(db, thread_id=thread_id, user_id=user_id)
+        rows = (
+            db.query(RunToolCallModel)
             .with_for_update()
-            .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread2.id)
-            .first()
+            .filter(
+                RunToolCallModel.thread_id == thread.id,
+                RunToolCallModel.id.in_(tool_call_ids),
+            )
+            .order_by(RunToolCallModel.call_seq.asc())
+            .all()
         )
-        if executed_row is None:
-            raise HTTPException(status_code=404, detail="Tool call not found after execution")
-        sync_result = sync_run_thread_status(db2, run_id=executed_row.run_id)
-        db2.commit()
-        db2.refresh(executed_row)
-
-        if sync_result.thread is not None:
-            await _emit_tool_call_status(thread=sync_result.thread, tool_call=executed_row)
-        await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
-
-        result_payload = {
-            "tool_call": _serialize_tool_call(executed_row),
-        }
+        sync_results: list[RuntimeSyncResult] = []
+        seen_run_ids: set[UUID] = set()
+        for row in rows:
+            if row.run_id in seen_run_ids:
+                continue
+            seen_run_ids.add(row.run_id)
+            sync_results.append(sync_run_thread_status(db, run_id=row.run_id))
+        db.commit()
+        for row in rows:
+            db.refresh(row)
+            await _emit_tool_call_status(thread=thread, tool_call=row)
+        for sync_result in sync_results:
+            await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
+        return {row.id: {"tool_call": _serialize_tool_call(row)} for row in rows}
     finally:
-        db2.close()
+        db.close()
 
-    # Start child run for sub-agent calls
-    exec_result = execution.get("result") if isinstance(execution.get("result"), dict) else None
-    if isinstance(exec_result, dict) and exec_result.get("image_run_id"):
-        try:
-            await image_run_service.start_run(UUID(str(exec_result["image_run_id"])))
-        except Exception as exc:  # noqa: BLE001
-            try:
-                await image_run_service.fail_run(
-                    image_run_id=UUID(str(exec_result["image_run_id"])),
-                    failure_code="startup_failed",
-                    error_message=f"Image run start failed: {exc}",
-                )
-            except Exception:
-                pass
 
-    if isinstance(exec_result, dict) and exec_result.get("child_thread_id"):
-        child_input = exec_result.get("input_text", "")
-        if child_input:
+async def _start_applied_tool_call_followups(
+    *,
+    user_id: UUID,
+    thread_id: UUID,
+    applied_results: list[object],
+) -> None:
+    for applied in applied_results:
+        tool_call_id = getattr(applied, "tool_call_id", None)
+        image_run_id = getattr(applied, "image_run_id", None)
+        child_thread_id = getattr(applied, "child_thread_id", None)
+        child_input_text = getattr(applied, "child_input_text", None)
+
+        if isinstance(image_run_id, UUID):
             try:
-                await run_pipeline.start_run(
-                    thread_id=UUID(exec_result["child_thread_id"]),
-                    user_id=user_id,
-                    input_text=child_input,
-                    input_payload=None,
-                    run_mode=None,
-                    surface=None,
-                    context_object_ids=[],
-                    journey_target_ids=[],
-                    language=None,
-                )
+                await image_run_service.start_run(image_run_id)
             except Exception as exc:  # noqa: BLE001
-                db3 = SessionLocal()
                 try:
-                    thread3 = require_owned_thread(db3, thread_id=thread_id, user_id=user_id)
-                    failed_row = (
-                        db3.query(RunToolCallModel)
-                        .with_for_update()
-                        .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread3.id)
-                        .first()
+                    await image_run_service.fail_run(
+                        image_run_id=image_run_id,
+                        failure_code="startup_failed",
+                        error_message=f"Image run start failed: {exc}",
                     )
-                    if failed_row is not None and failed_row.status in {"processing", "working"}:
-                        failed_row.status = "failed"
-                        failed_row.reason = f"Child run start failed: {exc}"
-                        base_result = failed_row.result if isinstance(failed_row.result, dict) else {}
-                        failed_row.result = {
-                            **base_result,
-                            "success": False,
-                            "message": "Child run start failed",
-                            "error": str(exc),
-                        }
-                        failed_row.updated_at = datetime.utcnow()
+                except Exception:
+                    pass
 
-                        sync_result = sync_run_thread_status(db3, run_id=failed_row.run_id)
-                        db3.commit()
-                        db3.refresh(failed_row)
-                        if sync_result.thread is not None:
-                            await _emit_tool_call_status(thread=sync_result.thread, tool_call=failed_row)
-                        await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
-                finally:
-                    db3.close()
+        if not (isinstance(child_thread_id, UUID) and isinstance(child_input_text, str) and child_input_text.strip()):
+            continue
 
-    return result_payload
+        try:
+            await run_pipeline.start_run(
+                thread_id=child_thread_id,
+                user_id=user_id,
+                input_text=child_input_text,
+                input_payload=None,
+                run_mode=None,
+                surface=None,
+                context_object_ids=[],
+                journey_target_ids=[],
+                language=None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            if not isinstance(tool_call_id, UUID):
+                continue
+            db = SessionLocal()
+            try:
+                thread = require_owned_thread(db, thread_id=thread_id, user_id=user_id)
+                failed_row = (
+                    db.query(RunToolCallModel)
+                    .with_for_update()
+                    .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread.id)
+                    .first()
+                )
+                if failed_row is not None and failed_row.status in {"processing", "working"}:
+                    failed_row.status = "failed"
+                    failed_row.reason = f"Child run start failed: {exc}"
+                    base_result = failed_row.result if isinstance(failed_row.result, dict) else {}
+                    failed_row.result = {
+                        **base_result,
+                        "success": False,
+                        "message": "Child run start failed",
+                        "error": str(exc),
+                    }
+                    failed_row.updated_at = datetime.utcnow()
+                    sync_result = sync_run_thread_status(db, run_id=failed_row.run_id)
+                    db.commit()
+                    db.refresh(failed_row)
+                    if sync_result.thread is not None:
+                        await _emit_tool_call_status(thread=sync_result.thread, tool_call=failed_row)
+                    await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
+            finally:
+                db.close()
 
 
 @router.post("/threads/{thread_id}/start", response_model=ThreadRunResponse)
@@ -868,358 +877,6 @@ async def decide_tool_call(
     )
     return ToolCallDecisionResponse(**result)
 
-def _tool_call_target_key(tc: RunToolCallModel | None) -> str:
-    """Compute a grouping key so patches on the same object are serialized."""
-    if tc is None:
-        return f"unknown:{id(tc)}"
-    args = tc.arguments if isinstance(tc.arguments, dict) else {}
-    target_id = args.get("id", "")
-    if tc.tool_name in {"patch_manuscript", "replace_manuscript"}:
-        return f"manuscript:{target_id}"
-    if tc.tool_name in {"patch_story_entity", "replace_story_entity", "patch_translation_story_entity"}:
-        return f"story_entity:{args.get('kind', '')}:{target_id}"
-    if tc.tool_name in {
-        "patch_story_entity_folder",
-        "replace_story_entity_folder",
-        "patch_translation_story_entity_folder",
-    }:
-        return f"story_entity_folder:{target_id}"
-    if tc.tool_name in {"patch_outline", "replace_outline"}:
-        return f"outline:{target_id}"
-    # Everything else (sub-agents, reads, creates, deletes) gets a unique key → parallel.
-    return f"{tc.tool_name}:{tc.id}"
-
-
-def _resolve_outline_kind(args: dict) -> str | None:
-    raw = args.get("kind")
-    if isinstance(raw, str) and raw:
-        return raw
-    return None
-
-
-def _extract_outline_metadata(args: dict) -> dict | None:
-    meta: dict[str, Any] = {}
-    if isinstance(args.get("position"), int):
-        meta["position"] = args["position"]
-    if "parentId" in args:
-        meta["parent_id"] = args.get("parentId")
-    return meta or None
-
-
-def _extract_story_entity_metadata(args: dict) -> dict | None:
-    meta: dict[str, Any] = {}
-    if "folderId" in args:
-        meta["folder_id"] = args.get("folderId")
-    return meta or None
-
-
-def _extract_story_entity_folder_metadata(args: dict) -> dict | None:
-    meta: dict[str, Any] = {}
-    if isinstance(args.get("position"), int):
-        meta["display_order"] = args["position"]
-    if "parentId" in args:
-        meta["parent_id"] = args.get("parentId")
-    return meta or None
-
-
-def _mark_tc_failed_by_id(db: Session, tc_id: UUID, reason: str) -> None:
-    tc = db.query(RunToolCallModel).filter(RunToolCallModel.id == tc_id).first()
-    if tc and tc.status in {"applied", "processing"}:
-        tc.status = "failed"
-        tc.reason = reason
-        tc.result = {"success": False, "message": reason, "error": reason}
-        tc.updated_at = datetime.utcnow()
-
-
-async def _execute_batched_patch_group(
-    *,
-    user_id: UUID,
-    thread_id: UUID,
-    decisions: list,
-) -> list[tuple[UUID, dict]]:
-    """Handle a group of batch-eligible tool calls on the same target object.
-
-    Phase 1: triage — mark accepted as 'processing', rejected as 'rejected',
-             commit and emit SSE so the frontend sees intermediate status.
-    Phase 2: execute — apply patches, mark applied/failed, commit, emit final SSE.
-    """
-    from ..services.manuscript_batch import ManuscriptBatch
-    from ..services.object_patch_batch import ObjectPatchBatch
-    from ..services.object_service import object_service
-    from ..services.sidecar_client import sidecar_client
-
-    manuscript_batch = ManuscriptBatch()
-    object_patch_batch = ObjectPatchBatch()
-    result_order: list[UUID] = []
-
-    db = SessionLocal()
-    try:
-        thread = require_owned_thread(db, thread_id=thread_id, user_id=user_id)
-        is_translation = str(resolve_parent(db, thread).journey_kind or "").strip() == "objectTranslation"
-        create_new_version = not is_translation
-        run_id: UUID | None = None
-
-        # ── Phase 1: Triage — mark processing / rejected ──
-        accepted_tcs: list[tuple[object, RunToolCallModel]] = []  # (decision_item, tc)
-        modified_tc_ids: list[UUID] = []  # IDs that changed status in this phase
-
-        for item in decisions:
-            tc = (
-                db.query(RunToolCallModel)
-                .with_for_update()
-                .filter(RunToolCallModel.id == item.tool_call_id, RunToolCallModel.thread_id == thread.id)
-                .first()
-            )
-            if tc is None:
-                raise HTTPException(status_code=404, detail="Tool call not found")
-
-            run_id = run_id or tc.run_id
-
-            # --- Reject path ---
-            if item.decision == "reject":
-                if tc.status in {"rejected", "applied", "failed"}:
-                    result_order.append(item.tool_call_id)
-                    continue
-                if tc.status in {"processing", "working"}:
-                    raise HTTPException(status_code=409, detail="Cannot reject in-progress tool call")
-                if tc.status not in {"pending", "validating", "streaming"}:
-                    raise HTTPException(status_code=409, detail=f"Cannot reject tool call in status={tc.status}")
-                tc.status = "rejected"
-                tc.reason = item.reason
-                tc.updated_at = datetime.utcnow()
-                db.flush()
-                result_order.append(item.tool_call_id)
-                modified_tc_ids.append(item.tool_call_id)
-                continue
-
-            # --- Accept path: skip already-terminal ---
-            if item.decision != "accept":
-                raise HTTPException(status_code=422, detail="Invalid decision")
-            if tc.status in {"applied", "failed", "processing", "working"}:
-                result_order.append(item.tool_call_id)
-                continue
-            if tc.status not in {"pending", "validating", "streaming"}:
-                raise HTTPException(status_code=409, detail=f"Cannot accept tool call in status={tc.status}")
-
-            # Mark processing (actual execution deferred to phase 2)
-            tc.status = "processing"
-            tc.reason = None
-            tc.accepted_at = tc.accepted_at or datetime.utcnow()
-            tc.updated_at = datetime.utcnow()
-            db.flush()
-            accepted_tcs.append((item, tc))
-            modified_tc_ids.append(item.tool_call_id)
-
-        # Commit processing/rejected statuses and emit SSE so frontend sees them
-        sync_result: RuntimeSyncResult | None = None
-        if modified_tc_ids:
-            if run_id is not None:
-                sync_result = sync_run_thread_status(db, run_id=run_id)
-            db.commit()
-            for tc_id in modified_tc_ids:
-                tc = db.query(RunToolCallModel).filter(RunToolCallModel.id == tc_id).first()
-                if tc:
-                    db.refresh(tc)
-                    await _emit_tool_call_status(thread=thread, tool_call=tc)
-            if sync_result is not None:
-                await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
-
-        # ── Phase 2: Execute accepted tool calls ──
-        for item, tc in accepted_tcs:
-            db.refresh(tc)
-            tool_name = str(tc.tool_name)
-            args = tc.arguments if isinstance(tc.arguments, dict) else {}
-            run = db.query(RunModel).filter(RunModel.id == tc.run_id).first()
-            language = run.language if run and isinstance(run.language, str) and run.language.strip() else "English"
-
-            try:
-                if tool_name == "patch_manuscript":
-                    r = await manuscript_batch.apply_patch(
-                        db=db,
-                        manuscript_id=UUID(str(args.get("id"))),
-                        project_id=thread.project_id,
-                        language=language,
-                        old_text=str(args.get("old") or ""),
-                        new_text=str(args.get("new") or ""),
-                        call_id=str(tc.id),
-                        create_new_version=create_new_version,
-                        user_request="tool:patch_manuscript",
-                        sidecar=sidecar_client,
-                    )
-                    if not r.get("success"):
-                        raise ValueError(r.get("reason", "patch failed"))
-                    tc.result = {
-                        "success": True, "message": "Patched manuscript",
-                        "object_id": str(args.get("id")), "object_type": "manuscript",
-                    }
-
-                elif tool_name == "replace_manuscript":
-                    r = await manuscript_batch.apply_replace(
-                        manuscript_id=UUID(str(args.get("id"))),
-                        project_id=thread.project_id,
-                        language=language,
-                        content=str(args.get("content") or ""),
-                        call_id=str(tc.id),
-                        create_new_version=create_new_version,
-                        user_request="tool:replace_manuscript",
-                    )
-                    if not r.get("success"):
-                        raise ValueError(r.get("reason", "replace failed"))
-                    tc.result = {
-                        "success": True, "message": "Replaced manuscript",
-                        "object_id": str(args.get("id")), "object_type": "manuscript",
-                    }
-
-                elif tool_name in {
-                    "patch_story_entity",
-                    "patch_translation_story_entity",
-                    "patch_story_entity_folder",
-                    "patch_translation_story_entity_folder",
-                    "patch_outline",
-                }:
-                    obj_type = (
-                        "story_entity"
-                        if tool_name in {"patch_story_entity", "patch_translation_story_entity"}
-                        else "story_entity_folder"
-                        if tool_name in {"patch_story_entity_folder", "patch_translation_story_entity_folder"}
-                        else "outline"
-                    )
-                    obj_id = UUID(str(args.get("id")))
-                    metadata = (
-                        _extract_story_entity_metadata(args)
-                        if tool_name in {"patch_story_entity", "patch_translation_story_entity"}
-                        else _extract_story_entity_folder_metadata(args)
-                        if tool_name in {"patch_story_entity_folder", "patch_translation_story_entity_folder"}
-                        else _extract_outline_metadata(args)
-                    )
-                    r = object_patch_batch.apply_patch(
-                        db=db,
-                        project_id=thread.project_id,
-                        object_type=obj_type,
-                        object_id=obj_id,
-                        language=language,
-                        field=str(args.get("field") or ""),
-                        old_text=str(args.get("old") or ""),
-                        new_text=str(args.get("new") or ""),
-                        call_id=str(tc.id),
-                        create_new_version=create_new_version,
-                        user_id=user_id,
-                        metadata=metadata,
-                    )
-                    if not r.get("success"):
-                        raise ValueError(r.get("reason", "patch failed"))
-                    tc.result = {
-                        "success": True, "message": f"Patched {obj_type}",
-                        "object_id": str(obj_id), "object_type": obj_type,
-                    }
-
-                elif tool_name in {
-                    "replace_story_entity",
-                    "replace_story_entity_folder",
-                    "replace_outline",
-                }:
-                    obj_type = (
-                        "story_entity"
-                        if tool_name == "replace_story_entity"
-                        else "story_entity_folder"
-                        if tool_name == "replace_story_entity_folder"
-                        else "outline"
-                    )
-                    obj_id = UUID(str(args.get("id")))
-                    field_keys = (
-                        ("name", "description", "content")
-                        if tool_name == "replace_story_entity"
-                        else ("name", "description")
-                        if tool_name == "replace_story_entity_folder"
-                        else ("name", "description", "content")
-                    )
-                    fields = {k: args[k] for k in field_keys if k in args}
-                    metadata = (
-                        _extract_story_entity_metadata(args)
-                        if tool_name == "replace_story_entity"
-                        else _extract_story_entity_folder_metadata(args)
-                        if tool_name == "replace_story_entity_folder"
-                        else _extract_outline_metadata(args)
-                    )
-                    r = object_patch_batch.apply_replace(
-                        db=db,
-                        project_id=thread.project_id,
-                        object_type=obj_type,
-                        object_id=obj_id,
-                        language=language,
-                        fields=fields,
-                        call_id=str(tc.id),
-                        create_new_version=create_new_version,
-                        user_id=user_id,
-                        metadata=metadata,
-                    )
-                    if not r.get("success"):
-                        raise ValueError(r.get("reason", "replace failed"))
-                    tc.result = {
-                        "success": True, "message": f"Replaced {obj_type}",
-                        "object_id": str(obj_id), "object_type": obj_type,
-                    }
-
-                else:
-                    raise ValueError(f"Unsupported batch tool: {tool_name}")
-
-                tc.status = "applied"
-
-            except Exception as exc:  # noqa: BLE001
-                tc.status = "failed"
-                tc.reason = str(exc)
-                tc.result = {"success": False, "message": str(exc), "error": str(exc)}
-
-            tc.updated_at = datetime.utcnow()
-            db.flush()
-            result_order.append(item.tool_call_id)
-
-        # --- Flush batches (1 sidecar roundtrip + 1 DB write per unique object) ---
-        if manuscript_batch.has_pending:
-            flush_results, key_to_call_ids = await manuscript_batch.flush_all(
-                db=db,
-                sidecar=sidecar_client,
-                object_service=object_service,
-                created_by=user_id,
-            )
-            for key, status in flush_results.items():
-                if not status.success:
-                    for call_id_str in key_to_call_ids.get(key, set()):
-                        _mark_tc_failed_by_id(db, UUID(call_id_str), status.reason or "flush failed")
-
-        if object_patch_batch.has_pending:
-            flush_results, key_to_call_ids = object_patch_batch.flush_all(
-                db=db,
-                object_service=object_service,
-                created_by=user_id,
-            )
-            for key, status in flush_results.items():
-                if not status.success:
-                    for call_id_str in key_to_call_ids.get(key, set()):
-                        _mark_tc_failed_by_id(db, UUID(call_id_str), status.reason or "flush failed")
-
-        # --- Sync run/thread status + commit ---
-        final_sync_result: RuntimeSyncResult | None = None
-        if run_id is not None:
-            final_sync_result = sync_run_thread_status(db, run_id=run_id)
-        db.commit()
-
-        # --- Emit SSE events (final statuses) ---
-        final_results: list[tuple[UUID, dict]] = []
-        for tc_id in result_order:
-            tc = db.query(RunToolCallModel).filter(RunToolCallModel.id == tc_id).first()
-            if tc:
-                db.refresh(tc)
-                await _emit_tool_call_status(thread=thread, tool_call=tc)
-                final_results.append((tc_id, {"tool_call": _serialize_tool_call(tc)}))
-        if final_sync_result is not None:
-            await emit_runtime_sync_events(runtime_event_dispatcher, result=final_sync_result)
-
-    finally:
-        db.close()
-
-    return final_results
-
 
 @router.post("/threads/{thread_id}/tool-calls/decisions", response_model=ToolCallBatchDecisionResponse)
 async def decide_tool_calls_batch(
@@ -1227,8 +884,6 @@ async def decide_tool_calls_batch(
     payload: ToolCallBatchDecisionRequest,
     current_user: User = Depends(get_current_user),
 ):
-    from collections import defaultdict
-
     has_accept_decision = any(item.decision == "accept" for item in payload.decisions)
 
     if payload.pause_after_apply and has_accept_decision:
@@ -1258,80 +913,41 @@ async def decide_tool_calls_batch(
         finally:
             db.close()
 
-    # Step 1: Group tool calls by target object.
-    db = SessionLocal()
-    try:
-        target_groups: dict[str, list] = defaultdict(list)
-        for item in payload.decisions:
-            tc = db.query(RunToolCallModel).filter(
-                RunToolCallModel.id == item.tool_call_id,
-            ).first()
-            key = _tool_call_target_key(tc)
-            target_groups[key].append(item)
-    finally:
-        db.close()
+    result_map: dict[UUID, dict] = {}
+    accepted_ids: list[UUID] = []
 
-    # Step 2: Build tasks — batch path vs single-call path.
-    async def run_batch_group(items: list) -> list[tuple[UUID, dict]]:
-        return await _execute_batched_patch_group(
-            user_id=current_user.id,
-            thread_id=thread_id,
-            decisions=items,
-        )
-
-    async def run_single_group(items: list) -> list[tuple[UUID, dict]]:
-        results: list[tuple[UUID, dict]] = []
-        for item in items:
-            r = await _apply_tool_decision(
+    for item in payload.decisions:
+        if item.decision == "reject":
+            result_map[item.tool_call_id] = await _apply_tool_decision(
                 user_id=current_user.id,
                 thread_id=thread_id,
                 tool_call_id=item.tool_call_id,
                 decision=item.decision,
                 reason=item.reason,
             )
-            results.append((item.tool_call_id, r))
-        return results
-
-    tasks = []
-    for key, items in target_groups.items():
-        first_token = key.split(":")[0]
-        if first_token in {"manuscript", "story_entity", "story_entity_folder", "outline"}:
-            tasks.append(run_batch_group(items))
         else:
-            tasks.append(run_single_group(items))
+            accepted_ids.append(item.tool_call_id)
 
-    try:
-        all_results = await asyncio.wait_for(
-            asyncio.gather(*tasks, return_exceptions=True),
-            timeout=120.0,
+    if accepted_ids:
+        applied_results = await tool_engine.apply_tool_call_ids(
+            SessionLocal,
+            user_id=current_user.id,
+            thread_id=thread_id,
+            tool_call_ids=accepted_ids,
         )
-    except asyncio.TimeoutError:
-        # Safety net: return the current DB state for each tool call rather
-        # than hanging the HTTP response forever.
-        db_timeout = SessionLocal()
-        try:
-            all_results = []
-            for _key, items in target_groups.items():
-                group: list[tuple[UUID, dict]] = []
-                for item in items:
-                    tc = db_timeout.query(RunToolCallModel).filter(
-                        RunToolCallModel.id == item.tool_call_id,
-                    ).first()
-                    if tc is not None:
-                        group.append((item.tool_call_id, {"tool_call": _serialize_tool_call(tc)}))
-                all_results.append(group)
-        finally:
-            db_timeout.close()
+        await _start_applied_tool_call_followups(
+            user_id=current_user.id,
+            thread_id=thread_id,
+            applied_results=applied_results,
+        )
+        result_map.update(
+            await _finalize_applied_tool_calls(
+                user_id=current_user.id,
+                thread_id=thread_id,
+                tool_call_ids=accepted_ids,
+            )
+        )
 
-    # Step 3: Reorder results to match input order.
-    result_map: dict[UUID, dict] = {}
-    for group in all_results:
-        if isinstance(group, BaseException):
-            continue
-        for tc_id, r in group:
-            result_map[tc_id] = r
-    # Fall back to a minimal entry for any tool call missing from the map
-    # (can happen when a task raised an exception via return_exceptions).
     ordered: list[dict] = []
     for item in payload.decisions:
         if item.tool_call_id in result_map:

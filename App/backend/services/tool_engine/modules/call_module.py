@@ -146,7 +146,6 @@ class CallToolCallModule(ToolCallModule):
             input_text = json.dumps(args, ensure_ascii=False)
 
         return {
-            "__continue_as": "working",
             "child_thread_id": str(child_thread.id),
             "agent_name": agent_name,
             "input_text": input_text,

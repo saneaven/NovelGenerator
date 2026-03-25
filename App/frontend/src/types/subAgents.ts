@@ -1,6 +1,19 @@
 import type { TaskAIConfig } from '../store/settingsStore';
 
 export type SubAgentAllowedInvocation = 'planMode' | 'agentMode' | 'subAgent';
+export type ToolCategory = 'read' | 'write' | 'delete' | 'translate' | 'sub_agent' | 'generate' | 'mcp';
+export type FeatureKey = 'project_data' | 'story_entity' | 'outline' | 'manuscript' | 'search' | 'project_tree' | 'image' | 'sub_agent' | 'mcp';
+
+export interface SubAgentToolGrant {
+  feature_key: FeatureKey;
+  categories: ToolCategory[];
+}
+
+export interface SubAgentToolGrantCatalogItem {
+  feature_key: FeatureKey;
+  display_name: string;
+  supported_categories: ToolCategory[];
+}
 
 export interface SubAgentPromptTemplates {
   system_prompt?: string;
@@ -21,9 +34,7 @@ export interface SubAgentDefinition {
   enabled: boolean;
 
   allowed_invocation_modes: SubAgentAllowedInvocation[];
-
-  /** Static tool names only (create_x/read_x/patch_x/replace_x etc). Never store call_x here. */
-  allowed_tool_names: string[];
+  tool_grants: SubAgentToolGrant[];
 
   /** UUID list of other Sub Agents this Sub Agent can call (by id). */
   allowed_sub_agent_ids: string[];

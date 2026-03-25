@@ -3,13 +3,19 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useMcpStore } from '../../../store/mcpStore';
 import { usePresetStore } from '../../../store/presetStore';
-import { useResolvedTaskConfig, useSettings } from '../../../store/settingsStore';
+import { useResolvedTaskConfig } from '../../../store/settingsStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
-import type { SubAgentAllowedInvocation, SubAgentCreatePayload, SubAgentDefinition } from '../../../types/subAgents';
+import type {
+  SubAgentAllowedInvocation,
+  SubAgentCreatePayload,
+  SubAgentDefinition,
+  SubAgentToolGrant,
+  SubAgentToolGrantCatalogItem,
+} from '../../../types/subAgents';
 import type { TaskAIConfig } from '../../../store/settingsStore';
 import TaskConfigForm from '../TaskConfigForm';
 import ToggleSwitch from '../../common/ToggleSwitch';
-import { Trash, Sliders, Clock, Eye } from '../../icons';
+import { Trash, Clock, Eye } from '../../icons';
 import { subAgentService } from '../../../api/subAgentService';
 import TemplateEditor from './TemplateEditor';
 import EditorPanelHeader from './EditorPanelHeader';
@@ -44,7 +50,7 @@ export interface SubAgentDraftData {
   description: string;
   enabled: boolean;
   allowed_invocation_modes: SubAgentAllowedInvocation[];
-  allowed_tool_names: string[];
+  tool_grants: SubAgentToolGrant[];
   allowed_sub_agent_ids: string[];
   allowed_mcp_server_ids: string[];
   use_custom_llm_config: boolean;
@@ -79,7 +85,12 @@ function snapshotForDraft(data: SubAgentDraftData): string {
     description: data.description,
     enabled: data.enabled,
     allowed_invocation_modes: [...data.allowed_invocation_modes].sort(),
-    allowed_tool_names: [...data.allowed_tool_names].sort(),
+    tool_grants: [...data.tool_grants]
+      .map((item) => ({
+        feature_key: item.feature_key,
+        categories: [...item.categories].sort(),
+      }))
+      .sort((a, b) => a.feature_key.localeCompare(b.feature_key)),
     allowed_sub_agent_ids: [...data.allowed_sub_agent_ids].sort(),
     allowed_mcp_server_ids: [...data.allowed_mcp_server_ids].sort(),
     use_custom_llm_config: data.use_custom_llm_config,
@@ -109,7 +120,7 @@ export function buildEmptySubAgentDraft(draftKey: string): SubAgentDefinitionDra
     description: '',
     enabled: true,
     allowed_invocation_modes: ['planMode', 'agentMode', 'subAgent'],
-    allowed_tool_names: [],
+    tool_grants: [],
     allowed_sub_agent_ids: [],
     allowed_mcp_server_ids: [],
     use_custom_llm_config: false,
@@ -123,7 +134,7 @@ export function buildEmptySubAgentDraft(draftKey: string): SubAgentDefinitionDra
     current: {
       ...base,
       allowed_invocation_modes: [...base.allowed_invocation_modes],
-      allowed_tool_names: [],
+      tool_grants: [],
       allowed_sub_agent_ids: [],
       allowed_mcp_server_ids: [],
     },
@@ -139,7 +150,10 @@ export function hydrateSubAgentDraft(definition: SubAgentDefinition, draftKey: s
     description: definition.description,
     enabled: definition.enabled,
     allowed_invocation_modes: [...definition.allowed_invocation_modes],
-    allowed_tool_names: [...definition.allowed_tool_names],
+    tool_grants: [...definition.tool_grants].map((item) => ({
+      feature_key: item.feature_key,
+      categories: [...item.categories],
+    })),
     allowed_sub_agent_ids: [...definition.allowed_sub_agent_ids],
     allowed_mcp_server_ids: [...definition.allowed_mcp_server_ids],
     use_custom_llm_config: definition.use_custom_llm_config,
@@ -152,14 +166,14 @@ export function hydrateSubAgentDraft(definition: SubAgentDefinition, draftKey: s
     original: {
       ...base,
       allowed_invocation_modes: [...base.allowed_invocation_modes],
-      allowed_tool_names: [...base.allowed_tool_names],
+      tool_grants: [...base.tool_grants].map((item) => ({ feature_key: item.feature_key, categories: [...item.categories] })),
       allowed_sub_agent_ids: [...base.allowed_sub_agent_ids],
       allowed_mcp_server_ids: [...base.allowed_mcp_server_ids],
     },
     current: {
       ...base,
       allowed_invocation_modes: [...base.allowed_invocation_modes],
-      allowed_tool_names: [...base.allowed_tool_names],
+      tool_grants: [...base.tool_grants].map((item) => ({ feature_key: item.feature_key, categories: [...item.categories] })),
       allowed_sub_agent_ids: [...base.allowed_sub_agent_ids],
       allowed_mcp_server_ids: [...base.allowed_mcp_server_ids],
     },
@@ -175,7 +189,10 @@ export function buildSubAgentPayload(draft: SubAgentDefinitionDraft): SubAgentCr
     description: draft.current.description.trim(),
     enabled: draft.current.enabled,
     allowed_invocation_modes: draft.current.allowed_invocation_modes,
-    allowed_tool_names: draft.current.allowed_tool_names.filter((name) => !name.startsWith(SUB_AGENT_CALL_PREFIX)),
+    tool_grants: draft.current.tool_grants.map((item) => ({
+      feature_key: item.feature_key,
+      categories: [...item.categories],
+    })),
     allowed_sub_agent_ids: draft.current.allowed_sub_agent_ids,
     allowed_mcp_server_ids: draft.current.allowed_mcp_server_ids,
     use_custom_llm_config: draft.current.use_custom_llm_config,
@@ -436,7 +453,6 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   onToggleSidebar,
 }) => {
   const { t } = useTranslation();
-  const settings = useSettings();
   const { subAgents, deleteSubAgent } = useSubAgentStore();
   const activePresetId = usePresetStore((state) => state.activePresetId);
   const { servers: mcpServers, ensureLoaded: ensureMcpLoaded } = useMcpStore(useShallow((state) => ({
@@ -449,9 +465,9 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
     return draft?.subAgentId ? subAgents.find((s) => s.id === draft.subAgentId) : undefined;
   }, [draft?.subAgentId, subAgents]);
 
-  const [allStaticTools, setAllStaticTools] = useState<string[]>([]);
+  const [toolGrantCatalog, setToolGrantCatalog] = useState<SubAgentToolGrantCatalogItem[]>([]);
   useEffect(() => {
-    subAgentService.listAvailableTools().then(setAllStaticTools).catch(() => {});
+    subAgentService.listToolGrantCatalog().then(setToolGrantCatalog).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -459,11 +475,9 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
     void ensureMcpLoaded(activePresetId).catch(() => {});
   }, [activePresetId, ensureMcpLoaded]);
 
-  const [toolFilter, setToolFilter] = useState('');
   const [activeTab, setActiveTab] = useState<SubAgentEditorTab>('general');
 
   useEffect(() => {
-    setToolFilter('');
     setActiveTab('general');
   }, [draft?.draftKey]);
 
@@ -476,12 +490,6 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
       current: { ...cur.current, llm_config_override: globalSubAgentConfig },
     }));
   }, [draft?.current.use_custom_llm_config, draft?.current.llm_config_override, globalSubAgentConfig]);
-
-  const filteredTools = useMemo(() => {
-    const q = toolFilter.trim().toLowerCase();
-    if (!q) return allStaticTools;
-    return allStaticTools.filter((name) => name.toLowerCase().includes(q));
-  }, [allStaticTools, toolFilter]);
 
   const updateDraft = (updater: (cur: SubAgentDefinitionDraft) => SubAgentDefinitionDraft) => {
     if (!draft) return;
@@ -497,13 +505,28 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
     });
   };
 
-  const setToolChecked = (toolName: string, checked: boolean) => {
+  const setToolGrantChecked = (featureKey: string, category: string, checked: boolean) => {
     updateDraft((cur) => {
-      const prev = cur.current.allowed_tool_names;
-      const has = prev.includes(toolName);
-      const nextTools = checked && !has ? [...prev, toolName] : !checked && has ? prev.filter((n) => n !== toolName) : prev;
-      return { ...cur, current: { ...cur.current, allowed_tool_names: nextTools } };
+      const prev = cur.current.tool_grants;
+      const currentGrant = prev.find((item) => item.feature_key === featureKey);
+      const currentCategories = currentGrant ? [...currentGrant.categories] : [];
+      const hasCategory = currentCategories.includes(category as any);
+      const nextCategories = checked && !hasCategory
+        ? [...currentCategories, category as any]
+        : !checked && hasCategory
+          ? currentCategories.filter((value) => value !== category)
+          : currentCategories;
+      const nextGrants = prev
+        .filter((item) => item.feature_key !== featureKey)
+        .concat(nextCategories.length > 0 ? [{ feature_key: featureKey as any, categories: nextCategories as any }] : [])
+        .sort((a, b) => a.feature_key.localeCompare(b.feature_key));
+      return { ...cur, current: { ...cur.current, tool_grants: nextGrants } };
     });
+  };
+
+  const hasToolGrant = (featureKey: string, category: string): boolean => {
+    const currentGrant = draft.current.tool_grants.find((item) => item.feature_key === featureKey);
+    return Boolean(currentGrant?.categories.includes(category as any));
   };
 
   const setSubAgentAllowedChecked = (subAgentId: string, checked: boolean) => {
@@ -732,25 +755,25 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
         >
           <section className="sub-agent-editor__section sub-agent-editor__section--fill">
             <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.allowedTools')}</h4>
-            <div className="sub-agent-editor__tool-filter">
-              <Sliders size="sm" />
-              <input
-                className="sub-agent-editor__tool-filter-input"
-                value={toolFilter}
-                onChange={(e) => setToolFilter(e.target.value)}
-                placeholder={t('settings.promptEditor.subAgentSettings.toolFilterPlaceholder')}
-              />
-            </div>
-
             <div className="sub-agent-editor__tool-grid">
-              {filteredTools.map((toolName) => (
-                <ToggleSwitch
-                  key={toolName}
-                  checked={draft.current.allowed_tool_names.includes(toolName)}
-                  onChange={(checked) => setToolChecked(toolName, checked)}
-                  label={toolName}
-                />
+              {toolGrantCatalog.map((item) => (
+                <div key={item.feature_key} className="sub-agent-editor__field-row" style={{ alignItems: 'flex-start' }}>
+                  <label className="sub-agent-editor__label">{item.display_name}</label>
+                  <div className="sub-agent-editor__chip-grid">
+                    {item.supported_categories.map((category) => (
+                      <ToggleSwitch
+                        key={`${item.feature_key}:${category}`}
+                        checked={hasToolGrant(item.feature_key, category)}
+                        onChange={(checked) => setToolGrantChecked(item.feature_key, category, checked)}
+                        label={category}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
+              {toolGrantCatalog.length === 0 && (
+                <div className="sub-agent-editor__hint">No tool grant catalog available.</div>
+              )}
             </div>
           </section>
 

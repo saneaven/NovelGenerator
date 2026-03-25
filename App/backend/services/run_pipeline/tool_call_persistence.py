@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from typing import Any
 from uuid import UUID
 
@@ -88,6 +89,34 @@ class RunToolCallPersistence:
             db.flush()
 
             tool_msg.parent_tool_call_id = row.id
+
+            binding_map = getattr(offer, "bindings_by_name", {}) or {}
+            binding = binding_map.get(tool_name) if isinstance(binding_map, dict) else None
+            if binding is not None:
+                settings = settings_service._get_settings(db, run.user_id)  # pylint: disable=protected-access
+                vector_storage_enabled = settings_service.is_vector_storage_enabled(db, run.user_id)
+                preset_id_value = preset_id or settings_service.get_active_preset_id(db, run.user_id)
+                if preset_id_value is not None:
+                    module_ctx = tool_engine.build_module_context(
+                        db,
+                        thread=thread,
+                        run=run,
+                        settings=settings,
+                        preset_id=preset_id_value,
+                        user_id=run.user_id,
+                        project_id=run.project_id,
+                        input_payload=run.input_payload if isinstance(run.input_payload, dict) else {},
+                        vector_storage_enabled=vector_storage_enabled,
+                    )
+                    try:
+                        persisted_meta = binding.build_persisted_meta(module_ctx, arguments)
+                        extra_content = row.extra_content if isinstance(row.extra_content, dict) else {}
+                        row.extra_content = {
+                            **extra_content,
+                            "__tool_meta": asdict(persisted_meta),
+                        }
+                    except Exception:
+                        pass
 
             if parse_error is not None:
                 row.status = "failed"

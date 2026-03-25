@@ -249,8 +249,8 @@ class SubAgentDefinitionModel(Base):
 
     # Stored as JSON arrays
     allowed_invocation_modes = Column(JSONB, nullable=False)
-    # Static tool names only (create_*/read_*/patch_*/replace_* etc). Never store call_* here.
-    allowed_tool_names = Column(JSONB, nullable=False)
+    # Feature/category grants for this sub-agent.
+    tool_grants = Column(JSONB, nullable=False, default=list)
     # UUID list of sub_agent_definitions.id that this Sub Agent is allowed to call.
     allowed_sub_agent_ids = Column(JSONB, nullable=False)
     # UUID list of mcp_servers.id that this Sub Agent is allowed to use.

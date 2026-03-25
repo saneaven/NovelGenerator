@@ -9,8 +9,6 @@ import {
   type OperationVM,
 } from '../ui/vmTypes';
 
-export type AutoApproveCategory = string;
-
 export interface MapToolToVmParams {
   id: string;
   toolName: string;
@@ -47,8 +45,9 @@ export interface RenderItem {
 }
 
 export interface ToolCallUiModule {
-  prefix: string;
-  autoApproveCategories: readonly AutoApproveCategory[];
+  key: string;
+  toolNames?: readonly string[];
+  matches?: (toolName: string) => boolean;
   mapOperation(params: MapToolToVmParams): OperationVM;
   buildRenderItems(operations: OperationVM[], ctx: RenderContext): RenderItem[];
   getEditMeta(toolName: string, args: Record<string, unknown>): { title: string; type: string };

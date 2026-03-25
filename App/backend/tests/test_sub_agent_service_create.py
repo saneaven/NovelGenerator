@@ -25,7 +25,7 @@ def _install_import_stubs() -> None:
 _install_import_stubs()
 
 from App.backend.models.db_models import PromptScenarioVersion, SubAgentDefinitionModel
-from App.backend.schemas.sub_agents import SubAgentCreate, SubAgentPromptTemplates
+from App.backend.schemas.sub_agents import SubAgentCreate, SubAgentPromptTemplates, SubAgentToolGrant
 from App.backend.services.sub_agent_service import (
     DEFAULT_SUB_AGENT_ASSISTANT_TEMPLATE,
     SubAgentService,
@@ -77,7 +77,9 @@ def test_create_sub_agent_uses_prompt_templates_from_payload() -> None:
             description="Writes the first pass",
             enabled=True,
             allowed_invocation_modes=["agentMode", "subAgent"],
-            allowed_tool_names=["read_file"],
+            tool_grants=[
+                SubAgentToolGrant(feature_key="manuscript", categories=["read", "write"]),
+            ],
             allowed_sub_agent_ids=[],
             allowed_mcp_server_ids=[],
             prompt_templates=SubAgentPromptTemplates(
