@@ -24,6 +24,9 @@ from ..models.db_models import (
     Project,
     StoryEntity,
     StoryEntityFolder,
+    Timeline,
+    TimelineEvent,
+    TimelineTrack,
     User,
 )
 from ..models.translation_models import ObjectVersion
@@ -103,6 +106,8 @@ async def get_project_translation_status(
         STORY_ENTITY_TYPE: StoryEntity,
         'outline': Outline,
         'manuscript': Manuscript,
+        'timeline_track': TimelineTrack,
+        'timeline_event': TimelineEvent,
     }
 
     status_list = []
@@ -118,6 +123,16 @@ async def get_project_translation_status(
             query = query.join(Outline, Manuscript.chapter_id == Outline.id).filter(
                 Outline.project_id == project_id,
                 Outline.kind == 'chapter',
+            )
+        elif object_type == 'timeline_track':
+            query = query.join(Timeline, Timeline.id == TimelineTrack.timeline_id).filter(
+                Timeline.project_id == project_id,
+            )
+        elif object_type == 'timeline_event':
+            query = (
+                query.join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+                .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+                .filter(Timeline.project_id == project_id)
             )
 
         objects = query.all()
@@ -191,6 +206,23 @@ async def get_language_coverage(
         .all()
     )
     object_ids.update([(str(row.id), 'manuscript') for row in manuscripts])
+
+    timeline_tracks = (
+        db.query(TimelineTrack)
+        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+        .filter(Timeline.project_id == project_id)
+        .all()
+    )
+    object_ids.update([(str(row.id), 'timeline_track') for row in timeline_tracks])
+
+    timeline_events = (
+        db.query(TimelineEvent)
+        .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+        .filter(Timeline.project_id == project_id)
+        .all()
+    )
+    object_ids.update([(str(row.id), 'timeline_event') for row in timeline_events])
 
     total_objects = len(object_ids)
 

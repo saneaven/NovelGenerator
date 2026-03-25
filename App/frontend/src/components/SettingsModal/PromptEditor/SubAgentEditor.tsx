@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useMcpStore } from '../../../store/mcpStore';
 import { usePresetStore } from '../../../store/presetStore';
-import { useResolvedTaskConfig } from '../../../store/settingsStore';
+import { useResolvedTaskConfig, useSettings } from '../../../store/settingsStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
 import type {
   SubAgentAllowedInvocation,
@@ -454,6 +454,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
 }) => {
   const { t } = useTranslation();
   const { subAgents, deleteSubAgent } = useSubAgentStore();
+  const settings = useSettings();
   const activePresetId = usePresetStore((state) => state.activePresetId);
   const { servers: mcpServers, ensureLoaded: ensureMcpLoaded } = useMcpStore(useShallow((state) => ({
     servers: state.servers,
@@ -525,6 +526,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   };
 
   const hasToolGrant = (featureKey: string, category: string): boolean => {
+    if (!draft) return false;
     const currentGrant = draft.current.tool_grants.find((item) => item.feature_key === featureKey);
     return Boolean(currentGrant?.categories.includes(category as any));
   };

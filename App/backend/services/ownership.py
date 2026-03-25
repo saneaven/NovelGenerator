@@ -14,6 +14,9 @@ from ..models.db_models import (
     Project,
     StoryEntity,
     StoryEntityFolder,
+    Timeline,
+    TimelineEvent,
+    TimelineTrack,
     Thread,
 )
 
@@ -24,6 +27,8 @@ OBJECT_TYPE_MODEL_MAP = {
     "story_entity": StoryEntity,
     "outline": Outline,
     "manuscript": Manuscript,
+    "timeline_track": TimelineTrack,
+    "timeline_event": TimelineEvent,
 }
 
 DIRECT_PROJECT_OBJECT_TYPES = {
@@ -82,6 +87,23 @@ def require_owned_object(
         if project_id is not None:
             query = query.filter(Project.id == project_id)
         query = query.options(joinedload(Manuscript.chapter))
+    elif normalized_type == "timeline_track":
+        query = (
+            query.join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+            .join(Project, Project.id == Timeline.project_id)
+            .filter(Project.user_id == user_id)
+        )
+        if project_id is not None:
+            query = query.filter(Project.id == project_id)
+    elif normalized_type == "timeline_event":
+        query = (
+            query.join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+            .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+            .join(Project, Project.id == Timeline.project_id)
+            .filter(Project.user_id == user_id)
+        )
+        if project_id is not None:
+            query = query.filter(Project.id == project_id)
 
     obj = query.filter(model_class.id == object_id).first()
     if obj is None:
@@ -138,5 +160,30 @@ def resolve_project_id_for_object(
         if row and isinstance(row[0], UUID):
             return row[0]
         raise HTTPException(status_code=404, detail="manuscript not found")
+
+    if normalized_type == "timeline_track":
+        row = (
+            db.query(Timeline.project_id)
+            .join(TimelineTrack, TimelineTrack.timeline_id == Timeline.id)
+            .join(Project, Project.id == Timeline.project_id)
+            .filter(TimelineTrack.id == object_id, Project.user_id == user_id)
+            .first()
+        )
+        if row and isinstance(row[0], UUID):
+            return row[0]
+        raise HTTPException(status_code=404, detail="timeline_track not found")
+
+    if normalized_type == "timeline_event":
+        row = (
+            db.query(Timeline.project_id)
+            .join(TimelineTrack, TimelineTrack.timeline_id == Timeline.id)
+            .join(TimelineEvent, TimelineEvent.track_id == TimelineTrack.id)
+            .join(Project, Project.id == Timeline.project_id)
+            .filter(TimelineEvent.id == object_id, Project.user_id == user_id)
+            .first()
+        )
+        if row and isinstance(row[0], UUID):
+            return row[0]
+        raise HTTPException(status_code=404, detail="timeline_event not found")
 
     raise HTTPException(status_code=400, detail=f"Unknown object type: {normalized_type}")

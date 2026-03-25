@@ -20,7 +20,9 @@ export type ObjectType =
   | 'basic_info'
   | 'guidelines'
   | 'outline'
-  | 'manuscript';
+  | 'manuscript'
+  | 'timeline_track'
+  | 'timeline_event';
 
 export type SearchType = 'semantic' | 'keyword';
 

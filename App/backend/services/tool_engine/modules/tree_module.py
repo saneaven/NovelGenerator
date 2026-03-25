@@ -9,7 +9,7 @@ from ..contexts import ToolExecutionContext, ToolModuleContext, ToolValidationCo
 from ..contracts import ToolCallModule, ToolSpec
 from ..registry import tool_call_module
 from ..result_utils import make_result, valid_result
-from ....models.db_models import BasicInfo, Manuscript, Outline, StoryEntity
+from ....models.db_models import BasicInfo, Manuscript, Outline, StoryEntity, Timeline, TimelineEvent, TimelineTrack
 from ....models.translation_models import ObjectVersion
 from ....utils.story_entities import STORY_ENTITY_TYPE
 from ...story_entity_tree_service import (
@@ -233,6 +233,47 @@ class TreeToolCallModule(ToolCallModule):
 
         outline_tree = _walk_outline(None)
 
+        # --- Timeline tree ---
+        timeline_summary: dict[str, Any] = {"tracks": []}
+        timeline = db.query(Timeline).filter(Timeline.project_id == project_id).first()
+        if timeline is not None:
+            timeline_tracks = (
+                db.query(TimelineTrack)
+                .filter(TimelineTrack.timeline_id == timeline.id)
+                .order_by(TimelineTrack.position.asc(), TimelineTrack.created_at.asc(), TimelineTrack.id.asc())
+                .all()
+            )
+            track_names = _latest_names(db, "timeline_track", [track.id for track in timeline_tracks], language)
+            event_count_rows = (
+                db.query(TimelineEvent.track_id, TimelineEvent.id)
+                .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+                .filter(TimelineTrack.timeline_id == timeline.id)
+                .all()
+            )
+            event_count_by_track_id: dict[UUID, int] = {}
+            for track_id, _event_id in event_count_rows:
+                event_count_by_track_id[track_id] = event_count_by_track_id.get(track_id, 0) + 1
+
+            children_by_parent: dict[UUID | None, list[TimelineTrack]] = {}
+            for row in timeline_tracks:
+                children_by_parent.setdefault(row.parent_id, []).append(row)
+            for values in children_by_parent.values():
+                values.sort(key=lambda r: (int(r.position or 0), r.created_at, str(r.id)))
+
+            def _walk_timeline(parent_id: UUID | None) -> list[dict[str, Any]]:
+                return [
+                    {
+                        "id": str(row.id),
+                        "name": track_names.get(row.id, ""),
+                        "eventCount": int(event_count_by_track_id.get(row.id, 0)),
+                        "position": int(row.position or 0),
+                        "children": _walk_timeline(row.id),
+                    }
+                    for row in children_by_parent.get(parent_id, [])
+                ]
+
+            timeline_summary = {"tracks": _walk_timeline(None)}
+
         return make_result(
             "Project tree retrieved",
             data={
@@ -240,6 +281,7 @@ class TreeToolCallModule(ToolCallModule):
                     "title": title,
                     "storyEntities": story_entity_tree,
                     "outline": outline_tree,
+                    "timeline": timeline_summary,
                 },
             },
         )

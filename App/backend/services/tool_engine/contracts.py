@@ -59,6 +59,8 @@ TargetKind = Literal[
     "story_entity_folder",
     "outline",
     "manuscript",
+    "timeline_track",
+    "timeline_event",
     "project_tree",
     "sub_agent",
     "object_image",

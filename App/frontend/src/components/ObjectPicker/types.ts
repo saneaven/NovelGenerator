@@ -2,7 +2,7 @@
  * TypeScript interfaces for the unified ObjectPicker component
  */
 
-import type { ObjectType, OutlineKind } from '../../types/unifiedObject';
+import type { AnyObjectType, ObjectType, OutlineKind } from '../../types/unifiedObject';
 
 // ============================================================================
 // OBJECT PICKER TYPES
@@ -27,7 +27,7 @@ export interface ObjectPickerItem {
   name: string;
   description?: string;      // One-line summary for object indexes
   content?: string;          // Full content
-  type: ObjectType;
+  type: AnyObjectType;
   kind?: OutlineKind;
   parentId?: string;
   order?: number;
@@ -42,7 +42,7 @@ export interface ObjectPickerGroup {
   id: string;
   label: string;
   description?: string;
-  type: ObjectType;
+  type: AnyObjectType;
   kind?: OutlineKind;
   order?: number;
   items: ObjectPickerItem[];
@@ -122,9 +122,9 @@ export interface ObjectPickerItemProps {
 export interface ObjectPickerSearchProps {
   value: string;
   onChange: (value: string) => void;
-  typeFilter?: ObjectType | null;
-  onTypeFilterChange?: (type: ObjectType | null) => void;
-  availableTypes?: ObjectType[];
+  typeFilter?: AnyObjectType | null;
+  onTypeFilterChange?: (type: AnyObjectType | null) => void;
+  availableTypes?: AnyObjectType[];
   placeholder?: string;
 }
 
@@ -152,7 +152,7 @@ export interface UseObjectPickerDataOptions {
 /** Result from useObjectPickerData hook */
 export interface UseObjectPickerDataResult {
   groups: ObjectPickerGroup[];
-  availableTypes: ObjectType[];
+  availableTypes: AnyObjectType[];
   isLoading: boolean;
   error: string | null;
 }

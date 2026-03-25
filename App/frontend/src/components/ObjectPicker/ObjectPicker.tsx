@@ -11,7 +11,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ObjectType } from '../../types/unifiedObject';
+import type { AnyObjectType, ObjectType } from '../../types/unifiedObject';
 import ObjectPickerSearch from './ObjectPickerSearch';
 import ObjectPickerGroup from './ObjectPickerGroup';
 import ObjectPickerPreview from './ObjectPickerPreview';
@@ -119,7 +119,7 @@ function findGroup(groups: Group[], groupId: string): Group | null {
 /**
  * Filter groups based on search query and type filter
  */
-function isAllowedGroupType(groupType: ObjectType, typeFilter: ObjectType | null): boolean {
+function isAllowedGroupType(groupType: AnyObjectType, typeFilter: AnyObjectType | null): boolean {
   if (!typeFilter) return true;
   if (groupType === typeFilter) return true;
   return (
@@ -142,7 +142,7 @@ function itemMatchesSearch(item: PickerItem, normalizedQuery: string): boolean {
   );
 }
 
-function filterGroupByType(group: Group, typeFilter: ObjectType | null): Group | null {
+function filterGroupByType(group: Group, typeFilter: AnyObjectType | null): Group | null {
   if (!isAllowedGroupType(group.type, typeFilter)) {
     return null;
   }
@@ -201,7 +201,7 @@ function filterGroupBySearch(group: Group, normalizedQuery: string): Group | nul
 function filterGroups(
   groups: Group[],
   searchQuery: string,
-  typeFilter: ObjectType | null
+  typeFilter: AnyObjectType | null
 ): Group[] {
   if (!searchQuery && !typeFilter) return groups;
 
@@ -251,7 +251,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   const agentConfig = useResolvedTaskConfig('agent');
   // Internal state
   const [searchQuery, setSearchQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState<ObjectType | null>(null);
+  const [typeFilter, setTypeFilter] = useState<AnyObjectType | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [previewItem, setPreviewItem] = useState<PickerItem | null>(null);
   const hasInitializedSelectionRef = useRef(false);

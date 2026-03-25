@@ -7,6 +7,7 @@ import { useSidebarStore } from '../../store/sidebarStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore, type SimplifiedProjectObjects } from '../../store/unifiedObjectStore';
 import { useNovelEditorStore } from '../../store/novelEditorStore';
+import { useTimelineStore } from '../../store/timelineStore';
 import { useSettings } from '../../store/settingsStore';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { alert as showAlert } from '../../store/dialogStore';
@@ -17,7 +18,7 @@ import { sortOutlineObjects } from '../../utils/outlineOrdering';
 import type { StoryEntityObject, OutlineObject } from '../../types/unifiedObject';
 
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
-import TranslationModal from '../../components/Modal/TranslationModal';
+import TranslationModal from '../../components/TranslationModal';
 import AgentPanel from '../workspace/components/AgentPanel';
 import ProjectHomePanel, { type ProjectHomeTab } from '../workspace/components/ProjectHomePanel';
 import ProjectHomeSidebar from '../workspace/components/ProjectHomeSidebar';
@@ -25,6 +26,7 @@ import StoryEntityPanel from '../workspace/components/StoryEntityPanel';
 import OutlinePanel from '../outlinemanager/components/OutlinePanel';
 import NovelEditorPanel from '../noveleditor/components/NovelEditorPanel';
 import WorkspaceConfigPanel from './components/WorkspaceConfigPanel';
+import TimelinePanel from '../timeline/TimelinePanel';
 import EntityFolderSidebar from '../../components/StoryEntityExplorer/EntityFolderSidebar';
 import { PageHeader, MobileFooter } from '../../components/layout';
 
@@ -49,6 +51,8 @@ function getSidebarType(subPage: SubPageType): string {
       return 'outline';
     case 'novel-editor':
       return 'chapter';
+    case 'timeline':
+      return 'timeline';
     case 'config':
       return 'config';
   }
@@ -65,6 +69,7 @@ const UnifiedWorkspace: React.FC = () => {
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
   const changeRevision = useUnifiedObjectStore(state => state.changeRevision);
+  const fetchTimeline = useTimelineStore((state) => state.fetchTimeline);
 
   // NovelEditor specific stores
   const selectedChapterByProject = useNovelEditorStore(state => state.selectedChapterByProject);
@@ -251,6 +256,14 @@ const UnifiedWorkspace: React.FC = () => {
 
     populateStoreCache();
   }, [projectId, refreshProjectObjects]);
+
+  useEffect(() => {
+    if (!projectId) return;
+
+    void fetchTimeline(projectId, currentDisplayLanguage, { force: true }).catch((error) => {
+      console.error('Failed to load timeline:', error);
+    });
+  }, [currentDisplayLanguage, fetchTimeline, projectId]);
 
   // Build objects for NovelEditor (when in novel-editor mode)
   useEffect(() => {
@@ -451,6 +464,8 @@ const UnifiedWorkspace: React.FC = () => {
         return t('unifiedWorkspace.mobileSubtitle.outlines');
       case 'novel-editor':
         return selectedChapter?.name || t('unifiedWorkspace.mobileSubtitle.noChapterSelected');
+      case 'timeline':
+        return t('unifiedWorkspace.mobileSubtitle.timeline', 'Timeline');
       case 'config':
         return t('unifiedWorkspace.mobileSubtitle.config');
     }
@@ -470,7 +485,7 @@ const UnifiedWorkspace: React.FC = () => {
         onTranslateAllClick={() => setShowTranslateModal(true)}
         onSettingsClick={() => setIsSettingsOpen(true)}
         mobileSubtitle={getMobileSubtitle()}
-        showHamburger={currentSubPage !== 'config'}
+        showHamburger={currentSubPage !== 'config' && currentSubPage !== 'timeline'}
         onHamburgerClick={() => sidebarStore.toggleSidebar(projectId ?? '', getSidebarType(currentSubPage))}
         showSaveIndicator={currentSubPage === 'novel-editor'}
         saveStatus={
@@ -522,6 +537,12 @@ const UnifiedWorkspace: React.FC = () => {
             chaptersInitialized={isOutlineInitialized}
             globalDisplayLanguage={currentDisplayLanguage}
             onSelectChapter={(chapterId) => selectChapter(projectId ?? '', chapterId)}
+          />
+        )}
+
+        {currentSubPage === 'timeline' && (
+          <TimelinePanel
+            globalDisplayLanguage={currentDisplayLanguage}
           />
         )}
 

@@ -3,8 +3,8 @@
  */
 
 import React, { useCallback } from 'react';
+import { getAnyObjectTypeLabel } from '../../types/timeline';
 import type { ObjectPickerPreviewProps } from './types';
-import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
 
 const ObjectPickerPreview: React.FC<ObjectPickerPreviewProps> = ({
   item,
@@ -29,7 +29,7 @@ const ObjectPickerPreview: React.FC<ObjectPickerPreviewProps> = ({
           <div className="object-picker-preview-content">
             <div className="object-picker-preview-header">
               <span className="object-picker-type-badge">
-                {OBJECT_TYPE_CONFIG[item.type]?.label || item.type}
+                {getAnyObjectTypeLabel(item.type)}
               </span>
               <h3 className="object-picker-preview-title">{item.name}</h3>
             </div>
@@ -62,7 +62,7 @@ const ObjectPickerPreview: React.FC<ObjectPickerPreviewProps> = ({
         <div className="object-picker-preview-header">
           <div className="object-picker-preview-header-content">
             <span className="object-picker-type-badge">
-              {OBJECT_TYPE_CONFIG[item.type]?.label || item.type}
+              {getAnyObjectTypeLabel(item.type)}
             </span>
             <h3 className="object-picker-preview-title">{item.name}</h3>
           </div>

@@ -370,6 +370,16 @@ def _list_manuscripts(bucket: dict[str, Any]) -> list[dict[str, Any]]:
     return [value for value in values if isinstance(value, dict)]
 
 
+def _list_timeline_events(bucket: dict[str, Any]) -> list[dict[str, Any]]:
+    timeline = bucket.get("timeline")
+    if not isinstance(timeline, dict):
+        return []
+    values = timeline.get("events")
+    if not isinstance(values, list):
+        return []
+    return [value for value in values if isinstance(value, dict)]
+
+
 def _outline_tree(bucket: dict[str, Any]) -> list[dict[str, Any]]:
     outline = bucket.get("outline")
     if not isinstance(outline, dict):
@@ -552,6 +562,7 @@ def _exact_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) -
     )
     outline_items = _collect_outline_items_by_id(_outline_tree(bucket), wanted)
     manuscripts = _filter_selected(_list_manuscripts(bucket), wanted)
+    timeline_events = _filter_selected(_list_timeline_events(bucket), wanted)
 
     return {
         "basicInfo": _select_single(bucket.get("basicInfo"), wanted or None),
@@ -560,6 +571,7 @@ def _exact_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) -
         "storyEntityFolders": story_entity_folders,
         "outlineItems": outline_items,
         "manuscripts": manuscripts,
+        "timelineEvents": timeline_events,
     }
 
 
@@ -640,6 +652,7 @@ def _tree_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) ->
     story_entity_tree = _prune_and_mark_story_entity_tree(_list_story_entity_tree(bucket), wanted)
     outline_tree = _prune_and_mark_outline_tree(_outline_tree(bucket), wanted)
     manuscripts = _filter_selected(_list_manuscripts(bucket), wanted)
+    timeline_events = _filter_selected(_list_timeline_events(bucket), wanted)
 
     return {
         "basicInfo": _select_single(bucket.get("basicInfo"), wanted),
@@ -648,6 +661,7 @@ def _tree_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) ->
         "storyEntities": _flatten_story_entity_tree(story_entity_tree),
         "outlineTree": outline_tree,
         "manuscripts": manuscripts,
+        "timelineEvents": timeline_events,
     }
 
 

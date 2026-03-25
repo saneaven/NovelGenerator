@@ -6,7 +6,10 @@ import { useMemo } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import type { ObjectType, UnifiedObject } from '../../types/unifiedObject';
+import { useTimelineStore } from '../../store/timelineStore';
+import type { AnyObjectType, ObjectType, UnifiedObject } from '../../types/unifiedObject';
+import type { CalendarConfig, TimelineTrack } from '../../types/timeline';
+import { getAnyObjectTypeOrder } from '../../types/timeline';
 import type {
   ObjectPickerMode,
   ObjectPickerGroup,
@@ -17,6 +20,7 @@ import type {
 import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
 import { docToMarkdown } from '../../editor/manuscript/convert';
 import { buildBasicInfoSummary, normalizeBasicInfoData } from '../../utils/basicInfo';
+import { formatDate } from '../../utils/timelineCalendar';
 import {
   getStoryEntityFolderDescription,
   getStoryEntityFolderName,
@@ -43,8 +47,8 @@ function getObjectDataForLanguage(obj: UnifiedObject, language: string): Record<
   return {};
 }
 
-function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): ObjectType[] {
-  let types: ObjectType[];
+function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): AnyObjectType[] {
+  let types: AnyObjectType[];
   switch (mode) {
     case 'story-entities':
       types = ['story_entity'];
@@ -53,7 +57,7 @@ function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): Ob
       types = ['outline', 'manuscript'];
       break;
     case 'all':
-      types = ['story_entity', 'outline', 'manuscript'];
+      types = ['story_entity', 'outline', 'manuscript', 'timeline_event'];
       break;
     case 'translation':
       types = ['basic_info', 'guidelines', 'story_entity', 'outline', 'manuscript'];
@@ -62,7 +66,7 @@ function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): Ob
       types = ['story_entity'];
       break;
   }
-  return types.filter((type) => !excludeTypes.includes(type));
+  return types.filter((type) => !excludeTypes.includes(type as ObjectType));
 }
 
 function compareOutlineItems(a: UnifiedObject, b: UnifiedObject): number {
@@ -195,6 +199,66 @@ function objectToItem(obj: UnifiedObject, language: string): ObjectPickerItem {
       kind: obj.kind,
     },
   };
+}
+
+function getTimelineDataForLanguage(data: Record<string, Record<string, unknown>>, language: string): Record<string, unknown> {
+  if (data[language]) return data[language];
+  const firstLanguage = Object.keys(data)[0];
+  return firstLanguage ? data[firstLanguage] : {};
+}
+
+function buildTimelineEventGroups(
+  tracks: TimelineTrack[],
+  calendar: CalendarConfig | null,
+  language: string,
+  _mode: ObjectPickerMode,
+  t: TFunction,
+): ObjectPickerGroup[] {
+  if (tracks.length === 0) return [];
+
+  const untitledTrack = t('timeline.untitledTrack', 'Untitled Track');
+  const untitledEvent = t('timeline.untitledEvent', 'Untitled Event');
+
+  const buildTrackGroup = (track: TimelineTrack): ObjectPickerGroup => {
+    const trackData = getTimelineDataForLanguage(track.data, language);
+    return {
+      id: `timeline-track-${track.id}`,
+      label: (trackData.name as string) || untitledTrack,
+      description: (trackData.description as string) || undefined,
+      type: 'timeline_event',
+      order: track.position,
+      items: [
+        ...track.events.map((event) => {
+          const eventData = getTimelineDataForLanguage(event.data, language);
+          return {
+            id: event.id,
+            name: (eventData.name as string) || untitledEvent,
+            description: (eventData.description as string) || (calendar ? formatDate(event.startDate, calendar) : undefined),
+            content: event.tags.length > 0 ? `Tags: ${event.tags.join(', ')}` : undefined,
+            type: 'timeline_event' as const,
+            parentId: track.id,
+            metadata: {
+              trackId: track.id,
+              startDate: event.startDate,
+              endDate: event.endDate,
+              tags: event.tags,
+            },
+          };
+        }),
+      ],
+      childGroups: track.children.map(buildTrackGroup),
+    };
+  };
+
+  return [
+    {
+      id: 'group-timeline-events',
+      label: t('timeline.title', 'Timeline'),
+      type: 'timeline_event',
+      items: [],
+      childGroups: tracks.map(buildTrackGroup),
+    },
+  ];
 }
 
 function buildFolderNodeMap(
@@ -509,12 +573,14 @@ function buildOutlineGroups(
 function buildGroups(
   objects: UnifiedObject[],
   folders: StoryEntityFolder[],
+  timelineTracks: TimelineTrack[],
+  timelineCalendar: CalendarConfig | null,
   language: string,
   mode: ObjectPickerMode,
   t: TFunction,
-): { groups: ObjectPickerGroup[]; availableTypes: ObjectType[] } {
+): { groups: ObjectPickerGroup[]; availableTypes: AnyObjectType[] } {
   const groups: ObjectPickerGroup[] = [];
-  const availableTypes: ObjectType[] = [];
+  const availableTypes: AnyObjectType[] = [];
 
   const meta = buildMetaGroups(objects, language, mode);
   groups.push(...meta.groups);
@@ -545,9 +611,17 @@ function buildGroups(
     availableTypes.push(...manuscriptGroups.availableTypes);
   }
 
+  if (mode === 'all') {
+    const timelineGroups = buildTimelineEventGroups(timelineTracks, timelineCalendar, language, mode, t);
+    if (timelineGroups.length > 0) {
+      groups.push(...timelineGroups);
+      availableTypes.push('timeline_event');
+    }
+  }
+
   groups.sort((a, b) => {
-    const orderA = OBJECT_TYPE_CONFIG[a.type]?.order ?? 999;
-    const orderB = OBJECT_TYPE_CONFIG[b.type]?.order ?? 999;
+    const orderA = getAnyObjectTypeOrder(a.type);
+    const orderB = getAnyObjectTypeOrder(b.type);
     return orderA - orderB;
   });
 
@@ -562,6 +636,7 @@ export function useObjectPickerData({
 }: UseObjectPickerDataOptions): UseObjectPickerDataResult {
   const { t } = useTranslation();
   const objects = useUnifiedObjectStore((state) => state.objects);
+  const timeline = useTimelineStore((state) => (state.loadedProjectId === projectId ? state.timeline : null));
   const typesToInclude = useMemo(
     () => getTypesForMode(mode, excludeTypes),
     [mode, excludeTypes],
@@ -573,8 +648,8 @@ export function useObjectPickerData({
     );
     const filteredObjects = projectObjects.filter((obj) => typesToInclude.includes(obj.type));
     const folders = getProjectStoryEntityFolders(objects, projectId);
-    return buildGroups(filteredObjects, folders, language, mode, t);
-  }, [objects, projectId, language, mode, t, typesToInclude]);
+    return buildGroups(filteredObjects, folders, timeline?.tracks ?? [], timeline?.calendar ?? null, language, mode, t);
+  }, [objects, projectId, language, mode, t, timeline, typesToInclude]);
 
   return { groups, availableTypes, isLoading: false, error: null };
 }

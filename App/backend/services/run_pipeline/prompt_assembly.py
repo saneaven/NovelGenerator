@@ -142,8 +142,17 @@ async def assemble_resume(
         language=run.language,
         include_run_ids=[run.id],
     )
-    # Cache already contains user messages; only append non-user turns.
-    conversation.extend(m for m in recent if m.get("role") != "user")
+    # Deduplicate: only append messages whose seq_in_thread exceeds the
+    # highest sequence already present in the cached conversation.
+    max_cached_seq = max(
+        (m.get("seq_in_thread") for m in conversation if isinstance(m.get("seq_in_thread"), int)),
+        default=-1,
+    )
+    conversation.extend(
+        m for m in recent
+        if m.get("role") != "user"
+        and (not isinstance(m.get("seq_in_thread"), int) or m["seq_in_thread"] > max_cached_seq)
+    )
 
     bundle: ScenarioBundle | None = None
     task_type = ScenarioManager.resolve_task_type(db, thread=thread, run=run)

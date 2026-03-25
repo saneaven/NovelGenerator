@@ -12,8 +12,12 @@ from ...models.db_models import (
     Manuscript,
     Outline,
     StoryEntity,
+    Timeline,
+    TimelineEvent,
+    TimelineTrack,
 )
 from ...models.translation_models import ObjectVersion
+from ...utils.timeline_calendar import default_calendar, format_date
 from ...utils.story_entities import STORY_ENTITY_TYPE
 from ..basic_info_utils import basic_info_summary_text, normalize_basic_info_data
 from ..sidecar_client import SidecarClient
@@ -211,6 +215,105 @@ def _build_outline_numbering(outlines: list[Outline]) -> dict[UUID, dict[str, in
     return numbering
 
 
+def _timeline_date_range_text(
+    *,
+    start_date: dict[str, Any] | None,
+    end_date: dict[str, Any] | None,
+    calendar: dict[str, Any],
+) -> str:
+    if not isinstance(start_date, dict):
+        return ""
+    start_text = format_date(start_date, calendar)
+    if not isinstance(end_date, dict) or end_date == start_date:
+        return start_text
+    return f"{start_text} -> {format_date(end_date, calendar)}"
+
+
+def _build_timeline_payload(
+    *,
+    timeline: Timeline | None,
+    tracks: list[TimelineTrack],
+    events: list[TimelineEvent],
+    get_latest: Any,
+    language: str,
+) -> dict[str, Any]:
+    if timeline is None:
+        return {
+            "id": "",
+            "projectId": "",
+            "calendar": default_calendar(),
+            "tracks": [],
+            "events": [],
+        }
+
+    calendar = timeline.calendar if isinstance(timeline.calendar, dict) else default_calendar()
+    track_lang_data = {
+        track.id: _lang_data(get_latest("timeline_track", track.id), language)
+        for track in tracks
+    }
+    event_lang_data = {
+        event.id: _lang_data(get_latest("timeline_event", event.id), language)
+        for event in events
+    }
+
+    children_by_parent: dict[UUID | None, list[TimelineTrack]] = {}
+    for track in tracks:
+        children_by_parent.setdefault(track.parent_id, []).append(track)
+    for values in children_by_parent.values():
+        values.sort(key=lambda row: (int(row.position or 0), row.created_at, str(row.id)))
+
+    events_by_track_id: dict[UUID, list[TimelineEvent]] = {}
+    for event in events:
+        events_by_track_id.setdefault(event.track_id, []).append(event)
+    for values in events_by_track_id.values():
+        values.sort(key=lambda row: (row.created_at, str(row.id)))
+
+    def event_payload(event: TimelineEvent) -> dict[str, Any]:
+        lang_data = event_lang_data.get(event.id, {})
+        track_data = track_lang_data.get(event.track_id, {})
+        return {
+            "id": str(event.id),
+            "trackId": str(event.track_id),
+            "trackName": str(track_data.get("name") or ""),
+            "name": str(lang_data.get("name") or ""),
+            "description": str(lang_data.get("description") or ""),
+            "startDate": dict(event.start_date) if isinstance(event.start_date, dict) else {},
+            "endDate": dict(event.end_date) if isinstance(event.end_date, dict) else None,
+            "tags": list(event.tags) if isinstance(event.tags, list) else [],
+            "formattedDate": _timeline_date_range_text(
+                start_date=event.start_date if isinstance(event.start_date, dict) else None,
+                end_date=event.end_date if isinstance(event.end_date, dict) else None,
+                calendar=calendar,
+            ),
+        }
+
+    def build_track_tree(parent_id: UUID | None) -> list[dict[str, Any]]:
+        payload: list[dict[str, Any]] = []
+        for track in children_by_parent.get(parent_id, []):
+            lang_data = track_lang_data.get(track.id, {})
+            payload.append(
+                {
+                    "id": str(track.id),
+                    "parentId": str(track.parent_id) if track.parent_id else None,
+                    "position": int(track.position or 0),
+                    "color": track.color,
+                    "name": str(lang_data.get("name") or ""),
+                    "description": str(lang_data.get("description") or ""),
+                    "events": [event_payload(event) for event in events_by_track_id.get(track.id, [])],
+                    "children": build_track_tree(track.id),
+                }
+            )
+        return payload
+
+    return {
+        "id": str(timeline.id),
+        "projectId": str(timeline.project_id),
+        "calendar": calendar,
+        "tracks": build_track_tree(None),
+        "events": [event_payload(event) for event in events],
+    }
+
+
 async def build_project_data(
     db: Session,
     project_id: UUID,
@@ -239,6 +342,27 @@ async def build_project_data(
         .filter(Outline.project_id == project_id, Outline.kind == "chapter")
         .all()
     )
+    try:
+        timeline = db.query(Timeline).filter(Timeline.project_id == project_id).first()
+        timeline_tracks = (
+            db.query(TimelineTrack)
+            .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+            .filter(Timeline.project_id == project_id)
+            .order_by(TimelineTrack.position.asc(), TimelineTrack.created_at.asc(), TimelineTrack.id.asc())
+            .all()
+        )
+        timeline_events = (
+            db.query(TimelineEvent)
+            .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+            .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+            .filter(Timeline.project_id == project_id)
+            .order_by(TimelineEvent.created_at.asc(), TimelineEvent.id.asc())
+            .all()
+        )
+    except AssertionError:
+        timeline = None
+        timeline_tracks = []
+        timeline_events = []
 
     latest: dict[tuple[str, UUID], dict[str, Any]] = {}
 
@@ -255,6 +379,8 @@ async def build_project_data(
         (STORY_ENTITY_TYPE, story_entities),
         ("outline", outlines),
         ("manuscript", manuscripts),
+        ("timeline_track", timeline_tracks),
+        ("timeline_event", timeline_events),
     ]:
         for row in rows:
             all_languages.update(get_latest(object_type, row.id).keys())
@@ -450,6 +576,13 @@ async def build_project_data(
     story_entities_payload, story_entity_tree_payload = build_story_entities_payload(language)
     outline_payload = build_outline_payload(language)
     manuscripts_payload = build_manuscripts_payload(language)
+    timeline_payload = _build_timeline_payload(
+        timeline=timeline,
+        tracks=timeline_tracks,
+        events=timeline_events,
+        get_latest=get_latest,
+        language=language,
+    )
 
     content_by_lang: dict[str, Any] = {}
     for lang in sorted(all_languages):
@@ -464,6 +597,13 @@ async def build_project_data(
             "storyEntityTree": lang_story_entity_tree,
             "outline": build_outline_payload(lang),
             "manuscripts": build_manuscripts_payload(lang),
+            "timeline": _build_timeline_payload(
+                timeline=timeline,
+                tracks=timeline_tracks,
+                events=timeline_events,
+                get_latest=get_latest,
+                language=lang,
+            ),
         }
 
     return {
@@ -473,5 +613,6 @@ async def build_project_data(
         "storyEntityTree": story_entity_tree_payload,
         "outline": outline_payload,
         "manuscripts": manuscripts_payload,
+        "timeline": timeline_payload,
         "contentByLang": content_by_lang,
     }

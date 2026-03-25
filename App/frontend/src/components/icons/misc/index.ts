@@ -8,6 +8,7 @@ export { Save } from './Save';
 export { Swap } from './Swap';
 export { SadMan as Mailbox } from './SadMan';
 export { Clock } from './Clock';
+export { Timeline } from './Timeline';
 export { Loading } from './Loading';
 export { DocumentAlt } from './DocumentAlt';
 export { HamburgerMenu } from './HamburgerMenu';

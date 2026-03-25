@@ -1,6 +1,6 @@
 import { API_BASE_URL, apiClient } from './client';
 import type { RunStatus, ToolCallStatus } from '../types/thread';
-import type { ObjectType } from '../types/unifiedObject';
+import type { AnyObjectType, ObjectType } from '../types/unifiedObject';
 import type { NotificationDTO } from './notificationService';
 import type { ImageRun, ImageRunStage, ImageRunStatus } from './assetService';
 
@@ -14,7 +14,7 @@ interface RuntimeEventBase {
 
 export interface ObjectChangedChange {
   action: 'created' | 'updated' | 'deleted';
-  object_type: ObjectType;
+  object_type: AnyObjectType;
   object_id: string;
 }
 

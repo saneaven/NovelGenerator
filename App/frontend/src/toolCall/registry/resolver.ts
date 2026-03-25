@@ -8,12 +8,14 @@ import projectTreeModule from '../modules/projectTreeModule';
 import searchModule from '../modules/searchModule';
 import storyEntityModule from '../modules/storyEntityModule';
 import subAgentModule from '../modules/subAgentModule';
+import timelineModule from '../modules/timelineModule';
 
 const REGISTERED_MODULES: ToolCallUiModule[] = [
   projectDataModule,
   storyEntityModule,
   outlineModule,
   manuscriptModule,
+  timelineModule,
   searchModule,
   projectTreeModule,
   imageModule,

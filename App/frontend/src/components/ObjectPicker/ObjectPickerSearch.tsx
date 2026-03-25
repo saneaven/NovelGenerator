@@ -4,9 +4,9 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ObjectType } from '../../types/unifiedObject';
+import type { AnyObjectType } from '../../types/unifiedObject';
+import { getAnyObjectTypeLabel } from '../../types/timeline';
 import type { ObjectPickerSearchProps } from './types';
-import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
 import CustomSelect from '../ui/CustomSelect';
 
 const ObjectPickerSearch: React.FC<ObjectPickerSearchProps> = ({
@@ -45,7 +45,7 @@ const ObjectPickerSearch: React.FC<ObjectPickerSearchProps> = ({
   }, [onChange]);
 
   const handleTypeChange = useCallback((newValue: string) => {
-    onTypeFilterChange?.(newValue ? (newValue as ObjectType) : null);
+    onTypeFilterChange?.(newValue ? (newValue as AnyObjectType) : null);
   }, [onTypeFilterChange]);
 
   const typeOptions = useMemo(() => {
@@ -53,7 +53,7 @@ const ObjectPickerSearch: React.FC<ObjectPickerSearchProps> = ({
       { value: '', label: t('objectPicker.allTypes') },
       ...availableTypes.map(type => ({
         value: type,
-        label: OBJECT_TYPE_CONFIG[type]?.label || type,
+        label: getAnyObjectTypeLabel(type),
       })),
     ];
   }, [availableTypes, t]);

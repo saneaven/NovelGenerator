@@ -1,0 +1,93 @@
+.timeline-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  grid-template-rows: 40px 1fr;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+/* Top-left corner */
+.timeline-body__corner {
+  grid-column: 1;
+  grid-row: 1;
+  border-right: 1px solid var(--color-border-default);
+  border-bottom: 1px solid var(--color-border-default);
+  background: var(--color-surface-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timeline-body__corner-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: var(--font-weight-medium);
+}
+
+/* Ruler area */
+.timeline-body__ruler {
+  grid-column: 2;
+  grid-row: 1;
+  overflow: hidden;
+}
+
+/* Track labels column */
+.timeline-body__labels {
+  grid-column: 1;
+  grid-row: 2;
+  overflow: hidden;
+  border-right: 1px solid var(--color-border-default);
+  background: var(--color-surface-base);
+}
+
+/* Canvas area */
+.timeline-body__canvas {
+  grid-column: 2;
+  grid-row: 2;
+  overflow: auto;
+}
+
+.timeline-body__canvas-inner {
+  min-height: 100%;
+  position: relative;
+}
+
+/* Label rows */
+.timeline-body__label-row {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.timeline-body__label-row--parent {
+  min-height: 36px;
+  background: var(--color-surface-subtle);
+}
+
+/* Lane rows */
+.timeline-body__lane-row {
+  position: relative;
+  min-height: 48px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.timeline-body__lane-row--parent {
+  min-height: 36px;
+}
+
+.timeline-body__lane-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}

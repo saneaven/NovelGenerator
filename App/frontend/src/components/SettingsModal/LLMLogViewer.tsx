@@ -94,7 +94,7 @@ const LLMLogViewer: React.FC<LLMLogViewerProps> = ({ onClose }) => {
       title: t('settings.advanced.llmLogging.clearConfirmTitle'),
       message: t('settings.advanced.llmLogging.clearConfirmMessage'),
       confirmLabel: t('common.delete'),
-      danger: true,
+      variant: 'danger',
     });
     if (!ok) return;
     try {
@@ -115,7 +115,7 @@ const LLMLogViewer: React.FC<LLMLogViewerProps> = ({ onClose }) => {
       isOpen
       onClose={onClose}
       title={t('settings.advanced.llmLogging.viewerTitle')}
-      size="lg"
+      size="large"
     >
       <div className="llm-log-viewer">
         <div className="llm-log-toolbar">

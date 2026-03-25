@@ -3,14 +3,14 @@ import { useShallow } from 'zustand/react/shallow';
 import { BaseModal } from '../BaseModal';
 import './TranslationModal.css';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useTimelineStore } from '../../store/timelineStore';
 import { useSettings } from '../../store/settingsStore';
-import type { UnifiedObject, ObjectType } from '../../types/unifiedObject';
+import type { AnyObjectType, UnifiedObject } from '../../types/unifiedObject';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import { useJourneyStore } from '../../store/journeyStore';
 import { journeyService } from '../../api/journeyService';
 import { Globe, Swap, Document } from '../icons';
 import { ObjectPicker } from '../ObjectPicker';
-import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
 import CollapsibleSection from '../ui/CollapsibleSection';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
@@ -19,6 +19,8 @@ import {
   getStoryEntityFolderData,
 } from '../../types/storyEntityFolder';
 import { getProjectStoryEntityFolders } from '../../utils/storyEntityTree';
+import { getAnyObjectTypeLabel, type FullTimeline, type TimelineTrack } from '../../types/timeline';
+import { formatDate, toBaseUnits } from '../../utils/timelineCalendar';
 
 interface TranslationModalProps {
   isOpen: boolean;
@@ -31,14 +33,14 @@ interface TranslationModalProps {
 }
 
 interface ProjectObjectToTranslate {
-  objectType: ObjectType;
+  objectType: AnyObjectType;
   objectKind?: UnifiedObject['kind'];
   objectId: string;
   sourceData: Record<string, any>;
   versionNumber?: number;
 }
 
-function objectDisplayLabel(objectType: ObjectType, objectKind?: UnifiedObject['kind']): string {
+function objectDisplayLabel(objectType: AnyObjectType, objectKind?: UnifiedObject['kind']): string {
   if (objectType === 'story_entity_folder') {
     return 'Story Entity Folder';
   }
@@ -51,7 +53,52 @@ function objectDisplayLabel(objectType: ObjectType, objectKind?: UnifiedObject['
     if (objectKind === 'chapter') return 'Chapter';
     return 'Outline';
   }
-  return OBJECT_TYPE_CONFIG[objectType]?.label || objectType;
+  return getAnyObjectTypeLabel(objectType);
+}
+
+function getTimelineDataForLanguage(data: Record<string, Record<string, unknown>>, language: string): Record<string, any> {
+  if (data[language]) return data[language] as Record<string, any>;
+  const firstLanguage = Object.keys(data)[0];
+  return firstLanguage ? (data[firstLanguage] as Record<string, any>) : {};
+}
+
+function forEachTimelineTrack(
+  tracks: TimelineTrack[],
+  visit: (track: TimelineTrack, path: number[]) => void,
+  path: number[] = [],
+): void {
+  tracks.forEach((track, index) => {
+    const nextPath = [...path, index];
+    visit(track, nextPath);
+    if (track.children.length > 0) {
+      forEachTimelineTrack(track.children, visit, nextPath);
+    }
+  });
+}
+
+function timelinePathKey(path: number[]): string {
+  return path.map((value) => String(value).padStart(3, '0')).join('');
+}
+
+function timelineBaseOrder(path: number[]): number {
+  return 7_000_000 + Number(timelinePathKey(path) || '0') * 1_000;
+}
+
+function eventOrderValue(
+  timeline: FullTimeline | null,
+  path: number[],
+  startDate: Record<string, number>,
+  fallbackIndex: number,
+): number {
+  const base = timelineBaseOrder(path);
+  if (!timeline) {
+    return base + fallbackIndex;
+  }
+  try {
+    return base + toBaseUnits(startDate, timeline.calendar) + fallbackIndex / 1000;
+  } catch {
+    return base + fallbackIndex;
+  }
 }
 
 const TranslationModal: React.FC<TranslationModalProps> = ({
@@ -84,6 +131,8 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   // Use selector to only subscribe to objects, preventing re-renders from unrelated store changes
   const objects = useUnifiedObjectStore(useShallow(state => state.objects));
   const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
+  const timeline = useTimelineStore((state) => (state.loadedProjectId === projectId ? state.timeline : null));
+  const fetchTimeline = useTimelineStore((state) => state.fetchTimeline);
   const settings = useSettings();
 
   // Ensure all object types are available in store for translation selection (tab-independent)
@@ -93,12 +142,15 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     let cancelled = false;
     setPickerLoading(true);
 
-    void refreshProjectObjects(projectId, [
-      'basic_info',
-      'guidelines',
-      'story_entity',
-      'outline',
-      'manuscript',
+    void Promise.all([
+      refreshProjectObjects(projectId, [
+        'basic_info',
+        'guidelines',
+        'story_entity',
+        'outline',
+        'manuscript',
+      ]),
+      fetchTimeline(projectId, sourceLanguage || defaultSourceLanguage || settings.mainLanguage || 'English', { force: true }),
     ]).catch((err) => {
       console.error('Failed to preload objects for translation:', err);
     }).finally(() => {
@@ -110,7 +162,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, projectId, refreshProjectObjects]);
+  }, [defaultSourceLanguage, fetchTimeline, isOpen, projectId, refreshProjectObjects, settings.mainLanguage, sourceLanguage]);
 
   const projectFolders = useMemo(
     () => getProjectStoryEntityFolders(objects, projectId),
@@ -149,8 +201,21 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       ids.add(folder.id);
     });
 
+    if (timeline) {
+      forEachTimelineTrack(timeline.tracks, (track) => {
+        if (track.data[targetLanguage]) {
+          ids.add(track.id);
+        }
+        track.events.forEach((event) => {
+          if (event.data[targetLanguage]) {
+            ids.add(event.id);
+          }
+        });
+      });
+    }
+
     return Array.from(ids);
-  }, [objects, projectId, targetLanguage, projectFolders]);
+  }, [objects, projectId, targetLanguage, projectFolders, timeline]);
 
   const hasAnyContext = contextObjectIds.length > 0;
 
@@ -179,6 +244,18 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
             count++;
           }
         });
+        if (timeline) {
+          forEachTimelineTrack(timeline.tracks, (track) => {
+            if (!Object.keys(track.data || {}).includes(subLang)) {
+              count++;
+            }
+            track.events.forEach((event) => {
+              if (!Object.keys(event.data || {}).includes(subLang)) {
+                count++;
+              }
+            });
+          });
+        }
         if (count > maxObjectsToTranslate) {
           maxObjectsToTranslate = count;
           bestTargetLanguage = subLang;
@@ -189,7 +266,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       setSourceLanguage(settings.mainLanguage);
       setTargetLanguage(bestTargetLanguage);
     }
-  }, [isOpen, settings.mainLanguage, settings.subLanguages, sourceLanguage, objects, projectId, projectFolders]);
+  }, [isOpen, settings.mainLanguage, settings.subLanguages, sourceLanguage, objects, projectId, projectFolders, timeline]);
 
   // Get all available objects that need translation (before selection filter)
   const availableObjects = useMemo(() => {
@@ -221,7 +298,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       const sourceData = obj.data[sourceLanguage] || obj.data[Object.keys(obj.data)[0]] || {};
       let label = sourceData.name || sourceData.title || obj.id;
       if (objType === 'guidelines') {
-        label = OBJECT_TYPE_CONFIG[objType]?.label || label;
+        label = getAnyObjectTypeLabel(objType) || label;
       }
 
       // Calculate hierarchical order for proper sorting
@@ -261,7 +338,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       }
 
       result.push({
-        objectType: objType as ObjectType,
+        objectType: objType,
         objectKind: obj.kind,
         objectId: obj.id,
         sourceData,
@@ -291,13 +368,50 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       });
     });
 
+    if (timeline) {
+      forEachTimelineTrack(timeline.tracks, (track, path) => {
+        const trackLanguages = Object.keys(track.data || {});
+        if ((!preSelectedSet && !trackLanguages.includes(targetLanguage)) || (preSelectedSet && preSelectedSet.has(track.id))) {
+          if (trackLanguages.includes(sourceLanguage)) {
+            const sourceData = getTimelineDataForLanguage(track.data, sourceLanguage);
+            result.push({
+              objectType: 'timeline_track',
+              objectId: track.id,
+              sourceData,
+              versionNumber: track.version?.number,
+              label: sourceData.name || `Track ${track.id}`,
+              order: timelineBaseOrder(path),
+            });
+          }
+        }
+
+        track.events.forEach((event, index) => {
+          const eventLanguages = Object.keys(event.data || {});
+          if ((!preSelectedSet && !eventLanguages.includes(targetLanguage)) || (preSelectedSet && preSelectedSet.has(event.id))) {
+            if (eventLanguages.includes(sourceLanguage)) {
+              const sourceData = getTimelineDataForLanguage(event.data, sourceLanguage);
+              const dateLabel = formatDate(event.startDate, timeline.calendar);
+              result.push({
+                objectType: 'timeline_event',
+                objectId: event.id,
+                sourceData,
+                versionNumber: event.version?.number,
+                label: sourceData.name || dateLabel,
+                order: eventOrderValue(timeline, path, event.startDate, index),
+              });
+            }
+          }
+        });
+      });
+    }
+
     // Sort by order for acts and chapters (objects without order will be at the end)
     return result.sort((a, b) => {
       const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
       const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
       return orderA - orderB;
     });
-  }, [objects, projectId, targetLanguage, sourceLanguage, preSelectedObjectIds, projectFolders]);
+  }, [objects, projectId, targetLanguage, sourceLanguage, preSelectedObjectIds, projectFolders, timeline]);
 
   // Get IDs of objects that need translation
   const availableObjectIds = useMemo(() => {

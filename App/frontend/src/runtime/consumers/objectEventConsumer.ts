@@ -1,5 +1,8 @@
 import { unifiedObjectService } from '../../api/unifiedObjectService';
 import { useProjectStore } from '../../store/projectStore';
+import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { useTimelineStore } from '../../store/timelineStore';
 import type { ObjectChangedEvent } from '../../api/sseClient';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import type { ObjectType, UnifiedObject } from '../../types/unifiedObject';
@@ -56,7 +59,24 @@ export class ObjectEventConsumer {
       const action = String(change?.action ?? '').toLowerCase();
       const objectId = String(change?.object_id ?? '');
       const objectTypeRaw = change?.object_type;
-      if (!objectId || !this.isObjectType(objectTypeRaw)) continue;
+      if (!objectId) continue;
+
+      if (objectTypeRaw === 'timeline_track' || objectTypeRaw === 'timeline_event') {
+        const settings = useSettingsStore.getState().settings;
+        const preferredDisplayLanguage = useDisplayLanguageStore.getState().preferredDisplayLanguage;
+        const language = preferredDisplayLanguage || settings?.mainLanguage || 'English';
+        void useTimelineStore.getState().fetchTimeline(projectId, language, { force: true }).catch((error) => {
+          console.warn('Failed to refresh timeline from SSE event', {
+            projectId,
+            objectType: objectTypeRaw,
+            objectId,
+            error,
+          });
+        });
+        continue;
+      }
+
+      if (!this.isObjectType(objectTypeRaw)) continue;
 
       const objectType = objectTypeRaw;
       const key = this.objectKey(objectType, objectId);

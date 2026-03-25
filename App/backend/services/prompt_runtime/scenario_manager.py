@@ -124,11 +124,10 @@ class ScenarioManager:
             raise RuntimeError(f"Unsupported journey kind: {journey_kind}")
 
         if thread.thread_type == "subAgent":
-            task_subtype = "default"
             defn = parent.sub_agent_definition
-            if defn is not None and str(defn.agent_name or "").strip():
-                task_subtype = str(defn.agent_name).strip()
-            return ScenarioTarget(task_type="subAgent", task_subtype=task_subtype)
+            if defn is None or not str(defn.agent_name or "").strip():
+                raise RuntimeError("SubAgent thread has no agent_name defined")
+            return ScenarioTarget(task_type="subAgent", task_subtype=str(defn.agent_name).strip())
 
         task_subtype = "planMode" if run.run_mode == "planMode" else "agentMode"
         return ScenarioTarget(task_type="agent", task_subtype=task_subtype)

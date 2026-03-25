@@ -10,6 +10,7 @@ import os
 # Add parent directory to path to import database
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import Base
+from utils.timeline_calendar import DEFAULT_CALENDAR_JSON
 
 
 # ============================================================================
@@ -482,6 +483,7 @@ class Project(Base):
     storage_usage = relationship("ProjectStorageUsage", back_populates="project", uselist=False, cascade="all, delete-orphan")
     basic_info = relationship("BasicInfo", back_populates="project", uselist=False, cascade="all, delete-orphan")
     guidelines = relationship("Guidelines", back_populates="project", uselist=False, cascade="all, delete-orphan")
+    timeline = relationship("Timeline", back_populates="project", uselist=False, cascade="all, delete-orphan")
     story_entity_folders = relationship("StoryEntityFolder", back_populates="project", cascade="all, delete-orphan", order_by="StoryEntityFolder.display_order")
     story_entities = relationship("StoryEntity", back_populates="project", cascade="all, delete-orphan", order_by="StoryEntity.display_order")
     outlines = relationship("Outline", back_populates="project", cascade="all, delete-orphan", order_by="Outline.position")
@@ -678,6 +680,108 @@ class Manuscript(Base):
     # Relationships
     chapter = relationship("Outline", back_populates="manuscript")
     owned_assets = relationship("Asset", back_populates="manuscript", foreign_keys="Asset.manuscript_id")
+
+
+# ============================================================================
+# TIMELINE
+# ============================================================================
+
+class Timeline(Base):
+    """Per-project timeline configuration and track container."""
+    __tablename__ = "timelines"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, unique=True)
+    calendar = Column(
+        JSONB,
+        nullable=False,
+        server_default=sa_text(f"'{DEFAULT_CALENDAR_JSON}'::jsonb"),
+    )
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    project = relationship("Project", back_populates="timeline")
+    tracks = relationship(
+        "TimelineTrack",
+        back_populates="timeline",
+        cascade="all, delete-orphan",
+        order_by="TimelineTrack.position",
+    )
+
+
+class TimelineTrack(Base):
+    """Timeline track tree used to group events."""
+    __tablename__ = "timeline_tracks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    timeline_id = Column(UUID(as_uuid=True), ForeignKey("timelines.id", ondelete="CASCADE"), nullable=False, index=True)
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("timeline_tracks.id", ondelete="CASCADE"), nullable=True, index=True)
+    position = Column(Integer, nullable=False, default=0)
+    color = Column(String(20), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    timeline = relationship("Timeline", back_populates="tracks")
+    parent = relationship("TimelineTrack", remote_side=[id], back_populates="children")
+    children = relationship(
+        "TimelineTrack",
+        back_populates="parent",
+        cascade="all, delete-orphan",
+        order_by="TimelineTrack.position",
+    )
+    events = relationship(
+        "TimelineEvent",
+        back_populates="track",
+        cascade="all, delete-orphan",
+        order_by="TimelineEvent.created_at",
+    )
+
+    __table_args__ = (
+        CheckConstraint("position >= 0", name="ck_timeline_tracks_position_non_negative"),
+        Index("ix_timeline_tracks_timeline_parent_position", "timeline_id", "parent_id", "position"),
+    )
+
+
+class TimelineEvent(Base):
+    """Timeline event with optional range and free-form tags."""
+    __tablename__ = "timeline_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    track_id = Column(UUID(as_uuid=True), ForeignKey("timeline_tracks.id", ondelete="CASCADE"), nullable=False, index=True)
+    start_date = Column(JSONB, nullable=False)
+    end_date = Column(JSONB, nullable=True)
+    tags = Column(JSONB, nullable=False, server_default=sa_text("'[]'::jsonb"))
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    track = relationship("TimelineTrack", back_populates="events")
+    links = relationship("TimelineEventLink", back_populates="event", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_timeline_events_track_id", "track_id"),
+    )
+
+
+class TimelineEventLink(Base):
+    """Polymorphic object link attached to a timeline event."""
+    __tablename__ = "timeline_event_links"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    event_id = Column(UUID(as_uuid=True), ForeignKey("timeline_events.id", ondelete="CASCADE"), nullable=False, index=True)
+    object_type = Column(String(50), nullable=False)
+    object_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    event = relationship("TimelineEvent", back_populates="links")
+
+    __table_args__ = (
+        UniqueConstraint("event_id", "object_type", "object_id", name="uq_timeline_event_link_target"),
+        Index("ix_timeline_event_links_event_id", "event_id"),
+        Index("ix_timeline_event_links_object_target", "object_type", "object_id"),
+    )
 
 
 # ============================================================================

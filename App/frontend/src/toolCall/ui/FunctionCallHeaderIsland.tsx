@@ -27,6 +27,8 @@ const CATEGORY_LABELS: Record<OperationCategory, string> = {
   search: 'SEARCH',
   call: 'CALL',
   generate: 'GENERATE',
+  get: 'GET',
+  mcp: 'MCP',
 };
 
 export interface FunctionCallHeaderIslandProps {

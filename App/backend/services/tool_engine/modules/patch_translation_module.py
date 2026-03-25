@@ -7,6 +7,7 @@ from ..contracts import ToolCallModule, ToolSpec
 from ..registry import tool_call_module
 from ..result_utils import invalid_result, make_result, valid_result
 from ....services.object_service import object_service
+from ....services.timeline_service import _UNSET, timeline_service
 from ....utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE
 from .manuscript_access import ensure_manuscript_exists, patch_manuscript, validate_patch_args as validate_manuscript_patch
 from .object_access import (
@@ -75,6 +76,24 @@ class PatchTranslationToolCallModule(ToolCallModule):
                     parameters=obj_schema({"id": _ID, **_TEXT_PATCH}, ["id", "old", "new"]),
                     auto_approve_category="patch_translation",
                 ),
+                ToolSpec(
+                    name="patch_translation_timeline_track",
+                    description="Patch a timeline track translation by single replacement.",
+                    parameters=obj_schema(
+                        {"id": _ID, "field": {"type": "string", "enum": ["name", "description"]}, **_TEXT_PATCH},
+                        ["id", "field", "old", "new"],
+                    ),
+                    auto_approve_category="patch_translation",
+                ),
+                ToolSpec(
+                    name="patch_translation_timeline_event",
+                    description="Patch a timeline event translation by single replacement.",
+                    parameters=obj_schema(
+                        {"id": _ID, "field": {"type": "string", "enum": ["name", "description"]}, **_TEXT_PATCH},
+                        ["id", "field", "old", "new"],
+                    ),
+                    auto_approve_category="patch_translation",
+                ),
             ],
         )
 
@@ -128,6 +147,16 @@ class PatchTranslationToolCallModule(ToolCallModule):
                 if field not in {"name", "description", "content"}:
                     raise ValueError("field must be one of name|description|content")
                 object_type = "outline"
+            elif tool_name == "patch_translation_timeline_track":
+                field = args.get("field")
+                if field not in {"name", "description"}:
+                    raise ValueError("field must be one of name|description")
+                object_type = "timeline_track"
+            elif tool_name == "patch_translation_timeline_event":
+                field = args.get("field")
+                if field not in {"name", "description"}:
+                    raise ValueError("field must be one of name|description")
+                object_type = "timeline_event"
             elif tool_name == "patch_translation_manuscript":
                 ensure_manuscript_exists(db=ctx.db, project_id=ctx.project_id, object_id=object_id, language=ctx.language)
                 await validate_manuscript_patch(args=args, ctx=ctx, object_id=object_id)
@@ -207,6 +236,63 @@ class PatchTranslationToolCallModule(ToolCallModule):
             )
         elif tool_name == "patch_translation_outline":
             object_type = "outline"
+        elif tool_name == "patch_translation_timeline_track":
+            current = read_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="timeline_track",
+                object_id=object_id,
+                language=ctx.language,
+            )
+            next_data = patch_object_field(
+                extract_lang_data(current, ctx.language),
+                field=str(args.get("field") or ""),
+                old=str(args.get("old") or ""),
+                new=str(args.get("new") or ""),
+            )
+            result = timeline_service.update_track(
+                ctx.db,
+                project_id=ctx.project_id,
+                track_id=object_id,
+                language=ctx.language,
+                name=str(next_data.get("name") or ""),
+                description=str(next_data.get("description") or ""),
+                color=_UNSET,
+                user_request="tool:patch_translation_timeline_track",
+                create_new_version=False,
+                user_id=ctx.user_id,
+            )
+            return make_result("Patched timeline track translation", object_id=result["id"], object_type="timeline_track")
+        elif tool_name == "patch_translation_timeline_event":
+            current = read_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="timeline_event",
+                object_id=object_id,
+                language=ctx.language,
+            )
+            next_data = patch_object_field(
+                extract_lang_data(current, ctx.language),
+                field=str(args.get("field") or ""),
+                old=str(args.get("old") or ""),
+                new=str(args.get("new") or ""),
+            )
+            result = timeline_service.update_event(
+                ctx.db,
+                project_id=ctx.project_id,
+                event_id=object_id,
+                track_id=None,
+                language=ctx.language,
+                name=str(next_data.get("name") or ""),
+                description=str(next_data.get("description") or ""),
+                start_date=_UNSET,
+                end_date=_UNSET,
+                tags=_UNSET,
+                user_request="tool:patch_translation_timeline_event",
+                create_new_version=False,
+                user_id=ctx.user_id,
+            )
+            return make_result("Patched timeline event translation", object_id=result["id"], object_type="timeline_event")
         elif tool_name == "patch_translation_manuscript":
             await patch_manuscript(
                 args=args,

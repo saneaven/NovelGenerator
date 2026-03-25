@@ -18,6 +18,7 @@ FeatureKey = Literal[
     "story_entity",
     "outline",
     "manuscript",
+    "timeline",
     "search",
     "project_tree",
     "image",
@@ -42,6 +43,10 @@ TOOL_GRANT_CATALOG: Final[dict[str, dict[str, object]]] = {
     "manuscript": {
         "display_name": "Manuscript",
         "supported_categories": ("read", "write", "translate"),
+    },
+    "timeline": {
+        "display_name": "Timeline",
+        "supported_categories": ("read", "write", "delete", "translate"),
     },
     "search": {
         "display_name": "Search",

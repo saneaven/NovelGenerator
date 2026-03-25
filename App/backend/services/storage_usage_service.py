@@ -34,6 +34,9 @@ from ..models.db_models import (
     RunModel,
     RunToolCallModel,
     StoryEntity,
+    Timeline,
+    TimelineEvent,
+    TimelineTrack,
     Thread,
     User,
 )
@@ -60,6 +63,8 @@ STORY_ENTITY_CONTEXT_TYPES = (
     "guidelines",
     "story_entity",
     "outline",
+    "timeline_track",
+    "timeline_event",
 )
 
 
@@ -220,6 +225,11 @@ def measure_story_core_row(row: object) -> int:
         getattr(row, "image_prompt", None),
         getattr(row, "image_prompt_positive", None),
         getattr(row, "image_prompt_negative", None),
+        getattr(row, "calendar", None),
+        getattr(row, "color", None),
+        getattr(row, "start_date", None),
+        getattr(row, "end_date", None),
+        getattr(row, "tags", None),
     )
 
 
@@ -325,7 +335,17 @@ def snapshot_project_row(row: Project | object | None) -> object | None:
 
 
 def snapshot_story_core_row(row: object | None) -> object | None:
-    return _snapshot_row(row, "image_prompt", "image_prompt_positive", "image_prompt_negative")
+    return _snapshot_row(
+        row,
+        "image_prompt",
+        "image_prompt_positive",
+        "image_prompt_negative",
+        "calendar",
+        "color",
+        "start_date",
+        "end_date",
+        "tags",
+    )
 
 
 def snapshot_object_version_row(row: ObjectVersion | object | None) -> object | None:
@@ -679,6 +699,19 @@ def _collect_project_object_ids(db: Session, *, project_id: UUID) -> dict[str, l
     guideline_ids = _uuid_rows(db.query(Guidelines.id).filter(Guidelines.project_id == project_id).all())
     story_entity_ids = _uuid_rows(db.query(StoryEntity.id).filter(StoryEntity.project_id == project_id).all())
     outline_ids = _uuid_rows(db.query(Outline.id).filter(Outline.project_id == project_id).all())
+    timeline_track_ids = _uuid_rows(
+        db.query(TimelineTrack.id)
+        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+        .filter(Timeline.project_id == project_id)
+        .all()
+    )
+    timeline_event_ids = _uuid_rows(
+        db.query(TimelineEvent.id)
+        .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+        .filter(Timeline.project_id == project_id)
+        .all()
+    )
     manuscript_ids = _uuid_rows(
         db.query(Manuscript.id)
         .join(Outline, Outline.id == Manuscript.chapter_id)
@@ -691,6 +724,8 @@ def _collect_project_object_ids(db: Session, *, project_id: UUID) -> dict[str, l
         "story_entity": story_entity_ids,
         "outline": outline_ids,
         "manuscript": manuscript_ids,
+        "timeline_track": timeline_track_ids,
+        "timeline_event": timeline_event_ids,
     }
 
 
@@ -790,6 +825,20 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
     story_core_rows.extend(db.query(Guidelines).filter(Guidelines.project_id == project_id).all())
     story_core_rows.extend(db.query(StoryEntity).filter(StoryEntity.project_id == project_id).all())
     story_core_rows.extend(db.query(Outline).filter(Outline.project_id == project_id).all())
+    story_core_rows.extend(db.query(Timeline).filter(Timeline.project_id == project_id).all())
+    story_core_rows.extend(
+        db.query(TimelineTrack)
+        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+        .filter(Timeline.project_id == project_id)
+        .all()
+    )
+    story_core_rows.extend(
+        db.query(TimelineEvent)
+        .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+        .filter(Timeline.project_id == project_id)
+        .all()
+    )
     story_bytes = sum(measure_story_core_row(row) for row in story_core_rows)
     story_bytes += _sum_object_versions(db, ids_by_type=ids_by_type, allowed_types=STORY_ENTITY_CONTEXT_TYPES)
 

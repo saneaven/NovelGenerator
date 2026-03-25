@@ -16,6 +16,9 @@ from ..models.db_models import (
     RunMessageAttachmentModel,
     StoryEntity,
     ObjectAssetLink,
+    Timeline,
+    TimelineEvent,
+    TimelineTrack,
 )
 from ..models.semantic_models import SemanticSource
 from ..models.translation_models import ObjectVersion
@@ -43,6 +46,19 @@ def collect_project_object_ids(db: Session, *, project_id: UUID) -> Dict[str, Li
     guideline_ids = _ids(db.query(Guidelines.id).filter(Guidelines.project_id == project_id).all())
     story_entity_ids = _ids(db.query(StoryEntity.id).filter(StoryEntity.project_id == project_id).all())
     outline_ids = _ids(db.query(Outline.id).filter(Outline.project_id == project_id).all())
+    timeline_track_ids = _ids(
+        db.query(TimelineTrack.id)
+        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+        .filter(Timeline.project_id == project_id)
+        .all()
+    )
+    timeline_event_ids = _ids(
+        db.query(TimelineEvent.id)
+        .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+        .filter(Timeline.project_id == project_id)
+        .all()
+    )
 
     manuscript_ids = _ids(
         db.query(Manuscript.id)
@@ -57,6 +73,8 @@ def collect_project_object_ids(db: Session, *, project_id: UUID) -> Dict[str, Li
         STORY_ENTITY_OBJECT_TYPE: story_entity_ids,
         "outline": outline_ids,
         "manuscript": manuscript_ids,
+        "timeline_track": timeline_track_ids,
+        "timeline_event": timeline_event_ids,
     }
 
 

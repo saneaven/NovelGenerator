@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 
 from ..database import get_db
-from ..models.db_models import User, Project, ObjectAssetLink, Asset, BasicInfo, Guidelines
+from ..models.db_models import User, Project, ObjectAssetLink, Asset, BasicInfo, Guidelines, Timeline
 from ..models.translation_models import ObjectVersion
 from ..schemas.projects import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse
 from ..schemas.project_transfer import (
@@ -33,10 +33,13 @@ from ..services.storage_usage_service import (
     apply_project_usage_deltas,
     build_object_version_delta,
     build_project_delta,
+    build_story_core_delta,
     snapshot_object_version_row,
     snapshot_project_row,
+    snapshot_story_core_row,
 )
 from ..services.storage_service import storage_service
+from ..utils.timeline_calendar import default_calendar
 
 
 def _get_cover_asset(db: Session, project: Project) -> dict | None:
@@ -98,6 +101,7 @@ async def create_project(
     project_id = uuid.uuid4()
     basic_info_id = uuid.uuid4()
     guidelines_id = uuid.uuid4()
+    timeline_id = uuid.uuid4()
     now = datetime.utcnow()
 
     # Create project
@@ -157,6 +161,15 @@ async def create_project(
     )
     db.add(guidelines_version)
 
+    timeline = Timeline(
+        id=timeline_id,
+        project_id=project_id,
+        calendar=default_calendar(),
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(timeline)
+
     queue_object_change(
         db,
         user_id=current_user.id,
@@ -190,6 +203,10 @@ async def create_project(
                     object_type="guidelines",
                     before=None,
                     after=snapshot_object_version_row(guidelines_version),
+                ),
+                build_story_core_delta(
+                    None,
+                    snapshot_story_core_row(timeline),
                 ),
             ],
             enforce_quota=True,

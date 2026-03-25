@@ -33,6 +33,10 @@ export function objectTypeLabel(objectType: ObjectType, storyEntityKind?: StoryE
       return 'Outline';
     case 'manuscript':
       return 'Manuscript';
+    case 'timeline_track':
+      return 'Timeline Track';
+    case 'timeline_event':
+      return 'Timeline Event';
     default:
       return 'Object';
   }

@@ -7,6 +7,7 @@ from ..contracts import ToolCallModule, ToolSpec
 from ..registry import tool_call_module
 from ..result_utils import invalid_result, make_result, valid_result
 from ....services.object_service import object_service
+from ....services.timeline_service import _UNSET, timeline_service
 from ....utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE
 from .manuscript_access import ensure_manuscript_exists, replace_manuscript
 from .object_access import (
@@ -84,6 +85,18 @@ class TranslateToolCallModule(ToolCallModule):
                     parameters=obj_schema({"id": _ID, "content": {"type": "string"}}, ["id", "content"]),
                     auto_approve_category="translate",
                 ),
+                ToolSpec(
+                    name="translate_timeline_track",
+                    description="Translate timeline track fields.",
+                    parameters=obj_schema({"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}}, ["id", "name", "description"]),
+                    auto_approve_category="translate",
+                ),
+                ToolSpec(
+                    name="translate_timeline_event",
+                    description="Translate timeline event fields.",
+                    parameters=obj_schema({"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}}, ["id", "name", "description"]),
+                    auto_approve_category="translate",
+                ),
             ],
         )
 
@@ -120,6 +133,10 @@ class TranslateToolCallModule(ToolCallModule):
             elif tool_name == "translate_manuscript":
                 ensure_manuscript_exists(db=ctx.db, project_id=ctx.project_id, object_id=object_id, language=ctx.language)
                 return valid_result()
+            elif tool_name == "translate_timeline_track":
+                object_type = "timeline_track"
+            elif tool_name == "translate_timeline_event":
+                object_type = "timeline_event"
             else:
                 return invalid_result("validate_translate_tool_name", f"Unsupported translate tool: {tool_name}")
             read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
@@ -196,6 +213,37 @@ class TranslateToolCallModule(ToolCallModule):
                 create_new_version=False,
             )
             return make_result("Translated manuscript", object_id=str(object_id), object_type="manuscript")
+        elif tool_name == "translate_timeline_track":
+            result = timeline_service.update_track(
+                ctx.db,
+                project_id=ctx.project_id,
+                track_id=object_id,
+                language=ctx.language,
+                name=str(args.get("name") or ""),
+                description=str(args.get("description") or ""),
+                color=_UNSET,
+                user_request="tool:translate_timeline_track",
+                create_new_version=False,
+                user_id=ctx.user_id,
+            )
+            return make_result("Translated timeline track", object_id=result["id"], object_type="timeline_track")
+        elif tool_name == "translate_timeline_event":
+            result = timeline_service.update_event(
+                ctx.db,
+                project_id=ctx.project_id,
+                event_id=object_id,
+                track_id=None,
+                language=ctx.language,
+                name=str(args.get("name") or ""),
+                description=str(args.get("description") or ""),
+                start_date=_UNSET,
+                end_date=_UNSET,
+                tags=_UNSET,
+                user_request="tool:translate_timeline_event",
+                create_new_version=False,
+                user_id=ctx.user_id,
+            )
+            return make_result("Translated timeline event", object_id=result["id"], object_type="timeline_event")
         else:
             raise ValueError(f"Unsupported translate tool: {tool_name}")
 

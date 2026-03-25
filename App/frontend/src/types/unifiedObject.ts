@@ -20,6 +20,9 @@ export type ObjectType =
   | 'outline'
   | 'manuscript';
 
+export type TimelineObjectType = 'timeline_track' | 'timeline_event';
+export type AnyObjectType = ObjectType | TimelineObjectType;
+
 export type StoryEntityKind = 'character' | 'organization' | 'location' | 'lorebook';
 export type OutlineKind = 'outline' | 'act' | 'chapter';
 export type StoryEntityStructureObjectType = 'story_entity_folder' | 'story_entity';
@@ -181,7 +184,7 @@ export interface StoryEntityTreeResponse {
 
 export interface TranslationStatus {
   object_id: string;
-  object_type: ObjectType;
+  object_type: AnyObjectType;
   kind?: StoryEntityKind | OutlineKind;
   available_languages: string[];
   missing_languages: string[];

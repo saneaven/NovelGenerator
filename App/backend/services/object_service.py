@@ -22,6 +22,9 @@ from ..models.db_models import (
     Project,
     StoryEntity,
     StoryEntityFolder,
+    Timeline,
+    TimelineEvent,
+    TimelineTrack,
     ObjectAssetLink,
 )
 from ..models.translation_models import ObjectVersion
@@ -57,6 +60,7 @@ from .story_entity_tree_service import (
     next_story_entity_sibling_order,
     normalize_story_entity_parent,
 )
+from .timeline_service import timeline_service
 from .credential_service import CredentialServiceError, credential_service
 from .settings_service import settings_service
 from .storage_usage_service import (
@@ -213,6 +217,8 @@ def _model_for_object_type(object_type: str):
         STORY_ENTITY_TYPE: StoryEntity,
         "outline": Outline,
         "manuscript": Manuscript,
+        "timeline_track": TimelineTrack,
+        "timeline_event": TimelineEvent,
     }
     model = mapping.get(t)
     if model is None:
@@ -299,6 +305,25 @@ def _get_metadata(db: Session, obj: Any, object_type: str) -> dict[str, Any]:
             raise ValueError("Manuscript chapter missing")
         metadata["project_id"] = str(chapter.project_id)
         metadata["chapter_id"] = str(obj.chapter_id)
+    elif object_type == "timeline_track":
+        timeline_project_id = db.query(Timeline.project_id).filter(Timeline.id == obj.timeline_id).scalar()
+        metadata["project_id"] = str(timeline_project_id) if isinstance(timeline_project_id, UUID) else None
+        metadata["timeline_id"] = str(obj.timeline_id)
+        metadata["parent_id"] = str(obj.parent_id) if getattr(obj, "parent_id", None) else None
+        metadata["position"] = int(getattr(obj, "position", 0) or 0)
+        metadata["color"] = getattr(obj, "color", None)
+    elif object_type == "timeline_event":
+        project_id = (
+            db.query(Timeline.project_id)
+            .join(TimelineTrack, TimelineTrack.timeline_id == Timeline.id)
+            .filter(TimelineTrack.id == obj.track_id)
+            .scalar()
+        )
+        metadata["project_id"] = str(project_id) if isinstance(project_id, UUID) else None
+        metadata["track_id"] = str(obj.track_id)
+        metadata["start_date"] = getattr(obj, "start_date", None)
+        metadata["end_date"] = getattr(obj, "end_date", None)
+        metadata["tags"] = getattr(obj, "tags", None)
 
     return metadata
 
@@ -359,6 +384,21 @@ def _load_owned_object(db: Session, project_id: UUID, object_type: str, object_i
             .join(Outline, Outline.id == Manuscript.chapter_id)
             .filter(Manuscript.id == object_id, Outline.project_id == project_id, Outline.kind == "chapter")
             .options(joinedload(Manuscript.chapter).joinedload(Outline.parent).joinedload(Outline.parent))
+            .first()
+        )
+    if object_type == "timeline_track":
+        return (
+            db.query(TimelineTrack)
+            .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+            .filter(TimelineTrack.id == object_id, Timeline.project_id == project_id)
+            .first()
+        )
+    if object_type == "timeline_event":
+        return (
+            db.query(TimelineEvent)
+            .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+            .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+            .filter(TimelineEvent.id == object_id, Timeline.project_id == project_id)
             .first()
         )
     return None
@@ -530,7 +570,7 @@ class ObjectService:
             raise ValueError("Project not found")
         event_user_id = created_by or project.user_id
 
-        if t in {"basic_info", "guidelines"}:
+        if t in {"basic_info", "guidelines", "timeline_track", "timeline_event"}:
             raise ValueError(f"{t} is auto-created with project and cannot be created manually")
 
         if t == "manuscript":
@@ -1182,6 +1222,22 @@ class ObjectService:
     def delete_object(self, db: Session, project_id: UUID, object_type: str, object_id: UUID, *, user_id: UUID) -> None:
         t = object_type
         storage_type = _canonical_object_type(t)
+        if storage_type == "timeline_track":
+            timeline_service.delete_track(
+                db,
+                project_id=project_id,
+                track_id=object_id,
+                user_id=user_id,
+            )
+            return
+        if storage_type == "timeline_event":
+            timeline_service.delete_event(
+                db,
+                project_id=project_id,
+                event_id=object_id,
+                user_id=user_id,
+            )
+            return
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             raise ValueError(f"{t} not found")
@@ -1506,6 +1562,21 @@ class ObjectService:
                 if kinds:
                     query = query.filter(StoryEntity.kind.in_([require_story_entity_kind(kind) for kind in kinds]))
                 query = query.order_by(StoryEntity.display_order.asc())
+        elif storage_type == "timeline_track":
+            query = (
+                db.query(TimelineTrack)
+                .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+                .filter(Timeline.project_id == project_id)
+                .order_by(TimelineTrack.parent_id.asc().nullsfirst(), TimelineTrack.position.asc(), TimelineTrack.created_at.asc())
+            )
+        elif storage_type == "timeline_event":
+            query = (
+                db.query(TimelineEvent)
+                .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+                .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+                .filter(Timeline.project_id == project_id)
+                .order_by(TimelineEvent.created_at.asc(), TimelineEvent.id.asc())
+            )
         elif storage_type == "outline":
             query = (
                 db.query(Outline)
