@@ -4,6 +4,7 @@ from typing import Any
 
 from ....models.db_models import RunMessageModel, RunToolCallModel
 from ...reasoning.normalize import normalize_reasoning_detail
+from ...run_status_logic import derive_run_status
 from ...storage_usage_service import (
     apply_project_usage_delta,
     build_run_message_delta,
@@ -219,15 +220,13 @@ async def persist_execution(
             preset_id=prepared.preset_id,
         )
 
-    if any(tc.status == "pending" for tc in persisted_tools):
-        run.status = "waiting"
-        thread.status = "waiting"
-    elif any(tc.status == "rejected" for tc in persisted_tools):
-        run.status = "paused"
-        thread.status = "paused"
-    else:
-        run.status = "done"
-        thread.status = "done"
+    derived = derive_run_status(
+        current_status=run.status,
+        tool_call_statuses=[tc.status for tc in persisted_tools],
+    )
+    if derived:
+        run.status = derived
+        thread.status = derived
 
     if not assistant_message_delta_applied:
         apply_project_usage_delta(

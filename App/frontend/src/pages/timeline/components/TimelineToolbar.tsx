@@ -35,7 +35,7 @@ const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
       <div className="timeline-toolbar__right">
         <button
           type="button"
-          className="timeline-toolbar__btn"
+          className="timeline-toolbar__btn timeline-toolbar__btn--icon"
           onClick={onConfigureCalendar}
           title="Calendar Settings"
         >
@@ -64,7 +64,7 @@ const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 
         <button
           type="button"
-          className="timeline-toolbar__btn"
+          className="timeline-toolbar__btn timeline-toolbar__btn--icon"
           onClick={onFitAll}
           title="Fit All Events"
         >

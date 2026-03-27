@@ -3,6 +3,7 @@ import { DropdownMenu, DropdownItem, DropdownSection } from '../../../components
 import { MoreHorizontal, Plus, Edit, Trash, ChevronRight } from '../../../components/icons';
 import type { TimelineTrack } from '../../../types/timeline';
 import type { TrackColorSet } from '../timelineColors';
+import './TimelineTrackLabel.css';
 
 interface TimelineTrackLabelProps {
   track: TimelineTrack;
@@ -39,7 +40,7 @@ const TimelineTrackLabel: React.FC<TimelineTrackLabelProps> = ({
   return (
     <div
       className={`timeline-track-label${menuOpen ? ' timeline-track-label--menu-open' : ''}`}
-      style={{ paddingLeft: depth * 16 + 8 }}
+      style={{ '--track-depth': depth } as React.CSSProperties}
     >
       <div className="timeline-track-label__color" style={{ background: colors.labelBar }} />
 
