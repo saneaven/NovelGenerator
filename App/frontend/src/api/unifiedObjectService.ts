@@ -24,6 +24,7 @@ import type {
   StoryEntityStructureObjectType,
   StructurePatchRequest,
   StoryEntityTreeResponse,
+  RichTextFormat,
 } from '../types/unifiedObject';
 
 type QueryParamValue = string | number | boolean | null | undefined;
@@ -70,9 +71,10 @@ export const unifiedObjectService = {
   async getObject<TData = Record<string, any>>(
     type: ObjectType,
     id: string,
-    language?: string
+    language?: string,
+    richTextFormat: RichTextFormat = 'markdown',
   ): Promise<UnifiedObject<TData>> {
-    const query = buildQueryString({ language });
+    const query = buildQueryString({ language, rich_text_format: richTextFormat });
     return apiClient.get<UnifiedObject<TData>>(`/api/v1/objects/${type}/${id}${query}`);
   },
 
@@ -121,7 +123,7 @@ export const unifiedObjectService = {
    * @param id Object ID
    */
   async getVersions(type: ObjectType, id: string): Promise<VersionHistoryEntry[]> {
-    return apiClient.get<VersionHistoryEntry[]>(`/api/v1/objects/${type}/${id}/versions`);
+    return apiClient.get<VersionHistoryEntry[]>(`/api/v1/objects/${type}/${id}/versions?rich_text_format=markdown`);
   },
 
   /**
@@ -134,10 +136,11 @@ export const unifiedObjectService = {
   async restoreVersion(
     type: ObjectType,
     id: string,
-    versionId: string
+    versionId: string,
+    richTextFormat: RichTextFormat = 'markdown',
   ): Promise<{ message: string; version_id: string }> {
     return apiClient.patch<{ message: string; version_id: string }>(
-      `/api/v1/objects/${type}/${id}/versions/${versionId}/activate`
+      `/api/v1/objects/${type}/${id}/versions/${versionId}/activate?rich_text_format=${richTextFormat}`
     );
   },
 
@@ -172,6 +175,7 @@ export const unifiedObjectService = {
     projectId: string,
     options?: {
       language?: string;
+      rich_text_format?: RichTextFormat;
       page?: number;
       page_size?: number;
       kinds?: Array<StoryEntityKind | OutlineKind>;
@@ -184,6 +188,7 @@ export const unifiedObjectService = {
   }> {
     const query = buildQueryString({
       language: options?.language,
+      rich_text_format: options?.rich_text_format ?? 'markdown',
       page: options?.page || 1,
       page_size: options?.page_size || 50,
       kinds: options?.kinds,
@@ -257,10 +262,12 @@ export const unifiedObjectService = {
     projectId: string,
     options?: {
       language?: string;
+      rich_text_format?: RichTextFormat;
     },
   ): Promise<StoryEntityTreeResponse> {
     const query = buildQueryString({
       language: options?.language,
+      rich_text_format: options?.rich_text_format ?? 'tiptap',
     });
     return apiClient.get<StoryEntityTreeResponse>(`/api/v1/projects/${projectId}/story-entity-tree${query}`);
   },

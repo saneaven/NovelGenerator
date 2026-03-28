@@ -32,7 +32,7 @@ interface WorkspaceConfigPanelProps {
 
 const DEFAULT_POLICY: ImageCleanupPolicy = {
   delete_non_main_object_images: false,
-  delete_unused_manuscript_images: true,
+  delete_unused_rich_text_images: true,
   keep_recent_days: 7,
   treat_reference_images_as_used: true,
 };
@@ -297,13 +297,13 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
     setIsRebuilding(true);
     setLastExecute(null);
     try {
-      const result = await assetService.rebuildManuscriptImagesIndex(projectId);
+      const result = await assetService.rebuildRichTextImageRefs(projectId);
       setLastRebuildSummary(
-        `Rebuilt: manuscripts=${result.manuscripts_processed}, languages=${result.languages_processed}, images_inserted=${result.images_inserted}, unresolved_refs=${result.unresolved_refs}`
+        `Rebuilt: objects=${result.objects_processed}, languages=${result.languages_processed}, refs_inserted=${result.refs_inserted}, refs_deleted=${result.refs_deleted}`
       );
     } catch (err: any) {
       console.error('Rebuild index failed:', err);
-      showAlert({ title: 'Image Cleanup', message: 'Failed to rebuild manuscript image index.' });
+      showAlert({ title: 'Image Cleanup', message: 'Failed to rebuild rich text image refs.' });
     } finally {
       setIsRebuilding(false);
     }
@@ -926,8 +926,8 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
 
           <div className="workspace-config-field">
             <ToggleSwitch
-              checked={policy.delete_unused_manuscript_images}
-              onChange={(checked) => setPolicy((prev) => ({ ...prev, delete_unused_manuscript_images: checked }))}
+              checked={policy.delete_unused_rich_text_images}
+              onChange={(checked) => setPolicy((prev) => ({ ...prev, delete_unused_rich_text_images: checked }))}
               label={t('workspaceConfig.imageCleanup.deleteUnusedScene')}
               icon={<Trash size="sm" />}
             />

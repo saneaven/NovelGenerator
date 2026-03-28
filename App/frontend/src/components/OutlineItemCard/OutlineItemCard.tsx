@@ -1,6 +1,7 @@
 import React from 'react';
-import { MarkdownRenderer } from '../MarkdownRenderer';
+
 import { Warning } from '../icons';
+import { richContentToPreview } from '../../utils/richTextPreview';
 import './OutlineItemCard.css';
 
 export type OutlineItemVariant = 'outline' | 'act' | 'chapter';
@@ -9,7 +10,7 @@ export interface OutlineItemCardProps {
   variant: OutlineItemVariant;
   name: string;
   description?: string;
-  content?: string;
+  content?: unknown;
   chapterIndex?: number;
   meta?: string;
   expanded?: boolean;
@@ -29,23 +30,17 @@ export function toOutlineItemVariant(objectType: string, kind?: string): Outline
   return 'outline';
 }
 
-interface OutlineCardMarkdownProps {
-  content?: string;
+interface OutlineCardPreviewProps {
+  content?: unknown;
   className?: string;
 }
 
-const OutlineCardMarkdown = React.memo(function OutlineCardMarkdown({
+const OutlineCardPreview = React.memo(function OutlineCardPreview({
   content,
   className,
-}: OutlineCardMarkdownProps) {
-  if (content) {
-    return (
-      <MarkdownRenderer className={className}>
-        {content}
-      </MarkdownRenderer>
-    );
-  }
-
+}: OutlineCardPreviewProps) {
+  const preview = richContentToPreview(content);
+  if (preview) return <div className={className}>{preview}</div>;
   return <p className="placeholder-text">No content provided.</p>;
 }, (prevProps, nextProps) => (
   prevProps.content === nextProps.content &&
@@ -97,7 +92,7 @@ const OutlineItemCardInner: React.FC<OutlineItemCardProps> = ({
           )}
           <div className={`chapter-expand-wrapper ${isExpanded ? 'is-expanded' : ''}`}>
             <div className="chapter-expand-content">
-              <OutlineCardMarkdown content={content} className="markdown-content chapter-content" />
+              <OutlineCardPreview content={content} className="markdown-content chapter-content" />
               {!readOnly && footerActions && (
                 <div className="chapter-footer-actions">
                   {footerActions}
@@ -110,7 +105,6 @@ const OutlineItemCardInner: React.FC<OutlineItemCardProps> = ({
     );
   }
 
-  // Act or Outline variant
   const cardClass = variant === 'act' ? 'act-card' : 'outline-card';
 
   return (
@@ -139,7 +133,7 @@ const OutlineItemCardInner: React.FC<OutlineItemCardProps> = ({
         )}
         <div className={`card-body-wrapper ${isExpanded ? 'is-expanded' : ''}`}>
           <div className="card-body-content">
-            <OutlineCardMarkdown content={content} className="markdown-content" />
+            <OutlineCardPreview content={content} className="markdown-content" />
             {!readOnly && footerActions && (
               <div className="card-footer-actions">
                 {footerActions}

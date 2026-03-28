@@ -11,8 +11,8 @@ from ..models.db_models import (
     BasicInfo,
     Guidelines,
     Manuscript,
-    ManuscriptImage,
     Outline,
+    RichTextImageRef,
     RunMessageAttachmentModel,
     StoryEntity,
     ObjectAssetLink,
@@ -256,8 +256,12 @@ def delete_project_chat_attachments_with_files(db: Session, *, project_id: UUID)
 
 def get_manuscript_indexed_asset_ids(db: Session, *, manuscript_id: UUID) -> Set[UUID]:
     rows = (
-        db.query(ManuscriptImage.asset_id)
-        .filter(ManuscriptImage.manuscript_id == manuscript_id, ManuscriptImage.asset_id.isnot(None))
+        db.query(RichTextImageRef.asset_id)
+        .filter(
+            RichTextImageRef.object_type == "manuscript",
+            RichTextImageRef.object_id == manuscript_id,
+            RichTextImageRef.asset_id.isnot(None),
+        )
         .distinct()
         .all()
     )

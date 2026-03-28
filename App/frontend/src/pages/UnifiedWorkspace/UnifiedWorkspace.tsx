@@ -16,6 +16,7 @@ import { bootstrapProjectRuntime } from '../../runtime/projectRuntimeBootstrap';
 import { normalizeBasicInfoData } from '../../utils/basicInfo';
 import { sortOutlineObjects } from '../../utils/outlineOrdering';
 import type { StoryEntityObject, OutlineObject } from '../../types/unifiedObject';
+import { normalizeDoc } from '../../editor/manuscript/doc';
 
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
 import TranslationModal from '../../components/TranslationModal';
@@ -321,7 +322,7 @@ const UnifiedWorkspace: React.FC = () => {
                 id: outline.id,
                 name: oData.name || '',
                 description: oData.description || '',
-                content: oData.content || '',
+                content: normalizeDoc(oData.content),
                 position: outline.metadata.position || 0,
                 acts: outlineActs.map(act => {
                   const actData = getDataForLanguage(act, mainLanguage);
@@ -329,7 +330,7 @@ const UnifiedWorkspace: React.FC = () => {
                     id: act.id,
                     name: actData.name || '',
                     description: actData.description || '',
-                    content: actData.content || '',
+                    content: normalizeDoc(actData.content),
                     position: act.metadata.position || 0,
                     parentId: act.metadata.parent_id || '',
                     chapters: sortOutlineObjects(
@@ -341,7 +342,7 @@ const UnifiedWorkspace: React.FC = () => {
                           id: chapter.id,
                           name: chapterData.name || '',
                           description: chapterData.description || '',
-                          content: chapterData.content || '',
+                          content: normalizeDoc(chapterData.content),
                           position: chapter.metadata.position || 0,
                           parentId: chapter.metadata.parent_id || '',
                         };
@@ -362,32 +363,32 @@ const UnifiedWorkspace: React.FC = () => {
                 kind: entity.kind,
                 name: data.name || '',
                 description: data.description || '',
-                content: data.content || '',
+                content: normalizeDoc(data.content),
               };
             }),
             characters: storyEntityItems
               .filter((entity) => entity.kind === 'character')
               .map((entity) => {
                 const data = getDataForLanguage(entity, mainLanguage);
-                return { id: entity.id, name: data.name || '', description: data.description || '', content: data.content || '' };
+                return { id: entity.id, name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) };
               }),
             organizations: storyEntityItems
               .filter((entity) => entity.kind === 'organization')
               .map((entity) => {
                 const data = getDataForLanguage(entity, mainLanguage);
-                return { id: entity.id, name: data.name || '', description: data.description || '', content: data.content || '' };
+                return { id: entity.id, name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) };
               }),
             locations: storyEntityItems
               .filter((entity) => entity.kind === 'location')
               .map((entity) => {
                 const data = getDataForLanguage(entity, mainLanguage);
-                return { id: entity.id, name: data.name || '', description: data.description || '', content: data.content || '' };
+                return { id: entity.id, name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) };
               }),
             lorebook: storyEntityItems
               .filter((entity) => entity.kind === 'lorebook')
               .map((entity) => {
                 const data = getDataForLanguage(entity, mainLanguage);
-                return { id: entity.id, name: data.name || '', description: data.description || '', content: data.content || '' };
+                return { id: entity.id, name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) };
               }),
             outline: outlineData,
           });

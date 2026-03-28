@@ -1,11 +1,11 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { MarkdownRenderer } from '../../MarkdownRenderer';
 import { IconButton } from '../../IconButton';
 import { Expand } from '../../icons';
 import AuthenticatedImage from '../../common/AuthenticatedImage';
 import { useFitText } from '../../../hooks/useFitText';
 import type { SpanType } from '../../../hooks/useCardSpanType';
+import { richContentToPreview } from '../../../utils/richTextPreview';
 import './ObjectCards.css';
 
 export interface ObjectCardProps {
@@ -13,8 +13,8 @@ export interface ObjectCardProps {
   name: string;
   /** One-line subtitle shown in expanded or text-only mode */
   description?: string;
-  /** Main body content (markdown) */
-  content?: string;
+  /** Main body content */
+  content?: unknown;
   /** Image URL (already resolved) */
   imageUrl?: string | null;
 
@@ -69,6 +69,7 @@ const ObjectCardInner: React.FC<ObjectCardProps> = ({
   const isInteractive = Boolean(layoutId);
   const showSubtitle = (expanded || isTextOnly) && description;
   const hasBadge = Boolean(badge);
+  const contentPreview = richContentToPreview(content);
 
   const enableFitText = (enableFitTextProp ?? !className) && isTextOnly;
   const { containerRef, textRef, fontSize, isReady } = useFitText({
@@ -154,9 +155,7 @@ const ObjectCardInner: React.FC<ObjectCardProps> = ({
           {/* Content — always in DOM, CSS controls visibility via max-height */}
           <div className="object-card__description-wrapper">
             <div className="object-card__description">
-              <MarkdownRenderer>
-                {content || 'No content.'}
-              </MarkdownRenderer>
+              {contentPreview || 'No content.'}
             </div>
           </div>
         </div>

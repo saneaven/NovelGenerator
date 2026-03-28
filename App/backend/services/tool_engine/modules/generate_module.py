@@ -96,8 +96,6 @@ class GenerateToolCallModule(ToolCallModule):
             anchor = args.get("insert_before")
             if not isinstance(anchor, str) or not anchor.strip():
                 return invalid_result("validate_generate_scene_image", "insert_before must be a non-empty string")
-            if ctx.sidecar is None:
-                return invalid_result("validate_generate_scene_image", "SIDECAR_ERROR: sidecar client unavailable")
             try:
                 await validate_scene_anchor(
                     ctx.db,
@@ -105,7 +103,6 @@ class GenerateToolCallModule(ToolCallModule):
                     manuscript_id=UUID(raw_manuscript_id),
                     language=ctx.language,
                     anchor=anchor,
-                    sidecar=ctx.sidecar,
                 )
                 return valid_result()
             except ValueError as exc:

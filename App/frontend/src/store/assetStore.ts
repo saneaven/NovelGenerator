@@ -115,7 +115,7 @@ function updateAssetInSceneEntries(entries: SceneAsset[], updatedAsset: Asset): 
         return {
             ...entry,
             ...updatedAsset,
-            used_in_manuscripts: entry.used_in_manuscripts,
+            usages: entry.usages,
             usage_count: entry.usage_count,
         };
     });

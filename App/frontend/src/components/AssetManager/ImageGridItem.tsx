@@ -15,7 +15,7 @@ export type DisplayAsset =
         asset: Asset | SceneAsset;
         is_main?: boolean;
         usage_count?: number;
-        used_in_manuscripts?: Array<{ id: string; name: string; act_name?: string | null }>;
+        usages?: Array<{ object_name: string; field_name?: string | null; language?: string | null }>;
         linkId?: string;
     }
     | {
@@ -168,7 +168,7 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
             {mode === 'scene' && item.usage_count && item.usage_count > 0 && (
                 <div
                     className="usage-badge"
-                    title={`Used in: ${item.used_in_manuscripts?.map(m => m.name).join(', ')}`}
+                    title={`Used in: ${item.usages?.map(u => u.object_name).join(', ')}`}
                 >
                     {item.usage_count}
                 </div>

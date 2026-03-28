@@ -70,8 +70,8 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
       return (
         <ReadOnlyManuscriptDisplay
           title={snapshot.displayName || 'Manuscript'}
-          content={resultText}
-          doc={snapshot.data.doc}
+          content={typeof snapshot.data.content === 'string' ? snapshot.data.content : resultText}
+          doc={snapshot.data.content}
           offset={offset}
         />
       );

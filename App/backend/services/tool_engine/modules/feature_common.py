@@ -214,7 +214,6 @@ async def apply_manuscript_batch_group(
                 call_id=str(item.tool_call_id),
                 create_new_version=create_new_version,
                 user_request=f"tool:{item.binding.spec.name}",
-                sidecar=ctx.sidecar,
             )
         elif item.meta.op in {"replace", "translate"}:
             result = await batch.apply_replace(
@@ -240,7 +239,6 @@ async def apply_manuscript_batch_group(
 
     flush_results, _ = await batch.flush_all(
         db=ctx.db,
-        sidecar=ctx.sidecar,
         object_service=object_service,
         created_by=ctx.user_id,
     )

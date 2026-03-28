@@ -41,7 +41,6 @@ from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..services.notification_service import collect_thread_delete_deltas, delete_threads
 from ..services.run_pipeline import run_pipeline
 from ..services.tool_engine import tool_engine
-from ..services.sidecar_client import sidecar_client
 from ..services.reasoning.normalize import normalize_reasoning_detail
 from ..services.thread_parent_runtime_service import resolve_parent, thread_runtime_fields
 from ..services.thread_runtime_sync_service import (

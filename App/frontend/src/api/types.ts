@@ -114,14 +114,14 @@ export interface BasicInfoResponse extends BaseMetadata {
 export interface NameDescriptionCreate {
   name: string;
   description?: string;  // One-line summary for object indexes
-  content: string;  // Full content
+  content: TipTapDoc;  // Full content
   language?: string;
 }
 
 export interface NameDescriptionUpdate {
   name?: string;
   description?: string;  // One-line summary for object indexes
-  content?: string;  // Full content
+  content?: TipTapDoc;  // Full content
   language?: string;
 }
 
@@ -129,7 +129,7 @@ export interface NameDescriptionResponse extends BaseMetadata {
   project_id: string;
   name?: string;
   description?: string;  // One-line summary for object indexes
-  content?: string;  // Full content
+  content?: TipTapDoc;  // Full content
 }
 
 // ============================================================================
@@ -141,7 +141,7 @@ export type OutlineKind = 'outline' | 'act' | 'chapter';
 export interface OutlineCreate {
   name: string;
   description?: string;  // One-line summary for object indexes
-  content: string;  // Full content
+  content: TipTapDoc;  // Full content
   kind: OutlineKind;
   parent_id?: string | null;
   position?: number;
@@ -151,7 +151,7 @@ export interface OutlineCreate {
 export interface OutlineUpdate {
   name?: string;
   description?: string;  // One-line summary for object indexes
-  content?: string;  // Full content
+  content?: TipTapDoc;  // Full content
   parent_id?: string | null;
   position?: number;
   language?: string;
@@ -163,7 +163,7 @@ export interface OutlineResponse extends BaseMetadata {
   parent_id: string | null;
   name?: string;
   description?: string;  // One-line summary for object indexes
-  content?: string;  // Full content
+  content?: TipTapDoc;  // Full content
   position: number;
   manuscript_id?: string | null;
 }
@@ -173,13 +173,13 @@ export interface OutlineResponse extends BaseMetadata {
 // ============================================================================
 
 export interface ManuscriptCreate {
-  doc: TipTapDoc;
+  content: TipTapDoc;
   language?: string;
   userRequest?: string;
 }
 
 export interface ManuscriptUpdate {
-  doc: TipTapDoc;
+  content: TipTapDoc;
   language?: string;
   userRequest?: string;
   create_new_version?: boolean;  // If false, updates existing active version instead of creating new one
@@ -190,7 +190,7 @@ export interface ManuscriptVersionResponse {
   manuscript_id: string;
   userRequest: string;
   is_active: boolean;  // Use snake_case to match backend
-  data: LanguageData<{ doc: TipTapDoc; wordCount: number }>;
+  data: LanguageData<{ content: TipTapDoc; wordCount: number }>;
   timestamp: string;
 }
 

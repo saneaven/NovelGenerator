@@ -86,6 +86,8 @@ def _install_import_stubs() -> None:
     fake_notification_service.delete_threads = lambda *_args, **_kwargs: None
     fake_notification_service.map_run_status_to_notification_status = lambda status: status
     fake_notification_service.upsert_notification_source = lambda *_args, **_kwargs: None
+    fake_notification_service.build_agent_notification_snapshot = lambda **_kwargs: SimpleNamespace()
+    fake_notification_service.build_sub_agent_notification_snapshot = lambda **_kwargs: SimpleNamespace()
     fake_notification_service.build_journey_notification_snapshot = lambda **kwargs: SimpleNamespace(
         user_id=getattr(kwargs.get("journey"), "user_id", None),
         project_id=getattr(kwargs.get("journey"), "project_id", None),
@@ -117,15 +119,12 @@ def _install_import_stubs() -> None:
     sys.modules["App.backend.services.run_pipeline"] = fake_run_pipeline
 
     fake_tool_engine = types.ModuleType("App.backend.services.tool_engine")
+    fake_tool_engine.__path__ = [str(ROOT / "App" / "backend" / "services" / "tool_engine")]
     fake_tool_engine.tool_engine = SimpleNamespace(
         execute_tool_call_by_id=lambda *_args, **_kwargs: {},
         propagate_child_terminal_state_to_parent=lambda *_args, **_kwargs: None,
     )
     sys.modules["App.backend.services.tool_engine"] = fake_tool_engine
-
-    fake_sidecar_client = types.ModuleType("App.backend.services.sidecar_client")
-    fake_sidecar_client.sidecar_client = SimpleNamespace()
-    sys.modules["App.backend.services.sidecar_client"] = fake_sidecar_client
 
     fake_reasoning_normalize = types.ModuleType("App.backend.services.reasoning.normalize")
     fake_reasoning_normalize.normalize_reasoning_detail = lambda value: value

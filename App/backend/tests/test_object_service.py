@@ -32,10 +32,6 @@ def _install_import_stubs() -> None:
     deletion_service.delete_semantic_sources_bulk = lambda *_args, **_kwargs: None
     sys.modules["App.backend.services.deletion_service"] = deletion_service
 
-    manuscript_image_index_service = types.ModuleType("App.backend.services.manuscript_image_index_service")
-    manuscript_image_index_service.rebuild_manuscript_images_for_language = lambda **_kwargs: None
-    sys.modules["App.backend.services.manuscript_image_index_service"] = manuscript_image_index_service
-
     semantic_index_service = types.ModuleType("App.backend.services.semantic_index_service")
 
     async def _index_object(*_args, **_kwargs) -> None:
@@ -69,14 +65,12 @@ def _install_import_stubs() -> None:
     storage_usage_service.apply_project_usage_delta = lambda *_args, **_kwargs: None
     storage_usage_service.apply_project_usage_deltas = lambda *_args, **_kwargs: None
     storage_usage_service.build_asset_rows_delta = lambda *_args, **_kwargs: None
-    storage_usage_service.build_manuscript_images_delta = lambda *_args, **_kwargs: None
     storage_usage_service.build_object_version_delta = lambda *_args, **_kwargs: None
     storage_usage_service.build_story_core_delta = lambda *_args, **_kwargs: None
     storage_usage_service.build_story_core_rows_delta = lambda *_args, **_kwargs: None
     storage_usage_service.build_usage_delta_for_measurement_rows = lambda *_args, **_kwargs: None
     storage_usage_service.measure_object_version_row = lambda *_args, **_kwargs: 0
     storage_usage_service.snapshot_asset_row = lambda *_args, **_kwargs: None
-    storage_usage_service.snapshot_manuscript_image_row = lambda *_args, **_kwargs: None
     storage_usage_service.snapshot_object_version_row = lambda *_args, **_kwargs: None
     storage_usage_service.snapshot_rows = lambda rows, snapshot_fn: [snapshot_fn(row) for row in rows]
     storage_usage_service.snapshot_story_core_row = lambda *_args, **_kwargs: None
@@ -86,7 +80,7 @@ def _install_import_stubs() -> None:
 _install_import_stubs()
 
 import App.backend.services.object_service as object_service_module
-from App.backend.models.db_models import ManuscriptImage
+from App.backend.models.db_models import RichTextImageRef
 
 
 class FakeQuery:
@@ -95,6 +89,12 @@ class FakeQuery:
 
     def filter(self, *_args: object, **_kwargs: object) -> "FakeQuery":
         return self
+
+    def order_by(self, *_args: object, **_kwargs: object) -> "FakeQuery":
+        return self
+
+    def delete(self, *_args: object, **_kwargs: object) -> int:
+        return 0
 
     def all(self) -> list[object]:
         return list(self._rows)
@@ -137,7 +137,7 @@ class FakeCreateSession:
         return None
 
 
-def test_update_object_manuscript_path_uses_manuscript_image_model(monkeypatch) -> None:
+def test_update_object_manuscript_path_uses_rich_text_image_refs(monkeypatch) -> None:
     db = FakeSession()
     project_id = uuid4()
     object_id = uuid4()
@@ -161,8 +161,8 @@ def test_update_object_manuscript_path_uses_manuscript_image_model(monkeypatch) 
     monkeypatch.setattr(object_service_module, "_create_or_update_version", lambda *_args, **_kwargs: SimpleNamespace())
     monkeypatch.setattr(
         object_service_module,
-        "rebuild_manuscript_images_for_language",
-        lambda **_kwargs: None,
+        "rebuild_rich_text_refs_for_object",
+        lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
         object_service_module,
@@ -172,7 +172,6 @@ def test_update_object_manuscript_path_uses_manuscript_image_model(monkeypatch) 
     monkeypatch.setattr(object_service_module, "_queue_semantic_index", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(object_service_module, "queue_object_change", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(object_service_module, "build_object_version_delta", lambda *_args, **_kwargs: "version-delta")
-    monkeypatch.setattr(object_service_module, "build_manuscript_images_delta", lambda *_args, **_kwargs: "image-delta")
     monkeypatch.setattr(
         object_service_module,
         "apply_project_usage_deltas",
@@ -189,7 +188,7 @@ def test_update_object_manuscript_path_uses_manuscript_image_model(monkeypatch) 
         project_id=project_id,
         object_type="manuscript",
         object_id=object_id,
-        data={"doc": {"type": "doc", "content": []}, "wordCount": 0},
+        data={"content": {"type": "doc", "content": [{"type": "paragraph"}]}, "wordCount": 0},
         language="Korean",
         user_request="raw:objectTranslation",
         create_new_version=False,
@@ -197,7 +196,7 @@ def test_update_object_manuscript_path_uses_manuscript_image_model(monkeypatch) 
     )
 
     assert result == {"id": str(object_id), "type": "manuscript"}
-    assert db.queried_models.count(ManuscriptImage) == 2
+    assert db.queried_models.count(RichTextImageRef) == 2
     assert len(usage_calls) == 1
     assert invalidations == [
         {
@@ -311,8 +310,9 @@ def test_create_outline_queues_updated_events_for_affected_siblings(monkeypatch)
     monkeypatch.setattr(
         object_service_module,
         "_serialize_object",
-        lambda _db, _storage_type, obj, _language=None: {"id": str(obj.id), "type": "outline"},
+        lambda *_args, **_kwargs: {"id": str(db.added[0].id), "type": "outline"},
     )
+    monkeypatch.setattr(object_service_module, "rebuild_rich_text_refs_for_object", lambda *_args, **_kwargs: None)
 
     result = object_service_module.object_service.create_object(
         db,
@@ -385,6 +385,7 @@ def test_update_outline_structure_queues_updated_events_for_affected_siblings(mo
     monkeypatch.setattr(object_service_module, "_create_or_update_version", lambda *_args, **_kwargs: SimpleNamespace())
     monkeypatch.setattr(object_service_module, "_invalidate_semantic_index", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(object_service_module, "_queue_semantic_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(object_service_module, "rebuild_rich_text_refs_for_object", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         object_service_module,
         "collect_affected_outline_rows",

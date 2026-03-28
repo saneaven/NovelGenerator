@@ -24,7 +24,6 @@ from ..models.db_models import (
     ImageRunModel,
     LLMLog,
     Manuscript,
-    ManuscriptImage,
     NotificationModel,
     Outline,
     Project,
@@ -237,10 +236,6 @@ def measure_object_version_row(version: ObjectVersion | object) -> int:
     return _sum_values(getattr(version, "data", None), getattr(version, "user_request", None))
 
 
-def measure_manuscript_image_row(row: ManuscriptImage | object) -> int:
-    return _sum_values(getattr(row, "generation_prompt", None), getattr(row, "caption", None))
-
-
 def measure_agent_row(row: Agent | object) -> int:
     return _sum_values(getattr(row, "name", None))
 
@@ -350,10 +345,6 @@ def snapshot_story_core_row(row: object | None) -> object | None:
 
 def snapshot_object_version_row(row: ObjectVersion | object | None) -> object | None:
     return _snapshot_row(row, "data", "user_request")
-
-
-def snapshot_manuscript_image_row(row: ManuscriptImage | object | None) -> object | None:
-    return _snapshot_row(row, "generation_prompt", "caption")
 
 
 def snapshot_agent_row(row: Agent | object | None) -> object | None:
@@ -514,18 +505,6 @@ def build_story_core_rows_delta(
         before_rows=before_rows,
         after_rows=after_rows,
         measure_fn=measure_story_core_row,
-    )
-
-
-def build_manuscript_images_delta(
-    before_rows: Sequence[object] | None,
-    after_rows: Sequence[object] | None,
-) -> StorageUsageDelta:
-    return build_usage_delta_for_measurement_rows(
-        category="manuscript",
-        before_rows=before_rows,
-        after_rows=after_rows,
-        measure_fn=measure_manuscript_image_row,
     )
 
 
@@ -843,14 +822,6 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
     story_bytes += _sum_object_versions(db, ids_by_type=ids_by_type, allowed_types=STORY_ENTITY_CONTEXT_TYPES)
 
     manuscript_bytes = _sum_object_versions(db, ids_by_type=ids_by_type, allowed_types=("manuscript",))
-    manuscript_rows = (
-        db.query(ManuscriptImage)
-        .join(Manuscript, Manuscript.id == ManuscriptImage.manuscript_id)
-        .join(Outline, Outline.id == Manuscript.chapter_id)
-        .filter(Outline.project_id == project_id, Outline.kind == "chapter")
-        .all()
-    )
-    manuscript_bytes += sum(measure_manuscript_image_row(row) for row in manuscript_rows)
 
     agents = db.query(Agent).filter(Agent.project_id == project_id).all()
     threads = db.query(Thread).filter(Thread.project_id == project_id).all()
@@ -1287,7 +1258,6 @@ __all__ = [
     "build_asset_delta",
     "build_asset_rows_delta",
     "build_image_run_delta",
-    "build_manuscript_images_delta",
     "build_notification_delta",
     "build_notification_rows_delta",
     "build_object_version_delta",
@@ -1312,7 +1282,6 @@ __all__ = [
     "measure_agent_row",
     "measure_asset_row",
     "measure_image_run_row",
-    "measure_manuscript_image_row",
     "measure_notification_row",
     "measure_object_version_row",
     "measure_project_row",
@@ -1333,7 +1302,6 @@ __all__ = [
     "snapshot_agent_row",
     "snapshot_asset_row",
     "snapshot_image_run_row",
-    "snapshot_manuscript_image_row",
     "snapshot_notification_row",
     "snapshot_object_version_row",
     "snapshot_project_row",

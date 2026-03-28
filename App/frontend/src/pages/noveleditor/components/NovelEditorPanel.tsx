@@ -199,7 +199,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     if (!manuscript) return { doc: emptyDoc(), wordCount: 0 };
     const data = manuscript.data[lang];
     if (data) {
-      const doc = normalizeDoc((data as any).doc);
+      const doc = normalizeDoc((data as any).content);
       const wordCount = typeof (data as any).wordCount === 'number' ? (data as any).wordCount : docWordCount(doc);
       return { doc, wordCount };
     }
@@ -207,7 +207,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     if (manuscriptLanguages.length > 0) {
       const fallbackData = manuscript.data[manuscriptLanguages[0]];
       if (fallbackData) {
-        const doc = normalizeDoc((fallbackData as any).doc);
+        const doc = normalizeDoc((fallbackData as any).content);
         const wordCount = typeof (fallbackData as any).wordCount === 'number' ? (fallbackData as any).wordCount : docWordCount(doc);
         return { doc, wordCount };
       }
@@ -449,10 +449,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       try {
         await updateObject('manuscript', manuscriptId, {
           data: {
-            doc: latestDoc,
+            content: latestDoc,
             wordCount: latestWordCount,
           },
           language: languageState.requestedLanguage,
+          rich_text_format: 'tiptap',
           user_request: reason,
           create_new_version: languageState.createNewVersion,
         });
@@ -529,7 +530,13 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     // If we're replacing an existing image
     if (replaceImageSrc && editorRef.current) {
       // Use the editor's updateImageSrc method to replace the image
-      const updated = editorRef.current.updateImageSrc(replaceImageSrc, newSrc, asset.name, asset.id);
+      const updated = editorRef.current.updateImageSrc(
+        replaceImageSrc,
+        newSrc,
+        asset.name,
+        asset.markdown_title ?? undefined,
+        asset.id,
+      );
 
       if (!updated) {
         console.error('Failed to find and update image:', { from: replaceImageSrc, to: newSrc });
@@ -543,7 +550,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
     // Normal insert at cursor
     if (editorRef.current) {
-      editorRef.current.insertImage(newSrc, asset.name, asset.id);
+      editorRef.current.insertImage(newSrc, asset.name, asset.markdown_title ?? undefined, asset.id);
     }
     setRegenerateRecipe(null);
     setShowImageModal(false);

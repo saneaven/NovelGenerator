@@ -1,0 +1,27 @@
+from __future__ import annotations
+
+from typing import Any
+
+
+def _flatten_styled_prompt(data: Any) -> str:
+    if not isinstance(data, dict):
+        return ""
+    parts = [str(data.get("prefix") or ""), str(data.get("content") or ""), str(data.get("postfix") or "")]
+    return " ".join(part.strip() for part in parts if str(part).strip()).strip()
+
+
+def build_markdown_image_title(asset: Any) -> str | None:
+    positive = _flatten_styled_prompt(getattr(asset, "generation_positive_prompt", None))
+    negative = _flatten_styled_prompt(getattr(asset, "generation_negative_prompt", None))
+    natural = _flatten_styled_prompt(getattr(asset, "generation_prompt", None))
+
+    if natural:
+        return natural
+    if positive or negative:
+        pieces: list[str] = []
+        if positive:
+            pieces.append(f"POS: {positive}")
+        if negative:
+            pieces.append(f"NEG: {negative}")
+        return " | ".join(pieces).strip() or None
+    return None

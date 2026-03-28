@@ -12,7 +12,6 @@ from ..prompt_runtime.scenario_runtime import assemble_scenario
 from ..prompt_runtime.template_renderer import TemplateRenderer, load_user_fragment_map
 from ..prompt_runtime.contracts import ScenarioBundle
 from ..settings_service import settings_service
-from ..sidecar_client import sidecar_client
 from ..storage_usage_service import apply_project_usage_delta, build_thread_delta, snapshot_thread_row
 from .contracts import CreateContext
 
@@ -30,7 +29,7 @@ async def assemble_create(
         raise RuntimeError("No active preset selected")
 
     scenario_manager = ScenarioManager()
-    project_data = await build_project_data(db, run.project_id, run.language, sidecar_client)
+    project_data = await build_project_data(db, run.project_id, run.language)
 
     target = scenario_manager.resolve_target(db, thread=thread, run=run, payload=create_ctx.input_payload)
     template_data = scenario_manager.build_template_data(
@@ -186,7 +185,7 @@ async def assemble_resume(
                     break
 
             if memory_template is not None:
-                project_data = await build_project_data(db, run.project_id, run.language, sidecar_client)
+                project_data = await build_project_data(db, run.project_id, run.language)
                 template_data = scenario_manager.build_template_data(
                     db,
                     user_id=run.user_id,

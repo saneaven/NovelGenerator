@@ -188,7 +188,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                 id: asset.id,
                 asset: asset,
                 usage_count: asset.usage_count,
-                used_in_manuscripts: asset.used_in_manuscripts,
+                usages: asset.usages,
             }));
         } else {
             // Picker mode: show all assets
@@ -444,7 +444,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         // Check if it's a scene asset with usage info
         const sceneAsset = sceneAssets.find(sa => sa.id === asset.id);
         const usageWarning = sceneAsset && sceneAsset.usage_count > 0
-            ? `\n\nWarning: This image is used in ${sceneAsset.usage_count} manuscript${sceneAsset.usage_count > 1 ? 's' : ''}:\n${sceneAsset.used_in_manuscripts.map(m => `• ${m.act_name ? m.act_name + ' - ' : ''}${m.name}`).join('\n')}`
+            ? `\n\nWarning: This image is used in ${sceneAsset.usage_count} place${sceneAsset.usage_count > 1 ? 's' : ''}:\n${sceneAsset.usages.map(u => `• ${u.object_name}${u.language ? ` [${u.language}]` : ''}${u.field_name ? ` (${u.field_name})` : ''}`).join('\n')}`
             : '';
 
         const confirmed = await confirm({

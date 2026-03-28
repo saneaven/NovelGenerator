@@ -19,6 +19,9 @@ sys.modules["App.backend.services.deletion_service"] = fake_deletion_service
 
 fake_notification_service = types.ModuleType("App.backend.services.notification_service")
 fake_notification_service.build_image_run_notification_snapshot = lambda *_args, **_kwargs: {}
+fake_notification_service.build_agent_notification_snapshot = lambda **_kwargs: SimpleNamespace()
+fake_notification_service.build_sub_agent_notification_snapshot = lambda **_kwargs: SimpleNamespace()
+fake_notification_service.build_journey_notification_snapshot = lambda **_kwargs: SimpleNamespace()
 fake_notification_service.serialize_notification = lambda *_args, **_kwargs: {}
 fake_notification_service.upsert_notification_source = lambda *_args, **_kwargs: SimpleNamespace()
 sys.modules["App.backend.services.notification_service"] = fake_notification_service
@@ -39,22 +42,6 @@ fake_settings_service = types.ModuleType("App.backend.services.settings_service"
 fake_settings_service.settings_service = SimpleNamespace(_get_settings=lambda *_args, **_kwargs: SimpleNamespace(image_gen_config={}))
 sys.modules["App.backend.services.settings_service"] = fake_settings_service
 
-fake_sidecar_client = types.ModuleType("App.backend.services.sidecar_client")
-
-class SidecarConversionError(RuntimeError):
-    pass
-
-
-class SidecarUnavailableError(RuntimeError):
-    pass
-
-
-fake_sidecar_client.SidecarClient = object
-fake_sidecar_client.SidecarConversionError = SidecarConversionError
-fake_sidecar_client.SidecarUnavailableError = SidecarUnavailableError
-fake_sidecar_client.sidecar_client = None
-sys.modules["App.backend.services.sidecar_client"] = fake_sidecar_client
-
 fake_storage_service = types.ModuleType("App.backend.services.storage_service")
 fake_storage_service.storage_service = SimpleNamespace(
     save_generated_image=lambda **_kwargs: ("generated/test.png", "image/png", 1024, 1024, 2048),
@@ -65,6 +52,25 @@ fake_storage_service.storage_service = SimpleNamespace(
     delete_asset_files=lambda *_args, **_kwargs: None,
 )
 sys.modules["App.backend.services.storage_service"] = fake_storage_service
+
+fake_image_providers = types.ModuleType("App.backend.image_providers")
+fake_image_providers.__path__ = []
+fake_image_providers.gemini_image = SimpleNamespace()
+fake_image_providers.novelai_image = SimpleNamespace()
+fake_image_providers.openai_image = SimpleNamespace()
+fake_image_providers.openrouter_image = SimpleNamespace()
+fake_image_providers.xai_image = SimpleNamespace()
+sys.modules["App.backend.image_providers"] = fake_image_providers
+
+fake_image_providers_base = types.ModuleType("App.backend.image_providers.base")
+fake_image_providers_base.BaseImageProvider = object
+fake_image_providers_base.ImageGenerationResult = object
+fake_image_providers_base.ReferenceImageData = object
+sys.modules["App.backend.image_providers.base"] = fake_image_providers_base
+
+fake_image_providers_registry = types.ModuleType("App.backend.image_providers.registry")
+fake_image_providers_registry.ImageProviderRegistry = object
+sys.modules["App.backend.image_providers.registry"] = fake_image_providers_registry
 
 fake_thread_runtime_sync_service = types.ModuleType("App.backend.services.thread_runtime_sync_service")
 fake_thread_runtime_sync_service.emit_runtime_sync_events = lambda *_args, **_kwargs: None

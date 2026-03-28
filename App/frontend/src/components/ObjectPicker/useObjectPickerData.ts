@@ -18,9 +18,9 @@ import type {
   UseObjectPickerDataResult,
 } from './types';
 import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
-import { docToMarkdown } from '../../editor/manuscript/convert';
 import { buildBasicInfoSummary, normalizeBasicInfoData } from '../../utils/basicInfo';
 import { formatDate } from '../../utils/timelineCalendar';
+import { richContentToPlainText } from '../../utils/richTextPreview';
 import {
   getStoryEntityFolderDescription,
   getStoryEntityFolderName,
@@ -171,7 +171,7 @@ function objectToItem(obj: UnifiedObject, language: string): ObjectPickerItem {
 
   let name = (data.name as string) || (data.title as string) || fallbackName;
   let description = (data.description as string) || (data.logline as string) || undefined;
-  let content = (data.content as string) || undefined;
+  let content = richContentToPlainText(data.content) || undefined;
 
   if (obj.type === 'basic_info') {
     const basicInfo = normalizeBasicInfoData(data);
@@ -179,7 +179,7 @@ function objectToItem(obj: UnifiedObject, language: string): ObjectPickerItem {
     description = basicInfo.logline || undefined;
     content = buildBasicInfoSummary(basicInfo) || undefined;
   } else if (obj.type === 'guidelines') {
-    const authorNote = (data as { authorNote?: string }).authorNote;
+    const authorNote = richContentToPlainText((data as { authorNote?: unknown }).authorNote);
     name = fallbackName;
     content = authorNote || undefined;
   }
@@ -533,7 +533,7 @@ function buildOutlineGroups(
               t,
             ),
             description: chapterData.description as string | undefined,
-            content: manuscriptData.doc ? docToMarkdown(manuscriptData.doc, { stripImages: true }) : undefined,
+            content: richContentToPlainText(manuscriptData.content) || undefined,
             type: 'manuscript' as const,
             parentId: chapter.id,
             order: chapter.metadata?.position as number | undefined,

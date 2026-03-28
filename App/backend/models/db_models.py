@@ -1299,7 +1299,7 @@ class Asset(Base):
     # Relationships
     project = relationship("Project", back_populates="assets")
     object_asset_links = relationship("ObjectAssetLink", back_populates="asset", cascade="all, delete-orphan")
-    manuscript_images = relationship("ManuscriptImage", back_populates="asset", cascade="all, delete-orphan")
+    rich_text_image_refs = relationship("RichTextImageRef", back_populates="asset", cascade="all, delete-orphan")
     manuscript = relationship("Manuscript", back_populates="owned_assets", foreign_keys=[manuscript_id])
 
 
@@ -1329,40 +1329,26 @@ class ObjectAssetLink(Base):
     )
 
 
-class ManuscriptImage(Base):
-    """Images embedded in manuscript content at specific positions"""
-    __tablename__ = 'manuscript_images'
+class RichTextImageRef(Base):
+    __tablename__ = "rich_text_image_refs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    manuscript_id = Column(UUID(as_uuid=True), ForeignKey('manuscripts.id', ondelete='CASCADE'), nullable=False, index=True)
-    language = Column(String(50), nullable=True)  # Language scope (indexed via composite index migration)
-
-    position = Column(Integer, nullable=False)  # Document-order index (0..n-1) within manuscript for a language
-
-    # Image source - either direct asset or generic object reference
-    source_type = Column(String(20), nullable=False)  # 'asset' or 'object'
-    asset_id = Column(UUID(as_uuid=True), ForeignKey('assets.id', ondelete='CASCADE'), nullable=True)
-
-    # If source_type is 'object', reference the canonical object target
-    story_entity_kind = Column(String(50), nullable=True)  # 'character', 'location'
-    object_id = Column(UUID(as_uuid=True), nullable=True)
-
-    # Generation metadata (for images generated specifically for this insertion)
-    generation_prompt = Column(Text, nullable=True)
-
-    # Display settings
-    display_width = Column(Integer, default=400, nullable=False)
-    caption = Column(Text, nullable=True)
-
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    object_type = Column(String(50), nullable=False)
+    object_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    language = Column(String(50), nullable=False)
+    field_name = Column(String(100), nullable=False)
+    position = Column(Integer, nullable=False)
+    asset_id = Column(UUID(as_uuid=True), ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    # Relationships
-    asset = relationship("Asset", back_populates="manuscript_images")
+    asset = relationship("Asset", back_populates="rich_text_image_refs")
 
     __table_args__ = (
-        Index("ix_manuscript_images_manuscript_id_language", "manuscript_id", "language"),
-        Index("ix_manuscript_images_asset_id", "asset_id"),
+        Index("ix_rich_text_image_refs_project_asset", "project_id", "asset_id"),
+        Index("ix_rich_text_image_refs_object_lang_field", "object_type", "object_id", "language", "field_name"),
+        Index("ix_rich_text_image_refs_project_object", "project_id", "object_type"),
     )
 
 

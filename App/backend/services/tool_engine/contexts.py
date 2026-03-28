@@ -7,7 +7,6 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from ...models.db_models import RunModel, RunToolCallModel, Thread, UserSettings
-from ..sidecar_client import SidecarClient
 from .grant_catalog import FeatureKey, ToolCategory
 
 
@@ -42,7 +41,6 @@ class ToolValidationContext:
     user_id: UUID
     project_id: UUID
     language: str
-    sidecar: SidecarClient | None = None
     preset_id: UUID | None = None
     input_payload: dict[str, Any] = field(default_factory=dict)
     vector_storage_enabled: bool = False
@@ -61,7 +59,6 @@ class ToolExecutionContext:
     user_id: UUID
     project_id: UUID
     language: str
-    sidecar: SidecarClient | None = None
     preset_id: UUID | None = None
     input_payload: dict[str, Any] = field(default_factory=dict)
     vector_storage_enabled: bool = False
@@ -80,7 +77,6 @@ class ToolGroupExecutionContext:
     user_id: UUID
     project_id: UUID
     language: str
-    sidecar: SidecarClient | None = None
     preset_id: UUID | None = None
     input_payload: dict[str, Any] = field(default_factory=dict)
     vector_storage_enabled: bool = False
@@ -104,7 +100,6 @@ class ToolGroupExecutionContext:
             user_id=self.user_id,
             project_id=self.project_id,
             language=self.language,
-            sidecar=self.sidecar,
             preset_id=self.preset_id,
             input_payload=self.input_payload,
             vector_storage_enabled=self.vector_storage_enabled,

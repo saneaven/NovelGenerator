@@ -1,19 +1,13 @@
 from __future__ import annotations
 
-from functools import lru_cache
 import re
 from typing import Any, Dict, Iterable, List, Sequence
 
-import mistune
+from .rich_text import markdown_to_tree
 
 
 _HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+")
 _SENTENCE_END_RE = re.compile(r"[\.!\?…]|[。！？]")
-
-
-@lru_cache(maxsize=1)
-def _md_ast() -> Any:
-    return mistune.create_markdown(renderer="ast")
 
 
 def _leading_heading_line(text: str) -> str | None:
@@ -40,56 +34,97 @@ def split_plaintext_blocks(text: str) -> List[str]:
     return [b for b in blocks if b]
 
 
-def _token_type(tok: Any) -> str:
-    return tok.get("type") if isinstance(tok, dict) else ""
+def _node_type(node: Any) -> str:
+    return str(node.get("type") or "") if isinstance(node, dict) else ""
 
 
-def _token_children(tok: Any) -> List[Any]:
-    if not isinstance(tok, dict):
+def _node_content(node: Any) -> List[Any]:
+    if not isinstance(node, dict):
         return []
-    children = tok.get("children")
-    return children if isinstance(children, list) else []
+    content = node.get("content")
+    return content if isinstance(content, list) else []
 
 
-def _token_text(tok: Any) -> str:
-    if tok is None:
-        return ""
-    if isinstance(tok, str):
-        return tok
-    if not isinstance(tok, dict):
+def _inline_text(node: Any) -> str:
+    if not isinstance(node, dict):
         return ""
 
-    t = _token_type(tok)
-    if t in {"image"}:
+    node_type = _node_type(node)
+    if node_type == "text":
+        return str(node.get("text") or "")
+    if node_type == "image":
         return ""
-    if t in {"linebreak", "softbreak"}:
+    if node_type == "hard_break":
         return "\n"
 
-    text = tok.get("text")
-    if isinstance(text, str):
-        return text
-    raw = tok.get("raw")
-    if isinstance(raw, str):
-        return raw
-
-    return "".join([_token_text(c) for c in _token_children(tok)])
+    return "".join(_inline_text(child) for child in _node_content(node))
 
 
-def _render_list_text(tok: Dict[str, Any], *, indent: int = 0) -> str:
-    attrs = tok.get("attrs") if isinstance(tok, dict) else None
-    ordered = bool(attrs.get("ordered")) if isinstance(attrs, dict) else False
-    start = attrs.get("start") if isinstance(attrs, dict) else None
-    start_num = int(start) if isinstance(start, int) else 1
+def _render_table_text(node: Dict[str, Any]) -> str:
+    rows: List[str] = []
+    for row in _node_content(node):
+        if _node_type(row) != "table_row":
+            continue
+        cells: List[str] = []
+        for cell in _node_content(row):
+            if _node_type(cell) not in {"table_header", "table_cell"}:
+                continue
+            cell_parts: List[str] = []
+            for child in _node_content(cell):
+                text = _inline_text(child).strip()
+                if text:
+                    cell_parts.append(text)
+            cells.append(" ".join(cell_parts).strip())
+        line = " | ".join(cell for cell in cells if cell)
+        if line:
+            rows.append(line)
+    return "\n".join(rows).strip()
+
+
+def _collect_blocks(node: Dict[str, Any]) -> List[str]:
+    node_type = _node_type(node)
+
+    if node_type in {"code_block", "image", "horizontal_rule"}:
+        return []
+    if node_type in {"paragraph", "heading", "table_header", "table_cell"}:
+        text = _inline_text(node).strip()
+        return [text] if text else []
+    if node_type in {"bullet_list", "ordered_list", "task_list"}:
+        text = _render_list_text(node)
+        return [text] if text else []
+    if node_type == "table":
+        text = _render_table_text(node)
+        return [text] if text else []
+
+    out: List[str] = []
+    for child in _node_content(node):
+        out.extend(_collect_blocks(child))
+    return out
+
+
+def _render_list_text(node: Dict[str, Any], *, indent: int = 0) -> str:
+    node_type = _node_type(node)
+    attrs = node.get("attrs") if isinstance(node.get("attrs"), dict) else {}
+    ordered = node_type == "ordered_list"
+    task = node_type == "task_list"
+    start_num = int(attrs.get("start") or 1) if ordered else 1
 
     lines: List[str] = []
     index = 0
-    for child in _token_children(tok):
-        if not isinstance(child, dict) or child.get("type") != "list_item":
+    for child in _node_content(node):
+        child_type = _node_type(child)
+        if child_type not in {"list_item", "task_item"}:
             continue
         item_text = _render_list_item_text(child, indent=indent + 2).strip()
         if not item_text:
             continue
-        bullet = f"{start_num + index}. " if ordered else "- "
+        if task:
+            checked = bool((child.get("attrs") or {}).get("checked"))
+            bullet = "- [x] " if checked else "- [ ] "
+        elif ordered:
+            bullet = f"{start_num + index}. "
+        else:
+            bullet = "- "
         index += 1
         prefix = (" " * indent) + bullet
         parts = item_text.splitlines()
@@ -102,21 +137,21 @@ def _render_list_text(tok: Dict[str, Any], *, indent: int = 0) -> str:
     return "\n".join(lines).strip()
 
 
-def _render_list_item_text(tok: Dict[str, Any], *, indent: int) -> str:
+def _render_list_item_text(node: Dict[str, Any], *, indent: int) -> str:
     parts: List[str] = []
-    for child in _token_children(tok):
-        child_type = _token_type(child)
-        if child_type == "list":
+    for child in _node_content(node):
+        child_type = _node_type(child)
+        if child_type in {"bullet_list", "ordered_list", "task_list"}:
             nested = _render_list_text(child, indent=indent)
             if nested:
                 parts.append(nested)
             continue
-        if child_type == "block_code":
+        if child_type == "code_block":
             continue
-        text = _token_text(child).strip()
-        if text:
-            parts.append(text)
-    return "\n".join(parts).strip()
+        blocks = _collect_blocks(child)
+        if blocks:
+            parts.append("\n".join(blocks).strip())
+    return "\n".join(part for part in parts if part).strip()
 
 
 def split_markdown_blocks(text: str) -> List[str]:
@@ -130,8 +165,8 @@ def split_markdown_blocks(text: str) -> List[str]:
     if not text:
         return []
 
-    tokens = _md_ast()(text)
-    if not isinstance(tokens, list):
+    tree = markdown_to_tree(text)
+    if not isinstance(tree, dict):
         return [text]
 
     heading_stack: List[str | None] = [None] * 6
@@ -166,39 +201,18 @@ def split_markdown_blocks(text: str) -> List[str]:
         for i in range(level, 6):
             heading_stack[i] = None
 
-    def collect_blocks(tok: Any) -> List[str]:
-        t = _token_type(tok)
-        if t in {"block_code"}:
-            return []
-        if t == "paragraph":
-            txt = _token_text(tok).strip()
-            return [txt] if txt else []
-        if t == "list":
-            txt = _render_list_text(tok)
-            return [txt] if txt else []
-        if t == "block_quote":
-            out_blocks: List[str] = []
-            for child in _token_children(tok):
-                out_blocks.extend(collect_blocks(child))
-            return out_blocks
-
-        txt = _token_text(tok).strip()
-        return [txt] if txt else []
-
-    for tok in tokens:
-        t = _token_type(tok)
-        if t == "heading":
-            attrs = tok.get("attrs") if isinstance(tok, dict) else None
-            level = 1
-            if isinstance(attrs, dict) and isinstance(attrs.get("level"), int):
-                level = attrs["level"]
-            set_heading(level, _token_text(tok))
+    for node in _node_content(tree):
+        node_type = _node_type(node)
+        if node_type == "heading":
+            attrs = node.get("attrs") if isinstance(node.get("attrs"), dict) else {}
+            level = int(attrs.get("level") or 1)
+            set_heading(level, _inline_text(node))
             continue
-        if t == "thematic_break":
+        if node_type == "horizontal_rule":
             flush()
             continue
 
-        for part in collect_blocks(tok):
+        for part in _collect_blocks(node):
             if part:
                 section_parts.append(part)
 

@@ -1,16 +1,9 @@
 services:
-  sidecar:
-    command: npm run dev
-    volumes:
-      - ./App/sidecar:/app
-      - sidecar_node_modules:/app/node_modules
-
   backend:
     environment:
       ASSET_STORAGE_BACKEND: "local"
       UVICORN_RELOAD: "1"
       WATCHFILES_FORCE_POLLING: "true"
-      SIDECAR_URL: "http://sidecar:3001"
     volumes:
       - ./App/backend:/app/App/backend
       - assets_data:/app/App/backend/storage/assets

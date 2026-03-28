@@ -64,7 +64,7 @@ export const novelService = {
     chapterId: string,
     data: ManuscriptCreate
   ): Promise<ManuscriptWithVersions> {
-    const doc = normalizeDoc(data.doc);
+    const doc = normalizeDoc(data.content);
     const wordCount = docWordCount(doc);
 
     const object = await unifiedObjectService.createObject<ManuscriptData>(
@@ -72,10 +72,11 @@ export const novelService = {
       projectId,
       {
         data: {
-          doc,
+          content: doc,
           wordCount,
         },
         language: data.language || 'en',
+        rich_text_format: 'tiptap',
         user_request: data.userRequest || 'Initial creation',
         metadata: {
           chapter_id: chapterId,
@@ -103,7 +104,9 @@ export const novelService = {
 
     const object = await unifiedObjectService.getObject<ManuscriptData>(
       'manuscript',
-      manuscriptId
+      manuscriptId,
+      undefined,
+      'tiptap',
     );
 
     const versions = await unifiedObjectService.getVersions('manuscript', manuscriptId);
@@ -125,7 +128,7 @@ export const novelService = {
       throw new Error(`No manuscript found for chapter ${chapterId}`);
     }
 
-    const doc = normalizeDoc(data.doc);
+    const doc = normalizeDoc(data.content);
     const wordCount = docWordCount(doc);
 
     const object = await unifiedObjectService.updateObject<ManuscriptData>(
@@ -133,10 +136,11 @@ export const novelService = {
       manuscriptId,
       {
         data: {
-          doc,
+          content: doc,
           wordCount,
         },
         language: data.language || 'en',
+        rich_text_format: 'tiptap',
         user_request: data.userRequest,
         create_new_version: data.create_new_version !== false,
       }
@@ -161,11 +165,13 @@ export const novelService = {
       throw new Error(`No manuscript found for chapter ${chapterId}`);
     }
 
-    await unifiedObjectService.restoreVersion('manuscript', manuscriptId, versionId);
+    await unifiedObjectService.restoreVersion('manuscript', manuscriptId, versionId, 'tiptap');
 
     const object = await unifiedObjectService.getObject<ManuscriptData>(
       'manuscript',
-      manuscriptId
+      manuscriptId,
+      undefined,
+      'tiptap',
     );
 
     const versions = await unifiedObjectService.getVersions('manuscript', manuscriptId);

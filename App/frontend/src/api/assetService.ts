@@ -53,6 +53,8 @@ export interface Asset {
     created_at: string;
     updated_at: string;
     file_url: string;
+    markdown_title: string | null;
+    usages: AssetUsage[];
 }
 
 export interface AssetListResponse {
@@ -76,16 +78,17 @@ export interface ObjectAssetLinksResponse {
     main_asset: ObjectAssetLink | null;
 }
 
-// Manuscript Asset Usage types (for scene asset tracking)
-export interface ManuscriptInfo {
-    id: string;
-    name: string;  // Chapter name
-    act_name: string | null;
+export interface AssetUsage {
+    usage_type: 'rich_text' | 'object_main' | 'generation_reference';
+    object_type: string;
+    object_id: string;
+    object_name: string;
+    field_name: string | null;
+    language: string | null;
 }
 
 export interface SceneAsset extends Omit<Asset, 'generation_settings' | 'generation_reference_objects' | 'generation_reference_images'> {
     manuscript_id: string | null;  // Ownership
-    used_in_manuscripts: ManuscriptInfo[];
     usage_count: number;
 }
 
@@ -97,7 +100,7 @@ export interface SceneAssetsResponse {
 // Image cleanup types
 export interface ImageCleanupPolicy {
     delete_non_main_object_images: boolean;
-    delete_unused_manuscript_images: boolean;
+    delete_unused_rich_text_images: boolean;
     keep_recent_days: number;
     treat_reference_images_as_used: boolean;
 }
@@ -142,12 +145,11 @@ export interface ImageCleanupExecuteResponse {
     scrubbed_reference_entries: number;
 }
 
-export interface RebuildManuscriptImagesResponse {
-    manuscripts_processed: number;
+export interface RebuildRichTextImageRefsResponse {
+    objects_processed: number;
     languages_processed: number;
-    images_deleted: number;
-    images_inserted: number;
-    unresolved_refs: number;
+    refs_deleted: number;
+    refs_inserted: number;
 }
 
 export type PromptType = 'natural' | 'tag_based';
@@ -411,7 +413,7 @@ export const assetService = {
     // Scene Assets
 
     /**
-     * List all scene assets with manuscript usage information
+     * List all scene assets with generic usage information
      */
     async listSceneAssets(projectId: string, manuscriptId?: string): Promise<SceneAssetsResponse> {
         const url = manuscriptId
@@ -430,8 +432,8 @@ export const assetService = {
         return apiClient.post<ImageCleanupExecuteResponse>(`/api/v1/assets/${projectId}/cleanup/execute`, request);
     },
 
-    async rebuildManuscriptImagesIndex(projectId: string): Promise<RebuildManuscriptImagesResponse> {
-        return apiClient.post<RebuildManuscriptImagesResponse>(`/api/v1/assets/${projectId}/cleanup/rebuild-manuscript-images`);
+    async rebuildRichTextImageRefs(projectId: string): Promise<RebuildRichTextImageRefsResponse> {
+        return apiClient.post<RebuildRichTextImageRefsResponse>(`/api/v1/assets/${projectId}/cleanup/rebuild-rich-text-image-refs`);
     },
 };
 

@@ -27,8 +27,8 @@ iniconfig
 jinja2
 jiter
 mako
+markdown-it-pyrs
 markupsafe
-mistune
 mcp
 openai
 packaging

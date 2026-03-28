@@ -26,6 +26,7 @@ export type AnyObjectType = ObjectType | TimelineObjectType;
 export type StoryEntityKind = 'character' | 'organization' | 'location' | 'lorebook';
 export type OutlineKind = 'outline' | 'act' | 'chapter';
 export type StoryEntityStructureObjectType = 'story_entity_folder' | 'story_entity';
+export type RichTextFormat = 'tiptap' | 'markdown' | 'tree';
 
 // ============================================================================
 // UNIFIED OBJECT (Response from API)
@@ -112,16 +113,16 @@ export interface BasicInfoData {
 export interface StoryEntityData {
   name: string;          // Object name
   description: string;   // One-line summary for object indexes
-  content: string;       // Full content
+  content: TipTapDoc;    // Full content
 }
 
 export interface ManuscriptData {
-  doc: TipTapDoc;
+  content: TipTapDoc;
   wordCount: number;
 }
 
 export interface GuidelinesData {
-  authorNote: string;
+  authorNote: TipTapDoc;
 }
 
 export interface StoryEntityFolderData {
@@ -149,6 +150,7 @@ export type ChapterObject = OutlineObject & { kind: 'chapter' };
 export interface UpdateObjectRequest<TData = Record<string, any>> {
   data: TData;
   language: string;
+  rich_text_format?: 'tiptap' | 'markdown';
   kind?: StoryEntityKind | OutlineKind;
   user_request?: string;
   create_new_version?: boolean;  // Default: true
@@ -158,12 +160,14 @@ export interface UpdateObjectRequest<TData = Record<string, any>> {
 export interface AddTranslationRequest<TData = Record<string, any>> {
   language: string;
   data: TData;
+  rich_text_format?: 'tiptap' | 'markdown';
   user_request?: string;
 }
 
 export interface CreateObjectRequest<TData = Record<string, any>> {
   data: TData;
   language: string;
+  rich_text_format?: 'tiptap' | 'markdown';
   kind?: StoryEntityKind | OutlineKind;
   user_request?: string;
   metadata?: Record<string, any>;

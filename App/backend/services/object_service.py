@@ -17,7 +17,7 @@ from ..models.db_models import (
     BasicInfo,
     Guidelines,
     Manuscript,
-    ManuscriptImage,
+    RichTextImageRef,
     Outline,
     Project,
     StoryEntity,
@@ -36,10 +36,21 @@ from ..services.deletion_service import (
     delete_object_versions_bulk,
     delete_semantic_sources_bulk,
 )
-from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.semantic_index_service import index_object, invalidate_object_index
 from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, require_story_entity_kind
 from .basic_info_utils import normalize_basic_info_data
+from .rich_text import (
+    empty_doc,
+    get_rich_text_fields,
+    markdown_to_tree,
+    normalize_tree,
+    tiptap_to_tree,
+    tree_to_markdown,
+    tree_to_text,
+    tree_to_tiptap,
+    word_count,
+)
+from .rich_text_image_ref_service import rebuild_rich_text_refs_for_object
 from .outline_service import (
     collect_affected_outline_rows,
     insert_outline_position,
@@ -67,14 +78,12 @@ from .storage_usage_service import (
     apply_project_usage_delta,
     apply_project_usage_deltas,
     build_asset_rows_delta,
-    build_manuscript_images_delta,
     build_object_version_delta,
     build_story_core_delta,
     build_story_core_rows_delta,
     build_usage_delta_for_measurement_rows,
     measure_object_version_row,
     snapshot_asset_row,
-    snapshot_manuscript_image_row,
     snapshot_object_version_row,
     snapshot_rows,
     snapshot_story_core_row,
@@ -328,7 +337,13 @@ def _get_metadata(db: Session, obj: Any, object_type: str) -> dict[str, Any]:
     return metadata
 
 
-def _serialize_object(db: Session, object_type: str, obj: Any, language: str | None = None) -> dict[str, Any]:
+def _serialize_object(
+    db: Session,
+    object_type: str,
+    obj: Any,
+    language: str | None = None,
+    rich_text_format: str = "tiptap",
+) -> dict[str, Any]:
     latest = _latest_version(db, object_type, obj.id)
     if latest is None:
         data: dict[str, Any] = {}
@@ -337,22 +352,29 @@ def _serialize_object(db: Session, object_type: str, obj: Any, language: str | N
         version_data = latest.data if isinstance(latest.data, dict) else {}
         if language:
             if language in version_data and isinstance(version_data[language], dict):
-                data = {language: version_data[language]}
+                data = {
+                    language: _render_language_payload(
+                        object_type=object_type,
+                        data=version_data[language],
+                        rich_text_format=rich_text_format,
+                    )
+                }
             else:
                 data = {}
         else:
-            data = version_data
+            data = {
+                lang: _render_language_payload(
+                    object_type=object_type,
+                    data=lang_data,
+                    rich_text_format=rich_text_format,
+                )
+                for lang, lang_data in version_data.items()
+                if isinstance(lang_data, dict)
+            }
         version = {
             "id": str(latest.id),
             "number": latest.version_number,
             "created_at": latest.created_at.isoformat() if latest.created_at else None,
-        }
-
-    if object_type == "basic_info":
-        data = {
-            lang: normalize_basic_info_data(lang_data)
-            for lang, lang_data in data.items()
-            if isinstance(lang_data, dict)
         }
 
     serialized = {
@@ -365,6 +387,95 @@ def _serialize_object(db: Session, object_type: str, obj: Any, language: str | N
     if object_type in {"outline", STORY_ENTITY_TYPE}:
         serialized["kind"] = str(getattr(obj, "kind", ""))
     return serialized
+
+
+def _normalize_rich_value(value: Any, *, rich_text_format: str) -> dict[str, Any]:
+    if rich_text_format == "markdown":
+        return markdown_to_tree(str(value or ""))
+    if rich_text_format == "tree":
+        return normalize_tree(value)
+    return tiptap_to_tree(value)
+
+
+def _render_rich_value(value: Any, *, rich_text_format: str) -> Any:
+    tree = normalize_tree(value)
+    if rich_text_format == "markdown":
+        return tree_to_markdown(tree)
+    if rich_text_format == "tree":
+        return tree
+    return tree_to_tiptap(tree)
+
+
+def _normalize_language_payload(
+    *,
+    object_type: str,
+    data: dict[str, Any],
+    rich_text_format: str,
+) -> dict[str, Any]:
+    incoming = dict(data or {})
+    if object_type == "basic_info":
+        return normalize_basic_info_data(incoming)
+    if object_type == STORY_ENTITY_FOLDER_TYPE:
+        return {
+            "name": str(incoming.get("name") or ""),
+            "description": str(incoming.get("description") or ""),
+        }
+    if object_type == "guidelines":
+        return {"authorNote": _normalize_rich_value(incoming.get("authorNote"), rich_text_format=rich_text_format)}
+    if object_type in {STORY_ENTITY_TYPE, "outline"}:
+        return {
+            "name": str(incoming.get("name") or ""),
+            "description": str(incoming.get("description") or ""),
+            "content": _normalize_rich_value(incoming.get("content"), rich_text_format=rich_text_format),
+        }
+    if object_type == "manuscript":
+        content = _normalize_rich_value(incoming.get("content"), rich_text_format=rich_text_format)
+        return {"content": content, "wordCount": word_count(content)}
+    return incoming
+
+
+def _render_language_payload(
+    *,
+    object_type: str,
+    data: dict[str, Any],
+    rich_text_format: str,
+) -> dict[str, Any]:
+    current = dict(data or {})
+    if object_type == "basic_info":
+        return normalize_basic_info_data(current)
+    if object_type == STORY_ENTITY_FOLDER_TYPE:
+        return {
+            "name": str(current.get("name") or ""),
+            "description": str(current.get("description") or ""),
+        }
+    if object_type == "guidelines":
+        return {"authorNote": _render_rich_value(current.get("authorNote"), rich_text_format=rich_text_format)}
+    if object_type in {STORY_ENTITY_TYPE, "outline"}:
+        return {
+            "name": str(current.get("name") or ""),
+            "description": str(current.get("description") or ""),
+            "content": _render_rich_value(current.get("content"), rich_text_format=rich_text_format),
+        }
+    if object_type == "manuscript":
+        content = normalize_tree(current.get("content"))
+        return {
+            "content": _render_rich_value(content, rich_text_format=rich_text_format),
+            "wordCount": int(current.get("wordCount") or word_count(content)),
+        }
+    return current
+
+
+def _snapshot_rich_text_refs(db: Session, *, object_type: str, object_id: UUID) -> list[tuple[str, str, str, int]]:
+    rows = (
+        db.query(RichTextImageRef)
+        .filter(RichTextImageRef.object_type == object_type, RichTextImageRef.object_id == object_id)
+        .order_by(RichTextImageRef.language.asc(), RichTextImageRef.field_name.asc(), RichTextImageRef.position.asc())
+        .all()
+    )
+    out: list[tuple[str, str, str, int]] = []
+    for row in rows:
+        out.append((str(row.asset_id), str(row.language), str(row.field_name), int(row.position)))
+    return out
 
 
 def _load_owned_object(db: Session, project_id: UUID, object_type: str, object_id: UUID) -> Any | None:
@@ -557,6 +668,7 @@ class ObjectService:
         object_type: str,
         data: dict[str, Any],
         language: str,
+        rich_text_format: str = "tiptap",
         kind: str | None = None,
         metadata: dict[str, Any] | None = None,
         user_request: str = "Initial Creation",
@@ -573,13 +685,7 @@ class ObjectService:
         if t in {"basic_info", "guidelines", "timeline_track", "timeline_event"}:
             raise ValueError(f"{t} is auto-created with project and cannot be created manually")
 
-        if t == "manuscript":
-            doc = data.get("doc")
-            if not isinstance(doc, dict):
-                raise ValueError("Manuscript creation requires data.doc (TipTap JSON)")
-            if "content" in data:
-                raise ValueError("Manuscript creation does not accept data.content")
-        elif t == STORY_ENTITY_FOLDER_TYPE:
+        if t == STORY_ENTITY_FOLDER_TYPE:
             if not str(data.get("name") or "").strip():
                 raise ValueError("Story entity folder creation requires data.name")
 
@@ -693,12 +799,18 @@ class ObjectService:
                 requested_position=requested_position if isinstance(requested_position, int) else None,
             )
 
+        normalized_data = _normalize_language_payload(
+            object_type=storage_type,
+            data=data,
+            rich_text_format=rich_text_format,
+        )
+
         version = ObjectVersion(
             id=uuid4(),
             object_type=storage_type,
             object_id=object_id,
             version_number=1,
-            data={language: data},
+            data={language: normalized_data},
             user_request=user_request,
             created_by=created_by,
             created_at=datetime.utcnow(),
@@ -725,7 +837,7 @@ class ObjectService:
                 object_type="manuscript",
                 object_id=manuscript_id,
                 version_number=1,
-                data={language: {"doc": {"type": "doc", "content": [{"type": "paragraph"}]}, "wordCount": 0}},
+                data={language: {"content": empty_doc(), "wordCount": 0}},
                 user_request=user_request,
                 created_by=created_by,
                 created_at=datetime.utcnow(),
@@ -805,7 +917,25 @@ class ObjectService:
                 deltas=deltas,
                 enforce_quota=True,
             )
-        return _serialize_object(db, storage_type, core_obj, language)
+        if get_rich_text_fields(storage_type):
+            rebuild_rich_text_refs_for_object(
+                db,
+                project_id=project_id,
+                object_type=storage_type,
+                object_id=object_id,
+                language=language,
+                version_data=normalized_data,
+            )
+        if manuscript_id is not None:
+            rebuild_rich_text_refs_for_object(
+                db,
+                project_id=project_id,
+                object_type="manuscript",
+                object_id=manuscript_id,
+                language=language,
+                version_data={"content": empty_doc(), "wordCount": 0},
+            )
+        return _serialize_object(db, storage_type, core_obj, language, rich_text_format=rich_text_format)
 
     def update_object(
         self,
@@ -815,6 +945,7 @@ class ObjectService:
         object_id: UUID,
         data: dict[str, Any],
         language: str,
+        rich_text_format: str = "tiptap",
         kind: str | None = None,
         metadata: dict[str, Any] | None = None,
         user_request: str = "User Edit",
@@ -829,13 +960,6 @@ class ObjectService:
         event_user_id = created_by or _resolve_project_user_id(db, project_id=project_id)
         is_outline_structure_write = storage_type == "outline" and _is_outline_structure_metadata(metadata)
         previous_outline_parent_id = obj.parent_id if storage_type == "outline" else None
-
-        if t == "manuscript":
-            doc = data.get("doc")
-            if not isinstance(doc, dict):
-                raise ValueError("Manuscript updates require data.doc (TipTap JSON)")
-            if "content" in data:
-                raise ValueError("Manuscript updates do not accept data.content")
 
         obj.updated_at = datetime.utcnow()
         if t == STORY_ENTITY_TYPE and kind is not None:
@@ -858,52 +982,49 @@ class ObjectService:
                             data = dict(value)
                             break
 
+        if not data and get_rich_text_fields(storage_type):
+            current_serialized = _serialize_object(db, storage_type, obj, language, rich_text_format="tree")
+            current_data = current_serialized.get("data") if isinstance(current_serialized, dict) else {}
+            if isinstance(current_data, dict) and isinstance(current_data.get(language), dict):
+                data = dict(current_data[language])
+
+        normalized_data = _normalize_language_payload(
+            object_type=storage_type,
+            data=data,
+            rich_text_format=rich_text_format,
+        )
         version_before = None if create_new_version else snapshot_object_version_row(_latest_version(db, storage_type, object_id))
-        manuscript_images_before = None
-        manuscript_images_after = None
-        if t == "manuscript":
-            manuscript_images_before = snapshot_rows(
-                db.query(ManuscriptImage).filter(ManuscriptImage.manuscript_id == object_id).all(),
-                snapshot_manuscript_image_row,
-            )
+        rich_text_refs_before = _snapshot_rich_text_refs(db, object_type=storage_type, object_id=object_id)
 
         version = _create_or_update_version(
             db,
             object_type=storage_type,
             object_id=object_id,
             language=language,
-            new_data=data,
+            new_data=normalized_data,
             user_request=user_request,
             created_by=created_by,
             create_new=create_new_version,
         )
 
-        # manuscript side effects: rebuild image index (metadata only, no file deletion)
-        if t == "manuscript":
-            doc = data.get("doc")
-            if isinstance(doc, dict):
-                chapter = getattr(obj, "chapter", None)
-                resolved_project_id = getattr(chapter, "project_id", None) if chapter else None
-                if resolved_project_id:
-                    rebuild_manuscript_images_for_language(
-                        db=db,
-                        project_id=resolved_project_id,
-                        manuscript_id=object_id,
-                        language=language,
-                        doc=doc,
-                    )
+        if get_rich_text_fields(storage_type):
+            rebuild_rich_text_refs_for_object(
+                db,
+                project_id=project_id,
+                object_type=storage_type,
+                object_id=object_id,
+                language=language,
+                version_data=normalized_data,
+            )
 
         # reload with required relationships
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             raise ValueError(f"{t} not found after update")
 
+        rich_text_refs_after = _snapshot_rich_text_refs(db, object_type=storage_type, object_id=object_id)
         if t == "manuscript":
-            manuscript_images_after = snapshot_rows(
-                db.query(ManuscriptImage).filter(ManuscriptImage.manuscript_id == object_id).all(),
-                snapshot_manuscript_image_row,
-            )
-            if manuscript_images_before != manuscript_images_after:
+            if rich_text_refs_before != rich_text_refs_after:
                 queue_scene_assets_change(
                     db,
                     user_id=event_user_id,
@@ -964,8 +1085,6 @@ class ObjectService:
                     after=snapshot_object_version_row(version),
                 )
             ]
-            if t == "manuscript":
-                deltas.append(build_manuscript_images_delta(manuscript_images_before, manuscript_images_after))
 
             apply_project_usage_deltas(
                 db,
@@ -974,7 +1093,7 @@ class ObjectService:
                 deltas=deltas,
                 enforce_quota=True,
             )
-        return _serialize_object(db, storage_type, obj)
+        return _serialize_object(db, storage_type, obj, rich_text_format=rich_text_format)
 
     def update_object_structure(
         self,
@@ -1024,6 +1143,7 @@ class ObjectService:
         object_id: UUID,
         language: str,
         data: dict[str, Any],
+        rich_text_format: str = "tiptap",
         user_request: str = "Translation",
         created_by: UUID | None = None,
     ) -> dict[str, Any]:
@@ -1041,19 +1161,34 @@ class ObjectService:
         if language in latest_data:
             raise ValueError(f"Translation for {language} already exists in latest version")
 
+        normalized_data = _normalize_language_payload(
+            object_type=storage_type,
+            data=data,
+            rich_text_format=rich_text_format,
+        )
+
         version_before = snapshot_object_version_row(latest)
         version = _create_or_update_version(
             db,
             object_type=storage_type,
             object_id=object_id,
             language=language,
-            new_data=data,
+            new_data=normalized_data,
             user_request=user_request,
             created_by=created_by,
             create_new=False,
         )
         obj.updated_at = datetime.utcnow()
         db.flush()
+        if get_rich_text_fields(storage_type):
+            rebuild_rich_text_refs_for_object(
+                db,
+                project_id=project_id,
+                object_type=storage_type,
+                object_id=object_id,
+                language=language,
+                version_data=normalized_data,
+            )
 
         _invalidate_semantic_index(
             db,
@@ -1106,18 +1241,28 @@ class ObjectService:
         project_id: UUID,
         object_type: str,
         object_id: UUID,
+        rich_text_format: str = "tiptap",
     ) -> list[dict[str, Any]]:
         t = object_type
+        storage_type = _canonical_object_type(t)
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             raise ValueError(f"{t} not found")
 
-        versions = _versions_desc(db, _canonical_object_type(t), object_id)
+        versions = _versions_desc(db, storage_type, object_id)
         return [
             {
                 "id": str(v.id),
                 "number": int(v.version_number),
-                "data": v.data if isinstance(v.data, dict) else {},
+                "data": {
+                    lang: _render_language_payload(
+                        object_type=storage_type,
+                        data=lang_data,
+                        rich_text_format=rich_text_format,
+                    )
+                    for lang, lang_data in (v.data or {}).items()
+                    if isinstance(lang_data, dict)
+                } if isinstance(v.data, dict) else {},
                 "user_request": v.user_request,
                 "created_at": v.created_at.isoformat() if v.created_at else None,
             }
@@ -1133,6 +1278,7 @@ class ObjectService:
         object_id: UUID,
         version_id: UUID,
         created_by: UUID | None = None,
+        rich_text_format: str = "tiptap",
     ) -> dict[str, Any]:
         t = object_type
         storage_type = _canonical_object_type(t)
@@ -1153,14 +1299,6 @@ class ObjectService:
         if version_to_restore is None:
             raise ValueError("Version not found")
 
-        if t == "manuscript":
-            restored_data = version_to_restore.data if isinstance(version_to_restore.data, dict) else {}
-            if not restored_data:
-                raise ValueError("Invalid manuscript version data")
-            for lang_data in restored_data.values():
-                if not isinstance(lang_data, dict) or not isinstance(lang_data.get("doc"), dict):
-                    raise ValueError("Cannot restore manuscript version (missing doc)")
-
         latest = _latest_version(db, storage_type, object_id)
         next_version_number = (latest.version_number + 1) if latest else 1
 
@@ -1177,6 +1315,18 @@ class ObjectService:
         db.add(new_version)
         obj.updated_at = datetime.utcnow()
         db.flush()
+        if isinstance(new_version.data, dict) and get_rich_text_fields(storage_type):
+            for lang, lang_data in new_version.data.items():
+                if not isinstance(lang_data, dict):
+                    continue
+                rebuild_rich_text_refs_for_object(
+                    db,
+                    project_id=project_id,
+                    object_type=storage_type,
+                    object_id=object_id,
+                    language=str(lang),
+                    version_data=lang_data,
+                )
 
         _invalidate_semantic_index(
             db,
@@ -1417,13 +1567,11 @@ class ObjectService:
             else:
                 story_version_before.extend(rows)
 
-        manuscript_image_before = []
+        rich_text_ref_ids_to_delete: list[tuple[str, UUID]] = []
         manuscript_ids = ids_by_type.get("manuscript") or []
-        if manuscript_ids:
-            manuscript_image_before = snapshot_rows(
-                db.query(ManuscriptImage).filter(ManuscriptImage.manuscript_id.in_(list(manuscript_ids))).all(),
-                snapshot_manuscript_image_row,
-            )
+        for deleted_type, deleted_ids in ids_by_type.items():
+            if deleted_type in {"guidelines", STORY_ENTITY_TYPE, "outline", "manuscript"}:
+                rich_text_ref_ids_to_delete.extend((deleted_type, deleted_id) for deleted_id in deleted_ids)
 
         owned_assets: list[Asset] = []
         if storage_type in {"basic_info", STORY_ENTITY_TYPE}:
@@ -1463,6 +1611,13 @@ class ObjectService:
 
         if owned_assets:
             delete_assets_with_files(db, assets=owned_assets, scrub_references_in_project_id=resolved_project_id)
+
+        for deleted_type, deleted_id in rich_text_ref_ids_to_delete:
+            (
+                db.query(RichTextImageRef)
+                .filter(RichTextImageRef.object_type == deleted_type, RichTextImageRef.object_id == deleted_id)
+                .delete(synchronize_session=False)
+            )
 
         delete_semantic_sources_bulk(db, user_id=user_id, project_id=resolved_project_id, ids_by_type=ids_by_type)
         delete_object_versions_bulk(db, ids_by_type=ids_by_type)
@@ -1526,19 +1681,27 @@ class ObjectService:
                     after_rows=[],
                     measure_fn=lambda row: measure_object_version_row(row),
                 ),
-                build_manuscript_images_delta(manuscript_image_before, []),
                 build_asset_rows_delta(deleted_asset_before, []),
                 build_asset_rows_delta(remaining_ref_assets_before, remaining_ref_assets_after),
             ],
             enforce_quota=False,
         )
 
-    def get_object(self, db: Session, object_type: str, object_id: UUID, *, project_id: UUID, language: str | None = None) -> dict[str, Any] | None:
+    def get_object(
+        self,
+        db: Session,
+        object_type: str,
+        object_id: UUID,
+        *,
+        project_id: UUID,
+        language: str | None = None,
+        rich_text_format: str = "tiptap",
+    ) -> dict[str, Any] | None:
         t = object_type
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             return None
-        return _serialize_object(db, _canonical_object_type(t), obj, language)
+        return _serialize_object(db, _canonical_object_type(t), obj, language, rich_text_format=rich_text_format)
 
     def list_objects(
         self,
@@ -1548,6 +1711,7 @@ class ObjectService:
         *,
         language: str | None = None,
         kinds: list[str] | None = None,
+        rich_text_format: str = "tiptap",
     ) -> list[dict[str, Any]]:
         t = object_type
         storage_type = _canonical_object_type(t)
@@ -1595,7 +1759,7 @@ class ObjectService:
             )
 
         rows = query.all()
-        return [_serialize_object(db, storage_type, row, language) for row in rows]
+        return [_serialize_object(db, storage_type, row, language, rich_text_format=rich_text_format) for row in rows]
 
     def update_image_prompt(
         self,

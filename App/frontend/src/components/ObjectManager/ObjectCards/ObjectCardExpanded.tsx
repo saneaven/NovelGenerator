@@ -9,6 +9,8 @@ import ImageTabContent from '../../AssetManager/ImageTabContent';
 import { RichTextEditor, type RichTextEditorRef } from '../../RichTextEditor';
 import AuthenticatedImage from '../../common/AuthenticatedImage';
 import type { Asset } from '../../../api/assetService';
+import type { TipTapDoc } from '../../../types/tiptap';
+import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
 import { getAssetUrl } from '../../../utils/assetUrl';
 import { confirm } from '../../../store/dialogStore';
 import './ObjectCardExpanded.css';
@@ -17,7 +19,7 @@ type TabType = 'edit' | 'image';
 
 interface ObjectCardExpandedProps {
     itemId: string;
-    itemData: { name: string; description: string; content: string };
+    itemData: { name: string; description: string; content: TipTapDoc };
     effectiveLanguage: string;
     versionNumber: number;
     objectType: 'character' | 'organization' | 'location' | 'lorebook' | 'story_entity';
@@ -30,7 +32,7 @@ interface ObjectCardExpandedProps {
     saveLabel?: string;
     hideAIEdit?: boolean;
     extraEditFields?: React.ReactNode;
-    onSave: (name: string, description: string, content: string) => void;
+    onSave: (name: string, description: string, content: TipTapDoc) => void;
     onCancel: () => void;
     onPrimaryAction?: () => void;
     onAIEdit?: () => void;
@@ -68,14 +70,14 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
     const [activeTab, setActiveTab] = useState<TabType>('edit');
     const [name, setName] = useState(itemData.name);
     const [description, setDescription] = useState(itemData.description);
-    const [content, setContent] = useState(itemData.content);
+    const [content, setContent] = useState<TipTapDoc>(normalizeDoc(itemData.content));
     const editorRef = useRef<RichTextEditorRef>(null);
 
     // Reset form when itemData changes
     useEffect(() => {
         setName(itemData.name);
         setDescription(itemData.description);
-        setContent(itemData.content);
+        setContent(normalizeDoc(itemData.content));
     }, [itemData.name, itemData.description, itemData.content]);
 
     // Use editorRef.hasChanges() for content comparison (handles TipTap normalization)
@@ -99,7 +101,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
             }
             setName(itemData.name);
             setDescription(itemData.description);
-            setContent(itemData.content);
+            setContent(normalizeDoc(itemData.content));
         }
         setActiveTab(tab);
     };
@@ -111,7 +113,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
         if (readOnly) {
             return;
         }
-        onSave(name.trim(), description, content);
+        onSave(name.trim(), description, normalizeDoc(content));
     };
 
     const handleCancel = async () => {
@@ -221,7 +223,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
                                 <RichTextEditor
                                     ref={editorRef}
                                     key={itemId}
-                                    initialContent={itemData.content}
+                                    initialContent={normalizeDoc(itemData.content)}
                                     onChange={setContent}
                                     placeholder="Enter content..."
                                     disabled={readOnly}

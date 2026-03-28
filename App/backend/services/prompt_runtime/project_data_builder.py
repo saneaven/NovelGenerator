@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 from uuid import UUID
 
@@ -20,7 +19,7 @@ from ...models.translation_models import ObjectVersion
 from ...utils.timeline_calendar import default_calendar, format_date
 from ...utils.story_entities import STORY_ENTITY_TYPE
 from ..basic_info_utils import basic_info_summary_text, normalize_basic_info_data
-from ..sidecar_client import SidecarClient
+from ..rich_text import tree_to_markdown
 from ..story_entity_tree_service import (
     build_story_entity_folder_content_map,
     build_story_entity_folder_path_map,
@@ -54,19 +53,23 @@ def _resolve_manuscript_lang_data(
     language: str,
 ) -> dict[str, Any]:
     requested_entry = all_data.get(language)
-    if isinstance(requested_entry, dict) and isinstance(requested_entry.get("doc"), dict):
+    if isinstance(requested_entry, dict) and "content" in requested_entry:
         return dict(requested_entry)
 
     for candidate_language, value in all_data.items():
-        if candidate_language == language or not isinstance(value, dict):
-            continue
-        if not isinstance(value.get("doc"), dict):
+        if candidate_language == language or not isinstance(value, dict) or "content" not in value:
             continue
         return dict(value)
 
-    if isinstance(requested_entry, dict):
-        return dict(requested_entry)
-    return {}
+    return dict(requested_entry) if isinstance(requested_entry, dict) else {}
+
+
+def _render_rich_text(value: Any) -> str:
+    if isinstance(value, dict):
+        return tree_to_markdown(value)
+    if isinstance(value, str):
+        return value
+    return ""
 
 
 def _story_entity_payload(
@@ -81,7 +84,7 @@ def _story_entity_payload(
         "id": str(row.id),
         "name": str(lang_data.get("name") or ""),
         "description": str(lang_data.get("description") or ""),
-        "content": str(lang_data.get("content") or ""),
+        "content": _render_rich_text(lang_data.get("content")),
         "folderId": str(row.folder_id) if row.folder_id else None,
         "folderPath": list(folder_path),
         "displayOrder": int(row.display_order or 0),
@@ -318,7 +321,6 @@ async def build_project_data(
     db: Session,
     project_id: UUID,
     language: str,
-    sidecar_client: SidecarClient,
 ) -> dict[str, Any]:
     basic = db.query(BasicInfo).filter(BasicInfo.project_id == project_id).first()
     guidelines = db.query(Guidelines).filter(Guidelines.project_id == project_id).first()
@@ -407,9 +409,10 @@ async def build_project_data(
         if guidelines is None:
             return {"id": "", "authorNote": ""}, None
         guideline_data = _lang_data(get_latest("guidelines", guidelines.id), lang)
+        author_note = _render_rich_text(guideline_data.get("authorNote"))
         payload = {
             "id": str(guidelines.id),
-            "authorNote": str(guideline_data.get("authorNote") or ""),
+            "authorNote": author_note,
         }
         return (
             payload,
@@ -418,7 +421,7 @@ async def build_project_data(
                 "id": str(guidelines.id),
                 "name": "Guidelines",
                 "description": "",
-                "content": str(guideline_data.get("authorNote") or ""),
+                "content": author_note,
             },
         )
 
@@ -475,7 +478,7 @@ async def build_project_data(
                 "position": int(row.position or 0),
                 "name": str(outline_data.get("name") or ""),
                 "description": str(outline_data.get("description") or ""),
-                "content": str(outline_data.get("content") or ""),
+                "content": _render_rich_text(outline_data.get("content")),
                 "manuscriptId": str(manuscript.id) if manuscript is not None else None,
                 "actNumber": numbering.get("actNumber"),
                 "chapterNumber": numbering.get("chapterNumber"),
@@ -512,32 +515,14 @@ async def build_project_data(
             int(row.position or 0),
         )
 
-    # Pre-convert manuscript docs to markdown per requested language.
-    markdown_cache: dict[tuple[UUID, str], str] = {}
     manuscript_lang_cache: dict[tuple[UUID, str], dict[str, Any]] = {}
-
-    async def _convert_manuscript_doc(manuscript: Manuscript, lang: str) -> None:
-        key = (manuscript.id, lang)
-        manuscript_versions = get_latest("manuscript", manuscript.id)
-        manuscript_data = _resolve_manuscript_lang_data(
-            manuscript_versions,
-            lang,
-        )
-        manuscript_lang_cache[key] = manuscript_data
-        doc = manuscript_data.get("doc") if isinstance(manuscript_data.get("doc"), dict) else None
-        if doc is not None:
-            markdown_cache[key] = await sidecar_client.doc_to_markdown(doc)
-        else:
-            markdown_cache[key] = ""
-
-    if manuscripts:
-        await asyncio.gather(
-            *[
-                _convert_manuscript_doc(ms, lang)
-                for ms in manuscripts
-                for lang in all_languages
-            ]
-        )
+    for manuscript in manuscripts:
+        for lang in all_languages:
+            key = (manuscript.id, lang)
+            manuscript_lang_cache[key] = _resolve_manuscript_lang_data(
+                get_latest("manuscript", manuscript.id),
+                lang,
+            )
 
     def build_manuscripts_payload(lang: str) -> list[dict[str, Any]]:
         sorted_manuscripts = sorted(
@@ -558,7 +543,7 @@ async def build_project_data(
             chapter_data = _lang_data(get_latest("outline", chapter.id), lang) if chapter is not None else {}
             numbering = outline_numbering.get(chapter.id, {}) if chapter is not None else {}
 
-            markdown = markdown_cache.get(manuscript_key, "")
+            markdown = _render_rich_text(manuscript_data.get("content"))
 
             payload.append(
                 {

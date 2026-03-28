@@ -22,11 +22,6 @@ fake_database.get_db = lambda: None
 sys.modules.setdefault("App.backend.database", fake_database)
 sys.modules.setdefault("database", fake_database)
 
-fake_sidecar_client = types.ModuleType("App.backend.services.sidecar_client")
-fake_sidecar_client.SidecarClient = object
-fake_sidecar_client.sidecar_client = SimpleNamespace()
-sys.modules.setdefault("App.backend.services.sidecar_client", fake_sidecar_client)
-
 fake_pil = types.ModuleType("PIL")
 fake_pil.Image = object
 fake_pil.ImageOps = object
@@ -381,13 +376,9 @@ def test_patch_story_entity_folder_passes_structural_metadata(monkeypatch) -> No
     assert captured["data"]["description"] == "Core characters"
 
 
-def test_thread_route_batch_contract_extracts_story_entity_folder_id_metadata() -> None:
+def test_thread_route_runtime_payload_includes_parent_metadata() -> None:
     source = (ROOT / "App" / "backend" / "routes" / "thread_routes.py").read_text(encoding="utf-8")
 
-    assert "def _extract_story_entity_metadata(args: dict) -> dict | None:" in source
-    assert 'meta["folder_id"] = args.get("folderId")' in source
-    assert "_extract_story_entity_metadata(args)" in source
-    assert "def _extract_story_entity_folder_metadata(args: dict) -> dict | None:" in source
-    assert 'meta["parent_id"] = args.get("parentId")' in source
-    assert 'meta["display_order"] = args["position"]' in source
-    assert "story_entity_folder:{target_id}" in source
+    assert 'runtime_fields["parent_id"]' in source
+    assert 'runtime_fields["journey_kind"]' in source
+    assert 'runtime_fields["display_label"]' in source

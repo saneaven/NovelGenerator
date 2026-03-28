@@ -3,11 +3,11 @@ import { BaseModal } from '../BaseModal';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { ObjectType } from '../../types/unifiedObject';
-import { docToMarkdown } from '../../editor/manuscript/convert';
 import { Scroll, Loading, Mailbox, Check, Globe, Clock, SpeechBubble, DocumentAlt } from '../icons';
 import { TextButton } from '../TextButton';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
 import { formatBasicInfoList, normalizeBasicInfoData } from '../../utils/basicInfo';
+import { richContentToPlainText } from '../../utils/richTextPreview';
 import './VersionHistoryModal.css';
 
 // Unified type for text-based version history (prompts and fragments)
@@ -213,10 +213,10 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     }
 
     if (type === 'manuscript') {
-      const rawDoc = (data as any).doc;
-      const preview = typeof rawDoc === 'object' && rawDoc
-        ? docToMarkdown(rawDoc)
-        : '';
+      const rawContent = (data as any).content;
+      const preview = typeof rawContent === 'string'
+        ? rawContent
+        : richContentToPlainText(rawContent);
 
       return (
         <div className="version-data-formatted">

@@ -8,10 +8,9 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from ..models.translation_models import ObjectVersion
-from .manuscript_image_index_service import restore_image_asset_ids
 from .object_service import ObjectService
 from .patch_utils import apply_single_replacement
-from .sidecar_client import SidecarClient, SidecarConversionError, SidecarUnavailableError
+from .rich_text import tree_to_markdown
 
 
 @dataclass
@@ -22,7 +21,6 @@ class BatchState:
     create_new_version: bool
     user_request: str
     markdown: str
-    original_doc: dict | None = None
     touched_call_ids: set[str] = field(default_factory=set)
 
 
@@ -63,7 +61,6 @@ class ManuscriptBatch:
         language: str,
         create_new_version: bool,
         user_request: str,
-        sidecar: SidecarClient,
     ) -> tuple[str, str]:
         key = self.make_key(manuscript_id, language, create_new_version)
         existing = self._states.get(key)
@@ -89,11 +86,11 @@ class ManuscriptBatch:
         if not isinstance(lang_data, dict):
             raise ValueError("MANUSCRIPT_EMPTY")
 
-        doc = lang_data.get("doc")
-        if not isinstance(doc, dict):
+        content = lang_data.get("content")
+        if not isinstance(content, dict):
             raise ValueError("MANUSCRIPT_EMPTY")
 
-        markdown = await sidecar.doc_to_markdown(doc)
+        markdown = tree_to_markdown(content)
         self._states[key] = BatchState(
             manuscript_id=manuscript_id,
             project_id=project_id,
@@ -101,7 +98,6 @@ class ManuscriptBatch:
             create_new_version=create_new_version,
             user_request=user_request,
             markdown=markdown,
-            original_doc=doc,
         )
         return key, markdown
 
@@ -117,7 +113,6 @@ class ManuscriptBatch:
         call_id: str,
         create_new_version: bool,
         user_request: str,
-        sidecar: SidecarClient,
     ) -> dict[str, Any]:
         key = self.make_key(manuscript_id, language, create_new_version)
         lock = self.lock_for(key)
@@ -130,12 +125,7 @@ class ManuscriptBatch:
                     language=language,
                     create_new_version=create_new_version,
                     user_request=user_request,
-                    sidecar=sidecar,
                 )
-            except SidecarUnavailableError:
-                return {"success": False, "code": "SIDECAR_ERROR", "reason": "sidecar unavailable"}
-            except SidecarConversionError as exc:
-                return {"success": False, "code": "SIDECAR_ERROR", "reason": str(exc)}
             except ValueError as exc:
                 return {"success": False, "code": str(exc), "reason": str(exc)}
 
@@ -182,7 +172,6 @@ class ManuscriptBatch:
         self,
         *,
         db: Session,
-        sidecar: SidecarClient,
         object_service: ObjectService,
         created_by: UUID | None,
     ) -> tuple[dict[str, FlushStatus], dict[str, set[str]]]:
@@ -192,42 +181,20 @@ class ManuscriptBatch:
         for key, state in list(self._states.items()):
             key_to_call_ids[key] = set(state.touched_call_ids)
             try:
-                # Lazy-load original doc for apply_replace paths that skipped get_or_load_markdown
-                if state.original_doc is None:
-                    latest = (
-                        db.query(ObjectVersion)
-                        .filter(
-                            ObjectVersion.object_type == "manuscript",
-                            ObjectVersion.object_id == state.manuscript_id,
-                        )
-                        .order_by(ObjectVersion.version_number.desc())
-                        .first()
-                    )
-                    if latest and isinstance(latest.data, dict):
-                        lang_data = latest.data.get(state.language)
-                        if isinstance(lang_data, dict):
-                            state.original_doc = lang_data.get("doc")
-
-                doc = await sidecar.markdown_to_doc(state.markdown)
-                if isinstance(state.original_doc, dict):
-                    restore_image_asset_ids(doc, state.original_doc)
                 object_service.update_object(
                     db=db,
                     project_id=state.project_id,
                     object_type="manuscript",
                     object_id=state.manuscript_id,
-                    data={"doc": doc, "wordCount": len(state.markdown.split())},
+                    data={"content": state.markdown},
                     language=state.language,
+                    rich_text_format="markdown",
                     metadata=None,
                     user_request=state.user_request,
                     create_new_version=state.create_new_version,
                     created_by=created_by,
                 )
                 results[key] = FlushStatus(success=True)
-            except SidecarUnavailableError as exc:
-                results[key] = FlushStatus(success=False, reason=f"sidecar unavailable: {exc}")
-            except SidecarConversionError as exc:
-                results[key] = FlushStatus(success=False, reason=str(exc))
             except Exception as exc:
                 results[key] = FlushStatus(success=False, reason=str(exc))
 

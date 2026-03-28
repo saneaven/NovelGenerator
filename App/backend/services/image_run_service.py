@@ -32,7 +32,6 @@ from ..services.image_model_catalog_service import (
     image_model_catalog_service,
     sanitize_generation_settings,
 )
-from ..services.manuscript_image_index_service import restore_image_asset_ids
 from ..services.notification_service import (
     build_image_run_notification_snapshot,
     serialize_notification,
@@ -40,9 +39,9 @@ from ..services.notification_service import (
 )
 from ..services.object_change_events import queue_object_change
 from ..services.object_service import object_service
+from ..services.rich_text import tree_to_markdown
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..services.settings_service import settings_service
-from ..services.sidecar_client import SidecarClient, SidecarConversionError, SidecarUnavailableError, sidecar_client
 from ..services.storage_service import storage_service
 from ..services.thread_runtime_sync_service import emit_runtime_sync_events, sync_run_thread_status
 from .asset_change_events import (
@@ -317,28 +316,22 @@ async def markdown_for_manuscript(
     project_id: UUID,
     manuscript_id: UUID,
     language: str,
-    sidecar: SidecarClient,
-) -> tuple[str, dict[str, Any]]:
+) -> str:
     obj = object_service.get_object(
         db,
         object_type="manuscript",
         object_id=manuscript_id,
         project_id=project_id,
         language=language,
+        rich_text_format="tree",
     )
     if obj is None:
         raise ValueError(f"manuscript not found: {manuscript_id}")
     lang_data = _safe_lang_data(obj, language)
-    original_doc = lang_data.get("doc")
-    if not isinstance(original_doc, dict):
+    content_tree = lang_data.get("content")
+    if not isinstance(content_tree, dict):
         raise ValueError("MANUSCRIPT_EMPTY")
-    try:
-        markdown = await sidecar.doc_to_markdown(original_doc)
-    except SidecarUnavailableError as exc:
-        raise ValueError("SIDECAR_ERROR: unavailable") from exc
-    except SidecarConversionError as exc:
-        raise ValueError(f"SIDECAR_ERROR: {exc}") from exc
-    return markdown, original_doc
+    return tree_to_markdown(content_tree)
 
 
 def anchor_excerpts(markdown: str, anchor: str) -> tuple[str, str]:
@@ -357,14 +350,12 @@ async def validate_scene_anchor(
     manuscript_id: UUID,
     language: str,
     anchor: str,
-    sidecar: SidecarClient,
 ) -> tuple[str, str]:
-    markdown, _original_doc = await markdown_for_manuscript(
+    markdown = await markdown_for_manuscript(
         db,
         project_id=project_id,
         manuscript_id=manuscript_id,
         language=language,
-        sidecar=sidecar,
     )
     count = markdown.count(anchor)
     if count != 1:
@@ -385,31 +376,6 @@ def _tool_call_id_from_snapshot(snapshot: dict[str, Any]) -> str | None:
     text = str(raw).strip()
     return text or None
 
-
-def _attach_image_asset_id_by_src(doc: Any, *, src: str, asset_id: UUID) -> None:
-    if not isinstance(doc, dict):
-        return
-
-    attached = False
-
-    def _walk(node: Any) -> None:
-        nonlocal attached
-        if attached or not isinstance(node, dict):
-            return
-        if node.get("type") == "image":
-            attrs = node.get("attrs")
-            if isinstance(attrs, dict) and attrs.get("src") == src and not (attrs.get("data-asset-id") or attrs.get("assetId")):
-                attrs["data-asset-id"] = str(asset_id)
-                attached = True
-                return
-        children = node.get("content")
-        if isinstance(children, list):
-            for child in children:
-                _walk(child)
-
-    _walk(doc)
-    if not attached:
-        raise ValueError("Inserted image node was not found in manuscript document")
 
 
 class ImageRunService:
@@ -616,8 +582,6 @@ class ImageRunService:
             }
             apply_kind = "set_object_main_image"
         elif tool_call.tool_name == IMAGE_SCENE_TOOL:
-            if sidecar_client is None:
-                raise ValueError("SIDECAR_ERROR: sidecar client unavailable")
             manuscript_id = _parse_uuid(tool_call.arguments.get("manuscript_id"), field_name="manuscript_id")
             anchor = str(tool_call.arguments.get("insert_before") or "").strip()
             if not anchor:
@@ -628,7 +592,6 @@ class ImageRunService:
                 manuscript_id=manuscript_id,
                 language=language,
                 anchor=anchor,
-                sidecar=sidecar_client,
             )
             target = {
                 "type": "scene",
@@ -1028,16 +991,19 @@ class ImageRunService:
         result: ImageGenerationResult,
         is_preview: bool,
     ) -> Asset:
+        asset_id = uuid4()
         if result.image_b64:
             file_path, mime_type, width, height, file_size = storage_service.save_generated_image(
                 base64_data=result.image_b64,
                 project_id=row.project_id,
+                asset_id=asset_id,
                 format=result.format,
             )
         elif result.image_data:
             file_path, mime_type, width, height, file_size = storage_service.save_generated_image_from_url(
                 image_bytes=result.image_data,
                 project_id=row.project_id,
+                asset_id=asset_id,
                 format=result.format,
             )
         else:
@@ -1049,7 +1015,7 @@ class ImageRunService:
         target = _json_dict(_json_dict(row.request_snapshot).get("target"))
         asset_type = "scene" if target.get("type") == "scene" else "object"
         asset = Asset(
-            id=uuid4(),
+            id=asset_id,
             project_id=row.project_id,
             manuscript_id=None,
             preview_image_run_id=row.id if is_preview else None,
@@ -1099,7 +1065,6 @@ class ImageRunService:
                 row=row,
                 user_id=row.user_id,
                 language=_request_language(row),
-                sidecar=sidecar_client,
             )
             row.status = "applied"
             row.stage = None
@@ -1122,7 +1087,6 @@ class ImageRunService:
         row: ImageRunModel,
         user_id: UUID,
         language: str,
-        sidecar: SidecarClient | None,
     ) -> None:
         snapshot = _json_dict(row.request_snapshot)
         target = _json_dict(snapshot.get("target"))
@@ -1240,39 +1204,40 @@ class ImageRunService:
 
         if apply_kind != "insert_scene_before_anchor":
             raise ValueError("Unsupported image apply kind")
-        if sidecar is None:
-            raise ValueError("SIDECAR_ERROR: sidecar client unavailable")
 
         manuscript_id = _parse_uuid(target.get("manuscript_id"), field_name="manuscript_id")
         anchor = str(target.get("insert_before") or "").strip()
-        markdown, original_doc = await markdown_for_manuscript(
+        markdown = await markdown_for_manuscript(
             db,
             project_id=row.project_id,
             manuscript_id=manuscript_id,
             language=language,
-            sidecar=sidecar,
         )
         if markdown.count(anchor) != 1:
             raise ValueError("insert_before must still match exactly once before applying")
 
         image_src = storage_service.build_public_asset_path(str(asset.file_path))
-        next_markdown = markdown.replace(anchor, f"![Generated Image]({image_src})\n\n{anchor}", 1)
-        try:
-            next_doc = await sidecar.markdown_to_doc(next_markdown)
-        except SidecarUnavailableError as exc:
-            raise ValueError("SIDECAR_ERROR: unavailable") from exc
-        except SidecarConversionError as exc:
-            raise ValueError(f"SIDECAR_ERROR: {exc}") from exc
-
-        restore_image_asset_ids(next_doc, original_doc)
-        _attach_image_asset_id_by_src(next_doc, src=image_src, asset_id=asset.id)
+        image_title = ""
+        if isinstance(asset.generation_prompt, dict):
+            parts = [
+                str(asset.generation_prompt.get("prefix") or "").strip(),
+                str(asset.generation_prompt.get("content") or "").strip(),
+                str(asset.generation_prompt.get("postfix") or "").strip(),
+            ]
+            image_title = " ".join(part for part in parts if part).strip()
+        next_markdown = markdown.replace(
+            anchor,
+            f'![Generated Image]({image_src} "{image_title}")\n\n{anchor}' if image_title else f"![Generated Image]({image_src})\n\n{anchor}",
+            1,
+        )
         object_service.update_object(
             db,
             project_id=row.project_id,
             object_type="manuscript",
             object_id=manuscript_id,
-            data={"doc": next_doc, "wordCount": len(next_markdown.split())},
+            data={"content": next_markdown},
             language=language,
+            rich_text_format="markdown",
             user_request="tool:generate_scene_image",
             created_by=user_id,
             create_new_version=True,
@@ -1357,7 +1322,6 @@ class ImageRunService:
                     row=row,
                     user_id=user_id,
                     language=_request_language(row),
-                    sidecar=sidecar_client,
                 )
                 row.status = "applied"
                 row.stage = None

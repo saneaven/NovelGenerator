@@ -62,7 +62,7 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
     }
 
     if (operation.objectType === 'manuscript') {
-      return <ReadOnlyManuscriptDisplay title={title || 'Manuscript'} doc={snapshot.data.doc} />;
+      return <ReadOnlyManuscriptDisplay title={title || 'Manuscript'} content={typeof snapshot.data.content === 'string' ? snapshot.data.content : undefined} doc={snapshot.data.content} />;
     }
 
     return (

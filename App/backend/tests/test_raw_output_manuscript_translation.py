@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import importlib
 import os
 import sys
@@ -43,12 +42,6 @@ def _install_import_stubs() -> None:
     )
     sys.modules["App.backend.services.object_service"] = object_service_module
 
-    sidecar_client_module = types.ModuleType("App.backend.services.sidecar_client")
-    sidecar_client_module.sidecar_client = SimpleNamespace(
-        markdown_to_doc=lambda *_args, **_kwargs: None
-    )
-    sys.modules["App.backend.services.sidecar_client"] = sidecar_client_module
-
     chat_attachment_service_module = types.ModuleType("App.backend.services.chat_attachment_service")
     chat_attachment_service_module.chat_attachment_service = SimpleNamespace(
         load_attachment_bytes=lambda *_args, **_kwargs: b"",
@@ -57,16 +50,13 @@ def _install_import_stubs() -> None:
     sys.modules["App.backend.services.chat_attachment_service"] = chat_attachment_service_module
 
     run_pipeline_package = types.ModuleType("App.backend.services.run_pipeline")
-    run_pipeline_package.__path__ = [
-        str(ROOT / "App" / "backend" / "services" / "run_pipeline")
-    ]
+    run_pipeline_package.__path__ = [str(ROOT / "App" / "backend" / "services" / "run_pipeline")]
     sys.modules["App.backend.services.run_pipeline"] = run_pipeline_package
 
 
 _install_import_stubs()
 
 raw_output_module = importlib.import_module("App.backend.services.run_pipeline.raw_output")
-from App.backend.services.manuscript_image_index_service import extract_asset_ids_with_positions
 
 
 class FakeQuery:
@@ -106,48 +96,15 @@ def _set_object_translation_parent(monkeypatch) -> None:
     )
 
 
-def test_raw_object_translation_restores_asset_ids_from_source_language(monkeypatch) -> None:
+def test_raw_object_translation_manuscript_uses_markdown_projection(monkeypatch) -> None:
     object_id = uuid4()
     project_id = uuid4()
     user_id = uuid4()
-    asset_id = uuid4()
-    image_src = "https://example.com/storage/assets/image-a.png"
-
-    original_doc = {
-        "type": "doc",
-        "content": [
-            {
-                "type": "image",
-                "attrs": {
-                    "src": image_src,
-                    "data-asset-id": str(asset_id),
-                    "width": 512,
-                },
-            }
-        ],
-    }
-    translated_doc = {
-        "type": "doc",
-        "content": [
-            {
-                "type": "image",
-                "attrs": {
-                    "src": image_src,
-                    "width": 512,
-                },
-            }
-        ],
-    }
-
     captured: dict[str, object] = {}
     get_calls: list[dict[str, object]] = []
-    expected_object_id = object_id
-    expected_project_id = project_id
 
     class DummyObjectService:
         def get_object(self, _db, object_type, object_id, *, project_id, language=None):
-            assert object_id == expected_object_id
-            assert project_id == expected_project_id
             get_calls.append(
                 {
                     "object_type": object_type,
@@ -159,8 +116,8 @@ def test_raw_object_translation_restores_asset_ids_from_source_language(monkeypa
             return {
                 "data": {
                     "English": {
-                        "doc": copy.deepcopy(original_doc),
-                        "wordCount": 12,
+                        "content": "# Existing manuscript",
+                        "wordCount": 2,
                     }
                 }
             }
@@ -169,13 +126,7 @@ def test_raw_object_translation_restores_asset_ids_from_source_language(monkeypa
             captured.update(kwargs)
             return {"id": str(object_id)}
 
-    class DummySidecar:
-        async def markdown_to_doc(self, markdown: str):
-            assert markdown == "translated manuscript"
-            return copy.deepcopy(translated_doc)
-
     monkeypatch.setattr(raw_output_module, "object_service", DummyObjectService())
-    monkeypatch.setattr(raw_output_module, "sidecar_client", DummySidecar())
     _set_object_translation_parent(monkeypatch)
 
     asyncio.run(
@@ -190,7 +141,7 @@ def test_raw_object_translation_restores_asset_ids_from_source_language(monkeypa
                     "targetLanguage": "Korean",
                 }
             },
-            content_parts=[{"type": "content", "text": "translated manuscript"}],
+            content_parts=[{"type": "content", "text": "# Translated manuscript"}],
             emit_fn=_noop_emit,
         )
     )
@@ -203,114 +154,21 @@ def test_raw_object_translation_restores_asset_ids_from_source_language(monkeypa
             "language": None,
         }
     ]
+    assert captured["data"] == {"content": "# Translated manuscript"}
+    assert captured["rich_text_format"] == "markdown"
     assert captured["language"] == "Korean"
     assert captured["create_new_version"] is False
-    saved_doc = captured["data"]["doc"]
-    assert saved_doc["content"][0]["attrs"]["data-asset-id"] == str(asset_id)
-    assert extract_asset_ids_with_positions(saved_doc) == [(asset_id, 0, 512)]
 
 
-def test_raw_object_translation_restores_asset_ids_from_first_available_language(monkeypatch) -> None:
+def test_raw_object_translation_story_entity_stays_markdown_based(monkeypatch) -> None:
     object_id = uuid4()
     project_id = uuid4()
-    expected_object_id = object_id
-    expected_project_id = project_id
-    user_id = uuid4()
-    asset_id = uuid4()
-    image_src = "https://example.com/storage/assets/image-b.png"
-
-    fallback_doc = {
-        "type": "doc",
-        "content": [
-            {
-                "type": "paragraph",
-                "content": [{"type": "text", "text": "Fallback"}],
-            },
-            {
-                "type": "image",
-                "attrs": {
-                    "src": image_src,
-                    "data-asset-id": str(asset_id),
-                },
-            },
-        ],
-    }
-    translated_doc = {
-        "type": "doc",
-        "content": [
-            {
-                "type": "image",
-                "attrs": {
-                    "src": image_src,
-                },
-            }
-        ],
-    }
-
-    captured: dict[str, object] = {}
-
-    class DummyObjectService:
-        def get_object(self, _db, object_type, object_id, *, project_id, language=None):
-            assert object_type == "manuscript"
-            assert object_id == expected_object_id
-            assert project_id == expected_project_id
-            assert language is None
-            return {
-                "data": {
-                    "Japanese": {
-                        "doc": copy.deepcopy(fallback_doc),
-                        "wordCount": 7,
-                    }
-                }
-            }
-
-        def update_object(self, _db, **kwargs):
-            captured.update(kwargs)
-            return {"id": str(object_id)}
-
-    class DummySidecar:
-        async def markdown_to_doc(self, markdown: str):
-            assert markdown == "translated with fallback"
-            return copy.deepcopy(translated_doc)
-
-    monkeypatch.setattr(raw_output_module, "object_service", DummyObjectService())
-    monkeypatch.setattr(raw_output_module, "sidecar_client", DummySidecar())
-    _set_object_translation_parent(monkeypatch)
-
-    asyncio.run(
-        raw_output_module.apply_raw_output(
-            FakeSession("manuscript"),
-            thread=SimpleNamespace(parent_id=uuid4(), thread_type="journey"),
-            run=SimpleNamespace(id=uuid4(), project_id=project_id, user_id=user_id, language="Korean"),
-            input_payload={
-                "translation": {
-                    "objectIds": [str(object_id)],
-                    "sourceLanguage": "English",
-                    "targetLanguage": "Korean",
-                }
-            },
-            content_parts=[{"type": "content", "text": "translated with fallback"}],
-            emit_fn=_noop_emit,
-        )
-    )
-
-    saved_doc = captured["data"]["doc"]
-    assert saved_doc["content"][0]["attrs"]["data-asset-id"] == str(asset_id)
-
-
-def test_raw_object_translation_non_manuscript_path_is_unchanged(monkeypatch) -> None:
-    object_id = uuid4()
-    project_id = uuid4()
-    expected_object_id = object_id
-    expected_project_id = project_id
     user_id = uuid4()
     captured: dict[str, object] = {}
     get_calls: list[dict[str, object]] = []
 
     class DummyObjectService:
         def get_object(self, _db, object_type, object_id, *, project_id, language=None):
-            assert object_id == expected_object_id
-            assert project_id == expected_project_id
             get_calls.append(
                 {
                     "object_type": object_type,
@@ -322,6 +180,8 @@ def test_raw_object_translation_non_manuscript_path_is_unchanged(monkeypatch) ->
             return {
                 "data": {
                     "Korean": {
+                        "name": "Ari",
+                        "description": "Broker",
                         "content": "old content",
                     }
                 }
@@ -331,17 +191,12 @@ def test_raw_object_translation_non_manuscript_path_is_unchanged(monkeypatch) ->
             captured.update(kwargs)
             return {"id": str(object_id)}
 
-    class DummySidecar:
-        async def markdown_to_doc(self, _markdown: str):
-            raise AssertionError("markdown_to_doc should not be used for non-manuscript translation")
-
     monkeypatch.setattr(raw_output_module, "object_service", DummyObjectService())
-    monkeypatch.setattr(raw_output_module, "sidecar_client", DummySidecar())
     _set_object_translation_parent(monkeypatch)
 
     asyncio.run(
         raw_output_module.apply_raw_output(
-            FakeSession("character"),
+            FakeSession("story_entity"),
             thread=SimpleNamespace(parent_id=uuid4(), thread_type="journey"),
             run=SimpleNamespace(id=uuid4(), project_id=project_id, user_id=user_id, language="Korean"),
             input_payload={
@@ -358,12 +213,13 @@ def test_raw_object_translation_non_manuscript_path_is_unchanged(monkeypatch) ->
 
     assert get_calls == [
         {
-            "object_type": "character",
+            "object_type": "story_entity",
             "object_id": object_id,
             "project_id": project_id,
             "language": "Korean",
         }
     ]
-    assert captured["data"] == {"content": "new translated content"}
+    assert captured["data"]["content"] == "new translated content"
+    assert captured["rich_text_format"] == "markdown"
     assert captured["language"] == "Korean"
     assert captured["create_new_version"] is False

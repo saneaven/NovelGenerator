@@ -1367,7 +1367,7 @@
       "referenceWarning": "비활성화하면 에셋을 삭제할 때 다른 에셋의 생성 참조 이미지에서 해당 ID가 제거됩니다.",
       "preview": "미리보기",
       "rebuildIndex": "원고 인덱스 재구축",
-      "rebuildConfirm": "마지막 저장된 문서에서 원고 이미지 인덱스를 재구축하시겠습니까?",
+      "rebuildConfirm": "최신 저장된 콘텐츠 기준으로 리치 텍스트 이미지 참조를 재구축하시겠습니까?",
       "candidates": "후보",
       "totalSize": "총 크기",
       "selected": "선택됨",

@@ -17,13 +17,17 @@ import TranslationModal from '../Modal/TranslationModal';
 import { DropdownMenu, DropdownItem } from '../ui/DropdownMenu';
 import { IconButton } from '../IconButton';
 import { TextButton } from '../TextButton';
+import { RichTextEditor } from '../RichTextEditor';
 import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal, Save, Close } from '../icons';
 import { Loading } from '../common/Loading';
+import type { TipTapDoc } from '../../types/tiptap';
+import { emptyDoc, normalizeDoc } from '../../editor/manuscript/doc';
 import type { GuidelinesObject, GuidelinesData } from '../../types/unifiedObject';
 import {
   resolveRequestedLanguageState,
   resolveTranslationSourceLanguage,
 } from '../../utils/requestedLanguage';
+import { richContentToPlainText } from '../../utils/richTextPreview';
 
 interface GuidelinesManagerProps {
   globalDisplayLanguage: string;
@@ -49,7 +53,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
   // Edit state
   const [isEditing, setIsEditing] = useState(false);
   const [editFormData, setEditFormData] = useState<GuidelinesData>({
-    authorNote: '',
+    authorNote: emptyDoc(),
   });
 
   // Modal state
@@ -60,14 +64,15 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
 
   // Helper to get data for a specific language
   const getDataForLanguage = useCallback((lang: string): GuidelinesData => {
-    if (!guidelines) return { authorNote: '' };
+    if (!guidelines) return { authorNote: emptyDoc() };
     const data = guidelines.data[lang];
-    if (data) return data as GuidelinesData;
+    if (data) return { authorNote: normalizeDoc((data as GuidelinesData).authorNote) };
     const availableLanguages = Object.keys(guidelines.data);
     if (availableLanguages.length > 0) {
-      return guidelines.data[availableLanguages[0]] as GuidelinesData;
+      const fallback = guidelines.data[availableLanguages[0]] as GuidelinesData;
+      return { authorNote: normalizeDoc(fallback.authorNote) };
     }
-    return { authorNote: '' };
+    return { authorNote: emptyDoc() };
   }, [guidelines]);
 
   const languageState = useMemo(
@@ -164,7 +169,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
     setIsEditing(false);
   };
 
-  const handleChange = (value: string) => {
+  const handleChange = (value: TipTapDoc) => {
     setEditFormData({ authorNote: value });
   };
 
@@ -312,18 +317,15 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
 
             <div className="content-body">
               {isEditing ? (
-                <textarea
-                  className="author-note-input"
-                  value={editFormData.authorNote}
-                  onChange={(e) => handleChange(e.target.value)}
+                <RichTextEditor
+                  initialContent={normalizeDoc(editFormData.authorNote)}
+                  onChange={handleChange}
                   placeholder="Enter author notes, writing style preferences, world-building rules, or any instructions for the AI..."
-                  rows={12}
-                  autoFocus
                 />
               ) : (
                 <div className="author-note-display">
-                  {currentData.authorNote ? (
-                    <pre className="author-note-text">{currentData.authorNote}</pre>
+                  {richContentToPlainText(currentData.authorNote) ? (
+                    <pre className="author-note-text">{richContentToPlainText(currentData.authorNote)}</pre>
                   ) : (
                     <p className="placeholder-text">
                       No author note provided. Click Edit to add instructions or context for the AI.

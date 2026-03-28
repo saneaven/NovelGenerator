@@ -163,11 +163,6 @@ class _FakeDb:
         return _FakeQuery(self, model)
 
 
-class _FakeSidecar:
-    async def doc_to_markdown(self, doc: dict) -> str:
-        return str(doc.get("markdown") or "")
-
-
 def _stub_story_entity_tree_helpers(monkeypatch) -> None:
     monkeypatch.setattr(project_data_builder_module, "list_story_entity_folders", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(project_data_builder_module, "build_story_entity_folder_path_map", lambda *_args, **_kwargs: {})
@@ -250,11 +245,11 @@ def test_build_project_data_adds_canonical_outline_and_manuscript_numbers(monkey
         _object_version(
             object_type="manuscript",
             object_id=manuscript_1.id,
-            data={"English": {"doc": {"markdown": "Alpha manuscript"}, "wordCount": 2}}),
+            data={"English": {"content": "Alpha manuscript", "wordCount": 2}}),
         _object_version(
             object_type="manuscript",
             object_id=manuscript_2.id,
-            data={"English": {"doc": {"markdown": "Beta manuscript"}, "wordCount": 2}}),
+            data={"English": {"content": "Beta manuscript", "wordCount": 2}}),
     ]
 
     db = _FakeDb(
@@ -271,7 +266,7 @@ def test_build_project_data_adds_canonical_outline_and_manuscript_numbers(monkey
 
     _stub_story_entity_tree_helpers(monkeypatch)
 
-    project = asyncio.run(build_project_data(db, project_id, "English", _FakeSidecar()))
+    project = asyncio.run(build_project_data(db, project_id, "English"))
 
     nodes_by_id = {node["id"]: node for node in project["outline"]["nodes"]}
     assert nodes_by_id[str(act_1.id)]["actNumber"] == 1
@@ -340,8 +335,8 @@ def test_build_project_data_uses_requested_manuscript_language_per_payload(monke
                     object_type="manuscript",
                     object_id=manuscript.id,
                     data={
-                        "Korean": {"doc": {"markdown": "한국어 원고"}, "wordCount": 2},
-                        "English": {"doc": {"markdown": "English manuscript"}, "wordCount": 2},
+                        "Korean": {"content": "한국어 원고", "wordCount": 2},
+                        "English": {"content": "English manuscript", "wordCount": 2},
                     },
                 ),
             ],
@@ -351,7 +346,7 @@ def test_build_project_data_uses_requested_manuscript_language_per_payload(monke
 
     _stub_story_entity_tree_helpers(monkeypatch)
 
-    project = asyncio.run(build_project_data(db, project_id, "English", _FakeSidecar()))
+    project = asyncio.run(build_project_data(db, project_id, "English"))
 
     assert project["manuscripts"][0]["content"] == "English manuscript"
     assert project["manuscripts"][0]["wordCount"] == 2
@@ -396,7 +391,7 @@ def test_build_project_data_falls_back_when_requested_manuscript_language_has_no
                     object_id=manuscript.id,
                     data={
                         "English": {"wordCount": 99},
-                        "Korean": {"doc": {"markdown": "대체 원고"}, "wordCount": 2},
+                        "Korean": {"content": "대체 원고", "wordCount": 2},
                     },
                 ),
             ],
@@ -406,7 +401,7 @@ def test_build_project_data_falls_back_when_requested_manuscript_language_has_no
 
     _stub_story_entity_tree_helpers(monkeypatch)
 
-    project = asyncio.run(build_project_data(db, project_id, "English", _FakeSidecar()))
+    project = asyncio.run(build_project_data(db, project_id, "English"))
 
     assert project["manuscripts"][0]["content"] == "대체 원고"
     assert project["manuscripts"][0]["wordCount"] == 2

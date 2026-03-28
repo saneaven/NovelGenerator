@@ -52,8 +52,10 @@ import {
   getStoryEntityFolderName,
   type StoryEntityFolder,
 } from '../../types/storyEntityFolder';
+import type { TipTapDoc } from '../../types/tiptap';
 import type { StoryEntityData, StoryEntityKind, StoryEntityObject } from '../../types/unifiedObject';
 import type { ObjectAssetLink } from '../../api/assetService';
+import { emptyDoc, normalizeDoc } from '../../editor/manuscript/doc';
 import {
   resolveRequestedLanguageState,
   resolveTranslationSourceLanguage,
@@ -140,7 +142,7 @@ function getEntityLanguageState(
 function getEntityData(entity: StoryEntityObject, language: string): StoryEntityData {
   return entity.data[language]
     || entity.data[Object.keys(entity.data)[0]]
-    || { name: '', description: '', content: '' };
+    || { name: '', description: '', content: emptyDoc() };
 }
 
 function kindIcon(kind: StoryEntityKind): React.ReactNode {
@@ -430,13 +432,13 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     setIsCreatingFolder(true);
   }, [isMainLanguageView]);
 
-  const handleCreateEntity = useCallback(async (name: string, description: string, content: string) => {
+  const handleCreateEntity = useCallback(async (name: string, description: string, content: TipTapDoc) => {
     if (!projectId || !newEntityDraft || !name.trim()) return;
     try {
       await createObject(
         'story_entity',
         projectId,
-        { name: name.trim(), description: description.trim(), content: content.trim() },
+        { name: name.trim(), description: description.trim(), content: normalizeDoc(content) },
         settings.mainLanguage,
         { folder_id: newEntityDraft.folderId },
         'User Creation',
@@ -517,7 +519,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     }
   }, [cancelRenameFolder, foldersById, renameFolderDescription, renameFolderValue, settings.mainLanguage, updateObject]);
 
-  const handleSaveEntity = useCallback(async (name: string, description: string, content: string) => {
+  const handleSaveEntity = useCallback(async (name: string, description: string, content: TipTapDoc) => {
     if (!projectId || !expandedEntityId || !editingEntityDraft || !name.trim()) return;
     const entity = entities.find((item) => item.id === expandedEntityId);
     if (!entity) return;
@@ -529,9 +531,10 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
         data: {
           name: name.trim(),
           description: description.trim(),
-          content: content.trim(),
+          content: normalizeDoc(content),
         },
         language: languageState.requestedLanguage,
+        rich_text_format: 'tiptap',
         user_request: 'User Edit',
         create_new_version: languageState.createNewVersion,
       });
@@ -1008,7 +1011,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
           >
             <ObjectCardExpanded
               itemId="new-story-entity"
-              itemData={{ name: '', description: '', content: '' }}
+              itemData={{ name: '', description: '', content: emptyDoc() }}
               effectiveLanguage={settings.mainLanguage}
               versionNumber={0}
               objectType="story_entity"

@@ -1367,7 +1367,7 @@
       "referenceWarning": "If disabled, deleting an asset will remove its ID from other assets' generation reference images.",
       "preview": "Preview",
       "rebuildIndex": "Rebuild Manuscript Index",
-      "rebuildConfirm": "Rebuild manuscript image index from last saved doc?",
+      "rebuildConfirm": "Rebuild rich text image references from the latest saved content?",
       "candidates": "Candidates",
       "totalSize": "Total size",
       "selected": "Selected",

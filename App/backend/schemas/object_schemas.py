@@ -1,9 +1,11 @@
 """Schemas for canonical project objects."""
 from pydantic import BaseModel, Field
-from datetime import datetime
 from uuid import UUID
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 from .common import BaseMetadata, VersionBase
+
+
+RichTextFormat = Literal["tiptap", "markdown", "tree"]
 
 
 # ============================================================================
@@ -45,16 +47,18 @@ class NameDescriptionCreate(BaseModel):
     """Create name/description object"""
     name: str = Field(..., max_length=255)
     description: str = ""  # One-line summary for object indexes
-    content: str  # Full content
+    content: Any  # Full content projection
     language: str = "English"
+    rich_text_format: Literal["tiptap", "markdown"] = "tiptap"
 
 
 class NameDescriptionUpdate(BaseModel):
     """Update name/description object"""
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None  # One-line summary for object indexes
-    content: Optional[str] = None  # Full content
+    content: Optional[Any] = None  # Full content projection
     language: Optional[str] = None
+    rich_text_format: Optional[Literal["tiptap", "markdown"]] = None
 
 
 class NameDescriptionResponse(BaseMetadata):
@@ -62,7 +66,7 @@ class NameDescriptionResponse(BaseMetadata):
     project_id: UUID
     name: Optional[str]
     description: Optional[str]  # One-line summary for object indexes
-    content: Optional[str]  # Full content
+    content: Optional[Any]  # Full content projection
     # Image prompts (stored on base object, not versioned)
     image_prompt: Optional[str] = None
     image_prompt_positive: Optional[str] = None
@@ -84,21 +88,23 @@ class OutlineCreate(BaseModel):
     """Create outline item"""
     name: str = Field(..., max_length=255)
     description: str = ""  # One-line summary for object indexes
-    content: str  # Full content
+    content: Any  # Full content projection
     kind: str
     parent_id: Optional[UUID] = None
     position: int = 0
     language: str = "English"
+    rich_text_format: Literal["tiptap", "markdown"] = "tiptap"
 
 
 class OutlineUpdate(BaseModel):
     """Update outline item"""
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None  # One-line summary for object indexes
-    content: Optional[str] = None  # Full content
+    content: Optional[Any] = None  # Full content projection
     parent_id: Optional[UUID] = None
     position: Optional[int] = None
     language: Optional[str] = None
+    rich_text_format: Optional[Literal["tiptap", "markdown"]] = None
 
 
 class OutlineResponse(BaseMetadata):
@@ -108,7 +114,7 @@ class OutlineResponse(BaseMetadata):
     parent_id: Optional[UUID]
     name: Optional[str]
     description: Optional[str]  # One-line summary for object indexes
-    content: Optional[str]  # Full content
+    content: Optional[Any]  # Full content projection
     position: int
     manuscript_id: Optional[UUID] = None
 

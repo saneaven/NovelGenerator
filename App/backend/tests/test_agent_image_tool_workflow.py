@@ -12,10 +12,12 @@ fake_database.get_db = lambda: None
 sys.modules.setdefault("App.backend.database", fake_database)
 sys.modules.setdefault("database", fake_database)
 
-fake_sidecar_client = types.ModuleType("App.backend.services.sidecar_client")
-fake_sidecar_client.SidecarClient = object
-fake_sidecar_client.sidecar_client = SimpleNamespace()
-sys.modules.setdefault("App.backend.services.sidecar_client", fake_sidecar_client)
+fake_notification_service = types.ModuleType("App.backend.services.notification_service")
+fake_notification_service.build_agent_notification_snapshot = lambda **_kwargs: SimpleNamespace()
+fake_notification_service.build_sub_agent_notification_snapshot = lambda **_kwargs: SimpleNamespace()
+fake_notification_service.build_journey_notification_snapshot = lambda **_kwargs: SimpleNamespace()
+fake_notification_service.upsert_notification_source = lambda *_args, **_kwargs: None
+sys.modules.setdefault("App.backend.services.notification_service", fake_notification_service)
 
 fake_image_run_service = types.ModuleType("App.backend.services.image_run_service")
 fake_image_run_service.IMAGE_OBJECT_TOOL = "generate_object_image"

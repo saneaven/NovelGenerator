@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
-import { normalizeDoc } from '../../../editor/manuscript/doc';
-import { docToMarkdown } from '../../../editor/manuscript/convert';
+import { richContentToPlainText } from '../../../utils/richTextPreview';
 
 export interface ReadOnlyManuscriptDisplayProps {
   title?: string;
@@ -12,16 +11,7 @@ export interface ReadOnlyManuscriptDisplayProps {
 
 function resolveContent(content?: string, doc?: unknown): string {
   if (typeof content === 'string') return content;
-
-  if (doc && typeof doc === 'object') {
-    try {
-      return docToMarkdown(normalizeDoc(doc));
-    } catch {
-      return '';
-    }
-  }
-
-  return '';
+  return richContentToPlainText(doc);
 }
 
 export const ReadOnlyManuscriptDisplay: React.FC<ReadOnlyManuscriptDisplayProps> = ({

@@ -30,11 +30,13 @@ import { TextButton } from '../../../components/TextButton';
 import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll, Refresh } from '../../../components/icons';
 import type { UnifiedObject, OutlineObject } from '../../../types/unifiedObject';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
-import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
 import { OutlineItemCard } from '../../../components/OutlineItemCard';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import { resolveRequestedLanguageState, resolveTranslationSourceLanguage } from '../../../utils/requestedLanguage';
 import { sortOutlineObjects } from '../../../utils/outlineOrdering';
+import type { TipTapDoc } from '../../../types/tiptap';
+import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
+import { richContentToPlainText } from '../../../utils/richTextPreview';
 import './OutlinePanel.css';
 
 interface OutlinePanelProps {
@@ -53,7 +55,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
   // Editing state for outlines (sidebar handles editing and adding now)
   const [editingOutline, setEditingOutline] = useState<string | null>(null);
-  const [editOutlineData, setEditOutlineData] = useState<{ name: string; description: string; content: string }>({ name: '', description: '', content: '' });
+  const [editOutlineData, setEditOutlineData] = useState<{ name: string; description: string; content: TipTapDoc }>({ name: '', description: '', content: emptyDoc() });
   const [showOutlineAIModal, setShowOutlineAIModal] = useState<string | null>(null);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showTranslationModal, setShowTranslationModal] = useState(false);
@@ -66,13 +68,13 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
   // Editing state for acts
   const [editingAct, setEditingAct] = useState<string | null>(null);
-  const [editActData, setEditActData] = useState<{ name: string; description: string; content: string }>({ name: '', description: '', content: '' });
+  const [editActData, setEditActData] = useState<{ name: string; description: string; content: TipTapDoc }>({ name: '', description: '', content: emptyDoc() });
   const [showAddActForm, setShowAddActForm] = useState<string | null>(null);
   const [showActAIModal, setShowActAIModal] = useState<string | null>(null);
 
   // Editing state for chapters
   const [editingChapter, setEditingChapter] = useState<string | null>(null);
-  const [editChapterData, setEditChapterData] = useState<{ name: string; description: string; content: string }>({ name: '', description: '', content: '' });
+  const [editChapterData, setEditChapterData] = useState<{ name: string; description: string; content: TipTapDoc }>({ name: '', description: '', content: emptyDoc() });
   const [showAddChapterForm, setShowAddChapterForm] = useState<string | null>(null);
   const [showChapterAIModal, setShowChapterAIModal] = useState<string | null>(null);
 
@@ -185,9 +187,15 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   // Helper to get data for a specific language with fallback
   const getDataForLanguage = (obj: UnifiedObject, lang: string) => {
     const data = obj.data[lang];
-    if (data) return data;
+    if (data) {
+      return { ...data, content: normalizeDoc((data as any).content) };
+    }
     const available = Object.keys(obj.data);
-    return available.length > 0 ? obj.data[available[0]] : { name: '', description: '' };
+    if (available.length > 0) {
+      const fallback = obj.data[available[0]];
+      return { ...fallback, content: normalizeDoc((fallback as any).content) };
+    }
+    return { name: '', description: '', content: emptyDoc() };
   };
 
   const getLanguageState = useCallback((obj: UnifiedObject) => resolveRequestedLanguageState({
@@ -258,7 +266,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       return;
     }
     const data = getDataForLanguage(outline, languageState.viewLanguage);
-    setEditOutlineData({ name: data.name || '', description: data.description || '', content: data.content || '' });
+    setEditOutlineData({ name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) });
     setEditingOutline(outlineId);
   };
 
@@ -276,8 +284,9 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
     try {
       await store.updateObject('outline', editingOutline, {
-        data: { name: editOutlineData.name.trim(), description: editOutlineData.description.trim(), content: editOutlineData.content.trim() },
+        data: { name: editOutlineData.name.trim(), description: editOutlineData.description.trim(), content: normalizeDoc(editOutlineData.content) },
         language: languageState.requestedLanguage,
+        rich_text_format: 'tiptap',
         create_new_version: languageState.createNewVersion,
         user_request: 'Manual Edit',
       });
@@ -290,7 +299,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
   const cancelEditingOutline = () => {
     setEditingOutline(null);
-    setEditOutlineData({ name: '', description: '', content: '' });
+    setEditOutlineData({ name: '', description: '', content: emptyDoc() });
   };
 
   // Inline description editing handlers
@@ -372,7 +381,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   // ACT HANDLERS
   // ========================================================================
 
-  const handleAddAct = async (outlineId: string, name: string, description: string, content: string) => {
+  const handleAddAct = async (outlineId: string, name: string, description: string, content: TipTapDoc) => {
     if (!projectId || !name.trim() || !isMainLanguageView) return;
 
     try {
@@ -381,7 +390,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       await store.createObject(
         'outline',
         projectId,
-        { name: name.trim(), description: description.trim(), content: content.trim() },
+        { name: name.trim(), description: description.trim(), content: normalizeDoc(content) },
         settings.mainLanguage,
         { parent_id: outlineId, position: actOrder },
         'User Creation',
@@ -403,7 +412,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       return;
     }
     const data = getDataForLanguage(act, languageState.viewLanguage);
-    setEditActData({ name: data.name || '', description: data.description || '', content: data.content || '' });
+    setEditActData({ name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) });
     setEditingAct(actId);
   };
 
@@ -421,8 +430,9 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
     try {
       await store.updateObject('outline', editingAct, {
-        data: { name: editActData.name.trim(), description: editActData.description.trim(), content: editActData.content.trim() },
+        data: { name: editActData.name.trim(), description: editActData.description.trim(), content: normalizeDoc(editActData.content) },
         language: languageState.requestedLanguage,
+        rich_text_format: 'tiptap',
         create_new_version: languageState.createNewVersion,
         user_request: 'Manual Edit',
       });
@@ -435,7 +445,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
   const cancelEditingAct = () => {
     setEditingAct(null);
-    setEditActData({ name: '', description: '', content: '' });
+    setEditActData({ name: '', description: '', content: emptyDoc() });
   };
 
   const handleDeleteAct = async (actId: string) => {
@@ -461,7 +471,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   // CHAPTER HANDLERS
   // ========================================================================
 
-  const handleAddChapter = async (actId: string, name: string, description: string, content: string) => {
+  const handleAddChapter = async (actId: string, name: string, description: string, content: TipTapDoc) => {
     if (!projectId || !name.trim() || !isMainLanguageView) return;
 
     try {
@@ -470,7 +480,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       await store.createObject(
         'outline',
         projectId,
-        { name: name.trim(), description: description.trim(), content: content.trim() },
+        { name: name.trim(), description: description.trim(), content: normalizeDoc(content) },
         settings.mainLanguage,
         { parent_id: actId, position: chapterOrder },
         'User Creation',
@@ -492,7 +502,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       return;
     }
     const data = getDataForLanguage(chapter, languageState.viewLanguage);
-    setEditChapterData({ name: data.name || '', description: data.description || '', content: data.content || '' });
+    setEditChapterData({ name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) });
     setEditingChapter(chapterId);
   };
 
@@ -510,8 +520,9 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
     try {
       await store.updateObject('outline', editingChapter, {
-        data: { name: editChapterData.name.trim(), description: editChapterData.description.trim(), content: editChapterData.content.trim() },
+        data: { name: editChapterData.name.trim(), description: editChapterData.description.trim(), content: normalizeDoc(editChapterData.content) },
         language: languageState.requestedLanguage,
+        rich_text_format: 'tiptap',
         create_new_version: languageState.createNewVersion,
         user_request: 'Manual Edit',
       });
@@ -524,7 +535,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
   const cancelEditingChapter = () => {
     setEditingChapter(null);
-    setEditChapterData({ name: '', description: '', content: '' });
+    setEditChapterData({ name: '', description: '', content: emptyDoc() });
   };
 
   const handleDeleteChapter = async (chapterId: string) => {
@@ -548,7 +559,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
   // Get selected outline data for header
   const selectedOutlineData = useMemo(() => {
-    if (!selectedOutline) return { name: 'Select Outline', description: '' };
+    if (!selectedOutline) return { name: 'Select Outline', description: '', content: emptyDoc() };
     const languageState = getLanguageState(selectedOutline);
     return getDataForLanguage(selectedOutline, languageState.viewLanguage);
   }, [getLanguageState, selectedOutline]);
@@ -824,9 +835,9 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                 )}
               </div>
             )}
-            {selectedOutlineData.content && (
+            {richContentToPlainText(selectedOutlineData.content) && (
               <div className="outline-header-content">
-                <MarkdownRenderer>{selectedOutlineData.content}</MarkdownRenderer>
+                <p>{richContentToPlainText(selectedOutlineData.content)}</p>
               </div>
             )}
           </div>
@@ -951,7 +962,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                       ref={actEditorRef}
                                                       key={editingAct}
                                                       initialContent={editActData.content}
-                                                      onChange={(markdown) => setEditActData(prev => ({ ...prev, content: markdown }))}
+                                                      onChange={(doc) => setEditActData(prev => ({ ...prev, content: normalizeDoc(doc) }))}
                                                       placeholder="Full act content..."
                                                     />
                                                   </div>
@@ -1082,7 +1093,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                                     ref={chapterEditorRef}
                                                                     key={editingChapter}
                                                                     initialContent={editChapterData.content}
-                                                                    onChange={(markdown) => setEditChapterData(prev => ({ ...prev, content: markdown }))}
+                                                                    onChange={(doc) => setEditChapterData(prev => ({ ...prev, content: normalizeDoc(doc) }))}
                                                                     placeholder="Full chapter content..."
                                                                   />
                                                                 </div>
@@ -1321,7 +1332,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                 ref={outlineEditorRef}
                 key={editingOutline}
                 initialContent={editOutlineData.content}
-                onChange={(markdown) => setEditOutlineData((prev) => ({ ...prev, content: markdown }))}
+                onChange={(doc) => setEditOutlineData((prev) => ({ ...prev, content: normalizeDoc(doc) }))}
                 placeholder="Full outline content..."
               />
             </div>
@@ -1396,21 +1407,21 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 // ============================================================================
 
 interface AddActFormProps {
-  onAdd: (name: string, description: string, content: string) => void;
+  onAdd: (name: string, description: string, content: TipTapDoc) => void;
   onCancel: () => void;
 }
 
 const AddActForm: React.FC<AddActFormProps> = ({ onAdd, onCancel }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState<TipTapDoc>(emptyDoc());
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onAdd(name, description, content);
     setName('');
     setDescription('');
-    setContent('');
+    setContent(emptyDoc());
   };
 
   return (
@@ -1464,21 +1475,21 @@ const AddActForm: React.FC<AddActFormProps> = ({ onAdd, onCancel }) => {
 // ============================================================================
 
 interface AddChapterFormProps {
-  onAdd: (name: string, description: string, content: string) => void;
+  onAdd: (name: string, description: string, content: TipTapDoc) => void;
   onCancel: () => void;
 }
 
 const AddChapterForm: React.FC<AddChapterFormProps> = ({ onAdd, onCancel }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState<TipTapDoc>(emptyDoc());
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onAdd(name, description, content);
     setName('');
     setDescription('');
-    setContent('');
+    setContent(emptyDoc());
   };
 
   return (

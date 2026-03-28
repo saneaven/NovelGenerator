@@ -20,11 +20,6 @@ fake_settings_service = types.ModuleType("App.backend.services.settings_service"
 fake_settings_service.settings_service = SimpleNamespace(_get_settings=lambda *_args, **_kwargs: SimpleNamespace())
 sys.modules.setdefault("App.backend.services.settings_service", fake_settings_service)
 
-fake_sidecar_client = types.ModuleType("App.backend.services.sidecar_client")
-fake_sidecar_client.SidecarClient = object
-fake_sidecar_client.sidecar_client = SimpleNamespace()
-sys.modules.setdefault("App.backend.services.sidecar_client", fake_sidecar_client)
-
 fake_storage_usage_service = types.ModuleType("App.backend.services.storage_usage_service")
 fake_storage_usage_service.apply_project_usage_delta = lambda *_args, **_kwargs: None
 fake_storage_usage_service.apply_project_usage_deltas = lambda *_args, **_kwargs: None

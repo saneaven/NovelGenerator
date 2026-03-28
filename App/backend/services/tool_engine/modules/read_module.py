@@ -151,7 +151,6 @@ class ReadToolCallModule(ToolCallModule):
                 project_id=ctx.project_id,
                 object_id=object_id,
                 language=ctx.language,
-                sidecar=ctx.sidecar,
             )
             return make_result(
                 "Read successful",

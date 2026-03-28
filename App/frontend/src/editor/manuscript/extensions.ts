@@ -1,20 +1,19 @@
 import type { AnyExtension } from '@tiptap/core';
+import Link from '@tiptap/extension-link';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
-import { Markdown } from '@tiptap/markdown';
 
 import ImageWithOverlay from '../../components/RichTextEditor/extensions/ImageWithOverlay';
 
 export type ManuscriptExtensionsOptions = {
   placeholder?: string;
-  includeMarkdown?: boolean;
 };
 
 export function buildManuscriptExtensions(
   options: ManuscriptExtensionsOptions = {}
 ) {
-  const { placeholder = 'Start writing...', includeMarkdown = false } = options;
+  const { placeholder = 'Start writing...' } = options;
 
   const extensions: AnyExtension[] = [
     StarterKit.configure({
@@ -29,6 +28,11 @@ export function buildManuscriptExtensions(
         class: 'novel-inline-image',
       },
     }),
+    Link.configure({
+      openOnClick: false,
+      autolink: true,
+      defaultProtocol: 'https',
+    }),
     Placeholder.configure({
       placeholder,
     }),
@@ -39,14 +43,6 @@ export function buildManuscriptExtensions(
     TableCell,
     TableHeader,
   ];
-
-  if (includeMarkdown) {
-    extensions.push(
-      Markdown.configure({
-        markedOptions: { gfm: true },
-      })
-    );
-  }
 
   return extensions;
 }

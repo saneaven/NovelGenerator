@@ -7,40 +7,11 @@ from sqlalchemy.orm import Session
 
 from ...models.db_models import Manuscript, RunMessageModel, RunModel, Thread
 from ...models.translation_models import ObjectVersion
-from ..manuscript_image_index_service import restore_image_asset_ids
 from ..object_service import object_service
-from ..sidecar_client import sidecar_client
 from ..thread_parent_runtime_service import resolve_parent
 from .text_utils import as_dict, as_str_list, collapse_content_text
 
 EmitFn = Callable[..., Awaitable[None]]
-
-
-def _resolve_original_manuscript_doc(
-    data_by_lang: dict[str, Any],
-    *,
-    source_language: str,
-    target_language: str,
-) -> dict[str, Any] | None:
-    for language in (source_language, target_language):
-        if not language:
-            continue
-        lang_data = data_by_lang.get(language)
-        if not isinstance(lang_data, dict):
-            continue
-        doc = lang_data.get("doc")
-        if isinstance(doc, dict):
-            return doc
-
-    for lang_data in data_by_lang.values():
-        if not isinstance(lang_data, dict):
-            continue
-        doc = lang_data.get("doc")
-        if isinstance(doc, dict):
-            return doc
-
-    return None
-
 
 async def apply_raw_output(
     db: Session,
@@ -124,17 +95,16 @@ async def apply_raw_output(
         )
         if manuscript is None:
             raise RuntimeError("manuscriptEdit target not found")
-        doc = await sidecar_client.markdown_to_doc(text)
         object_service.update_object(
             db,
             project_id=run.project_id,
             object_type="manuscript",
             object_id=manuscript.id,
             data={
-                "doc": doc,
-                "wordCount": len(text.split()),
+                "content": text,
             },
             language=run.language,
+            rich_text_format="markdown",
             user_request=user_request,
             created_by=run.user_id,
         )
@@ -177,6 +147,7 @@ async def apply_raw_output(
             object_id=target_id,
             data=next_data,
             language=run.language,
+            rich_text_format="markdown" if category in {"guidelines", "outline", "story_entity"} else "tiptap",
             user_request=user_request,
             created_by=run.user_id,
         )
@@ -188,7 +159,6 @@ async def apply_raw_output(
         if len(object_ids) != 1:
             raise RuntimeError("objectTranslation raw output requires exactly one objectId")
 
-        source_language = str(translation_payload.get("sourceLanguage") or "").strip()
         target_language = str(translation_payload.get("targetLanguage") or "").strip()
         if not target_language:
             raise RuntimeError("objectTranslation raw output requires targetLanguage")
@@ -223,17 +193,8 @@ async def apply_raw_output(
                     break
         next_data = dict(target_data)
         if object_type == "manuscript":
-            doc = await sidecar_client.markdown_to_doc(text)
-            original_doc = _resolve_original_manuscript_doc(
-                data_by_lang,
-                source_language=source_language,
-                target_language=target_language,
-            )
-            if isinstance(original_doc, dict):
-                restore_image_asset_ids(doc, original_doc)
             next_data = {
-                "doc": doc,
-                "wordCount": len(text.split()),
+                "content": text,
             }
         elif object_type == "basic_info":
             next_data["logline"] = text
@@ -249,6 +210,7 @@ async def apply_raw_output(
             object_id=object_id,
             data=next_data,
             language=target_language,
+            rich_text_format="markdown" if object_type in {"guidelines", "outline", "story_entity", "manuscript"} else "tiptap",
             user_request="raw:objectTranslation",
             created_by=run.user_id,
             create_new_version=False,

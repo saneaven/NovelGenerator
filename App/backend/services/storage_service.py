@@ -146,9 +146,10 @@ class StorageBackendBase(ABC):
         image_bytes: bytes,
         original_name: str,
         project_id: uuid.UUID,
+        asset_id: uuid.UUID,
     ) -> tuple[str, str, int, int, int]:
-        output_name = f"{Path(original_name).stem}.avif"
-        filename = self._generate_filename(output_name, project_id)
+        del original_name, project_id
+        filename = f"{asset_id}.avif"
         storage_key = self._normalize_storage_key(f"originals/{filename}")
 
         with Image.open(io.BytesIO(image_bytes)) as img:
@@ -180,11 +181,13 @@ class StorageBackendBase(ABC):
         file_content: bytes,
         original_filename: str,
         project_id: uuid.UUID,
+        asset_id: uuid.UUID,
     ) -> tuple[str, str, int, int, int]:
         return self._save_image_bytes(
             image_bytes=file_content,
             original_name=original_filename,
             project_id=project_id,
+            asset_id=asset_id,
         )
 
     def save_raw_file(
@@ -207,16 +210,18 @@ class StorageBackendBase(ABC):
         self,
         base64_data: str,
         project_id: uuid.UUID,
+        asset_id: uuid.UUID,
         format: str = "png",
     ) -> tuple[str, str, int, int, int]:
         del format
         image_bytes = base64.b64decode(base64_data)
-        return self.save_generated_image_from_url(image_bytes=image_bytes, project_id=project_id)
+        return self.save_generated_image_from_url(image_bytes=image_bytes, project_id=project_id, asset_id=asset_id)
 
     def save_generated_image_from_url(
         self,
         image_bytes: bytes,
         project_id: uuid.UUID,
+        asset_id: uuid.UUID,
         format: str = "png",
     ) -> tuple[str, str, int, int, int]:
         del format
@@ -224,6 +229,7 @@ class StorageBackendBase(ABC):
             image_bytes=image_bytes,
             original_name="generated.avif",
             project_id=project_id,
+            asset_id=asset_id,
         )
 
     @abstractmethod
@@ -473,8 +479,9 @@ class StorageService:
         file_content: bytes,
         original_filename: str,
         project_id: uuid.UUID,
+        asset_id: uuid.UUID,
     ) -> tuple[str, str, int, int, int]:
-        return self._backend.save_uploaded_file(file_content, original_filename, project_id)
+        return self._backend.save_uploaded_file(file_content, original_filename, project_id, asset_id)
 
     def save_raw_file(
         self,
@@ -497,17 +504,19 @@ class StorageService:
         self,
         base64_data: str,
         project_id: uuid.UUID,
+        asset_id: uuid.UUID,
         format: str = "png",
     ) -> tuple[str, str, int, int, int]:
-        return self._backend.save_generated_image(base64_data, project_id, format)
+        return self._backend.save_generated_image(base64_data, project_id, asset_id, format)
 
     def save_generated_image_from_url(
         self,
         image_bytes: bytes,
         project_id: uuid.UUID,
+        asset_id: uuid.UUID,
         format: str = "png",
     ) -> tuple[str, str, int, int, int]:
-        return self._backend.save_generated_image_from_url(image_bytes, project_id, format)
+        return self._backend.save_generated_image_from_url(image_bytes, project_id, asset_id, format)
 
     def open_asset_stream(self, storage_key: str) -> AssetStream:
         return self._backend.open_asset_stream(storage_key)

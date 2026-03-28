@@ -23,9 +23,9 @@ from ..models.db_models import (
     BasicInfo,
     Guidelines,
     Manuscript,
-    ManuscriptImage,
     Outline,
     Project,
+    RichTextImageRef,
     StoryEntity,
     StoryEntityFolder,
     ObjectAssetLink,
@@ -34,8 +34,9 @@ from ..models.db_models import (
 from ..models.translation_models import ObjectVersion
 from ..schemas.project_transfer import ProjectExportOptions
 from ..services.image_model_catalog_service import sanitize_generation_settings
-from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.ownership import require_owned_project
+from ..services.rich_text import get_rich_text_fields, normalize_tree
+from ..services.rich_text_image_ref_service import rebuild_rich_text_refs_for_object
 from ..services.storage_service import storage_service
 from ..services.storage_usage_service import (
     StorageQuotaExceededError,
@@ -149,13 +150,13 @@ def _extract_reference_image_ids(asset: Asset) -> List[UUID]:
     return out
 
 
-def _rewrite_tip_tap_doc_images(
-    doc: Any,
+def _rewrite_content_tree_images(
+    tree: Any,
     export_asset_id_to_new_asset_id: Dict[str, str],
     new_file_url_by_new_asset_id: Dict[str, str],
 ) -> Any:
-    if not isinstance(doc, dict):
-        return doc
+    if not isinstance(tree, dict):
+        return tree
 
     def walk(node: Any) -> Any:
         if not isinstance(node, dict):
@@ -165,13 +166,12 @@ def _rewrite_tip_tap_doc_images(
         if node_type == "image":
             attrs = node.get("attrs")
             if isinstance(attrs, dict):
-                raw_asset_id = attrs.get("data-asset-id") or attrs.get("assetId")
+                raw_asset_id = attrs.get("assetId")
                 if raw_asset_id is not None:
                     new_asset_id = export_asset_id_to_new_asset_id.get(str(raw_asset_id))
                     if new_asset_id:
                         next_attrs = dict(attrs)
-                        next_attrs["data-asset-id"] = new_asset_id
-                        next_attrs.pop("assetId", None)
+                        next_attrs["assetId"] = new_asset_id
                         new_src = new_file_url_by_new_asset_id.get(new_asset_id)
                         if new_src:
                             next_attrs["src"] = new_src
@@ -183,7 +183,7 @@ def _rewrite_tip_tap_doc_images(
             return {**node, "content": [walk(child) for child in content]}
         return node
 
-    return walk(doc)
+    return normalize_tree(walk(tree))
 
 class ProjectTransferService:
     @staticmethod
@@ -209,19 +209,18 @@ class ProjectTransferService:
         def add_reason(asset_id: UUID, reason: str) -> None:
             reasons.setdefault(asset_id, set()).add(reason)
 
-        # 1) Used in manuscripts (TipTap image nodes indexed into manuscript_images)
-        used_in_manuscripts_rows = (
-            db.query(ManuscriptImage.asset_id)
-            .join(Asset, Asset.id == ManuscriptImage.asset_id)
-            .filter(Asset.project_id == project_id, ManuscriptImage.asset_id.isnot(None))
+        # 1) Used in rich text content (ContentTree image refs)
+        used_in_rich_text_rows = (
+            db.query(RichTextImageRef.asset_id)
+            .filter(RichTextImageRef.project_id == project_id, RichTextImageRef.asset_id.isnot(None))
             .distinct()
             .all()
         )
-        for (asset_id,) in used_in_manuscripts_rows:
+        for (asset_id,) in used_in_rich_text_rows:
             if not asset_id:
                 continue
             used_ids.add(asset_id)
-            add_reason(asset_id, "manuscript_image")
+            add_reason(asset_id, "rich_text_image")
 
         # 2) Object-linked images (main-only by default, configurable)
         story_links_query = (
@@ -743,6 +742,7 @@ class ProjectTransferService:
                     file_content=image_bytes,
                     original_filename=f"{export_id}{ext}",
                     project_id=new_project_id,
+                    asset_id=new_asset_id,
                 )
                 created_files.append(file_path)
 
@@ -863,18 +863,23 @@ class ProjectTransferService:
                 continue
 
             data = item.get("data") if isinstance(item.get("data"), dict) else {}
-            if obj_type == "manuscript" and isinstance(data, dict) and export_asset_to_new_asset:
+            if isinstance(data, dict) and export_asset_to_new_asset and get_rich_text_fields(obj_type):
                 export_to_new_str = {k: str(v) for k, v in export_asset_to_new_asset.items()}
+                rewritten_data: Dict[str, Any] = {}
                 for lang, lang_data in list(data.items()):
                     if not isinstance(lang_data, dict):
                         continue
-                    doc = lang_data.get("doc")
-                    rewritten = _rewrite_tip_tap_doc_images(
-                        doc=doc,
-                        export_asset_id_to_new_asset_id=export_to_new_str,
-                        new_file_url_by_new_asset_id=new_file_url_by_new_asset_id,
-                    )
-                    data[lang] = {**lang_data, "doc": rewritten}
+                    next_lang_data = dict(lang_data)
+                    for field_name in get_rich_text_fields(obj_type):
+                        field_value = next_lang_data.get(field_name)
+                        if isinstance(field_value, dict):
+                            next_lang_data[field_name] = _rewrite_content_tree_images(
+                                tree=field_value,
+                                export_asset_id_to_new_asset_id=export_to_new_str,
+                                new_file_url_by_new_asset_id=new_file_url_by_new_asset_id,
+                            )
+                    rewritten_data[lang] = next_lang_data
+                data = rewritten_data
 
             version_info = item.get("version") if isinstance(item.get("version"), dict) else {}
             v_created_at = _iso_to_dt(version_info.get("created_at")) or now
@@ -894,36 +899,33 @@ class ProjectTransferService:
 
         db.flush()
 
-        # Rebuild manuscript_images index from imported docs
-        manuscripts = (
-            db.query(Manuscript)
-            .join(Outline, Manuscript.chapter_id == Outline.id)
-            .filter(Outline.project_id == new_project_id, Outline.kind == "chapter")
-            .all()
-        )
-
-        for manuscript in manuscripts:
+        for item in object_items:
+            if not isinstance(item, dict):
+                continue
+            object_type = str(item.get("type") or "")
+            if not get_rich_text_fields(object_type):
+                continue
+            export_id = str(item.get("id") or "")
+            new_obj_id = object_id_map.get((object_type, export_id))
+            if not new_obj_id:
+                continue
             latest_version = (
                 db.query(ObjectVersion)
-                .filter(ObjectVersion.object_type == "manuscript", ObjectVersion.object_id == manuscript.id)
+                .filter(ObjectVersion.object_type == object_type, ObjectVersion.object_id == new_obj_id)
                 .order_by(ObjectVersion.version_number.desc())
                 .first()
             )
-            version_data = latest_version.data if latest_version else {}
-            if not isinstance(version_data, dict):
-                continue
+            version_data = latest_version.data if latest_version and isinstance(latest_version.data, dict) else {}
             for lang, lang_data in version_data.items():
                 if not isinstance(lang_data, dict):
                     continue
-                doc = lang_data.get("doc")
-                if doc is None:
-                    continue
-                rebuild_manuscript_images_for_language(
-                    db=db,
+                rebuild_rich_text_refs_for_object(
+                    db,
                     project_id=new_project_id,
-                    manuscript_id=manuscript.id,
+                    object_type=object_type,
+                    object_id=new_obj_id,
                     language=str(lang),
-                    doc=doc,
+                    version_data=lang_data,
                 )
 
         return new_project_id

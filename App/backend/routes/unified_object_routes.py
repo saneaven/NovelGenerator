@@ -11,7 +11,7 @@ All project objects use the same pattern:
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 from pydantic import BaseModel
 from uuid import UUID
 
@@ -31,6 +31,7 @@ from ..services.storage_usage_service import StorageQuotaExceededError
 
 
 router = APIRouter()
+RichTextFormat = Literal["tiptap", "markdown", "tree"]
 
 
 # ============================================================================
@@ -55,6 +56,7 @@ class UpdateObjectRequest(BaseModel):
     """Request to update an object"""
     data: Dict[str, Any]
     language: str
+    rich_text_format: Literal["tiptap", "markdown"] = "tiptap"
     kind: Optional[str] = None
     user_request: Optional[str] = "User Edit"
     create_new_version: bool = True
@@ -65,6 +67,7 @@ class AddTranslationRequest(BaseModel):
     """Request to add a new language translation"""
     language: str
     data: Dict[str, Any]
+    rich_text_format: Literal["tiptap", "markdown"] = "tiptap"
     user_request: Optional[str] = "Translation"
 
 
@@ -72,6 +75,7 @@ class CreateObjectRequest(BaseModel):
     """Request to create a new object"""
     data: Dict[str, Any]
     language: str
+    rich_text_format: Literal["tiptap", "markdown"] = "tiptap"
     kind: Optional[str] = None
     user_request: Optional[str] = "Initial Creation"
     metadata: Optional[Dict[str, Any]] = None
@@ -111,6 +115,7 @@ async def get_object(
     object_type: str,
     object_id: UUID,
     language: Optional[str] = Query(None, description="Optional: return only this language. Default: return all languages."),
+    rich_text_format: RichTextFormat = Query("tiptap"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -132,6 +137,7 @@ async def get_object(
         object_id=object_id,
         project_id=project_id,
         language=language,
+        rich_text_format=rich_text_format,
     )
     if result is None:
         raise HTTPException(status_code=404, detail=f"{object_type} not found")
@@ -165,6 +171,7 @@ async def update_object(
             object_id=object_id,
             data=request.data,
             language=request.language,
+            rich_text_format=request.rich_text_format,
             kind=request.kind,
             metadata=request.metadata,
             user_request=request.user_request or "User Edit",
@@ -183,8 +190,6 @@ async def update_object(
         message = str(exc)
         if "not found" in message.lower():
             raise HTTPException(status_code=404, detail=message)
-        if "requires data.doc" in message or "does not accept data.content" in message:
-            raise HTTPException(status_code=422, detail=message)
         raise HTTPException(status_code=400, detail=message)
 
 
@@ -216,6 +221,7 @@ async def add_translation(
             object_id=object_id,
             language=request.language,
             data=request.data,
+            rich_text_format=request.rich_text_format,
             user_request=request.user_request or "Translation",
             created_by=current_user.id,
         )
@@ -238,6 +244,7 @@ async def add_translation(
 async def get_versions(
     object_type: str,
     object_id: UUID,
+    rich_text_format: RichTextFormat = Query("tiptap"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -257,6 +264,7 @@ async def get_versions(
             project_id=project_id,
             object_type=object_type,
             object_id=object_id,
+            rich_text_format=rich_text_format,
         )
         return [VersionResponse(**v) for v in versions]
     except StorageQuotaExceededError:
@@ -273,6 +281,7 @@ async def restore_version(
     object_type: str,
     object_id: UUID,
     version_id: UUID,
+    rich_text_format: RichTextFormat = Query("tiptap"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -295,6 +304,7 @@ async def restore_version(
             object_id=object_id,
             version_id=version_id,
             created_by=current_user.id,
+            rich_text_format=rich_text_format,
         )
         db.commit()
         return result
@@ -321,6 +331,7 @@ async def list_objects(
     object_type: str,
     language: Optional[str] = Query(None, description="Optional: return only this language. Default: return all languages."),
     kinds: Optional[List[str]] = Query(None, description="Optional story entity kind filters."),
+    rich_text_format: RichTextFormat = Query("tiptap"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -346,6 +357,7 @@ async def list_objects(
         object_type=object_type,
         language=language,
         kinds=normalized_kinds,
+        rich_text_format=rich_text_format,
     )
     result_objects = [UnifiedObjectResponse(**item) for item in serialized]
 
@@ -386,6 +398,7 @@ async def create_object(
             object_type=object_type,
             data=request.data,
             language=request.language,
+            rich_text_format=request.rich_text_format,
             kind=request.kind,
             metadata=request.metadata,
             user_request=request.user_request or "Initial Creation",
@@ -402,8 +415,6 @@ async def create_object(
         message = str(exc)
         if "not found" in message.lower():
             raise HTTPException(status_code=404, detail=message)
-        if "requires data.doc" in message or "does not accept data.content" in message:
-            raise HTTPException(status_code=422, detail=message)
         raise HTTPException(status_code=400, detail=message)
 
 

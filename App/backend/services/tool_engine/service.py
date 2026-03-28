@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from ...models.db_models import RunMessageModel, RunModel, RunToolCallModel, SubAgentDefinitionModel, Thread, UserSettings
 from ..settings_service import settings_service
-from ..sidecar_client import sidecar_client
 from ..storage_usage_service import (
     apply_project_usage_delta,
     apply_project_usage_deltas,
@@ -175,7 +174,6 @@ class ToolEngineService:
             user_id=user_id,
             project_id=project_id,
             language=language,
-            sidecar=sidecar_client,
             preset_id=preset_id,
             input_payload=input_payload,
             vector_storage_enabled=vector_storage_enabled,
@@ -214,7 +212,6 @@ class ToolEngineService:
             user_id=user_id,
             project_id=project_id,
             language=language,
-            sidecar=sidecar_client,
             preset_id=preset_id,
             input_payload=input_payload,
             vector_storage_enabled=vector_storage_enabled,
@@ -246,7 +243,6 @@ class ToolEngineService:
             user_id=user_id,
             project_id=project_id,
             language=language,
-            sidecar=sidecar_client,
             preset_id=preset_id,
             input_payload=input_payload,
             vector_storage_enabled=vector_storage_enabled,

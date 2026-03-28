@@ -23,7 +23,7 @@ export function useManuscript(projectId: string | undefined, chapterId: string |
     if (!manuscript) return { doc: emptyDoc(), wordCount: 0 };
     const preferredLang = settings.mainLanguage;
     const dataForLang = manuscript.data?.[preferredLang] ?? manuscript.data?.[Object.keys(manuscript.data ?? {})[0] ?? ''];
-    const nextDoc = normalizeDoc((dataForLang as any)?.doc);
+    const nextDoc = normalizeDoc((dataForLang as any)?.content);
     const nextWordCount = typeof (dataForLang as any)?.wordCount === 'number'
       ? (dataForLang as any).wordCount
       : docWordCount(nextDoc);
@@ -46,10 +46,11 @@ export function useManuscript(projectId: string | undefined, chapterId: string |
     try {
       await store.updateObject('manuscript', manuscript.id, {
         data: {
-          doc: normalized,
+          content: normalized,
           wordCount: calculatedWordCount,
         },
         language: settings.mainLanguage,
+        rich_text_format: 'tiptap',
         create_new_version: options?.createNewVersion ?? false,
         user_request: options?.userRequest,
       });
@@ -69,7 +70,7 @@ export function useManuscript(projectId: string | undefined, chapterId: string |
         'manuscript',
         projectId,
         {
-          doc: emptyDoc(),
+          content: emptyDoc(),
           wordCount: 0,
         },
         settings.mainLanguage,

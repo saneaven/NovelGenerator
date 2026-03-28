@@ -1,6 +1,6 @@
 """Asset management routes"""
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any, cast
 from collections import defaultdict
 from uuid import UUID, uuid4
@@ -13,22 +13,22 @@ from ..models.db_models import (
     Project,
     Asset,
     ObjectAssetLink,
-    ManuscriptImage,
+    RichTextImageRef,
     Manuscript,
     Outline,
     BasicInfo,
     StoryEntity,
+    Guidelines,
 )
 from ..models.translation_models import ObjectVersion
 from ..schemas.assets import (
     AssetResponse, AssetListResponse, AssetUpdateRequest,
     ObjectAssetLinkResponse, ObjectAssetLinksResponse, SetMainAssetRequest,
-    ManuscriptImageCreate, ManuscriptImageResponse, ManuscriptImagesResponse, ManuscriptImageUpdateRequest,
     ImageProvidersResponse, ImageProviderInfo, ImageModelsResponse, ImageModelInfo,
-    SceneAssetResponse, SceneAssetsResponse, ManuscriptInfo,
+    SceneAssetResponse, SceneAssetsResponse, AssetUsage,
     ImageCleanupPolicy, ImageCleanupPreviewResponse, ImageCleanupPreviewItem,
     ImageCleanupExecuteRequest, ImageCleanupExecuteResponse, ImageCleanupExecuteSkipped, ImageCleanupExecuteError,
-    RebuildManuscriptImagesResponse,
+    RebuildRichTextImageRefsResponse,
     StyledPrompt
 )
 from ..services.asset_change_events import (
@@ -36,10 +36,11 @@ from ..services.asset_change_events import (
     queue_scene_assets_change,
     queue_object_assets_change,
 )
+from ..services.asset_markdown import build_markdown_image_title
 from ..services.storage_service import storage_service
 from ..services.deletion_service import delete_assets_with_files
-from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.image_model_catalog_service import image_model_catalog_service
+from ..services.rich_text_image_ref_service import rebuild_rich_text_refs_for_object
 from ..services.object_change_events import queue_object_change
 from ..services.storage_usage_service import (
     StorageQuotaExceededError,
@@ -47,13 +48,11 @@ from ..services.storage_usage_service import (
     apply_project_usage_deltas,
     build_asset_delta,
     build_asset_rows_delta,
-    build_manuscript_images_delta,
     snapshot_asset_row,
-    snapshot_manuscript_image_row,
     snapshot_rows,
 )
 from ..services.credential_service import CredentialServiceError, credential_service
-from ..services.ownership import require_owned_manuscript, require_owned_object
+from ..services.ownership import require_owned_object
 from ..image_providers.registry import ImageProviderRegistry
 from ..utils.story_entities import STORY_ENTITY_TYPE
 
@@ -165,7 +164,183 @@ def _jsonb_to_styled_prompt(data: Optional[Dict[str, Any]]) -> Optional[StyledPr
     )
 
 
-def _asset_to_response(asset: Asset) -> AssetResponse:
+def _latest_version_display_name(
+    db: Session,
+    *,
+    object_type: str,
+    object_id: UUID,
+    preferred_language: str | None = None,
+) -> str:
+    latest = (
+        db.query(ObjectVersion)
+        .filter(ObjectVersion.object_type == object_type, ObjectVersion.object_id == object_id)
+        .order_by(ObjectVersion.version_number.desc())
+        .first()
+    )
+    if latest is None or not isinstance(latest.data, dict):
+        return object_type.replace("_", " ").title()
+    payloads: list[dict[str, Any]] = []
+    if preferred_language and isinstance(latest.data.get(preferred_language), dict):
+        payloads.append(cast(Dict[str, Any], latest.data.get(preferred_language)))
+    payloads.extend(
+        cast(Dict[str, Any], value)
+        for key, value in latest.data.items()
+        if key != preferred_language and isinstance(value, dict)
+    )
+    for payload in payloads:
+        for key in ("name", "title"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return object_type.replace("_", " ").title()
+
+
+def _manuscript_display_name(db: Session, manuscript_id: UUID) -> str:
+    row = (
+        db.query(Manuscript, Outline)
+        .join(Outline, Manuscript.chapter_id == Outline.id)
+        .filter(Manuscript.id == manuscript_id, Outline.kind == "chapter")
+        .first()
+    )
+    if not row:
+        return "Manuscript"
+    manuscript, chapter = row
+    title = _latest_version_display_name(db, object_type="outline", object_id=chapter.id)
+    if title and title != "Outline":
+        return title
+    chapter_position = int(chapter.position or 0) + 1
+    return f"Chapter {chapter_position}"
+
+
+def _display_name_for_usage(
+    db: Session,
+    *,
+    object_type: str,
+    object_id: UUID,
+    language: str | None = None,
+) -> str:
+    if object_type == "manuscript":
+        return _manuscript_display_name(db, object_id)
+    if object_type == "guidelines":
+        return "Guidelines"
+    return _latest_version_display_name(
+        db,
+        object_type=object_type,
+        object_id=object_id,
+        preferred_language=language,
+    )
+
+
+def _build_asset_usages_map(
+    db: Session,
+    *,
+    project_id: UUID,
+    asset_ids: list[UUID],
+) -> dict[UUID, list[AssetUsage]]:
+    usage_map: dict[UUID, list[AssetUsage]] = {asset_id: [] for asset_id in asset_ids}
+    if not asset_ids:
+        return usage_map
+
+    object_name_cache: dict[tuple[str, UUID, str | None], str] = {}
+
+    def object_name(object_type: str, object_id: UUID, language: str | None = None) -> str:
+        key = (object_type, object_id, language)
+        cached = object_name_cache.get(key)
+        if cached is not None:
+            return cached
+        resolved = _display_name_for_usage(
+            db,
+            object_type=object_type,
+            object_id=object_id,
+            language=language,
+        )
+        object_name_cache[key] = resolved
+        return resolved
+
+    rich_rows = (
+        db.query(RichTextImageRef)
+        .filter(
+            RichTextImageRef.project_id == project_id,
+            RichTextImageRef.asset_id.in_(asset_ids),
+        )
+        .order_by(
+            RichTextImageRef.object_type.asc(),
+            RichTextImageRef.object_id.asc(),
+            RichTextImageRef.language.asc(),
+            RichTextImageRef.field_name.asc(),
+            RichTextImageRef.position.asc(),
+        )
+        .all()
+    )
+    for row in rich_rows:
+        usage_map.setdefault(row.asset_id, []).append(
+            AssetUsage(
+                usage_type="rich_text",
+                object_type=row.object_type,
+                object_id=str(row.object_id),
+                object_name=object_name(row.object_type, row.object_id, str(row.language)),
+                field_name=str(row.field_name),
+                language=str(row.language),
+            )
+        )
+
+    link_rows = (
+        db.query(ObjectAssetLink)
+        .join(Asset, Asset.id == ObjectAssetLink.asset_id)
+        .filter(
+            Asset.project_id == project_id,
+            ObjectAssetLink.asset_id.in_(asset_ids),
+            ObjectAssetLink.is_main == True,
+        )
+        .order_by(ObjectAssetLink.object_type.asc(), ObjectAssetLink.object_id.asc())
+        .all()
+    )
+    for row in link_rows:
+        usage_map.setdefault(row.asset_id, []).append(
+            AssetUsage(
+                usage_type="object_main",
+                object_type=row.object_type,
+                object_id=str(row.object_id),
+                object_name=object_name(row.object_type, row.object_id),
+                field_name=None,
+                language=None,
+            )
+        )
+
+    assets_with_refs = (
+        db.query(Asset)
+        .filter(Asset.project_id == project_id, Asset.generation_reference_images.isnot(None))
+        .all()
+    )
+    target_ids = {str(asset_id) for asset_id in asset_ids}
+    for src_asset in assets_with_refs:
+        refs = cast(Optional[List[Dict[str, Any]]], src_asset.generation_reference_images)
+        if not isinstance(refs, list):
+            continue
+        for ref in refs:
+            if not isinstance(ref, dict):
+                continue
+            ref_asset_id = str(ref.get("asset_id") or "")
+            if ref_asset_id not in target_ids:
+                continue
+            target_uuid = UUID(ref_asset_id)
+            usage_map.setdefault(target_uuid, []).append(
+                AssetUsage(
+                    usage_type="generation_reference",
+                    object_type="asset",
+                    object_id=str(src_asset.id),
+                    object_name=str(src_asset.name),
+                    field_name=None,
+                    language=None,
+                )
+            )
+
+    for usages in usage_map.values():
+        usages.sort(key=lambda item: (item.usage_type, item.object_type, item.object_name, item.field_name or "", item.language or ""))
+    return usage_map
+
+
+def _asset_to_response(asset: Asset, *, usages: Optional[List[AssetUsage]] = None) -> AssetResponse:
     """Convert Asset model to response schema"""
     # Cast all SQLAlchemy Column types to their Python types for type checker
     return AssetResponse(
@@ -191,11 +366,13 @@ def _asset_to_response(asset: Asset) -> AssetResponse:
         created_at=cast(datetime, asset.created_at),
         updated_at=cast(datetime, asset.updated_at),
         file_url=storage_service.build_public_asset_path(cast(str, asset.file_path)),
+        markdown_title=build_markdown_image_title(asset),
+        usages=list(usages or []),
     )
 
 
-def _asset_to_scene_response(asset: Asset, used_in_manuscripts: List[ManuscriptInfo]) -> SceneAssetResponse:
-    """Convert Asset model to SceneAssetResponse with manuscript usage info"""
+def _asset_to_scene_response(asset: Asset, usages: List[AssetUsage]) -> SceneAssetResponse:
+    """Convert Asset model to SceneAssetResponse with generic usage info."""
     return SceneAssetResponse(
         id=str(asset.id),
         project_id=str(asset.project_id),
@@ -216,8 +393,9 @@ def _asset_to_scene_response(asset: Asset, used_in_manuscripts: List[ManuscriptI
         created_at=cast(datetime, asset.created_at),
         updated_at=cast(datetime, asset.updated_at),
         file_url=storage_service.build_public_asset_path(cast(str, asset.file_path)),
-        used_in_manuscripts=used_in_manuscripts,
-        usage_count=len(used_in_manuscripts)
+        markdown_title=build_markdown_image_title(asset),
+        usages=list(usages),
+        usage_count=len(usages),
     )
 
 
@@ -275,7 +453,7 @@ async def list_scene_assets(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """List scene assets with manuscript usage information. Optionally filter by manuscript ownership."""
+    """List scene assets with generic usage information. Optionally filter by manuscript ownership."""
     # Verify project ownership
     project = db.query(Project).filter(
         Project.id == project_id,
@@ -294,60 +472,15 @@ async def list_scene_assets(
         query = query.filter(Asset.manuscript_id == manuscript_id)
     assets = query.order_by(Asset.created_at.desc()).all()
 
-    # Precompute manuscript usage via manuscript_images (distinct per manuscript)
-    usage_by_asset: Dict[UUID, set[UUID]] = defaultdict(set)
-    asset_ids: List[UUID] = [a.id for a in assets]
-    if asset_ids:
-        pairs = (
-            db.query(ManuscriptImage.asset_id, ManuscriptImage.manuscript_id)
-            .filter(ManuscriptImage.asset_id.in_(asset_ids))
-            .distinct()
-            .all()
-        )
-        for asset_id_val, manuscript_id_val in pairs:
-            if asset_id_val and manuscript_id_val:
-                usage_by_asset[asset_id_val].add(manuscript_id_val)
+    usage_map = _build_asset_usages_map(
+        db,
+        project_id=project_id,
+        asset_ids=[asset.id for asset in assets],
+    )
 
-    manuscript_ids: set[UUID] = set()
-    for mids in usage_by_asset.values():
-        manuscript_ids.update(mids)
-
-    manuscript_meta: Dict[UUID, tuple[int, int]] = {}
-    manuscript_info_by_id: Dict[UUID, ManuscriptInfo] = {}
-    if manuscript_ids:
-        chapter_outline = aliased(Outline)
-        act_outline = aliased(Outline)
-        meta_rows = (
-            db.query(Manuscript.id, chapter_outline.position, act_outline.position)
-            .join(chapter_outline, Manuscript.chapter_id == chapter_outline.id)
-            .outerjoin(act_outline, chapter_outline.parent_id == act_outline.id)
-            .filter(chapter_outline.kind == "chapter")
-            .filter(Manuscript.id.in_(list(manuscript_ids)))
-            .all()
-        )
-        for m_id, chapter_order, act_order in meta_rows:
-            act_num = int(act_order) if act_order is not None else 0
-            chapter_num = int(chapter_order) if chapter_order is not None else 0
-            manuscript_meta[m_id] = (act_num, chapter_num)
-            manuscript_info_by_id[m_id] = ManuscriptInfo(
-                id=str(m_id),
-                name=f"Chapter {chapter_num + 1}",
-                act_name=f"Act {act_num + 1}" if act_order is not None else None,
-            )
-
-    # Build response with manuscript usage
     responses = []
     for asset in assets:
-        used_ids = usage_by_asset.get(asset.id, set())
-        used_in_manuscripts = [
-            manuscript_info_by_id[m_id]
-            for m_id in sorted(
-                used_ids,
-                key=lambda mid: manuscript_meta.get(mid, (10_000, 10_000)),
-            )
-            if m_id in manuscript_info_by_id
-        ]
-        responses.append(_asset_to_scene_response(asset, used_in_manuscripts))
+        responses.append(_asset_to_scene_response(asset, usage_map.get(asset.id, [])))
 
     return SceneAssetsResponse(assets=responses, total=len(responses))
 
@@ -376,9 +509,14 @@ async def list_assets(
         .order_by(Asset.created_at.desc())
         .all()
     )
+    usage_map = _build_asset_usages_map(
+        db,
+        project_id=project_id,
+        asset_ids=[asset.id for asset in assets],
+    )
 
     return AssetListResponse(
-        assets=[_asset_to_response(a) for a in assets],
+        assets=[_asset_to_response(a, usages=usage_map.get(a.id, [])) for a in assets],
         total=len(assets)
     )
 
@@ -451,17 +589,20 @@ async def upload_asset(
     # Read file content
     content = await file.read()
 
+    asset_uuid = uuid4()
+
     # Save to storage
     file_path, mime_type, width, height, file_size = storage_service.save_uploaded_file(
         file_content=content,
         original_filename=file.filename or "upload.png",
-        project_id=project_id
+        project_id=project_id,
+        asset_id=asset_uuid,
     )
 
     try:
         # Create asset record
         asset = Asset(
-            id=uuid4(),
+            id=asset_uuid,
             project_id=project_id,
             manuscript_id=manuscript_id,
             name=name or file.filename or "Uploaded Image",
@@ -555,7 +696,8 @@ async def get_asset(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
-    return _asset_to_response(asset)
+    usage_map = _build_asset_usages_map(db, project_id=project_id, asset_ids=[asset.id])
+    return _asset_to_response(asset, usages=usage_map.get(asset.id, []))
 
 
 @router.patch("/{project_id}/{asset_id}", response_model=AssetResponse)
@@ -611,7 +753,8 @@ async def update_asset(
     db.commit()
     db.refresh(asset)
 
-    return _asset_to_response(asset)
+    usage_map = _build_asset_usages_map(db, project_id=project_id, asset_ids=[asset.id])
+    return _asset_to_response(asset, usages=usage_map.get(asset.id, []))
 
 
 @router.delete("/{project_id}/{asset_id}")
@@ -715,10 +858,10 @@ def _build_reference_reverse_index(assets: List[Asset]) -> Dict[UUID, set[UUID]]
 def _candidate_reasons_for_asset(
     asset: Asset,
     policy: ImageCleanupPolicy,
-    used_in_manuscripts: set[UUID],
+    used_in_rich_text: set[UUID],
     story_non_main_assets: set[UUID],
 ) -> List[str]:
-    if asset.id in used_in_manuscripts:
+    if asset.id in used_in_rich_text:
         return []
 
     reasons: List[str] = []
@@ -727,10 +870,10 @@ def _candidate_reasons_for_asset(
         reasons.append("object_non_main")
 
     if (
-        policy.delete_unused_manuscript_images
+        policy.delete_unused_rich_text_images
         and asset.asset_type == "scene"
     ):
-        reasons.append("unused_in_manuscripts")
+        reasons.append("unused_in_rich_text")
 
     # De-dupe while keeping order
     out: List[str] = []
@@ -769,17 +912,16 @@ async def preview_image_cleanup(
         .all()
     )
 
-    used_in_manuscripts_rows = (
-        db.query(ManuscriptImage.asset_id)
-        .join(Asset, Asset.id == ManuscriptImage.asset_id)
+    used_in_rich_text_rows = (
+        db.query(RichTextImageRef.asset_id)
         .filter(
-            Asset.project_id == project_id,
-            ManuscriptImage.asset_id.isnot(None),
+            RichTextImageRef.project_id == project_id,
+            RichTextImageRef.asset_id.isnot(None),
         )
         .distinct()
         .all()
     )
-    used_in_manuscripts: set[UUID] = {row[0] for row in used_in_manuscripts_rows if row[0]}
+    used_in_rich_text: set[UUID] = {row[0] for row in used_in_rich_text_rows if row[0]}
 
     story_non_main_rows = (
         db.query(ObjectAssetLink.asset_id)
@@ -800,7 +942,7 @@ async def preview_image_cleanup(
         reasons = _candidate_reasons_for_asset(
             asset=asset,
             policy=policy,
-            used_in_manuscripts=used_in_manuscripts,
+            used_in_rich_text=used_in_rich_text,
             story_non_main_assets=story_non_main_assets,
         )
         if not reasons:
@@ -882,14 +1024,13 @@ async def execute_image_cleanup(
             skipped.append(ImageCleanupExecuteSkipped(asset_id=str(a_id), reason="Asset not found"))
 
     # Usage sets (project-wide)
-    used_in_manuscripts_rows = (
-        db.query(ManuscriptImage.asset_id)
-        .join(Asset, Asset.id == ManuscriptImage.asset_id)
-        .filter(Asset.project_id == project_id, ManuscriptImage.asset_id.isnot(None))
+    used_in_rich_text_rows = (
+        db.query(RichTextImageRef.asset_id)
+        .filter(RichTextImageRef.project_id == project_id, RichTextImageRef.asset_id.isnot(None))
         .distinct()
         .all()
     )
-    used_in_manuscripts: set[UUID] = {row[0] for row in used_in_manuscripts_rows if row[0]}
+    used_in_rich_text: set[UUID] = {row[0] for row in used_in_rich_text_rows if row[0]}
 
     story_non_main_rows = (
         db.query(ObjectAssetLink.asset_id)
@@ -914,7 +1055,7 @@ async def execute_image_cleanup(
         reasons = _candidate_reasons_for_asset(
             asset=asset,
             policy=policy,
-            used_in_manuscripts=used_in_manuscripts,
+            used_in_rich_text=used_in_rich_text,
             story_non_main_assets=story_non_main_assets,
         )
         if not reasons:
@@ -1067,13 +1208,13 @@ async def execute_image_cleanup(
     )
 
 
-@router.post("/{project_id}/cleanup/rebuild-manuscript-images", response_model=RebuildManuscriptImagesResponse)
-async def rebuild_manuscript_images_index(
+@router.post("/{project_id}/cleanup/rebuild-rich-text-image-refs", response_model=RebuildRichTextImageRefsResponse)
+async def rebuild_rich_text_image_refs_index(
     project_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Rebuild manuscript_images for all manuscripts/languages in a project from saved doc(JSON)."""
+    """Rebuild rich_text_image_refs for all rich-text objects/languages in a project."""
     project = db.query(Project).filter(
         Project.id == project_id,
         Project.user_id == current_user.id,
@@ -1081,88 +1222,98 @@ async def rebuild_manuscript_images_index(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    manuscripts = (
-        db.query(Manuscript)
-        .join(Outline, Manuscript.chapter_id == Outline.id)
-        .filter(Outline.project_id == project_id, Outline.kind == "chapter")
-        .all()
-    )
-
-    manuscripts_processed = 0
+    objects_processed = 0
     languages_processed = 0
-    images_deleted = 0
-    images_inserted = 0
-    unresolved_refs = 0
+    refs_deleted = 0
+    refs_inserted = 0
 
-    manuscript_images_before = snapshot_rows(
-        db.query(ManuscriptImage)
-        .join(Manuscript, Manuscript.id == ManuscriptImage.manuscript_id)
-        .join(Outline, Outline.id == Manuscript.chapter_id)
-        .filter(Outline.project_id == project_id, Outline.kind == "chapter")
-        .all(),
-        snapshot_manuscript_image_row,
+    object_rows: list[tuple[str, UUID]] = []
+    object_rows.extend(
+        ("guidelines", row.id)
+        for row in db.query(Guidelines.id).filter(Guidelines.project_id == project_id).all()
+        if isinstance(row.id, UUID)
+    )
+    object_rows.extend(
+        (STORY_ENTITY_TYPE, row.id)
+        for row in db.query(StoryEntity.id).filter(StoryEntity.project_id == project_id).all()
+        if isinstance(row.id, UUID)
+    )
+    object_rows.extend(
+        ("outline", row.id)
+        for row in db.query(Outline.id).filter(Outline.project_id == project_id).all()
+        if isinstance(row.id, UUID)
+    )
+    object_rows.extend(
+        ("manuscript", row.id)
+        for row in (
+            db.query(Manuscript.id)
+            .join(Outline, Manuscript.chapter_id == Outline.id)
+            .filter(Outline.project_id == project_id, Outline.kind == "chapter")
+            .all()
+        )
+        if isinstance(row.id, UUID)
     )
 
-    for manuscript in manuscripts:
-        manuscripts_processed += 1
-        latest_version = db.query(ObjectVersion).filter(
-            ObjectVersion.object_type == "manuscript",
-            ObjectVersion.object_id == manuscript.id,
-        ).order_by(ObjectVersion.version_number.desc()).first()
-
-        version_data = latest_version.data if latest_version else {}
-        if not isinstance(version_data, dict):
-            continue
-
-        for lang, lang_data in version_data.items():
+    manuscript_ids: list[UUID] = []
+    for object_type, object_id in object_rows:
+        objects_processed += 1
+        latest_version = (
+            db.query(ObjectVersion)
+            .filter(ObjectVersion.object_type == object_type, ObjectVersion.object_id == object_id)
+            .order_by(ObjectVersion.version_number.desc())
+            .first()
+        )
+        version_data = latest_version.data if latest_version and isinstance(latest_version.data, dict) else {}
+        for language, lang_data in version_data.items():
             if not isinstance(lang_data, dict):
                 continue
-            doc = lang_data.get("doc")
-            if not isinstance(doc, dict):
-                continue
-
-            stats = rebuild_manuscript_images_for_language(
-                db=db,
-                project_id=project_id,
-                manuscript_id=cast(UUID, manuscript.id),
-                language=cast(str, lang),
-                doc=doc,
-            )
             languages_processed += 1
-            images_deleted += int(stats.get("deleted", 0))
-            images_inserted += int(stats.get("inserted", 0))
-            unresolved_refs += int(stats.get("unresolved", 0))
+            refs_deleted += (
+                db.query(RichTextImageRef)
+                .filter(
+                    RichTextImageRef.object_type == object_type,
+                    RichTextImageRef.object_id == object_id,
+                    RichTextImageRef.language == str(language),
+                )
+                .count()
+            )
+            rebuild_rich_text_refs_for_object(
+                db,
+                project_id=project_id,
+                object_type=object_type,
+                object_id=object_id,
+                language=str(language),
+                version_data=lang_data,
+            )
+            refs_inserted += (
+                db.query(RichTextImageRef)
+                .filter(
+                    RichTextImageRef.object_type == object_type,
+                    RichTextImageRef.object_id == object_id,
+                    RichTextImageRef.language == str(language),
+                )
+                .count()
+            )
+            if object_type == "manuscript":
+                manuscript_ids.append(object_id)
 
-    manuscript_images_after = snapshot_rows(
-        db.query(ManuscriptImage)
-        .join(Manuscript, Manuscript.id == ManuscriptImage.manuscript_id)
-        .join(Outline, Outline.id == Manuscript.chapter_id)
-        .filter(Outline.project_id == project_id, Outline.kind == "chapter")
-        .all(),
-        snapshot_manuscript_image_row,
-    )
-    apply_project_usage_delta(
-        db,
-        user_id=current_user.id,
-        project_id=project_id,
-        delta=build_manuscript_images_delta(manuscript_images_before, manuscript_images_after),
-        enforce_quota=False,
-    )
-    if manuscripts:
+    if object_rows:
+        queue_project_assets_change(db, user_id=current_user.id, project_id=project_id, action="updated")
+    if manuscript_ids:
         _queue_scene_asset_updates(
             db,
+            user_id=current_user.id,
             project_id=project_id,
-            manuscript_ids=[cast(UUID, manuscript.id) for manuscript in manuscripts],
+            manuscript_ids=manuscript_ids,
             action="updated",
         )
     db.commit()
 
-    return RebuildManuscriptImagesResponse(
-        manuscripts_processed=manuscripts_processed,
+    return RebuildRichTextImageRefsResponse(
+        objects_processed=objects_processed,
         languages_processed=languages_processed,
-        images_deleted=images_deleted,
-        images_inserted=images_inserted,
-        unresolved_refs=unresolved_refs,
+        refs_deleted=refs_deleted,
+        refs_inserted=refs_inserted,
     )
 
 
@@ -1295,119 +1446,3 @@ async def set_main_asset(
         asset=_asset_to_response(asset)
     )
 
-
-# ============================================================================
-# MANUSCRIPT IMAGES
-# ============================================================================
-
-@router.get("/{project_id}/manuscript/{manuscript_id}/images", response_model=ManuscriptImagesResponse)
-async def get_manuscript_images(
-    project_id: UUID,
-    manuscript_id: UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get all images in a manuscript"""
-    require_owned_manuscript(
-        db,
-        user_id=current_user.id,
-        manuscript_id=manuscript_id,
-        project_id=project_id,
-    )
-
-    images = db.query(ManuscriptImage).filter(
-        ManuscriptImage.manuscript_id == manuscript_id
-    ).order_by(ManuscriptImage.position).all()
-
-    asset_ids = [img.asset_id for img in images if img.asset_id is not None]
-    assets_by_id: dict[UUID, Asset] = {}
-    if asset_ids:
-        assets = (
-            db.query(Asset)
-            .filter(Asset.project_id == project_id, Asset.id.in_(asset_ids))
-            .all()
-        )
-        assets_by_id = {asset.id: asset for asset in assets}
-
-    responses = []
-    for img in images:
-        asset = None
-        if img.asset_id:
-            asset_model = assets_by_id.get(img.asset_id)
-            if asset_model:
-                asset = _asset_to_response(asset_model)
-
-        responses.append(ManuscriptImageResponse(
-            id=str(img.id),
-            manuscript_id=str(img.manuscript_id),
-            language=cast(Optional[str], img.language),
-            position=img.position,
-            source_type=img.source_type,
-            asset_id=str(img.asset_id) if img.asset_id else None,
-            story_entity_kind=img.story_entity_kind,
-            object_id=str(img.object_id) if img.object_id else None,
-            generation_prompt=img.generation_prompt,
-            display_width=img.display_width,
-            caption=img.caption,
-            created_at=img.created_at,
-            updated_at=img.updated_at,
-            asset=asset
-        ))
-
-    return ManuscriptImagesResponse(images=responses)
-
-
-@router.post("/{project_id}/manuscript/{manuscript_id}/images", response_model=ManuscriptImageResponse)
-async def add_manuscript_image(
-    project_id: UUID,
-    manuscript_id: UUID,
-    request: ManuscriptImageCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Add an image to a manuscript (deprecated).
-
-    The manuscript_images table is a derived index rebuilt from TipTap doc JSON
-    on manuscript save. Manually editing it creates drift and stale references.
-    """
-    raise HTTPException(
-        status_code=410,
-        detail="manuscript_images is a derived index. Edit the manuscript doc and save to rebuild.",
-    )
-
-
-@router.patch("/{project_id}/manuscript/{manuscript_id}/images/{image_id}", response_model=ManuscriptImageResponse)
-async def update_manuscript_image(
-    project_id: UUID,
-    manuscript_id: UUID,
-    image_id: UUID,
-    request: ManuscriptImageUpdateRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Update a manuscript image (deprecated).
-
-    manuscript_images is rebuilt from manuscript doc JSON; manual edits are disallowed.
-    """
-    raise HTTPException(
-        status_code=410,
-        detail="manuscript_images is a derived index. Edit the manuscript doc and save to rebuild.",
-    )
-
-
-@router.delete("/{project_id}/manuscript/{manuscript_id}/images/{image_id}")
-async def delete_manuscript_image(
-    project_id: UUID,
-    manuscript_id: UUID,
-    image_id: UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Delete a manuscript image (deprecated).
-
-    manuscript_images is rebuilt from manuscript doc JSON; manual edits are disallowed.
-    """
-    raise HTTPException(
-        status_code=410,
-        detail="manuscript_images is a derived index. Edit the manuscript doc and save to rebuild.",
-    )

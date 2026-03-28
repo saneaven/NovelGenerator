@@ -26,14 +26,22 @@ import type {
   StoryEntityObject,
   OutlineObject,
   StoryEntityStructureObjectType,
+  RichTextFormat,
 } from '../types/unifiedObject';
 import { normalizeBasicInfoData } from '../utils/basicInfo';
 import { collectStoryEntitySubtreeIds } from '../utils/storyEntityTree';
 import { sortOutlineObjects } from '../utils/outlineOrdering';
+import type { TipTapDoc } from '../types/tiptap';
+import { normalizeDoc } from '../editor/manuscript/doc';
 
 const STORY_ENTITY_TREE_TYPES: ObjectType[] = ['story_entity_folder', 'story_entity'];
 const STORY_ENTITY_TREE_HYDRATION_KEY = '__story_entity_tree__';
 const OUTLINE_COLLECTION_PAGE_SIZE = 100;
+const defaultRichTextFormatForType = (type: ObjectType): RichTextFormat => (
+  type === 'guidelines' || type === 'story_entity' || type === 'outline' || type === 'manuscript'
+    ? 'tiptap'
+    : 'markdown'
+);
 
 type ProjectHydrationKey = ObjectType | typeof STORY_ENTITY_TREE_HYDRATION_KEY;
 type ProjectHydrationState = Partial<Record<ProjectHydrationKey, boolean>>;
@@ -344,7 +352,12 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
     try {
       // Fetch object (optionally for a specific language)
-      const object = await unifiedObjectService.getObject(type, id, language);
+      const object = await unifiedObjectService.getObject(
+        type,
+        id,
+        language,
+        defaultRichTextFormatForType(type),
+      );
 
       set((state) => ({
         objects: { ...state.objects, [id]: object },
@@ -370,7 +383,10 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     }));
 
     try {
-      const updatedObject = await unifiedObjectService.updateObject(type, id, request);
+      const updatedObject = await unifiedObjectService.updateObject(type, id, {
+        ...request,
+        rich_text_format: request.rich_text_format ?? defaultRichTextFormatForType(type),
+      });
       const outlineProjectId = type === 'outline' ? updatedObject.metadata?.project_id : undefined;
       const shouldReloadOutlineCollection = (
         type === 'outline'
@@ -414,7 +430,10 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     }));
 
     try {
-      await unifiedObjectService.addTranslation(type, id, request);
+      await unifiedObjectService.addTranslation(type, id, {
+        ...request,
+        rich_text_format: request.rich_text_format ?? defaultRichTextFormatForType(type),
+      });
 
       // Refetch object to get updated data with all languages
       await get().fetchObject(type, id);
@@ -450,7 +469,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     }));
 
     try {
-      await unifiedObjectService.restoreVersion(type, id, versionId);
+      await unifiedObjectService.restoreVersion(type, id, versionId, defaultRichTextFormatForType(type));
 
       // Refetch object to get updated data with all languages
       await get().fetchObject(type, id);
@@ -516,7 +535,9 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       }
 
       await withCollectionRequestDeduped(projectId, type, async () => {
-        const response = await unifiedObjectService.listObjects(type, projectId, {});
+        const response = await unifiedObjectService.listObjects(type, projectId, {
+          rich_text_format: defaultRichTextFormatForType(type),
+        });
         set((currentState) => ({
           objects: reconcileProjectObjects(currentState.objects, projectId, response.objects, [type]),
           projectHydration: setProjectHydrationState(
@@ -582,6 +603,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       const newObject = await unifiedObjectService.createObject(type, projectId, {
         data,
         language,
+        rich_text_format: defaultRichTextFormatForType(type),
         kind,
         user_request: userRequest,
         metadata,
@@ -1011,30 +1033,30 @@ export interface SimplifiedProjectObjects {
     genres: string[];
     tags: string[];
   } | null;
-  storyEntities: Array<{ id: string; kind: StoryEntityKind; name: string; description: string; content: string }>;
-  characters: Array<{ id: string; name: string; description: string; content: string }>;
-  organizations: Array<{ id: string; name: string; description: string; content: string }>;
-  locations: Array<{ id: string; name: string; description: string; content: string }>;
-  lorebook: Array<{ id: string; name: string; description: string; content: string }>;
+  storyEntities: Array<{ id: string; kind: StoryEntityKind; name: string; description: string; content: TipTapDoc }>;
+  characters: Array<{ id: string; name: string; description: string; content: TipTapDoc }>;
+  organizations: Array<{ id: string; name: string; description: string; content: TipTapDoc }>;
+  locations: Array<{ id: string; name: string; description: string; content: TipTapDoc }>;
+  lorebook: Array<{ id: string; name: string; description: string; content: TipTapDoc }>;
   outline: {
     outlines: Array<{
       id: string;
       name: string;
       description: string;
-      content: string;
+      content: TipTapDoc;
       position: number;
       acts: Array<{
         id: string;
         name: string;
         description: string;
-        content: string;
+        content: TipTapDoc;
         position: number;
         parentId: string;
         chapters: Array<{
           id: string;
           name: string;
           description: string;
-          content: string;
+          content: TipTapDoc;
           position: number;
           parentId: string;
         }>;
@@ -1124,7 +1146,7 @@ export function useProjectObjects(projectId: string | undefined, language: strin
             id: outlineObj.id,
             name: outlineData.name || '',
             description: outlineData.description || '',
-            content: outlineData.content || '',
+            content: normalizeDoc(outlineData.content),
             position: outlineObj.metadata.position || 0,
             acts: sortOutlineObjects(
               acts.filter(act => act.metadata.parent_id === outlineObj.id)
@@ -1135,7 +1157,7 @@ export function useProjectObjects(projectId: string | undefined, language: strin
                   id: act.id,
                   name: actData.name || '',
                   description: actData.description || '',
-                  content: actData.content || '',
+                  content: normalizeDoc(actData.content),
                   position: act.metadata.position || 0,
                   parentId: act.metadata.parent_id || '',
                   chapters: sortOutlineObjects(
@@ -1147,7 +1169,7 @@ export function useProjectObjects(projectId: string | undefined, language: strin
                         id: chapter.id,
                         name: chapterData.name || '',
                         description: chapterData.description || '',
-                        content: chapterData.content || '',
+                        content: normalizeDoc(chapterData.content),
                         position: chapter.metadata.position || 0,
                         parentId: chapter.metadata.parent_id || '',
                       };
@@ -1167,7 +1189,7 @@ export function useProjectObjects(projectId: string | undefined, language: strin
           kind: entity.kind,
           name: data.name || '',
           description: data.description || '',
-          content: data.content || '',
+          content: normalizeDoc(data.content),
         };
       }),
       characters: storyEntities
@@ -1178,7 +1200,7 @@ export function useProjectObjects(projectId: string | undefined, language: strin
             id: entity.id,
             name: data.name || '',
             description: data.description || '',
-            content: data.content || '',
+            content: normalizeDoc(data.content),
           };
         }),
       organizations: storyEntities
@@ -1189,7 +1211,7 @@ export function useProjectObjects(projectId: string | undefined, language: strin
             id: entity.id,
             name: data.name || '',
             description: data.description || '',
-            content: data.content || '',
+            content: normalizeDoc(data.content),
           };
         }),
       locations: storyEntities
@@ -1200,7 +1222,7 @@ export function useProjectObjects(projectId: string | undefined, language: strin
             id: entity.id,
             name: data.name || '',
             description: data.description || '',
-            content: data.content || '',
+            content: normalizeDoc(data.content),
           };
         }),
       lorebook: storyEntities
@@ -1211,7 +1233,7 @@ export function useProjectObjects(projectId: string | undefined, language: strin
             id: entity.id,
             name: data.name || '',
             description: data.description || '',
-            content: data.content || '',
+            content: normalizeDoc(data.content),
           };
         }),
       outline,

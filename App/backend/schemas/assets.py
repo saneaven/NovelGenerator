@@ -1,5 +1,5 @@
 """Pydantic schemas for asset management"""
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 
@@ -134,6 +134,15 @@ class ImageModelsResponse(BaseModel):
 # ASSETS
 # ============================================================================
 
+
+class AssetUsage(BaseModel):
+    usage_type: Literal["rich_text", "object_main", "generation_reference"]
+    object_type: str
+    object_id: str
+    object_name: str
+    field_name: Optional[str] = None
+    language: Optional[str] = None
+
 class AssetBase(BaseModel):
     """Base asset schema"""
     name: str
@@ -171,6 +180,8 @@ class AssetResponse(BaseModel):
     updated_at: datetime
     # URL for frontend access
     file_url: str
+    markdown_title: Optional[str] = None
+    usages: List["AssetUsage"] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
@@ -219,58 +230,7 @@ class SetMainAssetRequest(BaseModel):
 
 
 # ============================================================================
-# MANUSCRIPT IMAGES
-# ============================================================================
-
-class ManuscriptImageCreate(BaseModel):
-    """Request to add an image to manuscript"""
-    language: Optional[str] = None
-    position: int
-    source_type: str  # 'asset' or 'object'
-    asset_id: Optional[str] = None
-    story_entity_kind: Optional[str] = None
-    object_id: Optional[str] = None
-    generation_prompt: Optional[str] = None
-    display_width: int = 400
-    caption: Optional[str] = None
-
-
-class ManuscriptImageResponse(BaseModel):
-    """Response for manuscript image"""
-    id: str
-    manuscript_id: str
-    language: Optional[str] = None
-    position: int
-    source_type: str
-    asset_id: Optional[str] = None
-    story_entity_kind: Optional[str] = None
-    object_id: Optional[str] = None
-    generation_prompt: Optional[str] = None
-    display_width: int
-    caption: Optional[str] = None
-    created_at: datetime
-    updated_at: datetime
-    # Resolved asset info
-    asset: Optional[AssetResponse] = None
-
-    class Config:
-        from_attributes = True
-
-
-class ManuscriptImagesResponse(BaseModel):
-    """Response for listing manuscript images"""
-    images: List[ManuscriptImageResponse]
-
-
-class ManuscriptImageUpdateRequest(BaseModel):
-    """Request to update manuscript image"""
-    position: Optional[int] = None
-    display_width: Optional[int] = None
-    caption: Optional[str] = None
-
-
-# ============================================================================
-# SCENE ASSETS (Usage is derived from manuscript_images)
+# SCENE ASSETS (Usage is derived from rich_text_image_refs)
 # ============================================================================
 
 class ManuscriptInfo(BaseModel):
@@ -302,8 +262,8 @@ class SceneAssetResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     file_url: str
-    # Manuscript usage info
-    used_in_manuscripts: List[ManuscriptInfo] = []
+    markdown_title: Optional[str] = None
+    usages: List["AssetUsage"] = Field(default_factory=list)
     usage_count: int = 0
 
     class Config:
@@ -323,7 +283,7 @@ class SceneAssetsResponse(BaseModel):
 class ImageCleanupPolicy(BaseModel):
     """Policy for selecting candidate assets for cleanup"""
     delete_non_main_object_images: bool = False
-    delete_unused_manuscript_images: bool = True
+    delete_unused_rich_text_images: bool = True
 
     keep_recent_days: int = 7  # 0 disables
 
@@ -371,9 +331,8 @@ class ImageCleanupExecuteResponse(BaseModel):
     scrubbed_reference_entries: int = 0
 
 
-class RebuildManuscriptImagesResponse(BaseModel):
-    manuscripts_processed: int
+class RebuildRichTextImageRefsResponse(BaseModel):
+    objects_processed: int
     languages_processed: int
-    images_deleted: int
-    images_inserted: int
-    unresolved_refs: int
+    refs_deleted: int
+    refs_inserted: int
