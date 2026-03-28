@@ -9,6 +9,7 @@ export interface ReadOnlyObjectDisplayProps {
   changedFields?: string[];
   imageUrl?: string | null;
   objectType?: string;
+  contentMarkdown?: string;
 }
 
 export const ReadOnlyObjectDisplay: React.FC<ReadOnlyObjectDisplayProps> = ({
@@ -18,6 +19,7 @@ export const ReadOnlyObjectDisplay: React.FC<ReadOnlyObjectDisplayProps> = ({
   changedFields,
   imageUrl,
   objectType = 'story_entity',
+  contentMarkdown,
 }) => {
   const mapped = useMemo(() => mapObjectData(objectType, values), [objectType, values]);
 
@@ -42,7 +44,7 @@ export const ReadOnlyObjectDisplay: React.FC<ReadOnlyObjectDisplayProps> = ({
     <ObjectCard
       name={title}
       description={showDescription ? mapped.description : undefined}
-      content={showContent ? mapped.content : undefined}
+      contentMarkdown={showContent ? (contentMarkdown ?? mapped.contentMarkdown) : undefined}
       imageUrl={imageUrl}
       expanded
       spanType={hasImage ? 'vertical' : 'text-only'}

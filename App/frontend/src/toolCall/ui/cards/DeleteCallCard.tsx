@@ -21,6 +21,7 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
 }) => {
   const language = useSettingsStore((state) => state.getSettings().mainLanguage);
   const objects = useUnifiedObjectStore((state) => state.objects);
+  const getRichTextMarkdown = useUnifiedObjectStore((state) => state.getRichTextMarkdown);
 
   const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);
   const getMainAsset = useAssetStore((state) => state.getMainAsset);
@@ -49,20 +50,30 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
   const renderBody = () => {
     if (operation.objectType === 'outline') {
       const desc = typeof snapshot.data.description === 'string' && snapshot.data.description.trim() ? snapshot.data.description : undefined;
-      const body = typeof snapshot.data.content === 'string' && snapshot.data.content.trim() ? snapshot.data.content : undefined;
+      const body =
+        (typeof snapshot.data.content === 'string' && snapshot.data.content.trim() ? snapshot.data.content : undefined)
+        ?? (snapshot.id ? getRichTextMarkdown(snapshot.id, language, 'content') : undefined);
       return (
         <OutlineItemCard
           variant={toOutlineItemVariant(operation.objectType, operation.outlineKind ?? snapshot.object?.kind)}
           name={title || 'Outline'}
           description={desc}
-          content={body}
+          contentMarkdown={body}
           readOnly
         />
       );
     }
 
     if (operation.objectType === 'manuscript') {
-      return <ReadOnlyManuscriptDisplay title={title || 'Manuscript'} content={typeof snapshot.data.content === 'string' ? snapshot.data.content : undefined} doc={snapshot.data.content} />;
+      return (
+        <ReadOnlyManuscriptDisplay
+          title={title || 'Manuscript'}
+          contentMarkdown={
+            (typeof snapshot.data.content === 'string' ? snapshot.data.content : undefined)
+            ?? (snapshot.id ? getRichTextMarkdown(snapshot.id, language, 'content') : undefined)
+          }
+        />
+      );
     }
 
     return (
@@ -72,6 +83,11 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
         mode="delete"
         imageUrl={imageUrl}
         objectType={operation.objectType}
+        contentMarkdown={
+          operation.objectType === 'guidelines'
+            ? (snapshot.id ? getRichTextMarkdown(snapshot.id, language, 'authorNote') : undefined)
+            : (snapshot.id ? getRichTextMarkdown(snapshot.id, language, 'content') : undefined)
+        }
       />
     );
   };

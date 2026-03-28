@@ -1,26 +1,18 @@
 import React, { useMemo } from 'react';
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
-import { richContentToPlainText } from '../../../utils/richTextPreview';
 
 export interface ReadOnlyManuscriptDisplayProps {
   title?: string;
-  content?: string;
-  doc?: unknown;
+  contentMarkdown?: string;
   offset?: { from?: number; to?: number } | null;
-}
-
-function resolveContent(content?: string, doc?: unknown): string {
-  if (typeof content === 'string') return content;
-  return richContentToPlainText(doc);
 }
 
 export const ReadOnlyManuscriptDisplay: React.FC<ReadOnlyManuscriptDisplayProps> = ({
   title,
-  content,
-  doc,
+  contentMarkdown,
   offset,
 }) => {
-  const resolved = useMemo(() => resolveContent(content, doc), [content, doc]);
+  const resolved = useMemo(() => contentMarkdown ?? '', [contentMarkdown]);
 
   return (
     <div className="function-call-manuscript-readonly">

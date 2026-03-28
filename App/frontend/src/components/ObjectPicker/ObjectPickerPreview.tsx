@@ -4,6 +4,7 @@
 
 import React, { useCallback } from 'react';
 import { getAnyObjectTypeLabel } from '../../types/timeline';
+import { MarkdownRenderer } from '../MarkdownRenderer';
 import type { ObjectPickerPreviewProps } from './types';
 
 const ObjectPickerPreview: React.FC<ObjectPickerPreviewProps> = ({
@@ -44,7 +45,9 @@ const ObjectPickerPreview: React.FC<ObjectPickerPreviewProps> = ({
 
             {item.content && (
               <div className="object-picker-preview-description">
-                {item.content}
+                <MarkdownRenderer className="markdown-content object-picker-preview-description-markdown">
+                  {item.content}
+                </MarkdownRenderer>
               </div>
             )}
           </div>
@@ -86,7 +89,9 @@ const ObjectPickerPreview: React.FC<ObjectPickerPreviewProps> = ({
 
         {item.content && (
           <div className="object-picker-preview-description">
-            {item.content}
+            <MarkdownRenderer className="markdown-content object-picker-preview-description-markdown">
+              {item.content}
+            </MarkdownRenderer>
           </div>
         )}
       </div>

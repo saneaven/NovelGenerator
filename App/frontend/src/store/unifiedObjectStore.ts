@@ -26,7 +26,6 @@ import type {
   StoryEntityObject,
   OutlineObject,
   StoryEntityStructureObjectType,
-  RichTextFormat,
 } from '../types/unifiedObject';
 import { normalizeBasicInfoData } from '../utils/basicInfo';
 import { collectStoryEntitySubtreeIds } from '../utils/storyEntityTree';
@@ -37,11 +36,24 @@ import { normalizeDoc } from '../editor/manuscript/doc';
 const STORY_ENTITY_TREE_TYPES: ObjectType[] = ['story_entity_folder', 'story_entity'];
 const STORY_ENTITY_TREE_HYDRATION_KEY = '__story_entity_tree__';
 const OUTLINE_COLLECTION_PAGE_SIZE = 100;
-const defaultRichTextFormatForType = (type: ObjectType): RichTextFormat => (
+type RichFieldName = 'content' | 'authorNote';
+type MarkdownPreviewCache = Record<
+  string,
+  Record<string, Partial<Record<RichFieldName, string>>>
+>;
+
+const defaultRichTextFormatForType = (type: ObjectType): 'tiptap' | 'markdown' => (
   type === 'guidelines' || type === 'story_entity' || type === 'outline' || type === 'manuscript'
     ? 'tiptap'
     : 'markdown'
 );
+
+const RICH_PREVIEW_FIELDS: Partial<Record<ObjectType, readonly RichFieldName[]>> = {
+  guidelines: ['authorNote'],
+  story_entity: ['content'],
+  outline: ['content'],
+  manuscript: ['content'],
+};
 
 type ProjectHydrationKey = ObjectType | typeof STORY_ENTITY_TREE_HYDRATION_KEY;
 type ProjectHydrationState = Partial<Record<ProjectHydrationKey, boolean>>;
@@ -145,6 +157,95 @@ function reconcileProjectObjects(
   return nextObjects;
 }
 
+function isRichPreviewType(type: ObjectType): boolean {
+  return Boolean(RICH_PREVIEW_FIELDS[type]);
+}
+
+function mergeMarkdownPreviewFromObject(
+  currentPreviews: MarkdownPreviewCache,
+  object: UnifiedObject,
+): MarkdownPreviewCache {
+  const fields = RICH_PREVIEW_FIELDS[object.type];
+  if (!fields) return currentPreviews;
+
+  let nextPreviews = currentPreviews;
+  const existingObjectPreview = currentPreviews[object.id] ?? {};
+  let nextObjectPreview = existingObjectPreview;
+  let objectChanged = false;
+
+  for (const [language, value] of Object.entries(object.data ?? {})) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+
+    const existingLanguagePreview = existingObjectPreview[language] ?? {};
+    let nextLanguagePreview = existingLanguagePreview;
+    let languageChanged = false;
+
+    for (const field of fields) {
+      const previewValue = (value as Record<string, unknown>)[field];
+      if (typeof previewValue !== 'string') continue;
+      if (existingLanguagePreview[field] === previewValue) continue;
+      if (!languageChanged) {
+        nextLanguagePreview = { ...existingLanguagePreview };
+        languageChanged = true;
+      }
+      nextLanguagePreview[field] = previewValue;
+    }
+
+    if (languageChanged) {
+      if (!objectChanged) {
+        nextObjectPreview = { ...existingObjectPreview };
+        objectChanged = true;
+      }
+      nextObjectPreview[language] = nextLanguagePreview;
+    }
+  }
+
+  if (!objectChanged) return currentPreviews;
+  if (nextPreviews === currentPreviews) {
+    nextPreviews = { ...currentPreviews };
+  }
+  nextPreviews[object.id] = nextObjectPreview;
+  return nextPreviews;
+}
+
+function mergeMarkdownPreviewFromObjects(
+  currentPreviews: MarkdownPreviewCache,
+  objects: UnifiedObject[],
+): MarkdownPreviewCache {
+  let nextPreviews = currentPreviews;
+  for (const object of objects) {
+    nextPreviews = mergeMarkdownPreviewFromObject(nextPreviews, object);
+  }
+  return nextPreviews;
+}
+
+function getRichTextMarkdownFromCache(
+  previews: MarkdownPreviewCache,
+  objectId: string,
+  language: string,
+  fieldName: RichFieldName,
+): string | undefined {
+  const objectPreview = previews[objectId];
+  if (!objectPreview) return undefined;
+  const exact = objectPreview[language]?.[fieldName];
+  if (typeof exact === 'string') return exact;
+  for (const value of Object.values(objectPreview)) {
+    const fallback = value?.[fieldName];
+    if (typeof fallback === 'string') return fallback;
+  }
+  return undefined;
+}
+
+function removeMarkdownPreview(
+  currentPreviews: MarkdownPreviewCache,
+  objectId: string,
+): MarkdownPreviewCache {
+  if (!(objectId in currentPreviews)) return currentPreviews;
+  const nextPreviews = { ...currentPreviews };
+  delete nextPreviews[objectId];
+  return nextPreviews;
+}
+
 // ============================================================================
 // STORE INTERFACE
 // ============================================================================
@@ -153,6 +254,8 @@ interface UnifiedObjectStore {
   // Single object storage by ID - contains ALL languages per object
   objects: Record<string, UnifiedObject>;
   projectHydration: Record<string, ProjectHydrationState>;
+  markdownPreviews: MarkdownPreviewCache;
+  previewHydration: Record<string, ProjectHydrationState>;
 
   // Loading states
   loading: Record<string, boolean>;
@@ -206,6 +309,7 @@ interface UnifiedObjectStore {
   // Utilities
   getObject: (id: string) => UnifiedObject | null;
   getManuscriptByChapterId: (chapterId: string) => UnifiedObject | null;
+  getRichTextMarkdown: (objectId: string, language: string, fieldName: RichFieldName) => string | undefined;
   clearObject: (id: string) => void;
   clearAllObjects: () => void;
 
@@ -278,6 +382,26 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
     do {
       const response = await unifiedObjectService.listObjects('outline', projectId, {
+        rich_text_format: 'tiptap',
+        page,
+        page_size: OUTLINE_COLLECTION_PAGE_SIZE,
+      });
+      total = response.total;
+      outlineObjects.push(...response.objects);
+      page += 1;
+    } while (outlineObjects.length < total);
+
+    return outlineObjects;
+  };
+
+  const fetchAllOutlineMarkdownPages = async (projectId: string): Promise<UnifiedObject[]> => {
+    const outlineObjects: UnifiedObject[] = [];
+    let page = 1;
+    let total = 0;
+
+    do {
+      const response = await unifiedObjectService.listObjects('outline', projectId, {
+        rich_text_format: 'markdown',
         page,
         page_size: OUTLINE_COLLECTION_PAGE_SIZE,
       });
@@ -295,15 +419,25 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     const nextRevision = (outlineCollectionRevision.get(projectId) ?? 0) + 1;
     outlineCollectionRevision.set(projectId, nextRevision);
 
-    const outlineObjects = await fetchAllOutlinePages(projectId);
+    const [outlineObjects, markdownOutlineObjects] = await Promise.all([
+      fetchAllOutlinePages(projectId),
+      fetchAllOutlineMarkdownPages(projectId),
+    ]);
     if ((outlineCollectionRevision.get(projectId) ?? 0) !== nextRevision) {
       return getProjectObjectsByType(projectId, 'outline');
     }
 
     set((currentState) => ({
       objects: reconcileProjectObjects(currentState.objects, projectId, outlineObjects, ['outline']),
+      markdownPreviews: mergeMarkdownPreviewFromObjects(currentState.markdownPreviews, markdownOutlineObjects),
       projectHydration: setProjectHydrationState(
         currentState.projectHydration,
+        projectId,
+        ['outline'],
+        true,
+      ),
+      previewHydration: setProjectHydrationState(
+        currentState.previewHydration,
         projectId,
         ['outline'],
         true,
@@ -316,6 +450,8 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
   return ({
   objects: {},
   projectHydration: {},
+  markdownPreviews: {},
+  previewHydration: {},
   loading: {},
   errors: {},
   translating: {},
@@ -351,16 +487,24 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     }));
 
     try {
-      // Fetch object (optionally for a specific language)
-      const object = await unifiedObjectService.getObject(
-        type,
-        id,
-        language,
-        defaultRichTextFormatForType(type),
-      );
+      const richPreviewType = isRichPreviewType(type);
+      const [object, markdownObject] = await Promise.all([
+        unifiedObjectService.getObject(
+          type,
+          id,
+          language,
+          defaultRichTextFormatForType(type),
+        ),
+        richPreviewType
+          ? unifiedObjectService.getObject(type, id, language, 'markdown')
+          : Promise.resolve(null),
+      ]);
 
       set((state) => ({
         objects: { ...state.objects, [id]: object },
+        markdownPreviews: markdownObject
+          ? mergeMarkdownPreviewFromObject(state.markdownPreviews, markdownObject)
+          : state.markdownPreviews,
         loading: { ...state.loading, [id]: false },
       }));
     } catch (error: any) {
@@ -387,6 +531,9 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
         ...request,
         rich_text_format: request.rich_text_format ?? defaultRichTextFormatForType(type),
       });
+      const markdownObject = isRichPreviewType(type)
+        ? await unifiedObjectService.getObject(type, id, request.language, 'markdown')
+        : null;
       const outlineProjectId = type === 'outline' ? updatedObject.metadata?.project_id : undefined;
       const shouldReloadOutlineCollection = (
         type === 'outline'
@@ -396,6 +543,9 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
       set((state) => ({
         objects: { ...state.objects, [id]: updatedObject },
+        markdownPreviews: markdownObject
+          ? mergeMarkdownPreviewFromObject(state.markdownPreviews, markdownObject)
+          : state.markdownPreviews,
         loading: { ...state.loading, [id]: false },
         projectHydration: shouldReloadOutlineCollection
           ? setProjectHydrationState(
@@ -435,7 +585,6 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
         rich_text_format: request.rich_text_format ?? defaultRichTextFormatForType(type),
       });
 
-      // Refetch object to get updated data with all languages
       await get().fetchObject(type, id);
     } catch (error: any) {
       set((state) => ({
@@ -471,7 +620,6 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     try {
       await unifiedObjectService.restoreVersion(type, id, versionId, defaultRichTextFormatForType(type));
 
-      // Refetch object to get updated data with all languages
       await get().fetchObject(type, id);
     } catch (error: any) {
       set((state) => ({
@@ -530,22 +678,42 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       }
 
       const state = get();
-      if (isProjectHydrated(state.projectHydration, projectId, type)) {
+      const previewReady = !isRichPreviewType(type) || isProjectHydrated(state.previewHydration, projectId, type);
+      if (isProjectHydrated(state.projectHydration, projectId, type) && previewReady) {
         return getProjectObjectsByType(projectId, type, state.objects);
       }
 
       await withCollectionRequestDeduped(projectId, type, async () => {
-        const response = await unifiedObjectService.listObjects(type, projectId, {
-          rich_text_format: defaultRichTextFormatForType(type),
-        });
+        const richPreviewType = isRichPreviewType(type);
+        const [response, markdownResponse] = await Promise.all([
+          unifiedObjectService.listObjects(type, projectId, {
+            rich_text_format: defaultRichTextFormatForType(type),
+          }),
+          richPreviewType
+            ? unifiedObjectService.listObjects(type, projectId, {
+              rich_text_format: 'markdown',
+            })
+            : Promise.resolve(null),
+        ]);
         set((currentState) => ({
           objects: reconcileProjectObjects(currentState.objects, projectId, response.objects, [type]),
+          markdownPreviews: markdownResponse
+            ? mergeMarkdownPreviewFromObjects(currentState.markdownPreviews, markdownResponse.objects)
+            : currentState.markdownPreviews,
           projectHydration: setProjectHydrationState(
             currentState.projectHydration,
             projectId,
             [type],
             true,
           ),
+          previewHydration: richPreviewType
+            ? setProjectHydrationState(
+              currentState.previewHydration,
+              projectId,
+              [type],
+              true,
+            )
+            : currentState.previewHydration,
         }));
       });
 
@@ -560,18 +728,31 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     if (!projectId) return;
 
     const state = get();
-    if (!options?.force && isProjectHydrated(state.projectHydration, projectId, STORY_ENTITY_TREE_HYDRATION_KEY)) {
+    const treeReady = isProjectHydrated(state.projectHydration, projectId, STORY_ENTITY_TREE_HYDRATION_KEY);
+    const previewReady = isProjectHydrated(state.previewHydration, projectId, STORY_ENTITY_TREE_HYDRATION_KEY);
+    if (!options?.force && treeReady && previewReady) {
       return;
     }
 
     await withCollectionRequestDeduped(projectId, STORY_ENTITY_TREE_HYDRATION_KEY, async () => {
-      const response = await unifiedObjectService.getStoryEntityTree(projectId);
+      const [response, markdownResponse] = await Promise.all([
+        unifiedObjectService.getStoryEntityTree(projectId, { rich_text_format: 'tiptap' }),
+        unifiedObjectService.getStoryEntityTree(projectId, { rich_text_format: 'markdown' }),
+      ]);
       const treeObjects = [...response.folders, ...response.entities];
+      const markdownObjects = [...markdownResponse.folders, ...markdownResponse.entities];
 
       set((currentState) => ({
         objects: reconcileProjectObjects(currentState.objects, projectId, treeObjects, STORY_ENTITY_TREE_TYPES),
+        markdownPreviews: mergeMarkdownPreviewFromObjects(currentState.markdownPreviews, markdownObjects),
         projectHydration: setProjectHydrationState(
           currentState.projectHydration,
+          projectId,
+          [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+          true,
+        ),
+        previewHydration: setProjectHydrationState(
+          currentState.previewHydration,
           projectId,
           [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
           true,
@@ -608,9 +789,15 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
         user_request: userRequest,
         metadata,
       });
+      const markdownObject = isRichPreviewType(type)
+        ? await unifiedObjectService.getObject(type, newObject.id, language, 'markdown')
+        : null;
 
       set((state) => ({
         objects: { ...state.objects, [newObject.id]: newObject },
+        markdownPreviews: markdownObject
+          ? mergeMarkdownPreviewFromObject(state.markdownPreviews, markdownObject)
+          : state.markdownPreviews,
         loading: { ...state.loading, [newObject.id]: false },
         projectHydration: (
           isStoryEntityTreeType(type)
@@ -628,6 +815,23 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
                 false,
               )
               : state.projectHydration
+        ),
+        previewHydration: (
+          isStoryEntityTreeType(type)
+            ? setProjectHydrationState(
+              state.previewHydration,
+              projectId,
+              [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+              false,
+            )
+            : type === 'outline' || isRichPreviewType(type)
+              ? setProjectHydrationState(
+                state.previewHydration,
+                projectId,
+                [type],
+                false,
+              )
+              : state.previewHydration
         ),
       }));
 
@@ -667,10 +871,18 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
           ? setProjectHydrationState(
             state.projectHydration,
             updatedObject.metadata.project_id,
+              [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+              false,
+            )
+          : state.projectHydration,
+        previewHydration: updatedObject.metadata?.project_id
+          ? setProjectHydrationState(
+            state.previewHydration,
+            updatedObject.metadata.project_id,
             [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
             false,
           )
-          : state.projectHydration,
+          : state.previewHydration,
       }));
     } catch (error: any) {
       set((state) => ({
@@ -701,6 +913,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       // Remove object from cache
       set((state) => {
         const newObjects = { ...state.objects };
+        let newMarkdownPreviews = state.markdownPreviews;
         const newLoading = { ...state.loading };
         const newErrors = { ...state.errors };
         const removedIds = deletedSubtree
@@ -709,12 +922,14 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
         for (const removedId of removedIds) {
           delete newObjects[removedId];
+          newMarkdownPreviews = removeMarkdownPreview(newMarkdownPreviews, removedId);
           delete newLoading[removedId];
           delete newErrors[removedId];
         }
 
         return {
           objects: newObjects,
+          markdownPreviews: newMarkdownPreviews,
           loading: newLoading,
           errors: newErrors,
           projectHydration: (
@@ -735,6 +950,25 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
                   )
                   : state.projectHydration
               : state.projectHydration
+          ),
+          previewHydration: (
+            projectId
+              ? isStoryEntityTreeType(type)
+                ? setProjectHydrationState(
+                  state.previewHydration,
+                  projectId,
+                  [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+                  false,
+                )
+                : type === 'outline' || isRichPreviewType(type)
+                  ? setProjectHydrationState(
+                    state.previewHydration,
+                    projectId,
+                    [type],
+                    false,
+                  )
+                  : state.previewHydration
+              : state.previewHydration
           ),
         };
       });
@@ -764,6 +998,10 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     return get().objects[id] || null;
   },
 
+  getRichTextMarkdown: (objectId: string, language: string, fieldName: RichFieldName) => (
+    getRichTextMarkdownFromCache(get().markdownPreviews, objectId, language, fieldName)
+  ),
+
   /**
    * Find manuscript object by chapter_id
    * Returns the manuscript object or null if not found
@@ -780,6 +1018,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     set((state) => {
       const existingObject = state.objects[id];
       const newObjects = { ...state.objects };
+      const newMarkdownPreviews = removeMarkdownPreview(state.markdownPreviews, id);
       const newLoading = { ...state.loading };
       const newErrors = { ...state.errors };
 
@@ -789,6 +1028,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
       return {
         objects: newObjects,
+        markdownPreviews: newMarkdownPreviews,
         loading: newLoading,
         errors: newErrors,
         projectHydration: (
@@ -810,6 +1050,25 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
                 : state.projectHydration
             : state.projectHydration
         ),
+        previewHydration: (
+          existingObject?.metadata?.project_id
+            ? isStoryEntityTreeType(existingObject.type)
+              ? setProjectHydrationState(
+                state.previewHydration,
+                existingObject.metadata.project_id,
+                [STORY_ENTITY_TREE_HYDRATION_KEY, ...STORY_ENTITY_TREE_TYPES],
+                false,
+              )
+              : existingObject.type === 'outline' || isRichPreviewType(existingObject.type)
+                ? setProjectHydrationState(
+                  state.previewHydration,
+                  existingObject.metadata.project_id,
+                  [existingObject.type],
+                  false,
+                )
+                : state.previewHydration
+            : state.previewHydration
+        ),
       };
     });
   },
@@ -817,7 +1076,15 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
   clearAllObjects: () => {
     collectionRequestInflight.clear();
     outlineCollectionRevision.clear();
-    set({ objects: {}, projectHydration: {}, loading: {}, errors: {}, translating: {} });
+    set({
+      objects: {},
+      projectHydration: {},
+      markdownPreviews: {},
+      previewHydration: {},
+      loading: {},
+      errors: {},
+      translating: {},
+    });
   },
 
   // ========================================================================
@@ -901,12 +1168,15 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     if (!upserts.length && !deletes.length) return;
     set((state) => {
       const nextObjects = { ...state.objects };
+      let nextMarkdownPreviews = state.markdownPreviews;
       const nextLoading = { ...state.loading };
       const nextErrors = { ...state.errors };
       const nextTranslating = { ...state.translating };
       let nextProjectHydration = state.projectHydration;
+      let nextPreviewHydration = state.previewHydration;
       const touchedTreeProjects = new Set<string>();
       const touchedOutlineProjects = new Set<string>();
+      const touchedPreviewProjectsByType = new Map<string, Set<ProjectHydrationKey>>();
 
       for (const obj of upserts) {
         nextObjects[obj.id] = obj;
@@ -915,6 +1185,15 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
         }
         if (obj.type === 'outline' && obj.metadata?.project_id) {
           touchedOutlineProjects.add(obj.metadata.project_id);
+        }
+        if (isRichPreviewType(obj.type) && obj.metadata?.project_id) {
+          const keys = touchedPreviewProjectsByType.get(obj.metadata.project_id) ?? new Set<ProjectHydrationKey>();
+          keys.add(obj.type);
+          if (isStoryEntityTreeType(obj.type)) {
+            keys.add(STORY_ENTITY_TREE_HYDRATION_KEY);
+            keys.add('story_entity');
+          }
+          touchedPreviewProjectsByType.set(obj.metadata.project_id, keys);
         }
       }
       for (const id of deletes) {
@@ -933,7 +1212,21 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
         ) {
           touchedOutlineProjects.add(existingObject.metadata.project_id);
         }
+        if (
+          existingObject
+          && isRichPreviewType(existingObject.type)
+          && existingObject.metadata?.project_id
+        ) {
+          const keys = touchedPreviewProjectsByType.get(existingObject.metadata.project_id) ?? new Set<ProjectHydrationKey>();
+          keys.add(existingObject.type);
+          if (isStoryEntityTreeType(existingObject.type)) {
+            keys.add(STORY_ENTITY_TREE_HYDRATION_KEY);
+            keys.add('story_entity');
+          }
+          touchedPreviewProjectsByType.set(existingObject.metadata.project_id, keys);
+        }
         delete nextObjects[id];
+        nextMarkdownPreviews = removeMarkdownPreview(nextMarkdownPreviews, id);
         delete nextLoading[id];
         delete nextErrors[id];
         delete nextTranslating[id];
@@ -955,10 +1248,20 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
           false,
         );
       });
+      touchedPreviewProjectsByType.forEach((keys, projectId) => {
+        nextPreviewHydration = setProjectHydrationState(
+          nextPreviewHydration,
+          projectId,
+          [...keys],
+          false,
+        );
+      });
 
       return {
         objects: nextObjects,
+        markdownPreviews: nextMarkdownPreviews,
         projectHydration: nextProjectHydration,
+        previewHydration: nextPreviewHydration,
         loading: nextLoading,
         errors: nextErrors,
         translating: nextTranslating,

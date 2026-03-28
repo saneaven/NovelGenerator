@@ -27,6 +27,7 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
 }) => {
   const language = useSettingsStore((state) => state.getSettings().mainLanguage);
   const objects = useUnifiedObjectStore((state) => state.objects);
+  const getRichTextMarkdown = useUnifiedObjectStore((state) => state.getRichTextMarkdown);
 
   const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);
   const getMainAsset = useAssetStore((state) => state.getMainAsset);
@@ -52,13 +53,13 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
   const renderBody = () => {
     if (operation.objectType === 'outline') {
       const desc = typeof snapshot.data.description === 'string' && snapshot.data.description.trim() ? snapshot.data.description : undefined;
-      const body = typeof snapshot.data.content === 'string' && snapshot.data.content.trim() ? snapshot.data.content : undefined;
+      const body = snapshot.id ? getRichTextMarkdown(snapshot.id, language, 'content') : undefined;
       return (
         <OutlineItemCard
           variant={toOutlineItemVariant(operation.objectType, operation.outlineKind ?? snapshot.object?.kind)}
           name={snapshot.displayName || 'Outline'}
           description={desc}
-          content={body}
+          contentMarkdown={body}
           readOnly
         />
       );
@@ -70,8 +71,11 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
       return (
         <ReadOnlyManuscriptDisplay
           title={snapshot.displayName || 'Manuscript'}
-          content={typeof snapshot.data.content === 'string' ? snapshot.data.content : resultText}
-          doc={snapshot.data.content}
+          contentMarkdown={
+            (typeof snapshot.data.content === 'string' ? snapshot.data.content : undefined)
+            ?? (snapshot.id ? getRichTextMarkdown(snapshot.id, language, 'content') : undefined)
+            ?? resultText
+          }
           offset={offset}
         />
       );
@@ -96,6 +100,11 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
         mode="read"
         imageUrl={imageUrl}
         objectType={operation.objectType}
+        contentMarkdown={
+          operation.objectType === 'guidelines'
+            ? (snapshot.id ? getRichTextMarkdown(snapshot.id, language, 'authorNote') : undefined)
+            : (snapshot.id ? getRichTextMarkdown(snapshot.id, language, 'content') : undefined)
+        }
       />
     );
   };

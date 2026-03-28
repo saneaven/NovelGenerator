@@ -133,14 +133,18 @@
   border: 1px solid var(--color-border-subtle);
 }
 
-.guidelines-manager .author-note-text {
-  font-family: var(--font-family-mono);
+.guidelines-manager .author-note-markdown {
   font-size: var(--font-size-sm);
   line-height: 1.7;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  margin: 0;
   color: var(--color-text-primary);
+}
+
+.guidelines-manager .author-note-markdown > :first-child {
+  margin-top: 0;
+}
+
+.guidelines-manager .author-note-markdown > :last-child {
+  margin-bottom: 0;
 }
 
 .guidelines-manager .placeholder-text {

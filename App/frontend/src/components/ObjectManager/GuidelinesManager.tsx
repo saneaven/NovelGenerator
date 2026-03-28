@@ -18,6 +18,7 @@ import { DropdownMenu, DropdownItem } from '../ui/DropdownMenu';
 import { IconButton } from '../IconButton';
 import { TextButton } from '../TextButton';
 import { RichTextEditor } from '../RichTextEditor';
+import { MarkdownRenderer } from '../MarkdownRenderer';
 import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal, Save, Close } from '../icons';
 import { Loading } from '../common/Loading';
 import type { TipTapDoc } from '../../types/tiptap';
@@ -27,7 +28,6 @@ import {
   resolveRequestedLanguageState,
   resolveTranslationSourceLanguage,
 } from '../../utils/requestedLanguage';
-import { richContentToPlainText } from '../../utils/richTextPreview';
 
 interface GuidelinesManagerProps {
   globalDisplayLanguage: string;
@@ -41,6 +41,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
   const fetchObject = useUnifiedObjectStore((state) => state.fetchObject);
   const updateObject = useUnifiedObjectStore((state) => state.updateObject);
   const listObjects = useUnifiedObjectStore((state) => state.listObjects);
+  const getRichTextMarkdown = useUnifiedObjectStore((state) => state.getRichTextMarkdown);
   const settings = useSettings();
   // Get guidelines from unified store
   const [guidelinesId, setGuidelinesId] = useState<string | null>(null);
@@ -87,6 +88,14 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
   const currentData = useMemo(
     () => getDataForLanguage(languageState.viewLanguage),
     [getDataForLanguage, languageState.viewLanguage],
+  );
+  const currentAuthorNoteMarkdown = useMemo(
+    () => (
+      guidelinesId
+        ? getRichTextMarkdown(guidelinesId, languageState.viewLanguage, 'authorNote')
+        : undefined
+    ),
+    [getRichTextMarkdown, guidelinesId, languageState.viewLanguage],
   );
 
   const canTranslate = languageState.isTranslationView && !languageState.hasRequestedLanguage;
@@ -324,8 +333,10 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
                 />
               ) : (
                 <div className="author-note-display">
-                  {richContentToPlainText(currentData.authorNote) ? (
-                    <pre className="author-note-text">{richContentToPlainText(currentData.authorNote)}</pre>
+                  {currentAuthorNoteMarkdown?.trim() ? (
+                    <MarkdownRenderer className="markdown-content author-note-markdown">
+                      {currentAuthorNoteMarkdown}
+                    </MarkdownRenderer>
                   ) : (
                     <p className="placeholder-text">
                       No author note provided. Click Edit to add instructions or context for the AI.

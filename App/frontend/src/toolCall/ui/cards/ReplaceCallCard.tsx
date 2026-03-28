@@ -118,7 +118,7 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
           variant={toOutlineItemVariant(operation.objectType, operation.outlineKind)}
           name={newName || targetLabel || 'Outline'}
           description={desc}
-          content={body}
+          contentMarkdown={body}
           meta={meta}
           readOnly
         />
@@ -129,7 +129,7 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
       return (
         <ReadOnlyManuscriptDisplay
           title={targetLabel || 'Manuscript'}
-          content={typeof changedValues.content === 'string' ? changedValues.content : ''}
+          contentMarkdown={typeof changedValues.content === 'string' ? changedValues.content : ''}
         />
       );
     }

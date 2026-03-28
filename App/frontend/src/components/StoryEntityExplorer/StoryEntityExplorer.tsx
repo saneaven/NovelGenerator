@@ -177,6 +177,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   const updateObject = useUnifiedObjectStore((state) => state.updateObject);
   const patchObjectStructure = useUnifiedObjectStore((state) => state.patchObjectStructure);
   const deleteObject = useUnifiedObjectStore((state) => state.deleteObject);
+  const getRichTextMarkdown = useUnifiedObjectStore((state) => state.getRichTextMarkdown);
 
   const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);
   const objectAssetsByKey = useAssetStore((state) => state.objectAssetsByKey);
@@ -888,6 +889,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
                               entity={item.entity}
                               itemData={item.itemData}
                               description={item.description}
+                              contentMarkdown={getRichTextMarkdown(item.entity.id, item.languageState.viewLanguage, 'content')}
                               imageUrl={mainAsset ? getAssetUrl(mainAsset) : null}
                               spanType={spanType}
                               dragHandle={dragHandle}
@@ -1115,6 +1117,7 @@ const EntityCard: React.FC<{
   entity: StoryEntityObject;
   itemData: StoryEntityData;
   description: string;
+  contentMarkdown?: string;
   imageUrl: string | null;
   spanType: SpanType;
   dragHandle: React.ReactNode;
@@ -1128,6 +1131,7 @@ const EntityCard: React.FC<{
   entity,
   itemData,
   description,
+  contentMarkdown,
   imageUrl,
   spanType,
   dragHandle,
@@ -1142,7 +1146,7 @@ const EntityCard: React.FC<{
     <ObjectCard
       name={itemData.name}
       description={description}
-      content={itemData.content}
+      contentMarkdown={contentMarkdown}
       imageUrl={imageUrl}
       expanded={isExpanded}
       spanType={spanType}

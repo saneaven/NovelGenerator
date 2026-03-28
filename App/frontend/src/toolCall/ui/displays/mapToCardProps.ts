@@ -1,7 +1,7 @@
 export interface CardDisplayData {
   name: string;
   description?: string;
-  content?: unknown;
+  contentMarkdown?: string;
 }
 
 function str(value: unknown): string | undefined {
@@ -12,14 +12,14 @@ function mapObjectCardData(values: Record<string, unknown>): CardDisplayData {
   return {
     name: str(values.name) ?? '',
     description: str(values.description),
-    content: values.content,
+    contentMarkdown: str(values.content),
   };
 }
 
 function mapGuidelinesData(values: Record<string, unknown>): CardDisplayData {
   return {
     name: 'Guidelines',
-    content: values.authorNote,
+    contentMarkdown: str(values.authorNote),
   };
 }
 

@@ -20,7 +20,6 @@ import type {
 import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
 import { buildBasicInfoSummary, normalizeBasicInfoData } from '../../utils/basicInfo';
 import { formatDate } from '../../utils/timelineCalendar';
-import { richContentToPlainText } from '../../utils/richTextPreview';
 import {
   getStoryEntityFolderDescription,
   getStoryEntityFolderName,
@@ -35,6 +34,12 @@ type OutlineNumbering = {
   chapterNumberById: Map<string, number>;
   actNumberByChapterId: Map<string, number>;
 };
+
+type GetRichTextMarkdown = (
+  objectId: string,
+  language: string,
+  fieldName: 'content' | 'authorNote',
+) => string | undefined;
 
 function getObjectDataForLanguage(obj: UnifiedObject, language: string): Record<string, unknown> {
   if (obj.data[language]) {
@@ -165,13 +170,17 @@ function buildOutlineNumbering(outlineItems: UnifiedObject[]): OutlineNumbering 
   };
 }
 
-function objectToItem(obj: UnifiedObject, language: string): ObjectPickerItem {
+function objectToItem(
+  obj: UnifiedObject,
+  language: string,
+  getRichTextMarkdown: GetRichTextMarkdown,
+): ObjectPickerItem {
   const data = getObjectDataForLanguage(obj, language);
   const fallbackName = OBJECT_TYPE_CONFIG[obj.type]?.label || obj.id;
 
   let name = (data.name as string) || (data.title as string) || fallbackName;
   let description = (data.description as string) || (data.logline as string) || undefined;
-  let content = richContentToPlainText(data.content) || undefined;
+  let content = typeof data.content === 'string' ? data.content : undefined;
 
   if (obj.type === 'basic_info') {
     const basicInfo = normalizeBasicInfoData(data);
@@ -179,9 +188,14 @@ function objectToItem(obj: UnifiedObject, language: string): ObjectPickerItem {
     description = basicInfo.logline || undefined;
     content = buildBasicInfoSummary(basicInfo) || undefined;
   } else if (obj.type === 'guidelines') {
-    const authorNote = richContentToPlainText((data as { authorNote?: unknown }).authorNote);
     name = fallbackName;
-    content = authorNote || undefined;
+    content =
+      getRichTextMarkdown(obj.id, language, 'authorNote')
+      ?? (typeof (data as { authorNote?: unknown }).authorNote === 'string'
+        ? (data as { authorNote?: string }).authorNote
+        : undefined);
+  } else if (obj.type === 'story_entity' || obj.type === 'outline' || obj.type === 'manuscript') {
+    content = getRichTextMarkdown(obj.id, language, 'content') ?? content;
   }
 
   return {
@@ -287,6 +301,7 @@ function buildStoryEntityGroups(
   folders: StoryEntityFolder[],
   language: string,
   mode: ObjectPickerMode,
+  getRichTextMarkdown: GetRichTextMarkdown,
 ): ObjectPickerGroup[] {
   const sortedFolders = [...folders].sort((a, b) => {
     const orderA = a.metadata.display_order ?? 0;
@@ -300,7 +315,9 @@ function buildStoryEntityGroups(
     const orderA = a.metadata?.display_order ?? 0;
     const orderB = b.metadata?.display_order ?? 0;
     if (orderA === orderB) {
-      return objectToItem(a, language).name.localeCompare(objectToItem(b, language).name);
+      return objectToItem(a, language, getRichTextMarkdown).name.localeCompare(
+        objectToItem(b, language, getRichTextMarkdown).name,
+      );
     }
     return orderA - orderB;
   });
@@ -310,7 +327,7 @@ function buildStoryEntityGroups(
   const rootGroups: ObjectPickerGroup[] = [];
 
   for (const entity of sortedEntities) {
-    const item = objectToItem(entity, language);
+    const item = objectToItem(entity, language, getRichTextMarkdown);
     const folderId = (entity.metadata?.folder_id as string | null | undefined) ?? null;
     if (folderId && folderMap.has(folderId)) {
       folderMap.get(folderId)?.items.push(item);
@@ -365,6 +382,7 @@ function buildMetaGroups(
   objects: UnifiedObject[],
   language: string,
   mode: ObjectPickerMode,
+  getRichTextMarkdown: GetRichTextMarkdown,
 ): { groups: ObjectPickerGroup[]; availableTypes: ObjectType[] } {
   const groups: ObjectPickerGroup[] = [];
   const availableTypes: ObjectType[] = [];
@@ -376,7 +394,7 @@ function buildMetaGroups(
   for (const type of ['basic_info', 'guidelines'] as const) {
     const items = objects
       .filter((obj) => obj.type === type)
-      .map((obj) => objectToItem(obj, language));
+      .map((obj) => objectToItem(obj, language, getRichTextMarkdown));
     if (items.length === 0) continue;
     availableTypes.push(type);
     groups.push({
@@ -395,6 +413,7 @@ function buildOutlineGroups(
   language: string,
   includeManuscripts: boolean,
   t: TFunction,
+  getRichTextMarkdown: GetRichTextMarkdown,
   mode: ObjectPickerMode = 'all',
 ): { groups: ObjectPickerGroup[]; availableTypes: ObjectType[] } {
   const groups: ObjectPickerGroup[] = [];
@@ -424,7 +443,7 @@ function buildOutlineGroups(
     const outlineGroups: ObjectPickerGroup[] = outlines.map((outline) => {
       const outlineLabel = getOutlineObjectName(outline, language, untitledOutline);
       const outlineItem = {
-        ...objectToItem(outline, language),
+        ...objectToItem(outline, language, getRichTextMarkdown),
         name: outlineLabel,
         ...(markStructural ? { isStructural: true } : {}),
         isGroupParent: true,
@@ -451,13 +470,13 @@ function buildOutlineGroups(
             .sort(compareOutlineItems);
 
           const actItem = {
-            ...objectToItem(act, language),
+            ...objectToItem(act, language, getRichTextMarkdown),
             name: actName,
             ...(markStructural ? { isStructural: true } : {}),
             isGroupParent: true,
           };
           const chapterItems = actChapters.map((chapter) => ({
-            ...objectToItem(chapter, language),
+            ...objectToItem(chapter, language, getRichTextMarkdown),
             name: formatChapterDisplayName(
               getOutlineObjectName(chapter, language, untitledChapter),
               chapterNumberById.get(chapter.id),
@@ -533,7 +552,8 @@ function buildOutlineGroups(
               t,
             ),
             description: chapterData.description as string | undefined,
-            content: richContentToPlainText(manuscriptData.content) || undefined,
+            content: getRichTextMarkdown(manuscript.id, language, 'content')
+              ?? (typeof manuscriptData.content === 'string' ? manuscriptData.content : undefined),
             type: 'manuscript' as const,
             parentId: chapter.id,
             order: chapter.metadata?.position as number | undefined,
@@ -578,11 +598,12 @@ function buildGroups(
   language: string,
   mode: ObjectPickerMode,
   t: TFunction,
+  getRichTextMarkdown: GetRichTextMarkdown,
 ): { groups: ObjectPickerGroup[]; availableTypes: AnyObjectType[] } {
   const groups: ObjectPickerGroup[] = [];
   const availableTypes: AnyObjectType[] = [];
 
-  const meta = buildMetaGroups(objects, language, mode);
+  const meta = buildMetaGroups(objects, language, mode, getRichTextMarkdown);
   groups.push(...meta.groups);
   availableTypes.push(...meta.availableTypes);
 
@@ -592,6 +613,7 @@ function buildGroups(
       folders,
       language,
       mode,
+      getRichTextMarkdown,
     );
     if (entityGroups.length > 0) {
       groups.push(...entityGroups);
@@ -600,13 +622,13 @@ function buildGroups(
   }
 
   if (mode === 'all' || mode === 'translation') {
-    const outline = buildOutlineGroups(objects, language, false, t, mode);
+    const outline = buildOutlineGroups(objects, language, false, t, getRichTextMarkdown, mode);
     groups.push(...outline.groups);
     availableTypes.push(...outline.availableTypes);
   }
 
   if (mode === 'manuscript' || mode === 'all' || mode === 'translation') {
-    const manuscriptGroups = buildOutlineGroups(objects, language, true, t, mode);
+    const manuscriptGroups = buildOutlineGroups(objects, language, true, t, getRichTextMarkdown, mode);
     groups.push(...manuscriptGroups.groups);
     availableTypes.push(...manuscriptGroups.availableTypes);
   }
@@ -636,6 +658,7 @@ export function useObjectPickerData({
 }: UseObjectPickerDataOptions): UseObjectPickerDataResult {
   const { t } = useTranslation();
   const objects = useUnifiedObjectStore((state) => state.objects);
+  const getRichTextMarkdown = useUnifiedObjectStore((state) => state.getRichTextMarkdown);
   const timeline = useTimelineStore((state) => (state.loadedProjectId === projectId ? state.timeline : null));
   const typesToInclude = useMemo(
     () => getTypesForMode(mode, excludeTypes),
@@ -648,8 +671,8 @@ export function useObjectPickerData({
     );
     const filteredObjects = projectObjects.filter((obj) => typesToInclude.includes(obj.type));
     const folders = getProjectStoryEntityFolders(objects, projectId);
-    return buildGroups(filteredObjects, folders, timeline?.tracks ?? [], timeline?.calendar ?? null, language, mode, t);
-  }, [objects, projectId, language, mode, t, timeline, typesToInclude]);
+    return buildGroups(filteredObjects, folders, timeline?.tracks ?? [], timeline?.calendar ?? null, language, mode, t, getRichTextMarkdown);
+  }, [getRichTextMarkdown, objects, projectId, language, mode, t, timeline, typesToInclude]);
 
   return { groups, availableTypes, isLoading: false, error: null };
 }

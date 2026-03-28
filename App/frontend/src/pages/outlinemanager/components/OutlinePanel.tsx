@@ -27,6 +27,7 @@ import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu'
 import DragHandle from '../../../components/ui/DragHandle';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
+import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
 import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll, Refresh } from '../../../components/icons';
 import type { UnifiedObject, OutlineObject } from '../../../types/unifiedObject';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
@@ -36,7 +37,6 @@ import { resolveRequestedLanguageState, resolveTranslationSourceLanguage } from 
 import { sortOutlineObjects } from '../../../utils/outlineOrdering';
 import type { TipTapDoc } from '../../../types/tiptap';
 import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
-import { richContentToPlainText } from '../../../utils/richTextPreview';
 import './OutlinePanel.css';
 
 interface OutlinePanelProps {
@@ -47,6 +47,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const { projectId } = useParams<{ projectId: string }>();
   const store = useUnifiedObjectStore();
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
+  const getRichTextMarkdown = useUnifiedObjectStore(state => state.getRichTextMarkdown);
   const settings = useSettings();
   const openSidebar = useSidebarStore((state) => state.openSidebar);
 
@@ -568,6 +569,14 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     () => (selectedOutline ? getLanguageState(selectedOutline) : null),
     [getLanguageState, selectedOutline],
   );
+  const selectedOutlineContentMarkdown = useMemo(
+    () => (
+      selectedOutline && selectedOutlineLanguageState
+        ? getRichTextMarkdown(selectedOutline.id, selectedOutlineLanguageState.viewLanguage, 'content')
+        : undefined
+    ),
+    [getRichTextMarkdown, selectedOutline, selectedOutlineLanguageState],
+  );
   const editingOutlineLanguageState = useMemo(() => {
     if (!editingOutline) return null;
     const outline = store.objects[editingOutline] as OutlineObject | undefined;
@@ -835,9 +844,11 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                 )}
               </div>
             )}
-            {richContentToPlainText(selectedOutlineData.content) && (
+            {selectedOutlineContentMarkdown?.trim() && (
               <div className="outline-header-content">
-                <p>{richContentToPlainText(selectedOutlineData.content)}</p>
+                <MarkdownRenderer className="markdown-content outline-header-content__markdown">
+                  {selectedOutlineContentMarkdown}
+                </MarkdownRenderer>
               </div>
             )}
           </div>
@@ -1005,7 +1016,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                         variant="act"
                                         name={actData.name || 'Untitled Act'}
                                         description={actData.description}
-                                        content={actData.content}
+                                        contentMarkdown={getRichTextMarkdown(act.id, actLanguageState.viewLanguage, 'content')}
                                         meta={`${actChapters.length} Chapters`}
                                         expanded={isActExpanded}
                                         showFallbackWarning={actLanguageState.isFallbackView}
@@ -1136,7 +1147,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                       variant="chapter"
                                                       name={chData.name || 'Untitled Chapter'}
                                                       description={chData.description}
-                                                      content={chData.content}
+                                                      contentMarkdown={getRichTextMarkdown(chapter.id, chapterLanguageState.viewLanguage, 'content')}
                                                       chapterIndex={globalChapterIndex}
                                                       expanded={isChapterExpanded}
                                                       showFallbackWarning={chapterLanguageState.isFallbackView}

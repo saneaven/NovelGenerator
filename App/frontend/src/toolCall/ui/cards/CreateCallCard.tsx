@@ -58,14 +58,14 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
           variant={toOutlineItemVariant(operation.objectType, operation.outlineKind)}
           name={titleValue}
           description={desc}
-          content={body}
+          contentMarkdown={body}
           readOnly
         />
       );
     }
 
     if (operation.objectType === 'manuscript') {
-      return <ReadOnlyManuscriptDisplay title={titleValue} content={typeof fields.content === 'string' ? fields.content : ''} />;
+      return <ReadOnlyManuscriptDisplay title={titleValue} contentMarkdown={typeof fields.content === 'string' ? fields.content : ''} />;
     }
 
     if (operation.objectType === 'basic_info') {

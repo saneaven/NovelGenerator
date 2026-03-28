@@ -5,9 +5,9 @@ import { useSettingsStore } from '../../store/settingsStore';
 import type { ObjectType } from '../../types/unifiedObject';
 import { Scroll, Loading, Mailbox, Check, Globe, Clock, SpeechBubble, DocumentAlt } from '../icons';
 import { TextButton } from '../TextButton';
+import { MarkdownRenderer } from '../MarkdownRenderer';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
 import { formatBasicInfoList, normalizeBasicInfoData } from '../../utils/basicInfo';
-import { richContentToPlainText } from '../../utils/richTextPreview';
 import './VersionHistoryModal.css';
 
 // Unified type for text-based version history (prompts and fragments)
@@ -168,6 +168,16 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     return new Date(dateStr).toLocaleString();
   };
 
+  const richMarkdownForType = (data: Record<string, unknown>, type: ObjectType): string | undefined => {
+    if (type === 'guidelines') {
+      return typeof data.authorNote === 'string' && data.authorNote.trim() ? data.authorNote : undefined;
+    }
+    if (type === 'story_entity' || type === 'outline' || type === 'manuscript') {
+      return typeof data.content === 'string' && data.content.trim() ? data.content : undefined;
+    }
+    return undefined;
+  };
+
   const renderVersionData = (data: any, type: ObjectType) => {
     if (!data || typeof data !== 'object') {
       return <div className="version-data-simple">{String(data)}</div>;
@@ -197,6 +207,71 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       );
     }
 
+    const richMarkdown = richMarkdownForType(data as Record<string, unknown>, type);
+
+    if (type === 'guidelines') {
+      return (
+        <div className="version-data-formatted">
+          <div className="data-field data-field--stacked">
+            <label>Author Note:</label>
+            {richMarkdown ? (
+              <div className="version-data-markdown-shell">
+                <MarkdownRenderer className="markdown-content version-data-markdown">
+                  {richMarkdown}
+                </MarkdownRenderer>
+              </div>
+            ) : (
+              <span>Not set</span>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (type === 'story_entity' || type === 'outline') {
+      return (
+        <div className="version-data-formatted">
+          <div className="data-field">
+            <label>Name:</label>
+            <span>{typeof data.name === 'string' && data.name.trim() ? data.name : 'Not set'}</span>
+          </div>
+          <div className="data-field">
+            <label>Description:</label>
+            <span className="description-text">{typeof data.description === 'string' && data.description.trim() ? data.description : 'Not set'}</span>
+          </div>
+          {richMarkdown && (
+            <div className="data-field data-field--stacked">
+              <label>Content:</label>
+              <div className="version-data-markdown-shell">
+                <MarkdownRenderer className="markdown-content version-data-markdown">
+                  {richMarkdown}
+                </MarkdownRenderer>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (type === 'manuscript') {
+      return (
+        <div className="version-data-formatted">
+          <div className="data-field data-field--stacked">
+            <label>Content:</label>
+            {richMarkdown ? (
+              <div className="version-data-markdown-shell">
+                <MarkdownRenderer className="markdown-content version-data-markdown">
+                  {richMarkdown}
+                </MarkdownRenderer>
+              </div>
+            ) : (
+              <span>Not set</span>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     if (data.name !== undefined || data.description !== undefined) {
       return (
         <div className="version-data-formatted">
@@ -207,25 +282,6 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
           <div className="data-field">
             <label>Description:</label>
             <span className="description-text">{data.description || 'Not set'}</span>
-          </div>
-        </div>
-      );
-    }
-
-    if (type === 'manuscript') {
-      const rawContent = (data as any).content;
-      const preview = typeof rawContent === 'string'
-        ? rawContent
-        : richContentToPlainText(rawContent);
-
-      return (
-        <div className="version-data-formatted">
-          <div className="data-field">
-            <label>Content:</label>
-            <span className="content-preview">
-              {preview.substring(0, 200)}
-              {preview.length > 200 ? '...' : ''}
-            </span>
           </div>
         </div>
       );

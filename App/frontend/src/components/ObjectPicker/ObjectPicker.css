@@ -435,7 +435,14 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   line-height: 1.5;
-  white-space: pre-wrap;
+}
+
+.object-picker-preview-description-markdown > :first-child {
+  margin-top: 0;
+}
+
+.object-picker-preview-description-markdown > :last-child {
+  margin-bottom: 0;
 }
 
 /* ==================== PREVIEW MODAL ==================== */
