@@ -77,6 +77,7 @@ def _timeline_data_fields(args: dict[str, Any]) -> dict[str, str]:
     return {
         "name": str(args.get("name") or ""),
         "description": str(args.get("description") or ""),
+        "content": str(args.get("content") or ""),
     }
 
 
@@ -154,6 +155,7 @@ def _normal_specs(ctx) -> list[ToolSpec]:
                     {
                         "name": {"type": "string"},
                         "description": {"type": "string"},
+                        "content": {"type": "string", "description": "Rich text content (markdown)"},
                         "parentId": _PARENT_ID,
                         "position": _POSITION,
                         "color": _COLOR,
@@ -170,6 +172,7 @@ def _normal_specs(ctx) -> list[ToolSpec]:
                         "trackId": _TRACK_ID,
                         "name": {"type": "string"},
                         "description": {"type": "string"},
+                        "content": {"type": "string", "description": "Rich text content (markdown)"},
                         "startDate": date,
                         "endDate": {**date, "nullable": True},
                         "tags": _TAGS,
@@ -186,6 +189,7 @@ def _normal_specs(ctx) -> list[ToolSpec]:
                         "id": _ID,
                         "name": {"type": "string"},
                         "description": {"type": "string"},
+                        "content": {"type": "string", "description": "Rich text content (markdown)"},
                         "color": _COLOR,
                     },
                     ["id"],
@@ -201,6 +205,7 @@ def _normal_specs(ctx) -> list[ToolSpec]:
                         "trackId": _TRACK_ID,
                         "name": {"type": "string"},
                         "description": {"type": "string"},
+                        "content": {"type": "string", "description": "Rich text content (markdown)"},
                         "startDate": date,
                         "endDate": {**date, "nullable": True},
                         "tags": _TAGS,
@@ -472,6 +477,8 @@ class TimelineFeatureModule(ToolFeatureModule):
             language=ctx.language,
             name=str(args.get("name") or ""),
             description=str(args.get("description") or ""),
+            content=str(args.get("content") or "") if args.get("content") else None,
+            rich_text_format="markdown",
             parent_id=to_uuid(pid, "parentId") if pid else None,
             position=args.get("position") if isinstance(args.get("position"), int) else None,
             color=str(args.get("color") or "") if args.get("color") is not None else None,
@@ -503,6 +510,8 @@ class TimelineFeatureModule(ToolFeatureModule):
             language=ctx.language,
             name=str(args.get("name") or ""),
             description=str(args.get("description") or ""),
+            content=str(args.get("content") or "") if args.get("content") else None,
+            rich_text_format="markdown",
             start_date=dict(args.get("startDate") or {}),
             end_date=dict(args["endDate"]) if isinstance(args.get("endDate"), dict) else None,
             tags=list(args.get("tags") or []),
@@ -517,7 +526,7 @@ class TimelineFeatureModule(ToolFeatureModule):
     async def _validate_patch_timeline_track(self, args, ctx):
         try:
             track_id = to_uuid(args.get("id"), "id")
-            if not any(key in args for key in ("name", "description", "color")):
+            if not any(key in args for key in ("name", "description", "content", "color")):
                 raise ValueError("patch_timeline_track requires at least one field")
             track = object_service.get_object(
                 ctx.db,
@@ -537,9 +546,11 @@ class TimelineFeatureModule(ToolFeatureModule):
             ctx.db,
             project_id=ctx.project_id,
             track_id=to_uuid(args.get("id"), "id"),
-            language=ctx.language if any(key in args for key in ("name", "description")) else None,
+            language=ctx.language if any(key in args for key in ("name", "description", "content")) else None,
             name=str(args.get("name") or "") if "name" in args else None,
             description=str(args.get("description") or "") if "description" in args else None,
+            content=str(args.get("content") or "") if "content" in args else _UNSET,
+            rich_text_format="markdown",
             color=(str(args.get("color") or "") if args.get("color") is not None else None) if "color" in args else _UNSET,
             user_request="tool:patch_timeline_track",
             create_new_version=True,
@@ -553,7 +564,7 @@ class TimelineFeatureModule(ToolFeatureModule):
     async def _validate_patch_timeline_event(self, args, ctx):
         try:
             event_id = to_uuid(args.get("id"), "id")
-            if not any(key in args for key in ("trackId", "name", "description", "startDate", "endDate", "tags")):
+            if not any(key in args for key in ("trackId", "name", "description", "content", "startDate", "endDate", "tags")):
                 raise ValueError("patch_timeline_event requires at least one field")
             if "trackId" in args:
                 to_uuid(args.get("trackId"), "trackId")
@@ -576,9 +587,11 @@ class TimelineFeatureModule(ToolFeatureModule):
             project_id=ctx.project_id,
             event_id=to_uuid(args.get("id"), "id"),
             track_id=to_uuid(args.get("trackId"), "trackId") if "trackId" in args else None,
-            language=ctx.language if any(key in args for key in ("name", "description")) else None,
+            language=ctx.language if any(key in args for key in ("name", "description", "content")) else None,
             name=str(args.get("name") or "") if "name" in args else None,
             description=str(args.get("description") or "") if "description" in args else None,
+            content=str(args.get("content") or "") if "content" in args else _UNSET,
+            rich_text_format="markdown",
             start_date=dict(args.get("startDate") or {}) if "startDate" in args else _UNSET,
             end_date=(dict(args["endDate"]) if isinstance(args.get("endDate"), dict) else None) if "endDate" in args else _UNSET,
             tags=list(args.get("tags") or []) if "tags" in args else _UNSET,

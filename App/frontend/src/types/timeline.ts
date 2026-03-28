@@ -1,4 +1,5 @@
 import { OBJECT_TYPE_CONFIG } from './objectTypeConfig';
+import type { TipTapDoc } from './tiptap';
 import type { AnyObjectType, ObjectType, TimelineObjectType } from './unifiedObject';
 
 export interface CalendarUnit {
@@ -89,6 +90,7 @@ export interface TimelineTrackCreateRequest {
   language: string;
   name: string;
   description?: string;
+  content?: TipTapDoc;
   parentId?: string | null;
   position?: number;
   color?: string | null;
@@ -99,6 +101,7 @@ export interface TimelineTrackUpdateRequest {
   language?: string;
   name?: string;
   description?: string;
+  content?: TipTapDoc;
   color?: string | null;
   userRequest?: string;
   createNewVersion?: boolean;
@@ -114,6 +117,7 @@ export interface TimelineEventCreateRequest {
   language: string;
   name: string;
   description?: string;
+  content?: TipTapDoc;
   startDate: TimelineDate;
   endDate?: TimelineDate | null;
   tags?: string[];
@@ -125,6 +129,7 @@ export interface TimelineEventUpdateRequest {
   language?: string;
   name?: string;
   description?: string;
+  content?: TipTapDoc;
   startDate?: TimelineDate;
   endDate?: TimelineDate | null;
   tags?: string[];

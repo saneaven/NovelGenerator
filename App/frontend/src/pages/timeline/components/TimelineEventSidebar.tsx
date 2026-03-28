@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Close, Trash } from '../../../components/icons';
+import { RichTextEditor } from '../../../components/RichTextEditor';
+import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
 import { NumberInput } from '../../../components/ui/NumberInput';
 import { StringChipInput } from '../../../components/ui/StringChipInput';
 import { useTimelineStore } from '../../../store/timelineStore';
+import type { TipTapDoc } from '../../../types/tiptap';
 import type {
   CalendarConfig,
   TimelineDate,
@@ -58,6 +61,7 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
   // Form state
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [content, setContent] = useState<TipTapDoc>(emptyDoc());
   const [startDate, setStartDate] = useState<TimelineDate>({});
   const [endDate, setEndDate] = useState<TimelineDate | null>(null);
   const [hasEndDate, setHasEndDate] = useState(false);
@@ -71,6 +75,7 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
       const data = (event.data?.[displayLanguage] ?? Object.values(event.data ?? {})[0] ?? {}) as Record<string, unknown>;
       setName((data.name as string) || '');
       setDescription((data.description as string) || '');
+      setContent(normalizeDoc(data.content));
       setStartDate({ ...event.startDate });
       setEndDate(event.endDate ? { ...event.endDate } : null);
       setHasEndDate(!!event.endDate);
@@ -79,6 +84,7 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
     } else if (createForTrack) {
       setName('');
       setDescription('');
+      setContent(emptyDoc());
       setStartDate({ ...createForTrack.date });
       setEndDate(null);
       setHasEndDate(false);
@@ -107,6 +113,7 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
           language: displayLanguage,
           name: name.trim(),
           description: description.trim(),
+          content,
           startDate,
           endDate: hasEndDate ? endDate : null,
           tags,
@@ -119,6 +126,7 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
           language: displayLanguage,
           name: name.trim(),
           description: description.trim(),
+          content,
           startDate,
           endDate: hasEndDate ? endDate : null,
           tags,
@@ -127,7 +135,7 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [isCreating, name, description, startDate, endDate, hasEndDate, tags, trackId, projectId, displayLanguage, event, createEventAction, updateEventAction, onClose]);
+  }, [isCreating, name, description, content, startDate, endDate, hasEndDate, tags, trackId, projectId, displayLanguage, event, createEventAction, updateEventAction, onClose]);
 
   const handleDelete = useCallback(async () => {
     if (!event) return;
@@ -250,6 +258,16 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Describe this event..."
             rows={4}
+          />
+        </div>
+
+        {/* Content */}
+        <div className="timeline-event-sidebar__field">
+          <label className="timeline-event-sidebar__label">Content</label>
+          <RichTextEditor
+            initialContent={content}
+            onChange={setContent}
+            placeholder="Write detailed content..."
           />
         </div>
 

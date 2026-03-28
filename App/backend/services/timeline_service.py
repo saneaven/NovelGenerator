@@ -125,10 +125,12 @@ def _extract_version_payload(version: ObjectVersion | None, language: str | None
     }
 
 
-def _content_payload(name: str, description: str) -> dict[str, str]:
+def _content_payload(name: str, description: str, content: Any = None, *, rich_text_format: str = "tiptap") -> dict[str, Any]:
+    from .object_service import _normalize_rich_value
     return {
         "name": str(name or ""),
         "description": str(description or ""),
+        "content": _normalize_rich_value(content, rich_text_format=rich_text_format),
     }
 
 
@@ -698,6 +700,8 @@ class TimelineService:
         language: str,
         name: str,
         description: str,
+        content: Any = None,
+        rich_text_format: str = "tiptap",
         parent_id: UUID | None,
         position: int | None,
         color: str | None,
@@ -736,7 +740,7 @@ class TimelineService:
             object_type=TIMELINE_TRACK_TYPE,
             object_id=track.id,
             language=language,
-            new_data=_content_payload(name, description),
+            new_data=_content_payload(name, description, content, rich_text_format=rich_text_format),
             user_request=user_request,
             created_by=user_id,
             create_new_version=True,
@@ -783,6 +787,8 @@ class TimelineService:
         language: str | None,
         name: str | None,
         description: str | None,
+        content: Any = _UNSET,
+        rich_text_format: str = "tiptap",
         color: Any = _UNSET,
         user_request: str,
         create_new_version: bool,
@@ -794,7 +800,7 @@ class TimelineService:
 
         story_core_before = snapshot_story_core_row(track)
         version_before = snapshot_object_version_row(_latest_version(db, TIMELINE_TRACK_TYPE, track.id))
-        has_version_change = name is not None or description is not None
+        has_version_change = name is not None or description is not None or content is not _UNSET
 
         if color is not _UNSET:
             track.color = str(color).strip() or None
@@ -803,6 +809,7 @@ class TimelineService:
         if has_version_change:
             if not language:
                 raise HTTPException(status_code=400, detail="language is required when updating track content")
+            from .object_service import _normalize_rich_value
             latest = _latest_version(db, TIMELINE_TRACK_TYPE, track.id)
             current_data = {}
             if latest is not None and isinstance(latest.data, dict):
@@ -820,6 +827,7 @@ class TimelineService:
                 new_data={
                     "name": str(name if name is not None else current_data.get("name") or ""),
                     "description": str(description if description is not None else current_data.get("description") or ""),
+                    "content": _normalize_rich_value(content, rich_text_format=rich_text_format) if content is not _UNSET else current_data.get("content"),
                 },
                 user_request=user_request,
                 created_by=user_id,
@@ -1000,6 +1008,8 @@ class TimelineService:
         language: str,
         name: str,
         description: str,
+        content: Any = None,
+        rich_text_format: str = "tiptap",
         start_date: dict[str, Any],
         end_date: dict[str, Any] | None,
         tags: list[str] | None,
@@ -1031,7 +1041,7 @@ class TimelineService:
             object_type=TIMELINE_EVENT_TYPE,
             object_id=event.id,
             language=language,
-            new_data=_content_payload(name, description),
+            new_data=_content_payload(name, description, content, rich_text_format=rich_text_format),
             user_request=user_request,
             created_by=user_id,
             create_new_version=True,
@@ -1076,6 +1086,8 @@ class TimelineService:
         language: str | None,
         name: str | None,
         description: str | None,
+        content: Any = _UNSET,
+        rich_text_format: str = "tiptap",
         start_date: Any = _UNSET,
         end_date: Any = _UNSET,
         tags: Any = _UNSET,
@@ -1108,7 +1120,7 @@ class TimelineService:
 
         story_core_before = snapshot_story_core_row(event)
         version_before = snapshot_object_version_row(_latest_version(db, TIMELINE_EVENT_TYPE, event.id))
-        has_version_change = name is not None or description is not None
+        has_version_change = name is not None or description is not None or content is not _UNSET
 
         if start_date is not _UNSET:
             event.start_date = deepcopy(start_date)
@@ -1127,6 +1139,7 @@ class TimelineService:
         if has_version_change:
             if not language:
                 raise HTTPException(status_code=400, detail="language is required when updating event content")
+            from .object_service import _normalize_rich_value
             latest = _latest_version(db, TIMELINE_EVENT_TYPE, event.id)
             current_data = {}
             if latest is not None and isinstance(latest.data, dict):
@@ -1144,6 +1157,7 @@ class TimelineService:
                 new_data={
                     "name": str(name if name is not None else current_data.get("name") or ""),
                     "description": str(description if description is not None else current_data.get("description") or ""),
+                    "content": _normalize_rich_value(content, rich_text_format=rich_text_format) if content is not _UNSET else current_data.get("content"),
                 },
                 user_request=user_request,
                 created_by=user_id,

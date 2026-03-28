@@ -95,6 +95,8 @@ async def create_track(
             language=request.language,
             name=request.name,
             description=request.description,
+            content=request.content,
+            rich_text_format=request.rich_text_format,
             parent_id=_optional_uuid(request.parent_id, field_name="parent_id"),
             position=request.position,
             color=request.color,
@@ -121,6 +123,7 @@ async def update_track(
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
     color: Any = request.color if "color" in request.model_fields_set else _UNSET
+    content: Any = request.content if "content" in request.model_fields_set else _UNSET
     try:
         result = timeline_service.update_track(
             db,
@@ -129,6 +132,8 @@ async def update_track(
             language=request.language,
             name=request.name,
             description=request.description,
+            content=content,
+            rich_text_format=request.rich_text_format,
             color=color,
             user_request=request.user_request,
             create_new_version=request.create_new_version,
@@ -226,6 +231,8 @@ async def create_event(
             language=request.language,
             name=request.name,
             description=request.description,
+            content=request.content,
+            rich_text_format=request.rich_text_format,
             start_date=request.start_date,
             end_date=request.end_date,
             tags=request.tags,
@@ -263,6 +270,8 @@ async def update_event(
             language=request.language,
             name=request.name,
             description=request.description,
+            content=request.content if "content" in request.model_fields_set else _UNSET,
+            rich_text_format=request.rich_text_format,
             start_date=request.start_date if "start_date" in request.model_fields_set else _UNSET,
             end_date=request.end_date if "end_date" in request.model_fields_set else _UNSET,
             tags=request.tags if "tags" in request.model_fields_set else _UNSET,

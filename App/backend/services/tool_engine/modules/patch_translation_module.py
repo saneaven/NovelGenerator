@@ -80,7 +80,7 @@ class PatchTranslationToolCallModule(ToolCallModule):
                     name="patch_translation_timeline_track",
                     description="Patch a timeline track translation by single replacement.",
                     parameters=obj_schema(
-                        {"id": _ID, "field": {"type": "string", "enum": ["name", "description"]}, **_TEXT_PATCH},
+                        {"id": _ID, "field": {"type": "string", "enum": ["name", "description", "content"]}, **_TEXT_PATCH},
                         ["id", "field", "old", "new"],
                     ),
                     auto_approve_category="patch_translation",
@@ -89,7 +89,7 @@ class PatchTranslationToolCallModule(ToolCallModule):
                     name="patch_translation_timeline_event",
                     description="Patch a timeline event translation by single replacement.",
                     parameters=obj_schema(
-                        {"id": _ID, "field": {"type": "string", "enum": ["name", "description"]}, **_TEXT_PATCH},
+                        {"id": _ID, "field": {"type": "string", "enum": ["name", "description", "content"]}, **_TEXT_PATCH},
                         ["id", "field", "old", "new"],
                     ),
                     auto_approve_category="patch_translation",
@@ -149,13 +149,13 @@ class PatchTranslationToolCallModule(ToolCallModule):
                 object_type = "outline"
             elif tool_name == "patch_translation_timeline_track":
                 field = args.get("field")
-                if field not in {"name", "description"}:
-                    raise ValueError("field must be one of name|description")
+                if field not in {"name", "description", "content"}:
+                    raise ValueError("field must be one of name|description|content")
                 object_type = "timeline_track"
             elif tool_name == "patch_translation_timeline_event":
                 field = args.get("field")
-                if field not in {"name", "description"}:
-                    raise ValueError("field must be one of name|description")
+                if field not in {"name", "description", "content"}:
+                    raise ValueError("field must be one of name|description|content")
                 object_type = "timeline_event"
             elif tool_name == "patch_translation_manuscript":
                 ensure_manuscript_exists(db=ctx.db, project_id=ctx.project_id, object_id=object_id, language=ctx.language)
@@ -257,6 +257,8 @@ class PatchTranslationToolCallModule(ToolCallModule):
                 language=ctx.language,
                 name=str(next_data.get("name") or ""),
                 description=str(next_data.get("description") or ""),
+                content=next_data.get("content", _UNSET),
+                rich_text_format="tiptap",
                 color=_UNSET,
                 user_request="tool:patch_translation_timeline_track",
                 create_new_version=False,
@@ -285,6 +287,8 @@ class PatchTranslationToolCallModule(ToolCallModule):
                 language=ctx.language,
                 name=str(next_data.get("name") or ""),
                 description=str(next_data.get("description") or ""),
+                content=next_data.get("content", _UNSET),
+                rich_text_format="tiptap",
                 start_date=_UNSET,
                 end_date=_UNSET,
                 tags=_UNSET,

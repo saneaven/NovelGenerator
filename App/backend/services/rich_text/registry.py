@@ -5,6 +5,8 @@ RICH_TEXT_FIELDS: dict[str, tuple[str, ...]] = {
     "story_entity": ("content",),
     "outline": ("content",),
     "manuscript": ("content",),
+    "timeline_track": ("content",),
+    "timeline_event": ("content",),
 }
 
 

@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Close } from '../../../components/icons';
+import { RichTextEditor } from '../../../components/RichTextEditor';
+import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
 import { useTimelineStore } from '../../../store/timelineStore';
+import type { TipTapDoc } from '../../../types/tiptap';
 import type { CalendarConfig, TimelineTrack } from '../../../types/timeline';
 import { PRESET_NAMES, presetSwatch } from '../timelineColors';
 
@@ -28,6 +31,7 @@ const TimelineTrackSidebar: React.FC<TimelineTrackSidebarProps> = ({
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [content, setContent] = useState<TipTapDoc>(emptyDoc());
   const [color, setColor] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -36,10 +40,12 @@ const TimelineTrackSidebar: React.FC<TimelineTrackSidebarProps> = ({
       const data = (track.data?.[displayLanguage] ?? Object.values(track.data ?? {})[0] ?? {}) as Record<string, unknown>;
       setName((data.name as string) || '');
       setDescription((data.description as string) || '');
+      setContent(normalizeDoc(data.content));
       setColor(track.color || null);
     } else {
       setName('');
       setDescription('');
+      setContent(emptyDoc());
       setColor(null);
     }
   }, [track, displayLanguage]);
@@ -53,6 +59,7 @@ const TimelineTrackSidebar: React.FC<TimelineTrackSidebarProps> = ({
           language: displayLanguage,
           name: name.trim(),
           description: description.trim(),
+          content,
           parentId: parentId,
           color,
         }, displayLanguage);
@@ -61,6 +68,7 @@ const TimelineTrackSidebar: React.FC<TimelineTrackSidebarProps> = ({
           language: displayLanguage,
           name: name.trim(),
           description: description.trim(),
+          content,
           color,
         }, displayLanguage);
       }
@@ -68,7 +76,7 @@ const TimelineTrackSidebar: React.FC<TimelineTrackSidebarProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [isCreating, name, description, color, parentId, projectId, displayLanguage, track, createTrack, updateTrack, onClose]);
+  }, [isCreating, name, description, content, color, parentId, projectId, displayLanguage, track, createTrack, updateTrack, onClose]);
 
   return (
     <div className="timeline-track-sidebar">
@@ -128,6 +136,16 @@ const TimelineTrackSidebar: React.FC<TimelineTrackSidebarProps> = ({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Track description..."
             rows={3}
+          />
+        </div>
+
+        {/* Content */}
+        <div className="timeline-event-sidebar__field">
+          <label className="timeline-event-sidebar__label">Content</label>
+          <RichTextEditor
+            initialContent={content}
+            onChange={setContent}
+            placeholder="Write detailed content..."
           />
         </div>
       </div>

@@ -25,6 +25,8 @@ class TimelineTrackCreate(BaseModel):
     language: str
     name: str
     description: str = ""
+    content: Any = None
+    rich_text_format: str = "tiptap"
     parent_id: str | None = None
     position: int | None = None
     color: str | None = None
@@ -37,6 +39,8 @@ class TimelineTrackUpdate(BaseModel):
     language: str | None = None
     name: str | None = None
     description: str | None = None
+    content: Any = None
+    rich_text_format: str = "tiptap"
     color: str | None = None
     user_request: str = "Timeline Track Update"
     create_new_version: bool = True
@@ -56,6 +60,8 @@ class TimelineEventCreate(BaseModel):
     language: str
     name: str
     description: str = ""
+    content: Any = None
+    rich_text_format: str = "tiptap"
     start_date: dict[str, int]
     end_date: dict[str, int] | None = None
     tags: list[str] = Field(default_factory=list)
@@ -69,6 +75,8 @@ class TimelineEventUpdate(BaseModel):
     language: str | None = None
     name: str | None = None
     description: str | None = None
+    content: Any = None
+    rich_text_format: str = "tiptap"
     start_date: dict[str, int] | None = None
     end_date: dict[str, int] | None = None
     tags: list[str] | None = None

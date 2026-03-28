@@ -145,6 +145,8 @@ function serializeTrackCreate(request: TimelineTrackCreateRequest) {
     language: request.language,
     name: request.name,
     description: request.description ?? '',
+    content: request.content ?? null,
+    rich_text_format: 'tiptap',
     parent_id: request.parentId ?? null,
     position: request.position,
     color: request.color ?? null,
@@ -156,10 +158,12 @@ function serializeTrackUpdate(request: TimelineTrackUpdateRequest) {
   const payload: Record<string, unknown> = {
     user_request: request.userRequest ?? 'Timeline Track Update',
     create_new_version: request.createNewVersion ?? true,
+    rich_text_format: 'tiptap',
   };
   if (request.language !== undefined) payload.language = request.language;
   if (request.name !== undefined) payload.name = request.name;
   if (request.description !== undefined) payload.description = request.description;
+  if (request.content !== undefined) payload.content = request.content;
   if ('color' in request) payload.color = request.color ?? null;
   return payload;
 }
@@ -170,6 +174,8 @@ function serializeEventCreate(request: TimelineEventCreateRequest) {
     language: request.language,
     name: request.name,
     description: request.description ?? '',
+    content: request.content ?? null,
+    rich_text_format: 'tiptap',
     start_date: request.startDate,
     end_date: request.endDate ?? null,
     tags: request.tags ?? [],
@@ -181,11 +187,13 @@ function serializeEventUpdate(request: TimelineEventUpdateRequest) {
   const payload: Record<string, unknown> = {
     user_request: request.userRequest ?? 'Timeline Event Update',
     create_new_version: request.createNewVersion ?? true,
+    rich_text_format: 'tiptap',
   };
   if (request.trackId !== undefined) payload.track_id = request.trackId;
   if (request.language !== undefined) payload.language = request.language;
   if (request.name !== undefined) payload.name = request.name;
   if (request.description !== undefined) payload.description = request.description;
+  if (request.content !== undefined) payload.content = request.content;
   if (request.startDate !== undefined) payload.start_date = request.startDate;
   if ('endDate' in request) payload.end_date = request.endDate ?? null;
   if (request.tags !== undefined) payload.tags = request.tags;

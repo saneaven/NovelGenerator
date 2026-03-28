@@ -422,7 +422,7 @@ def _normalize_language_payload(
         }
     if object_type == "guidelines":
         return {"authorNote": _normalize_rich_value(incoming.get("authorNote"), rich_text_format=rich_text_format)}
-    if object_type in {STORY_ENTITY_TYPE, "outline"}:
+    if object_type in {STORY_ENTITY_TYPE, "outline", "timeline_track", "timeline_event"}:
         return {
             "name": str(incoming.get("name") or ""),
             "description": str(incoming.get("description") or ""),
@@ -450,7 +450,7 @@ def _render_language_payload(
         }
     if object_type == "guidelines":
         return {"authorNote": _render_rich_value(current.get("authorNote"), rich_text_format=rich_text_format)}
-    if object_type in {STORY_ENTITY_TYPE, "outline"}:
+    if object_type in {STORY_ENTITY_TYPE, "outline", "timeline_track", "timeline_event"}:
         return {
             "name": str(current.get("name") or ""),
             "description": str(current.get("description") or ""),
