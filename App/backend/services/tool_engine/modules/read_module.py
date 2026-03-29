@@ -77,6 +77,7 @@ class ReadToolCallModule(ToolCallModule):
                     object_id=object_id,
                     language=ctx.language,
                     kind=args.get("kind"),
+                    rich_text_format="markdown",
                 )
                 return valid_result()
             elif tool_name == "read_story_entity_folder":
@@ -100,7 +101,14 @@ class ReadToolCallModule(ToolCallModule):
             else:
                 return invalid_result("validate_read_tool_name", f"Unsupported read tool: {tool_name}")
 
-            read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
+            read_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type=object_type,
+                object_id=object_id,
+                language=ctx.language,
+                rich_text_format="markdown",
+            )
             return valid_result()
         except ValueError as exc:
             return invalid_result(f"validate_{tool_name}", str(exc))
@@ -115,6 +123,7 @@ class ReadToolCallModule(ToolCallModule):
                 object_id=object_id,
                 language=ctx.language,
                 kind=args.get("kind"),
+                rich_text_format="markdown",
             )
             return make_result(
                 "Read successful",
@@ -167,6 +176,7 @@ class ReadToolCallModule(ToolCallModule):
             object_type=object_type,
             object_id=object_id,
             language=ctx.language,
+            rich_text_format="markdown",
         )
         return make_result(
             "Read successful",

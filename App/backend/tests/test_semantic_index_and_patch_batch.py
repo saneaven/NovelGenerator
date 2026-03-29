@@ -41,6 +41,21 @@ def _install_import_stubs() -> None:
     semantic_embedding_service.embed_many = _embed_many
     sys.modules["App.backend.services.semantic_embedding_service"] = semantic_embedding_service
 
+    markdown_it_pyrs = types.ModuleType("markdown_it_pyrs")
+
+    class _FakeMarkdownIt:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def enable_many(self, *_args, **_kwargs):
+            return self
+
+        def parse(self, *_args, **_kwargs):
+            return []
+
+    markdown_it_pyrs.MarkdownIt = _FakeMarkdownIt
+    sys.modules["markdown_it_pyrs"] = markdown_it_pyrs
+
     object_access = types.ModuleType("App.backend.services.tool_engine.modules.object_access")
     object_access.extract_lang_data = lambda obj, _language: obj
     object_access.read_object = lambda *_args, **_kwargs: {}
@@ -50,6 +65,7 @@ def _install_import_stubs() -> None:
 _install_import_stubs()
 
 from App.backend.services import semantic_index_service
+import App.backend.services.object_patch_batch as object_patch_batch_module
 from App.backend.services.object_patch_batch import ObjectPatchBatch, ObjectPatchState
 
 
@@ -494,6 +510,55 @@ def test_object_patch_batch_flush_all_returns_per_key_status() -> None:
     }
     assert session.begin_nested_calls == 2
     assert batch.has_pending is False
+
+
+def test_object_patch_batch_reads_and_writes_markdown_for_rich_objects(monkeypatch) -> None:
+    session = FakeNestedSession()
+    batch = ObjectPatchBatch()
+    object_id = uuid4()
+    project_id = uuid4()
+    user_id = uuid4()
+    captured: dict[str, object] = {}
+
+    def _fake_read_object(*_args, **kwargs):
+        captured["read_rich_text_format"] = kwargs.get("rich_text_format")
+        return {
+            "name": "Chapter 1",
+            "description": "desc",
+            "content": "**Timeline**: Months 44-46 - daily life as the community rebuilds.",
+        }
+
+    monkeypatch.setattr(object_patch_batch_module, "read_object", _fake_read_object)
+
+    result = batch.apply_patch(
+        db=session,
+        project_id=project_id,
+        object_type="outline",
+        object_id=object_id,
+        language="English",
+        field="content",
+        old_text="**Timeline**: Months 44-46 - daily life as the community rebuilds.",
+        new_text="**Timeline**: Months 44-46 - daily routines as the community rebuilds.",
+        call_id="call-1",
+        create_new_version=True,
+        user_id=user_id,
+    )
+
+    assert result == {"success": True}
+    assert captured["read_rich_text_format"] == "markdown"
+
+    def _update_object(_db, **kwargs):
+        captured["write_rich_text_format"] = kwargs.get("rich_text_format")
+        captured["written_data"] = kwargs.get("data")
+        return {"id": str(object_id)}
+
+    object_service = SimpleNamespace(update_object=_update_object)
+    results, _ = batch.flush_all(db=session, object_service=object_service, created_by=user_id)
+
+    key = batch.make_key("outline", object_id, "English")
+    assert results[key].success is True
+    assert captured["write_rich_text_format"] == "markdown"
+    assert "daily routines as the community rebuilds" in captured["written_data"]["content"]
 
 
 def test_thread_routes_marks_processing_tool_calls_failed_after_flush_errors() -> None:

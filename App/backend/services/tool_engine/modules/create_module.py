@@ -132,6 +132,7 @@ class CreateToolCallModule(ToolCallModule):
                 object_type=STORY_ENTITY_TYPE,
                 data=payload,
                 language=ctx.language,
+                rich_text_format="markdown",
                 metadata={"folder_id": args.get("folderId")},
                 kind=kind,
                 user_request="tool:create_story_entity",
@@ -172,6 +173,7 @@ class CreateToolCallModule(ToolCallModule):
                 object_type="outline",
                 data=payload,
                 language=ctx.language,
+                rich_text_format="markdown",
                 kind=outline_kind,
                 metadata={
                     "parent_id": args.get("parentId"),

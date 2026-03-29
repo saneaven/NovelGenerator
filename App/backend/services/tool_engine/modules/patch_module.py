@@ -158,7 +158,14 @@ class PatchToolCallModule(ToolCallModule):
                 if args.get("field") != "authorNote":
                     raise ValueError("field must be authorNote")
                 object_id = get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
-                current = read_object(ctx.db, project_id=ctx.project_id, object_type="guidelines", object_id=object_id, language=ctx.language)
+                current = read_object(
+                    ctx.db,
+                    project_id=ctx.project_id,
+                    object_type="guidelines",
+                    object_id=object_id,
+                    language=ctx.language,
+                    rich_text_format="markdown",
+                )
                 patch_object_field(extract_lang_data(current, ctx.language), field="authorNote", old=str(args.get("old") or ""), new=str(args.get("new") or ""))
                 return valid_result()
 
@@ -173,6 +180,7 @@ class PatchToolCallModule(ToolCallModule):
                     object_id=object_id,
                     language=ctx.language,
                     kind=args.get("kind"),
+                    rich_text_format="markdown",
                 )
                 ensure_story_entity_folder_exists(
                     ctx.db,
@@ -207,14 +215,28 @@ class PatchToolCallModule(ToolCallModule):
                     raise ValueError("field must be one of name|description|content")
                 _non_negative_position(args.get("position"))
                 if args.get("parentId"):
-                    current = read_object(ctx.db, project_id=ctx.project_id, object_type="outline", object_id=object_id, language=ctx.language)
+                    current = read_object(
+                        ctx.db,
+                        project_id=ctx.project_id,
+                        object_type="outline",
+                        object_id=object_id,
+                        language=ctx.language,
+                        rich_text_format="markdown",
+                    )
                     current_kind = str(current.get("kind") or "")
                     if current_kind == "act":
                         ensure_outline_parent_kind(ctx.db, project_id=ctx.project_id, outline_id=to_uuid(args.get("parentId"), "parentId"), expected_kind="outline")
                     elif current_kind == "chapter":
                         ensure_outline_parent_kind(ctx.db, project_id=ctx.project_id, outline_id=to_uuid(args.get("parentId"), "parentId"), expected_kind="act")
                 object_type = "outline"
-                current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
+                current = read_object(
+                    ctx.db,
+                    project_id=ctx.project_id,
+                    object_type=object_type,
+                    object_id=object_id,
+                    language=ctx.language,
+                    rich_text_format="markdown",
+                )
                 patch_object_field(extract_lang_data(current, ctx.language), field=str(field), old=str(args.get("old") or ""), new=str(args.get("new") or ""))
                 return valid_result()
 
@@ -248,7 +270,14 @@ class PatchToolCallModule(ToolCallModule):
 
         if tool_name == "patch_guidelines":
             object_id = get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
-            current = read_object(ctx.db, project_id=ctx.project_id, object_type="guidelines", object_id=object_id, language=ctx.language)
+            current = read_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="guidelines",
+                object_id=object_id,
+                language=ctx.language,
+                rich_text_format="markdown",
+            )
             next_data = patch_object_field(
                 extract_lang_data(current, ctx.language),
                 field="authorNote",
@@ -262,6 +291,7 @@ class PatchToolCallModule(ToolCallModule):
                 object_id=object_id,
                 data=next_data,
                 language=ctx.language,
+                rich_text_format="markdown",
                 user_request="tool:patch_guidelines",
                 created_by=ctx.user_id,
                 create_new_version=True,
@@ -280,6 +310,7 @@ class PatchToolCallModule(ToolCallModule):
                 object_id=object_id,
                 language=ctx.language,
                 kind=kind,
+                rich_text_format="markdown",
             )
             next_data = patch_object_field(
                 extract_lang_data(current, ctx.language),
@@ -294,6 +325,7 @@ class PatchToolCallModule(ToolCallModule):
                 object_id=object_id,
                 data=next_data,
                 language=ctx.language,
+                rich_text_format="markdown",
                 metadata=metadata,
                 kind=kind,
                 user_request="tool:patch_story_entity",
@@ -346,7 +378,14 @@ class PatchToolCallModule(ToolCallModule):
 
         if tool_name == "patch_outline":
             object_type = "outline"
-            current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
+            current = read_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type=object_type,
+                object_id=object_id,
+                language=ctx.language,
+                rich_text_format="markdown",
+            )
             next_data = patch_object_field(
                 extract_lang_data(current, ctx.language),
                 field=str(args.get("field") or ""),
@@ -365,6 +404,7 @@ class PatchToolCallModule(ToolCallModule):
                 object_id=object_id,
                 data=next_data,
                 language=ctx.language,
+                rich_text_format="markdown",
                 metadata=metadata or None,
                 user_request=f"tool:{tool_name}",
                 created_by=ctx.user_id,

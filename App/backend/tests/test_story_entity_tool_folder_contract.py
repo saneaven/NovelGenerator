@@ -65,7 +65,7 @@ fake_manuscript_access.read_manuscript_markdown = _fake_read_manuscript_markdown
 fake_manuscript_access.ensure_manuscript_exists = lambda *_args, **_kwargs: None
 sys.modules.setdefault("App.backend.services.tool_engine.modules.manuscript_access", fake_manuscript_access)
 
-from App.backend.services.tool_engine.contexts import ToolExecutionContext, ToolModuleContext
+from App.backend.services.tool_engine.contexts import ToolExecutionContext, ToolModuleContext, ToolValidationContext
 from App.backend.services.tool_engine.modules import (
     create_module,
     delete_module,
@@ -106,6 +106,18 @@ def _execution_context() -> ToolExecutionContext:
         run=SimpleNamespace(),
         settings=SimpleNamespace(),
         tool_call_row=SimpleNamespace(),
+        user_id=uuid4(),
+        project_id=uuid4(),
+        language="English",
+    )
+
+
+def _validation_context() -> ToolValidationContext:
+    return ToolValidationContext(
+        db=SimpleNamespace(),
+        thread=SimpleNamespace(thread_type="agent"),
+        run=SimpleNamespace(),
+        settings=SimpleNamespace(),
         user_id=uuid4(),
         project_id=uuid4(),
         language="English",
@@ -183,6 +195,7 @@ def test_create_story_entity_passes_folder_id_metadata(monkeypatch) -> None:
     )
 
     assert captured["metadata"] == {"folder_id": "folder-main-cast"}
+    assert captured["rich_text_format"] == "markdown"
     assert result["data"]["kind"] == "character"
 
 
@@ -209,6 +222,34 @@ def test_create_story_entity_folder_passes_parent_metadata(monkeypatch) -> None:
 
     assert captured["metadata"] == {"parent_id": "folder-root"}
     assert result["objectType"] == "story_entity_folder"
+
+
+def test_create_outline_uses_markdown_projection(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_create_object(*_args, **kwargs):
+        captured.update(kwargs)
+        return {"id": "outline-1", "metadata": {}}
+
+    monkeypatch.setattr(create_module.object_service, "create_object", _fake_create_object)
+
+    result = asyncio.run(
+        CreateToolCallModule().execute(
+            "create_outline",
+            {
+                "kind": "chapter",
+                "name": "Chapter 1",
+                "description": "Opening",
+                "content": "## Beat\n\nSomething happens.",
+                "parentId": str(uuid4()),
+                "position": 0,
+            },
+            _execution_context(),
+        )
+    )
+
+    assert captured["rich_text_format"] == "markdown"
+    assert result["objectType"] == "outline"
 
 
 def test_replace_story_entity_passes_folder_id_metadata(monkeypatch) -> None:
@@ -374,6 +415,164 @@ def test_patch_story_entity_folder_passes_structural_metadata(monkeypatch) -> No
 
     assert captured["metadata"] == {"parent_id": None, "display_order": 1}
     assert captured["data"]["description"] == "Core characters"
+
+
+def test_validate_patch_outline_reads_markdown_projection(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_read_object(*_args, **kwargs):
+        captured["rich_text_format"] = kwargs.get("rich_text_format")
+        return {
+            "kind": "chapter",
+            "data": {
+                "English": {
+                    "name": "Chapter 1",
+                    "description": "Outline desc",
+                    "content": "**Timeline**: Months 44-46 - daily life as the community rebuilds.",
+                }
+            },
+        }
+
+    monkeypatch.setattr(patch_module, "read_object", _fake_read_object)
+
+    result = asyncio.run(
+        PatchToolCallModule().validate(
+            "patch_outline",
+            {
+                "id": str(uuid4()),
+                "field": "content",
+                "old": "**Timeline**: Months 44-46 - daily life as the community rebuilds.",
+                "new": "**Timeline**: Months 44-46 - daily routines as the community rebuilds.",
+            },
+            _validation_context(),
+        )
+    )
+
+    assert result.valid is True
+    assert captured["rich_text_format"] == "markdown"
+
+
+def test_patch_outline_execute_writes_markdown_projection(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        patch_module,
+        "read_object",
+        lambda *_args, **kwargs: {
+            "kind": "chapter",
+            "data": {
+                "English": {
+                    "name": "Chapter 1",
+                    "description": "Outline desc",
+                    "content": "**Timeline**: Months 44-46 - daily life as the community rebuilds.",
+                }
+            },
+            "__read_format__": kwargs.get("rich_text_format"),
+        },
+    )
+
+    def _fake_update_object(*_args, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(patch_module.object_service, "update_object", _fake_update_object)
+
+    asyncio.run(
+        PatchToolCallModule().execute(
+            "patch_outline",
+            {
+                "id": str(uuid4()),
+                "field": "content",
+                "old": "**Timeline**: Months 44-46 - daily life as the community rebuilds.",
+                "new": "**Timeline**: Months 44-46 - daily routines as the community rebuilds.",
+            },
+            _execution_context(),
+        )
+    )
+
+    assert captured["rich_text_format"] == "markdown"
+    assert "daily routines as the community rebuilds" in captured["data"]["content"]
+
+
+def test_replace_outline_execute_writes_markdown_projection(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    read_calls: list[dict[str, object]] = []
+
+    def _fake_read_object(*_args, **kwargs):
+        read_calls.append(dict(kwargs))
+        return {
+            "kind": "chapter",
+            "data": {
+                "English": {
+                    "name": "Chapter 1",
+                    "description": "Outline desc",
+                    "content": "Old markdown",
+                }
+            },
+        }
+
+    monkeypatch.setattr(replace_module, "read_object", _fake_read_object)
+
+    def _fake_update_object(*_args, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(replace_module.object_service, "update_object", _fake_update_object)
+
+    asyncio.run(
+        ReplaceToolCallModule().execute(
+            "replace_outline",
+            {
+                "id": str(uuid4()),
+                "content": "## New outline content",
+            },
+            _execution_context(),
+        )
+    )
+
+    assert read_calls[-1]["rich_text_format"] == "markdown"
+    assert captured["rich_text_format"] == "markdown"
+    assert captured["data"]["content"] == "## New outline content"
+
+
+def test_translate_outline_execute_writes_markdown_projection(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    read_calls: list[dict[str, object]] = []
+
+    def _fake_read_object(*_args, **kwargs):
+        read_calls.append(dict(kwargs))
+        return {
+            "kind": "chapter",
+            "data": {
+                "English": {
+                    "name": "Chapter 1",
+                    "description": "Outline desc",
+                    "content": "Old markdown",
+                }
+            },
+        }
+
+    monkeypatch.setattr(translate_module, "read_object", _fake_read_object)
+
+    def _fake_update_object(*_args, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(translate_module.object_service, "update_object", _fake_update_object)
+
+    asyncio.run(
+        TranslateToolCallModule().execute(
+            "translate_outline",
+            {
+                "id": str(uuid4()),
+                "name": "Chapter 1",
+                "description": "Translated desc",
+                "content": "Translated markdown",
+            },
+            _execution_context(),
+        )
+    )
+
+    assert read_calls[-1]["rich_text_format"] == "markdown"
+    assert captured["rich_text_format"] == "markdown"
+    assert captured["data"]["content"] == "Translated markdown"
 
 
 def test_thread_route_runtime_payload_includes_parent_metadata() -> None:

@@ -171,6 +171,7 @@ class ReplaceToolCallModule(ToolCallModule):
                     object_id=object_id,
                     language=ctx.language,
                     kind=args.get("kind"),
+                    rich_text_format="markdown",
                 )
                 ensure_story_entity_folder_exists(
                     ctx.db,
@@ -211,7 +212,14 @@ class ReplaceToolCallModule(ToolCallModule):
             if tool_name == "replace_outline":
                 _non_negative_position(args.get("position"))
                 if args.get("parentId"):
-                    current = read_object(ctx.db, project_id=ctx.project_id, object_type="outline", object_id=object_id, language=ctx.language)
+                    current = read_object(
+                        ctx.db,
+                        project_id=ctx.project_id,
+                        object_type="outline",
+                        object_id=object_id,
+                        language=ctx.language,
+                        rich_text_format="markdown",
+                    )
                     current_kind = str(current.get("kind") or "")
                     if current_kind == "act":
                         ensure_outline_parent_kind(
@@ -234,6 +242,7 @@ class ReplaceToolCallModule(ToolCallModule):
                 object_type=object_type,
                 object_id=object_id,
                 language=ctx.language,
+                rich_text_format="markdown",
             )
             return valid_result()
         except ValueError as exc:
@@ -268,7 +277,14 @@ class ReplaceToolCallModule(ToolCallModule):
 
         if tool_name == "replace_guidelines":
             object_id = get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
-            current = read_object(ctx.db, project_id=ctx.project_id, object_type="guidelines", object_id=object_id, language=ctx.language)
+            current = read_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="guidelines",
+                object_id=object_id,
+                language=ctx.language,
+                rich_text_format="markdown",
+            )
             next_data = dict(extract_lang_data(current, ctx.language))
             if "authorNote" in args:
                 next_data["authorNote"] = args.get("authorNote")
@@ -279,6 +295,7 @@ class ReplaceToolCallModule(ToolCallModule):
                 object_id=object_id,
                 data=next_data,
                 language=ctx.language,
+                rich_text_format="markdown",
                 user_request="tool:replace_guidelines",
                 created_by=ctx.user_id,
                 create_new_version=True,
@@ -297,6 +314,7 @@ class ReplaceToolCallModule(ToolCallModule):
                 object_id=object_id,
                 language=ctx.language,
                 kind=kind,
+                rich_text_format="markdown",
             )
             next_data = dict(extract_lang_data(current, ctx.language))
             for key in ["name", "description", "content"]:
@@ -309,6 +327,7 @@ class ReplaceToolCallModule(ToolCallModule):
                 object_id=object_id,
                 data=next_data,
                 language=ctx.language,
+                rich_text_format="markdown",
                 metadata=metadata,
                 kind=kind,
                 user_request="tool:replace_story_entity",
@@ -360,7 +379,14 @@ class ReplaceToolCallModule(ToolCallModule):
 
         if tool_name == "replace_outline":
             object_type = "outline"
-            current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
+            current = read_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type=object_type,
+                object_id=object_id,
+                language=ctx.language,
+                rich_text_format="markdown",
+            )
             next_data = dict(extract_lang_data(current, ctx.language))
             for key in ["name", "description", "content"]:
                 if key in args:
@@ -377,6 +403,7 @@ class ReplaceToolCallModule(ToolCallModule):
                 object_id=object_id,
                 data=next_data,
                 language=ctx.language,
+                rich_text_format="markdown",
                 metadata=metadata or None,
                 user_request=f"tool:{tool_name}",
                 created_by=ctx.user_id,

@@ -58,6 +58,7 @@ def read_object(
     object_type: str,
     object_id: UUID,
     language: str,
+    rich_text_format: str = "tiptap",
 ) -> dict[str, Any]:
     obj = object_service.get_object(
         db,
@@ -65,6 +66,7 @@ def read_object(
         object_id=object_id,
         project_id=project_id,
         language=language,
+        rich_text_format=rich_text_format,
     )
     if obj is None:
         raise ValueError(f"{object_type} not found: {object_id}")
@@ -78,6 +80,7 @@ def read_story_entity(
     object_id: UUID,
     language: str,
     kind: Any,
+    rich_text_format: str = "tiptap",
 ) -> dict[str, Any]:
     expected_kind = require_story_entity_arg_kind(kind)
     obj = read_object(
@@ -86,6 +89,7 @@ def read_story_entity(
         object_type=STORY_ENTITY_TYPE,
         object_id=object_id,
         language=language,
+        rich_text_format=rich_text_format,
     )
     actual_kind = str(obj.get("kind") or "").strip()
     if actual_kind and actual_kind != expected_kind:
@@ -99,6 +103,7 @@ def read_story_entity_folder(
     project_id: UUID,
     object_id: UUID,
     language: str,
+    rich_text_format: str = "tiptap",
 ) -> dict[str, Any]:
     return read_object(
         db,
@@ -106,6 +111,7 @@ def read_story_entity_folder(
         object_type=STORY_ENTITY_FOLDER_TYPE,
         object_id=object_id,
         language=language,
+        rich_text_format=rich_text_format,
     )
 
 

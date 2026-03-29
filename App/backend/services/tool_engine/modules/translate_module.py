@@ -116,6 +116,7 @@ class TranslateToolCallModule(ToolCallModule):
                     object_id=object_id,
                     language=ctx.language,
                     kind=args.get("kind"),
+                    rich_text_format="markdown",
                 )
                 return valid_result()
             elif tool_name == "translate_story_entity_folder":
@@ -139,7 +140,14 @@ class TranslateToolCallModule(ToolCallModule):
                 object_type = "timeline_event"
             else:
                 return invalid_result("validate_translate_tool_name", f"Unsupported translate tool: {tool_name}")
-            read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
+            read_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type=object_type,
+                object_id=object_id,
+                language=ctx.language,
+                rich_text_format="markdown" if object_type == "outline" else "tiptap",
+            )
             return valid_result()
         except ValueError as exc:
             return invalid_result(f"validate_{tool_name}", str(exc))
@@ -166,7 +174,14 @@ class TranslateToolCallModule(ToolCallModule):
 
         if tool_name == "translate_guidelines":
             object_id = get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
-            current = read_object(ctx.db, project_id=ctx.project_id, object_type="guidelines", object_id=object_id, language=ctx.language)
+            current = read_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="guidelines",
+                object_id=object_id,
+                language=ctx.language,
+                rich_text_format="markdown",
+            )
             next_data = dict(extract_lang_data(current, ctx.language))
             next_data["authorNote"] = args["authorNote"]
             object_service.update_object(
@@ -176,6 +191,7 @@ class TranslateToolCallModule(ToolCallModule):
                 object_id=object_id,
                 data=next_data,
                 language=ctx.language,
+                rich_text_format="markdown",
                 user_request="tool:translate_guidelines",
                 created_by=ctx.user_id,
                 create_new_version=False,
@@ -193,6 +209,7 @@ class TranslateToolCallModule(ToolCallModule):
                 object_id=object_id,
                 language=ctx.language,
                 kind=kind,
+                rich_text_format="markdown",
             )
         elif tool_name == "translate_story_entity_folder":
             object_type = STORY_ENTITY_FOLDER_TYPE
@@ -252,7 +269,14 @@ class TranslateToolCallModule(ToolCallModule):
             raise ValueError(f"Unsupported translate tool: {tool_name}")
 
         if tool_name != "translate_story_entity":
-            current = read_object(ctx.db, project_id=ctx.project_id, object_type=object_type, object_id=object_id, language=ctx.language)
+            current = read_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type=object_type,
+                object_id=object_id,
+                language=ctx.language,
+                rich_text_format="markdown" if object_type == "outline" else "tiptap",
+            )
         next_data = dict(extract_lang_data(current, ctx.language))
         keys = ["name", "description"] if tool_name == "translate_story_entity_folder" else ["name", "description", "content"]
         for key in keys:
@@ -266,6 +290,7 @@ class TranslateToolCallModule(ToolCallModule):
             object_id=object_id,
             data=next_data,
             language=ctx.language,
+            rich_text_format="markdown" if object_type in {"guidelines", "story_entity", "outline"} else "tiptap",
             kind=(str(args.get("kind") or "") if tool_name == "translate_story_entity" else None),
             user_request=f"tool:{tool_name}",
             created_by=ctx.user_id,
