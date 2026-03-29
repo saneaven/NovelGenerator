@@ -12,7 +12,6 @@ import type {
   TimelineEvent,
   TimelineTrack,
 } from '../../../types/timeline';
-import { formatDate } from '../../../utils/timelineCalendar';
 import './TimelineEventSidebar.css';
 
 interface TimelineEventSidebarProps {
@@ -23,7 +22,6 @@ interface TimelineEventSidebarProps {
   calendar: CalendarConfig;
   tracks: TimelineTrack[];
   onClose: () => void;
-  onEventSaved: (event: TimelineEvent) => void;
 }
 
 /** Collect all leaf tracks (only leaves can hold events). */
@@ -50,7 +48,6 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
   calendar,
   tracks,
   onClose,
-  onEventSaved,
 }) => {
   const createEventAction = useTimelineStore((s) => s.createEvent);
   const updateEventAction = useTimelineStore((s) => s.updateEvent);
@@ -96,8 +93,11 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
   const leafTracks = collectLeafTracks(tracks, displayLanguage);
 
   const updateDateUnit = useCallback((target: 'start' | 'end', unitName: string, value: number | undefined) => {
-    const setter = target === 'start' ? setStartDate : setEndDate;
-    setter((prev) => {
+    if (target === 'start') {
+      setStartDate((prev) => ({ ...prev, [unitName]: value ?? 0 }));
+      return;
+    }
+    setEndDate((prev) => {
       if (!prev) return prev;
       return { ...prev, [unitName]: value ?? 0 };
     });

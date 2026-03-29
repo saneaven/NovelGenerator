@@ -44,7 +44,7 @@ export {
 } from './searchMemorySettings';
 
 // Types
-export type ImageProviderType = 'openai' | 'gemini' | 'xai' | 'novelai' | 'openrouter';
+export type ImageProviderType = string;
 export type PromptType = 'natural' | 'tag_based';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -57,32 +57,8 @@ export const SUPPORTED_UI_LANGUAGES = [
 export type UILanguageCode = typeof SUPPORTED_UI_LANGUAGES[number]['code'];
 
 // Provider configurations (credentials only - shared across functions)
-export interface ProviderCredentials {
-    openai: {
-        apiKey: string;
-    };
-    gemini: {
-        apiKey: string;
-    };
-    claude: {
-        apiKey: string;
-    };
-    openrouter: {
-        apiKey: string;
-    };
-    custom: {
-        baseUrl: string;
-        apiKey?: string;
-        additionalHeadersJson: string;
-        additionalBodyJson: string;
-    };
-    xai: {
-        apiKey: string;
-    };
-    novelai: {
-        apiKey: string;  // JWT access token
-    };
-}
+export type ProviderCredentialDraft = Record<string, string>;
+export type ProviderCredentials = Record<string, ProviderCredentialDraft>;
 
 // Custom thinking template types
 export interface CustomThinkingEffortField {
@@ -158,29 +134,13 @@ export interface TagBasedImageStyle {
 }
 
 
-// NovelAI-specific settings
-export interface NovelAIImageSettings {
-    sampler: string;
-    steps: number;
-    scale: number;        // CFG Scale
-    noise_schedule: string;
-}
-
-// OpenAI-specific settings
-export interface OpenAIImageSettings {
-    quality: 'auto' | 'low' | 'medium' | 'high';
-    background: 'auto' | 'opaque' | 'transparent';
-    output_format: 'png' | 'jpeg' | 'webp';
-    output_compression: number;
-    input_fidelity: 'low' | 'high';
-}
-
 // Image generation configuration
 export interface ImageGenConfig {
     provider: ImageProviderType;
     model: string;
     aspect_ratio: string;
     image_size: string;
+    [key: string]: unknown;
 
     // Separate custom styles per prompt type
     naturalStyles: NaturalImageStyle[];      // For OpenAI, Gemini, xAI
@@ -189,8 +149,7 @@ export interface ImageGenConfig {
     selectedTagBasedStyleId: string | null;
 
     // Per-provider settings
-    openaiSettings: OpenAIImageSettings;
-    novelaiSettings: NovelAIImageSettings;
+    providerSettings: Record<string, Record<string, unknown>>;
 }
 
 // Main settings interface

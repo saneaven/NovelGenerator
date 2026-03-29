@@ -35,6 +35,18 @@ def _install_import_stubs() -> None:
     token_count_service.count_text_tokens = _count_text_tokens
     sys.modules["App.backend.services.token_count_service"] = token_count_service
 
+    markdown_it_pyrs = types.ModuleType("markdown_it_pyrs")
+
+    class _FakeMarkdownIt:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def enable_many(self, *_args, **_kwargs):
+            return self
+
+    markdown_it_pyrs.MarkdownIt = _FakeMarkdownIt
+    sys.modules["markdown_it_pyrs"] = markdown_it_pyrs
+
     object_service_module = types.ModuleType("App.backend.services.object_service")
     object_service_module.object_service = SimpleNamespace(
         get_object=lambda *_args, **_kwargs: None,
@@ -104,13 +116,14 @@ def test_raw_object_translation_manuscript_uses_markdown_projection(monkeypatch)
     get_calls: list[dict[str, object]] = []
 
     class DummyObjectService:
-        def get_object(self, _db, object_type, object_id, *, project_id, language=None):
+        def get_object(self, _db, object_type, object_id, *, project_id, language=None, **kwargs):
             get_calls.append(
                 {
                     "object_type": object_type,
                     "object_id": object_id,
                     "project_id": project_id,
                     "language": language,
+                    **kwargs,
                 }
             )
             return {
@@ -152,6 +165,7 @@ def test_raw_object_translation_manuscript_uses_markdown_projection(monkeypatch)
             "object_id": object_id,
             "project_id": project_id,
             "language": None,
+            "rich_text_format": "markdown",
         }
     ]
     assert captured["data"] == {"content": "# Translated manuscript"}
@@ -168,13 +182,14 @@ def test_raw_object_translation_story_entity_stays_markdown_based(monkeypatch) -
     get_calls: list[dict[str, object]] = []
 
     class DummyObjectService:
-        def get_object(self, _db, object_type, object_id, *, project_id, language=None):
+        def get_object(self, _db, object_type, object_id, *, project_id, language=None, **kwargs):
             get_calls.append(
                 {
                     "object_type": object_type,
                     "object_id": object_id,
                     "project_id": project_id,
                     "language": language,
+                    **kwargs,
                 }
             )
             return {
@@ -217,9 +232,138 @@ def test_raw_object_translation_story_entity_stays_markdown_based(monkeypatch) -
             "object_id": object_id,
             "project_id": project_id,
             "language": "Korean",
+            "rich_text_format": "markdown",
         }
     ]
     assert captured["data"]["content"] == "new translated content"
     assert captured["rich_text_format"] == "markdown"
     assert captured["language"] == "Korean"
     assert captured["create_new_version"] is False
+
+
+def test_raw_object_translation_timeline_track_uses_markdown_projection(monkeypatch) -> None:
+    object_id = uuid4()
+    project_id = uuid4()
+    user_id = uuid4()
+    captured: dict[str, object] = {}
+    get_calls: list[dict[str, object]] = []
+
+    class DummyObjectService:
+        def get_object(self, _db, object_type, object_id, *, project_id, language=None, **kwargs):
+            get_calls.append(
+                {
+                    "object_type": object_type,
+                    "object_id": object_id,
+                    "project_id": project_id,
+                    "language": language,
+                    **kwargs,
+                }
+            )
+            return {
+                "data": {
+                    "Korean": {
+                        "name": "Track",
+                        "description": "Track desc",
+                        "content": "old timeline markdown",
+                    }
+                }
+            }
+
+        def update_object(self, _db, **kwargs):
+            captured.update(kwargs)
+            return {"id": str(object_id)}
+
+    monkeypatch.setattr(raw_output_module, "object_service", DummyObjectService())
+    _set_object_translation_parent(monkeypatch)
+
+    asyncio.run(
+        raw_output_module.apply_raw_output(
+            FakeSession("timeline_track"),
+            thread=SimpleNamespace(parent_id=uuid4(), thread_type="journey"),
+            run=SimpleNamespace(id=uuid4(), project_id=project_id, user_id=user_id, language="Korean"),
+            input_payload={
+                "translation": {
+                    "objectIds": [str(object_id)],
+                    "sourceLanguage": "English",
+                    "targetLanguage": "Korean",
+                }
+            },
+            content_parts=[{"type": "content", "text": "new translated timeline markdown"}],
+            emit_fn=_noop_emit,
+        )
+    )
+
+    assert get_calls == [
+        {
+            "object_type": "timeline_track",
+            "object_id": object_id,
+            "project_id": project_id,
+            "language": "Korean",
+            "rich_text_format": "markdown",
+        }
+    ]
+    assert captured["rich_text_format"] == "markdown"
+    assert captured["data"]["content"] == "new translated timeline markdown"
+
+
+def test_raw_object_translation_basic_info_omits_projection(monkeypatch) -> None:
+    object_id = uuid4()
+    project_id = uuid4()
+    user_id = uuid4()
+    captured: dict[str, object] = {}
+    get_calls: list[dict[str, object]] = []
+
+    class DummyObjectService:
+        def get_object(self, _db, object_type, object_id, *, project_id, language=None, **kwargs):
+            get_calls.append(
+                {
+                    "object_type": object_type,
+                    "object_id": object_id,
+                    "project_id": project_id,
+                    "language": language,
+                    **kwargs,
+                }
+            )
+            return {
+                "data": {
+                    "Korean": {
+                        "title": "Novel",
+                        "logline": "Old logline",
+                    }
+                }
+            }
+
+        def update_object(self, _db, **kwargs):
+            captured.update(kwargs)
+            return {"id": str(object_id)}
+
+    monkeypatch.setattr(raw_output_module, "object_service", DummyObjectService())
+    _set_object_translation_parent(monkeypatch)
+
+    asyncio.run(
+        raw_output_module.apply_raw_output(
+            FakeSession("basic_info"),
+            thread=SimpleNamespace(parent_id=uuid4(), thread_type="journey"),
+            run=SimpleNamespace(id=uuid4(), project_id=project_id, user_id=user_id, language="Korean"),
+            input_payload={
+                "translation": {
+                    "objectIds": [str(object_id)],
+                    "sourceLanguage": "English",
+                    "targetLanguage": "Korean",
+                }
+            },
+            content_parts=[{"type": "content", "text": "New logline"}],
+            emit_fn=_noop_emit,
+        )
+    )
+
+    assert get_calls == [
+        {
+            "object_type": "basic_info",
+            "object_id": object_id,
+            "project_id": project_id,
+            "language": "Korean",
+        }
+    ]
+    assert "rich_text_format" not in captured
+    assert captured["data"]["logline"] == "New logline"

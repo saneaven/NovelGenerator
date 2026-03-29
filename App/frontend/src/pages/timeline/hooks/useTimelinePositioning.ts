@@ -17,7 +17,7 @@ const MAX_TICK_SPACING = 200;
  * Determine which calendar unit level to use for minor ticks,
  * and which for major ticks based on current zoom scale.
  */
-function pickTickUnit(units: CalendarUnit[], scale: number, viewportWidth: number): { majorIdx: number; minorIdx: number; minorStep: number } {
+function pickTickUnit(units: CalendarUnit[], scale: number): { majorIdx: number; minorIdx: number; minorStep: number } {
   // Try each unit as minor tick. The one where adjacent ticks are ~60-200px apart wins.
   for (let i = units.length - 1; i >= 0; i--) {
     // One increment of this unit = its multiplier in base units
@@ -104,7 +104,7 @@ export function useTimelinePositioning(calendar: CalendarConfig, viewport: Timel
   const rulerTicks = useMemo((): RulerTick[] => {
     if (units.length === 0) return [];
 
-    const { majorIdx, minorIdx, minorStep } = pickTickUnit(units, viewport.scale, viewport.viewportWidth);
+    const { majorIdx, minorIdx, minorStep } = pickTickUnit(units, viewport.scale);
     const ticks: RulerTick[] = [];
 
     // Calculate multiplier for minor unit

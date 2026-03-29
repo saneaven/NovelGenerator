@@ -73,6 +73,9 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
   const activeTaskType = activeTarget === 'general' ? undefined : activeTarget;
   const activeTaskConfig = activeTaskType ? resolvedTaskConfigs[activeTaskType] : undefined;
   const activeOverrideEnabled = activeTaskType ? hasTaskOverride(taskConfigSettings, activeTaskType) : false;
+  const activeTemperatureValue = Number.isFinite(activeTaskConfig?.temperature)
+    ? (activeTaskConfig?.temperature as number)
+    : 0.7;
 
   const handleGeneralChange = (nextGeneralConfig: typeof taskConfigSettings.general) => {
     onTaskConfigSettingsChange({
@@ -209,7 +212,7 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
                         </div>
                         <div>
                           <dt>{t('settings.taskConfig.temperature')}</dt>
-                          <dd>{activeTaskConfig.temperature.toFixed(1)}</dd>
+                          <dd>{activeTemperatureValue.toFixed(1)}</dd>
                         </div>
                       </dl>
                     </div>

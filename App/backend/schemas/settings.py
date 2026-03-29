@@ -1,6 +1,6 @@
 """Pydantic schemas for user settings"""
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
-from typing import Optional, Dict, List, Literal
+from typing import Any, Optional, Dict, List, Literal
 from enum import Enum
 
 
@@ -100,7 +100,7 @@ class TaskAIConfig(BaseModel):
     """Configuration for a specific AI task"""
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
-    provider: ProviderType
+    provider: str
     model: str = Field(..., min_length=1, max_length=200)
     temperature: float = Field(..., ge=0, le=2)
     provider_preference: Optional[ProviderPreference] = None
@@ -197,7 +197,7 @@ class SearchMemoryEmbeddingConfig(BaseModel):
     """Embedding configuration shared by Search / Memory settings."""
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
-    provider: EmbeddingProviderType = EmbeddingProviderType.OPENAI
+    provider: str = "openai"
     model: str = Field(default="", max_length=200)
     dimensions: Optional[int] = None
 
@@ -271,25 +271,10 @@ class TagBasedImageStyle(BaseModel):
     negativePostfix: str = ""
 
 
-class OpenAIImageSettings(BaseModel):
-    """OpenAI-specific image settings"""
-    quality: Literal["auto", "low", "medium", "high"] = "auto"
-    background: Literal["auto", "opaque", "transparent"] = "auto"
-    output_format: Literal["png", "jpeg", "webp"] = "png"
-    output_compression: int = Field(default=90, ge=0, le=100)
-    input_fidelity: Literal["low", "high"] = "high"
-
-
-class NovelAIImageSettings(BaseModel):
-    """NovelAI-specific image settings"""
-    sampler: str = "k_euler_ancestral"
-    steps: int = 28
-    scale: float = 6.0
-    noise_schedule: str = "karras"
-
-
 class ImageGenConfig(BaseModel):
     """Image generation configuration"""
+    model_config = ConfigDict(extra="forbid")
+
     provider: str = "openai"
     model: str = "gpt-image-1.5"
     aspect_ratio: str = "1:1"
@@ -298,8 +283,7 @@ class ImageGenConfig(BaseModel):
     tagBasedStyles: List[TagBasedImageStyle] = []
     selectedNaturalStyleId: Optional[str] = None
     selectedTagBasedStyleId: Optional[str] = None
-    openaiSettings: OpenAIImageSettings = Field(default_factory=OpenAIImageSettings)
-    novelaiSettings: NovelAIImageSettings = Field(default_factory=NovelAIImageSettings)
+    providerSettings: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
 
 
 class UserSettingsResponse(BaseModel):

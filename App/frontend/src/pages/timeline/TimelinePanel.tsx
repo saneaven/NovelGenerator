@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTimelineStore } from '../../store/timelineStore';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
@@ -28,11 +28,9 @@ const TimelinePanel: React.FC<TimelinePanelProps> = ({ globalDisplayLanguage }) 
   const timeline = useTimelineStore((s) => s.timeline);
   const isLoading = useTimelineStore((s) => s.isLoading);
   const fetchTimeline = useTimelineStore((s) => s.fetchTimeline);
-  const createTrack = useTimelineStore((s) => s.createTrack);
   const deleteTrack = useTimelineStore((s) => s.deleteTrack);
-  const createEvent = useTimelineStore((s) => s.createEvent);
 
-  const displayLanguage = useDisplayLanguageStore((s) => s.language) || globalDisplayLanguage;
+  const displayLanguage = useDisplayLanguageStore((s) => s.preferredDisplayLanguage) || globalDisplayLanguage;
 
   // Fetch timeline on mount
   useEffect(() => {
@@ -81,19 +79,6 @@ const TimelinePanel: React.FC<TimelinePanelProps> = ({ globalDisplayLanguage }) 
   }, [tracks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Find event by id across all tracks
-  const findEvent = useCallback((eventId: string): TimelineEvent | null => {
-    const search = (tks: TimelineTrack[]): TimelineEvent | null => {
-      for (const tk of tks) {
-        const found = tk.events.find((ev) => ev.id === eventId);
-        if (found) return found;
-        const childResult = search(tk.children);
-        if (childResult) return childResult;
-      }
-      return null;
-    };
-    return search(tracks);
-  }, [tracks]);
-
   // Handlers
   const handleToggleExpand = useCallback((trackId: string) => {
     setExpandedTracks((prev) => {
@@ -202,7 +187,6 @@ const TimelinePanel: React.FC<TimelinePanelProps> = ({ globalDisplayLanguage }) 
             track={editingTrack}
             parentId={creatingTrackParentId ?? null}
             displayLanguage={displayLanguage}
-            calendar={calendar}
             onClose={handleCloseSidebars}
           />
         )}
@@ -258,11 +242,6 @@ const TimelinePanel: React.FC<TimelinePanelProps> = ({ globalDisplayLanguage }) 
           calendar={calendar}
           tracks={tracks}
           onClose={handleCloseSidebars}
-          onEventSaved={(event) => {
-            setEditingEvent(event);
-            setCreatingEventTrack(null);
-            setSelectedEventId(event.id);
-          }}
         />
       )}
 
@@ -272,7 +251,6 @@ const TimelinePanel: React.FC<TimelinePanelProps> = ({ globalDisplayLanguage }) 
           track={editingTrack}
           parentId={creatingTrackParentId ?? null}
           displayLanguage={displayLanguage}
-          calendar={calendar}
           onClose={handleCloseSidebars}
         />
       )}

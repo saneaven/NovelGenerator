@@ -210,10 +210,8 @@ const McpServersEditor: React.FC<McpServersEditorProps> = ({
   onToggleSidebar,
 }) => {
   const activePresetId = usePresetStore((state) => state.activePresetId);
-  const { deleteServer, syncServer } = useMcpStore((state) => ({
-    deleteServer: state.deleteServer,
-    syncServer: state.syncServer,
-  }));
+  const deleteServer = useMcpStore((state) => state.deleteServer);
+  const syncServer = useMcpStore((state) => state.syncServer);
   const [actionError, setActionError] = useState('');
 
   const patchDraft = (patch: Partial<McpServerDraftFields>) => {

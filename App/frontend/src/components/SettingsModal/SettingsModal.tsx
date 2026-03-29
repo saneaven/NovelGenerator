@@ -26,6 +26,8 @@ import { TextButton } from '../TextButton';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
 import apiClient from '../../api/client';
 import { useAuthStore } from '../../store/authStore';
+import { useProviderSpecStore } from '../../providerEngine/store';
+import { buildCredentialDrafts, normalizeCredentialDraft, validateCredentialDraftJson } from '../../providerEngine/utils';
 import './SettingsModal.css';
 import './_shared-components.css';
 
@@ -48,62 +50,23 @@ type MainTab =
 type GeneralConfigTarget = 'general' | AITaskType;
 type SearchMemoryConfigTarget = 'general' | SearchMemoryTarget;
 
-type ProviderName = keyof ProviderCredentials;
-
-const DEFAULT_CREDENTIAL_DRAFT: ProviderCredentials = {
-  openai: { apiKey: '' },
-  gemini: { apiKey: '' },
-  claude: { apiKey: '' },
-  openrouter: { apiKey: '' },
-  custom: { baseUrl: '', apiKey: '', additionalHeadersJson: '{}', additionalBodyJson: '{}' },
-  xai: { apiKey: '' },
-  novelai: { apiKey: '' },
-};
-
-const PROVIDERS: ProviderName[] = ['openai', 'gemini', 'claude', 'openrouter', 'custom', 'xai', 'novelai'];
 const DEMO_LOCKED_TABS = new Set<MainTab>(['credentials', 'searchMemory', 'imageGen', 'prompts', 'advanced']);
-
 type NormalizedProviderConfig = Record<string, unknown>;
 
-function parseJsonObject(raw: string | undefined): Record<string, unknown> {
-  if (!raw?.trim()) return {};
-  const parsed = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-  return parsed as Record<string, unknown>;
+function buildEmptyCredentialDraft(specs: Record<string, any>): ProviderCredentials {
+  return buildCredentialDrafts(specs);
 }
 
-function normalizeProviderDraft(provider: ProviderName, draft: ProviderCredentials): NormalizedProviderConfig {
-  if (provider === 'custom') {
-    const apiKey = (draft.custom.apiKey || '').trim();
-    const baseUrl = (draft.custom.baseUrl || '').trim();
-    const parsedHeaders = parseJsonObject(draft.custom.additionalHeadersJson);
-    const additionalHeaders = Object.fromEntries(
-      Object.entries(parsedHeaders).filter(([, value]) => typeof value === 'string')
-    ) as Record<string, string>;
-    const additionalBody = parseJsonObject(draft.custom.additionalBodyJson);
-
-    const normalized: NormalizedProviderConfig = {};
-    if (apiKey) normalized.api_key = apiKey;
-    if (baseUrl) normalized.base_url = baseUrl;
-    if (Object.keys(additionalHeaders).length > 0) normalized.additional_headers = additionalHeaders;
-    if (Object.keys(additionalBody).length > 0) normalized.additional_body = additionalBody;
-    return normalized;
-  }
-
-  const apiKey = ((draft as any)[provider]?.apiKey || '').trim();
-  return apiKey ? { api_key: apiKey } : {};
-}
-
-function snapshotNormalized(draft: ProviderCredentials): Record<ProviderName, NormalizedProviderConfig> {
-  return {
-    openai: normalizeProviderDraft('openai', draft),
-    gemini: normalizeProviderDraft('gemini', draft),
-    claude: normalizeProviderDraft('claude', draft),
-    openrouter: normalizeProviderDraft('openrouter', draft),
-    custom: normalizeProviderDraft('custom', draft),
-    xai: normalizeProviderDraft('xai', draft),
-    novelai: normalizeProviderDraft('novelai', draft),
-  };
+function snapshotNormalized(
+  draft: ProviderCredentials,
+  specs: Record<string, any>
+): Record<string, NormalizedProviderConfig> {
+  return Object.fromEntries(
+    Object.values(specs).map((provider: any) => [
+      provider.id,
+      normalizeCredentialDraft(provider, draft[provider.id] ?? {}),
+    ])
+  );
 }
 
 function stableStringify(value: unknown): string {
@@ -117,6 +80,19 @@ function isEmptyConfig(config: NormalizedProviderConfig): boolean {
   return Object.keys(config).length === 0;
 }
 
+function calculateUnsavedCount(params: {
+  settingsJson: string;
+  credentialsJson: string;
+  settingsSnapshot: string;
+  credentialsSnapshot: string;
+  demoModeEnabled: boolean;
+  promptUnsavedCount: number;
+}): number {
+  const settingsDirty = params.settingsJson !== params.settingsSnapshot;
+  const credentialsDirty = !params.demoModeEnabled && params.credentialsJson !== params.credentialsSnapshot;
+  return params.promptUnsavedCount + (settingsDirty ? 1 : 0) + (credentialsDirty ? 1 : 0);
+}
+
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -124,8 +100,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const setStoreTheme = useSettingsStore((s) => s.setTheme);
   const settings = useSettings();
   const user = useAuthStore((state) => state.user);
+  const providerSpecs = useProviderSpecStore((state) => state.specs);
+  const loadProviderSpecs = useProviderSpecStore((state) => state.load);
   const [localSettings, setLocalSettings] = useState<Settings>(settings);
-  const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>(DEFAULT_CREDENTIAL_DRAFT);
+  const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>({});
   const [storedProviders, setStoredProviders] = useState<string[]>([]);
   const [isSyncingCredentials, setIsSyncingCredentials] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -142,6 +120,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const promptsPanelRef = useRef<PromptsTemplatesPanelHandle | null>(null);
   const settingsSnapshotRef = useRef<string>('');
   const credentialsSnapshotRef = useRef<string>('');
+  const localSettingsSnapshot = useMemo(() => JSON.stringify(localSettings), [localSettings]);
+  const localCredentialsSnapshot = useMemo(() => JSON.stringify(localCredentials), [localCredentials]);
+  const unsavedCount = useMemo(
+    () => calculateUnsavedCount({
+      settingsJson: localSettingsSnapshot,
+      credentialsJson: localCredentialsSnapshot,
+      settingsSnapshot: settingsSnapshotRef.current,
+      credentialsSnapshot: credentialsSnapshotRef.current,
+      demoModeEnabled: localSettings.demoModeEnabled,
+      promptUnsavedCount,
+    }),
+    [localCredentialsSnapshot, localSettings.demoModeEnabled, localSettingsSnapshot, promptUnsavedCount]
+  );
 
   // Mobile sidebar state from store
   const openSidebar = useSidebarStore((state) => state.openSidebar);
@@ -151,14 +142,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (isOpen) {
       setLocalSettings(settings);
-      setLocalCredentials(DEFAULT_CREDENTIAL_DRAFT);
       setActiveGeneralTarget('general');
       setActiveSearchMemoryTarget('general');
       settingsSnapshotRef.current = JSON.stringify(settings);
-      credentialsSnapshotRef.current = JSON.stringify(DEFAULT_CREDENTIAL_DRAFT);
       promptUnsavedCountRef.current = 0;
       setPromptUnsavedCount(0);
       setHasMountedPromptsPanel(mainTab === 'prompts' && !settings.demoModeEnabled);
+      void loadProviderSpecs()
+        .then(() => {
+          const emptyDraft = buildEmptyCredentialDraft(useProviderSpecStore.getState().specs);
+          setLocalCredentials(emptyDraft);
+          credentialsSnapshotRef.current = JSON.stringify(emptyDraft);
+        })
+        .catch(() => {
+          setLocalCredentials({});
+          credentialsSnapshotRef.current = JSON.stringify({});
+        });
       void apiClient
         .get<{ providers: string[] }>('/api/v1/credentials')
         .then((resp) => setStoredProviders(Array.isArray(resp.providers) ? resp.providers : []))
@@ -166,7 +165,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setToast(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, loadProviderSpecs, settings]);
 
   const handlePromptUnsavedCountChange = useCallback((count: number) => {
     promptUnsavedCountRef.current = count;
@@ -299,51 +298,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   };
 
   const validateCustomCredentialJson = (): { tab: MainTab; message: string } | null => {
-    const targets: Array<{ label: string; raw: string | undefined; requireStringValues: boolean }> = [
-      {
-        label: t('settings.credentials.custom.additionalHeaders'),
-        raw: localCredentials.custom?.additionalHeadersJson,
-        requireStringValues: true,
-      },
-      {
-        label: t('settings.credentials.custom.additionalBody'),
-        raw: localCredentials.custom?.additionalBodyJson,
-        requireStringValues: false,
-      },
-    ];
-
-    for (const target of targets) {
-      let parsed: unknown;
-      try {
-        const value = (target.raw || '').trim();
-        parsed = value ? JSON.parse(value) : {};
-      } catch {
-        return {
-          tab: 'credentials',
-          message: t('settings.credentials.validation.invalidJson', { field: target.label }),
-        };
-      }
-
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        return {
-          tab: 'credentials',
-          message: t('settings.credentials.validation.invalidJsonObject', { field: target.label }),
-        };
-      }
-
-      if (target.requireStringValues) {
-        const hasInvalidValue = Object.values(parsed as Record<string, unknown>).some(
-          (value) => typeof value !== 'string'
-        );
-        if (hasInvalidValue) {
-          return {
-            tab: 'credentials',
-            message: t('settings.credentials.validation.invalidHeaderValue'),
-          };
-        }
-      }
+    for (const provider of Object.values(providerSpecs)) {
+      const invalidField = validateCredentialDraftJson(provider, localCredentials[provider.id] ?? {});
+      if (!invalidField) continue;
+      const fieldNode = provider.credentials.fields[invalidField];
+      const labelKey = fieldNode && !('fields' in fieldNode) ? fieldNode.ui?.label_key : '';
+      const label = labelKey ? t(labelKey) : invalidField;
+      return {
+        tab: 'credentials',
+        message: t('settings.credentials.validation.invalidJsonObject', { field: label }),
+      };
     }
-
     return null;
   };
 
@@ -351,10 +316,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     async (prevDraft: ProviderCredentials, nextDraft: ProviderCredentials) => {
       setIsSyncingCredentials(true);
       try {
-        const prev = snapshotNormalized(prevDraft);
-        const next = snapshotNormalized(nextDraft);
-        const changedProviders = PROVIDERS.filter(
-          (provider) => stableStringify(prev[provider]) !== stableStringify(next[provider])
+        const prev = snapshotNormalized(prevDraft, providerSpecs);
+        const next = snapshotNormalized(nextDraft, providerSpecs);
+        const changedProviders = Object.keys(providerSpecs).filter(
+          (provider) => stableStringify(prev[provider] ?? {}) !== stableStringify(next[provider] ?? {})
         );
 
         for (const provider of changedProviders) {
@@ -376,7 +341,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         setIsSyncingCredentials(false);
       }
     },
-    []
+    [providerSpecs]
   );
 
   const handleDemoModeChange = useCallback(
@@ -391,8 +356,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       }
 
       const nextSettings = { ...buildLockedSectionReset(localSettings, settings), demoModeEnabled: true };
-      const lockedSettingsDirty = JSON.stringify(localSettings) !== JSON.stringify(buildLockedSectionReset(localSettings, settings));
-      const credentialsDirty = JSON.stringify(localCredentials) !== credentialsSnapshotRef.current;
+      const lockedSettingsDirty = localSettingsSnapshot !== JSON.stringify(buildLockedSectionReset(localSettings, settings));
+      const credentialsDirty = localCredentialsSnapshot !== credentialsSnapshotRef.current;
       const promptsDirty = promptUnsavedCount > 0;
 
       if (lockedSettingsDirty || credentialsDirty || promptsDirty) {
@@ -409,8 +374,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       }
 
       setLocalSettings(nextSettings);
-      setLocalCredentials(DEFAULT_CREDENTIAL_DRAFT);
-      credentialsSnapshotRef.current = JSON.stringify(DEFAULT_CREDENTIAL_DRAFT);
+      const emptyDraft = buildEmptyCredentialDraft(providerSpecs);
+      setLocalCredentials(emptyDraft);
+      credentialsSnapshotRef.current = JSON.stringify(emptyDraft);
       promptUnsavedCountRef.current = 0;
       setPromptUnsavedCount(0);
       setHasMountedPromptsPanel(false);
@@ -418,7 +384,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setMainTab('general');
       setActiveSearchMemoryTarget('general');
     },
-    [localCredentials, localSettings, promptUnsavedCount, settings, t]
+    [localCredentialsSnapshot, localSettings, localSettingsSnapshot, promptUnsavedCount, settings, t]
   );
 
   const handleSave = async () => {
@@ -426,10 +392,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
     setIsSaving(true);
     try {
-      const settingsDirty = JSON.stringify(localSettings) !== settingsSnapshotRef.current;
+      const settingsDirty = localSettingsSnapshot !== settingsSnapshotRef.current;
       const credentialsDirty =
         !localSettings.demoModeEnabled &&
-        JSON.stringify(localCredentials) !== credentialsSnapshotRef.current;
+        localCredentialsSnapshot !== credentialsSnapshotRef.current;
 
       if (settingsDirty || credentialsDirty) {
         if (!localSettings.demoModeEnabled) {
@@ -474,9 +440,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           if (credentialsDirty) {
             const prevCredentials = credentialsSnapshotRef.current
               ? (JSON.parse(credentialsSnapshotRef.current) as ProviderCredentials)
-              : DEFAULT_CREDENTIAL_DRAFT;
+              : buildEmptyCredentialDraft(providerSpecs);
             await syncCredentialDraftDiff(prevCredentials, localCredentials);
-            credentialsSnapshotRef.current = JSON.stringify(localCredentials);
+            credentialsSnapshotRef.current = localCredentialsSnapshot;
           }
 
           if (settingsDirty || credentialsDirty) {
@@ -524,21 +490,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   };
 
   const getUnsavedCount = useCallback(() => {
-    const settingsDirty = JSON.stringify(localSettings) !== settingsSnapshotRef.current;
-    const credentialsDirty =
-      !localSettings.demoModeEnabled &&
-      JSON.stringify(localCredentials) !== credentialsSnapshotRef.current;
-    const promptDirty = promptUnsavedCountRef.current;
-    return promptDirty + (settingsDirty ? 1 : 0) + (credentialsDirty ? 1 : 0);
-  }, [localCredentials, localSettings, promptUnsavedCount]);
+    return calculateUnsavedCount({
+      settingsJson: localSettingsSnapshot,
+      credentialsJson: localCredentialsSnapshot,
+      settingsSnapshot: settingsSnapshotRef.current,
+      credentialsSnapshot: credentialsSnapshotRef.current,
+      demoModeEnabled: localSettings.demoModeEnabled,
+      promptUnsavedCount: promptUnsavedCountRef.current,
+    });
+  }, [localCredentialsSnapshot, localSettings.demoModeEnabled, localSettingsSnapshot]);
 
   const closeWithoutSaving = useCallback(() => {
     setLocalSettings(settings);
-    setLocalCredentials(DEFAULT_CREDENTIAL_DRAFT);
+    setLocalCredentials(buildEmptyCredentialDraft(providerSpecs));
     setPromptUnsavedCount(0);
     setHasMountedPromptsPanel(false);
     onClose();
-  }, [onClose, settings]);
+  }, [onClose, providerSpecs, settings]);
 
   const handleRequestClose = useCallback(async () => {
     const unsavedCount = getUnsavedCount();
@@ -623,13 +591,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             <TextButton variant="secondary" onClick={handleCancel} disabled={isSaving}>
               {t('common.cancel')}
             </TextButton>
-            <TextButton variant="primary" onClick={handleSave} disabled={isSaving || getUnsavedCount() === 0} loading={isSaving}>
+            <TextButton variant="primary" onClick={handleSave} disabled={isSaving || unsavedCount === 0} loading={isSaving}>
               {isSaving ? (
                 t('settings.saving')
               ) : (
                 <>
                   {t('settings.saveSettings')}
-                  {getUnsavedCount() > 0 && <span className="settings-save-badge">{getUnsavedCount()}</span>}
+                  {unsavedCount > 0 && <span className="settings-save-badge">{unsavedCount}</span>}
                 </>
               )}
             </TextButton>

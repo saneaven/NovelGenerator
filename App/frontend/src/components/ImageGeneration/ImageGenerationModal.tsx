@@ -1,22 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useSettings } from '../../store/settingsStore';
+import { useTranslation } from 'react-i18next';
+import { useSettings, type ImageProviderType } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import {
-    IMAGE_PROVIDER_ORDER,
-    PROVIDER_LABELS,
-    OPENAI_BACKGROUND_OPTIONS,
-    OPENAI_INPUT_FIDELITY_OPTIONS,
-    OPENAI_OUTPUT_FORMAT_OPTIONS,
-    OPENAI_QUALITY_OPTIONS,
-    NOVELAI_SAMPLERS,
-    NOVELAI_NOISE_SCHEDULES,
-    NOVELAI_REFERENCE_MODES,
-    DEFAULT_NOVELAI_SETTINGS,
-    PROVIDER_PROMPT_TYPES,
-    type NovelAIReferenceMode,
-    type ImageProviderType,
-} from '../../imageRun/providerConfig';
 import { assetService, type Asset, type StyledPrompt } from '../../api/assetService';
 import { getAssetUrl } from '../../utils/assetUrl';
 import type { ImageGenerationBinding, ImageGenerationRecipe } from '../../imageRun';
@@ -36,8 +22,14 @@ import { AIAssistMini, Close } from '../icons';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import { alert as showAlert } from '../../store/dialogStore';
-import { NumberInput } from '../ui/NumberInput';
 import type { StoryEntityKind } from '../../types/unifiedObject';
+import { useProviderSpecStore } from '../../providerEngine/store';
+import ProviderSettingsFields from '../../providerEngine/ProviderSettingsFields';
+import {
+    buildDefaultObjectValue,
+    getStoredProviderSettings,
+    normalizeByPublicSpec,
+} from '../../providerEngine/utils';
 import './ImageGenerationModal.css';
 
 // Reference image item
@@ -109,9 +101,17 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     sceneContext,
     assetType = 'object',
 }) => {
+    const { t } = useTranslation();
     const { currentProjectId } = useProjectStore();
     const settings = useSettings();
     const { getObject } = useUnifiedObjectStore();
+    const [provider, setProvider] = useState<ImageProviderType>(settings.imageGenConfig.provider);
+    const [model, setModel] = useState(settings.imageGenConfig.model);
+    const [aspectRatio, setAspectRatio] = useState(settings.imageGenConfig.aspect_ratio);
+    const [imageSize, setImageSize] = useState(settings.imageGenConfig.image_size);
+    const loadProviderSpecs = useProviderSpecStore((state) => state.load);
+    const providerSpecs = useProviderSpecStore((state) => state.specs);
+    const providerSpec = providerSpecs[provider];
 
     const [taskId, setTaskId] = useState<string | null>(null);
     const session = useImageRunStore((state) => (taskId ? state.runsById[taskId] : undefined));
@@ -145,22 +145,9 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const [streamingError, setStreamingError] = useState<string | null>(null);
     const previousStreamingStatusRef = useRef<'running' | 'done' | 'halted' | null>(null);
 
-    const [provider, setProvider] = useState<ImageProviderType>(settings.imageGenConfig.provider);
-    const [model, setModel] = useState(settings.imageGenConfig.model);
-    const [aspectRatio, setAspectRatio] = useState(settings.imageGenConfig.aspect_ratio);
-    const [imageSize, setImageSize] = useState(settings.imageGenConfig.image_size);
     const { models, loading: modelsLoading, selectedModel } = useImageModelCatalog(provider, model);
-
-    // Provider-specific settings (serialized into recipe.providerSettings)
-    const [openaiQuality, setOpenaiQuality] = useState<'auto' | 'low' | 'medium' | 'high'>(settings.imageGenConfig.openaiSettings.quality);
-    const [openaiBackground, setOpenaiBackground] = useState<'auto' | 'opaque' | 'transparent'>(settings.imageGenConfig.openaiSettings.background);
-    const [openaiOutputFormat, setOpenaiOutputFormat] = useState<'png' | 'jpeg' | 'webp'>(settings.imageGenConfig.openaiSettings.output_format);
-    const [openaiOutputCompression, setOpenaiOutputCompression] = useState(settings.imageGenConfig.openaiSettings.output_compression);
-    const [openaiInputFidelity, setOpenaiInputFidelity] = useState<'low' | 'high'>(settings.imageGenConfig.openaiSettings.input_fidelity);
-    const [novelaiSampler, setNovelaiSampler] = useState(settings.imageGenConfig.novelaiSettings.sampler);
-    const [novelaiSteps, setNovelaiSteps] = useState(settings.imageGenConfig.novelaiSettings.steps);
-    const [novelaiScale, setNovelaiScale] = useState(settings.imageGenConfig.novelaiSettings.scale);
-    const [novelaiNoiseSchedule, setNovelaiNoiseSchedule] = useState(settings.imageGenConfig.novelaiSettings.noise_schedule);
+    const providerSettingsSpec = providerSpec?.image?.provider_settings ?? null;
+    const [providerSettingsDraft, setProviderSettingsDraft] = useState<Record<string, unknown>>({});
 
     // Style selection
     const [selectedNaturalStyleId, setSelectedNaturalStyleId] = useState<string | null>(
@@ -181,31 +168,50 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const [referenceImages, setReferenceImages] = useState<ReferenceImageItem[]>([]);
     const [showImagePicker, setShowImagePicker] = useState(false);
 
-    // NovelAI reference image settings (i2i / Vibe Transfer)
-    const [novelaiReferenceMode, setNovelaiReferenceMode] = useState<NovelAIReferenceMode>(DEFAULT_NOVELAI_SETTINGS.referenceMode);
-    const [novelaiStrength, setNovelaiStrength] = useState(DEFAULT_NOVELAI_SETTINGS.strength);
-    const [novelaiI2iNoise, setNovelaiI2iNoise] = useState(DEFAULT_NOVELAI_SETTINGS.i2iNoise);
-    const [novelaiVibeStrength, setNovelaiVibeStrength] = useState(DEFAULT_NOVELAI_SETTINGS.vibeStrength);
-    const [novelaiVibeInfoExtracted, setNovelaiVibeInfoExtracted] = useState(DEFAULT_NOVELAI_SETTINGS.vibeInfoExtracted);
-
-    // Preserve unknown providerSettings for retry/prefill.
-    const [providerSettingsBase, setProviderSettingsBase] = useState<Record<string, any>>({});
-
     const isInitialMount = useRef(true);
     const previousProvider = useRef(provider);
+    const seededProviderSettings = useRef<string | null>(null);
+
+    useEffect(() => {
+        void loadProviderSpecs();
+    }, [loadProviderSpecs]);
+
+    const imageProviders = useMemo(() => {
+        const providers = Object.values(providerSpecs).filter((item) => Boolean(item.image));
+        providers.sort((a, b) => {
+            const left = a.ui.image_order ?? 999;
+            const right = b.ui.image_order ?? 999;
+            return left - right || a.id.localeCompare(b.id);
+        });
+        return providers;
+    }, [providerSpecs]);
 
     const supportsImageInput = selectedModel?.supports_image_input ?? false;
+    const buildProviderSettingsDraft = useCallback((
+        providerId: string,
+        recipe?: ImageGenerationRecipe | null,
+    ): Record<string, unknown> => {
+        const spec = providerSpecs[providerId]?.image?.provider_settings;
+        if (!spec) return {};
 
-    // Compute effective reference mode for NovelAI (auto mode resolves based on image count)
-    const effectiveReferenceMode = useMemo(() => {
-        if (novelaiReferenceMode === 'auto') {
-            return referenceImages.length === 1 ? 'i2i' : 'vibe';
-        }
-        return novelaiReferenceMode;
-    }, [novelaiReferenceMode, referenceImages.length]);
+        const defaults = buildDefaultObjectValue(spec);
+        const stored = getStoredProviderSettings(settings.imageGenConfig as Record<string, unknown>, providerId);
+        const retry =
+            recipe?.provider === providerId && recipe.providerSettings && typeof recipe.providerSettings === 'object' && !Array.isArray(recipe.providerSettings)
+                ? recipe.providerSettings as Record<string, unknown>
+                : {};
+        const merged = {
+            ...defaults,
+            ...stored,
+            ...retry,
+        };
+        return normalizeByPublicSpec(merged, spec, merged);
+    }, [providerSpecs, settings.imageGenConfig]);
 
-    // Check if we should show NovelAI reference settings
-    const showNovelaiRefSettings = provider === 'novelai' && referenceImages.length > 0;
+    const normalizedProviderSettings = useMemo(() => {
+        if (!providerSettingsSpec) return {};
+        return normalizeByPublicSpec(providerSettingsDraft, providerSettingsSpec, providerSettingsDraft);
+    }, [providerSettingsDraft, providerSettingsSpec]);
 
     // Add reference image handler
     const handleImageSelected = useCallback((assetId: string, previewUrl: string) => {
@@ -222,7 +228,15 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         setReferenceImages(prev => prev.filter(img => img.assetId !== assetId));
     }, []);
 
-    const currentPromptType = selectedModel?.prompt_type ?? PROVIDER_PROMPT_TYPES[provider];
+    const providerOptions = useMemo(
+        () => imageProviders.map((item) => ({
+            value: item.id,
+            label: t(item.ui.display_name_key),
+        })),
+        [imageProviders, t]
+    );
+
+    const currentPromptType = selectedModel?.prompt_type ?? providerSpec?.image?.prompt_type ?? 'natural';
     const isTagBased = currentPromptType === 'tag_based';
     const naturalStyles = useMemo(
         () => settings.imageGenConfig.naturalStyles ?? [],
@@ -238,38 +252,13 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         if (!initialRecipe) return;
 
         previousProvider.current = initialRecipe.provider as ImageProviderType;
+        seededProviderSettings.current = initialRecipe.provider as ImageProviderType;
 
         setProvider(initialRecipe.provider as ImageProviderType);
         setModel(initialRecipe.model);
         setAspectRatio(initialRecipe.aspectRatio);
         setImageSize(initialRecipe.imageSize);
-
-        const s = (initialRecipe.providerSettings as Record<string, any> | undefined) ?? {};
-        setProviderSettingsBase(s);
-
-        // Provider-specific UI restoration from providerSettings
-        if (s.quality === 'auto' || s.quality === 'low' || s.quality === 'medium' || s.quality === 'high') {
-            setOpenaiQuality(s.quality);
-        }
-        if (s.background === 'auto' || s.background === 'opaque' || s.background === 'transparent') {
-            setOpenaiBackground(s.background);
-        }
-        if (s.output_format === 'png' || s.output_format === 'jpeg' || s.output_format === 'webp') {
-            setOpenaiOutputFormat(s.output_format);
-        }
-        if (typeof s.output_compression === 'number') setOpenaiOutputCompression(s.output_compression);
-        if (s.input_fidelity === 'low' || s.input_fidelity === 'high') setOpenaiInputFidelity(s.input_fidelity);
-        if (typeof s.sampler === 'string') setNovelaiSampler(s.sampler);
-        if (typeof s.steps === 'number') setNovelaiSteps(s.steps);
-        if (typeof s.scale === 'number') setNovelaiScale(s.scale);
-        if (typeof s.noise_schedule === 'string') setNovelaiNoiseSchedule(s.noise_schedule);
-        if (s.referenceMode === 'auto' || s.referenceMode === 'i2i' || s.referenceMode === 'vibe') {
-            setNovelaiReferenceMode(s.referenceMode);
-        }
-        if (typeof s.strength === 'number') setNovelaiStrength(s.strength);
-        if (typeof s.i2iNoise === 'number') setNovelaiI2iNoise(s.i2iNoise);
-        if (typeof s.vibeStrength === 'number') setNovelaiVibeStrength(s.vibeStrength);
-        if (typeof s.vibeInfoExtracted === 'number') setNovelaiVibeInfoExtracted(s.vibeInfoExtracted);
+        setProviderSettingsDraft(buildProviderSettingsDraft(initialRecipe.provider, initialRecipe));
 
         if (initialRecipe.promptType === 'natural') {
             setSelectedNaturalStyleId(normalizeSelectedStyleId(naturalStyles, initialRecipe.styleId));
@@ -336,7 +325,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         return () => {
             cancelled = true;
         };
-    }, [initialRecipe, currentProjectId, naturalStyles, tagBasedStyles]);
+    }, [initialRecipe, currentProjectId, naturalStyles, tagBasedStyles, buildProviderSettingsDraft]);
 
     useEffect(() => {
         if (!selectedNaturalStyleId) return;
@@ -349,6 +338,13 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         if (tagBasedStyles.some((style) => style.id === selectedTagBasedStyleId)) return;
         setSelectedTagBasedStyleId(null);
     }, [selectedTagBasedStyleId, tagBasedStyles]);
+
+    useEffect(() => {
+        if (!providerSettingsSpec) return;
+        if (seededProviderSettings.current === provider) return;
+        seededProviderSettings.current = provider;
+        setProviderSettingsDraft(buildProviderSettingsDraft(provider, initialRecipe));
+    }, [provider, providerSettingsSpec, buildProviderSettingsDraft, initialRecipe]);
 
     // Auto-load saved prompts from object metadata
     useEffect(() => {
@@ -376,8 +372,9 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
         if (previousProvider.current !== provider) {
             previousProvider.current = provider;
+            seededProviderSettings.current = null;
             setModel('');
-            setProviderSettingsBase({});
+            setProviderSettingsDraft(buildProviderSettingsDraft(provider, null));
             setReferenceImages([]);
             setCustomNaturalPrefix('');
             setCustomNaturalPostfix('');
@@ -386,8 +383,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             setCustomNegativePrefix('');
             setCustomNegativePostfix('');
         }
-    }, [provider]);
-    const isCompressedFormat = openaiOutputFormat !== 'png';
+    }, [provider, buildProviderSettingsDraft]);
 
     useEffect(() => {
         if (!selectedModel) return;
@@ -570,32 +566,10 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 ? referenceImages.map((img) => ({ assetId: img.assetId, strength: img.strength }))
                 : undefined;
 
-        let providerSettings: Record<string, unknown> | undefined =
-            providerSettingsBase && Object.keys(providerSettingsBase).length > 0 ? { ...providerSettingsBase } : undefined;
-
-        if (provider === 'openai') {
-            providerSettings = {
-                ...(providerSettings ?? {}),
-                quality: openaiQuality,
-                background: openaiBackground,
-                output_format: openaiOutputFormat,
-                output_compression: openaiOutputCompression,
-                input_fidelity: openaiInputFidelity,
-            };
-        } else if (provider === 'novelai') {
-            providerSettings = {
-                ...(providerSettings ?? {}),
-                sampler: novelaiSampler,
-                steps: novelaiSteps,
-                scale: novelaiScale,
-                noise_schedule: novelaiNoiseSchedule,
-                referenceMode: novelaiReferenceMode,
-                strength: novelaiStrength,
-                i2iNoise: novelaiI2iNoise,
-                vibeStrength: novelaiVibeStrength,
-                vibeInfoExtracted: novelaiVibeInfoExtracted,
-            };
-        }
+        const providerSettings =
+            Object.keys(normalizedProviderSettings).length > 0
+                ? normalizedProviderSettings
+                : undefined;
 
         if (isTagBased) {
             if (!positivePrompt.trim()) {
@@ -805,9 +779,9 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                             onChange={(e) => setProvider(e.target.value as ImageProviderType)}
                             className="config-select"
                         >
-                            {IMAGE_PROVIDER_ORDER.map((p) => (
-                                <option key={p} value={p}>
-                                    {PROVIDER_LABELS[p]}
+                            {providerOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                    {option.label}
                                 </option>
                             ))}
                         </select>
@@ -895,141 +869,20 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     )}
                 </div>
 
-                {/* OpenAI-specific settings */}
-                {provider === 'openai' && (
-                    <div className="form-row provider-settings">
-                        <div className="form-field">
-                            <label>Quality</label>
-                            <select
-                                value={openaiQuality}
-                                onChange={(e) => setOpenaiQuality(e.target.value as 'auto' | 'low' | 'medium' | 'high')}
-                                className="config-select"
-                            >
-                                {OPENAI_QUALITY_OPTIONS.map((value) => (
-                                    <option key={value} value={value}>
-                                        {value.charAt(0).toUpperCase() + value.slice(1)}
-                                    </option>
-                                ))}
-                            </select>
+                {providerSettingsSpec && (
+                    <div className="provider-settings">
+                        <div className="provider-settings-header">
+                            <label>{t(providerSpec?.image?.settings_title_key || providerSpec?.ui.display_name_key || 'settings.imageGen.provider')}</label>
+                            {providerSpec?.image?.settings_description_key ? (
+                                <p className="provider-settings-description">{t(providerSpec.image.settings_description_key)}</p>
+                            ) : null}
                         </div>
-                        <div className="form-field">
-                            <label>Background</label>
-                            <select
-                                value={openaiBackground}
-                                onChange={(e) => setOpenaiBackground(e.target.value as 'auto' | 'opaque' | 'transparent')}
-                                className="config-select"
-                            >
-                                {OPENAI_BACKGROUND_OPTIONS.map((value) => (
-                                    <option key={value} value={value}>
-                                        {value.charAt(0).toUpperCase() + value.slice(1)}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-                )}
-
-                {provider === 'openai' && (
-                    <div className="form-row provider-settings">
-                        <div className="form-field">
-                            <label>Format</label>
-                            <select
-                                value={openaiOutputFormat}
-                                onChange={(e) => setOpenaiOutputFormat(e.target.value as 'png' | 'jpeg' | 'webp')}
-                                className="config-select"
-                            >
-                                {OPENAI_OUTPUT_FORMAT_OPTIONS.map((value) => (
-                                    <option key={value} value={value}>
-                                        {value.toUpperCase()}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="form-field">
-                            <label>Compression</label>
-                            <NumberInput
-                                min={0}
-                                max={100}
-                                value={openaiOutputCompression}
-                                onValueChange={(v) => setOpenaiOutputCompression(v ?? 90)}
-                                className="config-input"
-                                disabled={!isCompressedFormat}
-                            />
-                        </div>
-                        <div className="form-field">
-                            <label>Input Fidelity</label>
-                            <select
-                                value={openaiInputFidelity}
-                                onChange={(e) => setOpenaiInputFidelity(e.target.value as 'low' | 'high')}
-                                className="config-select"
-                            >
-                                {OPENAI_INPUT_FIDELITY_OPTIONS.map((value) => (
-                                    <option key={value} value={value}>
-                                        {value.charAt(0).toUpperCase() + value.slice(1)}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-                )}
-
-                {/* NovelAI-specific settings */}
-                {provider === 'novelai' && (
-                    <div className="novelai-settings">
-                        <div className="form-row">
-                            <div className="form-field">
-                                <label>Sampler</label>
-                                <select
-                                    value={novelaiSampler}
-                                    onChange={(e) => setNovelaiSampler(e.target.value)}
-                                    className="config-select"
-                                >
-                                    {NOVELAI_SAMPLERS.map((s) => (
-                                        <option key={s} value={s}>
-                                            {s}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="form-field">
-                                <label>Steps</label>
-                                <NumberInput
-                                    min={1}
-                                    max={50}
-                                    value={novelaiSteps}
-                                    onValueChange={(v) => setNovelaiSteps(v!)}
-                                    className="config-input"
-                                />
-                            </div>
-                        </div>
-                        <div className="form-row">
-                            <div className="form-field">
-                                <label>CFG Scale</label>
-                                <NumberInput
-                                    min={1}
-                                    max={20}
-                                    step={0.5}
-                                    integer={false}
-                                    value={novelaiScale}
-                                    onValueChange={(v) => setNovelaiScale(v!)}
-                                    className="config-input"
-                                />
-                            </div>
-                            <div className="form-field">
-                                <label>Noise Schedule</label>
-                                <select
-                                    value={novelaiNoiseSchedule}
-                                    onChange={(e) => setNovelaiNoiseSchedule(e.target.value)}
-                                    className="config-select"
-                                >
-                                    {NOVELAI_NOISE_SCHEDULES.map((s) => (
-                                        <option key={s} value={s}>
-                                            {s}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
+                        <ProviderSettingsFields
+                            spec={providerSettingsSpec}
+                            draft={providerSettingsDraft}
+                            setDraft={setProviderSettingsDraft}
+                            className="image-generation-provider-settings"
+                        />
                     </div>
                 )}
 
@@ -1068,97 +921,6 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                                         />
                                     </div>
                                 ))}
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* NovelAI Reference Image Settings (i2i / Vibe Transfer) */}
-                {showNovelaiRefSettings && (
-                    <div className="novelai-ref-settings">
-                        <div className="ref-settings-header">
-                            <span className="ref-settings-label">Reference Image Mode</span>
-                            {referenceImages.length > 4 && effectiveReferenceMode === 'vibe' && (
-                                <span className="ref-warning">Extra Anlas cost for &gt;4 images</span>
-                            )}
-                        </div>
-                        <div className="form-row">
-                            <div className="form-field full-width">
-                                <select
-                                    value={novelaiReferenceMode}
-                                    onChange={(e) => setNovelaiReferenceMode(e.target.value as NovelAIReferenceMode)}
-                                    className="config-select"
-                                >
-                                    {NOVELAI_REFERENCE_MODES.map((m) => (
-                                        <option key={m.value} value={m.value}>
-                                            {m.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* i2i Settings */}
-                        {effectiveReferenceMode === 'i2i' && (
-                            <div className="form-row">
-                                <div className="form-field">
-                                    <label>Strength</label>
-                                    <input
-                                        type="range"
-                                        min={0}
-                                        max={1}
-                                        step={0.05}
-                                        value={novelaiStrength}
-                                        onChange={(e) => setNovelaiStrength(parseFloat(e.target.value))}
-                                        className="config-slider"
-                                    />
-                                    <span className="slider-value">{novelaiStrength.toFixed(2)}</span>
-                                </div>
-                                <div className="form-field">
-                                    <label>Noise</label>
-                                    <input
-                                        type="range"
-                                        min={0}
-                                        max={1}
-                                        step={0.05}
-                                        value={novelaiI2iNoise}
-                                        onChange={(e) => setNovelaiI2iNoise(parseFloat(e.target.value))}
-                                        className="config-slider"
-                                    />
-                                    <span className="slider-value">{novelaiI2iNoise.toFixed(2)}</span>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Vibe Transfer Settings */}
-                        {effectiveReferenceMode === 'vibe' && (
-                            <div className="form-row">
-                                <div className="form-field">
-                                    <label>Style Influence</label>
-                                    <input
-                                        type="range"
-                                        min={0}
-                                        max={1}
-                                        step={0.05}
-                                        value={novelaiVibeStrength}
-                                        onChange={(e) => setNovelaiVibeStrength(parseFloat(e.target.value))}
-                                        className="config-slider"
-                                    />
-                                    <span className="slider-value">{novelaiVibeStrength.toFixed(2)}</span>
-                                </div>
-                                <div className="form-field">
-                                    <label>Info Extraction</label>
-                                    <input
-                                        type="range"
-                                        min={0}
-                                        max={1}
-                                        step={0.05}
-                                        value={novelaiVibeInfoExtracted}
-                                        onChange={(e) => setNovelaiVibeInfoExtracted(parseFloat(e.target.value))}
-                                        className="config-slider"
-                                    />
-                                    <span className="slider-value">{novelaiVibeInfoExtracted.toFixed(2)}</span>
-                                </div>
                             </div>
                         )}
                     </div>

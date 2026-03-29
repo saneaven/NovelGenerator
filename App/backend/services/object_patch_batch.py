@@ -70,6 +70,7 @@ class ObjectPatchBatch:
                 object_type=object_type,
                 object_id=object_id,
                 language=language,
+                rich_text_format="markdown",
             )
             lang_data = extract_lang_data(obj, language)
             self._states[key] = ObjectPatchState(
@@ -169,11 +170,12 @@ class ObjectPatchBatch:
                         db,
                         project_id=state.project_id,
                         object_type=state.object_type,
-                        object_id=state.object_id,
-                        data=state.data,
-                        language=state.language,
-                        metadata=state.metadata,
-                        user_request="tool:patch_batch",
+                    object_id=state.object_id,
+                    data=state.data,
+                    language=state.language,
+                    rich_text_format="markdown",
+                    metadata=state.metadata,
+                    user_request="tool:patch_batch",
                         created_by=created_by,
                         create_new_version=state.create_new_version,
                     )

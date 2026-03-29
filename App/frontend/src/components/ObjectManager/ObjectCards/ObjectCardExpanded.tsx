@@ -10,7 +10,7 @@ import { RichTextEditor, type RichTextEditorRef } from '../../RichTextEditor';
 import AuthenticatedImage from '../../common/AuthenticatedImage';
 import type { Asset } from '../../../api/assetService';
 import type { TipTapDoc } from '../../../types/tiptap';
-import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
+import { normalizeDoc } from '../../../editor/manuscript/doc';
 import { getAssetUrl } from '../../../utils/assetUrl';
 import { confirm } from '../../../store/dialogStore';
 import './ObjectCardExpanded.css';

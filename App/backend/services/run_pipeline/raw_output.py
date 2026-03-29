@@ -8,10 +8,17 @@ from sqlalchemy.orm import Session
 from ...models.db_models import Manuscript, RunMessageModel, RunModel, Thread
 from ...models.translation_models import ObjectVersion
 from ..object_service import object_service
+from ..rich_text.registry import get_rich_text_fields
 from ..thread_parent_runtime_service import resolve_parent
 from .text_utils import as_dict, as_str_list, collapse_content_text
 
 EmitFn = Callable[..., Awaitable[None]]
+
+
+def _runtime_rich_text_kwargs(object_type: str) -> dict[str, str]:
+    if get_rich_text_fields(object_type):
+        return {"rich_text_format": "markdown"}
+    return {}
 
 async def apply_raw_output(
     db: Session,
@@ -121,6 +128,7 @@ async def apply_raw_output(
             object_id=target_id,
             project_id=run.project_id,
             language=run.language,
+            **_runtime_rich_text_kwargs(category),
         )
         if current is None:
             raise RuntimeError(f"{journey_kind} target object not found")
@@ -147,7 +155,7 @@ async def apply_raw_output(
             object_id=target_id,
             data=next_data,
             language=run.language,
-            rich_text_format="markdown" if category in {"guidelines", "outline", "story_entity"} else "tiptap",
+            **_runtime_rich_text_kwargs(category),
             user_request=user_request,
             created_by=run.user_id,
         )
@@ -180,6 +188,7 @@ async def apply_raw_output(
             object_id=object_id,
             project_id=run.project_id,
             language=None if object_type == "manuscript" else target_language,
+            **_runtime_rich_text_kwargs(object_type),
         )
         if current is None:
             raise RuntimeError("objectTranslation target object not found in project")
@@ -210,7 +219,7 @@ async def apply_raw_output(
             object_id=object_id,
             data=next_data,
             language=target_language,
-            rich_text_format="markdown" if object_type in {"guidelines", "outline", "story_entity", "manuscript"} else "tiptap",
+            **_runtime_rich_text_kwargs(object_type),
             user_request="raw:objectTranslation",
             created_by=run.user_id,
             create_new_version=False,

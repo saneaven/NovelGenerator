@@ -1,4 +1,4 @@
-export type EmbeddingProviderType = 'openai' | 'gemini' | 'openrouter' | 'custom';
+export type EmbeddingProviderType = string;
 export type SearchMemoryTarget = 'search' | 'memory';
 
 export interface EmbeddingConfig {

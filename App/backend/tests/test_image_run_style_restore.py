@@ -34,6 +34,10 @@ fake_object_service = types.ModuleType("App.backend.services.object_service")
 fake_object_service.object_service = SimpleNamespace(get_object=lambda *_args, **_kwargs: None)
 sys.modules["App.backend.services.object_service"] = fake_object_service
 
+fake_rich_text = types.ModuleType("App.backend.services.rich_text")
+fake_rich_text.tree_to_markdown = lambda *_args, **_kwargs: ""
+sys.modules["App.backend.services.rich_text"] = fake_rich_text
+
 fake_runtime_dispatcher = types.ModuleType("App.backend.services.runtime_event_dispatcher")
 fake_runtime_dispatcher.runtime_event_dispatcher = SimpleNamespace(emit_project_event=lambda *_args, **_kwargs: None)
 sys.modules["App.backend.services.runtime_event_dispatcher"] = fake_runtime_dispatcher
@@ -146,14 +150,21 @@ def test_build_tool_recipe_snapshot_uses_selected_natural_style_id(monkeypatch) 
                 }
             ],
             "tagBasedStyles": [],
-            "openaiSettings": {
-                "quality": "high",
-                "background": "auto",
-                "output_format": "png",
-                "output_compression": 90,
-                "input_fidelity": "high",
+            "providerSettings": {
+                "openai": {
+                    "quality": "high",
+                    "background": "auto",
+                    "output_format": "png",
+                    "output_compression": 90,
+                    "input_fidelity": "high",
+                },
+                "novelai": {
+                    "sampler": "k_euler_ancestral",
+                    "steps": 28,
+                    "scale": 6.0,
+                    "noise_schedule": "karras",
+                },
             },
-            "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"},
         }
     )
 
@@ -197,14 +208,21 @@ def test_build_tool_recipe_snapshot_uses_selected_tag_based_style_id(monkeypatch
                     "negativePostfix": ", blurry",
                 }
             ],
-            "openaiSettings": {
-                "quality": "auto",
-                "background": "auto",
-                "output_format": "png",
-                "output_compression": 90,
-                "input_fidelity": "high",
+            "providerSettings": {
+                "openai": {
+                    "quality": "auto",
+                    "background": "auto",
+                    "output_format": "png",
+                    "output_compression": 90,
+                    "input_fidelity": "high",
+                },
+                "novelai": {
+                    "sampler": "k_euler_ancestral",
+                    "steps": 28,
+                    "scale": 6.0,
+                    "noise_schedule": "karras",
+                },
             },
-            "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"},
         }
     )
 

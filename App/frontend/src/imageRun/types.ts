@@ -12,7 +12,7 @@ export type ReferenceImageRef = {
 export type ImageGenerationRecipe =
   | {
       promptType: 'natural';
-      provider: 'openai' | 'gemini' | 'xai' | 'openrouter' | (string & {});
+      provider: string;
       model: string;
       aspectRatio: string;
       imageSize: string;
@@ -23,7 +23,7 @@ export type ImageGenerationRecipe =
     }
   | {
       promptType: 'tag_based';
-      provider: 'novelai' | (string & {});
+      provider: string;
       model: string;
       aspectRatio: string;
       imageSize: string;

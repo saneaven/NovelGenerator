@@ -574,7 +574,22 @@
         "cfgScale": "CFG Scale",
         "cfgScaleHint": "Prompt guidance strength (1-20)",
         "noiseSchedule": "Noise Schedule",
-        "noiseScheduleHint": "Noise scheduling method"
+        "noiseScheduleHint": "Noise scheduling method",
+        "referenceMode": "Reference Mode",
+        "referenceModeHint": "How NovelAI should interpret attached reference images",
+        "referenceModeOptions": {
+          "auto": "Auto",
+          "i2i": "Image-to-Image",
+          "vibe": "Vibe Transfer"
+        },
+        "strength": "Strength",
+        "strengthHint": "How strongly the source image is transformed in i2i mode",
+        "i2iNoise": "Noise",
+        "i2iNoiseHint": "Extra noise applied before image-to-image generation",
+        "vibeStrength": "Style Influence",
+        "vibeStrengthHint": "How strongly reference images influence style in vibe mode",
+        "vibeInfoExtracted": "Info Extraction",
+        "vibeInfoExtractedHint": "How much detail NovelAI extracts from reference images in vibe mode"
       },
       "naturalStyles": {
         "title": "Custom Styles (Natural Language)",

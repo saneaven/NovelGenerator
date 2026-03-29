@@ -5,6 +5,7 @@ import { fetchModels, fetchEmbeddingModels, fetchModelEndpoints } from '../../ap
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import { Check, Expand, Collapse } from '../icons';
+import { useProviderSpecStore } from '../../providerEngine/store';
 import './ModelBrowser.css';
 
 interface ModelBrowserProps {
@@ -244,6 +245,8 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
   autoExpand = false,
 }) => {
   const { t } = useTranslation();
+  const loadProviderSpecs = useProviderSpecStore((state) => state.load);
+  const providerSpec = useProviderSpecStore((state) => state.specs[provider]);
   const [modelsData, setModelsData] = useState<any>(null);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
@@ -263,6 +266,10 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
       loadModels();
     }
   }, [autoExpand]);
+
+  useEffect(() => {
+    void loadProviderSpecs();
+  }, [loadProviderSpecs]);
 
   const loadModels = async () => {
     setLoadingModels(true);
@@ -305,32 +312,24 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     });
   };
 
-  // Determine if provider should use tree grouping
-  const shouldGroupByFamily = (): boolean => {
-    if (mode === 'embedding') {
-      return provider === 'openrouter';
-    }
-    return provider === 'openrouter' || provider === 'gemini' || provider === 'openai';
-  };
+  const grouping = mode === 'embedding'
+    ? providerSpec?.ui.model_browser_grouping_embedding ?? 'flat'
+    : providerSpec?.ui.model_browser_grouping_llm ?? 'flat';
 
-  // Determine what details to show based on provider
-  const getDetailsConfig = () => {
-    if (provider === 'openrouter') {
-      return {
-        showArchitecture: true,
-        showPricing: true,
-        showEndpoints: mode === 'chat',
+  const detailsConfig = mode === 'embedding'
+    ? {
+        showArchitecture: Boolean(providerSpec?.ui.embedding_show_architecture),
+        showPricing: Boolean(providerSpec?.ui.embedding_show_pricing),
+        showEndpoints: Boolean(providerSpec?.ui.embedding_show_endpoints),
+      }
+    : {
+        showArchitecture: Boolean(providerSpec?.ui.llm_show_architecture),
+        showPricing: Boolean(providerSpec?.ui.llm_show_pricing),
+        showEndpoints: Boolean(providerSpec?.ui.llm_show_endpoints),
       };
-    }
-    return {
-      showArchitecture: false,
-      showPricing: false,
-      showEndpoints: false,
-    };
-  };
 
   const loadModelEndpoints = async (modelId: string, canonicalSlug: string) => {
-    if (mode !== 'chat' || provider !== 'openrouter' || modelEndpoints[modelId]) {
+    if (mode !== 'chat' || !detailsConfig.showEndpoints || modelEndpoints[modelId]) {
       return;
     }
 
@@ -438,14 +437,14 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
         case 'name-desc':
           return getModelDisplayName(b).localeCompare(getModelDisplayName(a));
         case 'price-asc':
-          if (provider === 'openrouter') {
+          if (detailsConfig.showPricing) {
             const priceA = parseFloat(a.pricing?.prompt || '0');
             const priceB = parseFloat(b.pricing?.prompt || '0');
             return priceA - priceB;
           }
           return 0;
         case 'price-desc':
-          if (provider === 'openrouter') {
+          if (detailsConfig.showPricing) {
             const priceA = parseFloat(a.pricing?.prompt || '0');
             const priceB = parseFloat(b.pricing?.prompt || '0');
             return priceB - priceA;
@@ -457,23 +456,22 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     });
 
     return models;
-  }, [modelsData, searchQuery, sortOption, provider]);
+  }, [detailsConfig.showPricing, modelsData, searchQuery, sortOption]);
 
-  // Build model tree based on provider
   const modelTree = useMemo((): TreeNode[] | null => {
-    if (!shouldGroupByFamily() || !processedModels.length) return null;
+    if (grouping === 'flat' || !processedModels.length) return null;
 
-    if (provider === 'openrouter') {
+    if (grouping === 'provider_family') {
       return buildOpenRouterTree(processedModels);
     }
-    if (provider === 'gemini') {
+    if (grouping === 'gemini_family') {
       return buildGeminiTree(processedModels);
     }
-    if (provider === 'openai') {
+    if (grouping === 'openai_series') {
       return buildOpenAITree(processedModels);
     }
     return null;
-  }, [processedModels, provider]);
+  }, [grouping, processedModels]);
 
   const parseMarkdownLinks = (text: string) => {
     const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
@@ -509,7 +507,6 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
   };
 
   const renderModelCard = (model: any) => {
-    const detailsConfig = getDetailsConfig();
     const isSelected = currentModel === model.id;
     const MAX_DESC_LENGTH = 150;
     const isDescriptionLong = model.description && model.description.length > MAX_DESC_LENGTH;
@@ -537,7 +534,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
         </div>
 
         {/* OpenRouter: Show pricing inline */}
-        {provider === 'openrouter' && model.pricing && (
+        {detailsConfig.showPricing && model.pricing && (
           <div className="model-card__pricing-inline">
             <span className="model-card__price">
               ${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)} / ${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)} per 1M tokens
@@ -778,7 +775,6 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
       return <div className="model-browser__empty">{t('settings.modelBrowser.noModelsAvailable')}</div>;
     }
 
-    // Tree display (OpenRouter, Gemini)
     if (modelTree) {
       return (
         <div className="model-browser__list model-browser__list--tree">
@@ -815,7 +811,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
               options={[
                 { value: 'name-asc', label: t('settings.modelBrowser.sortNameAsc') },
                 { value: 'name-desc', label: t('settings.modelBrowser.sortNameDesc') },
-                ...(provider === 'openrouter' ? [
+                ...(detailsConfig.showPricing ? [
                   { value: 'price-asc', label: t('settings.modelBrowser.sortPriceAsc') },
                   { value: 'price-desc', label: t('settings.modelBrowser.sortPriceDesc') },
                 ] : []),

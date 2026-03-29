@@ -1,251 +1,27 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from copy import deepcopy
 from typing import Any, Optional
 
-try:
-    import httpx
-except ModuleNotFoundError:  # pragma: no cover - optional in lightweight test envs
-    httpx = None  # type: ignore[assignment]
+from ..provider_engine.contracts import ImageModelDescriptor, ImageModelGeometrySpec, MISSING, ObjectSpec, ResolvedImageGeometry
+from ..provider_engine.registry import list_providers, require_provider
+from ..provider_engine.runtime_dispatch import list_image_models as _list_image_models
+from ..provider_engine.runtime_dispatch import sanitize_provider_settings
 
 
-OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
-OPENROUTER_DEFAULT_RATIOS = [
-    "1:1",
-    "2:3",
-    "3:2",
-    "3:4",
-    "4:3",
-    "4:5",
-    "5:4",
-    "9:16",
-    "16:9",
-    "21:9",
-]
-OPENROUTER_DEFAULT_IMAGE_SIZES = ["1K", "2K", "4K"]
-OPENROUTER_IMAGE_MODEL_OVERRIDES: dict[str, dict[str, list[str]]] = {
-    "google/gemini-3.1-flash-image-preview": {
-        "supported_aspect_ratios": [
-            "1:1",
-            "2:3",
-            "3:2",
-            "3:4",
-            "4:3",
-            "4:5",
-            "5:4",
-            "9:16",
-            "16:9",
-            "21:9",
-            "1:4",
-            "4:1",
-            "1:8",
-            "8:1",
-        ],
-        "supported_image_sizes": ["512px", "1K", "2K", "4K"],
-    },
-    "google/gemini-3-pro-image-preview": {
-        "supported_aspect_ratios": [
-            "1:1",
-            "2:3",
-            "3:2",
-            "3:4",
-            "4:3",
-            "4:5",
-            "5:4",
-            "9:16",
-            "16:9",
-            "21:9",
-        ],
-        "supported_image_sizes": ["1K", "2K", "4K"],
-    },
-}
-OPENAI_PROVIDER_SETTINGS_KEYS = {
-    "quality",
-    "background",
-    "output_format",
-    "output_compression",
-    "input_fidelity",
-}
-NOVELAI_PROVIDER_SETTINGS_KEYS = {
-    "sampler",
-    "steps",
-    "scale",
-    "noise_schedule",
-    "referenceMode",
-    "strength",
-    "i2iNoise",
-    "vibeStrength",
-    "vibeInfoExtracted",
-}
-
-
-@dataclass(frozen=True)
-class ImageModelRecord:
-    id: str
-    name: str
-    prompt_type: str
-    supports_image_input: bool
-    supported_aspect_ratios: tuple[str, ...]
-    supported_image_sizes: tuple[str, ...]
-    default_aspect_ratio: str
-    default_image_size: str
-    ui_resolution_mode: str
-    native_size_by_aspect_ratio: dict[str, str] | None = None
-    description: str | None = None
-    canonical_slug: str | None = None
-    architecture: dict[str, Any] | None = None
-    pricing: dict[str, Any] | None = None
-
-    def to_api_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "name": self.name,
-            "description": self.description,
-            "canonical_slug": self.canonical_slug,
-            "prompt_type": self.prompt_type,
-            "supports_image_input": self.supports_image_input,
-            "supported_aspect_ratios": list(self.supported_aspect_ratios),
-            "supported_image_sizes": list(self.supported_image_sizes),
-            "default_aspect_ratio": self.default_aspect_ratio,
-            "default_image_size": self.default_image_size,
-            "ui_resolution_mode": self.ui_resolution_mode,
-            "architecture": self.architecture,
-            "pricing": self.pricing,
-        }
-
-
-@dataclass(frozen=True)
-class ResolvedImageGeometry:
-    model: str
-    prompt_type: str
-    supports_image_input: bool
-    requested_aspect_ratio: str
-    requested_image_size: str
-    resolved_aspect_ratio: str
-    resolved_image_size: str
-    resolved_native_size: str
-
-
-STATIC_MODEL_RECORDS: dict[str, tuple[ImageModelRecord, ...]] = {
-    "openai": (
-        ImageModelRecord(
-            id="gpt-image-1.5",
-            name="GPT Image 1.5",
-            prompt_type="natural",
-            supports_image_input=True,
-            supported_aspect_ratios=("1:1", "3:2", "2:3"),
-            supported_image_sizes=("1K",),
-            default_aspect_ratio="1:1",
-            default_image_size="1K",
-            ui_resolution_mode="translated_fixed",
-            native_size_by_aspect_ratio={"1:1": "1024x1024", "3:2": "1536x1024", "2:3": "1024x1536"},
-        ),
-        ImageModelRecord(
-            id="gpt-image-1",
-            name="GPT Image 1",
-            prompt_type="natural",
-            supports_image_input=True,
-            supported_aspect_ratios=("1:1", "3:2", "2:3"),
-            supported_image_sizes=("1K",),
-            default_aspect_ratio="1:1",
-            default_image_size="1K",
-            ui_resolution_mode="translated_fixed",
-            native_size_by_aspect_ratio={"1:1": "1024x1024", "3:2": "1536x1024", "2:3": "1024x1536"},
-        ),
-    ),
-    "gemini": (
-        ImageModelRecord(
-            id="gemini-3.1-flash-image-preview",
-            name="Gemini 3.1 Flash Image Preview",
-            prompt_type="natural",
-            supports_image_input=True,
-            supported_aspect_ratios=tuple(OPENROUTER_IMAGE_MODEL_OVERRIDES["google/gemini-3.1-flash-image-preview"]["supported_aspect_ratios"]),
-            supported_image_sizes=tuple(OPENROUTER_IMAGE_MODEL_OVERRIDES["google/gemini-3.1-flash-image-preview"]["supported_image_sizes"]),
-            default_aspect_ratio="1:1",
-            default_image_size="1K",
-            ui_resolution_mode="native_tier",
-        ),
-        ImageModelRecord(
-            id="gemini-3-pro-image-preview",
-            name="Gemini 3 Pro Image Preview",
-            prompt_type="natural",
-            supports_image_input=True,
-            supported_aspect_ratios=tuple(OPENROUTER_IMAGE_MODEL_OVERRIDES["google/gemini-3-pro-image-preview"]["supported_aspect_ratios"]),
-            supported_image_sizes=tuple(OPENROUTER_IMAGE_MODEL_OVERRIDES["google/gemini-3-pro-image-preview"]["supported_image_sizes"]),
-            default_aspect_ratio="1:1",
-            default_image_size="1K",
-            ui_resolution_mode="native_tier",
-        ),
-    ),
-    "xai": (
-        ImageModelRecord(
-            id="grok-2-image",
-            name="Grok 2 Image",
-            prompt_type="natural",
-            supports_image_input=False,
-            supported_aspect_ratios=("1:1", "4:7", "7:4"),
-            supported_image_sizes=("1K",),
-            default_aspect_ratio="1:1",
-            default_image_size="1K",
-            ui_resolution_mode="translated_fixed",
-            native_size_by_aspect_ratio={"1:1": "1024x1024", "4:7": "1024x1792", "7:4": "1792x1024"},
-        ),
-        ImageModelRecord(
-            id="grok-2-image-1212",
-            name="Grok 2 Image 1212",
-            prompt_type="natural",
-            supports_image_input=False,
-            supported_aspect_ratios=("1:1", "4:7", "7:4"),
-            supported_image_sizes=("1K",),
-            default_aspect_ratio="1:1",
-            default_image_size="1K",
-            ui_resolution_mode="translated_fixed",
-            native_size_by_aspect_ratio={"1:1": "1024x1024", "4:7": "1024x1792", "7:4": "1792x1024"},
-        ),
-    ),
-    "novelai": (
-        ImageModelRecord(
-            id="nai-diffusion-4-5-full",
-            name="NAI Diffusion V4.5 Full",
-            prompt_type="tag_based",
-            supports_image_input=True,
-            supported_aspect_ratios=("1:1", "13:19", "19:13", "2:3", "3:2", "5:12", "12:5"),
-            supported_image_sizes=("1K",),
-            default_aspect_ratio="13:19",
-            default_image_size="1K",
-            ui_resolution_mode="translated_fixed",
-            native_size_by_aspect_ratio={
-                "1:1": "1024x1024",
-                "13:19": "832x1216",
-                "19:13": "1216x832",
-                "2:3": "1024x1536",
-                "3:2": "1536x1024",
-                "5:12": "640x1536",
-                "12:5": "1536x640",
-            },
-        ),
-        ImageModelRecord(
-            id="nai-diffusion-4-5-curated",
-            name="NAI Diffusion V4.5 Curated",
-            prompt_type="tag_based",
-            supports_image_input=True,
-            supported_aspect_ratios=("1:1", "13:19", "19:13", "2:3", "3:2", "5:12", "12:5"),
-            supported_image_sizes=("1K",),
-            default_aspect_ratio="13:19",
-            default_image_size="1K",
-            ui_resolution_mode="translated_fixed",
-            native_size_by_aspect_ratio={
-                "1:1": "1024x1024",
-                "13:19": "832x1216",
-                "19:13": "1216x832",
-                "2:3": "1024x1536",
-                "3:2": "1536x1024",
-                "5:12": "640x1536",
-                "12:5": "1536x640",
-            },
-        ),
-    ),
-}
+def _defaults_from_object_spec(spec: ObjectSpec | None) -> dict[str, Any]:
+    if spec is None:
+        return {}
+    out: dict[str, Any] = {}
+    for key, node in spec.fields.items():
+        if isinstance(node, ObjectSpec):
+            child = _defaults_from_object_spec(node)
+            if child:
+                out[key] = child
+            continue
+        if node.default is not MISSING:
+            out[key] = deepcopy(node.default)
+    return out
 
 
 def _normalize_ratio_text(raw: Any, *, fallback: str = "1:1") -> str:
@@ -274,16 +50,14 @@ def _gcd(a: int, b: int) -> int:
     return a or 1
 
 
-def _ratio_score(candidate: str, requested: str) -> float:
-    c_value = _ratio_value(candidate)
-    r_value = _ratio_value(requested)
-    return abs(c_value - r_value)
-
-
 def _ratio_value(raw: str) -> float:
     normalized = _normalize_ratio_text(raw)
     left, right = normalized.split(":")
     return int(left) / int(right)
+
+
+def _ratio_score(candidate: str, requested: str) -> float:
+    return abs(_ratio_value(candidate) - _ratio_value(requested))
 
 
 def _pick_ratio(candidates: list[str], requested: str, *, fallback: str) -> str:
@@ -296,45 +70,45 @@ def _pick_ratio(candidates: list[str], requested: str, *, fallback: str) -> str:
 
 
 def sanitize_generation_settings(provider: str, settings: Any) -> dict[str, Any] | None:
-    if not isinstance(settings, dict):
-        return None
+    return sanitize_provider_settings(provider, settings)
 
-    allowlist: set[str]
-    if provider == "openai":
-        allowlist = OPENAI_PROVIDER_SETTINGS_KEYS
-    elif provider == "novelai":
-        allowlist = NOVELAI_PROVIDER_SETTINGS_KEYS
-    else:
-        allowlist = set()
 
-    cleaned: dict[str, Any] = {}
-    for key, value in settings.items():
-        if key in {"size", "aspect_ratio", "image_resolution", "image_size"}:
-            continue
-        if key not in allowlist:
-            continue
-        cleaned[key] = value
-    return cleaned or None
+def _descriptor_to_api_dict(model: ImageModelDescriptor) -> dict[str, Any]:
+    return {
+        "id": model.id,
+        "name": model.name,
+        "description": model.description,
+        "canonical_slug": model.canonical_slug,
+        "prompt_type": model.prompt_type,
+        "supports_image_input": model.supports_image_input,
+        "supported_aspect_ratios": list(model.geometry.supported_aspect_ratios),
+        "supported_image_sizes": list(model.geometry.supported_resolutions),
+        "default_aspect_ratio": model.geometry.default_aspect_ratio,
+        "default_image_size": model.geometry.default_resolution,
+        "ui_resolution_mode": model.geometry.resolution_mode,
+        "architecture": model.architecture,
+        "pricing": model.pricing,
+    }
 
 
 def default_image_gen_config() -> dict[str, Any]:
+    openai_image = require_provider("openai").image
+    openai_model = openai_image.models[0]
+    provider_settings: dict[str, dict[str, Any]] = {}
+    for provider in list_providers():
+        if provider.image is None:
+            continue
+        provider_settings[provider.id] = _defaults_from_object_spec(provider.image.provider_settings)
     return {
         "provider": "openai",
-        "model": "gpt-image-1.5",
-        "aspect_ratio": "1:1",
-        "image_size": "1K",
+        "model": openai_model.id,
+        "aspect_ratio": openai_model.geometry.default_aspect_ratio,
+        "image_size": openai_model.geometry.default_resolution,
         "naturalStyles": [],
         "tagBasedStyles": [],
         "selectedNaturalStyleId": None,
         "selectedTagBasedStyleId": None,
-        "openaiSettings": {
-            "quality": "auto",
-            "background": "auto",
-            "output_format": "png",
-            "output_compression": 90,
-            "input_fidelity": "high",
-        },
-        "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"},
+        "providerSettings": provider_settings,
     }
 
 
@@ -360,7 +134,29 @@ def migrate_image_gen_config(raw: Any) -> dict[str, Any]:
     elif isinstance(raw.get("geminiSettings"), dict) and raw["geminiSettings"].get("image_resolution"):
         image_size = str(raw["geminiSettings"]["image_resolution"]).strip()
     else:
-        image_size = "1K"
+        image_size = defaults["image_size"]
+
+    raw_provider_settings = raw.get("providerSettings") if isinstance(raw.get("providerSettings"), dict) else {}
+    provider_settings = deepcopy(defaults["providerSettings"])
+    for provider_id, value in raw_provider_settings.items():
+        if not isinstance(provider_id, str) or not isinstance(value, dict):
+            continue
+        provider_settings[provider_id] = provider_settings.get(provider_id, {}) | value
+    if isinstance(raw.get("openaiSettings"), dict):
+        provider_settings["openai"] = provider_settings.get("openai", {}) | raw["openaiSettings"]
+    if isinstance(raw.get("novelaiSettings"), dict):
+        provider_settings["novelai"] = provider_settings.get("novelai", {}) | raw["novelaiSettings"]
+
+    normalized_provider_settings: dict[str, dict[str, Any]] = {}
+    for provider_id, value in provider_settings.items():
+        if not isinstance(value, dict):
+            continue
+        try:
+            normalized = sanitize_provider_settings(provider_id, value)
+        except ValueError:
+            normalized_provider_settings[provider_id] = value
+            continue
+        normalized_provider_settings[provider_id] = normalized or {}
 
     migrated = {
         "provider": provider,
@@ -371,17 +167,8 @@ def migrate_image_gen_config(raw: Any) -> dict[str, Any]:
         "tagBasedStyles": raw.get("tagBasedStyles") if isinstance(raw.get("tagBasedStyles"), list) else [],
         "selectedNaturalStyleId": raw.get("selectedNaturalStyleId"),
         "selectedTagBasedStyleId": raw.get("selectedTagBasedStyleId"),
-        "openaiSettings": defaults["openaiSettings"] | (
-            raw.get("openaiSettings") if isinstance(raw.get("openaiSettings"), dict) else {}
-        ),
-        "novelaiSettings": defaults["novelaiSettings"] | (
-            raw.get("novelaiSettings") if isinstance(raw.get("novelaiSettings"), dict) else {}
-        ),
+        "providerSettings": normalized_provider_settings,
     }
-
-    if provider in {"openai", "xai", "novelai"}:
-        migrated["image_size"] = "1K"
-
     return migrated
 
 
@@ -390,7 +177,6 @@ def rewrite_image_run_recipe(raw: Any) -> dict[str, Any]:
         return {}
 
     provider = str(raw.get("provider") or "").strip()
-    requested_aspect_ratio = ""
     if isinstance(raw.get("requested_aspect_ratio"), str) and raw.get("requested_aspect_ratio"):
         requested_aspect_ratio = _normalize_ratio_text(raw.get("requested_aspect_ratio"))
     elif isinstance(raw.get("requested_ratio"), str) and raw.get("requested_ratio"):
@@ -410,9 +196,6 @@ def rewrite_image_run_recipe(raw: Any) -> dict[str, Any]:
         else:
             requested_image_size = "1K"
 
-    if provider in {"openai", "xai", "novelai"}:
-        requested_image_size = "1K"
-
     return {
         "prompt_type": raw.get("prompt_type"),
         "provider": provider,
@@ -430,10 +213,8 @@ def rewrite_image_run_recipe(raw: Any) -> dict[str, Any]:
 
 class ImageModelCatalogService:
     async def list_models(self, provider: str, provider_config: dict[str, Any]) -> list[dict[str, Any]]:
-        if provider == "openrouter":
-            return [record.to_api_dict() for record in await self._fetch_openrouter_models(provider_config)]
-        records = STATIC_MODEL_RECORDS.get(provider, ())
-        return [record.to_api_dict() for record in records]
+        descriptors = await _list_image_models(provider, provider_config)
+        return [_descriptor_to_api_dict(item) for item in descriptors]
 
     async def resolve_geometry(
         self,
@@ -444,35 +225,32 @@ class ImageModelCatalogService:
         requested_image_size: str,
         provider_config: dict[str, Any] | None = None,
     ) -> ResolvedImageGeometry:
-        record = await self._find_record(provider=provider, model=model, provider_config=provider_config or {})
-        if record is None:
+        descriptor = await self._find_descriptor(provider=provider, model=model, provider_config=provider_config or {})
+        if descriptor is None:
             raise ValueError(f"Unknown image provider '{provider}'")
 
+        geometry = descriptor.geometry
         resolved_ratio = _pick_ratio(
-            list(record.supported_aspect_ratios),
-            requested_aspect_ratio or record.default_aspect_ratio,
-            fallback=record.default_aspect_ratio,
+            list(geometry.supported_aspect_ratios),
+            requested_aspect_ratio or geometry.default_aspect_ratio,
+            fallback=geometry.default_aspect_ratio,
         )
-
-        supported_sizes = list(record.supported_image_sizes)
-        resolved_image_size = str(requested_image_size or record.default_image_size).strip() or record.default_image_size
+        supported_sizes = list(geometry.supported_resolutions)
+        resolved_image_size = str(requested_image_size or geometry.default_resolution).strip() or geometry.default_resolution
         if resolved_image_size not in supported_sizes:
-            resolved_image_size = record.default_image_size
+            resolved_image_size = geometry.default_resolution
 
-        if record.ui_resolution_mode == "translated_fixed":
-            native_size_by_ratio = record.native_size_by_aspect_ratio or {}
+        if geometry.resolution_mode == "translated_fixed":
+            native_size_by_ratio = geometry.native_size_by_ratio or {}
             resolved_native_size = native_size_by_ratio.get(resolved_ratio) or next(iter(native_size_by_ratio.values()), "1024x1024")
         else:
             resolved_native_size = resolved_image_size
 
-        effective_model = record.id or model
-        if provider == "openrouter" and model:
-            effective_model = model
-
+        effective_model = descriptor.id or model
         return ResolvedImageGeometry(
             model=effective_model,
-            prompt_type=record.prompt_type,
-            supports_image_input=record.supports_image_input,
+            prompt_type=descriptor.prompt_type,
+            supports_image_input=descriptor.supports_image_input,
             requested_aspect_ratio=_normalize_ratio_text(requested_aspect_ratio, fallback=resolved_ratio),
             requested_image_size=str(requested_image_size or resolved_image_size).strip() or resolved_image_size,
             resolved_aspect_ratio=resolved_ratio,
@@ -480,116 +258,35 @@ class ImageModelCatalogService:
             resolved_native_size=resolved_native_size,
         )
 
-    async def _find_record(self, *, provider: str, model: str, provider_config: dict[str, Any]) -> Optional[ImageModelRecord]:
-        if provider == "openrouter":
-            records = await self._fetch_openrouter_models(provider_config)
-            if model:
-                for record in records:
-                    if record.id == model:
-                        return record
-            return self._build_openrouter_fallback_record(model)
-
-        records = list(STATIC_MODEL_RECORDS.get(provider, ()))
-        if not records:
-            return None
+    async def _find_descriptor(self, *, provider: str, model: str, provider_config: dict[str, Any]) -> Optional[ImageModelDescriptor]:
+        descriptors = await _list_image_models(provider, provider_config)
         if model:
-            for record in records:
-                if record.id == model:
-                    return record
-        return records[0]
+            for descriptor in descriptors:
+                if descriptor.id == model:
+                    return descriptor
+        if descriptors:
+            return descriptors[0]
 
-    async def _fetch_openrouter_models(self, provider_config: dict[str, Any]) -> list[ImageModelRecord]:
-        if httpx is None:
-            return []
-        api_key = str(provider_config.get("api_key") or "").strip()
-        if not api_key:
-            return []
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://novelbuds.local",
-            "X-Title": "Novel Buds",
-        }
-        additional_headers = provider_config.get("additional_headers")
-        if isinstance(additional_headers, dict):
-            for key, value in additional_headers.items():
-                if isinstance(key, str) and isinstance(value, str):
-                    headers[key] = value
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(OPENROUTER_MODELS_URL, headers=headers)
-        response.raise_for_status()
-        payload = response.json()
-        models = payload.get("data") if isinstance(payload, dict) else None
-        if not isinstance(models, list):
-            return []
-
-        out: list[ImageModelRecord] = []
-        for raw_model in models:
-            record = self._normalize_openrouter_model(raw_model)
-            if record is not None:
-                out.append(record)
-        out.sort(key=lambda item: item.name.lower())
-        return out
-
-    def _normalize_openrouter_model(self, raw_model: Any) -> Optional[ImageModelRecord]:
-        if not isinstance(raw_model, dict):
-            return None
-        model_id = str(raw_model.get("id") or "").strip()
-        if not model_id:
+        provider_spec = require_provider(provider)
+        image_spec = provider_spec.image
+        if image_spec is None or not image_spec.models_adapter:
             return None
 
-        architecture = raw_model.get("architecture") if isinstance(raw_model.get("architecture"), dict) else None
-        input_modalities = [str(item).strip().lower() for item in architecture.get("input_modalities", [])] if architecture else []
-        output_modalities = [str(item).strip().lower() for item in architecture.get("output_modalities", [])] if architecture else []
-        if "image" not in output_modalities:
-            return None
-
-        geometry = OPENROUTER_IMAGE_MODEL_OVERRIDES.get(model_id, {})
-        supported_aspect_ratios = tuple(
-            geometry.get("supported_aspect_ratios", OPENROUTER_DEFAULT_RATIOS)
-        )
-        supported_image_sizes = tuple(
-            geometry.get("supported_image_sizes", OPENROUTER_DEFAULT_IMAGE_SIZES)
-        )
-        pricing = raw_model.get("pricing") if isinstance(raw_model.get("pricing"), dict) else None
-
-        return ImageModelRecord(
-            id=model_id,
-            name=str(raw_model.get("name") or model_id),
-            description=str(raw_model.get("description") or "").strip() or None,
-            canonical_slug=str(raw_model.get("canonical_slug") or raw_model.get("slug") or model_id),
-            prompt_type="natural",
-            supports_image_input="image" in input_modalities,
-            supported_aspect_ratios=supported_aspect_ratios,
-            supported_image_sizes=supported_image_sizes,
-            default_aspect_ratio=supported_aspect_ratios[0],
-            default_image_size=supported_image_sizes[0],
-            ui_resolution_mode="native_tier",
-            architecture={
-                "input_modalities": input_modalities,
-                "output_modalities": output_modalities,
-            },
-            pricing=pricing,
-        )
-
-    def _build_openrouter_fallback_record(self, model: str) -> ImageModelRecord:
-        model_id = str(model or "").strip() or "openrouter/image-model"
-        geometry = OPENROUTER_IMAGE_MODEL_OVERRIDES.get(model_id, {})
-        supported_aspect_ratios = tuple(geometry.get("supported_aspect_ratios", OPENROUTER_DEFAULT_RATIOS))
-        supported_image_sizes = tuple(geometry.get("supported_image_sizes", OPENROUTER_DEFAULT_IMAGE_SIZES))
-        return ImageModelRecord(
-            id=model_id,
-            name=model_id,
-            prompt_type="natural",
-            supports_image_input=False,
-            supported_aspect_ratios=supported_aspect_ratios,
-            supported_image_sizes=supported_image_sizes,
-            default_aspect_ratio=supported_aspect_ratios[0],
-            default_image_size=supported_image_sizes[0],
-            ui_resolution_mode="native_tier",
-            canonical_slug=model_id,
+        fallback_ratios = tuple(image_spec.runtime.server_only.get("fallback_aspect_ratios") or ("1:1",))
+        fallback_resolutions = tuple(image_spec.runtime.server_only.get("fallback_resolutions") or ("1K",))
+        return ImageModelDescriptor(
+            id=str(model or provider),
+            name=str(model or provider),
+            prompt_type=image_spec.prompt_type,
+            supports_image_input=image_spec.supports_image_input,
+            geometry=ImageModelGeometrySpec(
+                supported_aspect_ratios=fallback_ratios,
+                supported_resolutions=fallback_resolutions,
+                default_aspect_ratio=fallback_ratios[0],
+                default_resolution=fallback_resolutions[0],
+                resolution_mode="native_tier",
+            ),
+            canonical_slug=str(model or provider),
         )
 
 

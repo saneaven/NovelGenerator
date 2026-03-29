@@ -5,6 +5,7 @@
 
 import { apiClient, API_BASE_URL } from './client';
 import type { ProviderType, CustomKind } from '../store/settingsStore';
+import type { PublicProviderSpecResponse } from '../providerEngine/types';
 
 const API_BASE = `${API_BASE_URL}/api/v1`;
 
@@ -19,8 +20,8 @@ export async function fetchModels(
 ): Promise<any> {
   const endpoint = `${API_BASE}/providers/${provider}/models`;
   const requestBody: Record<string, unknown> = {};
-  if (provider === 'custom') {
-    requestBody.custom_kind = custom_kind ?? 'openai_completion';
+  if (custom_kind) {
+    requestBody.custom_kind = custom_kind;
   }
 
   const response = await fetch(endpoint, {
@@ -54,6 +55,10 @@ export async function fetchEmbeddingModels(
   }
 
   return response.json();
+}
+
+export async function fetchProviderSpecs(): Promise<PublicProviderSpecResponse> {
+  return apiClient.get<PublicProviderSpecResponse>('/api/v1/provider-specs');
 }
 
 export async function fetchModelEndpoints(

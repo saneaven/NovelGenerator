@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import ValidationError
 
+from ..provider_engine.registry import require_provider
 from ..schemas.settings import (
     MemoryConfig,
     SearchGeneralConfig,
@@ -125,6 +126,9 @@ def validate_search_memory_settings(search_memory_settings: dict[str, Any]) -> d
         for label, embedding in checks:
             provider = str(embedding.get("provider") or "").strip()
             model = str(embedding.get("model") or "").strip()
+            provider_spec = require_provider(provider)
+            if provider_spec.embedding is None:
+                raise ValueError(f"{label} embedding provider '{provider}' is not supported")
             if not provider or not model:
                 raise ValueError(f"{label} embedding provider/model is required when Search & Memory is enabled")
 

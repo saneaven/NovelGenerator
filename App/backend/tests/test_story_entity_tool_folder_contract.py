@@ -31,6 +31,20 @@ fake_mistune = types.ModuleType("mistune")
 fake_mistune.create_markdown = lambda *_args, **_kwargs: None
 sys.modules.setdefault("mistune", fake_mistune)
 
+fake_markdown_it_pyrs = types.ModuleType("markdown_it_pyrs")
+
+
+class _FakeMarkdownIt:
+    def __init__(self, *_args, **_kwargs) -> None:
+        pass
+
+    def enable_many(self, *_args, **_kwargs):
+        return self
+
+
+fake_markdown_it_pyrs.MarkdownIt = _FakeMarkdownIt
+sys.modules.setdefault("markdown_it_pyrs", fake_markdown_it_pyrs)
+
 fake_object_service_module = types.ModuleType("App.backend.services.object_service")
 fake_object_service_module.object_service = SimpleNamespace(
     create_object=lambda *_args, **_kwargs: {"id": "entity-1"},
@@ -66,6 +80,7 @@ fake_manuscript_access.ensure_manuscript_exists = lambda *_args, **_kwargs: None
 sys.modules.setdefault("App.backend.services.tool_engine.modules.manuscript_access", fake_manuscript_access)
 
 from App.backend.services.tool_engine.contexts import ToolExecutionContext, ToolModuleContext, ToolValidationContext
+from App.backend.services.tool_engine.modules import object_access
 from App.backend.services.tool_engine.modules import (
     create_module,
     delete_module,
@@ -171,6 +186,14 @@ def test_story_entity_folder_tool_schemas_are_registered(monkeypatch) -> None:
     assert translate_specs["patch_translation_story_entity_folder"].parameters["properties"]["field"]["enum"] == ["name", "description"]
 
 
+def test_runtime_rich_text_kwargs_only_marks_rich_objects() -> None:
+    assert object_access.runtime_rich_text_kwargs("story_entity") == {"rich_text_format": "markdown"}
+    assert object_access.runtime_rich_text_kwargs("outline") == {"rich_text_format": "markdown"}
+    assert object_access.runtime_rich_text_kwargs("timeline_track") == {"rich_text_format": "markdown"}
+    assert object_access.runtime_rich_text_kwargs("basic_info") == {}
+    assert object_access.runtime_rich_text_kwargs("story_entity_folder") == {}
+
+
 def test_create_story_entity_passes_folder_id_metadata(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -221,6 +244,7 @@ def test_create_story_entity_folder_passes_parent_metadata(monkeypatch) -> None:
     )
 
     assert captured["metadata"] == {"parent_id": "folder-root"}
+    assert "rich_text_format" not in captured
     assert result["objectType"] == "story_entity_folder"
 
 
@@ -257,7 +281,7 @@ def test_replace_story_entity_passes_folder_id_metadata(monkeypatch) -> None:
 
     monkeypatch.setattr(
         replace_module,
-        "read_story_entity",
+        "read_runtime_story_entity",
         lambda *_args, **_kwargs: {
             "kind": "character",
             "data": {
@@ -329,6 +353,7 @@ def test_replace_story_entity_folder_passes_structural_metadata(monkeypatch) -> 
     )
 
     assert captured["metadata"] == {"parent_id": "folder-archive", "display_order": 2}
+    assert "rich_text_format" not in captured
     assert captured["data"] == {}
 
 
@@ -337,7 +362,7 @@ def test_patch_story_entity_passes_folder_id_metadata(monkeypatch) -> None:
 
     monkeypatch.setattr(
         patch_module,
-        "read_story_entity",
+        "read_runtime_story_entity",
         lambda *_args, **_kwargs: {
             "kind": "character",
             "data": {
@@ -414,6 +439,81 @@ def test_patch_story_entity_folder_passes_structural_metadata(monkeypatch) -> No
     )
 
     assert captured["metadata"] == {"parent_id": None, "display_order": 1}
+    assert "rich_text_format" not in captured
+    assert captured["data"]["description"] == "Core characters"
+
+
+def test_translate_story_entity_folder_execute_omits_projection(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        translate_module,
+        "read_story_entity_folder",
+        lambda *_args, **_kwargs: {
+            "data": {
+                "English": {
+                    "name": "Main Cast",
+                    "description": "Primary characters",
+                }
+            },
+        },
+    )
+
+    def _fake_update_object(*_args, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(translate_module.object_service, "update_object", _fake_update_object)
+
+    asyncio.run(
+        TranslateToolCallModule().execute(
+            "translate_story_entity_folder",
+            {
+                "id": str(uuid4()),
+                "name": "Main Cast KR",
+            },
+            _execution_context(),
+        )
+    )
+
+    assert "rich_text_format" not in captured
+    assert captured["data"]["name"] == "Main Cast KR"
+
+
+def test_patch_translation_story_entity_folder_execute_omits_projection(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        patch_translation_module,
+        "read_story_entity_folder",
+        lambda *_args, **_kwargs: {
+            "data": {
+                "English": {
+                    "name": "Main Cast",
+                    "description": "Primary characters",
+                }
+            },
+        },
+    )
+
+    def _fake_update_object(*_args, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(patch_translation_module.object_service, "update_object", _fake_update_object)
+
+    asyncio.run(
+        PatchTranslationToolCallModule().execute(
+            "patch_translation_story_entity_folder",
+            {
+                "id": str(uuid4()),
+                "field": "description",
+                "old": "Primary",
+                "new": "Core",
+            },
+            _execution_context(),
+        )
+    )
+
+    assert "rich_text_format" not in captured
     assert captured["data"]["description"] == "Core characters"
 
 
@@ -421,7 +521,7 @@ def test_validate_patch_outline_reads_markdown_projection(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
     def _fake_read_object(*_args, **kwargs):
-        captured["rich_text_format"] = kwargs.get("rich_text_format")
+        captured["called"] = True
         return {
             "kind": "chapter",
             "data": {
@@ -433,7 +533,7 @@ def test_validate_patch_outline_reads_markdown_projection(monkeypatch) -> None:
             },
         }
 
-    monkeypatch.setattr(patch_module, "read_object", _fake_read_object)
+    monkeypatch.setattr(patch_module, "read_runtime_object", _fake_read_object)
 
     result = asyncio.run(
         PatchToolCallModule().validate(
@@ -449,7 +549,7 @@ def test_validate_patch_outline_reads_markdown_projection(monkeypatch) -> None:
     )
 
     assert result.valid is True
-    assert captured["rich_text_format"] == "markdown"
+    assert captured["called"] is True
 
 
 def test_patch_outline_execute_writes_markdown_projection(monkeypatch) -> None:
@@ -457,7 +557,7 @@ def test_patch_outline_execute_writes_markdown_projection(monkeypatch) -> None:
 
     monkeypatch.setattr(
         patch_module,
-        "read_object",
+        "read_runtime_object",
         lambda *_args, **kwargs: {
             "kind": "chapter",
             "data": {
@@ -498,7 +598,7 @@ def test_replace_outline_execute_writes_markdown_projection(monkeypatch) -> None
     read_calls: list[dict[str, object]] = []
 
     def _fake_read_object(*_args, **kwargs):
-        read_calls.append(dict(kwargs))
+        read_calls.append({"called": True})
         return {
             "kind": "chapter",
             "data": {
@@ -510,7 +610,7 @@ def test_replace_outline_execute_writes_markdown_projection(monkeypatch) -> None
             },
         }
 
-    monkeypatch.setattr(replace_module, "read_object", _fake_read_object)
+    monkeypatch.setattr(replace_module, "read_runtime_object", _fake_read_object)
 
     def _fake_update_object(*_args, **kwargs):
         captured.update(kwargs)
@@ -528,7 +628,7 @@ def test_replace_outline_execute_writes_markdown_projection(monkeypatch) -> None
         )
     )
 
-    assert read_calls[-1]["rich_text_format"] == "markdown"
+    assert read_calls[-1]["called"] is True
     assert captured["rich_text_format"] == "markdown"
     assert captured["data"]["content"] == "## New outline content"
 
@@ -538,7 +638,7 @@ def test_translate_outline_execute_writes_markdown_projection(monkeypatch) -> No
     read_calls: list[dict[str, object]] = []
 
     def _fake_read_object(*_args, **kwargs):
-        read_calls.append(dict(kwargs))
+        read_calls.append({"called": True})
         return {
             "kind": "chapter",
             "data": {
@@ -550,7 +650,7 @@ def test_translate_outline_execute_writes_markdown_projection(monkeypatch) -> No
             },
         }
 
-    monkeypatch.setattr(translate_module, "read_object", _fake_read_object)
+    monkeypatch.setattr(translate_module, "read_runtime_object", _fake_read_object)
 
     def _fake_update_object(*_args, **kwargs):
         captured.update(kwargs)
@@ -570,7 +670,7 @@ def test_translate_outline_execute_writes_markdown_projection(monkeypatch) -> No
         )
     )
 
-    assert read_calls[-1]["rich_text_format"] == "markdown"
+    assert read_calls[-1]["called"] is True
     assert captured["rich_text_format"] == "markdown"
     assert captured["data"]["content"] == "Translated markdown"
 

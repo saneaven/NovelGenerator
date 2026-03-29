@@ -21,6 +21,7 @@ import { CustomSelect } from '../ui/CustomSelect';
 import { NumberInput } from '../ui/NumberInput';
 import { IconButton } from '../IconButton';
 import { ChevronLeft, ChevronRight, Scroll, Search, Settings as SettingsIcon, Toggle } from '../icons';
+import { useProviderSpecStore } from '../../providerEngine/store';
 import './SearchMemoryPanel.css';
 
 type SearchMemoryConfigTarget = 'general' | SearchMemoryTarget;
@@ -40,13 +41,6 @@ const TARGET_ICONS: Record<SearchMemoryConfigTarget, React.ReactNode> = {
   memory: <Scroll size="sm" />,
 };
 
-const PROVIDER_OPTIONS = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'gemini', label: 'Gemini' },
-  { value: 'openrouter', label: 'OpenRouter' },
-  { value: 'custom', label: 'Custom' },
-];
-
 const isMobileViewport = () =>
   typeof window !== 'undefined' && window.innerWidth <= 768;
 
@@ -58,9 +52,33 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
   mainLanguage,
 }) => {
   const { t } = useTranslation();
+  const specs = useProviderSpecStore((state) => state.specs);
+  const loadProviderSpecs = useProviderSpecStore((state) => state.load);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => isMobileViewport());
   const [showModelBrowser, setShowModelBrowser] = useState(false);
   const [activeModelBrowser, setActiveModelBrowser] = useState<ModelBrowserTarget>('general');
+
+  useEffect(() => {
+    void loadProviderSpecs();
+  }, [loadProviderSpecs]);
+
+  const providerSpecs = useMemo(() => {
+    const providers = Object.values(specs).filter((provider) => Boolean(provider.embedding));
+    providers.sort((a, b) => {
+      const left = a.ui.embedding_order ?? 999;
+      const right = b.ui.embedding_order ?? 999;
+      return left - right || a.id.localeCompare(b.id);
+    });
+    return providers;
+  }, [specs]);
+
+  const providerOptions = useMemo(
+    () => providerSpecs.map((provider) => ({
+      value: provider.id,
+      label: t(provider.ui.display_name_key),
+    })),
+    [providerSpecs, t]
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -209,7 +227,7 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
             <CustomSelect
               value={config.embedding.provider}
               onChange={(value) => handleProviderChange(value as EmbeddingProviderType)}
-              options={PROVIDER_OPTIONS}
+              options={providerOptions}
             />
             <p className="field-hint">{t('settings.searchMemory.fields.providerHint')}</p>
           </div>

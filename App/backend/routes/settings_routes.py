@@ -11,7 +11,7 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..models.db_models import User, UserSettings
 from ..schemas.settings import UserSettingsResponse, UserSettingsUpdate
-from ..services.image_model_catalog_service import default_image_gen_config
+from ..services.image_model_catalog_service import default_image_gen_config, migrate_image_gen_config
 from ..services.memory_service import wipe_memory_index
 from ..services.semantic_index_service import wipe_user_semantic_index
 from ..services.search_memory_settings import (
@@ -96,7 +96,8 @@ def _build_settings_response(settings: UserSettings) -> UserSettingsResponse:
         "retryableStatusCodes": [429, 500, 502, 503, 504],
         "retryDelayMs": 1000,
     }
-    image_gen_config_dict = getattr(settings, "image_gen_config", None) or deepcopy(default_image_gen_config())
+    image_gen_config_raw = getattr(settings, "image_gen_config", None) or deepcopy(default_image_gen_config())
+    image_gen_config_dict = migrate_image_gen_config(image_gen_config_raw)
     tool_call_auto_approve_dict = _build_tool_call_auto_approve(getattr(settings, "tool_call_auto_approve", None))
     raw_search_memory_settings = getattr(settings, "search_memory_settings", None)
     if not isinstance(raw_search_memory_settings, dict):

@@ -5,6 +5,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from ..provider_engine.registry import require_provider
+from ..provider_engine.runtime_dispatch import normalize_task_config
 from ..schemas.settings import TaskAIConfig, TaskConfigSettings
 
 
@@ -39,42 +41,10 @@ def make_initial_task_config_settings() -> dict[str, Any]:
 
 def normalize_effective_task_config(config: dict[str, Any]) -> dict[str, Any]:
     normalized = deepcopy(config)
-
-    provider = normalized.get("provider")
+    provider = str(normalized.get("provider") or "").strip()
     advanced = normalized.get("advanced")
-    if not isinstance(advanced, dict):
-        advanced = {}
-    else:
-        advanced = deepcopy(advanced)
-
-    thinking_mode = advanced.get("thinking_mode")
-    custom_kind = advanced.get("custom_kind")
-
-    if provider != "openrouter":
-        normalized.pop("provider_preference", None)
-
-    if provider not in {"openrouter", "custom"}:
-        advanced.pop("tokenizer_override", None)
-
-    if provider != "custom":
-        advanced.pop("custom_kind", None)
-        advanced.pop("custom_thinking_template_id", None)
-    else:
-        if custom_kind not in {"openai_completion", "openai_response", "claude"}:
-            custom_kind = "openai_completion"
-        advanced["custom_kind"] = custom_kind
-        if custom_kind != "openai_completion":
-            advanced.pop("custom_thinking_template_id", None)
-
-    if thinking_mode != "model":
-        advanced.pop("thinking_config", None)
-        advanced.pop("custom_thinking_template_id", None)
-
-    if provider != "openai" and not (provider == "custom" and custom_kind == "openai_response"):
-        advanced.pop("verbosity", None)
-
-    normalized["advanced"] = advanced
-    return normalized
+    normalized["advanced"] = deepcopy(advanced) if isinstance(advanced, dict) else {}
+    return normalize_task_config(provider, normalized)
 
 
 def _validate_effective_task_config_semantics(config: dict[str, Any]) -> None:
@@ -82,6 +52,9 @@ def _validate_effective_task_config_semantics(config: dict[str, Any]) -> None:
     advanced = config.get("advanced")
     if not isinstance(advanced, dict):
         raise ValueError("Task config advanced settings must be an object")
+    provider_spec = require_provider(str(provider or "").strip())
+    if provider_spec.llm is None:
+        raise ValueError(f"Provider '{provider}' does not support llm")
 
 
 def validate_task_config_settings(task_config_settings: dict[str, Any]) -> dict[str, Any]:

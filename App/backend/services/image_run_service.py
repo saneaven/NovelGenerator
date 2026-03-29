@@ -30,6 +30,7 @@ from ..services.credential_service import credential_service
 from ..services.deletion_service import delete_assets_with_files
 from ..services.image_model_catalog_service import (
     image_model_catalog_service,
+    migrate_image_gen_config,
     sanitize_generation_settings,
 )
 from ..services.notification_service import (
@@ -197,7 +198,7 @@ def _pick_nearest_size(candidates: list[str], requested_ratio: float | None, fal
 
 def _get_image_settings(settings_row: UserSettings) -> ImageGenConfig:
     raw = settings_row.image_gen_config if isinstance(settings_row.image_gen_config, dict) else {}
-    return ImageGenConfig.model_validate(raw)
+    return ImageGenConfig.model_validate(migrate_image_gen_config(raw))
 
 
 def _provider_template(provider_name: str) -> BaseImageProvider:
@@ -251,22 +252,8 @@ def _build_tool_recipe_snapshot(
             postfix=str(style.get("postfix") or ""),
         )
 
-    provider_settings: dict[str, Any] = {}
-    if provider_name == "openai":
-        provider_settings = {
-            "quality": config.openaiSettings.quality,
-            "background": config.openaiSettings.background,
-            "output_format": config.openaiSettings.output_format,
-            "output_compression": config.openaiSettings.output_compression,
-            "input_fidelity": config.openaiSettings.input_fidelity,
-        }
-    elif provider_name == "novelai":
-        provider_settings = {
-            "sampler": config.novelaiSettings.sampler,
-            "steps": config.novelaiSettings.steps,
-            "scale": config.novelaiSettings.scale,
-            "noise_schedule": config.novelaiSettings.noise_schedule,
-        }
+    provider_settings_map = config.providerSettings if isinstance(config.providerSettings, dict) else {}
+    stored_provider_settings = _json_dict(provider_settings_map.get(provider_name))
 
     return {
         "prompt_type": prompt_type,
@@ -278,7 +265,7 @@ def _build_tool_recipe_snapshot(
         "prompt": _styled_prompt_to_dict(prompt_payload),
         "positive_prompt": _styled_prompt_to_dict(positive_payload),
         "negative_prompt": _styled_prompt_to_dict(negative_payload),
-        "provider_settings": sanitize_generation_settings(provider_name, provider_settings),
+        "provider_settings": sanitize_generation_settings(provider_name, stored_provider_settings),
         "reference_images": None,
         "reference_objects": None,
     }

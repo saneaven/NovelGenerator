@@ -36,7 +36,13 @@ def test_sanitize_generation_settings_drops_geometry_keys_and_unknown_values() -
         },
     )
 
-    assert cleaned == {"quality": "high"}
+    assert cleaned == {
+        "quality": "high",
+        "background": "auto",
+        "output_format": "png",
+        "output_compression": 90,
+        "input_fidelity": "high",
+    }
 
 
 def test_rewrite_image_run_recipe_normalizes_requested_geometry() -> None:
@@ -52,7 +58,13 @@ def test_rewrite_image_run_recipe_normalizes_requested_geometry() -> None:
 
     assert rewritten["requested_aspect_ratio"] == "3:2"
     assert rewritten["requested_image_size"] == "1K"
-    assert rewritten["provider_settings"] == {"quality": "high"}
+    assert rewritten["provider_settings"] == {
+        "quality": "high",
+        "background": "auto",
+        "output_format": "png",
+        "output_compression": 90,
+        "input_fidelity": "high",
+    }
 
 
 def test_resolve_geometry_translates_fixed_provider_to_native_size() -> None:

@@ -11,6 +11,8 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from .models.requests import ChatCompletionRequest, ProviderModelsRequest
+from .provider_engine.project import to_public_provider_spec
+from .provider_engine.registry import list_providers as list_provider_specs
 from .providers.registry import ProviderRegistry
 from .providers.openrouter import OpenRouterProvider
 from .providers.custom import CustomProvider
@@ -228,38 +230,43 @@ async def list_providers():
     """List all available LLM providers"""
     providers_info = []
 
-    for provider_dict in ProviderRegistry.list_providers():
-        provider_name = provider_dict["name"]
+    llm_specs = [spec for spec in list_provider_specs() if spec.llm is not None]
+    llm_specs.sort(key=lambda spec: spec.ui.llm_order if spec.ui.llm_order is not None else 999)
+
+    for spec in llm_specs:
+        provider_name = spec.id
 
         # Add metadata for each provider
         metadata = {
             "name": provider_name,
-            "display_name": provider_dict["display_name"],
+            "display_name": spec.ui.display_name_key,
+            "display_name_key": spec.ui.display_name_key,
+            "description_key": spec.ui.description_key,
             "capabilities": {
                 "chat": True,
                 "models": True,
-                "tools": provider_name in {"openrouter", "custom", "gemini", "claude"},
-                "thinking": provider_name in {"openrouter", "claude", "gemini", "custom"}
+                "tools": bool(spec.llm.supports_tools),
+                "thinking": bool(spec.llm.supports_thinking),
             }
         }
-
-        if provider_name == "openrouter":
-            metadata["requires_api_key"] = True
-            metadata["description"] = "OpenRouter unified LLM API"
-        elif provider_name == "custom":
-            metadata["requires_api_key"] = True
-            metadata["requires_base_url"] = True
-            metadata["description"] = "Custom OpenAI-compatible endpoint"
-        elif provider_name == "claude":
-            metadata["requires_api_key"] = True
-            metadata["description"] = "Anthropic Claude with extended thinking"
-        elif provider_name == "gemini":
-            metadata["requires_api_key"] = True
-            metadata["description"] = "Google Gemini with thought summaries"
 
         providers_info.append(metadata)
 
     return {"providers": providers_info}
+
+
+@app.get("/api/v1/provider-specs")
+async def get_provider_specs():
+    providers = [to_public_provider_spec(spec) for spec in list_provider_specs()]
+    providers.sort(
+        key=lambda item: (
+            item["ui"]["llm_order"] if item["llm"] is not None and item["ui"]["llm_order"] is not None else 999,
+            item["ui"]["embedding_order"] if item["embedding"] is not None and item["ui"]["embedding_order"] is not None else 999,
+            item["ui"]["image_order"] if item["image"] is not None and item["ui"]["image_order"] is not None else 999,
+            item["id"],
+        )
+    )
+    return {"providers": providers}
 
 
 @app.post("/api/v1/providers/{provider}/models")
@@ -272,10 +279,11 @@ async def get_models(
     """Get available models for a specific provider"""
     try:
         provider_config = credential_service.get_provider_config(db, current_user.id, provider)
-        if provider == "custom":
-            provider_config["custom_kind"] = request.custom_kind or "openai_completion"
-
-        provider_instance = ProviderRegistry.get_provider(provider, provider_config)
+        provider_instance = ProviderRegistry.get_provider(
+            provider,
+            provider_config,
+            variant_hint=request.custom_kind,
+        )
 
         # All providers now require API key for model listing
         if not provider_instance.validate_config():
@@ -352,15 +360,10 @@ async def stream_chat(
             )
 
         provider_config = credential_service.get_provider_config(db, current_user.id, provider)
-        if provider == "custom":
-            provider_config = {
-                **provider_config,
-                "custom_kind": request.custom_kind or "openai_completion",
-            }
-
         provider_instance = ProviderRegistry.get_provider(
             provider,
-            provider_config
+            provider_config,
+            variant_hint=request.custom_kind,
         )
 
         if not provider_instance.validate_config():

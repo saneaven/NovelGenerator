@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ImageModelInfo } from '../../api/assetService';
-import type { ImageProviderType } from '../../imageRun/providerConfig';
+import type { ImageProviderType } from '../../store/settingsStore';
 import { CustomSelect } from '../ui/CustomSelect';
 import { Check } from '../icons';
 

@@ -4,7 +4,7 @@ import { RichTextEditor } from '../../../components/RichTextEditor';
 import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
 import { useTimelineStore } from '../../../store/timelineStore';
 import type { TipTapDoc } from '../../../types/tiptap';
-import type { CalendarConfig, TimelineTrack } from '../../../types/timeline';
+import type { TimelineTrack } from '../../../types/timeline';
 import { PRESET_NAMES, presetSwatch } from '../timelineColors';
 
 interface TimelineTrackSidebarProps {
@@ -12,7 +12,6 @@ interface TimelineTrackSidebarProps {
   track: TimelineTrack | null;
   parentId: string | null;
   displayLanguage: string;
-  calendar: CalendarConfig;
   onClose: () => void;
 }
 
@@ -21,7 +20,6 @@ const TimelineTrackSidebar: React.FC<TimelineTrackSidebarProps> = ({
   track,
   parentId,
   displayLanguage,
-  calendar,
   onClose,
 }) => {
   const createTrack = useTimelineStore((s) => s.createTrack);

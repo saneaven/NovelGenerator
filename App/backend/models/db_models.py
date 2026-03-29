@@ -81,8 +81,20 @@ class UserSettings(Base):
         "tagBasedStyles": [],
         "selectedNaturalStyleId": null,
         "selectedTagBasedStyleId": null,
-        "openaiSettings": {"quality": "auto", "background": "auto", "output_format": "png", "output_compression": 90, "input_fidelity": "high"},
-        "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
+        "providerSettings": {
+            "openai": {"quality": "auto", "background": "auto", "output_format": "png", "output_compression": 90, "input_fidelity": "high"},
+            "novelai": {
+                "sampler": "k_euler_ancestral",
+                "steps": 28,
+                "scale": 6.0,
+                "noise_schedule": "karras",
+                "referenceMode": "auto",
+                "strength": 0.7,
+                "i2iNoise": 0.0,
+                "vibeStrength": 0.6,
+                "vibeInfoExtracted": 1.0
+            }
+        }
     }""")
 
     # Native output mode - use raw LLM output instead of tool calling

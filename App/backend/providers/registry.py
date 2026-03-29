@@ -1,52 +1,33 @@
-from typing import Dict, Type, List
+from typing import Dict, List, Type
+
 from .base import BaseProvider
 
-class ProviderRegistry:
-    """Registry for managing LLM providers"""
 
-    _providers: Dict[str, Type[BaseProvider]] = {}
+class ProviderRegistry:
+    """Compatibility wrapper over provider_engine."""
 
     @classmethod
     def register(cls, provider_class: Type[BaseProvider]):
-        """Register a provider class"""
-        instance = provider_class({})
-        cls._providers[instance.name] = provider_class
+        # Legacy decorators stay harmless; canonical registration lives in provider_engine.
         return provider_class
 
     @classmethod
-    def get_provider(cls, name: str, config: Dict) -> BaseProvider:
-        """
-        Get a provider instance by name
+    def get_provider(cls, name: str, config: Dict, variant_hint: str | None = None) -> BaseProvider:
+        from ..provider_engine.runtime_dispatch import create_llm_provider_instance
 
-        Args:
-            name: Provider identifier
-            config: Provider configuration dict
-
-        Returns:
-            Provider instance
-
-        Raises:
-            ValueError: If provider not found
-        """
-        provider_class = cls._providers.get(name)
-        if not provider_class:
-            available = ", ".join(cls._providers.keys())
-            raise ValueError(f"Unknown provider '{name}'. Available: {available}")
-        return provider_class(config)
+        resolved_variant_hint = variant_hint if variant_hint is not None else (str(config.get("custom_kind") or "").strip() or None)
+        return create_llm_provider_instance(name, config, variant_hint=resolved_variant_hint)
 
     @classmethod
     def list_providers(cls) -> List[Dict]:
-        """
-        List all registered providers with metadata
+        from ..provider_engine.registry import list_providers
 
-        Returns:
-            List of provider info dicts
-        """
-        providers = []
-        for provider_class in cls._providers.values():
-            instance = provider_class({})
-            providers.append({
-                "name": instance.name,
-                "display_name": instance.display_name
-            })
-        return providers
+        providers = [spec for spec in list_providers() if spec.llm is not None]
+        providers.sort(key=lambda spec: spec.ui.llm_order if spec.ui.llm_order is not None else 999)
+        return [
+            {
+                "name": spec.id,
+                "display_name": spec.ui.display_name_key,
+            }
+            for spec in providers
+        ]

@@ -1,4 +1,7 @@
-export type ProviderType = 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
+import { getProviderSpec } from '../providerEngine/store';
+import { cloneValue, normalizeByPublicSpec, resolveEffectiveLlmTaskSpec } from '../providerEngine/utils';
+
+export type ProviderType = string;
 export type AITaskType = 'agent' | 'translation' | 'editAssistant' | 'imagePrompt' | 'summary' | 'subAgent';
 export type CustomKind = 'openai_completion' | 'openai_response' | 'claude';
 export type TokenizerOverride = 'openai' | 'claude' | 'gemini';
@@ -48,17 +51,6 @@ export const TASK_CONFIG_TASK_TYPES: AITaskType[] = [
   'subAgent',
 ];
 
-function cloneValue<T>(value: T): T {
-  if (value === null || value === undefined) return value;
-  if (Array.isArray(value)) return value.map((item) => cloneValue(item)) as T;
-  if (typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, child]) => [key, cloneValue(child)])
-    ) as T;
-  }
-  return value;
-}
-
 function normalizeTaskConfigSettingsInternal(settings: TaskConfigSettings): TaskConfigSettings {
   const general = normalizeEffectiveTaskConfig(settings.general);
   const overrides: Partial<Record<AITaskType, TaskAIConfig>> = {};
@@ -77,37 +69,21 @@ function normalizeTaskConfigSettingsInternal(settings: TaskConfigSettings): Task
 
 export function normalizeEffectiveTaskConfig(config: TaskAIConfig): TaskAIConfig {
   const normalized = cloneValue(config);
-  const advanced = cloneValue(normalized.advanced);
-
-  if (normalized.provider !== 'openrouter') {
-    delete normalized.provider_preference;
+  normalized.provider = typeof normalized.provider === 'string' ? normalized.provider : '';
+  normalized.model = typeof normalized.model === 'string' ? normalized.model : '';
+  normalized.temperature = Number.isFinite(normalized.temperature) ? normalized.temperature : 0.7;
+  normalized.advanced = normalized.advanced && typeof normalized.advanced === 'object'
+    ? normalized.advanced
+    : ({ thinking_mode: 'off' } as TaskAIConfig['advanced']);
+  if (!['off', 'model', 'custom'].includes(normalized.advanced.thinking_mode)) {
+    normalized.advanced.thinking_mode = 'off';
   }
-
-  if (normalized.provider !== 'openrouter' && normalized.provider !== 'custom') {
-    delete advanced.tokenizer_override;
+  const provider = getProviderSpec(normalized.provider);
+  const spec = resolveEffectiveLlmTaskSpec(provider, normalized as unknown as Record<string, unknown>);
+  if (!provider || !spec) {
+    return normalized;
   }
-
-  if (normalized.provider !== 'custom') {
-    delete advanced.custom_kind;
-    delete advanced.custom_thinking_template_id;
-  } else {
-    advanced.custom_kind = advanced.custom_kind ?? 'openai_completion';
-    if (advanced.custom_kind !== 'openai_completion') {
-      delete advanced.custom_thinking_template_id;
-    }
-  }
-
-  if (advanced.thinking_mode !== 'model') {
-    delete advanced.thinking_config;
-    delete advanced.custom_thinking_template_id;
-  }
-
-  if (normalized.provider !== 'openai' && !(normalized.provider === 'custom' && advanced.custom_kind === 'openai_response')) {
-    delete advanced.verbosity;
-  }
-
-  normalized.advanced = advanced;
-  return normalized;
+  return normalizeByPublicSpec(normalized as unknown as Record<string, unknown>, spec) as unknown as TaskAIConfig;
 }
 
 export function resolveTaskConfig(settings: TaskConfigSettings, taskType: AITaskType): TaskAIConfig {

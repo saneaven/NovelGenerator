@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user
 from ..database import get_db
 from ..models.db_models import User
+from ..provider_engine.runtime_dispatch import normalize_credentials
 from ..services.credential_service import CredentialServiceError, credential_service
 from ..services.demo_policy import require_demo_off
 
@@ -36,9 +37,13 @@ async def put_credential(
     db: Session = Depends(get_db),
 ):
     try:
-        credential_service.save_credential(db, current_user.id, provider, payload.config)
+        normalized = normalize_credentials(provider, payload.config)
+        credential_service.save_credential(db, current_user.id, provider, normalized)
         db.commit()
     except CredentialServiceError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return {"ok": True}

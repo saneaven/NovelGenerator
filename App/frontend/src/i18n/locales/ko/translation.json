@@ -574,7 +574,22 @@
         "cfgScale": "CFG 스케일",
         "cfgScaleHint": "프롬프트 안내 강도 (1-20)",
         "noiseSchedule": "노이즈 스케줄",
-        "noiseScheduleHint": "노이즈 스케줄링 방식"
+        "noiseScheduleHint": "노이즈 스케줄링 방식",
+        "referenceMode": "참조 모드",
+        "referenceModeHint": "첨부된 참조 이미지를 NovelAI가 어떻게 해석할지 선택합니다",
+        "referenceModeOptions": {
+          "auto": "자동",
+          "i2i": "이미지-투-이미지",
+          "vibe": "바이브 전이"
+        },
+        "strength": "강도",
+        "strengthHint": "i2i 모드에서 원본 이미지가 얼마나 강하게 변형될지 설정합니다",
+        "i2iNoise": "노이즈",
+        "i2iNoiseHint": "이미지-투-이미지 생성 전에 추가할 노이즈 양입니다",
+        "vibeStrength": "스타일 영향도",
+        "vibeStrengthHint": "vibe 모드에서 참조 이미지가 스타일에 미치는 영향 강도입니다",
+        "vibeInfoExtracted": "정보 추출량",
+        "vibeInfoExtractedHint": "vibe 모드에서 참조 이미지로부터 추출할 정보량입니다"
       },
       "naturalStyles": {
         "title": "사용자 정의 스타일 (자연어)",

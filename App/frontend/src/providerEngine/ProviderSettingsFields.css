@@ -1,0 +1,55 @@
+.provider-settings-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.provider-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.provider-settings-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.provider-settings-label-text {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.provider-settings-label-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.provider-settings-number {
+  width: 100%;
+}
+
+.provider-settings-slider-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.provider-settings-slider {
+  width: 100%;
+  accent-color: var(--color-brand-primary);
+}
+
+.provider-settings-slider-value {
+  min-width: 44px;
+  text-align: right;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}

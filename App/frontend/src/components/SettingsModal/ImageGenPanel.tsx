@@ -1,26 +1,21 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ImageGenConfig, ImageProviderType } from '../../store/settingsStore';
-import {
-  IMAGE_PROVIDER_ORDER,
-  NOVELAI_NOISE_SCHEDULES,
-  NOVELAI_SAMPLERS,
-  OPENAI_BACKGROUND_OPTIONS,
-  OPENAI_INPUT_FIDELITY_OPTIONS,
-  OPENAI_OUTPUT_FORMAT_OPTIONS,
-  OPENAI_QUALITY_OPTIONS,
-  PROVIDER_LABELS,
-  PROVIDER_PROMPT_TYPES,
-} from '../../imageRun/providerConfig';
 import {
   resolveAspectRatio,
   resolveImageSize,
   useImageModelCatalog,
 } from '../../imageRun/useImageModelCatalog';
+import { useProviderSpecStore } from '../../providerEngine/store';
+import {
+  buildDefaultObjectValue,
+  getStoredProviderSettings,
+  setStoredProviderSettings,
+} from '../../providerEngine/utils';
 import { CustomSelect } from '../ui/CustomSelect';
-import { NumberInput } from '../ui/NumberInput';
 import ImageModelBrowser from '../ImageGeneration/ImageModelBrowser';
 import ImageStyleEditorModal from './ImageStyleEditorModal';
+import ProviderSettingsFields from '../../providerEngine/ProviderSettingsFields';
 import './ImageGenPanel.css';
 
 interface ImageGenPanelProps {
@@ -30,7 +25,24 @@ interface ImageGenPanelProps {
 
 const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
   const { t } = useTranslation();
+  const specs = useProviderSpecStore((state) => state.specs);
+  const loadProviderSpecs = useProviderSpecStore((state) => state.load);
+  const providerSpec = specs[config.provider];
   const { models, loading, selectedModel } = useImageModelCatalog(config.provider, config.model);
+
+  useEffect(() => {
+    void loadProviderSpecs();
+  }, [loadProviderSpecs]);
+
+  const imageProviders = useMemo(() => {
+    const providers = Object.values(specs).filter((provider) => Boolean(provider.image));
+    providers.sort((a, b) => {
+      const left = a.ui.image_order ?? 999;
+      const right = b.ui.image_order ?? 999;
+      return left - right || a.id.localeCompare(b.id);
+    });
+    return providers;
+  }, [specs]);
 
   useEffect(() => {
     if (!selectedModel) return;
@@ -52,14 +64,18 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
     });
   }, [config, onChange, selectedModel]);
 
-  const currentPromptType = selectedModel?.prompt_type ?? PROVIDER_PROMPT_TYPES[config.provider];
+  const providerOptions = imageProviders.map((provider) => ({
+    value: provider.id,
+    label: t(provider.ui.display_name_key),
+  }));
+
+  const currentPromptType = selectedModel?.prompt_type ?? providerSpec?.image?.prompt_type ?? 'natural';
   const isTagBased = currentPromptType === 'tag_based';
-  const isNovelAI = config.provider === 'novelai';
-  const isOpenAI = config.provider === 'openai';
-  const compressionEnabled = config.openaiSettings.output_format !== 'png';
   const currentStyles = isTagBased ? config.tagBasedStyles : config.naturalStyles;
   const selectedStyleId = isTagBased ? config.selectedTagBasedStyleId : config.selectedNaturalStyleId;
   const styleKey = isTagBased ? 'settings.imageGen.tagBasedStyles' : 'settings.imageGen.naturalStyles';
+  const providerSettingsSpec = providerSpec?.image?.provider_settings ?? null;
+  const providerSettings = getStoredProviderSettings(config as Record<string, unknown>, config.provider);
 
   return (
     <div className="image-gen-panel">
@@ -76,11 +92,20 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
           </label>
           <CustomSelect
             value={config.provider}
-            onChange={(value) => onChange({ ...config, provider: value as ImageProviderType, model: '' })}
-            options={IMAGE_PROVIDER_ORDER.map((provider) => ({
-              value: provider,
-              label: PROVIDER_LABELS[provider],
-            }))}
+            onChange={(value) => {
+              const nextProviderSpec = imageProviders.find((provider) => provider.id === value);
+              const existingSettings = getStoredProviderSettings(config as Record<string, unknown>, value);
+              const nextSettings = Object.keys(existingSettings).length > 0
+                ? existingSettings
+                : buildDefaultObjectValue(nextProviderSpec?.image?.provider_settings);
+              const nextConfig = setStoredProviderSettings(
+                { ...config, provider: value as ImageProviderType, model: '' } as Record<string, unknown>,
+                value,
+                nextSettings
+              ) as ImageGenConfig;
+              onChange(nextConfig);
+            }}
+            options={providerOptions}
           />
         </div>
 
@@ -131,172 +156,25 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
         </div>
       </div>
 
-      {isOpenAI && (
+      {providerSettingsSpec && (
         <div className="provider-settings-section">
           <div className="section-header">
-            <h4>{t('settings.imageGen.openaiSettings.title')}</h4>
-            <p className="section-description">{t('settings.imageGen.openaiSettings.description')}</p>
+            <h4>{t(providerSpec?.image?.settings_title_key || providerSpec?.ui.display_name_key || 'settings.imageGen.provider')}</h4>
+            {providerSpec?.image?.settings_description_key ? (
+              <p className="section-description">{t(providerSpec.image.settings_description_key)}</p>
+            ) : null}
           </div>
-          <div className="settings-grid">
-            <div className="setting-item">
-              <label className="setting-label">
-                <span className="label-text">{t('settings.imageGen.openaiSettings.quality')}</span>
-                <span className="label-hint">{t('settings.imageGen.openaiSettings.qualityHint')}</span>
-              </label>
-              <CustomSelect
-                value={config.openaiSettings.quality}
-                onChange={(value) => onChange({
-                  ...config,
-                  openaiSettings: { ...config.openaiSettings, quality: value as 'auto' | 'low' | 'medium' | 'high' },
-                })}
-                options={OPENAI_QUALITY_OPTIONS.map((value) => ({
-                  value,
-                  label: t(`settings.imageGen.openaiSettings.qualityOptions.${value}`),
-                }))}
-              />
-            </div>
-            <div className="setting-item">
-              <label className="setting-label">
-                <span className="label-text">{t('settings.imageGen.openaiSettings.background')}</span>
-                <span className="label-hint">{t('settings.imageGen.openaiSettings.backgroundHint')}</span>
-              </label>
-              <CustomSelect
-                value={config.openaiSettings.background}
-                onChange={(value) => onChange({
-                  ...config,
-                  openaiSettings: { ...config.openaiSettings, background: value as 'auto' | 'opaque' | 'transparent' },
-                })}
-                options={OPENAI_BACKGROUND_OPTIONS.map((value) => ({
-                  value,
-                  label: t(`settings.imageGen.openaiSettings.backgroundOptions.${value}`),
-                }))}
-              />
-            </div>
-            <div className="setting-item">
-              <label className="setting-label">
-                <span className="label-text">{t('settings.imageGen.openaiSettings.format')}</span>
-                <span className="label-hint">{t('settings.imageGen.openaiSettings.formatHint')}</span>
-              </label>
-              <CustomSelect
-                value={config.openaiSettings.output_format}
-                onChange={(value) => onChange({
-                  ...config,
-                  openaiSettings: { ...config.openaiSettings, output_format: value as 'png' | 'jpeg' | 'webp' },
-                })}
-                options={OPENAI_OUTPUT_FORMAT_OPTIONS.map((value) => ({
-                  value,
-                  label: t(`settings.imageGen.openaiSettings.formatOptions.${value}`),
-                }))}
-              />
-            </div>
-            <div className="setting-item">
-              <label className="setting-label">
-                <span className="label-text">{t('settings.imageGen.openaiSettings.compression')}</span>
-                <span className="label-hint">{t('settings.imageGen.openaiSettings.compressionHint')}</span>
-              </label>
-              <NumberInput
-                min={0}
-                max={100}
-                value={config.openaiSettings.output_compression}
-                onValueChange={(value) => onChange({
-                  ...config,
-                  openaiSettings: { ...config.openaiSettings, output_compression: value ?? 90 },
-                })}
-                className="setting-input"
-                disabled={!compressionEnabled}
-              />
-            </div>
-            <div className="setting-item">
-              <label className="setting-label">
-                <span className="label-text">{t('settings.imageGen.openaiSettings.inputFidelity')}</span>
-                <span className="label-hint">{t('settings.imageGen.openaiSettings.inputFidelityHint')}</span>
-              </label>
-              <CustomSelect
-                value={config.openaiSettings.input_fidelity}
-                onChange={(value) => onChange({
-                  ...config,
-                  openaiSettings: { ...config.openaiSettings, input_fidelity: value as 'low' | 'high' },
-                })}
-                options={OPENAI_INPUT_FIDELITY_OPTIONS.map((value) => ({
-                  value,
-                  label: t(`settings.imageGen.openaiSettings.inputFidelityOptions.${value}`),
-                }))}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isNovelAI && (
-        <div className="provider-settings-section">
-          <div className="section-header">
-            <h4>{t('settings.imageGen.novelaiSettings.title')}</h4>
-            <p className="section-description">{t('settings.imageGen.novelaiSettings.description')}</p>
-          </div>
-          <div className="settings-grid novelai-settings">
-            <div className="setting-item">
-              <label className="setting-label">
-                <span className="label-text">{t('settings.imageGen.novelaiSettings.sampler')}</span>
-                <span className="label-hint">{t('settings.imageGen.novelaiSettings.samplerHint')}</span>
-              </label>
-              <CustomSelect
-                value={config.novelaiSettings.sampler}
-                onChange={(value) => onChange({
-                  ...config,
-                  novelaiSettings: { ...config.novelaiSettings, sampler: value },
-                })}
-                options={NOVELAI_SAMPLERS.map((value) => ({ value, label: value }))}
-              />
-            </div>
-            <div className="setting-item">
-              <label className="setting-label">
-                <span className="label-text">{t('settings.imageGen.novelaiSettings.steps')}</span>
-                <span className="label-hint">{t('settings.imageGen.novelaiSettings.stepsHint')}</span>
-              </label>
-              <NumberInput
-                min={1}
-                max={50}
-                value={config.novelaiSettings.steps}
-                onValueChange={(value) => onChange({
-                  ...config,
-                  novelaiSettings: { ...config.novelaiSettings, steps: value ?? 28 },
-                })}
-                className="setting-input"
-              />
-            </div>
-            <div className="setting-item">
-              <label className="setting-label">
-                <span className="label-text">{t('settings.imageGen.novelaiSettings.scale')}</span>
-                <span className="label-hint">{t('settings.imageGen.novelaiSettings.scaleHint')}</span>
-              </label>
-              <NumberInput
-                min={1}
-                max={20}
-                step={0.5}
-                integer={false}
-                value={config.novelaiSettings.scale}
-                onValueChange={(value) => onChange({
-                  ...config,
-                  novelaiSettings: { ...config.novelaiSettings, scale: value ?? 6 },
-                })}
-                className="setting-input"
-              />
-            </div>
-            <div className="setting-item">
-              <label className="setting-label">
-                <span className="label-text">{t('settings.imageGen.novelaiSettings.noiseSchedule')}</span>
-                <span className="label-hint">{t('settings.imageGen.novelaiSettings.noiseScheduleHint')}</span>
-              </label>
-              <CustomSelect
-                value={config.novelaiSettings.noise_schedule}
-                onChange={(value) => onChange({
-                  ...config,
-                  novelaiSettings: { ...config.novelaiSettings, noise_schedule: value },
-                })}
-                options={NOVELAI_NOISE_SCHEDULES.map((value) => ({ value, label: value }))}
-              />
-            </div>
-          </div>
+          <ProviderSettingsFields
+            spec={providerSettingsSpec}
+            draft={providerSettings}
+            setDraft={(next) => {
+              const resolved =
+                typeof next === 'function'
+                  ? next(providerSettings)
+                  : next;
+              onChange(setStoredProviderSettings(config as Record<string, unknown>, config.provider, resolved) as ImageGenConfig);
+            }}
+          />
         </div>
       )}
 
