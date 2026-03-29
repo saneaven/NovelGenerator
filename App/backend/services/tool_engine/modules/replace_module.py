@@ -15,8 +15,10 @@ from .object_access import (
     extract_lang_data,
     get_primary_object_id,
     read_object,
+    read_runtime_object,
+    read_runtime_story_entity,
     read_story_entity_folder,
-    read_story_entity,
+    runtime_rich_text_kwargs,
     to_uuid,
 )
 from .shared import (
@@ -165,13 +167,12 @@ class ReplaceToolCallModule(ToolCallModule):
 
             object_id = to_uuid(args.get("id"), "id")
             if tool_name == "replace_story_entity":
-                read_story_entity(
+                read_runtime_story_entity(
                     ctx.db,
                     project_id=ctx.project_id,
                     object_id=object_id,
                     language=ctx.language,
                     kind=args.get("kind"),
-                    rich_text_format="markdown",
                 )
                 ensure_story_entity_folder_exists(
                     ctx.db,
@@ -212,13 +213,12 @@ class ReplaceToolCallModule(ToolCallModule):
             if tool_name == "replace_outline":
                 _non_negative_position(args.get("position"))
                 if args.get("parentId"):
-                    current = read_object(
+                    current = read_runtime_object(
                         ctx.db,
                         project_id=ctx.project_id,
                         object_type="outline",
                         object_id=object_id,
                         language=ctx.language,
-                        rich_text_format="markdown",
                     )
                     current_kind = str(current.get("kind") or "")
                     if current_kind == "act":
@@ -236,13 +236,12 @@ class ReplaceToolCallModule(ToolCallModule):
                             expected_kind="act",
                         )
 
-            read_object(
+            read_runtime_object(
                 ctx.db,
                 project_id=ctx.project_id,
                 object_type=object_type,
                 object_id=object_id,
                 language=ctx.language,
-                rich_text_format="markdown",
             )
             return valid_result()
         except ValueError as exc:
@@ -277,13 +276,12 @@ class ReplaceToolCallModule(ToolCallModule):
 
         if tool_name == "replace_guidelines":
             object_id = get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
-            current = read_object(
+            current = read_runtime_object(
                 ctx.db,
                 project_id=ctx.project_id,
                 object_type="guidelines",
                 object_id=object_id,
                 language=ctx.language,
-                rich_text_format="markdown",
             )
             next_data = dict(extract_lang_data(current, ctx.language))
             if "authorNote" in args:
@@ -295,7 +293,7 @@ class ReplaceToolCallModule(ToolCallModule):
                 object_id=object_id,
                 data=next_data,
                 language=ctx.language,
-                rich_text_format="markdown",
+                **runtime_rich_text_kwargs("guidelines"),
                 user_request="tool:replace_guidelines",
                 created_by=ctx.user_id,
                 create_new_version=True,
@@ -308,13 +306,12 @@ class ReplaceToolCallModule(ToolCallModule):
             kind = str(args.get("kind") or "")
             object_type = STORY_ENTITY_TYPE
             metadata = {"folder_id": args.get("folderId")} if "folderId" in args else None
-            current = read_story_entity(
+            current = read_runtime_story_entity(
                 ctx.db,
                 project_id=ctx.project_id,
                 object_id=object_id,
                 language=ctx.language,
                 kind=kind,
-                rich_text_format="markdown",
             )
             next_data = dict(extract_lang_data(current, ctx.language))
             for key in ["name", "description", "content"]:
@@ -379,13 +376,12 @@ class ReplaceToolCallModule(ToolCallModule):
 
         if tool_name == "replace_outline":
             object_type = "outline"
-            current = read_object(
+            current = read_runtime_object(
                 ctx.db,
                 project_id=ctx.project_id,
                 object_type=object_type,
                 object_id=object_id,
                 language=ctx.language,
-                rich_text_format="markdown",
             )
             next_data = dict(extract_lang_data(current, ctx.language))
             for key in ["name", "description", "content"]:
@@ -403,7 +399,7 @@ class ReplaceToolCallModule(ToolCallModule):
                 object_id=object_id,
                 data=next_data,
                 language=ctx.language,
-                rich_text_format="markdown",
+                **runtime_rich_text_kwargs(object_type),
                 metadata=metadata or None,
                 user_request=f"tool:{tool_name}",
                 created_by=ctx.user_id,

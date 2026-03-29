@@ -9,6 +9,7 @@ from ....models.db_models import Outline, StoryEntityFolder
 from ....services.object_service import object_service
 from ....services.patch_utils import apply_single_replacement
 from ....services.outline_service import require_outline_kind
+from ....services.rich_text.registry import get_rich_text_fields
 from ....utils.story_entities import (
     STORY_ENTITY_FOLDER_TYPE,
     STORY_ENTITY_KINDS,
@@ -58,15 +59,16 @@ def read_object(
     object_type: str,
     object_id: UUID,
     language: str,
-    rich_text_format: str = "tiptap",
+    rich_text_format: str | None = None,
 ) -> dict[str, Any]:
+    kwargs = {"rich_text_format": rich_text_format} if rich_text_format is not None else {}
     obj = object_service.get_object(
         db,
         object_type=object_type,
         object_id=object_id,
         project_id=project_id,
         language=language,
-        rich_text_format=rich_text_format,
+        **kwargs,
     )
     if obj is None:
         raise ValueError(f"{object_type} not found: {object_id}")
@@ -80,7 +82,7 @@ def read_story_entity(
     object_id: UUID,
     language: str,
     kind: Any,
-    rich_text_format: str = "tiptap",
+    rich_text_format: str | None = None,
 ) -> dict[str, Any]:
     expected_kind = require_story_entity_arg_kind(kind)
     obj = read_object(
@@ -103,7 +105,7 @@ def read_story_entity_folder(
     project_id: UUID,
     object_id: UUID,
     language: str,
-    rich_text_format: str = "tiptap",
+    rich_text_format: str | None = None,
 ) -> dict[str, Any]:
     return read_object(
         db,
@@ -112,6 +114,48 @@ def read_story_entity_folder(
         object_id=object_id,
         language=language,
         rich_text_format=rich_text_format,
+    )
+
+
+def runtime_rich_text_kwargs(object_type: str) -> dict[str, str]:
+    if get_rich_text_fields(object_type):
+        return {"rich_text_format": "markdown"}
+    return {}
+
+
+def read_runtime_object(
+    db: Session,
+    *,
+    project_id: UUID,
+    object_type: str,
+    object_id: UUID,
+    language: str,
+) -> dict[str, Any]:
+    return read_object(
+        db,
+        project_id=project_id,
+        object_type=object_type,
+        object_id=object_id,
+        language=language,
+        **runtime_rich_text_kwargs(object_type),
+    )
+
+
+def read_runtime_story_entity(
+    db: Session,
+    *,
+    project_id: UUID,
+    object_id: UUID,
+    language: str,
+    kind: Any,
+) -> dict[str, Any]:
+    return read_story_entity(
+        db,
+        project_id=project_id,
+        object_id=object_id,
+        language=language,
+        kind=kind,
+        **runtime_rich_text_kwargs(STORY_ENTITY_TYPE),
     )
 
 

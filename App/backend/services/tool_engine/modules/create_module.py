@@ -13,6 +13,7 @@ from .object_access import (
     ensure_outline_parent_kind,
     ensure_story_entity_folder_exists,
     require_story_entity_arg_kind,
+    runtime_rich_text_kwargs,
     to_uuid,
 )
 from .shared import filter_allowed_specs, is_agent_write_context, is_outline_journey, is_object_journey, obj_schema
@@ -132,7 +133,7 @@ class CreateToolCallModule(ToolCallModule):
                 object_type=STORY_ENTITY_TYPE,
                 data=payload,
                 language=ctx.language,
-                rich_text_format="markdown",
+                **runtime_rich_text_kwargs(STORY_ENTITY_TYPE),
                 metadata={"folder_id": args.get("folderId")},
                 kind=kind,
                 user_request="tool:create_story_entity",
@@ -173,7 +174,7 @@ class CreateToolCallModule(ToolCallModule):
                 object_type="outline",
                 data=payload,
                 language=ctx.language,
-                rich_text_format="markdown",
+                **runtime_rich_text_kwargs("outline"),
                 kind=outline_kind,
                 metadata={
                     "parent_id": args.get("parentId"),

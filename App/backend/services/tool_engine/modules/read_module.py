@@ -11,8 +11,9 @@ from .manuscript_access import ensure_manuscript_exists, read_manuscript_markdow
 from .object_access import (
     extract_lang_data,
     read_object,
+    read_runtime_object,
+    read_runtime_story_entity,
     read_story_entity_folder,
-    read_story_entity,
     to_uuid,
 )
 from .shared import filter_allowed_specs, is_non_journey, obj_schema
@@ -71,13 +72,12 @@ class ReadToolCallModule(ToolCallModule):
         try:
             object_id = to_uuid(args.get("id"), "id")
             if tool_name == "read_story_entity":
-                read_story_entity(
+                read_runtime_story_entity(
                     ctx.db,
                     project_id=ctx.project_id,
                     object_id=object_id,
                     language=ctx.language,
                     kind=args.get("kind"),
-                    rich_text_format="markdown",
                 )
                 return valid_result()
             elif tool_name == "read_story_entity_folder":
@@ -101,13 +101,12 @@ class ReadToolCallModule(ToolCallModule):
             else:
                 return invalid_result("validate_read_tool_name", f"Unsupported read tool: {tool_name}")
 
-            read_object(
+            read_runtime_object(
                 ctx.db,
                 project_id=ctx.project_id,
                 object_type=object_type,
                 object_id=object_id,
                 language=ctx.language,
-                rich_text_format="markdown",
             )
             return valid_result()
         except ValueError as exc:
@@ -117,13 +116,12 @@ class ReadToolCallModule(ToolCallModule):
         object_id = to_uuid(args.get("id"), "id")
 
         if tool_name == "read_story_entity":
-            obj = read_story_entity(
+            obj = read_runtime_story_entity(
                 ctx.db,
                 project_id=ctx.project_id,
                 object_id=object_id,
                 language=ctx.language,
                 kind=args.get("kind"),
-                rich_text_format="markdown",
             )
             return make_result(
                 "Read successful",
@@ -170,13 +168,12 @@ class ReadToolCallModule(ToolCallModule):
         else:
             raise ValueError(f"Unsupported read tool: {tool_name}")
 
-        obj = read_object(
+        obj = read_runtime_object(
             ctx.db,
             project_id=ctx.project_id,
             object_type=object_type,
             object_id=object_id,
             language=ctx.language,
-            rich_text_format="markdown",
         )
         return make_result(
             "Read successful",

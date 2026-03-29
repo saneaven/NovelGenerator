@@ -15,8 +15,10 @@ from .object_access import (
     get_primary_object_id,
     patch_object_field,
     read_object,
+    read_runtime_object,
+    read_runtime_story_entity,
     read_story_entity_folder,
-    read_story_entity,
+    runtime_rich_text_kwargs,
     to_uuid,
 )
 from .shared import filter_allowed_specs, is_translation_journey, obj_schema
@@ -112,13 +114,12 @@ class PatchTranslationToolCallModule(ToolCallModule):
                 if args.get("field") != "authorNote":
                     raise ValueError("field must be authorNote")
                 object_id = get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
-                current = read_object(
+                current = read_runtime_object(
                     ctx.db,
                     project_id=ctx.project_id,
                     object_type="guidelines",
                     object_id=object_id,
                     language=ctx.language,
-                    rich_text_format="markdown",
                 )
                 patch_object_field(extract_lang_data(current, ctx.language), field="authorNote", old=str(args.get("old") or ""), new=str(args.get("new") or ""))
                 return valid_result()
@@ -128,13 +129,12 @@ class PatchTranslationToolCallModule(ToolCallModule):
                 field = args.get("field")
                 if field not in {"name", "description", "content"}:
                     raise ValueError("field must be one of name|description|content")
-                current = read_story_entity(
+                current = read_runtime_story_entity(
                     ctx.db,
                     project_id=ctx.project_id,
                     object_id=object_id,
                     language=ctx.language,
                     kind=args.get("kind"),
-                    rich_text_format="markdown",
                 )
                 patch_object_field(extract_lang_data(current, ctx.language), field=str(field), old=str(args.get("old") or ""), new=str(args.get("new") or ""))
                 return valid_result()
@@ -172,13 +172,12 @@ class PatchTranslationToolCallModule(ToolCallModule):
             else:
                 return invalid_result("validate_patch_translation_tool_name", f"Unsupported patch translation tool: {tool_name}")
 
-            current = read_object(
+            current = read_runtime_object(
                 ctx.db,
                 project_id=ctx.project_id,
                 object_type=object_type,
                 object_id=object_id,
                 language=ctx.language,
-                rich_text_format="markdown" if object_type in {"guidelines", "story_entity", "outline", "timeline_track", "timeline_event"} else "tiptap",
             )
             patch_object_field(extract_lang_data(current, ctx.language), field=str(field), old=str(args.get("old") or ""), new=str(args.get("new") or ""))
             return valid_result()
@@ -210,13 +209,12 @@ class PatchTranslationToolCallModule(ToolCallModule):
 
         if tool_name == "patch_translation_guidelines":
             object_id = get_primary_object_id(ctx.db, ctx.project_id, "guidelines")
-            current = read_object(
+            current = read_runtime_object(
                 ctx.db,
                 project_id=ctx.project_id,
                 object_type="guidelines",
                 object_id=object_id,
                 language=ctx.language,
-                rich_text_format="markdown",
             )
             next_data = patch_object_field(
                 extract_lang_data(current, ctx.language),
@@ -231,7 +229,7 @@ class PatchTranslationToolCallModule(ToolCallModule):
                 object_id=object_id,
                 data=next_data,
                 language=ctx.language,
-                rich_text_format="markdown",
+                **runtime_rich_text_kwargs("guidelines"),
                 user_request="tool:patch_translation_guidelines",
                 created_by=ctx.user_id,
                 create_new_version=False,
@@ -242,13 +240,12 @@ class PatchTranslationToolCallModule(ToolCallModule):
 
         if tool_name == "patch_translation_story_entity":
             object_type = STORY_ENTITY_TYPE
-            current = read_story_entity(
+            current = read_runtime_story_entity(
                 ctx.db,
                 project_id=ctx.project_id,
                 object_id=object_id,
                 language=ctx.language,
                 kind=args.get("kind"),
-                rich_text_format="markdown",
             )
         elif tool_name == "patch_translation_story_entity_folder":
             object_type = STORY_ENTITY_FOLDER_TYPE
@@ -336,14 +333,13 @@ class PatchTranslationToolCallModule(ToolCallModule):
             raise ValueError(f"Unsupported patch translation tool: {tool_name}")
 
         field = str(args.get("field") or "")
-        if tool_name != "patch_translation_story_entity":
-            current = read_object(
+        if tool_name not in {"patch_translation_story_entity", "patch_translation_story_entity_folder"}:
+            current = read_runtime_object(
                 ctx.db,
                 project_id=ctx.project_id,
                 object_type=object_type,
                 object_id=object_id,
                 language=ctx.language,
-                rich_text_format="markdown" if object_type in {"story_entity", "outline"} else "tiptap",
             )
         next_data = patch_object_field(
             extract_lang_data(current, ctx.language),
@@ -358,7 +354,7 @@ class PatchTranslationToolCallModule(ToolCallModule):
             object_id=object_id,
             data=next_data,
             language=ctx.language,
-            rich_text_format="markdown" if object_type in {"story_entity", "outline"} else "tiptap",
+            **runtime_rich_text_kwargs(object_type),
             kind=(str(args.get("kind") or "") if tool_name == "patch_translation_story_entity" else None),
             user_request=f"tool:{tool_name}",
             created_by=ctx.user_id,
