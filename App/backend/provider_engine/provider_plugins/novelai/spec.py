@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ...contracts import (
+    Condition,
     FieldSpec,
     ImageModelDescriptor,
     ImageModelGeometrySpec,
@@ -90,6 +91,7 @@ SPEC = ProviderSpec(
                 kind="enum",
                 default="auto",
                 options=("auto", "i2i", "vibe"),
+                when=(Condition(op="flag", flag="hasReferenceImages"),),
                 ui=UIHint(
                     widget="select",
                     label_key="settings.imageGen.novelaiSettings.referenceMode",
@@ -105,6 +107,7 @@ SPEC = ProviderSpec(
                 min_value=0,
                 max_value=1,
                 step=0.05,
+                when=(Condition(op="flag", flag="hasReferenceImages"), Condition(op="neq", path="referenceMode", value="vibe")),
                 ui=UIHint(
                     widget="slider",
                     label_key="settings.imageGen.novelaiSettings.strength",
@@ -119,6 +122,7 @@ SPEC = ProviderSpec(
                 min_value=0,
                 max_value=1,
                 step=0.05,
+                when=(Condition(op="flag", flag="hasReferenceImages"), Condition(op="neq", path="referenceMode", value="vibe")),
                 ui=UIHint(
                     widget="slider",
                     label_key="settings.imageGen.novelaiSettings.i2iNoise",
@@ -133,6 +137,7 @@ SPEC = ProviderSpec(
                 min_value=0,
                 max_value=1,
                 step=0.05,
+                when=(Condition(op="flag", flag="hasReferenceImages"), Condition(op="neq", path="referenceMode", value="i2i")),
                 ui=UIHint(
                     widget="slider",
                     label_key="settings.imageGen.novelaiSettings.vibeStrength",
@@ -147,6 +152,7 @@ SPEC = ProviderSpec(
                 min_value=0,
                 max_value=1,
                 step=0.05,
+                when=(Condition(op="flag", flag="hasReferenceImages"), Condition(op="neq", path="referenceMode", value="i2i")),
                 ui=UIHint(
                     widget="slider",
                     label_key="settings.imageGen.novelaiSettings.vibeInfoExtracted",

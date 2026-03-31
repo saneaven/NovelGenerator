@@ -18,6 +18,7 @@ type ProviderSettingsFieldsProps = {
   draft: Record<string, unknown>;
   setDraft: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
   className?: string;
+  flags?: Record<string, unknown>;
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -47,9 +48,10 @@ export const ProviderSettingsFields: React.FC<ProviderSettingsFieldsProps> = ({
   draft,
   setDraft,
   className,
+  flags = {},
 }) => {
   const { t } = useTranslation();
-  const entries = getVisibleSpecEntries(spec, draft);
+  const entries = getVisibleSpecEntries(spec, draft, flags);
 
   if (entries.length === 0) return null;
 
@@ -70,6 +72,7 @@ export const ProviderSettingsFields: React.FC<ProviderSettingsFieldsProps> = ({
               key={fieldName}
               spec={node}
               draft={childDraft}
+              flags={flags}
               setDraft={(next) => {
                 if (typeof next === 'function') {
                   const resolved = next(childDraft);
@@ -84,7 +87,7 @@ export const ProviderSettingsFields: React.FC<ProviderSettingsFieldsProps> = ({
 
         const label = translateFieldLabel(t, node) || fieldName;
         const hint = translateFieldHelp(t, node);
-        const disabled = isNodeDisabled(node, draft);
+        const disabled = isNodeDisabled(node, draft, flags);
         const value = draft[fieldName];
 
         if (node.ui?.widget === 'slider') {

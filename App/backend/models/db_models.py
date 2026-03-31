@@ -761,7 +761,7 @@ class TimelineEvent(Base):
     __tablename__ = "timeline_events"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    track_id = Column(UUID(as_uuid=True), ForeignKey("timeline_tracks.id", ondelete="CASCADE"), nullable=False, index=True)
+    track_id = Column(UUID(as_uuid=True), ForeignKey("timeline_tracks.id", ondelete="CASCADE"), nullable=False)
     start_date = Column(JSONB, nullable=False)
     end_date = Column(JSONB, nullable=True)
     tags = Column(JSONB, nullable=False, server_default=sa_text("'[]'::jsonb"))
@@ -782,7 +782,7 @@ class TimelineEventLink(Base):
     __tablename__ = "timeline_event_links"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    event_id = Column(UUID(as_uuid=True), ForeignKey("timeline_events.id", ondelete="CASCADE"), nullable=False, index=True)
+    event_id = Column(UUID(as_uuid=True), ForeignKey("timeline_events.id", ondelete="CASCADE"), nullable=False)
     object_type = Column(String(50), nullable=False)
     object_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

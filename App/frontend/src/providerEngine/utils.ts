@@ -245,11 +245,11 @@ export function normalizeByPublicSpec(value: JsonObject, spec: PublicObjectSpec,
   return out;
 }
 
-export function getVisibleSpecEntries(spec: PublicObjectSpec | null | undefined, rootValue: JsonObject): Array<[string, PublicSchemaNode]> {
+export function getVisibleSpecEntries(spec: PublicObjectSpec | null | undefined, rootValue: JsonObject, flags: Record<string, unknown> = {}): Array<[string, PublicSchemaNode]> {
   if (!spec) return [];
   const fields = isPlainObject(spec.fields) ? spec.fields : {};
   return Object.entries(fields)
-    .filter(([, node]) => isNodeVisible(node, rootValue))
+    .filter(([, node]) => isNodeVisible(node, rootValue, flags))
     .sort((left, right) => {
       const leftOrder = isObjectSpec(left[1]) ? null : left[1].ui?.order;
       const rightOrder = isObjectSpec(right[1]) ? null : right[1].ui?.order;

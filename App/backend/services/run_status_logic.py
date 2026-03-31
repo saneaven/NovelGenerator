@@ -11,12 +11,12 @@ def derive_run_status(*, current_status: str | None, tool_call_statuses: Iterabl
 
     if current_status == "paused":
         return "paused"
+    if not statuses:
+        return "done"
     if any(status == "pending" for status in statuses):
         return "waiting"
     if any(status in _IN_PROGRESS_TOOL_STATUSES for status in statuses):
         return "processing"
     if any(status == "rejected" for status in statuses):
         return "paused"
-    if statuses:
-        return "done"
-    return current_status
+    return "done"

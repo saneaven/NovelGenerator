@@ -213,6 +213,10 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         return normalizeByPublicSpec(providerSettingsDraft, providerSettingsSpec, providerSettingsDraft);
     }, [providerSettingsDraft, providerSettingsSpec]);
 
+    const providerSettingsFlags = useMemo(() => ({
+        hasReferenceImages: referenceImages.length > 0,
+    }), [referenceImages.length]);
+
     // Add reference image handler
     const handleImageSelected = useCallback((assetId: string, previewUrl: string) => {
         if (referenceImages.some(img => img.assetId === assetId)) {
@@ -882,6 +886,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                             draft={providerSettingsDraft}
                             setDraft={setProviderSettingsDraft}
                             className="image-generation-provider-settings"
+                            flags={providerSettingsFlags}
                         />
                     </div>
                 )}
