@@ -189,7 +189,7 @@
         },
         "search": {
           "label": "Search",
-          "description": "Semantic search and keyword search over indexed project knowledge."
+          "description": "Semantic search and regex search over indexed project knowledge."
         },
         "memory": {
           "label": "Memory",
@@ -219,8 +219,8 @@
         "maxTotalItems": "Max total items",
         "maxTotalSearchHint": "Hard cap for total Search results after neighbor expansion.",
         "maxTotalMemoryHint": "Hard cap for total Memory messages after neighbor expansion.",
-        "keywordPageSize": "Keyword results per page",
-        "keywordPageSizeHint": "Number of chunks returned per page for search_keyword."
+        "regexPageSize": "Regex results per page",
+        "regexPageSizeHint": "Number of chunks returned per page for search_regex."
       },
       "searchRulesTitle": "Search rules",
       "searchRules": {

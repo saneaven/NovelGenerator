@@ -398,12 +398,27 @@
   gap: var(--spacing-xs);
 }
 
-.function-call-search-query-island__keyword-row {
+.function-call-search-query-island__pattern-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-sm);
   color: var(--color-text-primary);
+}
+
+.function-call-search-query-island__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.function-call-search-query-island__case-chip {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-full);
+  padding: 2px var(--spacing-sm);
 }
 
 .function-call-search-query-island__page-chip {

@@ -78,7 +78,7 @@ def test_update_user_settings_wipes_semantic_index_on_main_language_change(monke
             "general": {
                 "embedding": {"provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536},
                 "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
-                "keywordPageSize": 20,
+                "regexPageSize": 20,
             },
             "overrides": {
                 "memory": {
@@ -120,7 +120,7 @@ def test_update_user_settings_wipes_semantic_index_once_on_search_model_change(m
             "general": {
                 "embedding": {"provider": "openai", "model": "old-model", "dimensions": 1536},
                 "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
-                "keywordPageSize": 20,
+                "regexPageSize": 20,
             },
             "overrides": {
                 "memory": {
@@ -143,7 +143,7 @@ def test_update_user_settings_wipes_semantic_index_once_on_search_model_change(m
             "general": {
                 "embedding": {"provider": "openai", "model": "new-model", "dimensions": 3072},
                 "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
-                "keywordPageSize": 20,
+                "regexPageSize": 20,
             },
             "overrides": {
                 "memory": {
@@ -177,7 +177,7 @@ def test_update_user_settings_accepts_disabled_incomplete_search_memory_settings
             "general": {
                 "embedding": {"provider": "openai", "model": "", "dimensions": None},
                 "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
-                "keywordPageSize": 20,
+                "regexPageSize": 20,
             },
             "overrides": {},
         },
@@ -201,7 +201,7 @@ def test_update_user_settings_accepts_disabled_incomplete_search_memory_settings
                             "maxPrimaryItems": 5,
                             "maxTotalItems": 8,
                         },
-                        "keywordPageSize": 12,
+                        "regexPageSize": 12,
                     },
                     "overrides": {},
                 }
@@ -213,7 +213,7 @@ def test_update_user_settings_accepts_disabled_incomplete_search_memory_settings
 
     assert result.search_memory_settings["enabled"] is False
     assert result.search_memory_settings["general"]["embedding"]["model"] == ""
-    assert result.search_memory_settings["general"]["keywordPageSize"] == 12
+    assert result.search_memory_settings["general"]["regexPageSize"] == 12
 
 
 def test_update_user_settings_rejects_enabled_search_memory_without_effective_model(monkeypatch) -> None:
@@ -227,7 +227,7 @@ def test_update_user_settings_rejects_enabled_search_memory_without_effective_mo
             "general": {
                 "embedding": {"provider": "openai", "model": "", "dimensions": None},
                 "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
-                "keywordPageSize": 20,
+                "regexPageSize": 20,
             },
             "overrides": {},
         },
@@ -251,7 +251,7 @@ def test_update_user_settings_rejects_enabled_search_memory_without_effective_mo
                                 "maxPrimaryItems": 20,
                                 "maxTotalItems": 60,
                             },
-                            "keywordPageSize": 20,
+                            "regexPageSize": 20,
                         },
                         "overrides": {
                             "memory": {

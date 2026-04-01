@@ -4,8 +4,10 @@ import asyncio
 import sys
 import types
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import declarative_base
 
 
@@ -69,6 +71,33 @@ class FakeDB:
         if not self._first_rows:
             raise AssertionError("Unexpected execute call")
         return FakeResult(self._first_rows.pop(0))
+
+
+class RegexFakeResult:
+    def __init__(self, *, first_row: object | None = None, rows: list[object] | None = None) -> None:
+        self._first_row = first_row
+        self._rows = list(rows or [])
+
+    def first(self):
+        return self._first_row
+
+    def fetchall(self):
+        return list(self._rows)
+
+
+class RegexFakeDB:
+    def __init__(self, results: list[object]) -> None:
+        self._results = list(results)
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def execute(self, stmt: object, params: dict[str, object]):
+        self.calls.append((str(stmt), dict(params)))
+        if not self._results:
+            raise AssertionError("Unexpected execute call")
+        result = self._results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
 
 
 def test_search_project_returns_empty_without_embedding_when_index_is_empty(monkeypatch) -> None:
@@ -176,3 +205,94 @@ def test_search_project_calls_embedding_when_matching_index_exists(monkeypatch) 
     assert vector_calls[0]["neighbor_window"] == 2
     assert vector_calls[0]["max_primary_items"] == 5
     assert vector_calls[0]["max_total_items"] == 9
+
+
+def test_search_project_by_regex_uses_case_insensitive_operator_by_default(monkeypatch) -> None:
+    row = SimpleNamespace(
+        chunk_id=uuid4(),
+        source_id=uuid4(),
+        object_type="story_entity",
+        object_id=uuid4(),
+        type_group="story_entity",
+        story_entity_kind="character",
+        story_entity_order=1,
+        outline_order=None,
+        act_order=None,
+        chapter_order=None,
+        chapter_id=None,
+        field_path="content",
+        chunk_index=0,
+        text="Hero wound mentioned here.",
+    )
+    db = RegexFakeDB([
+        RegexFakeResult(first_row=SimpleNamespace(total=1)),
+        RegexFakeResult(rows=[row]),
+    ])
+
+    monkeypatch.setattr(
+        semantic_search_service,
+        "get_embedding_profile",
+        lambda *_args, **_kwargs: {"provider": "openai", "model": "embed"},
+    )
+    monkeypatch.setattr(semantic_search_service, "get_main_language", lambda *_args, **_kwargs: "English")
+
+    result = semantic_search_service.search_project_by_regex(
+        db,
+        user_id=uuid4(),
+        project_id=uuid4(),
+        pattern="hero.*wound",
+    )
+
+    assert result["total"] == 1
+    assert len(result["results"]) == 1
+    count_stmt, count_params = db.calls[0]
+    assert "c.text ~* :pattern" in count_stmt
+    assert count_params["pattern"] == "hero.*wound"
+
+
+def test_search_project_by_regex_uses_case_sensitive_operator_when_enabled(monkeypatch) -> None:
+    db = RegexFakeDB([RegexFakeResult(first_row=SimpleNamespace(total=0))])
+
+    monkeypatch.setattr(
+        semantic_search_service,
+        "get_embedding_profile",
+        lambda *_args, **_kwargs: {"provider": "openai", "model": "embed"},
+    )
+    monkeypatch.setattr(semantic_search_service, "get_main_language", lambda *_args, **_kwargs: "English")
+
+    result = semantic_search_service.search_project_by_regex(
+        db,
+        user_id=uuid4(),
+        project_id=uuid4(),
+        pattern="Hero.*Wound",
+        case_sensitive=True,
+    )
+
+    assert result == {"total": 0, "results": []}
+    assert "c.text ~ :pattern" in db.calls[0][0]
+    assert "~* :pattern" not in db.calls[0][0]
+
+
+def test_search_project_by_regex_converts_invalid_regex_errors(monkeypatch) -> None:
+    db = RegexFakeDB([
+        DBAPIError("SELECT 1", {"pattern": "("}, Exception("invalid regular expression: parentheses not balanced")),
+    ])
+
+    monkeypatch.setattr(
+        semantic_search_service,
+        "get_embedding_profile",
+        lambda *_args, **_kwargs: {"provider": "openai", "model": "embed"},
+    )
+    monkeypatch.setattr(semantic_search_service, "get_main_language", lambda *_args, **_kwargs: "English")
+
+    try:
+        semantic_search_service.search_project_by_regex(
+            db,
+            user_id=uuid4(),
+            project_id=uuid4(),
+            pattern="(",
+        )
+    except ValueError as exc:
+        assert str(exc) == "Invalid regex pattern"
+    else:
+        raise AssertionError("Expected ValueError for invalid regex")

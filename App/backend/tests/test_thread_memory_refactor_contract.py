@@ -37,6 +37,21 @@ def _install_import_stubs() -> None:
     mistune.create_markdown = lambda **_kwargs: (lambda _text: [])
     sys.modules["mistune"] = mistune
 
+    markdown_it_pyrs = types.ModuleType("markdown_it_pyrs")
+
+    class _MarkdownIt:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def enable_many(self, *_args, **_kwargs):
+            return self
+
+        def parse(self, *_args, **_kwargs):
+            return []
+
+    markdown_it_pyrs.MarkdownIt = _MarkdownIt
+    sys.modules["markdown_it_pyrs"] = markdown_it_pyrs
+
 
 _install_import_stubs()
 
@@ -112,7 +127,7 @@ def test_search_tools_are_offer_gated_by_vector_storage() -> None:
     legacy_gate = "enabled_when" + "=_vector_storage_enabled"
 
     assert "ctx.vector_storage_enabled" in source
-    assert '"search_keyword"' in source
+    assert '"search_regex"' in source
     assert '"search_semantic"' in source
     assert legacy_gate not in source
 

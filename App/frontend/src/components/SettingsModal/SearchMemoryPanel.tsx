@@ -192,10 +192,10 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
     target: ModelBrowserTarget,
     config: Pick<SearchGeneralConfig, 'embedding' | 'retrieval'> | MemoryConfig,
     onConfigChange: (next: typeof config) => void,
-    options?: { includeKeyword?: boolean; keywordPageSize?: number; onKeywordPageSizeChange?: (value: number) => void; showIndexLanguage?: boolean; }
+    options?: { includeRegex?: boolean; regexPageSize?: number; onRegexPageSizeChange?: (value: number) => void; showIndexLanguage?: boolean; }
   ) => {
     const dimensions = config.embedding.dimensions;
-    const isSearchLike = options?.includeKeyword ?? false;
+    const isSearchLike = options?.includeRegex ?? false;
 
     const handleProviderChange = (provider: EmbeddingProviderType) => {
       onConfigChange({
@@ -384,17 +384,17 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
             </p>
           </div>
 
-          {options?.includeKeyword && typeof options.keywordPageSize === 'number' && options.onKeywordPageSizeChange && (
+          {options?.includeRegex && typeof options.regexPageSize === 'number' && options.onRegexPageSizeChange && (
             <div className="form-field">
-              <label>{t('settings.searchMemory.fields.keywordPageSize')}</label>
+              <label>{t('settings.searchMemory.fields.regexPageSize')}</label>
               <NumberInput
-                value={options.keywordPageSize}
+                value={options.regexPageSize}
                 min={1}
                 max={200}
-                onValueChange={(value) => options.onKeywordPageSizeChange?.(value ?? options.keywordPageSize ?? 20)}
+                onValueChange={(value) => options.onRegexPageSizeChange?.(value ?? options.regexPageSize ?? 20)}
                 className="config-input"
               />
-              <p className="field-hint">{t('settings.searchMemory.fields.keywordPageSizeHint')}</p>
+              <p className="field-hint">{t('settings.searchMemory.fields.regexPageSizeHint')}</p>
             </div>
           )}
         </div>
@@ -438,8 +438,8 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
           </div>
           {target === 'search' && (
             <div>
-              <dt>{t('settings.searchMemory.fields.keywordPageSize')}</dt>
-              <dd>{resolvedSearchSettings.keywordPageSize}</dd>
+              <dt>{t('settings.searchMemory.fields.regexPageSize')}</dt>
+              <dd>{resolvedSearchSettings.regexPageSize}</dd>
             </div>
           )}
         </dl>
@@ -517,10 +517,10 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
                     settings.general,
                     (next) => updateGeneral({ ...settings.general, ...next }),
                     {
-                      includeKeyword: true,
-                      keywordPageSize: settings.general.keywordPageSize,
-                      onKeywordPageSizeChange: (keywordPageSize) =>
-                        updateGeneral({ ...settings.general, keywordPageSize }),
+                      includeRegex: true,
+                      regexPageSize: settings.general.regexPageSize,
+                      onRegexPageSizeChange: (regexPageSize) =>
+                        updateGeneral({ ...settings.general, regexPageSize }),
                       showIndexLanguage: true,
                     }
                   )}
@@ -566,10 +566,10 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
                         settings.overrides.search,
                         (next) => updateSearchOverride({ ...(settings.overrides.search as SearchGeneralConfig), ...next }),
                         {
-                          includeKeyword: true,
-                          keywordPageSize: settings.overrides.search.keywordPageSize,
-                          onKeywordPageSizeChange: (keywordPageSize) =>
-                            updateSearchOverride({ ...(settings.overrides.search as SearchGeneralConfig), keywordPageSize }),
+                          includeRegex: true,
+                          regexPageSize: settings.overrides.search.regexPageSize,
+                          onRegexPageSizeChange: (regexPageSize) =>
+                            updateSearchOverride({ ...(settings.overrides.search as SearchGeneralConfig), regexPageSize }),
                           showIndexLanguage: true,
                         }
                       )}

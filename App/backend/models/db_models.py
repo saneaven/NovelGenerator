@@ -106,7 +106,7 @@ class UserSettings(Base):
         "general": {
             "embedding": {"provider": "openai", "model": "", "dimensions": null},
             "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
-            "keywordPageSize": 20
+            "regexPageSize": 20
         },
         "overrides": {}
     }""")

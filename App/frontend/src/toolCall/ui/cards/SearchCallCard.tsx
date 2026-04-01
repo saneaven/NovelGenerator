@@ -14,10 +14,8 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
   const payload = useMemo(
     () => extractSearchPayload({
       resultData: operation.result?.data,
-      resultMessage: operation.result?.message,
-      fallbackType: operation.searchType,
     }),
-    [operation]
+    [operation.result]
   );
 
   const resultsIsland = operation.status === 'applied' ? (
@@ -60,7 +58,7 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
       cardId={operation.id}
       category={operation.category}
       status={operation.status}
-      title={operation.searchType === 'semantic' ? 'Semantic Search' : 'Keyword Search'}
+      title={operation.searchType === 'semantic' ? 'Semantic Search' : 'Regex Search'}
       subtitle={operation.status === 'failed' && operation.reason ? operation.reason : undefined}
       showDecisionButtons={showDecisionButtons}
       decisionDisabled={decisionDisabled}
@@ -78,11 +76,16 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
                 .map((query, index) => <li key={`${query}-${index}`}>{query}</li>)}
             </ul>
           ) : (
-            <div className="function-call-search-query-island__keyword-row">
-              <span>{typeof operation.args.keyword === 'string' ? operation.args.keyword : '(empty keyword)'}</span>
-              <span className="function-call-search-query-island__page-chip">
-                Page {typeof operation.args.page === 'number' ? operation.args.page : 1}
-              </span>
+            <div className="function-call-search-query-island__pattern-row">
+              <span>{typeof operation.args.pattern === 'string' ? operation.args.pattern : '(empty pattern)'}</span>
+              <div className="function-call-search-query-island__meta">
+                {operation.args.case_sensitive === true && (
+                  <span className="function-call-search-query-island__case-chip">Case sensitive</span>
+                )}
+                <span className="function-call-search-query-island__page-chip">
+                  Page {typeof operation.args.page === 'number' ? operation.args.page : 1}
+                </span>
+              </div>
             </div>
           )}
         </div>,

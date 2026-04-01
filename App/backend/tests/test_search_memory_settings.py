@@ -19,13 +19,13 @@ def test_resolve_settings_inherit_general_when_overrides_are_missing() -> None:
     settings["general"]["embedding"]["model"] = "general-model"
     settings["general"]["embedding"]["dimensions"] = 1536
     settings["general"]["retrieval"]["topKPerQuery"] = 12
-    settings["general"]["keywordPageSize"] = 33
+    settings["general"]["regexPageSize"] = 33
 
     resolved_search = resolve_search_settings(settings)
     resolved_memory = resolve_memory_settings(settings)
 
     assert resolved_search["embedding"]["model"] == "general-model"
-    assert resolved_search["keywordPageSize"] == 33
+    assert resolved_search["regexPageSize"] == 33
     assert resolved_memory["embedding"]["model"] == "general-model"
     assert resolved_memory["retrieval"]["topKPerQuery"] == 12
 
@@ -45,12 +45,12 @@ def test_override_seed_and_resolution_use_target_specific_values() -> None:
     settings = make_initial_search_memory_settings()
     settings["general"]["embedding"]["model"] = "general-model"
     settings["general"]["retrieval"]["maxPrimaryItems"] = 9
-    settings["general"]["keywordPageSize"] = 25
+    settings["general"]["regexPageSize"] = 25
 
     search_override = make_search_override_seed(settings)
     memory_override = make_memory_override_seed(settings)
     search_override["embedding"]["model"] = "search-model"
-    search_override["keywordPageSize"] = 7
+    search_override["regexPageSize"] = 7
     memory_override["embedding"]["model"] = "memory-model"
 
     settings["overrides"]["search"] = search_override
@@ -59,7 +59,7 @@ def test_override_seed_and_resolution_use_target_specific_values() -> None:
     assert has_search_memory_override(settings, "search") is True
     assert has_search_memory_override(settings, "memory") is True
     assert resolve_search_settings(settings)["embedding"]["model"] == "search-model"
-    assert resolve_search_settings(settings)["keywordPageSize"] == 7
+    assert resolve_search_settings(settings)["regexPageSize"] == 7
     assert resolve_memory_settings(settings)["embedding"]["model"] == "memory-model"
     assert resolve_memory_settings(settings)["retrieval"]["maxPrimaryItems"] == 9
 

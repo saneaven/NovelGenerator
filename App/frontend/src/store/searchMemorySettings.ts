@@ -17,7 +17,7 @@ export interface RetrievalConfig {
 export interface SearchGeneralConfig {
   embedding: EmbeddingConfig;
   retrieval: RetrievalConfig;
-  keywordPageSize: number;
+  regexPageSize: number;
 }
 
 export interface MemoryConfig {
@@ -53,7 +53,7 @@ export function makeInitialSearchMemorySettings(): SearchMemorySettings {
     general: {
       embedding: { ...DEFAULT_EMBEDDING },
       retrieval: { ...DEFAULT_RETRIEVAL },
-      keywordPageSize: 20,
+      regexPageSize: 20,
     },
     overrides: {},
   };
@@ -95,7 +95,7 @@ function normalizeSearchGeneralConfig(config?: Partial<SearchGeneralConfig> | nu
   return {
     embedding: normalizeEmbeddingConfig(config?.embedding),
     retrieval: normalizeRetrievalConfig(config?.retrieval),
-    keywordPageSize: typeof config?.keywordPageSize === 'number' ? config.keywordPageSize : 20,
+    regexPageSize: typeof config?.regexPageSize === 'number' ? config.regexPageSize : 20,
   };
 }
 

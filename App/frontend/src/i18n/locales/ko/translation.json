@@ -219,8 +219,8 @@
         "maxTotalItems": "전체 항목 최대 수",
         "maxTotalSearchHint": "이웃 확장 후 최종 Search 결과의 최대 수입니다.",
         "maxTotalMemoryHint": "이웃 확장 후 최종 Memory 메시지의 최대 수입니다.",
-        "keywordPageSize": "키워드 검색 페이지 크기",
-        "keywordPageSizeHint": "search_keyword에서 페이지당 반환할 chunk 개수입니다."
+        "regexPageSize": "정규식 검색 페이지 크기",
+        "regexPageSizeHint": "search_regex에서 페이지당 반환할 chunk 개수입니다."
       },
       "searchRulesTitle": "Search 규칙",
       "searchRules": {

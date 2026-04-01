@@ -77,8 +77,9 @@ class SemanticSearchResponse(BaseModel):
     results: List[SemanticSearchResult]
 
 
-class KeywordSearchResponse(BaseModel):
-    keyword: str = Field(..., min_length=1)
+class RegexSearchResponse(BaseModel):
+    pattern: str = Field(..., min_length=1)
+    case_sensitive: bool = False
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=200)
     total: int = Field(default=0, ge=0)

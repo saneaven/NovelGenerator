@@ -18,7 +18,7 @@ from ..schemas.search import (
     SemanticSearchRequest,
     SemanticSearchResponse,
     SemanticSearchResult,
-    KeywordSearchResponse,
+    RegexSearchResponse,
 )
 from ..services.embedding_config_service import get_embedding_profile
 from ..services.credential_service import CredentialServiceError, credential_service
@@ -30,7 +30,7 @@ from ..services.semantic_index_service import (
     index_object,
     reindex_project,
 )
-from ..services.semantic_search_service import search_project, search_project_by_keyword
+from ..services.semantic_search_service import search_project, search_project_by_regex
 
 
 router = APIRouter(prefix="/api/v1", tags=["search"])
@@ -194,10 +194,11 @@ async def semantic_search(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/projects/{project_id}/search/keyword", response_model=KeywordSearchResponse)
-async def keyword_search(
+@router.get("/projects/{project_id}/search/regex", response_model=RegexSearchResponse)
+async def regex_search(
     project_id: UUID,
-    keyword: str = Query(..., min_length=1),
+    pattern: str = Query(..., min_length=1),
+    case_sensitive: bool = Query(False),
     page: int = Query(1, ge=1),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -205,23 +206,25 @@ async def keyword_search(
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
     _require_vector_storage_enabled(db, user_id=current_user.id)
 
-    kw = (keyword or "").strip()
-    if not kw:
-        raise HTTPException(status_code=400, detail="Keyword must not be empty")
+    regex_pattern = (pattern or "").strip()
+    if not regex_pattern:
+        raise HTTPException(status_code=400, detail="Pattern must not be empty")
 
-    page_size = settings_service.get_search_settings(db, current_user.id).keyword_page_size
+    page_size = settings_service.get_search_settings(db, current_user.id).regex_page_size
 
     try:
-        data = search_project_by_keyword(
+        data = search_project_by_regex(
             db,
             user_id=current_user.id,
             project_id=project_id,
-            keyword=kw,
+            pattern=regex_pattern,
+            case_sensitive=case_sensitive,
             page=page,
             page_size=page_size,
         )
-        return KeywordSearchResponse(
-            keyword=kw,
+        return RegexSearchResponse(
+            pattern=regex_pattern,
+            case_sensitive=case_sensitive,
             page=page,
             page_size=page_size,
             total=int(data.get("total") or 0),

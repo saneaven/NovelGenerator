@@ -30,7 +30,7 @@ INITIAL_SEARCH_MEMORY_SETTINGS: dict[str, Any] = {
             "maxPrimaryItems": 20,
             "maxTotalItems": 60,
         },
-        "keywordPageSize": 20,
+        "regexPageSize": 20,
     },
     "overrides": {},
 }

@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from uuid import UUID
 
 from sqlalchemy import text as sql_text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
@@ -20,18 +21,10 @@ def _vec_to_pg(vec: List[float]) -> str:
     return "[" + ",".join(str(float(x)) for x in vec) + "]"
 
 
-def _escape_like_pattern(value: str, *, escape_char: str = "!") -> str:
-    """Escape a string for use inside LIKE/ILIKE patterns.
-
-    We use ESCAPE '!' in SQL to keep the pattern syntax simple and avoid
-    backslash-related surprises.
-    """
-    if not value:
-        return ""
-    value = value.replace(escape_char, escape_char + escape_char)
-    value = value.replace("%", escape_char + "%")
-    value = value.replace("_", escape_char + "_")
-    return value
+def _raise_if_invalid_regex(exc: DBAPIError) -> None:
+    message = str(exc.orig or exc).lower()
+    if "invalid regular expression" in message or "regular expression is invalid" in message:
+        raise ValueError("Invalid regex pattern") from exc
 
 
 def _has_searchable_semantic_chunks(
@@ -69,18 +62,19 @@ def _has_searchable_semantic_chunks(
     return row is not None
 
 
-def search_project_by_keyword(
+def search_project_by_regex(
     db: Session,
     *,
     user_id: UUID,
     project_id: UUID,
-    keyword: str,
+    pattern: str,
+    case_sensitive: bool = False,
     page: int = 1,
     page_size: int = 20,
 ) -> Dict[str, Any]:
-    kw = (keyword or "").strip()
-    if not kw:
-        raise ValueError("Keyword must not be empty")
+    regex_pattern = (pattern or "").strip()
+    if not regex_pattern:
+        raise ValueError("Pattern must not be empty")
 
     if page < 1:
         raise ValueError("page must be >= 1")
@@ -92,21 +86,19 @@ def search_project_by_keyword(
         raise ValueError("Semantic embedding profile is not configured")
 
     language = get_main_language(db, user_id=user_id)
-
-    escaped = _escape_like_pattern(kw)
-    pattern = f"%{escaped}%"
+    regex_operator = "~" if case_sensitive else "~*"
 
     base_params = {
         "user_id": user_id,
         "project_id": project_id,
         "language": language,
-        "pattern": pattern,
+        "pattern": regex_pattern,
         "provider": str(profile["provider"]),
         "model": str(profile["model"]),
     }
 
     count_stmt = sql_text(
-        """
+        f"""
         SELECT COUNT(*) AS total
         FROM semantic_chunks c
         JOIN semantic_sources s ON s.id = c.source_id
@@ -115,11 +107,15 @@ def search_project_by_keyword(
           AND s.language = :language
           AND s.indexed_provider = :provider
           AND s.indexed_model = :model
-          AND c.text ILIKE :pattern ESCAPE '!'
+          AND c.text {regex_operator} :pattern
         """
     )
 
-    total_row = db.execute(count_stmt, base_params).first()
+    try:
+        total_row = db.execute(count_stmt, base_params).first()
+    except DBAPIError as exc:
+        _raise_if_invalid_regex(exc)
+        raise
     total = int(total_row.total or 0) if total_row else 0
 
     if total <= 0:
@@ -128,7 +124,7 @@ def search_project_by_keyword(
     offset = int((page - 1) * page_size)
 
     stmt = sql_text(
-        """
+        f"""
         SELECT
           c.id AS chunk_id,
           c.source_id AS source_id,
@@ -151,7 +147,7 @@ def search_project_by_keyword(
           AND s.language = :language
           AND s.indexed_provider = :provider
           AND s.indexed_model = :model
-          AND c.text ILIKE :pattern ESCAPE '!'
+          AND c.text {regex_operator} :pattern
         ORDER BY
           CASE s.type_group
             WHEN 'story_entity' THEN 0
@@ -173,10 +169,14 @@ def search_project_by_keyword(
         """
     )
 
-    rows = db.execute(
-        stmt,
-        {**base_params, "limit": int(page_size), "offset": offset},
-    ).fetchall()
+    try:
+        rows = db.execute(
+            stmt,
+            {**base_params, "limit": int(page_size), "offset": offset},
+        ).fetchall()
+    except DBAPIError as exc:
+        _raise_if_invalid_regex(exc)
+        raise
 
     results: List[Dict[str, Any]] = []
     for r in rows:
@@ -523,7 +523,8 @@ def build_search_payload(
     search_type: str,
     results: List[Dict[str, Any]],
     language: str,
-    keyword: Optional[str] = None,
+    pattern: Optional[str] = None,
+    case_sensitive: Optional[bool] = None,
     queries: Optional[List[str]] = None,
     page: Optional[int] = None,
     page_size: Optional[int] = None,
@@ -572,8 +573,10 @@ def build_search_payload(
         "type": search_type,
         "groups": groups,
     }
-    if keyword is not None:
-        payload["keyword"] = keyword
+    if pattern is not None:
+        payload["pattern"] = pattern
+    if case_sensitive is not None:
+        payload["caseSensitive"] = case_sensitive
     if queries is not None:
         payload["queries"] = queries
     if page is not None:

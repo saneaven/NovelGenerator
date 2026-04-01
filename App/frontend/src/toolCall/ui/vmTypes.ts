@@ -24,7 +24,7 @@ export type ObjectType =
   | 'timeline_track'
   | 'timeline_event';
 
-export type SearchType = 'semantic' | 'keyword';
+export type SearchType = 'semantic' | 'regex';
 
 export type StoryEntityKind = 'character' | 'location' | 'organization' | 'lorebook';
 export type OutlineKind = 'outline' | 'act' | 'chapter';

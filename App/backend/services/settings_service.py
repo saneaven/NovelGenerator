@@ -58,7 +58,7 @@ class SearchSettings:
     enabled: bool
     embedding: EmbeddingConfig
     retrieval: RetrievalSettings
-    keyword_page_size: int
+    regex_page_size: int
 
 
 @dataclass
@@ -151,7 +151,7 @@ class SettingsService:
                 max_primary_items=int(retrieval.get("maxPrimaryItems") or 20),
                 max_total_items=int(retrieval.get("maxTotalItems") or 60),
             ),
-            keyword_page_size=int(resolved.get("keywordPageSize") or 20),
+            regex_page_size=int(resolved.get("regexPageSize") or 20),
         )
 
     def get_memory_settings(self, db: Session, user_id: UUID) -> MemorySettings:

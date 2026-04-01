@@ -219,12 +219,12 @@ class SearchMemoryRetrievalConfig(BaseModel):
 
 
 class SearchGeneralConfig(BaseModel):
-    """Search configuration including keyword-search settings."""
+    """Search configuration including regex-search settings."""
     model_config = ConfigDict(extra="forbid")
 
     embedding: SearchMemoryEmbeddingConfig = Field(default_factory=SearchMemoryEmbeddingConfig)
     retrieval: SearchMemoryRetrievalConfig = Field(default_factory=SearchMemoryRetrievalConfig)
-    keywordPageSize: int = Field(default=20, ge=1, le=200)
+    regexPageSize: int = Field(default=20, ge=1, le=200)
 
 
 class MemoryConfig(BaseModel):

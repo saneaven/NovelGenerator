@@ -30,7 +30,7 @@ class SearchFeatureModule(ToolFeatureModule):
     def list_bindings(self, ctx) -> list:
         specs = legacy_specs_by_name(_SEARCH, ctx)
         bindings = []
-        for name in ("search_keyword", "search_semantic"):
+        for name in ("search_regex", "search_semantic"):
             spec = specs.get(name)
             if spec is None:
                 continue
