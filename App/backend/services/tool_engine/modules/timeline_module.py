@@ -41,15 +41,18 @@ def _date_schema(db, project_id) -> dict[str, Any]:
 
     properties: dict[str, Any] = {}
     desc_parts: list[str] = []
-    for u in units:
+    for i, u in enumerate(units):
         name = u.get("name", "")
         if not name:
             continue
-        count = u.get("count")
         prop: dict[str, Any] = {"type": "integer", "minimum": 0}
-        if count is not None:
-            prop["maximum"] = int(count) - 1
-            desc_parts.append(f"{name} (0\u2013{int(count) - 1})")
+        if i > 0:
+            parent_count = units[i - 1].get("count")
+            if parent_count is not None:
+                prop["maximum"] = int(parent_count) - 1
+                desc_parts.append(f"{name} (0\u2013{int(parent_count) - 1})")
+            else:
+                desc_parts.append(f"{name} (0+, unbounded)")
         else:
             desc_parts.append(f"{name} (0+, unbounded)")
         properties[name] = prop

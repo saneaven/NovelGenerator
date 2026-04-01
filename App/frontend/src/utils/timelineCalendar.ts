@@ -33,7 +33,7 @@ function coerceUnits(value: CalendarConfig | CalendarUnit[]): CalendarUnit[] {
 
 function unitMultiplier(units: CalendarUnit[], index: number): number {
   let multiplier = 1;
-  for (let cursor = index + 1; cursor < units.length; cursor += 1) {
+  for (let cursor = index; cursor < units.length; cursor += 1) {
     const count = units[cursor].count;
     if (!Number.isInteger(count)) break;
     multiplier *= Number(count);
@@ -44,10 +44,13 @@ function unitMultiplier(units: CalendarUnit[], index: number): number {
 export function validateDate(dateValue: unknown, unitsOrCalendar: CalendarConfig | CalendarUnit[]): dateValue is TimelineDate {
   if (!dateValue || typeof dateValue !== 'object') return false;
   const units = coerceUnits(unitsOrCalendar);
-  return units.every((unit) => {
+  return units.every((unit, i) => {
     const raw = (dateValue as Record<string, unknown>)[unit.name] ?? 0;
     if (!Number.isInteger(raw) || Number(raw) < 0) return false;
-    if (Number.isInteger(unit.count) && Number(raw) >= Number(unit.count)) return false;
+    if (i > 0) {
+      const parentCount = units[i - 1].count;
+      if (Number.isInteger(parentCount) && Number(raw) >= Number(parentCount)) return false;
+    }
     return true;
   });
 }
@@ -123,10 +126,26 @@ export function migrateDates(
         nextValue[unitName] = 0;
       }
     });
-    return newUnits.reduce<TimelineDate>((acc, unit) => {
+    const ordered = newUnits.reduce<TimelineDate>((acc, unit) => {
       acc[unit.name] = Number(nextValue[unit.name] ?? 0);
       return acc;
     }, {});
+
+    // Carry propagation: redistribute values that exceed the parent's count
+    for (let i = newUnits.length - 1; i > 0; i--) {
+      const parentCount = newUnits[i - 1].count;
+      if (!Number.isInteger(parentCount)) continue;
+      const unitName = newUnits[i].name;
+      const value = Number(ordered[unitName] ?? 0);
+      if (value >= Number(parentCount)) {
+        const carry = Math.floor(value / Number(parentCount));
+        ordered[unitName] = value % Number(parentCount);
+        const parentName = newUnits[i - 1].name;
+        ordered[parentName] = Number(ordered[parentName] ?? 0) + carry;
+      }
+    }
+
+    return ordered;
   });
 
   return {

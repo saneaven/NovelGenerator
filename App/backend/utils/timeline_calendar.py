@@ -65,7 +65,7 @@ def normalize_calendar(value: dict[str, Any] | Iterable[dict[str, Any]]) -> dict
 
 def _unit_multiplier(units: list[dict[str, Any]], index: int) -> int:
     multiplier = 1
-    for unit in units[index + 1:]:
+    for unit in units[index:]:
         count = unit.get("count")
         if count is None:
             break
@@ -81,15 +81,16 @@ def validate_date(date_value: Any, units_or_calendar: dict[str, Any] | Iterable[
     except ValueError:
         return False
 
-    for unit in units:
+    for i, unit in enumerate(units):
         raw = date_value.get(unit["name"], 0)
         if not isinstance(raw, int):
             return False
         if raw < 0:
             return False
-        count = unit.get("count")
-        if count is not None and raw >= int(count):
-            return False
+        if i > 0:
+            parent_count = units[i - 1].get("count")
+            if parent_count is not None and raw >= int(parent_count):
+                return False
     return True
 
 
@@ -171,6 +172,21 @@ def migrate_dates(
             next_value.setdefault(unit_name, 0)
 
         ordered = {unit["name"]: int(next_value.get(unit["name"], 0) or 0) for unit in new_units}
+
+        # Carry propagation: redistribute values that exceed the parent's count
+        for i in range(len(new_units) - 1, 0, -1):
+            parent_count = new_units[i - 1].get("count")
+            if parent_count is None:
+                continue
+            parent_count = int(parent_count)
+            unit_name = new_units[i]["name"]
+            value = int(ordered.get(unit_name, 0) or 0)
+            if value >= parent_count:
+                carry = value // parent_count
+                ordered[unit_name] = value % parent_count
+                parent_name = new_units[i - 1]["name"]
+                ordered[parent_name] = int(ordered.get(parent_name, 0) or 0) + carry
+
         migrated.append(ordered)
 
     return migrated, list(dict.fromkeys(warnings))

@@ -22,9 +22,10 @@ function pickTickUnit(units: CalendarUnit[], scale: number): { majorIdx: number;
   for (let i = units.length - 1; i >= 0; i--) {
     // One increment of this unit = its multiplier in base units
     let multiplier = 1;
-    for (let j = i + 1; j < units.length; j++) {
+    for (let j = i; j < units.length; j++) {
       const count = units[j].count;
-      if (count && Number.isInteger(count)) multiplier *= count;
+      if (!Number.isInteger(count)) break;
+      multiplier *= Number(count);
     }
 
     const pixelsPerTick = multiplier / scale;
@@ -109,16 +110,18 @@ export function useTimelinePositioning(calendar: CalendarConfig, viewport: Timel
 
     // Calculate multiplier for minor unit
     let minorMultiplier = 1;
-    for (let j = minorIdx + 1; j < units.length; j++) {
+    for (let j = minorIdx; j < units.length; j++) {
       const count = units[j].count;
-      if (count && Number.isInteger(count)) minorMultiplier *= count;
+      if (!Number.isInteger(count)) break;
+      minorMultiplier *= Number(count);
     }
 
     // Calculate multiplier for major unit
     let majorMultiplier = 1;
-    for (let j = majorIdx + 1; j < units.length; j++) {
+    for (let j = majorIdx; j < units.length; j++) {
       const count = units[j].count;
-      if (count && Number.isInteger(count)) majorMultiplier *= count;
+      if (!Number.isInteger(count)) break;
+      majorMultiplier *= Number(count);
     }
 
     const visibleStartBase = viewport.scrollOffset;
