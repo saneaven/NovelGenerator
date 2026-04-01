@@ -123,7 +123,9 @@ def test_run_pipeline_executes_preflight_before_memory_prompt_build() -> None:
 
 def test_search_tools_are_offer_gated_by_vector_storage() -> None:
     backend_root = Path(__file__).resolve().parents[1]
-    source = (backend_root / "services" / "tool_engine" / "modules" / "search_module.py").read_text(encoding="utf-8")
+    source = (
+        backend_root / "services" / "tool_engine" / "modules" / "search_feature_module.py"
+    ).read_text(encoding="utf-8")
     legacy_gate = "enabled_when" + "=_vector_storage_enabled"
 
     assert "ctx.vector_storage_enabled" in source

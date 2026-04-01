@@ -344,45 +344,6 @@ class ToolEngineService:
             merge_key=merge_key,
         )
 
-    @staticmethod
-    def _normalize_execution_outcome(raw: Any) -> ToolExecutionOutcome:
-        if isinstance(raw, ToolExecutionOutcome):
-            return raw
-        if not isinstance(raw, dict):
-            raise ValueError(f"Legacy tool execution returned invalid type: {type(raw)!r}")
-
-        extra_content_patch = raw.get("__extra_content")
-        safe_result = {k: v for k, v in raw.items() if k != "__extra_content"}
-
-        child_thread_id: UUID | None = None
-        image_run_id: UUID | None = None
-        for field_name, target in (("child_thread_id", "child"), ("image_run_id", "image")):
-            value = safe_result.get(field_name)
-            if value is None:
-                continue
-            try:
-                parsed = UUID(str(value))
-            except (TypeError, ValueError):
-                parsed = None
-            if target == "child":
-                child_thread_id = parsed
-            else:
-                image_run_id = parsed
-
-        child_input_text = safe_result.get("input_text")
-        if not isinstance(child_input_text, str):
-            child_input_text = None
-
-        return ToolExecutionOutcome(
-            lifecycle="applied",
-            result=safe_result,
-            extra_content_patch=extra_content_patch if isinstance(extra_content_patch, dict) else None,
-            child_thread_id=child_thread_id,
-            child_input_text=child_input_text,
-            image_run_id=image_run_id,
-        )
-
-    @staticmethod
     def _apply_execution_outcome(row: RunToolCallModel, outcome: ToolExecutionOutcome) -> None:
         base_extra = row.extra_content if isinstance(row.extra_content, dict) else {}
         if outcome.extra_content_patch:
@@ -491,7 +452,7 @@ class ToolEngineService:
             )
             outcome = await item.binding.execute(item.args, exec_ctx)
             if not isinstance(outcome, ToolExecutionOutcome):
-                outcome = self._normalize_execution_outcome(outcome)
+                raise ValueError(f"Invalid execution outcome for {item.binding.spec.name}")
             self._apply_execution_outcome(row, outcome)
             apply_project_usage_delta(
                 db,

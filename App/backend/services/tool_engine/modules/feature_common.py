@@ -1,23 +1,15 @@
 from __future__ import annotations
 
-import inspect
 from typing import Any, Callable
 from uuid import UUID
 
-from ....services.manuscript_batch import ManuscriptBatch
-from ....services.object_patch_batch import ObjectPatchBatch
-from ....services.object_service import object_service
-from ..contexts import ToolExecutionContext, ToolGroupExecutionContext, ToolModuleContext, ToolValidationContext
+from ..contexts import ToolGroupExecutionContext, ToolModuleContext
 from ..contracts import (
-    PersistedToolMeta,
     ToolBinding,
-    ToolBindingMeta,
-    ToolCallModule,
     ToolDecisionGroup,
     ToolDecisionItem,
     ToolExecutionOutcome,
     ToolExecutionResult,
-    ToolSpec,
 )
 from ..result_utils import make_result
 
@@ -34,71 +26,6 @@ def filter_allowed_bindings(ctx: ToolModuleContext, bindings: list[ToolBinding])
     return [binding for binding in bindings if binding_allowed(ctx, binding)]
 
 
-async def await_if_needed(value: Any) -> Any:
-    if inspect.isawaitable(value):
-        return await value
-    return value
-
-
-def legacy_specs_by_name(module: ToolCallModule, ctx: ToolModuleContext) -> dict[str, ToolSpec]:
-    return {spec.name: spec for spec in module.list_tools(ctx)}
-
-
-def _to_uuid_or_none(value: Any) -> UUID | None:
-    try:
-        return UUID(str(value))
-    except (TypeError, ValueError):
-        return None
-
-
-def legacy_result_to_outcome(raw: Any) -> ToolExecutionOutcome:
-    if isinstance(raw, ToolExecutionOutcome):
-        return raw
-    if not isinstance(raw, dict):
-        raise ValueError(f"Legacy tool execution returned invalid type: {type(raw)!r}")
-
-    extra_content_patch = raw.get("__extra_content")
-    safe_result = {k: v for k, v in raw.items() if k != "__extra_content"}
-
-    child_thread_id = _to_uuid_or_none(safe_result.get("child_thread_id"))
-    image_run_id = _to_uuid_or_none(safe_result.get("image_run_id"))
-    child_input_text = safe_result.get("input_text")
-    if not isinstance(child_input_text, str):
-        child_input_text = None
-
-    return ToolExecutionOutcome(
-        lifecycle="applied",
-        result=safe_result,
-        extra_content_patch=extra_content_patch if isinstance(extra_content_patch, dict) else None,
-        child_thread_id=child_thread_id,
-        child_input_text=child_input_text,
-        image_run_id=image_run_id,
-    )
-
-
-def build_legacy_binding(
-    *,
-    spec: ToolSpec,
-    meta: ToolBindingMeta,
-    module: ToolCallModule,
-    tool_name: str,
-    build_persisted_meta: Callable[[ToolModuleContext, dict[str, Any]], PersistedToolMeta],
-) -> ToolBinding:
-    async def _validate(args: dict[str, Any], ctx: ToolValidationContext):
-        return await await_if_needed(module.validate(tool_name, args, ctx))
-
-    async def _execute(args: dict[str, Any], ctx: ToolExecutionContext) -> ToolExecutionOutcome:
-        return legacy_result_to_outcome(await await_if_needed(module.execute(tool_name, args, ctx)))
-
-    return ToolBinding(
-        spec=spec,
-        meta=meta,
-        validate=_validate,
-        execute=_execute,
-        build_persisted_meta=build_persisted_meta,
-    )
-
-
 def merge_key_for(category: str, *, target_kind: str, target_id: str | None, language: str) -> str | None:
     if not target_id:
         return None
@@ -107,7 +34,11 @@ def merge_key_for(category: str, *, target_kind: str, target_id: str | None, lan
 
 
 def _required_target_id(item: ToolDecisionItem) -> UUID:
-    value = _to_uuid_or_none(item.meta.target_id)
+    value = None
+    try:
+        value = UUID(str(item.meta.target_id))
+    except (TypeError, ValueError):
+        value = None
     if value is None:
         raise ValueError(f"Missing target_id for tool call {item.tool_call_id}")
     return value
@@ -122,6 +53,9 @@ async def apply_object_batch_group(
     metadata_for_item: Callable[[ToolDecisionItem], dict[str, Any] | None],
     result_for_item: Callable[[ToolDecisionItem], dict[str, Any]],
 ) -> list[ToolExecutionResult]:
+    from ....services.object_patch_batch import ObjectPatchBatch
+    from ....services.object_service import object_service
+
     batch = ObjectPatchBatch()
     key_by_call_id: dict[UUID, str] = {}
 
@@ -197,6 +131,9 @@ async def apply_manuscript_batch_group(
     ctx: ToolGroupExecutionContext,
     result_for_item: Callable[[ToolDecisionItem], dict[str, Any]],
 ) -> list[ToolExecutionResult]:
+    from ....services.manuscript_batch import ManuscriptBatch
+    from ....services.object_service import object_service
+
     batch = ManuscriptBatch()
     key_by_call_id: dict[UUID, str] = {}
 

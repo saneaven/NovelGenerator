@@ -3,26 +3,14 @@ from __future__ import annotations
 from .contexts import ToolModuleContext
 from .contracts import (
     AutoApproveCategory,
-    ToolCallModule,
     ToolFeatureModule,
     ToolFeatureModuleFactory,
-    ToolModuleFactory,
     ToolOffer,
     ToolSpec,
 )
 
 
-_REGISTERED_MODULE_FACTORIES: list[ToolModuleFactory] = []
 _REGISTERED_FEATURE_MODULE_FACTORIES: list[ToolFeatureModuleFactory] = []
-
-
-def tool_call_module(*, prefix: str):
-    def _decorate(cls: type[ToolCallModule]) -> type[ToolCallModule]:
-        cls.prefix = prefix
-        _REGISTERED_MODULE_FACTORIES.append(cls)
-        return cls
-
-    return _decorate
 
 
 def tool_feature_module():
@@ -80,10 +68,6 @@ class ToolRegistry:
             bindings_by_name=bindings_by_name,
             provider_tools=provider_tools,
         )
-
-
-def registered_module_factories() -> list[ToolModuleFactory]:
-    return list(_REGISTERED_MODULE_FACTORIES)
 
 
 def registered_feature_module_factories() -> list[ToolFeatureModuleFactory]:

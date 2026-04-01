@@ -13,11 +13,9 @@ from ..contracts import (
 )
 from ..registry import tool_feature_module
 from ..result_utils import invalid_result, make_result, valid_result
-from .feature_common import build_legacy_binding, filter_allowed_bindings, legacy_specs_by_name, merge_key_for
-from .object_access import to_uuid
-from .patch_translation_module import PatchTranslationToolCallModule
+from .feature_common import filter_allowed_bindings, merge_key_for
+from .object_access import extract_lang_data, patch_object_field, read_object, read_runtime_object, to_uuid
 from .shared import filter_allowed_specs, is_non_journey, is_translation_journey, obj_schema
-from .translate_module import TranslateToolCallModule
 from ....models.db_models import TimelineEventLink
 from ....services.object_service import object_service
 from ....services.timeline_service import ALLOWED_LINK_TYPES, _UNSET, timeline_service
@@ -128,11 +126,6 @@ def _binding(
         execute=_execute,
         build_persisted_meta=build_persisted_meta,
     )
-
-
-_TRANSLATE = TranslateToolCallModule()
-_PATCH_TRANSLATION = PatchTranslationToolCallModule()
-
 
 def _normal_specs(ctx) -> list[ToolSpec]:
     date = _date_schema(ctx.db, ctx.project_id)
@@ -252,6 +245,62 @@ def _normal_specs(ctx) -> list[ToolSpec]:
     )
 
 
+def _translation_specs(ctx) -> list[ToolSpec]:
+    if not is_translation_journey(ctx):
+        return []
+    return filter_allowed_specs(
+        ctx,
+        [
+            ToolSpec(
+                name="translate_timeline_track",
+                description="Translate timeline track fields.",
+                parameters=obj_schema(
+                    {
+                        "id": _ID,
+                        "name": {"type": "string"},
+                        "description": {"type": "string"},
+                        "content": {"type": "string", "description": "Translated rich text content (markdown)"},
+                    },
+                    ["id", "name", "description"],
+                ),
+                auto_approve_category="translate",
+            ),
+            ToolSpec(
+                name="translate_timeline_event",
+                description="Translate timeline event fields.",
+                parameters=obj_schema(
+                    {
+                        "id": _ID,
+                        "name": {"type": "string"},
+                        "description": {"type": "string"},
+                        "content": {"type": "string", "description": "Translated rich text content (markdown)"},
+                    },
+                    ["id", "name", "description"],
+                ),
+                auto_approve_category="translate",
+            ),
+            ToolSpec(
+                name="patch_translation_timeline_track",
+                description="Patch a timeline track translation by single replacement.",
+                parameters=obj_schema(
+                    {"id": _ID, "field": {"type": "string", "enum": ["name", "description", "content"]}, "old": {"type": "string"}, "new": {"type": "string"}},
+                    ["id", "field", "old", "new"],
+                ),
+                auto_approve_category="patch_translation",
+            ),
+            ToolSpec(
+                name="patch_translation_timeline_event",
+                description="Patch a timeline event translation by single replacement.",
+                parameters=obj_schema(
+                    {"id": _ID, "field": {"type": "string", "enum": ["name", "description", "content"]}, "old": {"type": "string"}, "new": {"type": "string"}},
+                    ["id", "field", "old", "new"],
+                ),
+                auto_approve_category="patch_translation",
+            ),
+        ],
+    )
+
+
 @tool_feature_module()
 class TimelineFeatureModule(ToolFeatureModule):
     feature_key = "timeline"
@@ -262,8 +311,7 @@ class TimelineFeatureModule(ToolFeatureModule):
 
         bindings: list[ToolBinding] = []
         normal_specs_by_name = {spec.name: spec for spec in _normal_specs(ctx)}
-        translate_specs = legacy_specs_by_name(_TRANSLATE, ctx)
-        patch_translation_specs = legacy_specs_by_name(_PATCH_TRANSLATION, ctx)
+        translation_specs_by_name = {spec.name: spec for spec in _translation_specs(ctx)}
 
         def add_binding(
             *,
@@ -370,33 +418,41 @@ class TimelineFeatureModule(ToolFeatureModule):
             )
 
         if is_translation_journey(ctx):
-            for name, op, target_kind, module, source in (
-                ("translate_timeline_track", "translate", "timeline_track", _TRANSLATE, translate_specs),
-                ("translate_timeline_event", "translate", "timeline_event", _TRANSLATE, translate_specs),
-                ("patch_translation_timeline_track", "patch_translation", "timeline_track", _PATCH_TRANSLATION, patch_translation_specs),
-                ("patch_translation_timeline_event", "patch_translation", "timeline_event", _PATCH_TRANSLATION, patch_translation_specs),
+            for name, op, target_kind, validate, execute in (
+                ("translate_timeline_track", "translate", "timeline_track", self._validate_translate_timeline_track, self._execute_translate_timeline_track),
+                ("translate_timeline_event", "translate", "timeline_event", self._validate_translate_timeline_event, self._execute_translate_timeline_event),
+                (
+                    "patch_translation_timeline_track",
+                    "patch_translation",
+                    "timeline_track",
+                    self._validate_patch_translation_timeline_track,
+                    self._execute_patch_translation_timeline_track,
+                ),
+                (
+                    "patch_translation_timeline_event",
+                    "patch_translation",
+                    "timeline_event",
+                    self._validate_patch_translation_timeline_event,
+                    self._execute_patch_translation_timeline_event,
+                ),
             ):
-                spec = source.get(name)
-                if spec is None:
-                    continue
-                bindings.append(
-                    build_legacy_binding(
-                        spec=spec,
-                        meta=ToolBindingMeta(
-                            feature_key="timeline",
-                            category="translate",
-                            op=op,
-                            target_kind=target_kind,
-                        ),
-                        module=module,
-                        tool_name=name,
-                        build_persisted_meta=_persisted_meta(
-                            category="translate",
-                            op=op,
-                            target_kind=target_kind,
-                            grouped=True,
-                        ),
-                    )
+                add_binding(
+                    spec_map=translation_specs_by_name,
+                    name=name,
+                    meta=ToolBindingMeta(
+                        feature_key="timeline",
+                        category="translate",
+                        op=op,
+                        target_kind=target_kind,
+                    ),
+                    validate=validate,
+                    execute=execute,
+                    build_persisted_meta=_persisted_meta(
+                        category="translate",
+                        op=op,
+                        target_kind=target_kind,
+                        grouped=True,
+                    ),
                 )
 
         return filter_allowed_bindings(ctx, bindings)
@@ -733,4 +789,190 @@ class TimelineFeatureModule(ToolFeatureModule):
         return ToolExecutionOutcome(
             lifecycle="applied",
             result=make_result("Deleted timeline event link", object_id=str(event_id), object_type="timeline_event"),
+        )
+
+    async def _validate_translate_timeline_track(self, args, ctx):
+        try:
+            read_runtime_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="timeline_track",
+                object_id=to_uuid(args.get("id"), "id"),
+                language=ctx.language,
+            )
+            return valid_result()
+        except ValueError as exc:
+            return invalid_result("validate_translate_timeline_track", str(exc))
+
+    async def _execute_translate_timeline_track(self, args, ctx):
+        result = timeline_service.update_track(
+            ctx.db,
+            project_id=ctx.project_id,
+            track_id=to_uuid(args.get("id"), "id"),
+            language=ctx.language,
+            name=str(args.get("name") or ""),
+            description=str(args.get("description") or ""),
+            content=str(args.get("content") or "") if "content" in args else _UNSET,
+            rich_text_format="markdown",
+            color=_UNSET,
+            user_request="tool:translate_timeline_track",
+            create_new_version=False,
+            user_id=ctx.user_id,
+        )
+        return ToolExecutionOutcome(
+            lifecycle="applied",
+            result=make_result("Translated timeline track", object_id=result["id"], object_type="timeline_track"),
+        )
+
+    async def _validate_translate_timeline_event(self, args, ctx):
+        try:
+            read_runtime_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="timeline_event",
+                object_id=to_uuid(args.get("id"), "id"),
+                language=ctx.language,
+            )
+            return valid_result()
+        except ValueError as exc:
+            return invalid_result("validate_translate_timeline_event", str(exc))
+
+    async def _execute_translate_timeline_event(self, args, ctx):
+        result = timeline_service.update_event(
+            ctx.db,
+            project_id=ctx.project_id,
+            event_id=to_uuid(args.get("id"), "id"),
+            track_id=None,
+            language=ctx.language,
+            name=str(args.get("name") or ""),
+            description=str(args.get("description") or ""),
+            content=str(args.get("content") or "") if "content" in args else _UNSET,
+            rich_text_format="markdown",
+            start_date=_UNSET,
+            end_date=_UNSET,
+            tags=_UNSET,
+            user_request="tool:translate_timeline_event",
+            create_new_version=False,
+            user_id=ctx.user_id,
+        )
+        return ToolExecutionOutcome(
+            lifecycle="applied",
+            result=make_result("Translated timeline event", object_id=result["id"], object_type="timeline_event"),
+        )
+
+    async def _validate_patch_translation_timeline_track(self, args, ctx):
+        try:
+            field = args.get("field")
+            if field not in {"name", "description", "content"}:
+                raise ValueError("field must be one of name|description|content")
+            current = read_runtime_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="timeline_track",
+                object_id=to_uuid(args.get("id"), "id"),
+                language=ctx.language,
+            )
+            patch_object_field(
+                extract_lang_data(current, ctx.language),
+                field=str(field),
+                old=str(args.get("old") or ""),
+                new=str(args.get("new") or ""),
+            )
+            return valid_result()
+        except ValueError as exc:
+            return invalid_result("validate_patch_translation_timeline_track", str(exc))
+
+    async def _execute_patch_translation_timeline_track(self, args, ctx):
+        object_id = to_uuid(args.get("id"), "id")
+        current = read_object(
+            ctx.db,
+            project_id=ctx.project_id,
+            object_type="timeline_track",
+            object_id=object_id,
+            language=ctx.language,
+            rich_text_format="markdown",
+        )
+        next_data = patch_object_field(
+            extract_lang_data(current, ctx.language),
+            field=str(args.get("field") or ""),
+            old=str(args.get("old") or ""),
+            new=str(args.get("new") or ""),
+        )
+        result = timeline_service.update_track(
+            ctx.db,
+            project_id=ctx.project_id,
+            track_id=object_id,
+            language=ctx.language,
+            name=str(next_data.get("name") or ""),
+            description=str(next_data.get("description") or ""),
+            content=next_data.get("content", _UNSET),
+            rich_text_format="markdown",
+            color=_UNSET,
+            user_request="tool:patch_translation_timeline_track",
+            create_new_version=False,
+            user_id=ctx.user_id,
+        )
+        return ToolExecutionOutcome(
+            lifecycle="applied",
+            result=make_result("Patched timeline track translation", object_id=result["id"], object_type="timeline_track"),
+        )
+
+    async def _validate_patch_translation_timeline_event(self, args, ctx):
+        try:
+            field = args.get("field")
+            if field not in {"name", "description", "content"}:
+                raise ValueError("field must be one of name|description|content")
+            current = read_runtime_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="timeline_event",
+                object_id=to_uuid(args.get("id"), "id"),
+                language=ctx.language,
+            )
+            patch_object_field(
+                extract_lang_data(current, ctx.language),
+                field=str(field),
+                old=str(args.get("old") or ""),
+                new=str(args.get("new") or ""),
+            )
+            return valid_result()
+        except ValueError as exc:
+            return invalid_result("validate_patch_translation_timeline_event", str(exc))
+
+    async def _execute_patch_translation_timeline_event(self, args, ctx):
+        object_id = to_uuid(args.get("id"), "id")
+        current = read_object(
+            ctx.db,
+            project_id=ctx.project_id,
+            object_type="timeline_event",
+            object_id=object_id,
+            language=ctx.language,
+            rich_text_format="markdown",
+        )
+        next_data = patch_object_field(
+            extract_lang_data(current, ctx.language),
+            field=str(args.get("field") or ""),
+            old=str(args.get("old") or ""),
+            new=str(args.get("new") or ""),
+        )
+        result = timeline_service.update_event(
+            ctx.db,
+            project_id=ctx.project_id,
+            event_id=object_id,
+            track_id=None,
+            language=ctx.language,
+            name=str(next_data.get("name") or ""),
+            description=str(next_data.get("description") or ""),
+            content=next_data.get("content", _UNSET),
+            rich_text_format="markdown",
+            start_date=_UNSET,
+            end_date=_UNSET,
+            tags=_UNSET,
+            user_request="tool:patch_translation_timeline_event",
+            create_new_version=False,
+            user_id=ctx.user_id,
+        )
+        return ToolExecutionOutcome(
+            lifecycle="applied",
+            result=make_result("Patched timeline event translation", object_id=result["id"], object_type="timeline_event"),
         )

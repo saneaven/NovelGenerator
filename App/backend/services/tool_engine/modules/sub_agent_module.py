@@ -4,29 +4,87 @@ import json
 from datetime import datetime
 
 from ....models.db_models import SubAgentDefinitionModel, Thread
-from ..contracts import PersistedToolMeta, ToolBinding, ToolBindingMeta, ToolExecutionOutcome, ToolFeatureModule
+from ..contracts import PersistedToolMeta, ToolBinding, ToolBindingMeta, ToolExecutionOutcome, ToolFeatureModule, ToolSpec
 from ..registry import tool_feature_module
-from ..result_utils import invalid_result
-from .call_module import CallToolCallModule, _invocation_allowed, _resolve_definition
-from .feature_common import filter_allowed_bindings, legacy_specs_by_name
+from ..result_utils import invalid_result, valid_result
+from .feature_common import filter_allowed_bindings
+from .shared import filter_allowed_specs, is_non_journey, obj_schema
 
 
-_CALL = CallToolCallModule()
+def _resolve_definition(*, db, user_id, preset_id, agent_name: str):
+    return (
+        db.query(SubAgentDefinitionModel)
+        .filter(
+            SubAgentDefinitionModel.user_id == user_id,
+            SubAgentDefinitionModel.preset_id == preset_id,
+            SubAgentDefinitionModel.agent_name == agent_name,
+            SubAgentDefinitionModel.enabled == True,  # noqa: E712
+        )
+        .first()
+    )
+
+
+def _invocation_allowed(definition: SubAgentDefinitionModel, invocation_mode: str) -> bool:
+    modes = definition.allowed_invocation_modes or []
+    if not isinstance(modes, list):
+        return False
+    return invocation_mode in {str(m) for m in modes if isinstance(m, str)}
+
+
+def _sub_agent_specs(ctx) -> list[ToolSpec]:
+    if not is_non_journey(ctx):
+        return []
+
+    q = (
+        ctx.db.query(SubAgentDefinitionModel)
+        .filter(
+            SubAgentDefinitionModel.user_id == ctx.user_id,
+            SubAgentDefinitionModel.preset_id == ctx.preset_id,
+            SubAgentDefinitionModel.enabled == True,  # noqa: E712
+        )
+    )
+    if ctx.allowed_sub_agent_ids is not None:
+        if len(ctx.allowed_sub_agent_ids) == 0:
+            return []
+        q = q.filter(SubAgentDefinitionModel.id.in_(ctx.allowed_sub_agent_ids))
+
+    specs: list[ToolSpec] = []
+    for definition in q.order_by(SubAgentDefinitionModel.agent_name.asc()).all():
+        if not _invocation_allowed(definition, ctx.invocation_mode):
+            continue
+        display = (definition.display_name or definition.agent_name or "").strip() or definition.agent_name
+        description = (definition.description or "").strip()
+        base = f'Call Sub Agent "{display}".'
+        specs.append(
+            ToolSpec(
+                name=f"call_{definition.agent_name}",
+                description=f"{base} {description}" if description else base,
+                parameters=obj_schema(
+                    {
+                        "input": {
+                            "type": "string",
+                            "description": "Input for the sub-agent. Include complete context and instructions.",
+                        }
+                    },
+                    ["input"],
+                ),
+                auto_approve_category="call",
+            )
+        )
+    return filter_allowed_specs(ctx, specs)
 
 
 @tool_feature_module()
 class SubAgentFeatureModule(ToolFeatureModule):
     feature_key = "sub_agent"
 
-    def list_bindings(self, ctx) -> list:
-        specs = legacy_specs_by_name(_CALL, ctx)
-        bindings = []
-        for name, spec in specs.items():
-            if not name.startswith("call_"):
-                continue
-            agent_name = name[len("call_"):]
+    def list_bindings(self, ctx) -> list[ToolBinding]:
+        bindings: list[ToolBinding] = []
+        for spec in _sub_agent_specs(ctx):
+            tool_name = spec.name
+            agent_name = tool_name[len("call_"):]
 
-            async def _validate(args, validation_ctx, _tool_name=name, _agent_name=agent_name):
+            async def _validate(args, validation_ctx, _agent_name=agent_name):
                 allowed_sub_agent_ids = validation_ctx.access_policy.allowed_sub_agent_ids
                 value = args.get("input")
                 if not isinstance(value, str) or not value.strip():
@@ -46,7 +104,7 @@ class SubAgentFeatureModule(ToolFeatureModule):
                     return invalid_result("validate_call_mode", f"Sub-agent not invocable in mode: {mode}")
                 if validation_ctx.thread.thread_type == "subAgent" and allowed_sub_agent_ids is not None and definition.id not in allowed_sub_agent_ids:
                     return invalid_result("validate_call_permission", f"Sub-agent not allowed: {_agent_name}")
-                return await _CALL.validate(_tool_name, args, validation_ctx)
+                return valid_result()
 
             async def _execute(args, execution_ctx, _agent_name=agent_name):
                 allowed_sub_agent_ids = execution_ctx.access_policy.allowed_sub_agent_ids

@@ -20,6 +20,11 @@ def _install_import_stubs() -> None:
     sys.modules["App.backend.database"] = fake_database
     sys.modules["database"] = fake_database
 
+    fake_pil = types.ModuleType("PIL")
+    fake_pil.Image = object
+    fake_pil.ImageOps = object
+    sys.modules["PIL"] = fake_pil
+
 
 _install_import_stubs()
 
@@ -113,28 +118,21 @@ def test_project_creation_seed_uses_array_based_basic_info() -> None:
 
 
 def test_basic_info_tool_contracts_use_arrays_and_limit_patch_fields() -> None:
-    replace_source = (
-        BACKEND_ROOT / "services" / "tool_engine" / "modules" / "replace_module.py"
-    ).read_text(encoding="utf-8")
-    translate_source = (
-        BACKEND_ROOT / "services" / "tool_engine" / "modules" / "translate_module.py"
-    ).read_text(encoding="utf-8")
-    patch_source = (
-        BACKEND_ROOT / "services" / "tool_engine" / "modules" / "patch_module.py"
-    ).read_text(encoding="utf-8")
-    patch_translation_source = (
-        BACKEND_ROOT / "services" / "tool_engine" / "modules" / "patch_translation_module.py"
+    source = (
+        BACKEND_ROOT / "services" / "tool_engine" / "modules" / "project_data_module.py"
     ).read_text(encoding="utf-8")
 
-    for source in (replace_source, translate_source):
-        assert '"genres": {"type": "array", "items": {"type": "string"}}' in source
-        assert '"tags": {"type": "array", "items": {"type": "string"}}' in source
-        assert 'for key in ["title", "logline", "genres", "tags"]' in source
+    assert 'name="replace_basic_info"' in source
+    assert 'name="translate_basic_info"' in source
+    assert '"genres": {"type": "array", "items": {"type": "string"}}' in source
+    assert '"tags": {"type": "array", "items": {"type": "string"}}' in source
+    assert '("title", "logline", "genres", "tags")' in source
 
-    for source in (patch_source, patch_translation_source):
-        assert '"enum": ["title", "logline"]' in source
-        assert "field must be one of title|logline" in source
-        assert "genre" not in source.split('"enum": ["title", "logline"]', 1)[1][:120]
+    assert 'name="patch_basic_info"' in source
+    assert 'name="patch_translation_basic_info"' in source
+    assert '"enum": ["title", "logline"]' in source
+    assert "field must be one of title|logline" in source
+    assert "genre" not in source.split('"enum": ["title", "logline"]', 1)[1][:120]
 
 
 def test_basic_info_raw_output_remains_logline_only() -> None:
@@ -163,8 +161,8 @@ def test_default_prompt_and_transfer_version_match_new_contract() -> None:
     assert '- **Genres**: {{ project.basicInfo.genres|join(\\", \\") }}' in prompt_source
     assert '- **Tags**: {{ project.basicInfo.tags|join(\\", \\") }}' in prompt_source
     assert "<genres>" in prompt_source
-    assert "<genre>{{ this }}</genre>" in prompt_source
+    assert "<genre>{{ this|e }}</genre>" in prompt_source
     assert "<tags>" in prompt_source
-    assert "<tag>{{ this }}</tag>" in prompt_source
+    assert "<tag>{{ this|e }}</tag>" in prompt_source
     assert "patch_basic_info` - Patch `title` or `logline`" in prompt_source
     assert "patch_translation_basic_info` | Fix basic info via search-replace | Requires `field` (title/logline)" in prompt_source

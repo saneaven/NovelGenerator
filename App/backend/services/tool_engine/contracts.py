@@ -19,7 +19,7 @@ class ValidationResult:
 
 
 if False:  # pragma: no cover
-    from .contexts import ToolExecutionContext, ToolModuleContext, ToolValidationContext
+    from .contexts import ToolExecutionContext, ToolGroupExecutionContext, ToolModuleContext, ToolValidationContext
 
 
 @dataclass(frozen=True)
@@ -152,37 +152,6 @@ class ToolFeatureModule(ABC):
                 raise ValueError(f"Invalid execution outcome for {item.binding.spec.name}")
             results.append(ToolExecutionResult(tool_call_id=item.tool_call_id, outcome=outcome))
         return results
-
-
-class ToolCallModule(ABC):
-    prefix: str = ""
-    dynamic: bool = False
-
-    def list_auto_approve_categories(self) -> tuple[AutoApproveCategory, ...]:
-        return ()
-
-    @abstractmethod
-    def list_tools(self, ctx: "ToolModuleContext") -> list[ToolSpec]:
-        raise NotImplementedError
-
-    def resolve_tool(self, tool_name: str, ctx: "ToolModuleContext") -> ToolSpec | None:
-        for spec in self.list_tools(ctx):
-            if spec.name == tool_name:
-                return spec
-        return None
-
-    @abstractmethod
-    async def validate(self, tool_name: str, args: dict[str, Any], ctx: "ToolValidationContext") -> ValidationResult:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def execute(self, tool_name: str, args: dict[str, Any], ctx: "ToolExecutionContext") -> dict[str, Any]:
-        raise NotImplementedError
-
-
-class ToolModuleFactory(Protocol):
-    def __call__(self) -> ToolCallModule:
-        ...
 
 
 class ToolFeatureModuleFactory(Protocol):

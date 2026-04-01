@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 import types
 from types import SimpleNamespace
+from uuid import uuid4
+
 from sqlalchemy.orm import declarative_base
 
 fake_database = types.ModuleType("App.backend.database")
@@ -25,16 +27,17 @@ fake_image_run_service.IMAGE_SCENE_TOOL = "generate_scene_image"
 fake_image_run_service.image_run_service = SimpleNamespace(create_tool_preview_run=None)
 fake_image_run_service.resolve_explicit_object_target = lambda *_args, **_kwargs: None
 
+
 async def _validate_scene_anchor(*_args, **_kwargs):
     return None
+
 
 fake_image_run_service.validate_scene_anchor = _validate_scene_anchor
 sys.modules.setdefault("App.backend.services.image_run_service", fake_image_run_service)
 
 from App.backend.models.db_models import RunModel, Thread
 from App.backend.services.tool_engine.contexts import ToolModuleContext
-from App.backend.services.tool_engine.modules.generate_module import GenerateToolCallModule
-from uuid import uuid4
+from App.backend.services.tool_engine.modules.image_module import ImageFeatureModule
 
 IMAGE_OBJECT_TOOL = "generate_object_image"
 IMAGE_SCENE_TOOL = "generate_scene_image"
@@ -73,18 +76,14 @@ def _make_ctx() -> ToolModuleContext:
 
 
 def test_generate_tool_schemas_register() -> None:
-    module = GenerateToolCallModule()
-    specs = {spec.name: spec for spec in module.list_tools(_make_ctx())}
-    object_tool = specs.get(IMAGE_OBJECT_TOOL)
-    scene_tool = specs.get(IMAGE_SCENE_TOOL)
+    specs = {binding.spec.name: binding.spec for binding in ImageFeatureModule().list_bindings(_make_ctx())}
 
-    assert object_tool is not None
-    assert scene_tool is not None
+    assert specs.get(IMAGE_OBJECT_TOOL) is not None
+    assert specs.get(IMAGE_SCENE_TOOL) is not None
 
 
 def test_image_tool_schemas_require_explicit_target_ids() -> None:
-    module = GenerateToolCallModule()
-    specs = {spec.name: spec for spec in module.list_tools(_make_ctx())}
+    specs = {binding.spec.name: binding.spec for binding in ImageFeatureModule().list_bindings(_make_ctx())}
     object_tool = specs.get(IMAGE_OBJECT_TOOL)
     scene_tool = specs.get(IMAGE_SCENE_TOOL)
 

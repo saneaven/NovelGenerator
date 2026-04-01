@@ -51,10 +51,12 @@ fake_object_service_module.object_service = SimpleNamespace(
     update_object=lambda *_args, **_kwargs: None,
     get_object=lambda *_args, **_kwargs: None,
     list_objects=lambda *_args, **_kwargs: [],
+    delete_object=lambda *_args, **_kwargs: None,
 )
 sys.modules.setdefault("App.backend.services.object_service", fake_object_service_module)
 
 fake_manuscript_access = types.ModuleType("App.backend.services.tool_engine.modules.manuscript_access")
+
 
 async def _fake_patch_manuscript(*_args, **_kwargs):
     return None
@@ -79,31 +81,19 @@ fake_manuscript_access.read_manuscript_markdown = _fake_read_manuscript_markdown
 fake_manuscript_access.ensure_manuscript_exists = lambda *_args, **_kwargs: None
 sys.modules.setdefault("App.backend.services.tool_engine.modules.manuscript_access", fake_manuscript_access)
 
-from App.backend.services.tool_engine.contexts import ToolExecutionContext, ToolModuleContext, ToolValidationContext
+from App.backend.services.tool_engine.contexts import ToolExecutionContext, ToolGroupExecutionContext, ToolModuleContext, ToolValidationContext
+from App.backend.services.tool_engine.contracts import ToolDecisionGroup, ToolDecisionItem, ToolExecutionOutcome, ToolExecutionResult
 from App.backend.services.tool_engine.modules import object_access
-from App.backend.services.tool_engine.modules import (
-    create_module,
-    delete_module,
-    patch_module,
-    patch_translation_module,
-    read_module,
-    replace_module,
-    translate_module,
-)
-from App.backend.services.tool_engine.modules.create_module import CreateToolCallModule
-from App.backend.services.tool_engine.modules.delete_module import DeleteToolCallModule
-from App.backend.services.tool_engine.modules.patch_module import PatchToolCallModule
-from App.backend.services.tool_engine.modules.patch_translation_module import PatchTranslationToolCallModule
-from App.backend.services.tool_engine.modules.read_module import ReadToolCallModule
-from App.backend.services.tool_engine.modules.replace_module import ReplaceToolCallModule
-from App.backend.services.tool_engine.modules.translate_module import TranslateToolCallModule
+from App.backend.services.tool_engine.modules import outline_module, story_entity_module
+from App.backend.services.tool_engine.modules.outline_module import OutlineFeatureModule
+from App.backend.services.tool_engine.modules.story_entity_module import StoryEntityFeatureModule
 
 
 def _module_context() -> ToolModuleContext:
     return ToolModuleContext(
         db=SimpleNamespace(),
         thread=SimpleNamespace(thread_type="agent"),
-        run=SimpleNamespace(),
+        run=SimpleNamespace(language="English"),
         settings=SimpleNamespace(),
         preset_id=uuid4(),
         user_id=uuid4(),
@@ -118,9 +108,9 @@ def _execution_context() -> ToolExecutionContext:
     return ToolExecutionContext(
         db=SimpleNamespace(),
         thread=SimpleNamespace(thread_type="agent"),
-        run=SimpleNamespace(),
+        run=SimpleNamespace(language="English"),
         settings=SimpleNamespace(),
-        tool_call_row=SimpleNamespace(),
+        tool_call_row=SimpleNamespace(id=uuid4(), call_seq=0),
         user_id=uuid4(),
         project_id=uuid4(),
         language="English",
@@ -131,7 +121,7 @@ def _validation_context() -> ToolValidationContext:
     return ToolValidationContext(
         db=SimpleNamespace(),
         thread=SimpleNamespace(thread_type="agent"),
-        run=SimpleNamespace(),
+        run=SimpleNamespace(language="English"),
         settings=SimpleNamespace(),
         user_id=uuid4(),
         project_id=uuid4(),
@@ -139,12 +129,77 @@ def _validation_context() -> ToolValidationContext:
     )
 
 
+def _group_context() -> ToolGroupExecutionContext:
+    return ToolGroupExecutionContext(
+        db=SimpleNamespace(),
+        thread=SimpleNamespace(thread_type="agent"),
+        run=SimpleNamespace(language="English"),
+        settings=SimpleNamespace(),
+        user_id=uuid4(),
+        project_id=uuid4(),
+        language="English",
+    )
+
+
+def _binding_by_name(module, ctx: ToolModuleContext, name: str):
+    for binding in module.list_bindings(ctx):
+        if binding.spec.name == name:
+            return binding
+    raise AssertionError(f"Binding not found: {name}")
+
+
+def _capture_object_group(*, monkeypatch, module_under_test, feature, binding, args: dict[str, object]) -> dict[str, object]:
+    captured: dict[str, object] = {}
+    module_ctx = _module_context()
+    group_ctx = _group_context()
+
+    async def _fake_apply_object_batch_group(
+        *,
+        group,
+        ctx,
+        object_type_for_item,
+        replace_fields_for_item,
+        metadata_for_item,
+        result_for_item,
+    ):
+        _ = ctx
+        item = group.items[0]
+        captured["object_type"] = object_type_for_item(item)
+        captured["replace_fields"] = replace_fields_for_item(item)
+        captured["metadata"] = metadata_for_item(item)
+        captured["result"] = result_for_item(item)
+        return [
+            ToolExecutionResult(
+                tool_call_id=item.tool_call_id,
+                outcome=ToolExecutionOutcome(lifecycle="applied", result={"success": True}),
+            )
+        ]
+
+    monkeypatch.setattr(module_under_test, "apply_object_batch_group", _fake_apply_object_batch_group)
+
+    item = ToolDecisionItem(
+        tool_call_id=uuid4(),
+        binding=binding,
+        args=args,
+        meta=binding.build_persisted_meta(module_ctx, args),
+        call_seq=0,
+    )
+    group = ToolDecisionGroup(
+        feature_key=feature.feature_key,
+        merge_key=item.meta.merge_key or "fallback",
+        items=(item,),
+    )
+    asyncio.run(feature.apply_group(group=group, ctx=group_ctx))
+    return captured
+
+
 def test_story_entity_tool_schemas_include_optional_folder_id() -> None:
     ctx = _module_context()
+    module = StoryEntityFeatureModule()
     specs = {
-        spec.name: spec
-        for module in (CreateToolCallModule(), ReplaceToolCallModule(), PatchToolCallModule())
-        for spec in module.list_tools(ctx)
+        binding.spec.name: binding.spec
+        for binding in module.list_bindings(ctx)
+        if binding.spec.name in {"create_story_entity", "replace_story_entity", "patch_story_entity"}
     }
 
     assert specs["create_story_entity"].parameters["properties"]["folderId"]["type"] == ["string", "null"]
@@ -154,27 +209,9 @@ def test_story_entity_tool_schemas_include_optional_folder_id() -> None:
 
 def test_story_entity_folder_tool_schemas_are_registered(monkeypatch) -> None:
     ctx = _module_context()
-    monkeypatch.setattr(translate_module, "is_translation_journey", lambda _ctx: True)
-    monkeypatch.setattr(patch_translation_module, "is_translation_journey", lambda _ctx: True)
-    specs = {
-        spec.name: spec
-        for module in (
-            CreateToolCallModule(),
-            ReadToolCallModule(),
-            ReplaceToolCallModule(),
-            PatchToolCallModule(),
-            DeleteToolCallModule(),
-        )
-        for spec in module.list_tools(ctx)
-    }
-    translate_specs = {
-        spec.name: spec
-        for module in (
-            TranslateToolCallModule(),
-            PatchTranslationToolCallModule(),
-        )
-        for spec in module.list_tools(_module_context())
-    }
+    monkeypatch.setattr(story_entity_module, "is_translation_journey", lambda _ctx: True)
+    module = StoryEntityFeatureModule()
+    specs = {binding.spec.name: binding.spec for binding in module.list_bindings(ctx)}
 
     assert specs["create_story_entity_folder"].parameters["required"] == ["name"]
     assert specs["create_story_entity_folder"].parameters["properties"]["parentId"]["type"] == ["string", "null"]
@@ -182,8 +219,8 @@ def test_story_entity_folder_tool_schemas_are_registered(monkeypatch) -> None:
     assert specs["replace_story_entity_folder"].parameters["properties"]["position"]["type"] == "integer"
     assert specs["patch_story_entity_folder"].parameters["properties"]["field"]["enum"] == ["name", "description"]
     assert specs["delete_story_entity_folder"].parameters["required"] == ["id"]
-    assert translate_specs["translate_story_entity_folder"].parameters["required"] == ["id"]
-    assert translate_specs["patch_translation_story_entity_folder"].parameters["properties"]["field"]["enum"] == ["name", "description"]
+    assert specs["translate_story_entity_folder"].parameters["required"] == ["id"]
+    assert specs["patch_translation_story_entity_folder"].parameters["properties"]["field"]["enum"] == ["name", "description"]
 
 
 def test_runtime_rich_text_kwargs_only_marks_rich_objects() -> None:
@@ -201,11 +238,11 @@ def test_create_story_entity_passes_folder_id_metadata(monkeypatch) -> None:
         captured.update(kwargs)
         return {"id": "entity-1"}
 
-    monkeypatch.setattr(create_module.object_service, "create_object", _fake_create_object)
+    monkeypatch.setattr(story_entity_module.object_service, "create_object", _fake_create_object)
+    binding = _binding_by_name(StoryEntityFeatureModule(), _module_context(), "create_story_entity")
 
-    result = asyncio.run(
-        CreateToolCallModule().execute(
-            "create_story_entity",
+    outcome = asyncio.run(
+        binding.execute(
             {
                 "kind": "character",
                 "name": "Ari",
@@ -219,7 +256,7 @@ def test_create_story_entity_passes_folder_id_metadata(monkeypatch) -> None:
 
     assert captured["metadata"] == {"folder_id": "folder-main-cast"}
     assert captured["rich_text_format"] == "markdown"
-    assert result["data"]["kind"] == "character"
+    assert outcome.result["data"]["kind"] == "character"
 
 
 def test_create_story_entity_folder_passes_parent_metadata(monkeypatch) -> None:
@@ -229,11 +266,11 @@ def test_create_story_entity_folder_passes_parent_metadata(monkeypatch) -> None:
         captured.update(kwargs)
         return {"id": "folder-1"}
 
-    monkeypatch.setattr(create_module.object_service, "create_object", _fake_create_object)
+    monkeypatch.setattr(story_entity_module.object_service, "create_object", _fake_create_object)
+    binding = _binding_by_name(StoryEntityFeatureModule(), _module_context(), "create_story_entity_folder")
 
-    result = asyncio.run(
-        CreateToolCallModule().execute(
-            "create_story_entity_folder",
+    outcome = asyncio.run(
+        binding.execute(
             {
                 "name": "Main Cast",
                 "description": "Primary characters",
@@ -245,7 +282,7 @@ def test_create_story_entity_folder_passes_parent_metadata(monkeypatch) -> None:
 
     assert captured["metadata"] == {"parent_id": "folder-root"}
     assert "rich_text_format" not in captured
-    assert result["objectType"] == "story_entity_folder"
+    assert outcome.result["objectType"] == "story_entity_folder"
 
 
 def test_create_outline_uses_markdown_projection(monkeypatch) -> None:
@@ -255,11 +292,11 @@ def test_create_outline_uses_markdown_projection(monkeypatch) -> None:
         captured.update(kwargs)
         return {"id": "outline-1", "metadata": {}}
 
-    monkeypatch.setattr(create_module.object_service, "create_object", _fake_create_object)
+    monkeypatch.setattr(outline_module.object_service, "create_object", _fake_create_object)
+    binding = _binding_by_name(OutlineFeatureModule(), _module_context(), "create_outline")
 
-    result = asyncio.run(
-        CreateToolCallModule().execute(
-            "create_outline",
+    outcome = asyncio.run(
+        binding.execute(
             {
                 "kind": "chapter",
                 "name": "Chapter 1",
@@ -273,254 +310,74 @@ def test_create_outline_uses_markdown_projection(monkeypatch) -> None:
     )
 
     assert captured["rich_text_format"] == "markdown"
-    assert result["objectType"] == "outline"
+    assert outcome.result["objectType"] == "outline"
 
 
-def test_replace_story_entity_passes_folder_id_metadata(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(
-        replace_module,
-        "read_runtime_story_entity",
-        lambda *_args, **_kwargs: {
+def test_replace_story_entity_group_passes_folder_id_metadata(monkeypatch) -> None:
+    feature = StoryEntityFeatureModule()
+    binding = _binding_by_name(feature, _module_context(), "replace_story_entity")
+    captured = _capture_object_group(
+        monkeypatch=monkeypatch,
+        module_under_test=story_entity_module,
+        feature=feature,
+        binding=binding,
+        args={
+            "id": str(uuid4()),
             "kind": "character",
-            "data": {
-                "English": {
-                    "name": "Ari",
-                    "description": "Broker",
-                    "content": "Detailed content",
-                }
-            },
+            "name": "Eira",
+            "folderId": None,
         },
     )
 
-    def _fake_update_object(*_args, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(replace_module.object_service, "update_object", _fake_update_object)
-
-    asyncio.run(
-        ReplaceToolCallModule().execute(
-            "replace_story_entity",
-            {
-                "id": str(uuid4()),
-                "kind": "character",
-                "name": "Eira",
-                "folderId": None,
-            },
-            _execution_context(),
-        )
-    )
-
+    assert captured["object_type"] == "story_entity"
     assert captured["metadata"] == {"folder_id": None}
+    assert captured["replace_fields"] == {"name": "Eira"}
 
 
-def test_replace_story_entity_folder_passes_structural_metadata(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(
-        replace_module,
-        "read_story_entity_folder",
-        lambda *_args, **_kwargs: {
-            "metadata": {
-                "parent_id": None,
-                "display_order": 0,
-            },
-            "data": {
-                "English": {
-                    "name": "Main Cast",
-                    "description": "Primary characters",
-                }
-            },
+def test_replace_story_entity_folder_group_passes_structural_metadata(monkeypatch) -> None:
+    feature = StoryEntityFeatureModule()
+    binding = _binding_by_name(feature, _module_context(), "replace_story_entity_folder")
+    captured = _capture_object_group(
+        monkeypatch=monkeypatch,
+        module_under_test=story_entity_module,
+        feature=feature,
+        binding=binding,
+        args={
+            "id": str(uuid4()),
+            "parentId": "folder-archive",
+            "position": 2,
         },
     )
 
-    def _fake_update_object(*_args, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(replace_module.object_service, "update_object", _fake_update_object)
-
-    asyncio.run(
-        ReplaceToolCallModule().execute(
-            "replace_story_entity_folder",
-            {
-                "id": str(uuid4()),
-                "parentId": "folder-archive",
-                "position": 2,
-            },
-            _execution_context(),
-        )
-    )
-
+    assert captured["object_type"] == "story_entity_folder"
     assert captured["metadata"] == {"parent_id": "folder-archive", "display_order": 2}
-    assert "rich_text_format" not in captured
-    assert captured["data"] == {}
+    assert captured["replace_fields"] == {}
 
 
-def test_patch_story_entity_passes_folder_id_metadata(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(
-        patch_module,
-        "read_runtime_story_entity",
-        lambda *_args, **_kwargs: {
-            "kind": "character",
-            "data": {
-                "English": {
-                    "name": "Ari",
-                    "description": "Broker",
-                    "content": "Detailed content",
-                }
-            },
+def test_translate_story_entity_folder_group_uses_content_fields_only(monkeypatch) -> None:
+    monkeypatch.setattr(story_entity_module, "is_translation_journey", lambda _ctx: True)
+    feature = StoryEntityFeatureModule()
+    binding = _binding_by_name(feature, _module_context(), "translate_story_entity_folder")
+    captured = _capture_object_group(
+        monkeypatch=monkeypatch,
+        module_under_test=story_entity_module,
+        feature=feature,
+        binding=binding,
+        args={
+            "id": str(uuid4()),
+            "name": "Main Cast KR",
         },
     )
 
-    def _fake_update_object(*_args, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(patch_module.object_service, "update_object", _fake_update_object)
-
-    asyncio.run(
-        PatchToolCallModule().execute(
-            "patch_story_entity",
-            {
-                "id": str(uuid4()),
-                "kind": "character",
-                "field": "content",
-                "old": "Detailed",
-                "new": "Updated",
-                "folderId": "folder-main-cast",
-            },
-            _execution_context(),
-        )
-    )
-
-    assert captured["metadata"] == {"folder_id": "folder-main-cast"}
-
-
-def test_patch_story_entity_folder_passes_structural_metadata(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(
-        patch_module,
-        "read_story_entity_folder",
-        lambda *_args, **_kwargs: {
-            "metadata": {
-                "parent_id": None,
-                "display_order": 0,
-            },
-            "data": {
-                "English": {
-                    "name": "Main Cast",
-                    "description": "Primary characters",
-                }
-            },
-        },
-    )
-
-    def _fake_update_object(*_args, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(patch_module.object_service, "update_object", _fake_update_object)
-
-    asyncio.run(
-        PatchToolCallModule().execute(
-            "patch_story_entity_folder",
-            {
-                "id": str(uuid4()),
-                "field": "description",
-                "old": "Primary",
-                "new": "Core",
-                "parentId": None,
-                "position": 1,
-            },
-            _execution_context(),
-        )
-    )
-
-    assert captured["metadata"] == {"parent_id": None, "display_order": 1}
-    assert "rich_text_format" not in captured
-    assert captured["data"]["description"] == "Core characters"
-
-
-def test_translate_story_entity_folder_execute_omits_projection(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(
-        translate_module,
-        "read_story_entity_folder",
-        lambda *_args, **_kwargs: {
-            "data": {
-                "English": {
-                    "name": "Main Cast",
-                    "description": "Primary characters",
-                }
-            },
-        },
-    )
-
-    def _fake_update_object(*_args, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(translate_module.object_service, "update_object", _fake_update_object)
-
-    asyncio.run(
-        TranslateToolCallModule().execute(
-            "translate_story_entity_folder",
-            {
-                "id": str(uuid4()),
-                "name": "Main Cast KR",
-            },
-            _execution_context(),
-        )
-    )
-
-    assert "rich_text_format" not in captured
-    assert captured["data"]["name"] == "Main Cast KR"
-
-
-def test_patch_translation_story_entity_folder_execute_omits_projection(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(
-        patch_translation_module,
-        "read_story_entity_folder",
-        lambda *_args, **_kwargs: {
-            "data": {
-                "English": {
-                    "name": "Main Cast",
-                    "description": "Primary characters",
-                }
-            },
-        },
-    )
-
-    def _fake_update_object(*_args, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(patch_translation_module.object_service, "update_object", _fake_update_object)
-
-    asyncio.run(
-        PatchTranslationToolCallModule().execute(
-            "patch_translation_story_entity_folder",
-            {
-                "id": str(uuid4()),
-                "field": "description",
-                "old": "Primary",
-                "new": "Core",
-            },
-            _execution_context(),
-        )
-    )
-
-    assert "rich_text_format" not in captured
-    assert captured["data"]["description"] == "Core characters"
+    assert captured["object_type"] == "story_entity_folder"
+    assert captured["metadata"] is None
+    assert captured["replace_fields"] == {"name": "Main Cast KR"}
 
 
 def test_validate_patch_outline_reads_markdown_projection(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_read_object(*_args, **kwargs):
+    def _fake_read_object(*_args, **_kwargs):
         captured["called"] = True
         return {
             "kind": "chapter",
@@ -533,11 +390,11 @@ def test_validate_patch_outline_reads_markdown_projection(monkeypatch) -> None:
             },
         }
 
-    monkeypatch.setattr(patch_module, "read_runtime_object", _fake_read_object)
+    monkeypatch.setattr(outline_module, "read_runtime_object", _fake_read_object)
+    binding = _binding_by_name(OutlineFeatureModule(), _module_context(), "patch_outline")
 
     result = asyncio.run(
-        PatchToolCallModule().validate(
-            "patch_outline",
+        binding.validate(
             {
                 "id": str(uuid4()),
                 "field": "content",
@@ -552,127 +409,46 @@ def test_validate_patch_outline_reads_markdown_projection(monkeypatch) -> None:
     assert captured["called"] is True
 
 
-def test_patch_outline_execute_writes_markdown_projection(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(
-        patch_module,
-        "read_runtime_object",
-        lambda *_args, **kwargs: {
-            "kind": "chapter",
-            "data": {
-                "English": {
-                    "name": "Chapter 1",
-                    "description": "Outline desc",
-                    "content": "**Timeline**: Months 44-46 - daily life as the community rebuilds.",
-                }
-            },
-            "__read_format__": kwargs.get("rich_text_format"),
+def test_replace_outline_group_uses_markdown_content_field(monkeypatch) -> None:
+    feature = OutlineFeatureModule()
+    binding = _binding_by_name(feature, _module_context(), "replace_outline")
+    captured = _capture_object_group(
+        monkeypatch=monkeypatch,
+        module_under_test=outline_module,
+        feature=feature,
+        binding=binding,
+        args={
+            "id": str(uuid4()),
+            "content": "## New outline content",
         },
     )
 
-    def _fake_update_object(*_args, **kwargs):
-        captured.update(kwargs)
+    assert captured["object_type"] == "outline"
+    assert captured["replace_fields"] == {"content": "## New outline content"}
 
-    monkeypatch.setattr(patch_module.object_service, "update_object", _fake_update_object)
 
-    asyncio.run(
-        PatchToolCallModule().execute(
-            "patch_outline",
-            {
-                "id": str(uuid4()),
-                "field": "content",
-                "old": "**Timeline**: Months 44-46 - daily life as the community rebuilds.",
-                "new": "**Timeline**: Months 44-46 - daily routines as the community rebuilds.",
-            },
-            _execution_context(),
-        )
+def test_translate_outline_group_uses_markdown_content_field(monkeypatch) -> None:
+    monkeypatch.setattr(outline_module, "is_translation_journey", lambda _ctx: True)
+    feature = OutlineFeatureModule()
+    binding = _binding_by_name(feature, _module_context(), "translate_outline")
+    captured = _capture_object_group(
+        monkeypatch=monkeypatch,
+        module_under_test=outline_module,
+        feature=feature,
+        binding=binding,
+        args={
+            "id": str(uuid4()),
+            "name": "Chapter 1",
+            "description": "Translated desc",
+            "content": "Translated markdown",
+        },
     )
 
-    assert captured["rich_text_format"] == "markdown"
-    assert "daily routines as the community rebuilds" in captured["data"]["content"]
-
-
-def test_replace_outline_execute_writes_markdown_projection(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-    read_calls: list[dict[str, object]] = []
-
-    def _fake_read_object(*_args, **kwargs):
-        read_calls.append({"called": True})
-        return {
-            "kind": "chapter",
-            "data": {
-                "English": {
-                    "name": "Chapter 1",
-                    "description": "Outline desc",
-                    "content": "Old markdown",
-                }
-            },
-        }
-
-    monkeypatch.setattr(replace_module, "read_runtime_object", _fake_read_object)
-
-    def _fake_update_object(*_args, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(replace_module.object_service, "update_object", _fake_update_object)
-
-    asyncio.run(
-        ReplaceToolCallModule().execute(
-            "replace_outline",
-            {
-                "id": str(uuid4()),
-                "content": "## New outline content",
-            },
-            _execution_context(),
-        )
-    )
-
-    assert read_calls[-1]["called"] is True
-    assert captured["rich_text_format"] == "markdown"
-    assert captured["data"]["content"] == "## New outline content"
-
-
-def test_translate_outline_execute_writes_markdown_projection(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-    read_calls: list[dict[str, object]] = []
-
-    def _fake_read_object(*_args, **kwargs):
-        read_calls.append({"called": True})
-        return {
-            "kind": "chapter",
-            "data": {
-                "English": {
-                    "name": "Chapter 1",
-                    "description": "Outline desc",
-                    "content": "Old markdown",
-                }
-            },
-        }
-
-    monkeypatch.setattr(translate_module, "read_runtime_object", _fake_read_object)
-
-    def _fake_update_object(*_args, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(translate_module.object_service, "update_object", _fake_update_object)
-
-    asyncio.run(
-        TranslateToolCallModule().execute(
-            "translate_outline",
-            {
-                "id": str(uuid4()),
-                "name": "Chapter 1",
-                "description": "Translated desc",
-                "content": "Translated markdown",
-            },
-            _execution_context(),
-        )
-    )
-
-    assert read_calls[-1]["called"] is True
-    assert captured["rich_text_format"] == "markdown"
-    assert captured["data"]["content"] == "Translated markdown"
+    assert captured["replace_fields"] == {
+        "name": "Chapter 1",
+        "description": "Translated desc",
+        "content": "Translated markdown",
+    }
 
 
 def test_thread_route_runtime_payload_includes_parent_metadata() -> None:

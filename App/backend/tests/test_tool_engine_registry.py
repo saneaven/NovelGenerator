@@ -60,8 +60,17 @@ sys.modules.setdefault("PIL", fake_pil)
 from App.backend.models.db_models import RunModel, Thread
 from App.backend.models.db_models import RunMessageModel, RunToolCallModel
 from App.backend.services.tool_engine import service as tool_service
-from App.backend.services.tool_engine.contexts import ToolModuleContext
-from App.backend.services.tool_engine.contracts import ToolBinding, ToolBindingMeta, ToolFeatureModule, ToolOffer, ToolSpec
+from App.backend.services.tool_engine.contexts import ToolGroupExecutionContext, ToolModuleContext
+from App.backend.services.tool_engine.contracts import (
+    PersistedToolMeta,
+    ToolBinding,
+    ToolBindingMeta,
+    ToolDecisionGroup,
+    ToolDecisionItem,
+    ToolFeatureModule,
+    ToolOffer,
+    ToolSpec,
+)
 from App.backend.services.tool_engine.registry import ToolRegistry
 from App.backend.services.tool_engine.schema_validation import validate_schema_required_enum_additional_properties
 from App.backend.services.tool_engine.service import ToolEngineService
@@ -191,6 +200,70 @@ def test_validate_schema_rejects_additional_properties() -> None:
 
     assert result.valid is False
     assert result.validator == "validate_schema_required_enum_additional_properties"
+
+
+def test_feature_apply_group_rejects_non_outcome_result() -> None:
+    class _NonOutcomeModule(ToolFeatureModule):
+        feature_key = "story_entity"
+
+        def list_bindings(self, _ctx: ToolModuleContext) -> list[ToolBinding]:
+            async def _validate(_args, _ctx):
+                return valid_result()
+
+            async def _execute(_args, _ctx):
+                return {"success": True}
+
+            return [
+                ToolBinding(
+                    spec=_make_spec("read_story_entity"),
+                    meta=ToolBindingMeta(
+                        feature_key="story_entity",
+                        category="read",
+                        op="read",
+                        target_kind="story_entity",
+                    ),
+                    validate=_validate,
+                    execute=_execute,
+                    build_persisted_meta=lambda _ctx, _args: PersistedToolMeta(
+                        feature_key="story_entity",
+                        category="read",
+                        op="read",
+                        target_kind="story_entity",
+                        target_id=None,
+                        merge_key=None,
+                    ),
+                )
+            ]
+
+    module = _NonOutcomeModule()
+    binding = module.list_bindings(SimpleNamespace())[0]
+    item = ToolDecisionItem(
+        tool_call_id=uuid4(),
+        binding=binding,
+        args={"value": "x"},
+        meta=PersistedToolMeta(
+            feature_key="story_entity",
+            category="read",
+            op="read",
+            target_kind="story_entity",
+            target_id=None,
+            merge_key=None,
+        ),
+        call_seq=0,
+    )
+    group = ToolDecisionGroup(feature_key="story_entity", merge_key="story_entity:x", items=(item,))
+    ctx = ToolGroupExecutionContext(
+        db=SimpleNamespace(),
+        thread=SimpleNamespace(),
+        run=SimpleNamespace(),
+        settings=SimpleNamespace(),
+        user_id=uuid4(),
+        project_id=uuid4(),
+        language="English",
+    )
+
+    with pytest.raises(ValueError, match="Invalid execution outcome"):
+        asyncio.run(module.apply_group(group=group, ctx=ctx))
 
 
 class _ParentCompletionQuery:
