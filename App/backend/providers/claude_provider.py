@@ -250,6 +250,10 @@ class ClaudeProvider(BaseProvider):
         """Additional request payload for subclasses (e.g., custom gateways)."""
         return {}
 
+    def _get_extra_headers(self) -> Dict[str, str]:
+        """Per-request headers for subclasses (e.g., template-resolved custom headers)."""
+        return {}
+
     # ------------------------------------------------------------------ #
     # Streaming
     # ------------------------------------------------------------------ #
@@ -314,6 +318,9 @@ class ClaudeProvider(BaseProvider):
         additional_body = self._additional_request_body()
         if additional_body:
             request = merge_user_overrides(request, additional_body)
+        extra_headers = self._get_extra_headers()
+        if extra_headers:
+            request["extra_headers"] = extra_headers
 
         yield ProviderEvent(kind="meta", raw_request=request)
 

@@ -32,6 +32,27 @@ from ..utils.outbound_http import (
     merge_user_overrides,
     validate_outbound_base_url,
 )
+from ..utils.template_vars import resolve_value
+
+
+def build_request_context(run: Any, thread: Any, provider_messages: list[Dict], task_config: Any) -> Dict[str, Any]:
+    """Build the Jinja2 template context for custom provider headers/body."""
+    last_role = ""
+    for msg in reversed(provider_messages):
+        role = msg.get("role", "")
+        if role in ("user", "assistant"):
+            last_role = role
+            break
+    return {
+        "run_id": str(run.id),
+        "thread_id": str(thread.id),
+        "thread_type": str(thread.thread_type or ""),
+        "is_sub_agent": thread.thread_type == "subAgent",
+        "parent_run_id": str(run.parent_run_id or ""),
+        "last_role": last_role,
+        "model": str(getattr(task_config, "model", "") or ""),
+        "run_seq": str(getattr(run, "run_seq", "") or ""),
+    }
 
 
 CustomKind = Literal["openai_completion", "openai_response", "claude"]
@@ -46,6 +67,9 @@ class _CustomClaudeProvider(ClaudeProvider):
         self._base_url = validate_outbound_base_url(raw_base_url) if raw_base_url else ""
         self._additional_headers = filter_additional_headers(config.get("additional_headers"))
         self._additional_body = filter_additional_body(config.get("additional_body"))
+        self._request_context: Dict[str, Any] = {}
+        self._resolved_headers: Dict[str, str] = {}
+        self._resolved_body: Dict[str, Any] = {}
         super().__init__(config)
 
     @property
@@ -75,7 +99,12 @@ class _CustomClaudeProvider(ClaudeProvider):
             kwargs["default_headers"] = self._additional_headers
         return AsyncAnthropic(**kwargs)
 
+    def _get_extra_headers(self) -> Dict[str, str]:
+        return self._resolved_headers
+
     def _additional_request_body(self) -> Dict[str, object]:
+        if self._request_context:
+            return dict(self._resolved_body)
         return dict(self._additional_body)
 
 
@@ -88,6 +117,9 @@ class _CustomOpenAIResponseProvider(OpenAIResponsesProvider):
         self._base_url = validate_outbound_base_url(raw_base_url) if raw_base_url else ""
         self._additional_headers = filter_additional_headers(config.get("additional_headers"))
         self._additional_body = filter_additional_body(config.get("additional_body"))
+        self._request_context: Dict[str, Any] = {}
+        self._resolved_headers: Dict[str, str] = {}
+        self._resolved_body: Dict[str, Any] = {}
         super().__init__(config)
 
     @property
@@ -118,10 +150,13 @@ class _CustomOpenAIResponseProvider(OpenAIResponsesProvider):
 
     def _prepare_responses_request(self, **kwargs) -> Dict:
         request = super()._prepare_responses_request(**kwargs)
-        if self._additional_body:
+        body = self._resolved_body if self._request_context else self._additional_body
+        if body:
             existing = request.get("extra_body")
             base = dict(existing) if isinstance(existing, dict) else {}
-            request["extra_body"] = merge_user_overrides(base, self._additional_body)
+            request["extra_body"] = merge_user_overrides(base, body)
+        if self._request_context and self._resolved_headers:
+            request["extra_headers"] = self._resolved_headers
         return request
 
     async def get_models(self) -> Dict:
@@ -147,7 +182,16 @@ class CustomProvider(AsyncOpenAIProvider):
         self._custom_kind = self._normalize_custom_kind(config.get("custom_kind"))
         self._current_thinking_template: Optional[Dict] = None
         self._active_custom_kind: CustomKind = self._custom_kind
+        self._request_context: Dict[str, Any] = {}
+        self._resolved_headers: Dict[str, str] = {}
+        self._resolved_body: Dict[str, Any] = {}
         super().__init__(config)
+
+    def set_request_context(self, ctx: Dict[str, Any]) -> None:
+        """Set per-request template variable context for Jinja2 resolution."""
+        self._request_context = ctx
+        self._resolved_headers = resolve_value(self._additional_headers, ctx)
+        self._resolved_body = resolve_value(self._additional_body, ctx) if self._additional_body else {}
 
     def set_thinking_template(self, template: Optional[Dict]) -> None:
         """Set the compiled thinking template for the next stream_chat call."""
@@ -190,10 +234,11 @@ class CustomProvider(AsyncOpenAIProvider):
         return dict(existing) if isinstance(existing, dict) else {}
 
     def _apply_additional_body(self, request: Dict[str, object]) -> Dict[str, object]:
-        if not self._additional_body:
+        body = self._resolved_body if self._request_context else self._additional_body
+        if not body:
             return request
         extra_body = self._coerce_extra_body(request)
-        request["extra_body"] = merge_user_overrides(extra_body, self._additional_body)
+        request["extra_body"] = merge_user_overrides(extra_body, body)
         return request
 
     @staticmethod
@@ -224,8 +269,13 @@ class CustomProvider(AsyncOpenAIProvider):
     def _effective_custom_kind(self, custom_kind: Optional[str]) -> CustomKind:
         return self._normalize_custom_kind(custom_kind or self._custom_kind)
 
+    def _propagate_request_context(self, delegate: Any) -> None:
+        delegate._request_context = self._request_context
+        delegate._resolved_headers = self._resolved_headers
+        delegate._resolved_body = self._resolved_body
+
     def _build_claude_delegate(self) -> _CustomClaudeProvider:
-        return _CustomClaudeProvider(
+        delegate = _CustomClaudeProvider(
             {
                 "api_key": self._api_key,
                 "base_url": self._base_url,
@@ -233,9 +283,11 @@ class CustomProvider(AsyncOpenAIProvider):
                 "additional_body": self._additional_body,
             }
         )
+        self._propagate_request_context(delegate)
+        return delegate
 
     def _build_openai_response_delegate(self) -> _CustomOpenAIResponseProvider:
-        return _CustomOpenAIResponseProvider(
+        delegate = _CustomOpenAIResponseProvider(
             {
                 "api_key": self._api_key,
                 "base_url": self._base_url,
@@ -243,6 +295,8 @@ class CustomProvider(AsyncOpenAIProvider):
                 "additional_body": self._additional_body,
             }
         )
+        self._propagate_request_context(delegate)
+        return delegate
 
     def _prepare_completion_messages(self, messages: List[Dict]) -> List[Dict]:
         prepared = self._copy_messages(messages)
@@ -300,7 +354,10 @@ class CustomProvider(AsyncOpenAIProvider):
         if self._current_thinking_template:
             apply_effort_fields(request, self._current_thinking_template.get("effort_fields") or [])
 
-        return self._apply_additional_body(request)
+        request = self._apply_additional_body(request)
+        if self._request_context and self._resolved_headers:
+            request["extra_headers"] = self._resolved_headers
+        return request
 
     # ----- Streaming: template response field extraction -----
 
