@@ -79,18 +79,27 @@ def upgrade() -> None:
         sa.column("id", UUID(as_uuid=True)),
         sa.column("search_memory_settings", JSONB),
     )
+    update_stmt = (
+        sa.text(
+            "UPDATE user_settings "
+            "SET search_memory_settings = :search_memory_settings "
+            "WHERE id = :id"
+        )
+        .bindparams(
+            sa.bindparam("search_memory_settings", type_=JSONB),
+            sa.bindparam("id", type_=UUID(as_uuid=True)),
+        )
+    )
 
     rows = session.execute(sa.select(settings_table)).fetchall()
     for row in rows:
         next_payload = _rewrite_search_settings(row.search_memory_settings)
         if next_payload is None or next_payload == row.search_memory_settings:
             continue
-        stmt = (
-            sa.update(settings_table)
-            .where(settings_table.c.id == row.id)
-            .values(search_memory_settings=sa.cast(sa.literal(next_payload), JSONB))
+        session.execute(
+            update_stmt,
+            {"id": row.id, "search_memory_settings": next_payload},
         )
-        session.execute(stmt)
 
     session.commit()
 
