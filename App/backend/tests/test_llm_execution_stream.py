@@ -368,3 +368,87 @@ def test_execute_stream_merges_mixed_id_index_tool_call_deltas(monkeypatch: pyte
     assert emitted.count("tool_call:start") == 1
     assert emitted.count("tool_call:delta") == 2
     assert log_events == [("request", {"messages": []}), ("complete", None)]
+
+
+def test_execute_stream_emits_full_raw_request_to_frontend(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, thread, assistant_message = _make_run_thread_message()
+    emitted_payloads: list[dict[str, object]] = []
+    session_requests: list[dict[str, object]] = []
+
+    class FakeRequestSession:
+        def __init__(self, **_kwargs) -> None:
+            self._closed = False
+            self.retry_count = 0
+
+        def on_request(self, raw_request: dict[str, object]) -> None:
+            session_requests.append(raw_request)
+
+        def on_retry(self, error_msg: str, error_status: int | None) -> None:
+            _ = error_msg, error_status
+
+        def fail(self, error_msg: str, *, content_parts, merged_meta) -> None:  # noqa: ANN001
+            _ = error_msg, content_parts, merged_meta
+            self._closed = True
+
+        def complete(self, raw_output, merged_meta) -> None:  # noqa: ANN001
+            _ = raw_output, merged_meta
+            self._closed = True
+
+    class RequestProvider:
+        def stream_chat(self, **_kwargs):
+            async def _gen():
+                yield ProviderEvent(
+                    kind="delta",
+                    raw_request={
+                        "messages": [],
+                        "extra_headers": {"Authorization": "secret"},
+                        "extra_body": {"metadata": {"request_id": "req_test"}},
+                    },
+                )
+                if False:
+                    yield None
+
+            return _gen()
+
+    async def _emit(**kwargs) -> None:
+        emitted_payloads.append(kwargs["data"])
+
+    monkeypatch.setattr(stream_module, "LLMRequestSession", FakeRequestSession)
+
+    with pytest.raises(ValueError, match="Unable to assemble final snapshot"):
+        asyncio.run(
+            stream_module.execute_stream(
+                SimpleNamespace(
+                    run=run,
+                    thread=thread,
+                    settings=SimpleNamespace(llm_logging_enabled=True),
+                ),
+                SimpleNamespace(emit_fn=_emit),
+                _make_prepared(RequestProvider()),
+                assistant_message=assistant_message,
+                request_id="req_test",
+            )
+        )
+
+    assert session_requests == [
+        {
+            "messages": [],
+            "extra_headers": {"Authorization": "secret"},
+            "extra_body": {"metadata": {"request_id": "req_test"}},
+        }
+    ]
+    assert emitted_payloads == [
+        {
+            "run_id": str(run.id),
+            "message_id": str(assistant_message.id),
+            "request_id": "req_test",
+            "retry_count": 0,
+            "provider": "test",
+            "model": "model-a",
+            "raw_request": {
+                "messages": [],
+                "extra_headers": {"Authorization": "secret"},
+                "extra_body": {"metadata": {"request_id": "req_test"}},
+            },
+        }
+    ]

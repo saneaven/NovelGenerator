@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ....providers.contracts import MetaPayload
+from ....providers.request_logging import build_logged_request_body
 from ...llm_request_service import llm_request_service
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ class LLMRequestSession:
         try:
             llm_request_service.update_request(
                 self._ctx.request_id,
-                raw_input=raw_request if self._logging_enabled else None,
+                raw_input=build_logged_request_body(raw_request) if self._logging_enabled else None,
             )
         except Exception:
             logger.warning("LLM request update failed", exc_info=True)

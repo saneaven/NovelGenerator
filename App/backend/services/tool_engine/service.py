@@ -344,6 +344,7 @@ class ToolEngineService:
             merge_key=merge_key,
         )
 
+    @staticmethod
     def _apply_execution_outcome(row: RunToolCallModel, outcome: ToolExecutionOutcome) -> None:
         base_extra = row.extra_content if isinstance(row.extra_content, dict) else {}
         if outcome.extra_content_patch:

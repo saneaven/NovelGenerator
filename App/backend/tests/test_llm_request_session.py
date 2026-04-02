@@ -150,3 +150,50 @@ def test_request_session_respects_logging_disabled(monkeypatch) -> None:
             },
         ),
     ]
+
+
+def test_request_session_strips_headers_from_persisted_raw_input(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+    fake_service = SimpleNamespace(
+        update_request=lambda request_id, **kwargs: calls.append(("update", {"request_id": request_id, **kwargs})),
+        on_retry=lambda request_id, **kwargs: calls.append(("retry", {"request_id": request_id, **kwargs})),
+        complete=lambda request_id, **kwargs: calls.append(("complete", {"request_id": request_id, **kwargs})),
+        fail=lambda request_id, **kwargs: calls.append(("fail", {"request_id": request_id, **kwargs})),
+    )
+
+    monkeypatch.setattr(request_session_module, "llm_request_service", fake_service)
+
+    session = request_session_module.LLMRequestSession(
+        request_id="req_3",
+        user_id="user-1",
+        project_id="project-1",
+        thread_id="thread-1",
+        run_id="run-1",
+        assistant_message_id="msg-1",
+        provider="custom",
+        model="model-a",
+        logging_enabled=True,
+    )
+
+    session.on_request(
+        {
+            "model": "gpt-4.1",
+            "messages": [{"role": "user", "content": "hi"}],
+            "extra_headers": {"Authorization": "secret"},
+            "extra_body": {"metadata": {"request_id": "req_3"}},
+        }
+    )
+
+    assert calls == [
+        (
+            "update",
+            {
+                "request_id": "req_3",
+                "raw_input": {
+                    "model": "gpt-4.1",
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "metadata": {"request_id": "req_3"},
+                },
+            },
+        )
+    ]
