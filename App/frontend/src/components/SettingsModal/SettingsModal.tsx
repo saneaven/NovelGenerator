@@ -118,20 +118,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [activeGeneralTarget, setActiveGeneralTarget] = useState<GeneralConfigTarget>('general');
   const [activeSearchMemoryTarget, setActiveSearchMemoryTarget] = useState<SearchMemoryConfigTarget>('general');
   const promptsPanelRef = useRef<PromptsTemplatesPanelHandle | null>(null);
-  const settingsSnapshotRef = useRef<string>('');
-  const credentialsSnapshotRef = useRef<string>('');
+  const [settingsSnapshot, setSettingsSnapshot] = useState<string>('');
+  const [credentialsSnapshot, setCredentialsSnapshot] = useState<string>('');
   const localSettingsSnapshot = useMemo(() => JSON.stringify(localSettings), [localSettings]);
   const localCredentialsSnapshot = useMemo(() => JSON.stringify(localCredentials), [localCredentials]);
   const unsavedCount = useMemo(
     () => calculateUnsavedCount({
       settingsJson: localSettingsSnapshot,
       credentialsJson: localCredentialsSnapshot,
-      settingsSnapshot: settingsSnapshotRef.current,
-      credentialsSnapshot: credentialsSnapshotRef.current,
+      settingsSnapshot,
+      credentialsSnapshot,
       demoModeEnabled: localSettings.demoModeEnabled,
       promptUnsavedCount,
     }),
-    [localCredentialsSnapshot, localSettings.demoModeEnabled, localSettingsSnapshot, promptUnsavedCount]
+    [localCredentialsSnapshot, localSettings.demoModeEnabled, localSettingsSnapshot, promptUnsavedCount, settingsSnapshot, credentialsSnapshot]
   );
 
   // Mobile sidebar state from store
@@ -144,7 +144,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setLocalSettings(settings);
       setActiveGeneralTarget('general');
       setActiveSearchMemoryTarget('general');
-      settingsSnapshotRef.current = JSON.stringify(settings);
+      setSettingsSnapshot(JSON.stringify(settings));
       promptUnsavedCountRef.current = 0;
       setPromptUnsavedCount(0);
       setHasMountedPromptsPanel(mainTab === 'prompts' && !settings.demoModeEnabled);
@@ -152,11 +152,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         .then(() => {
           const emptyDraft = buildEmptyCredentialDraft(useProviderSpecStore.getState().specs);
           setLocalCredentials(emptyDraft);
-          credentialsSnapshotRef.current = JSON.stringify(emptyDraft);
+          setCredentialsSnapshot(JSON.stringify(emptyDraft));
         })
         .catch(() => {
           setLocalCredentials({});
-          credentialsSnapshotRef.current = JSON.stringify({});
+          setCredentialsSnapshot(JSON.stringify({}));
         });
       void apiClient
         .get<{ providers: string[] }>('/api/v1/credentials')
@@ -357,7 +357,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
       const nextSettings = { ...buildLockedSectionReset(localSettings, settings), demoModeEnabled: true };
       const lockedSettingsDirty = localSettingsSnapshot !== JSON.stringify(buildLockedSectionReset(localSettings, settings));
-      const credentialsDirty = localCredentialsSnapshot !== credentialsSnapshotRef.current;
+      const credentialsDirty = localCredentialsSnapshot !== credentialsSnapshot;
       const promptsDirty = promptUnsavedCount > 0;
 
       if (lockedSettingsDirty || credentialsDirty || promptsDirty) {
@@ -376,7 +376,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setLocalSettings(nextSettings);
       const emptyDraft = buildEmptyCredentialDraft(providerSpecs);
       setLocalCredentials(emptyDraft);
-      credentialsSnapshotRef.current = JSON.stringify(emptyDraft);
+      setCredentialsSnapshot(JSON.stringify(emptyDraft));
       promptUnsavedCountRef.current = 0;
       setPromptUnsavedCount(0);
       setHasMountedPromptsPanel(false);
@@ -384,7 +384,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setMainTab('general');
       setActiveSearchMemoryTarget('general');
     },
-    [localCredentialsSnapshot, localSettings, localSettingsSnapshot, promptUnsavedCount, settings, t]
+    [credentialsSnapshot, localCredentialsSnapshot, localSettings, localSettingsSnapshot, promptUnsavedCount, settings, t]
   );
 
   const handleSave = async () => {
@@ -392,10 +392,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
     setIsSaving(true);
     try {
-      const settingsDirty = localSettingsSnapshot !== settingsSnapshotRef.current;
+      const settingsDirty = localSettingsSnapshot !== settingsSnapshot;
       const credentialsDirty =
         !localSettings.demoModeEnabled &&
-        localCredentialsSnapshot !== credentialsSnapshotRef.current;
+        localCredentialsSnapshot !== credentialsSnapshot;
 
       if (settingsDirty || credentialsDirty) {
         if (!localSettings.demoModeEnabled) {
@@ -434,15 +434,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           if (settingsDirty) {
             savedSettings = await saveSettingsToServer(localSettings);
             setLocalSettings(savedSettings);
-            settingsSnapshotRef.current = JSON.stringify(savedSettings);
+            setSettingsSnapshot(JSON.stringify(savedSettings));
           }
 
           if (credentialsDirty) {
-            const prevCredentials = credentialsSnapshotRef.current
-              ? (JSON.parse(credentialsSnapshotRef.current) as ProviderCredentials)
+            const prevCredentials = credentialsSnapshot
+              ? (JSON.parse(credentialsSnapshot) as ProviderCredentials)
               : buildEmptyCredentialDraft(providerSpecs);
             await syncCredentialDraftDiff(prevCredentials, localCredentials);
-            credentialsSnapshotRef.current = localCredentialsSnapshot;
+            setCredentialsSnapshot(localCredentialsSnapshot);
           }
 
           if (settingsDirty || credentialsDirty) {
@@ -493,12 +493,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     return calculateUnsavedCount({
       settingsJson: localSettingsSnapshot,
       credentialsJson: localCredentialsSnapshot,
-      settingsSnapshot: settingsSnapshotRef.current,
-      credentialsSnapshot: credentialsSnapshotRef.current,
+      settingsSnapshot,
+      credentialsSnapshot,
       demoModeEnabled: localSettings.demoModeEnabled,
       promptUnsavedCount: promptUnsavedCountRef.current,
     });
-  }, [localCredentialsSnapshot, localSettings.demoModeEnabled, localSettingsSnapshot]);
+  }, [credentialsSnapshot, localCredentialsSnapshot, localSettings.demoModeEnabled, localSettingsSnapshot, settingsSnapshot]);
 
   const closeWithoutSaving = useCallback(() => {
     setLocalSettings(settings);
