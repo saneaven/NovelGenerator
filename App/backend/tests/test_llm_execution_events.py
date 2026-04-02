@@ -137,9 +137,11 @@ def test_emit_terminal_events_propagates_child_terminal_state_to_parent(monkeypa
     )
 
     order: list[str] = []
+    emitted_payloads: list[tuple[str, dict[str, object]]] = []
 
-    async def _emit_fn(*, event_name: str, **_kwargs) -> None:
+    async def _emit_fn(*, event_name: str, data: dict[str, object], **_kwargs) -> None:
         order.append(event_name)
+        emitted_payloads.append((event_name, data))
 
     async def _sync_status_fn(**_kwargs) -> None:
         order.append("sync_status")
@@ -164,6 +166,7 @@ def test_emit_terminal_events_propagates_child_terminal_state_to_parent(monkeypa
             run=run,
             thread=thread,
             assistant_message=assistant_message,
+            request_id="req_123",
             final_snapshot=final_snapshot,
             tool_call_summaries=[],
         )
@@ -177,3 +180,5 @@ def test_emit_terminal_events_propagates_child_terminal_state_to_parent(monkeypa
         "run:done",
         "propagate_parent",
     ]
+    assert emitted_payloads[0][1]["request_id"] == "req_123"
+    assert emitted_payloads[1][1]["request_id"] == "req_123"

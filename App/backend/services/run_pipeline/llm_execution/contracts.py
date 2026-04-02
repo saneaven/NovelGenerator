@@ -22,6 +22,7 @@ SyncStatusFn = Callable[..., Awaitable[None]]
 @dataclass
 class ExecutionCheckpoint:
     message_id: Any | None = None
+    request_id: str | None = None
     finalized: bool = False
 
 
@@ -66,6 +67,7 @@ class PreparedLLMExecution:
 class StreamExecutionResult:
     final_snapshot: FinalSnapshot
     raw_response: dict[str, Any] | None
+    request_id: str | None = None
 
 
 @dataclass(frozen=True)

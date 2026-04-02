@@ -106,14 +106,23 @@ function deriveStreamKey(payload: Record<string, unknown>): string | null {
   return null;
 }
 
+function readRequestId(payload: Record<string, unknown>): string | null {
+  return readNonEmptyString(payload.request_id);
+}
+
+function buildSessionKey(threadId: string, requestId: string): string {
+  return `${threadId}:${requestId}`;
+}
+
 export class ThreadEventConsumer {
-  private readonly streamingToolCallsByThread = new Map<string, Map<string, string>>();
+  private readonly streamingToolCallsBySession = new Map<string, Map<string, string>>();
   private readonly streamingArgBuffers = new Map<string, string>();
   private readonly autoContinueLockByThread = new Set<string>();
   private readonly inFlightResumeByThread = new Set<string>();
   private readonly autoAcceptLockByThread = new Set<string>();
   private readonly autoContinuedAssistantByThread = new Map<string, string>();
   private readonly deltaBuffer = new Map<string, Map<string, {
+    threadId: string;
     runId: string;
     textDelta: string;
     thinkingDeltas: Array<{ text: string; thinkingDisplay: string }>;
@@ -131,7 +140,7 @@ export class ThreadEventConsumer {
       this.deltaFlushTimer = null;
     }
     this.deltaBuffer.clear();
-    this.streamingToolCallsByThread.clear();
+    this.streamingToolCallsBySession.clear();
     this.streamingArgBuffers.clear();
     this.autoContinueLockByThread.clear();
     this.inFlightResumeByThread.clear();
@@ -196,17 +205,17 @@ export class ThreadEventConsumer {
     return message;
   }
 
-  private getStreamingToolMap(threadId: string): Map<string, string> {
-    const existing = this.streamingToolCallsByThread.get(threadId);
+  private getStreamingToolMap(sessionKey: string): Map<string, string> {
+    const existing = this.streamingToolCallsBySession.get(sessionKey);
     if (existing) return existing;
     const created = new Map<string, string>();
-    this.streamingToolCallsByThread.set(threadId, created);
+    this.streamingToolCallsBySession.set(sessionKey, created);
     return created;
   }
 
-  private rekeyStreamingTool(threadId: string, fromKey: string, toKey: string, tempId: string): void {
+  private rekeyStreamingTool(sessionKey: string, fromKey: string, toKey: string, tempId: string): void {
     if (fromKey === toKey) return;
-    const toolMap = this.getStreamingToolMap(threadId);
+    const toolMap = this.getStreamingToolMap(sessionKey);
     if (toolMap.get(fromKey) === tempId) {
       toolMap.delete(fromKey);
     }
@@ -214,10 +223,10 @@ export class ThreadEventConsumer {
   }
 
   private resolveStreamingTempId(
-    threadId: string,
+    sessionKey: string,
     payload: Record<string, unknown>,
   ): { streamKey: string | null; tempId: string | null } {
-    const toolMap = this.getStreamingToolMap(threadId);
+    const toolMap = this.getStreamingToolMap(sessionKey);
     const desiredKey = deriveStreamKey(payload);
     if (desiredKey) {
       const direct = toolMap.get(desiredKey);
@@ -231,7 +240,7 @@ export class ThreadEventConsumer {
         const existing = store.toolCallsById[tempId];
         if (!existing || existing.llmCallId !== llmCallId) continue;
         if (desiredKey) {
-          this.rekeyStreamingTool(threadId, existingKey, desiredKey, tempId);
+          this.rekeyStreamingTool(sessionKey, existingKey, desiredKey, tempId);
           return { streamKey: desiredKey, tempId };
         }
         return { streamKey: existingKey, tempId };
@@ -246,7 +255,7 @@ export class ThreadEventConsumer {
         if (!existing || existing.callSeq !== index) continue;
         if (assistantMessageId && existing.assistantMessageId !== assistantMessageId) continue;
         if (desiredKey) {
-          this.rekeyStreamingTool(threadId, existingKey, desiredKey, tempId);
+          this.rekeyStreamingTool(sessionKey, existingKey, desiredKey, tempId);
           return { streamKey: desiredKey, tempId };
         }
         return { streamKey: existingKey, tempId };
@@ -254,6 +263,28 @@ export class ThreadEventConsumer {
     }
 
     return { streamKey: desiredKey, tempId: null };
+  }
+
+  private resolveStreamingTempIdForThread(
+    threadId: string,
+    payload: Record<string, unknown>,
+  ): { sessionKey: string | null; streamKey: string | null; tempId: string | null } {
+    const requestId = readRequestId(payload);
+    if (requestId) {
+      const sessionKey = buildSessionKey(threadId, requestId);
+      const resolved = this.resolveStreamingTempId(sessionKey, payload);
+      return { sessionKey, streamKey: resolved.streamKey, tempId: resolved.tempId };
+    }
+
+    for (const [sessionKey] of this.streamingToolCallsBySession) {
+      if (!sessionKey.startsWith(`${threadId}:`)) continue;
+      const resolved = this.resolveStreamingTempId(sessionKey, payload);
+      if (resolved.tempId) {
+        return { sessionKey, streamKey: resolved.streamKey, tempId: resolved.tempId };
+      }
+    }
+
+    return { sessionKey: null, streamKey: deriveStreamKey(payload), tempId: null };
   }
 
   private patchThreadFromRunStatus(threadId: string, status: ThreadStatus, error: string | null, payload: Record<string, unknown>): void {
@@ -374,15 +405,16 @@ export class ThreadEventConsumer {
     store.setThreadStreamActive(params.threadId, true);
   }
 
-  private bufferDelta(threadId: string, messageId: string, runId: string, text: string): void {
-    let threadMap = this.deltaBuffer.get(threadId);
+  private bufferDelta(threadId: string, requestId: string, messageId: string, runId: string, text: string): void {
+    const sessionKey = buildSessionKey(threadId, requestId);
+    let threadMap = this.deltaBuffer.get(sessionKey);
     if (!threadMap) {
       threadMap = new Map();
-      this.deltaBuffer.set(threadId, threadMap);
+      this.deltaBuffer.set(sessionKey, threadMap);
     }
     let entry = threadMap.get(messageId);
     if (!entry) {
-      entry = { runId, textDelta: '', thinkingDeltas: [] };
+      entry = { threadId, runId, textDelta: '', thinkingDeltas: [] };
       threadMap.set(messageId, entry);
     }
     entry.textDelta += text;
@@ -390,17 +422,18 @@ export class ThreadEventConsumer {
   }
 
   private bufferThinkingDelta(
-    threadId: string, messageId: string, runId: string,
+    threadId: string, requestId: string, messageId: string, runId: string,
     text: string, thinkingDisplay: string,
   ): void {
-    let threadMap = this.deltaBuffer.get(threadId);
+    const sessionKey = buildSessionKey(threadId, requestId);
+    let threadMap = this.deltaBuffer.get(sessionKey);
     if (!threadMap) {
       threadMap = new Map();
-      this.deltaBuffer.set(threadId, threadMap);
+      this.deltaBuffer.set(sessionKey, threadMap);
     }
     let entry = threadMap.get(messageId);
     if (!entry) {
-      entry = { runId, textDelta: '', thinkingDeltas: [] };
+      entry = { threadId, runId, textDelta: '', thinkingDeltas: [] };
       threadMap.set(messageId, entry);
     }
     entry.thinkingDeltas.push({ text, thinkingDisplay });
@@ -420,18 +453,20 @@ export class ThreadEventConsumer {
     const snapshot = new Map(this.deltaBuffer);
     this.deltaBuffer.clear();
 
-    for (const [threadId, messageMap] of snapshot) {
+    for (const [, messageMap] of snapshot) {
       for (const [messageId, entry] of messageMap) {
         if (entry.textDelta) {
           this.appendDelta({
-            threadId, messageId,
+            threadId: entry.threadId,
+            messageId,
             runId: entry.runId,
             text: entry.textDelta,
           });
         }
         for (const td of entry.thinkingDeltas) {
           this.appendThinkingDelta({
-            threadId, messageId,
+            threadId: entry.threadId,
+            messageId,
             runId: entry.runId,
             text: td.text,
             thinkingDisplay: td.thinkingDisplay,
@@ -454,31 +489,66 @@ export class ThreadEventConsumer {
     });
   }
 
-  private clearStreamingAssistantBuffers(threadId: string, assistantMessageId: string): void {
-    const toolMap = this.streamingToolCallsByThread.get(threadId);
-    if (!toolMap) return;
-
-    const assistantToken = `:${assistantMessageId}:`;
-    for (const [streamKey, tempId] of [...toolMap.entries()]) {
-      if (!tempId.includes(assistantToken)) continue;
-      toolMap.delete(streamKey);
-      this.streamingArgBuffers.delete(tempId);
+  private clearThreadStreamingState(threadId: string): void {
+    for (const [sessionKey, toolMap] of [...this.streamingToolCallsBySession.entries()]) {
+      if (!sessionKey.startsWith(`${threadId}:`)) continue;
+      for (const tempId of toolMap.values()) {
+        this.streamingArgBuffers.delete(tempId);
+      }
+      this.streamingToolCallsBySession.delete(sessionKey);
     }
+    for (const sessionKey of [...this.deltaBuffer.keys()]) {
+      if (sessionKey.startsWith(`${threadId}:`)) {
+        this.deltaBuffer.delete(sessionKey);
+      }
+    }
+  }
 
-    if (toolMap.size === 0) {
-      this.streamingToolCallsByThread.delete(threadId);
+  private clearStreamingSession(sessionKey: string): void {
+    const toolMap = this.streamingToolCallsBySession.get(sessionKey);
+    if (toolMap) {
+      for (const tempId of toolMap.values()) {
+        this.streamingArgBuffers.delete(tempId);
+      }
+    }
+    this.streamingToolCallsBySession.delete(sessionKey);
+    this.deltaBuffer.delete(sessionKey);
+  }
+
+  private clearStreamingAssistantBuffers(threadId: string, assistantMessageId: string): void {
+    const assistantToken = `:${assistantMessageId}:`;
+    for (const [sessionKey, toolMap] of [...this.streamingToolCallsBySession.entries()]) {
+      if (!sessionKey.startsWith(`${threadId}:`)) continue;
+      for (const [streamKey, tempId] of [...toolMap.entries()]) {
+        if (!tempId.includes(assistantToken)) continue;
+        toolMap.delete(streamKey);
+        this.streamingArgBuffers.delete(tempId);
+      }
+      if (toolMap.size === 0) {
+        this.streamingToolCallsBySession.delete(sessionKey);
+      }
+    }
+    for (const [sessionKey, messageMap] of [...this.deltaBuffer.entries()]) {
+      if (!sessionKey.startsWith(`${threadId}:`)) continue;
+      messageMap.delete(assistantMessageId);
+      if (messageMap.size === 0) {
+        this.deltaBuffer.delete(sessionKey);
+      }
     }
   }
 
   private handleToolCallStart(threadId: string, payload: Record<string, unknown>): void {
+    const requestId = readRequestId(payload);
+    if (!requestId) return;
     const streamKey = deriveStreamKey(payload);
     if (!streamKey) return;
     const index = readOptionalIndex(payload.index);
     const assistantMessageId = payload.assistant_message_id ? String(payload.assistant_message_id) : '';
-    const toolMap = this.getStreamingToolMap(threadId);
+    const sessionKey = buildSessionKey(threadId, requestId);
+    const toolMap = this.getStreamingToolMap(sessionKey);
     const existingTempId = toolMap.get(streamKey);
     if (existingTempId) return;
-    const tempId = `streaming:${threadId}:${assistantMessageId}:${streamKey}`;
+    const tempId = `streaming:${threadId}:${requestId}:${assistantMessageId}:${streamKey}`;
     toolMap.set(streamKey, tempId);
 
     const toolCall: ThreadToolCall = {
@@ -504,7 +574,7 @@ export class ThreadEventConsumer {
   }
 
   private handleToolCallDelta(threadId: string, payload: Record<string, unknown>): void {
-    const { tempId } = this.resolveStreamingTempId(threadId, payload);
+    const { tempId } = this.resolveStreamingTempIdForThread(threadId, payload);
     if (!tempId) return;
 
     const store = useThreadStore.getState();
@@ -538,11 +608,11 @@ export class ThreadEventConsumer {
     if (!toolCallId) return;
 
     const index = readOptionalIndex(payload.index);
-    const { streamKey, tempId } = this.resolveStreamingTempId(threadId, payload);
+    const { sessionKey, streamKey, tempId } = this.resolveStreamingTempIdForThread(threadId, payload);
     if (tempId) {
       useThreadStore.getState().removeToolCall(tempId);
-      if (streamKey) {
-        this.getStreamingToolMap(threadId).delete(streamKey);
+      if (sessionKey && streamKey) {
+        this.getStreamingToolMap(sessionKey).delete(streamKey);
       }
       this.streamingArgBuffers.delete(tempId);
     }
@@ -722,13 +792,7 @@ export class ThreadEventConsumer {
       if (!threadId) return;
       useThreadStore.getState().removeThreadCascade(threadId);
       useJourneyStore.getState().clearByThreadId(threadId);
-      const toolMap = this.streamingToolCallsByThread.get(threadId);
-      if (toolMap) {
-        for (const tempId of toolMap.values()) {
-          this.streamingArgBuffers.delete(tempId);
-        }
-      }
-      this.streamingToolCallsByThread.delete(threadId);
+      this.clearThreadStreamingState(threadId);
       this.autoContinueLockByThread.delete(threadId);
       this.inFlightResumeByThread.delete(threadId);
       this.autoAcceptLockByThread.delete(threadId);
@@ -742,13 +806,7 @@ export class ThreadEventConsumer {
       useThreadStore.getState().removeThreadsCascade(ids);
       useJourneyStore.getState().clearByThreadIds(ids);
       for (const threadId of ids) {
-        const toolMap = this.streamingToolCallsByThread.get(threadId);
-        if (toolMap) {
-          for (const tempId of toolMap.values()) {
-            this.streamingArgBuffers.delete(tempId);
-          }
-        }
-        this.streamingToolCallsByThread.delete(threadId);
+        this.clearThreadStreamingState(threadId);
         this.autoContinueLockByThread.delete(threadId);
         this.inFlightResumeByThread.delete(threadId);
         this.autoAcceptLockByThread.delete(threadId);
@@ -780,11 +838,15 @@ export class ThreadEventConsumer {
     if (event.event === 'llm:request') {
       const d = event.data as Record<string, unknown>;
       const runId = d.run_id ? String(d.run_id) : 'n/a';
+      const requestId = d.request_id ? String(d.request_id) : 'n/a';
       console.groupCollapsed(
-        `%c[LLM Request]%c run=${runId} · ${d.provider}/${d.model}`,
+        `%c[LLM Request]%c run=${runId} · request=${requestId} · ${d.provider}/${d.model}`,
         'color: var(--color-brand-primary); font-weight: bold',
         'color: inherit',
       );
+      if (d.retry_count !== undefined) {
+        console.log('Retry Count:', d.retry_count);
+      }
       console.log('Raw Request:', d.raw_request);
       console.groupEnd();
       return;
@@ -793,8 +855,9 @@ export class ThreadEventConsumer {
     if (event.event === 'llm:response') {
       const d = event.data as Record<string, unknown>;
       const runId = d.run_id ? String(d.run_id) : 'n/a';
+      const requestId = d.request_id ? String(d.request_id) : 'n/a';
       console.groupCollapsed(
-        `%c[LLM Response]%c run=${runId} · ${d.provider}/${d.model}`,
+        `%c[LLM Response]%c run=${runId} · request=${requestId} · ${d.provider}/${d.model}`,
         'color: var(--color-success); font-weight: bold',
         'color: inherit',
       );
@@ -867,22 +930,24 @@ export class ThreadEventConsumer {
 
     if (event.event === 'content:delta') {
       if (this.isSuppressed(threadId)) return;
+      const requestId = readRequestId(payload);
       const messageId = String(payload.message_id ?? '');
       const runId = payload.run_id ? String(payload.run_id) : '';
       const text = String(payload.text ?? '');
-      if (!messageId || !runId || !text) return;
-      this.bufferDelta(threadId, messageId, runId, text);
+      if (!requestId || !messageId || !runId || !text) return;
+      this.bufferDelta(threadId, requestId, messageId, runId, text);
       return;
     }
 
     if (event.event === 'thinking:delta') {
       if (this.isSuppressed(threadId)) return;
+      const requestId = readRequestId(payload);
       const messageId = String(payload.message_id ?? '');
       const runId = payload.run_id ? String(payload.run_id) : '';
       const text = String(payload.text ?? '');
       const thinkingDisplay = String(payload.thinking_display ?? '').trim();
-      if (!messageId || !runId || !text || !thinkingDisplay) return;
-      this.bufferThinkingDelta(threadId, messageId, runId, text, thinkingDisplay);
+      if (!requestId || !messageId || !runId || !text || !thinkingDisplay) return;
+      this.bufferThinkingDelta(threadId, requestId, messageId, runId, text, thinkingDisplay);
       return;
     }
 
@@ -1026,11 +1091,12 @@ export class ThreadEventConsumer {
       // tool calls for this assistant message and replace with the payload
       // in a single batched store update to avoid per-item re-renders.
       const toolCalls = Array.isArray(payload.tool_calls) ? payload.tool_calls as Record<string, unknown>[] : [];
-      const toolMap = this.streamingToolCallsByThread.get(threadId);
-      if (toolMap) {
-        for (const tempId of toolMap.values()) this.streamingArgBuffers.delete(tempId);
+      const requestId = readRequestId(payload);
+      if (requestId) {
+        this.clearStreamingSession(buildSessionKey(threadId, requestId));
+      } else {
+        this.clearStreamingAssistantBuffers(threadId, messageId);
       }
-      this.streamingToolCallsByThread.delete(threadId);
 
       const now = nowIso();
       const newToolCalls: ThreadToolCall[] = [];
@@ -1102,6 +1168,10 @@ export class ThreadEventConsumer {
       this.flushDeltaBuffer();
       const messageId = String(payload.message_id ?? '');
       if (!messageId) return;
+      const requestId = readRequestId(payload);
+      if (requestId) {
+        this.clearStreamingSession(buildSessionKey(threadId, requestId));
+      }
       this.clearStreamingAssistantBuffers(threadId, messageId);
       const store = useThreadStore.getState();
       store.discardStreamingAssistantMessage(threadId, messageId);

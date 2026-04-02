@@ -55,7 +55,7 @@ function formatProjectStorageDetails(
       bytes: project.categories.image_run_bytes,
     },
     {
-      id: 'llm-logs',
+      id: 'llm-requests',
       label: t('settings.profile.storageCategoryLLMLogs'),
       value: formatBytes(project.categories.llm_log_bytes),
       bytes: project.categories.llm_log_bytes,

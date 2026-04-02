@@ -16,6 +16,7 @@ async def emit_message_start(
     run: RunModel,
     thread: Thread,
     assistant_message: RunMessageModel,
+    request_id: str,
 ) -> None:
     await callbacks.emit_fn(
         user_id=run.user_id,
@@ -25,6 +26,7 @@ async def emit_message_start(
         data={
             "run_id": str(run.id),
             "message_id": str(assistant_message.id),
+            "request_id": request_id,
             "role": "assistant",
             "seq": int(assistant_message.seq),
             "seq_in_thread": int(assistant_message.seq_in_thread),
@@ -38,6 +40,8 @@ async def emit_llm_request(
     run: RunModel,
     thread: Thread,
     assistant_message: RunMessageModel,
+    request_id: str,
+    retry_count: int,
     provider: str,
     model: str,
     raw_request: dict[str, Any],
@@ -50,6 +54,8 @@ async def emit_llm_request(
         data={
             "run_id": str(run.id),
             "message_id": str(assistant_message.id),
+            "request_id": request_id,
+            "retry_count": retry_count,
             "provider": provider,
             "model": model,
             "raw_request": raw_request,
@@ -63,6 +69,7 @@ async def emit_content_delta(
     run: RunModel,
     thread: Thread,
     assistant_message: RunMessageModel,
+    request_id: str,
     text: str,
 ) -> None:
     await callbacks.emit_fn(
@@ -73,6 +80,7 @@ async def emit_content_delta(
         data={
             "run_id": str(run.id),
             "message_id": str(assistant_message.id),
+            "request_id": request_id,
             "text": text,
         },
     )
@@ -84,6 +92,7 @@ async def emit_thinking_delta(
     run: RunModel,
     thread: Thread,
     assistant_message: RunMessageModel,
+    request_id: str,
     text: str,
     thinking_display: str,
 ) -> None:
@@ -95,6 +104,7 @@ async def emit_thinking_delta(
         data={
             "run_id": str(run.id),
             "message_id": str(assistant_message.id),
+            "request_id": request_id,
             "text": text,
             "thinking_display": thinking_display,
         },
@@ -107,6 +117,7 @@ async def emit_tool_call_start(
     run: RunModel,
     thread: Thread,
     assistant_message: RunMessageModel,
+    request_id: str,
     stream_key: str,
     tool_call_id: str,
     index: int | None,
@@ -118,6 +129,7 @@ async def emit_tool_call_start(
         event_name="tool_call:start",
         data={
             "run_id": str(run.id),
+            "request_id": request_id,
             "stream_key": stream_key,
             "tool_call_id": tool_call_id,
             "message_id": "",
@@ -133,6 +145,7 @@ async def emit_tool_call_delta(
     *,
     run: RunModel,
     thread: Thread,
+    request_id: str,
     stream_key: str,
     tool_call_id: str,
     index: int | None,
@@ -146,6 +159,7 @@ async def emit_tool_call_delta(
         event_name="tool_call:delta",
         data={
             "run_id": str(run.id),
+            "request_id": request_id,
             "stream_key": stream_key,
             "tool_call_id": tool_call_id,
             "index": index,
@@ -183,6 +197,7 @@ async def emit_terminal_events(
     run: RunModel,
     thread: Thread,
     assistant_message: RunMessageModel,
+    request_id: str,
     final_snapshot: FinalSnapshot,
     tool_call_summaries: list[dict[str, Any]],
 ) -> None:
@@ -194,6 +209,7 @@ async def emit_terminal_events(
         data={
             "run_id": str(run.id),
             "message_id": str(assistant_message.id),
+            "request_id": request_id,
             "provider": final_snapshot.provider,
             "model": final_snapshot.model,
             "raw_response": final_snapshot.raw_native_response,
@@ -208,6 +224,7 @@ async def emit_terminal_events(
         data={
             "run_id": str(run.id),
             "message_id": str(assistant_message.id),
+            "request_id": request_id,
             "seq_in_thread": int(assistant_message.seq_in_thread),
             "data": assistant_message.data,
             "tool_calls": tool_call_summaries,

@@ -24,6 +24,7 @@ def install_import_stubs() -> None:
     fake_database.Base = declarative_base()
     fake_database.SessionLocal = lambda: None
     fake_database.get_db = lambda: None
+    fake_database.short_session = lambda: None
     sys.modules["App.backend.database"] = fake_database
     sys.modules["database"] = fake_database
 
@@ -205,6 +206,7 @@ def install_import_stubs() -> None:
     @dataclass
     class ExecutionCheckpoint:
         message_id: object | None = None
+        request_id: str | None = None
         finalized: bool = False
 
     @dataclass(frozen=True)

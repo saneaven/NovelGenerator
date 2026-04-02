@@ -1365,26 +1365,35 @@ class RichTextImageRef(Base):
 
 
 # ============================================================================
-# LLM LOGGING
+# LLM REQUEST TRACKING
 # ============================================================================
 
-class LLMLog(Base):
-    """Persisted LLM request/response log entry."""
-    __tablename__ = "llm_logs"
+class LLMRequest(Base):
+    """Persisted LLM request tracking row."""
+    __tablename__ = "llm_requests"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    request_id = Column(String(40), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    thread_id = Column(UUID(as_uuid=True), nullable=False)
+    run_id = Column(UUID(as_uuid=True), nullable=False)
+    assistant_message_id = Column(UUID(as_uuid=True), nullable=False)
     provider = Column(String(50), nullable=False)
     model = Column(String(200), nullable=False)
-    raw_input = Column(JSONB, nullable=False)
+    status = Column(String(20), nullable=False, default="running")
+    retry_count = Column(Integer, nullable=False, default=0)
+    raw_input = Column(JSONB, nullable=True)
     raw_output = Column(JSONB, nullable=True)
     error = Column(Text, nullable=True)
-    status = Column(String(20), nullable=False, default="pending")
+    meta = Column(JSONB, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
-    meta = Column(JSONB, nullable=True)
 
     __table_args__ = (
-        Index("ix_llm_logs_user_created", "user_id", created_at.desc()),
+        UniqueConstraint("request_id", name="uq_llm_requests_request_id"),
+        UniqueConstraint("assistant_message_id", name="uq_llm_requests_assistant_message_id"),
+        Index("ix_llm_requests_user_created", "user_id", created_at.desc()),
+        Index("ix_llm_requests_run_id", "run_id"),
+        Index("ix_llm_requests_thread_id", "thread_id"),
     )

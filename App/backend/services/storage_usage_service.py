@@ -22,7 +22,7 @@ from ..models.db_models import (
     BasicInfo,
     Guidelines,
     ImageRunModel,
-    LLMLog,
+    LLMRequest,
     Manuscript,
     NotificationModel,
     Outline,
@@ -861,9 +861,9 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
     assets = db.query(Asset).filter(Asset.project_id == project_id).all()
     image_bytes = sum(measure_asset_row(row) for row in assets)
 
-    from .llm_log_service import _measure_log_row
-    llm_logs = db.query(LLMLog).filter(LLMLog.project_id == project_id).all()
-    llm_log_bytes = sum(_measure_log_row(row) for row in llm_logs)
+    from .llm_request_service import _measure_request_row
+    llm_requests = db.query(LLMRequest).filter(LLMRequest.project_id == project_id).all()
+    llm_log_bytes = sum(_measure_request_row(row) for row in llm_requests)
 
     return StorageUsageBreakdown(
         project_meta_bytes=int(project_meta_bytes),

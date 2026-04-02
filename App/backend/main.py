@@ -100,7 +100,7 @@ from .routes.sub_agent_routes import router as sub_agent_router
 from .routes.thread_routes import router as thread_router
 from .routes.journey_routes import router as journey_router
 from .routes.notification_routes import router as notification_router
-from .routes.llm_log_routes import router as llm_log_router
+from .routes.llm_request_routes import router as llm_request_router
 
 # Token counting routes
 from .routes.token_routes import router as token_router
@@ -182,7 +182,7 @@ app.include_router(sub_agent_router)
 app.include_router(thread_router)
 app.include_router(journey_router)
 app.include_router(notification_router)
-app.include_router(llm_log_router)
+app.include_router(llm_request_router)
 
 # Include token counting router
 app.include_router(token_router)

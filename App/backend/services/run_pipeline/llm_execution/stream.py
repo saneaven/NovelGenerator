@@ -17,7 +17,7 @@ from ....providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from ....providers.stream_retry import stream_with_retry
 from . import events
 from .contracts import LLMExecutionCallbacks, LLMExecutionRequest, PreparedLLMExecution, StreamExecutionResult
-from .log_session import LLMLogSession
+from .request_session import LLMRequestSession
 from .tool_delta_tracker import ToolDeltaTracker
 
 
@@ -27,6 +27,7 @@ async def execute_stream(
     prepared: PreparedLLMExecution,
     *,
     assistant_message,
+    request_id: str,
 ) -> StreamExecutionResult:
     run = request.run
     thread = request.thread
@@ -57,7 +58,22 @@ async def execute_stream(
             verbosity=advanced.get("verbosity"),
         )
 
-    stream = stream_with_retry(_create_stream, prepared.retry_cfg)
+    session = LLMRequestSession(
+        request_id=request_id,
+        user_id=run.user_id,
+        project_id=run.project_id,
+        thread_id=thread.id,
+        run_id=run.id,
+        assistant_message_id=assistant_message.id,
+        provider=task_config.provider,
+        model=task_config.model,
+        logging_enabled=bool(getattr(request.settings, "llm_logging_enabled", False)),
+    )
+
+    async def _on_retry(message: str, status: int | None, _attempt: int) -> None:
+        session.on_retry(message, status)
+
+    stream = stream_with_retry(_create_stream, prepared.retry_cfg, on_retry=_on_retry)
     assembler = FallbackSnapshotAssembler(provider=task_config.provider, model=task_config.model)
     content_normalizer = StreamContentNormalizer()
     tool_tracker = ToolDeltaTracker(
@@ -65,13 +81,7 @@ async def execute_stream(
         run=run,
         thread=thread,
         assistant_message=assistant_message,
-    )
-    log_session = LLMLogSession(
-        enabled=bool(getattr(request.settings, "llm_logging_enabled", False)),
-        user_id=run.user_id,
-        project_id=run.project_id,
-        provider=task_config.provider,
-        model=task_config.model,
+        request_id=request_id,
     )
     native_final = None
     merged_meta: MetaPayload | None = None
@@ -80,12 +90,14 @@ async def execute_stream(
     try:
         async for event in stream:
             if event.raw_request is not None:
-                log_session.on_request(event.raw_request)
+                session.on_request(event.raw_request)
                 await events.emit_llm_request(
                     callbacks,
                     run=run,
                     thread=thread,
                     assistant_message=assistant_message,
+                    request_id=request_id,
+                    retry_count=session.retry_count,
                     provider=task_config.provider,
                     model=task_config.model,
                     raw_request=event.raw_request,
@@ -107,6 +119,7 @@ async def execute_stream(
                         run=run,
                         thread=thread,
                         assistant_message=assistant_message,
+                        request_id=request_id,
                         text=delta.content_delta,
                     )
 
@@ -116,6 +129,7 @@ async def execute_stream(
                         run=run,
                         thread=thread,
                         assistant_message=assistant_message,
+                        request_id=request_id,
                         text=delta.thinking_delta,
                         thinking_display=prepared.stream_thinking_display,
                     )
@@ -128,14 +142,14 @@ async def execute_stream(
                 native_final = event.final_native
             elif event.kind == "error":
                 err: ProviderErrorPayload = event.error or ProviderErrorPayload(message="Unknown provider error", status=None)
-                log_session.fail(
+                session.fail(
                     err.message,
                     content_parts=assembler._content_parts,
                     merged_meta=merged_meta,
                 )
                 raise RuntimeError(err.message)
     except Exception as exc:
-        log_session.fail(
+        session.fail(
             str(exc),
             content_parts=assembler._content_parts,
             merged_meta=merged_meta,
@@ -155,15 +169,16 @@ async def execute_stream(
             final_snapshot = extract_native_tool_calls_from_snapshot(final_snapshot)
         final_snapshot = normalize_final_snapshot_content(final_snapshot)
     except Exception as exc:
-        log_session.fail(
+        session.fail(
             str(exc),
             content_parts=assembler._content_parts,
             merged_meta=merged_meta,
         )
         raise
 
-    log_session.complete(final_snapshot.raw_native_response or raw_response)
+    session.complete(final_snapshot.raw_native_response or raw_response, merged_meta)
     return StreamExecutionResult(
         final_snapshot=final_snapshot,
         raw_response=raw_response,
+        request_id=request_id,
     )

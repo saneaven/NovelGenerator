@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, AsyncGenerator, Callable, Optional
+from typing import Any, AsyncGenerator, Awaitable, Callable, Optional
 
 from .contracts import DeltaPayload, ProviderErrorPayload, ProviderEvent
 
@@ -68,6 +68,7 @@ def _has_content(delta: Optional[DeltaPayload]) -> bool:
 async def stream_with_retry(
     stream_factory: Callable[[], AsyncGenerator[ProviderEvent, None]],
     retry_config: NormalizedRetryConfig | None,
+    on_retry: Callable[[str, int | None, int], Awaitable[None]] | None = None,
 ) -> AsyncGenerator[ProviderEvent, None]:
     """Wrap a provider stream with automatic retry on transient errors.
 
@@ -114,6 +115,8 @@ async def stream_with_retry(
                             retry_config.max_retries,
                             error.message,
                         )
+                        if on_retry is not None:
+                            await on_retry(error.message, error.status, attempt)
                         should_retry = True
                         break  # break inner loop to retry
 

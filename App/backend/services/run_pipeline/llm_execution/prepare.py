@@ -231,12 +231,6 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
 
     provider_messages = _strip_internal_message_keys(messages)
 
-    if task_config.provider == "custom":
-        from ....providers.custom import build_request_context
-
-        ctx = build_request_context(run=run, thread=thread, provider_messages=provider_messages, task_config=task_config)
-        provider.set_request_context(ctx)
-
     if advanced.get("_resolved_template"):
         effective_thinking_config = None
     else:

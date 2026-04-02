@@ -35,7 +35,15 @@ from ..utils.outbound_http import (
 from ..utils.template_vars import resolve_value
 
 
-def build_request_context(run: Any, thread: Any, provider_messages: list[Dict], task_config: Any) -> Dict[str, Any]:
+def build_request_context(
+    run: Any,
+    thread: Any,
+    provider_messages: list[Dict],
+    task_config: Any,
+    *,
+    request_id: str,
+    assistant_message_id: str,
+) -> Dict[str, Any]:
     """Build the Jinja2 template context for custom provider headers/body."""
     last_role = ""
     for msg in reversed(provider_messages):
@@ -50,6 +58,8 @@ def build_request_context(run: Any, thread: Any, provider_messages: list[Dict], 
         "is_sub_agent": thread.thread_type == "subAgent",
         "parent_run_id": str(run.parent_run_id or ""),
         "last_role": last_role,
+        "request_id": str(request_id or ""),
+        "assistant_message_id": str(assistant_message_id or ""),
         "model": str(getattr(task_config, "model", "") or ""),
         "run_seq": str(getattr(run, "run_seq", "") or ""),
     }

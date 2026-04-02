@@ -143,12 +143,14 @@ def test_execute_loop_midstream_failure_emits_message_error_and_discards_placeho
     )
     session = FakeSession(run=run, thread=thread, assistant_message=assistant_message)
     stack = build_runtime_stack(lambda: session)
+    request_fail_calls: list[dict[str, object]] = []
 
     async def _assemble_create(*_args: object, **_kwargs: object) -> tuple[str, list[dict[str, object]], None]:
         return "system", [], None
 
     async def _failing_execute(_self: object, request: object, _callbacks: object) -> None:
         request.checkpoint.message_id = assistant_message.id
+        request.checkpoint.request_id = "req_123"
         request.checkpoint.finalized = False
         raise RuntimeError("stream blew up")
 
@@ -156,6 +158,11 @@ def test_execute_loop_midstream_failure_emits_message_error_and_discards_placeho
         execution_loop_module.settings_service,
         "_get_settings",
         lambda *_args, **_kwargs: UserSettings(),
+    )
+    monkeypatch.setattr(
+        execution_loop_module.llm_request_service,
+        "fail",
+        lambda request_id, **kwargs: request_fail_calls.append({"request_id": request_id, **kwargs}),
     )
     monkeypatch.setattr(execution_loop_module.prompt_assembly, "assemble_create", _assemble_create)
     monkeypatch.setattr(execution_loop_module.LLMExecutionOrchestrator, "execute", _failing_execute)
@@ -179,8 +186,16 @@ def test_execute_loop_midstream_failure_emits_message_error_and_discards_placeho
     assert stack.dispatcher.events[1]["data"] == {
         "run_id": str(run.id),
         "message_id": str(assistant_message.id),
+        "request_id": "req_123",
         "error": "stream blew up",
     }
+    assert request_fail_calls == [
+        {
+            "request_id": "req_123",
+            "error": "stream blew up",
+            "meta": None,
+        }
+    ]
     assert not any(event["event_name"] == "message:end" for event in stack.dispatcher.events)
 
 

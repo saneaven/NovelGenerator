@@ -252,6 +252,20 @@ class TestStreamWithRetry:
         mock_sleep = asyncio.run(_run())
         mock_sleep.assert_called_once_with(2.5)
 
+    def test_on_retry_callback_receives_error_details(self):
+        attempt_1 = [_error_event(429, "rate limited")]
+        attempt_2 = [_delta_event("ok")]
+        factory = _make_factory([attempt_1, attempt_2])
+
+        async def _run():
+            on_retry = AsyncMock()
+            with patch(SLEEP_TARGET, new_callable=AsyncMock):
+                await _collect(stream_with_retry(factory, DEFAULT_CFG, on_retry=on_retry))
+            return on_retry
+
+        on_retry = asyncio.run(_run())
+        on_retry.assert_awaited_once_with("rate limited", 429, 1)
+
     def test_meta_events_do_not_block_retry(self):
         """Meta and raw_request events are yielded but don't prevent retry."""
         attempt_1 = [_meta_event(), _meta_event(), _error_event(502)]

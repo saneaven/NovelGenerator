@@ -6,24 +6,29 @@ import apiClient from '../../api/client';
 import { confirm } from '../../store/dialogStore';
 import './LLMLogViewer.css';
 
-interface LLMLogSummary {
-  id: string;
+interface LLMRequestSummary {
+  request_id: string;
   provider: string;
   model: string;
   status: string;
   created_at: string;
   completed_at: string | null;
+  retry_count: number;
   meta: { response_time_ms?: number } | null;
 }
 
-interface LLMLogDetail extends LLMLogSummary {
-  raw_input: Record<string, unknown>;
+interface LLMRequestDetail extends LLMRequestSummary {
+  run_id: string;
+  thread_id: string;
+  assistant_message_id: string;
+  raw_input: Record<string, unknown> | null;
   raw_output: Record<string, unknown> | null;
   error: string | null;
+  meta: { response_time_ms?: number; retry_errors?: Array<Record<string, unknown>> } | null;
 }
 
-interface LLMLogListResponse {
-  items: LLMLogSummary[];
+interface LLMRequestListResponse {
+  items: LLMRequestSummary[];
   total: number;
 }
 
@@ -46,18 +51,18 @@ function formatDuration(ms: number | undefined | null): string {
 
 const LLMLogViewer: React.FC<LLMLogViewerProps> = ({ onClose }) => {
   const { t } = useTranslation();
-  const [logs, setLogs] = useState<LLMLogSummary[]>([]);
+  const [logs, setLogs] = useState<LLMRequestSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<LLMLogDetail | null>(null);
+  const [detail, setDetail] = useState<LLMRequestDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
   const fetchLogs = useCallback(async (offset = 0, append = false) => {
     setLoading(true);
     try {
-      const res = await apiClient.request<LLMLogListResponse>(
-        'GET', `/api/v1/llm-logs?limit=${PAGE_SIZE}&offset=${offset}`,
+      const res = await apiClient.request<LLMRequestListResponse>(
+        'GET', `/api/v1/llm-requests?limit=${PAGE_SIZE}&offset=${offset}`,
       );
       setLogs(prev => append ? [...prev, ...res.items] : res.items);
       setTotal(res.total);
@@ -80,7 +85,7 @@ const LLMLogViewer: React.FC<LLMLogViewerProps> = ({ onClose }) => {
     setDetail(null);
     setDetailLoading(true);
     try {
-      const res = await apiClient.request<LLMLogDetail>('GET', `/api/v1/llm-logs/${id}`);
+      const res = await apiClient.request<LLMRequestDetail>('GET', `/api/v1/llm-requests/${id}`);
       setDetail(res);
     } catch {
       // silently fail
@@ -98,7 +103,7 @@ const LLMLogViewer: React.FC<LLMLogViewerProps> = ({ onClose }) => {
     });
     if (!ok) return;
     try {
-      await apiClient.request('DELETE', '/api/v1/llm-logs');
+      await apiClient.request('DELETE', '/api/v1/llm-requests');
       setLogs([]);
       setTotal(0);
       setExpandedId(null);
@@ -138,39 +143,52 @@ const LLMLogViewer: React.FC<LLMLogViewerProps> = ({ onClose }) => {
 
         <div className="llm-log-list">
           {logs.map((log) => (
-            <div key={log.id} className={`llm-log-row ${expandedId === log.id ? 'expanded' : ''}`}>
-              <div className="llm-log-summary" onClick={() => handleExpand(log.id)}>
+            <div key={log.request_id} className={`llm-log-row ${expandedId === log.request_id ? 'expanded' : ''}`}>
+              <div className="llm-log-summary" onClick={() => handleExpand(log.request_id)}>
                 <span className={`llm-log-status llm-log-status--${log.status}`}>
                   {log.status}
                 </span>
+                <span className="llm-log-request-id">{log.request_id}</span>
                 <span className="llm-log-provider">{log.provider}</span>
                 <span className="llm-log-model">{log.model}</span>
+                <span className="llm-log-retries">r{log.retry_count}</span>
                 <span className="llm-log-time">{formatTime(log.created_at)}</span>
                 <span className="llm-log-duration">
                   {formatDuration(log.meta?.response_time_ms)}
                 </span>
               </div>
 
-              {expandedId === log.id && (
+              {expandedId === log.request_id && (
                 <div className="llm-log-detail">
                   {detailLoading && <div className="llm-log-detail-loading">Loading...</div>}
-                  {detail && detail.id === log.id && (
+                  {detail && detail.request_id === log.request_id && (
                     <>
+                      <div className="llm-log-meta-grid">
+                        <div><strong>Request ID:</strong> {detail.request_id}</div>
+                        <div><strong>Run ID:</strong> {detail.run_id}</div>
+                        <div><strong>Thread ID:</strong> {detail.thread_id}</div>
+                        <div><strong>Assistant Message ID:</strong> {detail.assistant_message_id}</div>
+                        <div><strong>Retries:</strong> {detail.retry_count}</div>
+                      </div>
                       {detail.error && (
                         <div className="llm-log-error">
                           <strong>Error:</strong> {detail.error}
                         </div>
                       )}
-                      <div className="llm-log-payload">
-                        <h4>Raw Input</h4>
-                        <pre>{JSON.stringify(detail.raw_input, null, 2)}</pre>
-                      </div>
-                      {detail.raw_output && (
+                      {Array.isArray(detail.meta?.retry_errors) && detail.meta.retry_errors.length > 0 && (
                         <div className="llm-log-payload">
-                          <h4>Raw Output</h4>
-                          <pre>{JSON.stringify(detail.raw_output, null, 2)}</pre>
+                          <h4>Retry Errors</h4>
+                          <pre>{JSON.stringify(detail.meta.retry_errors, null, 2)}</pre>
                         </div>
                       )}
+                      <div className="llm-log-payload">
+                        <h4>Raw Input</h4>
+                        <pre>{detail.raw_input === null ? 'Logging disabled' : JSON.stringify(detail.raw_input, null, 2)}</pre>
+                      </div>
+                      <div className="llm-log-payload">
+                        <h4>Raw Output</h4>
+                        <pre>{detail.raw_output === null ? 'Logging disabled' : JSON.stringify(detail.raw_output, null, 2)}</pre>
+                      </div>
                     </>
                   )}
                 </div>

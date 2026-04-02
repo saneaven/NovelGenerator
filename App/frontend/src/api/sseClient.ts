@@ -51,11 +51,11 @@ export type ThreadRuntimeEvent =
   | { event: 'run:status'; data: RuntimeEventBase & { status: RunStatus; error?: string | null } }
   | { event: 'thread:snapshot_invalidated'; data: RuntimeEventBase }
   | { event: 'message:user'; data: RuntimeEventBase & { message_id: string; role: 'user'; seq: number; seq_in_thread: number; data: Record<string, unknown>; attachments?: Record<string, unknown>[] } }
-  | { event: 'message:start'; data: RuntimeEventBase & { message_id: string; role: 'assistant'; seq: number; seq_in_thread: number } }
-  | { event: 'content:delta'; data: RuntimeEventBase & { message_id: string; text: string } }
-  | { event: 'thinking:delta'; data: RuntimeEventBase & { message_id: string; text: string; thinking_display: string } }
-  | { event: 'tool_call:start'; data: RuntimeEventBase & { stream_key: string; tool_call_id: string; message_id: string; assistant_message_id: string; index?: number | null; name: string } }
-  | { event: 'tool_call:delta'; data: RuntimeEventBase & { stream_key: string; tool_call_id: string; index?: number | null; arguments_delta: string; name?: string } }
+  | { event: 'message:start'; data: RuntimeEventBase & { request_id?: string; message_id: string; role: 'assistant'; seq: number; seq_in_thread: number } }
+  | { event: 'content:delta'; data: RuntimeEventBase & { request_id?: string; message_id: string; text: string } }
+  | { event: 'thinking:delta'; data: RuntimeEventBase & { request_id?: string; message_id: string; text: string; thinking_display: string } }
+  | { event: 'tool_call:start'; data: RuntimeEventBase & { request_id?: string; stream_key: string; tool_call_id: string; message_id: string; assistant_message_id: string; index?: number | null; name: string } }
+  | { event: 'tool_call:delta'; data: RuntimeEventBase & { request_id?: string; stream_key: string; tool_call_id: string; index?: number | null; arguments_delta: string; name?: string } }
   | { event: 'tool_call:end'; data: RuntimeEventBase & { stream_key?: string; tool_call_id: string; message_id: string; assistant_message_id: string; index?: number | null; name: string; arguments: Record<string, unknown>; extra_content?: Record<string, unknown> | null; status?: ToolCallStatus } }
   | { event: 'tool_call:status'; data: RuntimeEventBase & {
       tool_call_id: string;
@@ -68,8 +68,9 @@ export type ThreadRuntimeEvent =
       child_thread_id?: string | null;
     } }
   | { event: 'message:update'; data: RuntimeEventBase & { message_id: string; data: Record<string, unknown> } }
-  | { event: 'message:error'; data: RuntimeEventBase & { message_id: string; error: string } }
+  | { event: 'message:error'; data: RuntimeEventBase & { request_id?: string; message_id: string; error: string } }
   | { event: 'message:end'; data: RuntimeEventBase & {
+      request_id?: string;
       message_id: string;
       seq_in_thread: number;
       data: Record<string, unknown>;
@@ -90,12 +91,15 @@ export type ThreadRuntimeEvent =
   | { event: 'run:error'; data: RuntimeEventBase & { error: string } }
   | { event: 'run:canceled'; data: RuntimeEventBase }
   | { event: 'llm:request'; data: RuntimeEventBase & {
+      request_id?: string;
+      retry_count?: number;
       message_id: string;
       provider: string;
       model: string;
       raw_request: Record<string, unknown>;
     }}
   | { event: 'llm:response'; data: RuntimeEventBase & {
+      request_id?: string;
       message_id: string;
       provider: string;
       model: string;

@@ -10,6 +10,7 @@ from jinja2.sandbox import SecurityError
 from sqlalchemy.orm import Session
 
 from ...models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thread, UserSettings
+from ..llm_request_service import llm_request_service
 from ..run_status_policy import RUN_EXECUTION_NOOP_STATUSES
 from ..settings_service import settings_service
 from ..storage_usage_service import (
@@ -218,6 +219,15 @@ class RunPipelineExecutionLoop:
             logger.error("Run %s failed: %s", run_id, exc, exc_info=True)
             db.rollback()
             user_error = format_user_run_error(exc)
+            if execution_checkpoint.request_id and not execution_checkpoint.finalized:
+                try:
+                    llm_request_service.fail(
+                        execution_checkpoint.request_id,
+                        error=user_error,
+                        meta=None,
+                    )
+                except Exception:
+                    logger.warning("Failed to finalize LLM request row after run failure", exc_info=True)
             run = db.query(RunModel).filter(RunModel.id == run_id).first()
             if run is not None:
                 thread = run.thread
@@ -234,6 +244,7 @@ class RunPipelineExecutionLoop:
                                 {
                                     "run_id": str(run.id),
                                     "message_id": str(discarded_message_id),
+                                    "request_id": execution_checkpoint.request_id,
                                     "error": user_error,
                                 },
                             )

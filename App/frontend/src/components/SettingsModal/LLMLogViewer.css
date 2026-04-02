@@ -90,6 +90,14 @@
   font-weight: var(--font-weight-medium);
 }
 
+.llm-log-request-id,
+.llm-log-retries {
+  flex-shrink: 0;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
 .llm-log-model {
   flex: 1;
   min-width: 0;
@@ -127,6 +135,15 @@
   padding: var(--spacing-md);
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
+}
+
+.llm-log-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 .llm-log-error {

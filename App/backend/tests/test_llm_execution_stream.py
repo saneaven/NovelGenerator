@@ -80,14 +80,14 @@ def _install_import_stubs() -> None:
     fake_tool_contracts.ToolOffer = ToolOffer
     sys.modules["App.backend.services.tool_engine.contracts"] = fake_tool_contracts
 
-    fake_llm_log_service = types.ModuleType("App.backend.services.llm_log_service")
-    fake_llm_log_service.llm_log_service = SimpleNamespace(
-        create_log=lambda **_kwargs: "log-1",
-        reset_log=lambda *_args, **_kwargs: None,
-        complete_log=lambda *_args, **_kwargs: None,
-        fail_log=lambda *_args, **_kwargs: None,
+    fake_llm_request_service = types.ModuleType("App.backend.services.llm_request_service")
+    fake_llm_request_service.llm_request_service = SimpleNamespace(
+        update_request=lambda *_args, **_kwargs: None,
+        on_retry=lambda *_args, **_kwargs: None,
+        complete=lambda *_args, **_kwargs: None,
+        fail=lambda *_args, **_kwargs: None,
     )
-    sys.modules["App.backend.services.llm_log_service"] = fake_llm_log_service
+    sys.modules["App.backend.services.llm_request_service"] = fake_llm_request_service
 
     fake_run_pipeline = types.ModuleType("App.backend.services.run_pipeline")
     fake_run_pipeline.__path__ = [str(ROOT / "App" / "backend" / "services" / "run_pipeline")]
@@ -156,17 +156,21 @@ def _make_prepared(provider: object, **overrides: object) -> SimpleNamespace:
     )
 
 
-def test_execute_stream_fails_log_session_on_provider_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_execute_stream_fails_request_session_on_provider_error(monkeypatch: pytest.MonkeyPatch) -> None:
     run, thread, assistant_message = _make_run_thread_message()
     emitted: list[str] = []
     log_events: list[tuple[str, object]] = []
 
-    class FakeLogSession:
+    class FakeRequestSession:
         def __init__(self, **_kwargs) -> None:
             self._closed = False
+            self.retry_count = 0
 
         def on_request(self, raw_request: dict[str, object]) -> None:
             log_events.append(("request", raw_request))
+
+        def on_retry(self, error_msg: str, error_status: int | None) -> None:
+            log_events.append(("retry", {"message": error_msg, "status": error_status}))
 
         def fail(self, error_msg: str, *, content_parts, merged_meta) -> None:  # noqa: ANN001
             if self._closed:
@@ -174,7 +178,7 @@ def test_execute_stream_fails_log_session_on_provider_error(monkeypatch: pytest.
             self._closed = True
             log_events.append(("fail", error_msg))
 
-        def complete(self, raw_output) -> None:  # noqa: ANN001
+        def complete(self, raw_output, merged_meta) -> None:  # noqa: ANN001
             if self._closed:
                 return
             self._closed = True
@@ -191,7 +195,7 @@ def test_execute_stream_fails_log_session_on_provider_error(monkeypatch: pytest.
     async def _emit(**kwargs) -> None:
         emitted.append(kwargs["event_name"])
 
-    monkeypatch.setattr(stream_module, "LLMLogSession", FakeLogSession)
+    monkeypatch.setattr(stream_module, "LLMRequestSession", FakeRequestSession)
 
     with pytest.raises(RuntimeError, match="boom"):
         asyncio.run(
@@ -204,6 +208,7 @@ def test_execute_stream_fails_log_session_on_provider_error(monkeypatch: pytest.
                 SimpleNamespace(emit_fn=_emit),
                 _make_prepared(ErrorProvider()),
                 assistant_message=assistant_message,
+                request_id="req_test",
             )
         )
 
@@ -211,16 +216,20 @@ def test_execute_stream_fails_log_session_on_provider_error(monkeypatch: pytest.
     assert log_events == [("request", {"messages": []}), ("fail", "boom")]
 
 
-def test_execute_stream_fails_log_session_on_finalize_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_execute_stream_fails_request_session_on_finalize_error(monkeypatch: pytest.MonkeyPatch) -> None:
     run, thread, assistant_message = _make_run_thread_message()
     log_events: list[tuple[str, object]] = []
 
-    class FakeLogSession:
+    class FakeRequestSession:
         def __init__(self, **_kwargs) -> None:
             self._closed = False
+            self.retry_count = 0
 
         def on_request(self, raw_request: dict[str, object]) -> None:
             log_events.append(("request", raw_request))
+
+        def on_retry(self, error_msg: str, error_status: int | None) -> None:
+            log_events.append(("retry", {"message": error_msg, "status": error_status}))
 
         def fail(self, error_msg: str, *, content_parts, merged_meta) -> None:  # noqa: ANN001
             if self._closed:
@@ -228,7 +237,7 @@ def test_execute_stream_fails_log_session_on_finalize_error(monkeypatch: pytest.
             self._closed = True
             log_events.append(("fail", error_msg))
 
-        def complete(self, raw_output) -> None:  # noqa: ANN001
+        def complete(self, raw_output, merged_meta) -> None:  # noqa: ANN001
             if self._closed:
                 return
             self._closed = True
@@ -246,7 +255,7 @@ def test_execute_stream_fails_log_session_on_finalize_error(monkeypatch: pytest.
     async def _emit(**_kwargs) -> None:
         return None
 
-    monkeypatch.setattr(stream_module, "LLMLogSession", FakeLogSession)
+    monkeypatch.setattr(stream_module, "LLMRequestSession", FakeRequestSession)
 
     with pytest.raises(ValueError, match="Unable to assemble final snapshot"):
         asyncio.run(
@@ -259,6 +268,7 @@ def test_execute_stream_fails_log_session_on_finalize_error(monkeypatch: pytest.
                 SimpleNamespace(emit_fn=_emit),
                 _make_prepared(EmptyProvider()),
                 assistant_message=assistant_message,
+                request_id="req_test",
             )
         )
 
@@ -272,12 +282,16 @@ def test_execute_stream_merges_mixed_id_index_tool_call_deltas(monkeypatch: pyte
     emitted: list[str] = []
     log_events: list[tuple[str, object]] = []
 
-    class FakeLogSession:
+    class FakeRequestSession:
         def __init__(self, **_kwargs) -> None:
             self._closed = False
+            self.retry_count = 0
 
         def on_request(self, raw_request: dict[str, object]) -> None:
             log_events.append(("request", raw_request))
+
+        def on_retry(self, error_msg: str, error_status: int | None) -> None:
+            log_events.append(("retry", {"message": error_msg, "status": error_status}))
 
         def fail(self, error_msg: str, *, content_parts, merged_meta) -> None:  # noqa: ANN001
             if self._closed:
@@ -285,7 +299,7 @@ def test_execute_stream_merges_mixed_id_index_tool_call_deltas(monkeypatch: pyte
             self._closed = True
             log_events.append(("fail", error_msg))
 
-        def complete(self, raw_output) -> None:  # noqa: ANN001
+        def complete(self, raw_output, merged_meta) -> None:  # noqa: ANN001
             if self._closed:
                 return
             self._closed = True
@@ -329,7 +343,7 @@ def test_execute_stream_merges_mixed_id_index_tool_call_deltas(monkeypatch: pyte
     async def _emit(**kwargs) -> None:
         emitted.append(kwargs["event_name"])
 
-    monkeypatch.setattr(stream_module, "LLMLogSession", FakeLogSession)
+    monkeypatch.setattr(stream_module, "LLMRequestSession", FakeRequestSession)
 
     result = asyncio.run(
         stream_module.execute_stream(
@@ -341,6 +355,7 @@ def test_execute_stream_merges_mixed_id_index_tool_call_deltas(monkeypatch: pyte
             SimpleNamespace(emit_fn=_emit),
             _make_prepared(ToolProvider()),
             assistant_message=assistant_message,
+            request_id="req_test",
         )
     )
 

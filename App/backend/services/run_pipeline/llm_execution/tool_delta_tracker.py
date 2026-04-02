@@ -92,11 +92,13 @@ class ToolDeltaTracker:
         run: RunModel,
         thread: Thread,
         assistant_message: RunMessageModel,
+        request_id: str,
     ) -> None:
         self._callbacks = callbacks
         self._run = run
         self._thread = thread
         self._assistant_message = assistant_message
+        self._request_id = request_id
         self._delta_state_by_key: dict[str, ToolDeltaState] = {}
         self._state_key_by_index: dict[int, str] = {}
         self._anonymous_tool_call_counter = 0
@@ -128,6 +130,7 @@ class ToolDeltaTracker:
                     run=self._run,
                     thread=self._thread,
                     assistant_message=self._assistant_message,
+                    request_id=self._request_id,
                     stream_key=stream_key,
                     tool_call_id=llm_call_id,
                     index=idx,
@@ -148,6 +151,7 @@ class ToolDeltaTracker:
                     self._callbacks,
                     run=self._run,
                     thread=self._thread,
+                    request_id=self._request_id,
                     stream_key=stream_key,
                     tool_call_id=state.llm_call_id,
                     index=idx,
