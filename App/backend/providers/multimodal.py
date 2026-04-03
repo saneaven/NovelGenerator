@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 from typing import Any
 
 from ..models.db_models import RunMessageAttachmentModel
@@ -34,6 +35,8 @@ def attachment_to_content_part(attachment: RunMessageAttachmentModel) -> dict[st
         base["width"] = int(attachment.width) if attachment.width is not None else None
         base["height"] = int(attachment.height) if attachment.height is not None else None
         return {"type": "image", **base}
+    if attachment.kind == "text_file":
+        return {"type": "text_file", **base}
     return {"type": "file", **base}
 
 
@@ -47,6 +50,17 @@ def _load_binary_part(part: dict[str, Any]) -> tuple[str, str, bytes]:
     return mime_type, filename, data
 
 
+def _load_text_part(part: dict[str, Any]) -> str:
+    _mime_type, _filename, data = _load_binary_part(part)
+    return data.decode("utf-8", errors="replace")
+
+
+def _format_text_file(filename: str, mime_type: str, text: str) -> str:
+    safe_filename = escape(str(filename or "attachment"), quote=True)
+    safe_mime_type = escape(str(mime_type or "text/plain"), quote=True)
+    return f'<attached_file name="{safe_filename}" type="{safe_mime_type}">\n{text}\n</attached_file>'
+
+
 def build_openai_chat_content(parts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for part in parts:
@@ -55,6 +69,18 @@ def build_openai_chat_content(parts: list[dict[str, Any]]) -> list[dict[str, Any
             text = part.get("text")
             if isinstance(text, str) and text:
                 out.append({"type": "text", "text": text})
+            continue
+        if part_type == "text_file":
+            out.append(
+                {
+                    "type": "text",
+                    "text": _format_text_file(
+                        str(part.get("filename") or ""),
+                        str(part.get("mime_type") or ""),
+                        _load_text_part(part),
+                    ),
+                }
+            )
             continue
         if part_type == "image":
             mime_type, _filename, data = _load_binary_part(part)
@@ -88,6 +114,18 @@ def build_openai_responses_content(parts: list[dict[str, Any]], *, role: str) ->
             if isinstance(text, str) and text:
                 out.append({"type": "output_text" if role == "assistant" else "input_text", "text": text})
             continue
+        if part_type == "text_file":
+            out.append(
+                {
+                    "type": "output_text" if role == "assistant" else "input_text",
+                    "text": _format_text_file(
+                        str(part.get("filename") or ""),
+                        str(part.get("mime_type") or ""),
+                        _load_text_part(part),
+                    ),
+                }
+            )
+            continue
         if role == "assistant":
             continue
         if part_type == "image":
@@ -114,6 +152,18 @@ def build_claude_content(parts: list[dict[str, Any]]) -> list[dict[str, Any]]:
             text = part.get("text")
             if isinstance(text, str) and text:
                 out.append({"type": "text", "text": text})
+            continue
+        if part_type == "text_file":
+            out.append(
+                {
+                    "type": "text",
+                    "text": _format_text_file(
+                        str(part.get("filename") or ""),
+                        str(part.get("mime_type") or ""),
+                        _load_text_part(part),
+                    ),
+                }
+            )
             continue
         if part_type == "image":
             mime_type, _filename, data = _load_binary_part(part)
@@ -151,6 +201,18 @@ def build_gemini_binary_parts(parts: list[dict[str, Any]]) -> list[dict[str, Any
             text = part.get("text")
             if isinstance(text, str) and text:
                 out.append({"type": "text", "text": text})
+            continue
+        if part_type == "text_file":
+            out.append(
+                {
+                    "type": "text",
+                    "text": _format_text_file(
+                        str(part.get("filename") or ""),
+                        str(part.get("mime_type") or ""),
+                        _load_text_part(part),
+                    ),
+                }
+            )
             continue
         if part_type in {"image", "file"}:
             mime_type, filename, data = _load_binary_part(part)

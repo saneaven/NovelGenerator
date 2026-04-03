@@ -51,6 +51,7 @@ import {
   Upload,
   Document,
   Image as ImageIcon,
+  Text,
   Close,
 } from '../../../components/icons';
 import '../../../pages/workspace/styles/AgentPanel.css';
@@ -246,7 +247,11 @@ const PendingAttachmentCard: React.FC<{
             className="agent-composer-attachment-image"
           />
         ) : (
-          attachment.kind === 'image' ? <ImageIcon size="md" /> : <Document size="md" />
+          attachment.kind === 'image'
+            ? <ImageIcon size="md" />
+            : attachment.kind === 'text_file'
+              ? <Text size="md" />
+              : <Document size="md" />
         )}
       </div>
       <div className="agent-composer-attachment-meta">
@@ -326,9 +331,11 @@ const MessageMcpChipRow: React.FC<{
 const MessageAttachmentBlock: React.FC<{
   attachments: ThreadMessage['attachments'];
 }> = React.memo(({ attachments }) => {
+  const { t } = useTranslation();
   const sortedAttachments = [...attachments].sort((a, b) => a.sortOrder - b.sortOrder);
   const imageAttachments = sortedAttachments.filter((attachment) => attachment.kind === 'image');
   const documentAttachments = sortedAttachments.filter((attachment) => attachment.kind === 'document');
+  const textFileAttachments = sortedAttachments.filter((attachment) => attachment.kind === 'text_file');
 
   if (sortedAttachments.length === 0) {
     return null;
@@ -368,6 +375,49 @@ const MessageAttachmentBlock: React.FC<{
                   {formatAttachmentSize(attachment.fileSize)}
                 </div>
               </div>
+              {attachment.url ? (
+                <a
+                  href={attachment.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="message-attachment-document-link"
+                >
+                  {t('agent.viewAttachment')}
+                </a>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {textFileAttachments.length > 0 && (
+        <div className="message-attachments-documents">
+          {textFileAttachments.map((attachment) => (
+            <div key={attachment.id} className="message-attachment-document-card">
+              <div className="message-attachment-document-icon" aria-hidden="true">
+                <Text size="md" />
+              </div>
+              <div className="message-attachment-document-meta">
+                <div
+                  className="message-attachment-document-name"
+                  title={attachment.originalFilename}
+                >
+                  {attachment.originalFilename}
+                </div>
+                <div className="message-attachment-document-size">
+                  {formatAttachmentSize(attachment.fileSize)}
+                </div>
+              </div>
+              {attachment.url ? (
+                <a
+                  href={attachment.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="message-attachment-document-link"
+                >
+                  {t('agent.viewAttachment')}
+                </a>
+              ) : null}
             </div>
           ))}
         </div>
@@ -1255,7 +1305,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
 
     for (const file of files) {
       const mimeType = (file.type || '').toLowerCase();
-      if (!isSupportedAttachmentMimeType(mimeType)) {
+      if (!isSupportedAttachmentMimeType(mimeType, file.name)) {
         showAlert({
           title: t('agent.addFiles'),
           message: t('agent.unsupportedAttachmentType', { filename: file.name || 'file' }),

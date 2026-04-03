@@ -1226,6 +1226,8 @@
     "tooManyAttachments": "You can attach up to {{count}} files per message.",
     "imageCount": "Image {{count}}",
     "pdfCount": "PDF {{count}}",
+    "textFileCount": "{{count}} text file(s)",
+    "viewAttachment": "View",
     "viewAgentList": "View agent list",
     "agents": "Agents",
     "aiAgent": "AI Agent",

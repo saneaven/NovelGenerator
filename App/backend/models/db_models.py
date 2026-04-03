@@ -1064,7 +1064,7 @@ class RunMessageModel(Base):
 
 
 class RunMessageAttachmentModel(Base):
-    """Binary attachments stored alongside a run message."""
+    """Attachments stored alongside a run message."""
     __tablename__ = "run_message_attachments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -1088,7 +1088,7 @@ class RunMessageAttachmentModel(Base):
     message = relationship("RunMessageModel", back_populates="attachments")
 
     __table_args__ = (
-        CheckConstraint("kind IN ('image','document')", name="ck_run_message_attachments_kind"),
+        CheckConstraint("kind IN ('image','document','text_file')", name="ck_run_message_attachments_kind"),
         UniqueConstraint("message_id", "sort_order", name="uq_run_message_attachments_message_sort"),
         Index("ix_run_message_attachments_thread_created", "thread_id", "created_at"),
     )

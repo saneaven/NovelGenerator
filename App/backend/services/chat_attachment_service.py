@@ -27,12 +27,35 @@ CHAT_ATTACHMENT_MAX_FILES = max(1, _int_env("CHAT_ATTACHMENT_MAX_FILES", 5))
 CHAT_ATTACHMENT_MAX_FILE_BYTES = max(1, _int_env("CHAT_ATTACHMENT_MAX_FILE_BYTES", 10 * 1024 * 1024))
 CHAT_ATTACHMENT_MAX_TOTAL_BYTES = max(CHAT_ATTACHMENT_MAX_FILE_BYTES, _int_env("CHAT_ATTACHMENT_MAX_TOTAL_BYTES", 20 * 1024 * 1024))
 CHAT_ATTACHMENT_STORAGE_PREFIX = "chat-attachments"
+ALLOWED_TEXT_MIME_TYPES = {
+    "text/plain",
+    "text/csv",
+    "text/xml",
+    "text/html",
+    "text/markdown",
+    "application/json",
+    "application/xml",
+    "application/yaml",
+    "application/x-yaml",
+    "application/toml",
+}
 ALLOWED_ATTACHMENT_MIME_TYPES = {
     "image/png",
     "image/jpeg",
     "image/webp",
     "image/gif",
     "application/pdf",
+}.union(ALLOWED_TEXT_MIME_TYPES)
+TEXT_FILE_EXTENSION_TO_MIME = {
+    ".txt": "text/plain",
+    ".json": "application/json",
+    ".csv": "text/csv",
+    ".xml": "application/xml",
+    ".yaml": "application/yaml",
+    ".yml": "application/yaml",
+    ".md": "text/markdown",
+    ".html": "text/html",
+    ".toml": "application/toml",
 }
 
 
@@ -66,17 +89,34 @@ class ChatAttachmentService:
         return f"/storage/chat-attachments/{normalized}"
 
     def inspect_attachment(self, attachment: IncomingMessageAttachment) -> InspectedAttachment:
+        filename = str(attachment.filename or "").strip() or "attachment"
         mime_type = str(attachment.mime_type or "").strip().lower()
+        if mime_type in {"", "application/octet-stream"}:
+            mime_type = TEXT_FILE_EXTENSION_TO_MIME.get(Path(filename).suffix.lower(), mime_type)
         if mime_type not in ALLOWED_ATTACHMENT_MIME_TYPES:
             raise ChatAttachmentValidationError(f"Unsupported attachment type: {mime_type or 'unknown'}")
 
-        filename = str(attachment.filename or "").strip() or "attachment"
         content = attachment.content or b""
         file_size = len(content)
         if file_size <= 0:
             raise ChatAttachmentValidationError("Attachment is empty")
         if file_size > CHAT_ATTACHMENT_MAX_FILE_BYTES:
             raise ChatAttachmentValidationError("Attachment exceeds the maximum file size", status_code=413)
+
+        if mime_type in ALLOWED_TEXT_MIME_TYPES:
+            if b"\x00" in content:
+                raise ChatAttachmentValidationError("File appears to be binary, not UTF-8 text")
+            try:
+                content.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ChatAttachmentValidationError("File is not valid UTF-8 text") from exc
+            return InspectedAttachment(
+                kind="text_file",
+                mime_type=mime_type,
+                filename=filename,
+                content=content,
+                file_size=file_size,
+            )
 
         if mime_type == "application/pdf":
             if not content.startswith(b"%PDF-"):

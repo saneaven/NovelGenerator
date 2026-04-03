@@ -253,6 +253,7 @@
 
 .message-attachment-document-meta {
     min-width: 0;
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
@@ -270,6 +271,19 @@
 .message-attachment-document-size {
     font-size: var(--font-size-xs);
     color: var(--color-text-secondary);
+}
+
+.message-attachment-document-link {
+    flex-shrink: 0;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-brand-accent);
+    text-decoration: none;
+}
+
+.message-attachment-document-link:hover,
+.message-attachment-document-link:focus-visible {
+    text-decoration: underline;
 }
 
 /* ===== Assistant Messages ===== */

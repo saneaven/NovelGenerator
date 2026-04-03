@@ -81,7 +81,7 @@ class MessageAttachmentResponse(BaseModel):
     id: UUID
     message_id: UUID
     sort_order: int
-    kind: Literal["image", "document"]
+    kind: Literal["image", "document", "text_file"]
     mime_type: str
     original_filename: str
     file_size: int

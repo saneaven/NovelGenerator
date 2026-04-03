@@ -159,7 +159,7 @@ class AsyncOpenAIProvider(BaseProvider):
                 "role": role,
                 "content": (
                     build_openai_chat_content(canonical_parts)
-                    if any(part.get("type") in {"image", "file"} for part in canonical_parts)
+                    if any(isinstance(part, dict) and part.get("type") != "content" for part in canonical_parts)
                     else self._extract_text_content(msg)
                 ),
             }

@@ -1226,6 +1226,8 @@
     "tooManyAttachments": "메시지당 최대 {{count}}개 파일까지 첨부할 수 있습니다.",
     "imageCount": "이미지 {{count}}",
     "pdfCount": "PDF {{count}}",
+    "textFileCount": "텍스트 파일 {{count}}개",
+    "viewAttachment": "보기",
     "viewAgentList": "에이전트 목록 보기",
     "agents": "에이전트",
     "aiAgent": "AI 에이전트",

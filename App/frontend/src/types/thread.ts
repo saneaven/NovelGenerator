@@ -74,7 +74,7 @@ export interface MessageAttachment {
   id: string;
   messageId: string;
   sortOrder: number;
-  kind: 'image' | 'document';
+  kind: 'image' | 'document' | 'text_file';
   mimeType: string;
   originalFilename: string;
   fileSize: number;

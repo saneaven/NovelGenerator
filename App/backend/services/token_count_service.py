@@ -11,7 +11,13 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from ..providers.multimodal import build_claude_content, build_gemini_binary_parts, get_canonical_content_parts
+from ..providers.multimodal import (
+    _format_text_file,
+    _load_text_part,
+    build_claude_content,
+    build_gemini_binary_parts,
+    get_canonical_content_parts,
+)
 from ..providers.tool_call_arguments import parse_tool_call_arguments
 from .chat_attachment_service import chat_attachment_service
 from .credential_service import CredentialServiceError, credential_service
@@ -392,7 +398,28 @@ def _estimate_openai_pdf_tokens(part: dict[str, Any], model: str, cache: TokenCo
     return total
 
 
-def _openai_visual_tokens_for_parts(
+def _estimate_openai_text_file_tokens(part: dict[str, Any], model: str, cache: TokenCountCache | None = None) -> int:
+    storage_key = str(part.get("storage_key") or "").strip()
+    filename = str(part.get("filename") or "").strip() or "attachment"
+    mime_type = str(part.get("mime_type") or "").strip()
+    cache_key = f"{storage_key}:{model}"
+    bucket = _cache_bucket(cache, "openai_text_file_tokens")
+    cached = bucket.get(cache_key)
+    if isinstance(cached, int):
+        return cached
+
+    try:
+        text = _load_text_part(part)
+    except Exception:
+        text = ""
+
+    total = _count_tokens_tiktoken(_format_text_file(filename, mime_type, text), model)
+    if cache is not None:
+        bucket[cache_key] = total
+    return total
+
+
+def _openai_attachment_tokens_for_parts(
     parts: list[dict[str, Any]],
     model: str,
     cache: TokenCountCache | None = None,
@@ -407,6 +434,8 @@ def _openai_visual_tokens_for_parts(
             total += _estimate_openai_visual_tokens(width, height)
         elif part_type == "file":
             total += _estimate_openai_pdf_tokens(part, model, cache)
+        elif part_type == "text_file":
+            total += _estimate_openai_text_file_tokens(part, model, cache)
     return total
 
 
@@ -427,8 +456,8 @@ def count_openai_message_tokens(
 ) -> int:
     text_tokens = _count_tokens_tiktoken(_openai_message_payload_text(message), model)
     parts = get_canonical_content_parts(message)
-    visual_tokens = _openai_visual_tokens_for_parts(parts, model, cache)
-    return text_tokens + visual_tokens
+    attachment_tokens = _openai_attachment_tokens_for_parts(parts, model, cache)
+    return text_tokens + attachment_tokens
 
 
 def _resolve_system_prompt(system_prompt: str, conversation: list[dict[str, Any]]) -> str | None:
