@@ -143,6 +143,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const editorRef = useRef<ManuscriptEditorRef>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const pendingScrollRestoreRef = useRef<number | null>(null);
+  const lastSavedDocHashRef = useRef<string | null>(null);
   const docRef = useRef<TipTapDoc>(doc);
   docRef.current = doc;
 
@@ -251,10 +252,18 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   const serverDocHash = useMemo(() => getDocHash(serverDoc), [serverDoc]);
 
+  const stableServerDocHash = useMemo(() => {
+    if (lastSavedDocHashRef.current !== null && lastSavedDocHashRef.current === serverDocHash) {
+      return lastSavedDocHashRef.current;
+    }
+    lastSavedDocHashRef.current = null;
+    return serverDocHash;
+  }, [serverDocHash]);
+
   const editorKey = useMemo(() => {
     if (!manuscript || !manuscriptId) return 'loading';
-    return `${manuscriptId}-${globalDisplayLanguage}-${effectiveLanguage}-${serverDocHash}`;
-  }, [manuscriptId, manuscript, globalDisplayLanguage, effectiveLanguage, serverDocHash]);
+    return `${manuscriptId}-${globalDisplayLanguage}-${effectiveLanguage}-${stableServerDocHash}`;
+  }, [manuscriptId, manuscript, globalDisplayLanguage, effectiveLanguage, stableServerDocHash]);
 
   const initialDoc = useMemo(() => {
     if (editorKey === 'loading') return emptyDoc();
@@ -459,6 +468,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         });
 
         setDoc(latestDoc);
+        lastSavedDocHashRef.current = getDocHash(latestDoc);
         editorRef.current?.resetBaseline();
 
         // Clear localStorage cache after successful save

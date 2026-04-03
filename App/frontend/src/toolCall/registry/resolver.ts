@@ -1,4 +1,5 @@
 import type { ToolCallUiModule } from './contracts';
+import fallbackModule from '../modules/fallbackModule';
 import imageModule from '../modules/imageModule';
 import manuscriptModule from '../modules/manuscriptModule';
 import mcpModule from '../modules/mcpModule';
@@ -35,7 +36,7 @@ export function resolveToolUiModule(toolName: string): ToolCallUiModule {
   if (dynamic.length > 1) {
     throw new Error(`Multiple dynamic tool UI modules registered for tool: ${toolName}`);
   }
-  throw new Error(`Unknown tool UI module for tool: ${toolName}`);
+  return fallbackModule;
 }
 
 export function getToolUiModules(): ToolCallUiModule[] {
