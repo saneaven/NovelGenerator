@@ -6,8 +6,7 @@ from typing import Any
 def _flatten_styled_prompt(data: Any) -> str:
     if not isinstance(data, dict):
         return ""
-    parts = [str(data.get("prefix") or ""), str(data.get("content") or ""), str(data.get("postfix") or "")]
-    return " ".join(part.strip() for part in parts if str(part).strip()).strip()
+    return str(data.get("content") or "").strip()
 
 
 def build_markdown_image_title(asset: Any) -> str | None:
