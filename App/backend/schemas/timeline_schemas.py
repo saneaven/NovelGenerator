@@ -24,8 +24,8 @@ class TimelineTrackCreate(BaseModel):
 
     language: str
     name: str
-    description: str = ""
-    content: Any = None
+    description: str
+    content: str | dict
     rich_text_format: str = "tiptap"
     parent_id: str | None = None
     position: int | None = None
@@ -59,8 +59,8 @@ class TimelineEventCreate(BaseModel):
     track_id: str
     language: str
     name: str
-    description: str = ""
-    content: Any = None
+    description: str
+    content: str | dict
     rich_text_format: str = "tiptap"
     start_date: dict[str, int]
     end_date: dict[str, int] | None = None
