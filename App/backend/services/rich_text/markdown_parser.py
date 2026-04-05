@@ -98,7 +98,6 @@ def _convert_inline(node: Any, active_marks: list[dict[str, Any]] | None = None)
         src = str(getattr(node, "meta", {}).get("url") or "").strip()
         if not src:
             return []
-        title = str(getattr(node, "meta", {}).get("title") or "").strip()
         alt_parts = []
         for child in getattr(node, "children", []) or []:
             alt_parts.append(_text_meta(child))
@@ -106,8 +105,6 @@ def _convert_inline(node: Any, active_marks: list[dict[str, Any]] | None = None)
         alt = "".join(alt_parts).strip()
         if alt:
             attrs["alt"] = alt
-        if title:
-            attrs["title"] = title
         asset_id = _extract_asset_id_from_src(src)
         if asset_id:
             attrs["assetId"] = asset_id

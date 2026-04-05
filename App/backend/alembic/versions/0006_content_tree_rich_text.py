@@ -23,7 +23,7 @@ from models.db_models import (
     StoryEntity,
 )
 from models.translation_models import ObjectVersion
-from services.asset_markdown import build_markdown_image_title
+from services.asset_markdown import build_markdown_image_alt
 from services.rich_text import (
     empty_doc,
     extract_image_refs,
@@ -108,10 +108,10 @@ def _rewrite_tree_images(
         if asset_id and asset_id in asset_by_id:
             next_attrs["assetId"] = asset_id
             next_attrs["src"] = new_src_by_asset_id.get(asset_id, src)
-            if not str(next_attrs.get("title") or "").strip():
-                generated_title = build_markdown_image_title(asset_by_id[asset_id])
-                if generated_title:
-                    next_attrs["title"] = generated_title
+            if not str(next_attrs.get("alt") or "").strip():
+                generated_alt = build_markdown_image_alt(asset_by_id[asset_id])
+                if generated_alt:
+                    next_attrs["alt"] = generated_alt
         else:
             next_attrs.pop("assetId", None)
         next_node["attrs"] = next_attrs

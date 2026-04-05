@@ -35,8 +35,8 @@ export interface ManuscriptEditorRef {
   setDoc: (doc: TipTapDoc) => void;
   getScrollPosition: () => number;
   setScrollPosition: (scrollTop: number) => void;
-  insertImage: (src: string, alt?: string, title?: string, assetId?: string) => void;
-  updateImageSrc: (oldSrc: string, newSrc: string, newAlt?: string, newTitle?: string, newAssetId?: string) => boolean;
+  insertImage: (src: string, alt?: string, assetId?: string) => void;
+  updateImageSrc: (oldSrc: string, newSrc: string, newAlt?: string, newAssetId?: string) => boolean;
   focus: () => void;
   getTextAroundCursor: () => { before: string; after: string };
   hasChanges: () => boolean;
@@ -154,19 +154,16 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
     }
   }, [editor, imageOverlayCallbacks]);
 
-  const insertImage = useCallback((src: string, alt?: string, title?: string, assetId?: string) => {
+  const insertImage = useCallback((src: string, alt?: string, assetId?: string) => {
     if (!editor) return;
     const attrs: Record<string, any> = { src, alt: alt || '' };
-    if (title) {
-      attrs.title = title;
-    }
     if (assetId) {
       attrs['data-asset-id'] = assetId;
     }
     editor.chain().focus().setImage(attrs as any).run();
   }, [editor]);
 
-  const updateImageSrc = useCallback((oldSrc: string, newSrc: string, newAlt?: string, newTitle?: string, newAssetId?: string): boolean => {
+  const updateImageSrc = useCallback((oldSrc: string, newSrc: string, newAlt?: string, newAssetId?: string): boolean => {
     if (!editor) return false;
 
     let found = false;
@@ -175,9 +172,6 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
         const attrs: Record<string, any> = { src: newSrc };
         if (newAlt !== undefined) {
           attrs.alt = newAlt;
-        }
-        if (newTitle !== undefined) {
-          attrs.title = newTitle;
         }
         if (newAssetId !== undefined) {
           attrs['data-asset-id'] = newAssetId;

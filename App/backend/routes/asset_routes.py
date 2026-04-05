@@ -36,7 +36,7 @@ from ..services.asset_change_events import (
     queue_scene_assets_change,
     queue_object_assets_change,
 )
-from ..services.asset_markdown import build_markdown_image_title
+from ..services.asset_markdown import build_markdown_image_alt
 from ..services.storage_service import storage_service
 from ..services.deletion_service import delete_assets_with_files
 from ..services.image_model_catalog_service import image_model_catalog_service
@@ -366,7 +366,7 @@ def _asset_to_response(asset: Asset, *, usages: Optional[List[AssetUsage]] = Non
         created_at=cast(datetime, asset.created_at),
         updated_at=cast(datetime, asset.updated_at),
         file_url=storage_service.build_public_asset_path(cast(str, asset.file_path)),
-        markdown_title=build_markdown_image_title(asset),
+        markdown_alt=build_markdown_image_alt(asset),
         usages=list(usages or []),
     )
 
@@ -393,7 +393,7 @@ def _asset_to_scene_response(asset: Asset, usages: List[AssetUsage]) -> SceneAss
         created_at=cast(datetime, asset.created_at),
         updated_at=cast(datetime, asset.updated_at),
         file_url=storage_service.build_public_asset_path(cast(str, asset.file_path)),
-        markdown_title=build_markdown_image_title(asset),
+        markdown_alt=build_markdown_image_alt(asset),
         usages=list(usages),
         usage_count=len(usages),
     )

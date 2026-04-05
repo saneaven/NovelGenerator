@@ -180,7 +180,7 @@ class AssetResponse(BaseModel):
     updated_at: datetime
     # URL for frontend access
     file_url: str
-    markdown_title: Optional[str] = None
+    markdown_alt: Optional[str] = None
     usages: List["AssetUsage"] = Field(default_factory=list)
 
     class Config:
@@ -262,7 +262,7 @@ class SceneAssetResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     file_url: str
-    markdown_title: Optional[str] = None
+    markdown_alt: Optional[str] = None
     usages: List["AssetUsage"] = Field(default_factory=list)
     usage_count: int = 0
 

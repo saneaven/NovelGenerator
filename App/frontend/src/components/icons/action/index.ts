@@ -8,3 +8,4 @@ export { Download } from './Download';
 export { Upload } from './Upload';
 export { Send } from './Send';
 export { Stop } from './Stop';
+export { Pause } from './Pause';

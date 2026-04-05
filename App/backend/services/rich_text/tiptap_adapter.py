@@ -99,8 +99,6 @@ def _tiptap_to_tree_node(node: Any) -> ContentNode | None:
         tree_attrs["src"] = attrs.get("src")
         if "alt" in attrs:
             tree_attrs["alt"] = attrs.get("alt")
-        if "title" in attrs:
-            tree_attrs["title"] = attrs.get("title")
         if "data-asset-id" in attrs:
             tree_attrs["assetId"] = attrs.get("data-asset-id")
     if tree_attrs:
@@ -153,8 +151,6 @@ def _tree_to_tiptap_node(node: Any) -> dict[str, Any] | None:
         tiptap_attrs["src"] = attrs.get("src")
         if attrs.get("alt"):
             tiptap_attrs["alt"] = attrs.get("alt")
-        if attrs.get("title"):
-            tiptap_attrs["title"] = attrs.get("title")
         if attrs.get("assetId"):
             tiptap_attrs["data-asset-id"] = attrs.get("assetId")
     if tiptap_attrs:

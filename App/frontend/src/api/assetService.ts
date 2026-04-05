@@ -53,7 +53,7 @@ export interface Asset {
     created_at: string;
     updated_at: string;
     file_url: string;
-    markdown_title: string | null;
+    markdown_alt: string | null;
     usages: AssetUsage[];
 }
 

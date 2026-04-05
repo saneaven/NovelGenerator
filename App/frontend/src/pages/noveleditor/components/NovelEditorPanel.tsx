@@ -543,8 +543,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       const updated = editorRef.current.updateImageSrc(
         replaceImageSrc,
         newSrc,
-        asset.name,
-        asset.markdown_title ?? undefined,
+        asset.markdown_alt ?? asset.name,
         asset.id,
       );
 
@@ -560,7 +559,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
     // Normal insert at cursor
     if (editorRef.current) {
-      editorRef.current.insertImage(newSrc, asset.name, asset.markdown_title ?? undefined, asset.id);
+      editorRef.current.insertImage(newSrc, asset.markdown_alt ?? asset.name, asset.id);
     }
     setRegenerateRecipe(null);
     setShowImageModal(false);

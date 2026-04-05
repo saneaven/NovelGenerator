@@ -40,6 +40,7 @@ from ..services.notification_service import (
 )
 from ..services.object_change_events import queue_object_change
 from ..services.object_service import object_service
+from ..services.asset_markdown import build_markdown_image_alt
 from ..services.rich_text import tree_to_markdown
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..services.settings_service import settings_service
@@ -1204,17 +1205,10 @@ class ImageRunService:
             raise ValueError("insert_before must still match exactly once before applying")
 
         image_src = storage_service.build_public_asset_path(str(asset.file_path))
-        image_title = ""
-        if isinstance(asset.generation_prompt, dict):
-            parts = [
-                str(asset.generation_prompt.get("prefix") or "").strip(),
-                str(asset.generation_prompt.get("content") or "").strip(),
-                str(asset.generation_prompt.get("postfix") or "").strip(),
-            ]
-            image_title = " ".join(part for part in parts if part).strip()
+        image_alt = build_markdown_image_alt(asset) or ""
         next_markdown = markdown.replace(
             anchor,
-            f'![Generated Image]({image_src} "{image_title}")\n\n{anchor}' if image_title else f"![Generated Image]({image_src})\n\n{anchor}",
+            f"![{image_alt}]({image_src})\n\n{anchor}",
             1,
         )
         object_service.update_object(

@@ -9,7 +9,7 @@ def _flatten_styled_prompt(data: Any) -> str:
     return str(data.get("content") or "").strip()
 
 
-def build_markdown_image_title(asset: Any) -> str | None:
+def build_markdown_image_alt(asset: Any) -> str | None:
     positive = _flatten_styled_prompt(getattr(asset, "generation_positive_prompt", None))
     negative = _flatten_styled_prompt(getattr(asset, "generation_negative_prompt", None))
     natural = _flatten_styled_prompt(getattr(asset, "generation_prompt", None))

@@ -9,11 +9,6 @@ def _escape_text(text: str) -> str:
     return str(text or "")
 
 
-def _escape_title(text: str) -> str:
-    escaped = str(text or "").replace("\\", "\\\\").replace('"', '\\"')
-    escaped = escaped.replace("\r", " ").replace("\n", " ").replace("\t", " ")
-    return " ".join(escaped.split()).strip()
-
 
 def _render_inline(nodes: list[Any] | None) -> str:
     parts: list[str] = []
@@ -44,13 +39,9 @@ def _render_inline(nodes: list[Any] | None) -> str:
             attrs = node.get("attrs") or {}
             alt = _escape_text(str(attrs.get("alt") or ""))
             src = str(attrs.get("src") or "").strip()
-            title = _escape_title(str(attrs.get("title") or ""))
             if not src:
                 continue
-            if title:
-                parts.append(f'![{alt}]({src} "{title}")')
-            else:
-                parts.append(f"![{alt}]({src})")
+            parts.append(f"![{alt}]({src})")
         elif node_type == "hard_break":
             parts.append("\\\n")
     return "".join(parts)
