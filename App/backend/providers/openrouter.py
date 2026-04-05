@@ -32,7 +32,7 @@ class OpenRouterProvider(AsyncOpenAIProvider):
     @property
     def default_headers(self) -> Dict[str, str]:
         headers = {
-            "HTTP-Referer": "https://novelbuds.local",
+            "HTTP-Referer": "https://novelbuds.com",
             "X-Title": "Novel Buds",
         }
         headers.update(self._additional_headers)

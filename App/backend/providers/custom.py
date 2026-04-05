@@ -32,7 +32,7 @@ from ..utils.outbound_http import (
     merge_user_overrides,
     validate_outbound_base_url,
 )
-from ..utils.template_vars import resolve_value
+from ..utils.template_vars import resolve_and_filter_headers, resolve_value
 
 
 def build_request_context(
@@ -105,8 +105,6 @@ class _CustomClaudeProvider(ClaudeProvider):
             "base_url": self._base_url.rstrip("/"),
             "timeout": get_llm_stream_timeout(),
         }
-        if self._additional_headers:
-            kwargs["default_headers"] = self._additional_headers
         return AsyncAnthropic(**kwargs)
 
     def _get_extra_headers(self) -> Dict[str, str]:
@@ -116,6 +114,20 @@ class _CustomClaudeProvider(ClaudeProvider):
         if self._request_context:
             return dict(self._resolved_body)
         return dict(self._additional_body)
+
+    async def get_models(self, extra_headers: Dict[str, str] | None = None) -> Dict:
+        client = self._ensure_client()
+        response = await client.models.list(extra_headers=extra_headers)
+        models = []
+        for model in response.data:
+            models.append(
+                {
+                    "id": model.id,
+                    "display_name": model.display_name,
+                    "created_at": model.created_at,
+                }
+            )
+        return {"data": models}
 
 
 class _CustomOpenAIResponseProvider(OpenAIResponsesProvider):
@@ -154,8 +166,6 @@ class _CustomOpenAIResponseProvider(OpenAIResponsesProvider):
             "base_url": self._base_url.rstrip("/"),
             "timeout": get_llm_stream_timeout(),
         }
-        if self._additional_headers:
-            kwargs["default_headers"] = self._additional_headers
         return AsyncOpenAI(**kwargs)
 
     def _prepare_responses_request(self, **kwargs) -> Dict:
@@ -169,11 +179,11 @@ class _CustomOpenAIResponseProvider(OpenAIResponsesProvider):
             request["extra_headers"] = self._resolved_headers
         return request
 
-    async def get_models(self) -> Dict:
+    async def get_models(self, extra_headers: Dict[str, str] | None = None) -> Dict:
         """No regex filtering — custom endpoint may serve any model."""
         client = self._ensure_client()
         try:
-            models = await client.models.list()
+            models = await client.models.list(extra_headers=extra_headers)
             return {"data": [m.model_dump() for m in models.data]}
         except OpenAIError as exc:
             raise Exception(f"Error fetching models: {exc}") from exc
@@ -229,7 +239,7 @@ class CustomProvider(AsyncOpenAIProvider):
 
     @property
     def default_headers(self) -> Dict[str, str]:
-        return self._additional_headers
+        return {}
 
     @staticmethod
     def _normalize_custom_kind(custom_kind: Optional[str]) -> CustomKind:
@@ -502,15 +512,22 @@ class CustomProvider(AsyncOpenAIProvider):
 
     async def get_models(self) -> Dict:
         effective_custom_kind = self._normalize_custom_kind(self._custom_kind)
+        headers = resolve_and_filter_headers(self._additional_headers) or None
+
         if effective_custom_kind == "claude":
             claude_provider = self._build_claude_delegate()
-            return await claude_provider.get_models()
+            return await claude_provider.get_models(extra_headers=headers)
 
         if effective_custom_kind == "openai_response":
             responses_provider = self._build_openai_response_delegate()
-            return await responses_provider.get_models()
+            return await responses_provider.get_models(extra_headers=headers)
 
-        return await super().get_models()
+        client = self._ensure_client()
+        try:
+            models = await client.models.list(extra_headers=headers)
+            return {"data": [m.model_dump() for m in models.data]}
+        except OpenAIError as exc:
+            raise Exception(f"Error fetching models: {exc}") from exc
 
     def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
         effective_custom_kind = self._effective_custom_kind(advanced.get("custom_kind"))

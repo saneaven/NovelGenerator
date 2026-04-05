@@ -389,3 +389,40 @@ class TestBuildRequestContext:
             request_id="req_123", assistant_message_id="msg_456",
         )
         assert ctx["last_role"] == ""
+
+
+class TestDefaultHeadersEmpty:
+    """default_headers should not contain custom headers — all headers go via extra_headers."""
+
+    def test_custom_provider_default_headers_empty(self):
+        provider = CustomProvider(_base_config())
+        assert provider.default_headers == {}
+
+    def test_custom_provider_default_headers_empty_with_static_only(self):
+        provider = CustomProvider(_base_config(additional_headers={"X-Static": "plain"}))
+        assert provider.default_headers == {}
+
+
+class TestGetModelsHeaders:
+    """get_models() should resolve+filter headers for extra_headers."""
+
+    def test_completion_get_models_uses_filtered_headers(self):
+        """openai_completion path: static headers kept, template headers removed."""
+        provider = CustomProvider(_base_config())
+        # Access the resolved headers that get_models would use
+        from App.backend.utils.template_vars import resolve_and_filter_headers
+        headers = resolve_and_filter_headers(provider._additional_headers)
+        assert headers == {"X-Static": "plain"}
+        assert "X-Run" not in headers
+
+    def test_completion_get_models_all_static(self):
+        provider = CustomProvider(_base_config(additional_headers={"X-A": "a", "X-B": "b"}))
+        from App.backend.utils.template_vars import resolve_and_filter_headers
+        headers = resolve_and_filter_headers(provider._additional_headers)
+        assert headers == {"X-A": "a", "X-B": "b"}
+
+    def test_completion_get_models_all_template(self):
+        provider = CustomProvider(_base_config(additional_headers={"X-Run": "{{ run_id }}", "X-Thread": "{{ thread_id }}"}))
+        from App.backend.utils.template_vars import resolve_and_filter_headers
+        headers = resolve_and_filter_headers(provider._additional_headers)
+        assert headers == {}

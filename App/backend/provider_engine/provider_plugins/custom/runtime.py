@@ -17,6 +17,7 @@ async def list_embedding_models(*, provider_config: dict[str, Any], runtime_spec
     import httpx
 
     from ....utils.outbound_http import filter_additional_headers, validate_outbound_base_url
+    from ....utils.template_vars import resolve_and_filter_headers
 
     base_url_raw = str(provider_config.get("base_url") or "").strip()
     if not base_url_raw:
@@ -26,7 +27,7 @@ async def list_embedding_models(*, provider_config: dict[str, Any], runtime_spec
     headers: Dict[str, str] = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    headers.update(filter_additional_headers(provider_config.get("additional_headers")))
+    headers.update(resolve_and_filter_headers(filter_additional_headers(provider_config.get("additional_headers"))))
 
     base_url = validate_outbound_base_url(base_url_raw).rstrip("/")
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -67,6 +68,7 @@ async def embed_many(
     import httpx
 
     from ....utils.outbound_http import filter_additional_headers, validate_outbound_base_url
+    from ....utils.template_vars import resolve_and_filter_headers
 
     if not inputs:
         return []
@@ -81,7 +83,7 @@ async def embed_many(
     }
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    headers.update(filter_additional_headers(provider_config.get("additional_headers")))
+    headers.update(resolve_and_filter_headers(filter_additional_headers(provider_config.get("additional_headers"))))
 
     base_url = validate_outbound_base_url(base_url_raw).rstrip("/")
     vectors: list[list[float]] = []

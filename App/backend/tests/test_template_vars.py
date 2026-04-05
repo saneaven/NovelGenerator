@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from App.backend.utils.template_vars import resolve_str, resolve_value
+from App.backend.utils.template_vars import resolve_and_filter_headers, resolve_str, resolve_value
 
 
 class TestResolveStr:
@@ -73,3 +73,31 @@ class TestResolveValue:
         result = resolve_value(original, {"v": "resolved"})
         assert original["k"] == "{{ v }}"
         assert result["k"] == "resolved"
+
+
+class TestResolveAndFilterHeaders:
+    def test_static_headers_pass_through(self):
+        headers = {"X-Api-Version": "2024-01", "X-Custom": "value"}
+        assert resolve_and_filter_headers(headers) == {"X-Api-Version": "2024-01", "X-Custom": "value"}
+
+    def test_template_headers_resolved_with_context(self):
+        headers = {"X-Run": "{{ run_id }}", "X-Static": "plain"}
+        result = resolve_and_filter_headers(headers, {"run_id": "abc-123"})
+        assert result == {"X-Run": "abc-123", "X-Static": "plain"}
+
+    def test_template_headers_filtered_when_empty(self):
+        headers = {"X-Run": "{{ run_id }}", "X-Thread": "{{ thread_id }}", "X-Static": "plain"}
+        result = resolve_and_filter_headers(headers)
+        assert result == {"X-Static": "plain"}
+
+    def test_all_template_headers_filtered(self):
+        headers = {"X-Run": "{{ run_id }}", "X-Thread": "{{ thread_id }}"}
+        assert resolve_and_filter_headers(headers) == {}
+
+    def test_empty_input(self):
+        assert resolve_and_filter_headers({}) == {}
+        assert resolve_and_filter_headers(None) == {}
+
+    def test_whitespace_only_values_filtered(self):
+        headers = {"X-Run": "  ", "X-Static": "value"}
+        assert resolve_and_filter_headers(headers) == {"X-Static": "value"}
