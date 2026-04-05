@@ -130,7 +130,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
-  const [footerActionInFlight, setFooterActionInFlight] = useState<'resume' | 'cancel' | null>(null);
+  const [footerActionInFlight, setFooterActionInFlight] = useState<'resume' | 'cancel' | 'feedback' | null>(null);
   const [latestRunContext, setLatestRunContext] = useState<LatestRunContext | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const bodyContentRef = useRef<HTMLDivElement | null>(null);
@@ -293,8 +293,9 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const { commitDecisions, commitDecisionsAndPause } = useToolCallDecisions(threadId);
 
   const handleSendFeedback = useCallback(() => {
-    if (!feedbackText.trim() || latestRunContext === null) return;
-    void sendThreadMessage({
+    if (!feedbackText.trim() || latestRunContext === null || footerActionInFlight) return;
+    setFooterActionInFlight('feedback');
+    const op = sendThreadMessage({
       threadId,
       projectId,
       threadType: 'journey',
@@ -308,9 +309,10 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
         surface: latestRunContext.surface || undefined,
       },
     });
+    void op.finally(() => setFooterActionInFlight(null));
     setFeedbackText('');
     setFeedbackOpen(false);
-  }, [threadId, projectId, feedbackText, latestRunContext]);
+  }, [threadId, projectId, feedbackText, latestRunContext, footerActionInFlight]);
 
   const handleFeedbackKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

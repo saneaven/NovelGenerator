@@ -1207,6 +1207,7 @@ export class ThreadEventConsumer {
       this.flushDeltaBuffer();
       this.patchThreadFromRunStatus(threadId, 'canceled', null, payload);
       useThreadStore.getState().setThreadStreamActive(threadId, false);
+      useThreadStore.getState().clearThreadStreamingState(threadId);
       if (useThreadStore.getState().isPreexistingLiveThread(threadId)) {
         void fetchAndReplaceThreadSnapshot(threadId);
       }

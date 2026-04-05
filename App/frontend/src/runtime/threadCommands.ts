@@ -241,6 +241,7 @@ export async function cancelThread(params: CancelThreadParams): Promise<void> {
     updatedAt: nowIso(),
   });
   store.setThreadStreamActive(params.threadId, false);
+  store.clearThreadStreamingState(params.threadId);
 }
 
 export async function decideToolCall(params: DecideToolCallParams): Promise<void> {
