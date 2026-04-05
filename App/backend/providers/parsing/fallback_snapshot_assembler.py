@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from .contracts import DeltaPayload, FinalSnapshot, FinalToolCall, MetaPayload, normalize_usage_dict
+from ..contracts import DeltaPayload, FinalSnapshot, FinalToolCall, MetaPayload, normalize_usage_dict
 from .tool_call_arguments import parse_tool_call_arguments
 
 

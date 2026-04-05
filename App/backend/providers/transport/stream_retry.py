@@ -14,7 +14,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Awaitable, Callable, Optional
 
-from .contracts import DeltaPayload, ProviderErrorPayload, ProviderEvent
+from ..contracts import DeltaPayload, ProviderErrorPayload, ProviderEvent
 
 logger = logging.getLogger(__name__)
 

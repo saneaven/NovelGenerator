@@ -1,5 +1,5 @@
 from .async_openai_provider import AsyncOpenAIProvider
-from .registry import ProviderRegistry
+from ..registry import ProviderRegistry
 
 
 @ProviderRegistry.register

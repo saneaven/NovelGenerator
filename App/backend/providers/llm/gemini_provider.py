@@ -6,14 +6,14 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 from google import genai
 from google.genai import errors, types
 
-from .base import BaseProvider
-from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
-from .final_mappers import _to_raw_dict
-from .multimodal import build_gemini_binary_parts, get_canonical_content_parts
-from .native_tool_calls_parser import NativeToolCallsStreamParser
-from .registry import ProviderRegistry
-from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
-from ..utils.outbound_http import validate_outbound_base_url
+from ..base import BaseProvider
+from ..contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
+from ..parsing.final_mappers import _to_raw_dict
+from ..parsing.multimodal import build_gemini_binary_parts, get_canonical_content_parts
+from ..parsing.native_tool_calls_parser import NativeToolCallsStreamParser
+from ..registry import ProviderRegistry
+from ..parsing.thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
+from ...utils.outbound_http import validate_outbound_base_url
 
 @ProviderRegistry.register
 class GeminiProvider(BaseProvider):

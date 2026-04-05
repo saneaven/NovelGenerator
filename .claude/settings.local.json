@@ -10,7 +10,9 @@
       "Bash(tree:*)",
       "Bash(find:*)",
       "mcp__context7__query-docs",
-      "Bash(grep -E \"router\\\\.\\(ts|tsx\\)$\")"
+      "Bash(grep -E \"router\\\\.\\(ts|tsx\\)$\")",
+      "WebFetch(domain:nano-gpt.com)",
+      "WebFetch(domain:docs.nano-gpt.com)"
     ],
     "deny": [],
     "ask": []

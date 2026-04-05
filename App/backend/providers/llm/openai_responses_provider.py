@@ -26,13 +26,13 @@ from openai import (
     RateLimitError,
 )
 
-from .base import BaseProvider
-from .client_timeouts import get_llm_stream_timeout
-from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
-from .final_mappers import map_openai_response_to_snapshot
-from .multimodal import build_openai_responses_content, get_canonical_content_parts
-from .native_tool_calls_parser import NativeToolCallsStreamParser
-from .registry import ProviderRegistry
+from ..base import BaseProvider
+from ..transport.client_timeouts import get_llm_stream_timeout
+from ..contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
+from ..parsing.final_mappers import map_openai_response_to_snapshot
+from ..parsing.multimodal import build_openai_responses_content, get_canonical_content_parts
+from ..parsing.native_tool_calls_parser import NativeToolCallsStreamParser
+from ..registry import ProviderRegistry
 
 # Text/chat model patterns: gpt-* or o{number}*
 TEXT_MODEL_REGEX = re.compile(r'^(gpt-|o\d)')

@@ -11,19 +11,19 @@ from openai import (
     RateLimitError,
 )
 
-from .base import BaseProvider
-from .client_timeouts import get_llm_stream_timeout
-from .contracts import (
+from ..base import BaseProvider
+from ..transport.client_timeouts import get_llm_stream_timeout
+from ..contracts import (
     DeltaPayload,
     MetaPayload,
     ProviderErrorPayload,
     ProviderEvent,
     merge_openai_choice_delta,
 )
-from .native_tool_calls_parser import NativeToolCallsStreamParser
-from .multimodal import build_openai_chat_content, get_canonical_content_parts
-from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
-from ..utils.outbound_http import validate_outbound_base_url
+from ..parsing.native_tool_calls_parser import NativeToolCallsStreamParser
+from ..parsing.multimodal import build_openai_chat_content, get_canonical_content_parts
+from ..parsing.thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
+from ...utils.outbound_http import validate_outbound_base_url
 
 class AsyncOpenAIProvider(BaseProvider):
     """Reusable base class for providers backed by OpenAI-compatible chat completions."""

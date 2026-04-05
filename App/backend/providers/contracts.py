@@ -4,7 +4,7 @@ import copy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional
 
-from .tool_call_arguments import parse_tool_call_arguments
+from .parsing.tool_call_arguments import parse_tool_call_arguments
 
 
 ProviderEventKind = Literal["delta", "meta", "final_native", "error"]
@@ -311,7 +311,7 @@ def extract_native_tool_calls_from_snapshot(snapshot: FinalSnapshot) -> FinalSna
 
     If no <tool_call> tags are found, the snapshot is returned unchanged.
     """
-    from .native_tool_calls_parser import NativeToolCallsStreamParser
+    from .parsing.native_tool_calls_parser import NativeToolCallsStreamParser
 
     parser = NativeToolCallsStreamParser()
     new_content_parts: List[Dict[str, str]] = []

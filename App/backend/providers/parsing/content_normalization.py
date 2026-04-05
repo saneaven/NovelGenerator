@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from .contracts import DeltaPayload, FinalSnapshot
+from ..contracts import DeltaPayload, FinalSnapshot
 
 
 @dataclass

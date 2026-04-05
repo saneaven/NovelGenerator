@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from ..utils.outbound_http import merge_user_overrides
+from ...utils.outbound_http import merge_user_overrides
 
 
 def build_logged_request_body(request: dict[str, Any] | None) -> dict[str, Any]:

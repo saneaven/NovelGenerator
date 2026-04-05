@@ -14,25 +14,25 @@ from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI, OpenAIError
 
 from .async_openai_provider import AsyncOpenAIProvider
-from .client_timeouts import get_llm_stream_timeout
+from ..transport.client_timeouts import get_llm_stream_timeout
 from .claude_provider import ClaudeProvider
-from .contracts import ProviderEvent
+from ..contracts import ProviderEvent
 from .openai_responses_provider import OpenAIResponsesProvider
-from .registry import ProviderRegistry
-from ..services.reasoning.custom_template_runtime import (
+from ..registry import ProviderRegistry
+from ...services.reasoning.custom_template_runtime import (
     apply_effort_fields,
     build_history_inject,
     extract_response_fields,
     get_nested_path,
     set_nested_path,
 )
-from ..utils.outbound_http import (
+from ...utils.outbound_http import (
     filter_additional_body,
     filter_additional_headers,
     merge_user_overrides,
     validate_outbound_base_url,
 )
-from ..utils.template_vars import resolve_and_filter_headers, resolve_value
+from ...utils.template_vars import resolve_and_filter_headers, resolve_value
 
 
 def build_request_context(

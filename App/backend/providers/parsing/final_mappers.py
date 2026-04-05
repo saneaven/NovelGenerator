@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from .contracts import FinalSnapshot, FinalToolCall, normalize_usage_dict
+from ..contracts import FinalSnapshot, FinalToolCall, normalize_usage_dict
 from .tool_call_arguments import parse_tool_call_arguments
 
 

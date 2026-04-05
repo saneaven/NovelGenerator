@@ -3,8 +3,8 @@ from __future__ import annotations
 from html import escape
 from typing import Any
 
-from ..models.db_models import RunMessageAttachmentModel
-from ..services.chat_attachment_service import chat_attachment_service
+from ...models.db_models import RunMessageAttachmentModel
+from ...services.chat_attachment_service import chat_attachment_service
 
 
 def get_canonical_content_parts(message: dict[str, Any]) -> list[dict[str, Any]]:

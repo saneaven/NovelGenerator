@@ -4,15 +4,15 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from anthropic import AsyncAnthropic
 
-from .base import BaseProvider
-from .client_timeouts import get_llm_stream_timeout
-from .contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
-from .final_mappers import map_claude_message_to_snapshot
-from .multimodal import build_claude_content, get_canonical_content_parts
-from .native_tool_calls_parser import NativeToolCallsStreamParser
-from .registry import ProviderRegistry
-from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
-from ..utils.outbound_http import merge_user_overrides, validate_outbound_base_url
+from ..base import BaseProvider
+from ..transport.client_timeouts import get_llm_stream_timeout
+from ..contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
+from ..parsing.final_mappers import map_claude_message_to_snapshot
+from ..parsing.multimodal import build_claude_content, get_canonical_content_parts
+from ..parsing.native_tool_calls_parser import NativeToolCallsStreamParser
+from ..registry import ProviderRegistry
+from ..parsing.thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
+from ...utils.outbound_http import merge_user_overrides, validate_outbound_base_url
 
 logger = logging.getLogger(__name__)
 
