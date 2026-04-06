@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 from google import genai
 from google.genai import types, errors
 
-from .base import BaseImageProvider, ImageGenerationResult, ReferenceImageData
+from .base import BaseImageProvider, ImageGenerationResult, MaskImageData, ReferenceImageData
 from .model_capabilities import GEMINI_DEFAULT_MODEL, GEMINI_MODEL_OPTIONS
 from .registry import ImageProviderRegistry
 
@@ -71,9 +71,10 @@ class GeminiImageProvider(BaseImageProvider):
         negative_prompt: Optional[str] = None,
         provider_settings: Optional[Dict] = None,
         reference_images: Optional[List[ReferenceImageData]] = None,
+        mask_image: Optional[MaskImageData] = None,
     ) -> ImageGenerationResult:
         """Generate image using Gemini API"""
-        del size, quality, n, positive_prompt, negative_prompt, resolved_native_size
+        del size, quality, n, positive_prompt, negative_prompt, resolved_native_size, mask_image
         if not self._client:
             return ImageGenerationResult(
                 success=False,

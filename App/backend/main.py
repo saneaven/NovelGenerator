@@ -14,12 +14,12 @@ from .models.requests import ChatCompletionRequest, ProviderModelsRequest
 from .provider_engine.project import to_public_provider_spec
 from .provider_engine.registry import list_providers as list_provider_specs
 from .providers.registry import ProviderRegistry
-from .providers.openrouter import OpenRouterProvider
-from .providers.custom import CustomProvider
-from .providers.claude_provider import ClaudeProvider
-from .providers.gemini_provider import GeminiProvider
-from .providers.openai_responses_provider import OpenAIResponsesProvider
-from .providers.xai_provider import XAIProvider
+from .providers.llm.openrouter import OpenRouterProvider
+from .providers.llm.custom import CustomProvider
+from .providers.llm.claude_provider import ClaudeProvider
+from .providers.llm.gemini_provider import GeminiProvider
+from .providers.llm.openai_responses_provider import OpenAIResponsesProvider
+from .providers.llm.xai_provider import XAIProvider
 from .providers.contracts import (
     MetaPayload,
     ProviderErrorPayload,
@@ -29,14 +29,14 @@ from .providers.contracts import (
     patch_snapshot_with_meta,
     extract_native_tool_calls_from_snapshot,
 )
-from .providers.content_normalization import (
+from .providers.parsing.content_normalization import (
     StreamContentNormalizer,
     has_effective_delta,
     normalize_final_snapshot_content,
 )
-from .providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
-from .providers.sse_encoder import encode_sse
-from .providers.stream_retry import normalize_retry_config, stream_with_retry
+from .providers.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
+from .providers.transport.sse_encoder import encode_sse
+from .providers.transport.stream_retry import normalize_retry_config, stream_with_retry
 from .auth import get_current_user
 from .database import get_db
 from .models.db_models import User
@@ -316,18 +316,24 @@ async def get_embedding_models(
 ):
     """Get available embedding models for a specific provider."""
     try:
-        config = credential_service.get_provider_config(db, current_user.id, provider)
-        provider_instance = ProviderRegistry.get_provider(
-            provider,
-            config,
-        )
-
-        # Keep parity with /models: require a valid provider configuration to list.
-        if not provider_instance.validate_config():
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid configuration for provider '{provider}'",
+        config = {}
+        requires_credential = provider != "nanogpt"
+        if requires_credential:
+            config = credential_service.get_provider_config(db, current_user.id, provider)
+            provider_instance = ProviderRegistry.get_provider(
+                provider,
+                config,
             )
+            if not provider_instance.validate_config():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid configuration for provider '{provider}'",
+                )
+        else:
+            try:
+                config = credential_service.get_provider_config(db, current_user.id, provider)
+            except CredentialServiceError:
+                config = {}
 
         return await list_embedding_models(provider=provider, config=config)
     except HTTPException:
@@ -413,6 +419,7 @@ async def stream_chat(
                     custom_kind=request.custom_kind,
                     native_tool_call=request.native_tool_call,
                     verbosity=request.verbosity,
+                    provider_settings=request.provider_settings,
                 )
 
             stream = stream_with_retry(_create_stream, retry_cfg)
@@ -544,7 +551,7 @@ async def get_openrouter_model_endpoints(
             detail = response.text or f"OpenRouter request failed ({response.status_code})"
             raise HTTPException(status_code=response.status_code, detail=detail)
 
-        return response.json()
+        return OpenRouterProvider.annotate_endpoints_payload_for_ui(response.json())
     except HTTPException:
         raise
     except CredentialServiceError as e:

@@ -79,15 +79,27 @@ def _descriptor_to_api_dict(model: ImageModelDescriptor) -> dict[str, Any]:
         "name": model.name,
         "description": model.description,
         "canonical_slug": model.canonical_slug,
+        "owned_by": model.owned_by,
+        "icon_url": model.icon_url,
+        "tags": list(model.tags or ()),
+        "category": model.category,
         "prompt_type": model.prompt_type,
         "supports_image_input": model.supports_image_input,
+        "supports_mask_input": model.supports_mask_input,
+        "supports_multi_image_input": model.supports_multi_image_input,
         "supported_aspect_ratios": list(model.geometry.supported_aspect_ratios),
         "supported_image_sizes": list(model.geometry.supported_resolutions),
         "default_aspect_ratio": model.geometry.default_aspect_ratio,
         "default_image_size": model.geometry.default_resolution,
         "ui_resolution_mode": model.geometry.resolution_mode,
+        "supported_geometry_pairs": {
+            key: list(value)
+            for key, value in (model.geometry.supported_geometry_pairs or {}).items()
+        } if model.geometry.supported_geometry_pairs else None,
         "architecture": model.architecture,
         "pricing": model.pricing,
+        "capabilities": model.capabilities,
+        "supported_parameters": model.supported_parameters,
     }
 
 
@@ -207,6 +219,7 @@ def rewrite_image_run_recipe(raw: Any) -> dict[str, Any]:
         "negative_prompt": raw.get("negative_prompt"),
         "provider_settings": sanitize_generation_settings(provider, raw.get("provider_settings")),
         "reference_images": raw.get("reference_images") if isinstance(raw.get("reference_images"), list) else None,
+        "mask_image": raw.get("mask_image") if isinstance(raw.get("mask_image"), dict) else None,
         "reference_objects": raw.get("reference_objects") if isinstance(raw.get("reference_objects"), list) else None,
     }
 
@@ -230,15 +243,27 @@ class ImageModelCatalogService:
             raise ValueError(f"Unknown image provider '{provider}'")
 
         geometry = descriptor.geometry
-        resolved_ratio = _pick_ratio(
-            list(geometry.supported_aspect_ratios),
-            requested_aspect_ratio or geometry.default_aspect_ratio,
-            fallback=geometry.default_aspect_ratio,
-        )
         supported_sizes = list(geometry.supported_resolutions)
-        resolved_image_size = str(requested_image_size or geometry.default_resolution).strip() or geometry.default_resolution
-        if resolved_image_size not in supported_sizes:
-            resolved_image_size = geometry.default_resolution
+        supported_pairs = {
+            key: list(value)
+            for key, value in (geometry.supported_geometry_pairs or {}).items()
+        }
+        requested_ratio = _normalize_ratio_text(requested_aspect_ratio, fallback=geometry.default_aspect_ratio)
+        requested_size = str(requested_image_size or geometry.default_resolution).strip() or geometry.default_resolution
+
+        if geometry.resolution_mode == "native_exact":
+            resolved_image_size = requested_size if requested_size in supported_sizes else geometry.default_resolution
+            resolved_ratio = _normalize_ratio_text(resolved_image_size, fallback=geometry.default_aspect_ratio)
+        else:
+            resolved_ratio = _pick_ratio(
+                list(geometry.supported_aspect_ratios),
+                requested_ratio,
+                fallback=geometry.default_aspect_ratio,
+            )
+            allowed_sizes = supported_pairs.get(resolved_ratio) or supported_sizes
+            resolved_image_size = requested_size if requested_size in allowed_sizes else (
+                geometry.default_resolution if geometry.default_resolution in allowed_sizes else allowed_sizes[0]
+            )
 
         if geometry.resolution_mode == "translated_fixed":
             native_size_by_ratio = geometry.native_size_by_ratio or {}

@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from .base import BaseImageProvider, ImageGenerationResult, ReferenceImageData
+from .base import BaseImageProvider, ImageGenerationResult, MaskImageData, ReferenceImageData
 from .registry import ImageProviderRegistry
 from ..services.image_model_catalog_service import image_model_catalog_service
 from ..utils.outbound_http import filter_additional_headers
@@ -88,8 +88,9 @@ class OpenRouterImageProvider(BaseImageProvider):
         negative_prompt: Optional[str] = None,
         provider_settings: Optional[Dict[str, Any]] = None,
         reference_images: Optional[List[ReferenceImageData]] = None,
+        mask_image: Optional[MaskImageData] = None,
     ) -> ImageGenerationResult:
-        del size, quality, n, positive_prompt, negative_prompt
+        del size, quality, n, positive_prompt, negative_prompt, mask_image
 
         if not self.validate_config():
             return ImageGenerationResult(success=False, error="OpenRouter client not initialized. Check API key.")

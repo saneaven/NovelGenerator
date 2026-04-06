@@ -417,6 +417,7 @@ async def archive_thread_until(
                 model=profile["model"],
                 inputs=[chunk["text"] for chunk in chunks_to_embed],
                 config=provider_config,
+                dimensions=profile.get("dimensions"),
                 purpose="document",
             )
             if len(vectors) != len(chunks_to_embed):
@@ -554,6 +555,7 @@ async def search_thread_memory(
         model=profile["model"],
         inputs=queries,
         config=provider_config,
+        dimensions=profile.get("dimensions"),
         purpose="query",
     )
 

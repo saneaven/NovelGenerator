@@ -2,7 +2,7 @@
 from typing import Dict, List, Optional
 from openai import AsyncOpenAI, OpenAIError
 
-from .base import BaseImageProvider, ImageGenerationResult, ReferenceImageData
+from .base import BaseImageProvider, ImageGenerationResult, MaskImageData, ReferenceImageData
 from .registry import ImageProviderRegistry
 
 
@@ -61,9 +61,10 @@ class XAIImageProvider(BaseImageProvider):
         negative_prompt: Optional[str] = None,
         provider_settings: Optional[Dict] = None,
         reference_images: Optional[List[ReferenceImageData]] = None,
+        mask_image: Optional[MaskImageData] = None,
     ) -> ImageGenerationResult:
         """Generate image using xAI Grok API (OpenAI-compatible)"""
-        del size, aspect_ratio, image_size, resolved_native_size, quality, positive_prompt, negative_prompt, provider_settings, reference_images
+        del size, aspect_ratio, image_size, resolved_native_size, quality, positive_prompt, negative_prompt, provider_settings, reference_images, mask_image
         if not self._client:
             return ImageGenerationResult(
                 success=False,

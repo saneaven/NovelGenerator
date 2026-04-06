@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import type { ImageModelInfo } from '../../api/assetService';
 import type { ImageProviderType } from '../../store/settingsStore';
-import { CustomSelect } from '../ui/CustomSelect';
+import { TextButton } from '../TextButton';
 import { Check } from '../icons';
+import './ImageModelBrowser.css';
 
 type ImageModelBrowserProps = {
   provider: ImageProviderType;
@@ -14,15 +15,36 @@ type ImageModelBrowserProps = {
   disabled?: boolean;
 };
 
-function buildDescription(provider: ImageProviderType, model: ImageModelInfo): string | undefined {
-  if (provider !== 'openrouter') return model.description ?? undefined;
+function formatGeometry(model: ImageModelInfo): string {
+  if (model.ui_resolution_mode === 'native_exact') {
+    const sizes = model.supported_image_sizes.slice(0, 3).join(', ');
+    const extra = model.supported_image_sizes.length > 3 ? `, +${model.supported_image_sizes.length - 3}` : '';
+    return `Output sizes: ${sizes}${extra}`;
+  }
+  const ratios = model.supported_aspect_ratios.slice(0, 3).join(', ');
+  const sizes = model.supported_image_sizes.slice(0, 3).join(', ');
+  const ratioExtra = model.supported_aspect_ratios.length > 3 ? `, +${model.supported_aspect_ratios.length - 3}` : '';
+  const sizeExtra = model.supported_image_sizes.length > 3 ? `, +${model.supported_image_sizes.length - 3}` : '';
+  return `Ratios: ${ratios}${ratioExtra} / Sizes: ${sizes}${sizeExtra}`;
+}
 
-  const parts: string[] = [];
-  if (model.pricing?.image) parts.push(`Image ${model.pricing.image}`);
-  if (model.supports_image_input) parts.push('Image input');
-  const outputs = model.architecture?.output_modalities?.join(', ');
-  if (outputs) parts.push(`Out: ${outputs}`);
-  return [model.description, parts.join(' • ')].filter(Boolean).join(' — ') || undefined;
+function formatPricing(model: ImageModelInfo): string | null {
+  const pricing = model.pricing;
+  if (!pricing) return null;
+  if (typeof pricing.image === 'string' && pricing.image.trim()) return pricing.image;
+  const providerPricing = pricing as Record<string, unknown>;
+  const perImage = providerPricing.per_image;
+  if (typeof perImage === 'string' && perImage.trim()) return perImage;
+  return null;
+}
+
+function getBadges(model: ImageModelInfo): string[] {
+  const badges: string[] = [];
+  if (model.supports_image_input) badges.push('Image Input');
+  if (model.supports_multi_image_input) badges.push('Multi Image');
+  if (model.supports_mask_input) badges.push('Mask');
+  if (model.category && model.category.toLowerCase() !== 'other') badges.push(model.category);
+  return badges;
 }
 
 const ImageModelBrowser: React.FC<ImageModelBrowserProps> = ({
@@ -34,47 +56,98 @@ const ImageModelBrowser: React.FC<ImageModelBrowserProps> = ({
   error = null,
   disabled = false,
 }) => {
-  const placeholder = loading
-    ? 'Loading models...'
-    : error
-      ? 'Failed to load models'
-      : models.length === 0
-        ? 'No models available'
-        : 'Select model';
+  const [showBrowser, setShowBrowser] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const filteredModels = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return models;
+    return models.filter((model) => {
+      return model.name.toLowerCase().includes(needle)
+        || model.id.toLowerCase().includes(needle)
+        || String(model.description || '').toLowerCase().includes(needle)
+        || String(model.category || '').toLowerCase().includes(needle);
+    });
+  }, [models, query]);
 
   return (
-    <CustomSelect
-      value={currentModel}
-      onChange={onSelectModel}
-      disabled={disabled || loading || models.length === 0}
-      placeholder={placeholder}
-      options={models.map((model) => ({
-        value: model.id,
-        label: model.name,
-        description: buildDescription(provider, model),
-      }))}
-      renderOption={({ option, isSelected, onSelect }) => (
-        <button
+    <div className="image-model-browser">
+      <div className="model-input-row">
+        <input
+          type="text"
+          value={currentModel}
+          onChange={(event) => onSelectModel(event.target.value)}
+          placeholder={loading ? 'Loading models...' : 'Select a model'}
+          className="config-input"
+          disabled={disabled}
+        />
+        <TextButton
+          variant={showBrowser ? 'primary' : 'secondary'}
+          size="sm"
           type="button"
-          className={`custom-select-option ${isSelected ? 'selected' : ''}`}
-          onClick={onSelect}
+          onClick={() => setShowBrowser((prev) => !prev)}
+          disabled={disabled || loading}
         >
-          <div className="custom-select-option-content">
-            <span className="custom-select-option-text">{option.label}</span>
-            {option.description ? (
-              <span className="custom-select-option-description">{option.description}</span>
-            ) : (
-              <span className="custom-select-option-description">{option.value}</span>
-            )}
-          </div>
-          {isSelected ? (
-            <span className="custom-select-check">
-              <Check size="sm" />
-            </span>
+          {showBrowser ? 'Hide' : 'Browse'}
+        </TextButton>
+      </div>
+
+      {showBrowser ? (
+        <div className="image-model-browser__panel">
+          <input
+            type="text"
+            className="config-input"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={`Search ${provider} models...`}
+          />
+          {error ? <div className="image-model-browser__empty">{error}</div> : null}
+          {!error && filteredModels.length === 0 ? (
+            <div className="image-model-browser__empty">
+              {loading ? 'Loading models...' : 'No models found.'}
+            </div>
           ) : null}
-        </button>
-      )}
-    />
+          {!error ? (
+            <div className="image-model-browser__list">
+              {filteredModels.map((model) => {
+                const isSelected = model.id === currentModel;
+                return (
+                  <button
+                    key={model.id}
+                    type="button"
+                    className={`image-model-browser__item ${isSelected ? 'selected' : ''}`}
+                    onClick={() => {
+                      onSelectModel(model.id);
+                      setShowBrowser(false);
+                    }}
+                  >
+                    <div className="image-model-browser__item-main">
+                      <div className="image-model-browser__item-header">
+                        <strong>{model.name}</strong>
+                        {isSelected ? <Check size="sm" /> : null}
+                      </div>
+                      <div className="image-model-browser__item-id">{model.id}</div>
+                      {model.description ? (
+                        <div className="image-model-browser__item-description">{model.description}</div>
+                      ) : null}
+                      <div className="image-model-browser__item-meta">{formatGeometry(model)}</div>
+                      {getBadges(model).length > 0 ? (
+                        <div className="image-model-browser__item-badges">
+                          {getBadges(model).map((badge) => <span key={badge}>{badge}</span>)}
+                        </div>
+                      ) : null}
+                      {formatPricing(model) ? (
+                        <div className="image-model-browser__item-pricing">{formatPricing(model)}</div>
+                      ) : null}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 };
 

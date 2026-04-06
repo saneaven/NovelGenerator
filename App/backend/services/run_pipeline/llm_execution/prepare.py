@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from ....providers.registry import ProviderRegistry
-from ....providers.stream_retry import normalize_retry_config
+from ....providers.transport.stream_retry import normalize_retry_config
 from ...context_manager import fit_to_context_window
 from ...llm_runtime_service import get_llm_runtime
 from ...mcp import mcp_sync_service

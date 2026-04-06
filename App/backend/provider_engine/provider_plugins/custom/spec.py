@@ -20,8 +20,8 @@ SPEC = ProviderSpec(
         display_name_key="settings.credentials.custom.title",
         icon_key="custom",
         description_key="settings.taskConfig.providerDescriptions.custom",
-        llm_order=60,
-        embedding_order=40,
+        llm_order=70,
+        embedding_order=50,
     ),
     credentials=ObjectSpec(fields={
         "base_url": FieldSpec(

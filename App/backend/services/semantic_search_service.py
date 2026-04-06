@@ -418,6 +418,7 @@ async def search_project(
         model=model,
         inputs=queries,
         config=provider_config,
+        dimensions=profile.get("dimensions"),
         purpose="query",
     )
 

@@ -1,0 +1,123 @@
+.nanogpt-task-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+  margin-top: var(--spacing-lg);
+}
+
+.nanogpt-task-settings__section {
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.nanogpt-task-settings__section:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.nanogpt-task-settings__section > h5 {
+  margin: 0 0 var(--spacing-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.nanogpt-task-settings__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "label override"
+    "control control";
+  gap: var(--spacing-sm) var(--spacing-md);
+  align-items: start;
+  padding: var(--spacing-md) 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.nanogpt-task-settings__row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.nanogpt-task-settings__row--textarea {
+  align-items: flex-start;
+}
+
+.nanogpt-task-settings__label {
+  grid-area: label;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.nanogpt-task-settings__label > span:first-child {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.nanogpt-task-settings__label .field-hint {
+  margin-top: 0;
+}
+
+.nanogpt-task-settings__override {
+  grid-area: override;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  justify-self: end;
+}
+
+.nanogpt-task-settings__override input {
+  accent-color: var(--color-brand-primary);
+}
+
+.nanogpt-task-settings__row > .config-input,
+.nanogpt-task-settings__row > .custom-select,
+.nanogpt-task-settings__row > .toggle-switch {
+  grid-area: control;
+  min-width: 0;
+}
+
+.nanogpt-task-settings__row > .config-input,
+.nanogpt-task-settings__row > .custom-select {
+  width: 100%;
+  max-width: 22rem;
+}
+
+.nanogpt-task-settings__row > .toggle-switch {
+  justify-self: start;
+}
+
+.nanogpt-task-settings__textarea {
+  min-height: 11rem;
+  font-family: var(--font-family-mono);
+  background-color: var(--color-surface-base);
+  max-width: none;
+}
+
+.nanogpt-task-settings__error {
+  margin: var(--spacing-sm) 0 0;
+  color: var(--color-feedback-error-base);
+  font-size: var(--font-size-xs);
+}
+
+@media (max-width: 900px) {
+  .nanogpt-task-settings__row {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "label"
+      "override"
+      "control";
+  }
+
+  .nanogpt-task-settings__override {
+    white-space: normal;
+    justify-self: start;
+  }
+}

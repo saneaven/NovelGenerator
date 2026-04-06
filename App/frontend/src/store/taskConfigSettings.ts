@@ -25,6 +25,7 @@ export interface AdvancedTaskSettings {
   tokenizer_override?: TokenizerOverride | null;
   custom_kind?: CustomKind | null;
   verbosity?: 'low' | 'medium' | 'high' | null;
+  provider_settings?: Record<string, unknown>;
 }
 
 export interface TaskAIConfig {
@@ -77,6 +78,9 @@ export function normalizeEffectiveTaskConfig(config: TaskAIConfig): TaskAIConfig
     : ({ thinking_mode: 'off' } as TaskAIConfig['advanced']);
   if (!['off', 'model', 'custom'].includes(normalized.advanced.thinking_mode)) {
     normalized.advanced.thinking_mode = 'off';
+  }
+  if (!normalized.advanced.provider_settings || typeof normalized.advanced.provider_settings !== 'object' || Array.isArray(normalized.advanced.provider_settings)) {
+    normalized.advanced.provider_settings = {};
   }
   const provider = getProviderSpec(normalized.provider);
   const spec = resolveEffectiveLlmTaskSpec(provider, normalized as unknown as Record<string, unknown>);

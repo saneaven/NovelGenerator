@@ -67,6 +67,9 @@ export function generationRecipeFromImageRun(run: ImageRun): ImageGenerationReci
             ))
             .map((item) => ({ assetId: item.asset_id, strength: Number(item.strength ?? 0.7) }))
         : undefined,
+      maskImage: recipe.mask_image && typeof recipe.mask_image === 'object' && !Array.isArray(recipe.mask_image) && typeof (recipe.mask_image as { asset_id?: unknown }).asset_id === 'string'
+        ? { assetId: (recipe.mask_image as { asset_id: string }).asset_id }
+        : undefined,
     };
   }
 
@@ -93,6 +96,9 @@ export function generationRecipeFromImageRun(run: ImageRun): ImageGenerationReci
               && typeof (item as { asset_id?: unknown }).asset_id === 'string'
             ))
             .map((item) => ({ assetId: item.asset_id, strength: Number(item.strength ?? 0.7) }))
+        : undefined,
+      maskImage: recipe.mask_image && typeof recipe.mask_image === 'object' && !Array.isArray(recipe.mask_image) && typeof (recipe.mask_image as { asset_id?: unknown }).asset_id === 'string'
+        ? { assetId: (recipe.mask_image as { asset_id: string }).asset_id }
         : undefined,
     };
   }

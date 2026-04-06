@@ -79,6 +79,7 @@ export interface PublicImageModelGeometrySpec {
   default_resolution: string;
   resolution_mode: 'native_exact' | 'native_tier' | 'translated_fixed';
   native_size_by_ratio?: Record<string, string> | null;
+  supported_geometry_pairs?: Record<string, string[]> | null;
 }
 
 export interface PublicImageModelDescriptor {
@@ -86,9 +87,15 @@ export interface PublicImageModelDescriptor {
   name: string;
   prompt_type: 'natural' | 'tag_based';
   supports_image_input: boolean;
+  supports_mask_input?: boolean;
+  supports_multi_image_input?: boolean;
   geometry: PublicImageModelGeometrySpec;
   description?: string | null;
   canonical_slug?: string | null;
+  owned_by?: string | null;
+  icon_url?: string | null;
+  tags?: string[] | null;
+  category?: string | null;
   architecture?: {
     input_modalities?: string[] | null;
     output_modalities?: string[] | null;
@@ -100,6 +107,8 @@ export interface PublicImageModelDescriptor {
     completion?: string | null;
     image?: string | null;
   } | null;
+  capabilities?: Record<string, unknown> | null;
+  supported_parameters?: Record<string, unknown> | null;
 }
 
 export interface PublicImageSpec {

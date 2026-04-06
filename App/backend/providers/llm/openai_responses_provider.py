@@ -340,6 +340,7 @@ class OpenAIResponsesProvider(BaseProvider):
         custom_kind: Optional[str] = None,
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
+        provider_settings: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         """
         Stream chat using OpenAI Responses API.
@@ -350,6 +351,7 @@ class OpenAIResponsesProvider(BaseProvider):
         if not self.validate_config():
             yield self._error_event("Invalid provider configuration")
             return
+        del provider_preference, thinking_mode, custom_kind, provider_settings
 
         client = self._ensure_client()
 

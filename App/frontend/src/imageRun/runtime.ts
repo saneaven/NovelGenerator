@@ -45,6 +45,7 @@ function buildCreateImageRunRequest(input: ImageRunInput, clientRequestId: strin
       asset_id: item.assetId,
       strength: item.strength,
     })),
+    mask_image: input.recipe.maskImage ? { asset_id: input.recipe.maskImage.assetId } : undefined,
     reference_objects: undefined,
   };
 

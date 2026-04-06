@@ -1,0 +1,75 @@
+.nanogpt-image-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.nanogpt-image-settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.nanogpt-image-settings__label {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.nanogpt-image-settings__label > span:first-child {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.nanogpt-image-settings__control {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  min-width: 0;
+}
+
+.nanogpt-image-settings__override {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.nanogpt-image-settings__override input {
+  accent-color: var(--color-brand-primary);
+}
+
+.nanogpt-image-settings__control > .config-input,
+.nanogpt-image-settings__control > .toggle-switch {
+  min-width: 0;
+}
+
+.nanogpt-image-settings__control > .config-input {
+  flex: 1;
+}
+
+.nanogpt-image-settings__control > .toggle-switch {
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .nanogpt-image-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .nanogpt-image-settings__control {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nanogpt-image-settings__override {
+    white-space: normal;
+  }
+}

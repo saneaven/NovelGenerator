@@ -720,22 +720,19 @@
   }
 
   .function-call-sticky-decision-bar {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .function-call-sticky-decision-bar__actions {
-    display: flex;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
     gap: var(--spacing-xs);
   }
 
-  .function-call-sticky-decision-bar__actions .text-button__label {
-    display: none;
-  }
-
   .function-call-sticky-decision-bar__actions .text-button--sm {
-    padding: var(--spacing-xs) var(--spacing-sm);
-    min-width: unset;
+    width: 100%;
+    justify-content: center;
   }
 }

@@ -213,28 +213,28 @@
    ======================================== */
 
 .model-card {
-    background-color: var(--color-surface-elevated);
+    background-color: var(--color-surface-base);
     border-radius: var(--border-radius-md);
-    box-shadow: var(--shadow-md);
     padding: var(--spacing-md);
     border: 1px solid;
     border-color: var(--color-border-subtle);
-    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .model-card:hover {
     border-color: var(--color-border-medium);
-    box-shadow: var(--shadow-lg);
+    background-color: var(--color-surface-subtle);
 }
 
 .model-card--selected {
-    border: 1.5px solid;
+    border: 1px solid;
     border-color: var(--color-brand-primary-border);
-    background-color: var(--color-surface-elevated);
+    background-color: var(--color-brand-primary-soft);
 }
 
 .model-card--selected:hover {
     border-color: var(--color-brand-primary-hover);
+    background-color: var(--color-brand-primary-soft);
 }
 
 /* Card header */
@@ -251,6 +251,13 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-xs);
+}
+
+.model-card__icon {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    border-radius: var(--border-radius-sm);
 }
 
 .model-card__name {
@@ -331,6 +338,25 @@
     line-height: var(--line-height-relaxed);
 }
 
+.model-card__metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+    margin-top: var(--spacing-sm);
+}
+
+.model-card__meta-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    background-color: var(--color-surface-subtle);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--border-radius-full);
+}
+
 .model-card__link {
     color: var(--color-text-link);
     text-decoration: none;
@@ -383,6 +409,7 @@
     margin-top: var(--spacing-md);
     padding: var(--spacing-md);
     background-color: var(--color-surface-subtle);
+    border: 1px solid var(--color-border-subtle);
     border-radius: var(--border-radius-md);
 }
 

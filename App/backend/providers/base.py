@@ -87,6 +87,7 @@ class BaseProvider(ABC):
         custom_kind: Optional[str] = None,
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
+        provider_settings: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         """
         Stream chat completions from the provider
@@ -104,6 +105,7 @@ class BaseProvider(ABC):
             custom_kind: Custom endpoint kind ('openai_completion', 'openai_response', 'claude')
             native_tool_call: If true, provider should parse <tool_call> tags from text and emit tool_calls deltas.
             verbosity: GPT-5 output verbosity ('low', 'medium', 'high'). Maps to text.verbosity in Responses API.
+            provider_settings: Provider-specific runtime settings for the active provider.
 
         Yields:
             ProviderEvent objects. SSE formatting is handled by the API endpoint.
@@ -141,4 +143,3 @@ class BaseProvider(ABC):
     def display_name(self) -> str:
         """Human-readable provider name"""
         pass
-

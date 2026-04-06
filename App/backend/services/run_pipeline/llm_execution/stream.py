@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ....providers.content_normalization import (
+from ....providers.parsing.content_normalization import (
     StreamContentNormalizer,
     has_effective_delta,
     normalize_final_snapshot_content,
@@ -13,8 +13,8 @@ from ....providers.contracts import (
     merge_meta_payload,
     patch_snapshot_with_meta,
 )
-from ....providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
-from ....providers.stream_retry import stream_with_retry
+from ....providers.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
+from ....providers.transport.stream_retry import stream_with_retry
 from . import events
 from .contracts import LLMExecutionCallbacks, LLMExecutionRequest, PreparedLLMExecution, StreamExecutionResult
 from .request_session import LLMRequestSession
@@ -56,6 +56,7 @@ async def execute_stream(
             custom_kind=advanced.get("custom_kind"),
             native_tool_call=prepared.native_tool_call_mode,
             verbosity=advanced.get("verbosity"),
+            provider_settings=advanced.get("provider_settings"),
         )
 
     session = LLMRequestSession(

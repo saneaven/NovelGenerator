@@ -7,6 +7,7 @@ from enum import Enum
 class ProviderType(str, Enum):
     """AI provider types"""
     OPENAI = "openai"
+    NANOGPT = "nanogpt"
     GEMINI = "gemini"
     CLAUDE = "claude"
     OPENROUTER = "openrouter"
@@ -18,6 +19,7 @@ class EmbeddingProviderType(str, Enum):
     """Embedding provider types (subset of ProviderType)."""
 
     OPENAI = "openai"
+    NANOGPT = "nanogpt"
     GEMINI = "gemini"
     OPENROUTER = "openrouter"
     CUSTOM = "custom"
@@ -94,6 +96,7 @@ class AdvancedTaskSettings(BaseModel):
     tokenizer_override: Optional[Literal["openai", "claude", "gemini"]] = None
     custom_kind: Optional[CustomKind] = None
     verbosity: Optional[Literal["low", "medium", "high"]] = None  # GPT-5 output verbosity (text.verbosity in Responses API)
+    provider_settings: Dict[str, Any] = Field(default_factory=dict)
 
 
 class TaskAIConfig(BaseModel):
@@ -154,6 +157,11 @@ class OpenAICredentials(BaseModel):
     apiKey: str = ""
 
 
+class NanoGPTCredentials(BaseModel):
+    """NanoGPT credentials"""
+    apiKey: str = ""
+
+
 class XAICredentials(BaseModel):
     """xAI (Grok) credentials"""
     apiKey: str = ""
@@ -167,6 +175,7 @@ class NovelAICredentials(BaseModel):
 class ProviderCredentials(BaseModel):
     """All provider credentials"""
     openai: OpenAICredentials = Field(default_factory=OpenAICredentials)
+    nanogpt: NanoGPTCredentials = Field(default_factory=NanoGPTCredentials)
     gemini: GeminiCredentials = Field(default_factory=GeminiCredentials)
     claude: ClaudeCredentials = Field(default_factory=ClaudeCredentials)
     openrouter: OpenRouterCredentials = Field(default_factory=OpenRouterCredentials)

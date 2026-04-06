@@ -10,7 +10,7 @@ _PROVIDERS: dict[str, ProviderSpec] = {}
 _RUNTIME_MODULES: dict[str, Any] = {}
 _LOADED = False
 
-_BUILTINS = ("openai", "gemini", "claude", "openrouter", "xai", "novelai", "custom")
+_BUILTINS = ("openai", "nanogpt", "gemini", "claude", "openrouter", "xai", "novelai", "custom")
 
 
 def register_provider_spec(spec: ProviderSpec) -> None:

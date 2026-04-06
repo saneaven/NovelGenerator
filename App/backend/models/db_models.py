@@ -1298,6 +1298,7 @@ class Asset(Base):
     generation_style_id = Column(String(255), nullable=True)
     generation_settings = Column(JSONB, nullable=True)  # Provider-specific settings (sampler, steps, etc.)
     generation_reference_images = Column(JSONB, nullable=True)  # Reference images used during generation (asset_id + strength)
+    generation_mask_image = Column(JSONB, nullable=True)  # Mask image used during generation (asset_id)
     generation_reference_objects = Column(JSONB, nullable=True)  # Project objects referenced during generation
 
     # Image dimensions

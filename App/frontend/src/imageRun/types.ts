@@ -9,6 +9,10 @@ export type ReferenceImageRef = {
   strength: number;
 };
 
+export type MaskImageRef = {
+  assetId: string;
+};
+
 export type ImageGenerationRecipe =
   | {
       promptType: 'natural';
@@ -20,6 +24,7 @@ export type ImageGenerationRecipe =
       providerSettings?: Record<string, unknown>;
       styleId?: string | null;
       referenceImages?: ReferenceImageRef[];
+      maskImage?: MaskImageRef;
     }
   | {
       promptType: 'tag_based';
@@ -32,4 +37,5 @@ export type ImageGenerationRecipe =
       providerSettings?: Record<string, unknown>;
       styleId?: string | null;
       referenceImages?: ReferenceImageRef[];
+      maskImage?: MaskImageRef;
     };

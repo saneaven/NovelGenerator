@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ...models.db_models import RunMessageAttachmentModel, RunMessageModel, RunModel, RunToolCallModel, Thread
 from ...providers.contracts import ProviderErrorPayload, merge_meta_payload, patch_snapshot_with_meta, MetaPayload
-from ...providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
+from ...providers.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from ...providers.registry import ProviderRegistry
 from ..memory_builder import render_memory_summary_prompt
 from ..memory_service import archive_thread_until, get_thread_memory_status
@@ -18,7 +18,7 @@ from ..prompt_runtime.template_renderer import TemplateRenderer
 from ..settings_service import settings_service
 from ..llm_runtime_service import get_llm_runtime
 from ..token_count_service import count_message_tokens
-from ...providers.stream_retry import normalize_retry_config, stream_with_retry
+from ...providers.transport.stream_retry import normalize_retry_config, stream_with_retry
 from .text_utils import (
     build_archive_payload_for_message,
     build_active_messages_for_budget,

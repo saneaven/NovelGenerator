@@ -36,7 +36,7 @@ class LLMExecutionOrchestrator:
             model=prepared.task_config.model,
         )
         if prepared.task_config.provider == "custom":
-            from ....providers.custom import build_request_context
+            from ....providers.llm.custom import build_request_context
 
             prepared.provider.set_request_context(
                 build_request_context(

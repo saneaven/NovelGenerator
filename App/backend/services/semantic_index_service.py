@@ -696,6 +696,7 @@ async def index_object(
             model=prepared.model,
             inputs=prepared.embedding_texts,
             config=provider_config,
+            dimensions=prepared.dimensions,
             purpose="document",
         )
         return _apply_index_vectors(db, prepared=prepared, vectors=vectors)

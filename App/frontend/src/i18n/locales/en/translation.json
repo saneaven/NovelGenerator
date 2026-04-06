@@ -355,6 +355,11 @@
         "placeholder": "xai-...",
         "hint": "Get your API key from"
       },
+      "nanogpt": {
+        "title": "NanoGPT",
+        "placeholder": "ngpt-...",
+        "hint": "Get your API key from"
+      },
       "novelai": {
         "title": "NovelAI",
         "placeholder": "eyJ...",
@@ -635,6 +640,7 @@
         "claude": "Anthropic Claude with extended thinking",
         "openrouter": "Access to 100+ AI models via OpenRouter",
         "xai": "xAI Grok models for text generation",
+        "nanogpt": "NanoGPT personalized models with unified chat, embeddings, and image generation",
         "custom": "Use your own OpenAI-compatible endpoint"
       },
       "thinkingTemplate": "Thinking Template",

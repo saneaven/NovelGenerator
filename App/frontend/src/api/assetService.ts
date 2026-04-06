@@ -46,6 +46,7 @@ export interface Asset {
     generation_style_id: string | null;
     generation_settings: Record<string, any> | null;  // Provider-specific settings
     generation_reference_images: ReferenceImage[] | null;  // Reference images used during generation
+    generation_mask_image: MaskImage | null;
     generation_reference_objects: ReferenceObjectData[] | null;  // Story objects referenced during generation
     width: number | null;
     height: number | null;
@@ -87,7 +88,7 @@ export interface AssetUsage {
     language: string | null;
 }
 
-export interface SceneAsset extends Omit<Asset, 'generation_settings' | 'generation_reference_objects' | 'generation_reference_images'> {
+export interface SceneAsset extends Omit<Asset, 'generation_settings' | 'generation_reference_objects' | 'generation_reference_images' | 'generation_mask_image'> {
     manuscript_id: string | null;  // Ownership
     usage_count: number;
 }
@@ -167,13 +168,20 @@ export interface ImageModelInfo {
     name: string;
     description?: string | null;
     canonical_slug?: string | null;
+    owned_by?: string | null;
+    icon_url?: string | null;
+    tags?: string[] | null;
+    category?: string | null;
     prompt_type: PromptType;
     supports_image_input: boolean;
+    supports_mask_input: boolean;
+    supports_multi_image_input: boolean;
     supported_aspect_ratios: string[];
     supported_image_sizes: string[];
     default_aspect_ratio: string;
     default_image_size: string;
-    ui_resolution_mode: 'native_tier' | 'translated_fixed';
+    ui_resolution_mode: 'native_exact' | 'native_tier' | 'translated_fixed';
+    supported_geometry_pairs?: Record<string, string[]> | null;
     architecture?: {
         input_modalities?: string[];
         output_modalities?: string[];
@@ -183,12 +191,18 @@ export interface ImageModelInfo {
         completion?: string | null;
         image?: string | null;
     } | null;
+    capabilities?: Record<string, unknown> | null;
+    supported_parameters?: Record<string, unknown> | null;
 }
 
 // Reference image for image-to-image generation
 export interface ReferenceImage {
     asset_id: string;
     strength: number;  // 0-1, how much to use this reference
+}
+
+export interface MaskImage {
+    asset_id: string;
 }
 
 export type ImageRunOrigin = 'direct' | 'tool_preview';
@@ -208,6 +222,7 @@ export interface ImageRunRecipeRequest {
     negative_prompt?: StyledPrompt;
     provider_settings?: Record<string, unknown>;
     reference_images?: ReferenceImage[];
+    mask_image?: MaskImage;
     reference_objects?: ReferenceObjectData[];
 }
 

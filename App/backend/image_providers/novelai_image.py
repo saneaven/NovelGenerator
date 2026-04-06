@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from .base import BaseImageProvider, ImageGenerationResult, ReferenceImageData
+from .base import BaseImageProvider, ImageGenerationResult, MaskImageData, ReferenceImageData
 from .registry import ImageProviderRegistry
 
 
@@ -164,9 +164,10 @@ class NovelAIImageProvider(BaseImageProvider):
         negative_prompt: Optional[str] = None,
         provider_settings: Optional[Dict] = None,
         reference_images: Optional[List[ReferenceImageData]] = None,
+        mask_image: Optional[MaskImageData] = None,
     ) -> ImageGenerationResult:
         """Generate image using NovelAI API"""
-        del aspect_ratio, image_size, resolved_native_size, quality, n
+        del aspect_ratio, image_size, resolved_native_size, quality, n, mask_image
         if not self.api_key:
             return ImageGenerationResult(
                 success=False,

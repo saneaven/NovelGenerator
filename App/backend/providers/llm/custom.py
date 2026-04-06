@@ -359,7 +359,10 @@ class CustomProvider(AsyncOpenAIProvider):
         max_tokens: Optional[int],
         provider_preference: Optional[Dict],
         thinking_config: Optional[Dict],
+        thinking_mode: Optional[str],
+        provider_settings: Optional[Dict[str, Any]],
     ) -> Dict[str, object]:
+        del provider_settings
         request = super()._prepare_request_kwargs(
             messages=messages,
             model=model,
@@ -369,6 +372,8 @@ class CustomProvider(AsyncOpenAIProvider):
             max_tokens=max_tokens,
             provider_preference=provider_preference,
             thinking_config=thinking_config,
+            thinking_mode=thinking_mode,
+            provider_settings=None,
         )
 
         if self._current_thinking_template:
@@ -451,7 +456,9 @@ class CustomProvider(AsyncOpenAIProvider):
         custom_kind: Optional[str] = None,
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
+        provider_settings: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
+        del provider_settings
         effective_custom_kind = self._effective_custom_kind(custom_kind)
         self._active_custom_kind = effective_custom_kind
 

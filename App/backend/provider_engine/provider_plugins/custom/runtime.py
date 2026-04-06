@@ -7,7 +7,7 @@ def create_llm_runtime(*, provider_config: dict[str, Any], runtime_spec: Any):
     adapter = str(runtime_spec.adapter)
     if adapter not in {"openai_completion", "openai_response", "claude"}:
         raise ValueError(f"Unknown custom llm runtime '{adapter}'")
-    from ....providers.custom import CustomProvider
+    from ....providers.llm.custom import CustomProvider
 
     return CustomProvider({**provider_config, "custom_kind": adapter})
 
@@ -60,6 +60,7 @@ async def embed_many(
     provider_config: dict[str, Any],
     model: str,
     inputs: list[str],
+    dimensions: int | None,
     purpose: str,
     timeout_s: float,
     runtime_spec: Any,
@@ -93,7 +94,11 @@ async def embed_many(
             resp = await client.post(
                 f"{base_url}/embeddings",
                 headers=headers,
-                json={"model": model, "input": batch},
+                json={k: v for k, v in {
+                    "model": model,
+                    "input": batch,
+                    "dimensions": dimensions,
+                }.items() if v is not None},
             )
             if resp.status_code >= 400:
                 raise RuntimeError(f"Embedding request failed ({resp.status_code}): {resp.text}")

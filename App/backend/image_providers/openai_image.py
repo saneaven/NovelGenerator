@@ -3,7 +3,7 @@ import io
 from typing import Dict, List, Optional
 from openai import AsyncOpenAI, OpenAIError
 
-from .base import BaseImageProvider, ImageGenerationResult, ReferenceImageData
+from .base import BaseImageProvider, ImageGenerationResult, MaskImageData, ReferenceImageData
 from .model_capabilities import OPENAI_DEFAULT_MODEL, OPENAI_MODEL_OPTIONS, get_openai_supported_sizes
 from .registry import ImageProviderRegistry
 
@@ -62,6 +62,7 @@ class OpenAIImageProvider(BaseImageProvider):
         negative_prompt: Optional[str] = None,
         provider_settings: Optional[Dict] = None,
         reference_images: Optional[List[ReferenceImageData]] = None,
+        mask_image: Optional[MaskImageData] = None,
     ) -> ImageGenerationResult:
         """Generate image using OpenAI API"""
         del aspect_ratio, image_size, resolved_native_size
@@ -103,6 +104,7 @@ class OpenAIImageProvider(BaseImageProvider):
                     quality=quality,
                     n=n,
                     provider_settings=provider_settings,
+                    mask_image=mask_image,
                 )
 
             return await self._generate_text_to_image(
@@ -183,6 +185,7 @@ class OpenAIImageProvider(BaseImageProvider):
         quality: str,
         n: int,
         provider_settings: Optional[Dict],
+        mask_image: Optional[MaskImageData],
     ) -> ImageGenerationResult:
         """Image-to-image generation using one or more reference images."""
         supported_sizes = get_openai_supported_sizes(model)
@@ -201,6 +204,8 @@ class OpenAIImageProvider(BaseImageProvider):
             "output_format": output_format,
             "input_fidelity": (provider_settings or {}).get("input_fidelity", "high"),
         }
+        if mask_image is not None:
+            params["mask"] = self._build_upload_image(mask_image.image_data, "mask")
 
         if output_format in {"jpeg", "webp"}:
             params["output_compression"] = (provider_settings or {}).get("output_compression", 90)
@@ -224,7 +229,7 @@ class OpenAIImageProvider(BaseImageProvider):
                 error="No image data in response"
             )
 
-    def _build_upload_image(self, image_data: bytes, index: int) -> io.BytesIO:
+    def _build_upload_image(self, image_data: bytes, index: int | str) -> io.BytesIO:
         file_like = io.BytesIO(image_data)
         file_like.name = f"reference_{index}.png"
         return file_like

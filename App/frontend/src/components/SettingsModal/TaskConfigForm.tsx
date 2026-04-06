@@ -12,6 +12,7 @@ import type {
 import { normalizeEffectiveTaskConfig } from '../../store/taskConfigSettings';
 import ModelBrowser from './ModelBrowser';
 import ThinkingTemplateEditor from './ThinkingTemplateEditor';
+import NanoGptTaskSettings from './NanoGptTaskSettings';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import { Warning, Settings, Advenced } from '../icons';
@@ -461,6 +462,13 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                   </>
                 ) : null}
               </div>
+            ) : null}
+
+            {config.provider === 'nanogpt' ? (
+              <NanoGptTaskSettings
+                config={config}
+                onChange={emitChange}
+              />
             ) : null}
           </div>
         </div>

@@ -18,6 +18,32 @@ export function resolveImageSize(model: ImageModelInfo | null, currentValue: str
   return model.supported_image_sizes.includes(currentValue) ? currentValue : model.default_image_size;
 }
 
+export function resolveSupportedImageSizes(model: ImageModelInfo | null, aspectRatio: string): string[] {
+  if (!model) return [];
+  if (model.ui_resolution_mode === 'native_exact') {
+    return model.supported_image_sizes;
+  }
+  const paired = model.supported_geometry_pairs?.[aspectRatio];
+  if (Array.isArray(paired) && paired.length > 0) {
+    return paired;
+  }
+  return model.supported_image_sizes;
+}
+
+export function aspectRatioFromImageSize(size: string): string {
+  const text = String(size || '').trim().toLowerCase();
+  if (!text.includes('x')) return '1:1';
+  const [widthText, heightText] = text.split('x', 2);
+  const width = Number.parseInt(widthText, 10);
+  const height = Number.parseInt(heightText, 10);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return '1:1';
+  }
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+  const divisor = gcd(width, height) || 1;
+  return `${Math.floor(width / divisor)}:${Math.floor(height / divisor)}`;
+}
+
 export function useImageModelCatalog(provider: string, currentModel: string) {
   const shouldUseCache = provider !== 'openrouter';
   const [models, setModels] = useState<ImageModelInfo[]>(() => shouldUseCache ? (catalogCache.get(provider) ?? []) : []);

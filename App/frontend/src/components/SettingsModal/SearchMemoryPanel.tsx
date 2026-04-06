@@ -7,6 +7,7 @@ import type {
   SearchMemorySettings,
   SearchMemoryTarget,
 } from '../../store/settingsStore';
+import { fetchEmbeddingModels } from '../../api/providerService';
 import {
   hasSearchMemoryOverride,
   makeMemoryOverrideSeed,
@@ -23,6 +24,18 @@ import { IconButton } from '../IconButton';
 import { ChevronLeft, ChevronRight, Scroll, Search, Settings as SettingsIcon, Toggle } from '../icons';
 import { useProviderSpecStore } from '../../providerEngine/store';
 import './SearchMemoryPanel.css';
+
+type EmbeddingCatalogModel = {
+  id: string;
+  name?: string;
+  description?: string | null;
+  dimensions?: number | null;
+  supports_dimensions?: boolean;
+  max_tokens?: number | null;
+  pricing?: Record<string, unknown> | null;
+};
+
+const embeddingCatalogCache = new Map<string, EmbeddingCatalogModel[]>();
 
 type SearchMemoryConfigTarget = 'general' | SearchMemoryTarget;
 type ModelBrowserTarget = SearchMemoryConfigTarget;
@@ -57,10 +70,53 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => isMobileViewport());
   const [showModelBrowser, setShowModelBrowser] = useState(false);
   const [activeModelBrowser, setActiveModelBrowser] = useState<ModelBrowserTarget>('general');
+  const [embeddingCatalogs, setEmbeddingCatalogs] = useState<Record<string, EmbeddingCatalogModel[]>>({});
 
   useEffect(() => {
     void loadProviderSpecs();
   }, [loadProviderSpecs]);
+
+  const embeddingProvidersToLoad = useMemo(() => {
+    const providers = new Set<string>();
+    if (settings.general.embedding.provider) providers.add(settings.general.embedding.provider);
+    if (settings.overrides.search?.embedding.provider) providers.add(settings.overrides.search.embedding.provider);
+    if (settings.overrides.memory?.embedding.provider) providers.add(settings.overrides.memory.embedding.provider);
+    return Array.from(providers);
+  }, [
+    settings.general.embedding.provider,
+    settings.overrides.memory?.embedding.provider,
+    settings.overrides.search?.embedding.provider,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    for (const provider of embeddingProvidersToLoad) {
+      const cached = embeddingCatalogCache.get(provider);
+      if (cached) {
+        setEmbeddingCatalogs((prev) => (prev[provider] ? prev : { ...prev, [provider]: cached }));
+        continue;
+      }
+
+      void fetchEmbeddingModels(provider as EmbeddingProviderType)
+        .then((payload) => {
+          if (cancelled) return;
+          const items = Array.isArray(payload?.data)
+            ? payload.data.filter((item: unknown): item is EmbeddingCatalogModel => Boolean(item) && typeof item === 'object')
+            : [];
+          embeddingCatalogCache.set(provider, items);
+          setEmbeddingCatalogs((prev) => ({ ...prev, [provider]: items }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setEmbeddingCatalogs((prev) => ({ ...prev, [provider]: [] }));
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [embeddingProvidersToLoad]);
 
   const providerSpecs = useMemo(() => {
     const providers = Object.values(specs).filter((provider) => Boolean(provider.embedding));
@@ -195,6 +251,9 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
     options?: { includeRegex?: boolean; regexPageSize?: number; onRegexPageSizeChange?: (value: number) => void; showIndexLanguage?: boolean; }
   ) => {
     const dimensions = config.embedding.dimensions;
+    const catalogModels = embeddingCatalogs[config.embedding.provider] ?? embeddingCatalogCache.get(config.embedding.provider) ?? [];
+    const selectedEmbeddingModel = catalogModels.find((item) => item.id === config.embedding.model) ?? null;
+    const supportsDimensions = selectedEmbeddingModel?.supports_dimensions === true;
     const isSearchLike = options?.includeRegex ?? false;
 
     const handleProviderChange = (provider: EmbeddingProviderType) => {
@@ -286,11 +345,30 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
 
           <div className="form-field">
             <label>{t('settings.searchMemory.fields.dimensions')}</label>
-            <input
-              type="text"
-              value={dimensions != null ? String(dimensions) : t('settings.searchMemory.fields.dimensionsUnknown')}
-              disabled
-            />
+            {supportsDimensions ? (
+              <NumberInput
+                value={dimensions ?? undefined}
+                min={1}
+                integer={true}
+                allowEmpty={true}
+                onValueChange={(value) =>
+                  onConfigChange({
+                    ...config,
+                    embedding: {
+                      ...config.embedding,
+                      dimensions: value ?? null,
+                    },
+                  })
+                }
+                className="config-input"
+              />
+            ) : (
+              <input
+                type="text"
+                value={dimensions != null ? String(dimensions) : t('settings.searchMemory.fields.dimensionsUnknown')}
+                disabled
+              />
+            )}
             <p className="field-hint">{t('settings.searchMemory.fields.dimensionsHint')}</p>
           </div>
 

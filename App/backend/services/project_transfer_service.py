@@ -469,6 +469,7 @@ class ProjectTransferService:
                 "model": asset.generation_model,
                 "settings": asset.generation_settings,
                 "reference_images": asset.generation_reference_images,
+                "mask_image": asset.generation_mask_image,
                 "reference_objects": asset.generation_reference_objects,
             },
         }
@@ -774,6 +775,14 @@ class ProjectTransferService:
                 else:
                     ref_images = None
 
+                mask_image = gen.get("mask_image")
+                if isinstance(mask_image, dict):
+                    mask_asset_id = mask_image.get("asset_id")
+                    mapped_mask = export_asset_to_new_asset.get(str(mask_asset_id or ""))
+                    mask_image = {**mask_image, "asset_id": str(mapped_mask)} if mapped_mask else None
+                else:
+                    mask_image = None
+
                 # Rewrite reference object IDs -> new object IDs (drop missing)
                 ref_objects = gen.get("reference_objects")
                 if isinstance(ref_objects, list):
@@ -812,6 +821,7 @@ class ProjectTransferService:
                             gen.get("settings"),
                         ),
                         generation_reference_images=ref_images,
+                        generation_mask_image=mask_image,
                         generation_reference_objects=ref_objects,
                         width=width,
                         height=height,

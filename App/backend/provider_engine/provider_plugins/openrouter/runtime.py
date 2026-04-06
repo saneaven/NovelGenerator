@@ -33,7 +33,7 @@ OPENROUTER_IMAGE_MODEL_OVERRIDES: dict[str, dict[str, list[str]]] = {
 
 def create_llm_runtime(*, provider_config: dict[str, Any], runtime_spec: Any):
     del runtime_spec
-    from ....providers.openrouter import OpenRouterProvider
+    from ....providers.llm.openrouter import OpenRouterProvider
 
     return OpenRouterProvider(provider_config)
 
@@ -66,6 +66,7 @@ async def embed_many(
     provider_config: dict[str, Any],
     model: str,
     inputs: list[str],
+    dimensions: int | None,
     purpose: str,
     timeout_s: float,
     runtime_spec: Any,
@@ -98,7 +99,11 @@ async def embed_many(
             resp = await client.post(
                 "https://openrouter.ai/api/v1/embeddings",
                 headers=headers,
-                json={"model": model, "input": batch},
+                json={k: v for k, v in {
+                    "model": model,
+                    "input": batch,
+                    "dimensions": dimensions,
+                }.items() if v is not None},
             )
             if resp.status_code >= 400:
                 raise RuntimeError(f"Embedding request failed ({resp.status_code}): {resp.text}")

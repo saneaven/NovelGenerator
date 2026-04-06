@@ -7,10 +7,17 @@ import { assetService, type Asset, type StyledPrompt } from '../../api/assetServ
 import { getAssetUrl } from '../../utils/assetUrl';
 import type { ImageGenerationBinding, ImageGenerationRecipe } from '../../imageRun';
 import { ImageRunRuntime, useImageRunStore } from '../../imageRun';
-import { resolveAspectRatio, resolveImageSize, useImageModelCatalog } from '../../imageRun/useImageModelCatalog';
+import {
+    aspectRatioFromImageSize,
+    resolveAspectRatio,
+    resolveImageSize,
+    resolveSupportedImageSizes,
+    useImageModelCatalog,
+} from '../../imageRun/useImageModelCatalog';
 import { UnifiedImageModal } from '../AssetManager';
 import UnifiedImagePromptModal, { type PromptResult, type PromptMode } from './UnifiedImagePromptModal';
 import ImageModelBrowser from './ImageModelBrowser';
+import NanoGptImageSettings from './NanoGptImageSettings';
 import AuthenticatedImage from '../common/AuthenticatedImage';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
@@ -37,6 +44,12 @@ interface ReferenceImageItem {
     assetId: string;
     previewUrl: string;
     strength: number;
+    missing?: boolean;
+}
+
+interface MaskImageItem {
+    assetId: string;
+    previewUrl: string;
     missing?: boolean;
 }
 
@@ -145,7 +158,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const [streamingError, setStreamingError] = useState<string | null>(null);
     const previousStreamingStatusRef = useRef<'running' | 'done' | 'halted' | null>(null);
 
-    const { models, loading: modelsLoading, selectedModel } = useImageModelCatalog(provider, model);
+    const { models, loading: modelsLoading, error: modelError, selectedModel } = useImageModelCatalog(provider, model);
     const providerSettingsSpec = providerSpec?.image?.provider_settings ?? null;
     const [providerSettingsDraft, setProviderSettingsDraft] = useState<Record<string, unknown>>({});
 
@@ -166,7 +179,8 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
     // Reference images - available for all providers that support it
     const [referenceImages, setReferenceImages] = useState<ReferenceImageItem[]>([]);
-    const [showImagePicker, setShowImagePicker] = useState(false);
+    const [maskImage, setMaskImage] = useState<MaskImageItem | null>(null);
+    const [assetPickerMode, setAssetPickerMode] = useState<'reference' | 'mask' | null>(null);
 
     const isInitialMount = useRef(true);
     const previousProvider = useRef(provider);
@@ -194,7 +208,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         const spec = providerSpecs[providerId]?.image?.provider_settings;
         if (!spec) return {};
 
-        const defaults = buildDefaultObjectValue(spec);
+        const defaults = providerId === 'nanogpt' ? {} : buildDefaultObjectValue(spec);
         const stored = getStoredProviderSettings(settings.imageGenConfig as Record<string, unknown>, providerId);
         const retry =
             recipe?.provider === providerId && recipe.providerSettings && typeof recipe.providerSettings === 'object' && !Array.isArray(recipe.providerSettings)
@@ -208,28 +222,52 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         return normalizeByPublicSpec(merged, spec, merged);
     }, [providerSpecs, settings.imageGenConfig]);
 
-    const normalizedProviderSettings = useMemo(() => {
+    const normalizedProviderSettings = useMemo<Record<string, unknown>>(() => {
         if (!providerSettingsSpec) return {};
+        if (provider === 'nanogpt') {
+            return providerSettingsDraft && typeof providerSettingsDraft === 'object' && !Array.isArray(providerSettingsDraft)
+                ? providerSettingsDraft
+                : {};
+        }
         return normalizeByPublicSpec(providerSettingsDraft, providerSettingsSpec, providerSettingsDraft);
-    }, [providerSettingsDraft, providerSettingsSpec]);
+    }, [provider, providerSettingsDraft, providerSettingsSpec]);
 
     const providerSettingsFlags = useMemo(() => ({
         hasReferenceImages: referenceImages.length > 0,
     }), [referenceImages.length]);
+    const supportsMaskInput = selectedModel?.supports_mask_input ?? false;
+    const supportsMultiImageInput = selectedModel?.supports_multi_image_input ?? false;
+    const isNanoGptProvider = provider === 'nanogpt';
+    const isNativeExact = selectedModel?.ui_resolution_mode === 'native_exact';
+    const supportedImageSizes = resolveSupportedImageSizes(selectedModel, aspectRatio);
+    const showKontextMaxMode = /kontext/i.test(selectedModel?.id ?? model)
+        || Object.prototype.hasOwnProperty.call(providerSettingsDraft, 'kontext_max_mode');
+    const showStrengthField = referenceImages.length > 0 || Object.prototype.hasOwnProperty.call(providerSettingsDraft, 'strength');
+    const showReferenceSection = supportsImageInput || referenceImages.length > 0 || Boolean(maskImage);
+    const showMaskSection = supportsMaskInput || Boolean(maskImage);
 
     // Add reference image handler
     const handleImageSelected = useCallback((assetId: string, previewUrl: string) => {
+        if (assetPickerMode === 'mask') {
+            setMaskImage({ assetId, previewUrl, missing: !previewUrl });
+            setAssetPickerMode(null);
+            return;
+        }
         if (referenceImages.some(img => img.assetId === assetId)) {
-            setShowImagePicker(false);
+            setAssetPickerMode(null);
             return;
         }
         setReferenceImages(prev => [...prev, { assetId, previewUrl, strength: 0.7 }]);
-        setShowImagePicker(false);
-    }, [referenceImages]);
+        setAssetPickerMode(null);
+    }, [assetPickerMode, referenceImages]);
 
     // Remove reference image handler
     const handleRemoveImage = useCallback((assetId: string) => {
         setReferenceImages(prev => prev.filter(img => img.assetId !== assetId));
+    }, []);
+
+    const handleRemoveMaskImage = useCallback(() => {
+        setMaskImage(null);
     }, []);
 
     const providerOptions = useMemo(
@@ -290,8 +328,11 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
         // Reference images: resolve thumbs by asset_id
         const refs = initialRecipe.referenceImages ?? [];
-        if (!currentProjectId || refs.length === 0) {
+        const mask = initialRecipe.maskImage ?? null;
+
+        if (!currentProjectId) {
             setReferenceImages([]);
+            setMaskImage(mask ? { assetId: mask.assetId, previewUrl: '', missing: true } : null);
             return;
         }
 
@@ -303,27 +344,44 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 missing: true,
             }))
         );
+        setMaskImage(mask ? { assetId: mask.assetId, previewUrl: '', missing: true } : null);
+
+        if (refs.length === 0 && !mask) {
+            return;
+        }
 
         let cancelled = false;
         void (async () => {
-            const resolved = await Promise.all(
-                refs.map(async (r) => {
+            const [resolvedRefs, resolvedMask] = await Promise.all([
+                Promise.all(
+                    refs.map(async (r) => {
+                        try {
+                            const a = await assetService.getAsset(currentProjectId, r.assetId);
+                            const url = getAssetUrl(a);
+                            return {
+                                assetId: r.assetId,
+                                strength: r.strength,
+                                previewUrl: url || '',
+                                missing: !url,
+                            };
+                        } catch {
+                            return { assetId: r.assetId, strength: r.strength, previewUrl: '', missing: true };
+                        }
+                    })
+                ),
+                mask ? (async () => {
                     try {
-                        const a = await assetService.getAsset(currentProjectId, r.assetId);
+                        const a = await assetService.getAsset(currentProjectId, mask.assetId);
                         const url = getAssetUrl(a);
-                        return {
-                            assetId: r.assetId,
-                            strength: r.strength,
-                            previewUrl: url || '',
-                            missing: !url,
-                        };
+                        return { assetId: mask.assetId, previewUrl: url || '', missing: !url };
                     } catch {
-                        return { assetId: r.assetId, strength: r.strength, previewUrl: '', missing: true };
+                        return { assetId: mask.assetId, previewUrl: '', missing: true };
                     }
-                })
-            );
+                })() : Promise.resolve<MaskImageItem | null>(null),
+            ]);
             if (cancelled) return;
-            setReferenceImages(resolved);
+            setReferenceImages(resolvedRefs);
+            setMaskImage(resolvedMask);
         })();
 
         return () => {
@@ -380,6 +438,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             setModel('');
             setProviderSettingsDraft(buildProviderSettingsDraft(provider, null));
             setReferenceImages([]);
+            setMaskImage(null);
             setCustomNaturalPrefix('');
             setCustomNaturalPostfix('');
             setCustomPositivePrefix('');
@@ -392,8 +451,20 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     useEffect(() => {
         if (!selectedModel) return;
         const nextModel = selectedModel.id;
-        const nextAspectRatio = resolveAspectRatio(selectedModel, aspectRatio);
-        const nextImageSize = resolveImageSize(selectedModel, imageSize);
+        let nextAspectRatio = aspectRatio;
+        let nextImageSize = imageSize;
+
+        if (selectedModel.ui_resolution_mode === 'native_exact') {
+            nextImageSize = resolveImageSize(selectedModel, imageSize);
+            nextAspectRatio = aspectRatioFromImageSize(nextImageSize);
+        } else {
+            nextAspectRatio = resolveAspectRatio(selectedModel, aspectRatio);
+            const nextSizes = resolveSupportedImageSizes(selectedModel, nextAspectRatio);
+            nextImageSize = nextSizes.includes(imageSize)
+                ? imageSize
+                : (nextSizes[0] ?? resolveImageSize(selectedModel, imageSize));
+        }
+
         if (nextModel !== model) setModel(nextModel);
         if (nextAspectRatio !== aspectRatio) setAspectRatio(nextAspectRatio);
         if (nextImageSize !== imageSize) setImageSize(nextImageSize);
@@ -545,6 +616,22 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         return objectType && objectId ? { type: 'object', objectType, objectId } : null;
     }, [assetType, manuscriptId, objectType, objectId]);
 
+    const generationBlocker = useMemo(() => {
+        if (referenceImages.length > 0 && !supportsImageInput) {
+            return 'The selected model does not support reference images.';
+        }
+        if (referenceImages.length > 1 && !supportsMultiImageInput) {
+            return 'The selected model supports only one input image.';
+        }
+        if (maskImage && !supportsMaskInput) {
+            return 'The selected model does not support mask input.';
+        }
+        if (maskImage && referenceImages.length === 0) {
+            return 'Add a reference image before using a mask.';
+        }
+        return null;
+    }, [maskImage, referenceImages.length, supportsImageInput, supportsMaskInput, supportsMultiImageInput]);
+
     const handleGenerate = async () => {
         if (!binding) {
             showAlert({
@@ -564,11 +651,23 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             showAlert({ title: 'Validation Error', message: 'No image model is available for the selected provider.' });
             return;
         }
+        if (generationBlocker) {
+            showAlert({ title: 'Validation Error', message: generationBlocker });
+            return;
+        }
 
+        const nanogptStrength =
+            isNanoGptProvider && typeof normalizedProviderSettings.strength === 'number'
+                ? normalizedProviderSettings.strength
+                : undefined;
         const referenceImagesData =
             supportsImageInput && referenceImages.length > 0
-                ? referenceImages.map((img) => ({ assetId: img.assetId, strength: img.strength }))
+                ? referenceImages.map((img) => ({
+                    assetId: img.assetId,
+                    strength: nanogptStrength ?? img.strength,
+                }))
                 : undefined;
+        const maskImageData = maskImage ? { assetId: maskImage.assetId } : undefined;
 
         const providerSettings =
             Object.keys(normalizedProviderSettings).length > 0
@@ -607,6 +706,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 providerSettings,
                 styleId: selectedTagBasedStyleId,
                 referenceImages: referenceImagesData,
+                maskImage: maskImageData,
             };
 
                 const { imageRunId: newTaskId } = await ImageRunRuntime.start(
@@ -642,6 +742,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 providerSettings,
                 styleId: selectedNaturalStyleId,
                 referenceImages: referenceImagesData,
+                maskImage: maskImageData,
             };
 
             const { imageRunId: newTaskId } = await ImageRunRuntime.start(
@@ -799,42 +900,85 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                             currentModel={model}
                             onSelectModel={setModel}
                             loading={modelsLoading}
+                            error={modelError}
                         />
                     </div>
                 </div>
 
                 {/* Geometry and Style Selection */}
                 <div className="form-row">
-                    <div className="form-field">
-                        <label>Aspect Ratio</label>
-                        <select
-                            value={aspectRatio}
-                            onChange={(e) => setAspectRatio(e.target.value)}
-                            className="config-select"
-                            disabled={!selectedModel || selectedModel.supported_aspect_ratios.length <= 1}
-                        >
-                            {(selectedModel?.supported_aspect_ratios ?? [aspectRatio]).map((ratio) => (
-                                <option key={ratio} value={ratio}>
-                                    {ratio}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="form-field">
-                        <label>Image Size</label>
-                        <select
-                            value={imageSize}
-                            onChange={(e) => setImageSize(e.target.value)}
-                            className="config-select"
-                            disabled={!selectedModel || selectedModel.supported_image_sizes.length <= 1}
-                        >
-                            {(selectedModel?.supported_image_sizes ?? [imageSize]).map((sizeOption) => (
-                                <option key={sizeOption} value={sizeOption}>
-                                    {sizeOption}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+                    {!isNativeExact ? (
+                        <>
+                            <div className="form-field">
+                                <label>Aspect Ratio</label>
+                                <select
+                                    value={aspectRatio}
+                                    onChange={(e) => {
+                                        const nextAspectRatio = e.target.value;
+                                        const nextSizes = resolveSupportedImageSizes(selectedModel, nextAspectRatio);
+                                        setAspectRatio(nextAspectRatio);
+                                        if (!nextSizes.includes(imageSize)) {
+                                            setImageSize(nextSizes[0] ?? imageSize);
+                                        }
+                                    }}
+                                    className="config-select"
+                                    disabled={!selectedModel || selectedModel.supported_aspect_ratios.length <= 1}
+                                >
+                                    {(selectedModel?.supported_aspect_ratios ?? [aspectRatio]).map((ratio) => (
+                                        <option key={ratio} value={ratio}>
+                                            {ratio}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="form-field">
+                                <label>Image Size</label>
+                                <select
+                                    value={imageSize}
+                                    onChange={(e) => setImageSize(e.target.value)}
+                                    className="config-select"
+                                    disabled={!selectedModel || supportedImageSizes.length <= 1}
+                                >
+                                    {(supportedImageSizes.length > 0 ? supportedImageSizes : [imageSize]).map((sizeOption) => (
+                                        <option key={sizeOption} value={sizeOption}>
+                                            {sizeOption}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="form-field">
+                                <label>Output Size</label>
+                                <select
+                                    value={imageSize}
+                                    onChange={(e) => {
+                                        const nextSize = e.target.value;
+                                        setImageSize(nextSize);
+                                        setAspectRatio(aspectRatioFromImageSize(nextSize));
+                                    }}
+                                    className="config-select"
+                                    disabled={!selectedModel || selectedModel.supported_image_sizes.length <= 1}
+                                >
+                                    {(selectedModel?.supported_image_sizes ?? [imageSize]).map((sizeOption) => (
+                                        <option key={sizeOption} value={sizeOption}>
+                                            {sizeOption}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="form-field">
+                                <label>Aspect Ratio</label>
+                                <input
+                                    type="text"
+                                    value={aspectRatio}
+                                    className="config-input"
+                                    disabled
+                                />
+                            </div>
+                        </>
+                    )}
 
                     {!isTagBased && (
                         <div className="form-field">
@@ -873,7 +1017,20 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     )}
                 </div>
 
-                {providerSettingsSpec && (
+                {provider === 'nanogpt' ? (
+                    <div className="provider-settings">
+                        <div className="provider-settings-header">
+                            <label>{t(providerSpec?.image?.settings_title_key || providerSpec?.ui.display_name_key || 'settings.imageGen.provider')}</label>
+                            <p className="provider-settings-description">Optional provider overrides. Leave Override unchecked to use provider defaults.</p>
+                        </div>
+                        <NanoGptImageSettings
+                            value={providerSettingsDraft}
+                            onChange={setProviderSettingsDraft}
+                            showStrength={showStrengthField}
+                            showKontextMaxMode={showKontextMaxMode}
+                        />
+                    </div>
+                ) : providerSettingsSpec ? (
                     <div className="provider-settings">
                         <div className="provider-settings-header">
                             <label>{t(providerSpec?.image?.settings_title_key || providerSpec?.ui.display_name_key || 'settings.imageGen.provider')}</label>
@@ -889,21 +1046,27 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                             flags={providerSettingsFlags}
                         />
                     </div>
-                )}
+                ) : null}
 
                 {/* Reference Images Section */}
-                {supportsImageInput && (
+                {showReferenceSection && (
                     <div className="form-section reference-images-section">
                         <div className="section-header">
                             <label>Reference Images</label>
                             <TextButton
                                 variant="secondary"
                                 size="sm"
-                                onClick={() => setShowImagePicker(true)}
+                                onClick={() => setAssetPickerMode('reference')}
+                                disabled={!supportsImageInput}
                             >
                                 + Add
                             </TextButton>
                         </div>
+                        {!supportsImageInput ? (
+                            <div className="empty-hint">
+                                The selected model does not support image input. Remove the existing reference images or switch models.
+                            </div>
+                        ) : null}
                         {referenceImages.length === 0 ? (
                             <div className="empty-hint">
                                 Add reference images for i2i or style transfer
@@ -930,6 +1093,49 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                         )}
                     </div>
                 )}
+
+                {showMaskSection ? (
+                    <div className="form-section reference-images-section">
+                        <div className="section-header">
+                            <label>Mask</label>
+                            <TextButton
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => setAssetPickerMode('mask')}
+                                disabled={!supportsMaskInput}
+                            >
+                                {maskImage ? 'Replace' : 'Add'}
+                            </TextButton>
+                        </div>
+                        {!supportsMaskInput ? (
+                            <div className="empty-hint">
+                                The selected model does not support mask input. Remove the existing mask or switch models.
+                            </div>
+                        ) : null}
+                        {!maskImage ? (
+                            <div className="empty-hint">
+                                Add a mask image for inpainting.
+                            </div>
+                        ) : (
+                            <div className="reference-images-grid">
+                                <div className="reference-image-item">
+                                    {maskImage.previewUrl && !maskImage.missing ? (
+                                        <AuthenticatedImage src={maskImage.previewUrl} alt="Mask" />
+                                    ) : (
+                                        <div className="reference-image-missing">Missing</div>
+                                    )}
+                                    <IconButton
+                                        icon={<Close size="sm" />}
+                                        onClick={handleRemoveMaskImage}
+                                        title="Remove mask"
+                                        size="sm"
+                                        className="remove-image-btn"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                ) : null}
 
                 {/* Natural Style Preview */}
                 {!isTagBased && selectedNaturalStyleId && getCurrentNaturalStyle() && (
@@ -981,6 +1187,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 {/* Error Display */}
                 {error && <div className="error-message">{error}</div>}
                 {streamingError && <div className="error-message">{streamingError}</div>}
+                {generationBlocker && <div className="error-message">{generationBlocker}</div>}
             </div>
 
             {/* Footer with Generate Button */}
@@ -990,6 +1197,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     onClick={handleGenerate}
                     disabled={
                         isGenerating ||
+                        Boolean(generationBlocker) ||
                         (isTagBased ? !positivePrompt.trim() : !prompt.trim())
                     }
                 >
@@ -1025,15 +1233,15 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             ) : null)}
 
             {/* Reference Image Picker Modal */}
-            {showImagePicker && (
+            {assetPickerMode && (
                 <UnifiedImageModal
                     preset="assetPicker"
-                    isOpen={showImagePicker}
-                    onClose={() => setShowImagePicker(false)}
+                    isOpen={assetPickerMode !== null}
+                    onClose={() => setAssetPickerMode(null)}
                     onSelect={(asset: Asset) => {
                         handleImageSelected(asset.id, asset.file_url || '');
                     }}
-                    title="Select Reference Image"
+                    title={assetPickerMode === 'mask' ? 'Select Mask Image' : 'Select Reference Image'}
                 />
             )}
         </div>

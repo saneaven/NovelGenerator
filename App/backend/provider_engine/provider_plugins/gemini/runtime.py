@@ -5,7 +5,7 @@ from typing import Any
 
 def create_llm_runtime(*, provider_config: dict[str, Any], runtime_spec: Any):
     del runtime_spec
-    from ....providers.gemini_provider import GeminiProvider
+    from ....providers.llm.gemini_provider import GeminiProvider
 
     return GeminiProvider(provider_config)
 
@@ -20,11 +20,12 @@ async def embed_many(
     provider_config: dict[str, Any],
     model: str,
     inputs: list[str],
+    dimensions: int | None,
     purpose: str,
     timeout_s: float,
     runtime_spec: Any,
 ) -> list[list[float]]:
-    del timeout_s, runtime_spec
+    del timeout_s, runtime_spec, dimensions
     from google import genai
     from google.genai import types
 

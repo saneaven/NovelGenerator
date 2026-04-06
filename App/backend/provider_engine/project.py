@@ -103,6 +103,8 @@ def _project_image_model(model: Any) -> dict[str, Any]:
         "name": model.name,
         "prompt_type": model.prompt_type,
         "supports_image_input": model.supports_image_input,
+        "supports_mask_input": model.supports_mask_input,
+        "supports_multi_image_input": model.supports_multi_image_input,
         "geometry": {
             "supported_aspect_ratios": list(model.geometry.supported_aspect_ratios),
             "supported_resolutions": list(model.geometry.supported_resolutions),
@@ -110,11 +112,21 @@ def _project_image_model(model: Any) -> dict[str, Any]:
             "default_resolution": model.geometry.default_resolution,
             "resolution_mode": model.geometry.resolution_mode,
             "native_size_by_ratio": model.geometry.native_size_by_ratio,
+            "supported_geometry_pairs": {
+                key: list(value)
+                for key, value in (model.geometry.supported_geometry_pairs or {}).items()
+            } if model.geometry.supported_geometry_pairs else None,
         },
         "description": model.description,
         "canonical_slug": model.canonical_slug,
+        "owned_by": model.owned_by,
+        "icon_url": model.icon_url,
+        "tags": list(model.tags or ()),
+        "category": model.category,
         "architecture": model.architecture,
         "pricing": model.pricing,
+        "capabilities": model.capabilities,
+        "supported_parameters": model.supported_parameters,
     }
 
 

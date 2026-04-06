@@ -79,6 +79,7 @@ class ChatCompletionRequest(BaseModel):
     retry_config: Optional[RetryConfig] = None
     native_tool_call: bool = False
     verbosity: Optional[Literal["low", "medium", "high"]] = None  # GPT-5 output verbosity
+    provider_settings: Optional[Dict[str, Any]] = None
 
 
 class ProviderModelsRequest(BaseModel):

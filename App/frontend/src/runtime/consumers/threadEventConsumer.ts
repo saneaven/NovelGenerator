@@ -65,7 +65,8 @@ function isReasoningDetailType(value: unknown): value is ReasoningDetail['type']
     || value === 'claude'
     || value === 'openrouter'
     || value === 'openai_compatible_template'
-    || value === 'xai';
+    || value === 'xai'
+    || value === 'nanogpt';
 }
 
 function pickExistingReasoningDetail(message: ThreadMessage): ReasoningDetail | undefined {

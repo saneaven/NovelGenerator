@@ -21,6 +21,11 @@ class ReferenceImage(BaseModel):
     strength: float = 0.7  # How much to use this reference (0-1)
 
 
+class MaskImage(BaseModel):
+    """Mask image used during inpainting generation."""
+    asset_id: str
+
+
 class ReferenceObject(BaseModel):
     """Reference object used during generation (stored in metadata)"""
     id: str
@@ -40,6 +45,7 @@ class ImageRunRecipe(BaseModel):
     negative_prompt: Optional[StyledPrompt] = None
     provider_settings: Optional[Dict[str, Any]] = None
     reference_images: Optional[List[ReferenceImage]] = None
+    mask_image: Optional[MaskImage] = None
     reference_objects: Optional[List[ReferenceObject]] = None
 
 
@@ -114,15 +120,24 @@ class ImageModelInfo(BaseModel):
     name: str
     description: Optional[str] = None
     canonical_slug: Optional[str] = None
+    owned_by: Optional[str] = None
+    icon_url: Optional[str] = None
+    tags: Optional[List[str]] = None
+    category: Optional[str] = None
     prompt_type: Literal["natural", "tag_based"]
     supports_image_input: bool = False
+    supports_mask_input: bool = False
+    supports_multi_image_input: bool = False
     supported_aspect_ratios: List[str]
     supported_image_sizes: List[str]
     default_aspect_ratio: str
     default_image_size: str
-    ui_resolution_mode: Literal["native_tier", "translated_fixed"]
+    ui_resolution_mode: Literal["native_exact", "native_tier", "translated_fixed"]
+    supported_geometry_pairs: Optional[Dict[str, List[str]]] = None
     architecture: Optional[Dict[str, Any]] = None
     pricing: Optional[Dict[str, Any]] = None
+    capabilities: Optional[Dict[str, Any]] = None
+    supported_parameters: Optional[Dict[str, Any]] = None
 
 
 class ImageModelsResponse(BaseModel):
@@ -172,6 +187,7 @@ class AssetResponse(BaseModel):
     generation_style_id: Optional[str] = None
     generation_settings: Optional[Dict[str, Any]] = None  # Provider-specific settings
     generation_reference_images: Optional[List[ReferenceImage]] = None  # Reference images used during generation
+    generation_mask_image: Optional[MaskImage] = None
     generation_reference_objects: Optional[List[Dict[str, Any]]] = None  # Project objects referenced
     width: Optional[int] = None
     height: Optional[int] = None

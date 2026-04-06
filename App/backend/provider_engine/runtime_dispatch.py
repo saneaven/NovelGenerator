@@ -93,6 +93,7 @@ async def embed_many(
     provider_config: dict[str, Any],
     model: str,
     inputs: list[str],
+    dimensions: int | None = None,
     purpose: str,
     timeout_s: float = 60.0,
 ) -> list[list[float]]:
@@ -104,6 +105,7 @@ async def embed_many(
         provider_config=deepcopy(provider_config),
         model=model,
         inputs=inputs,
+        dimensions=dimensions,
         purpose=purpose,
         timeout_s=timeout_s,
         runtime_spec=provider.embedding.runtime,

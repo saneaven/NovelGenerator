@@ -57,7 +57,7 @@ from ..image_providers.registry import ImageProviderRegistry
 from ..utils.story_entities import STORY_ENTITY_TYPE
 
 # Import providers to register them
-from ..image_providers import openai_image, gemini_image, xai_image, novelai_image, openrouter_image
+from ..image_providers import openai_image, gemini_image, xai_image, novelai_image, openrouter_image, nanogpt_image
 
 router = APIRouter(prefix="/api/v1/assets", tags=["assets"])
 
@@ -429,7 +429,13 @@ async def get_image_models(
 ):
     """Get available models for an image provider"""
     try:
-        provider_config = credential_service.get_provider_config(db, current_user.id, provider)
+        if provider == "nanogpt":
+            try:
+                provider_config = credential_service.get_provider_config(db, current_user.id, provider)
+            except CredentialServiceError:
+                provider_config = {}
+        else:
+            provider_config = credential_service.get_provider_config(db, current_user.id, provider)
         if not ImageProviderRegistry.has_provider(provider):
             raise HTTPException(status_code=404, detail=f"Unknown image provider '{provider}'")
         models = await image_model_catalog_service.list_models(provider, provider_config)
@@ -1445,4 +1451,3 @@ async def set_main_asset(
         created_at=link.created_at,
         asset=_asset_to_response(asset)
     )
-

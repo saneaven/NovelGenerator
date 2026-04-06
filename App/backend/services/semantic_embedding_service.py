@@ -11,6 +11,7 @@ async def embed_many(
     model: str,
     inputs: List[str],
     config: Dict[str, Any],
+    dimensions: int | None = None,
     purpose: Literal["query", "document"] = "document",
     timeout_s: float = 60.0,
 ) -> List[List[float]]:
@@ -19,6 +20,7 @@ async def embed_many(
         provider_config=config,
         model=model,
         inputs=inputs,
+        dimensions=dimensions,
         purpose=purpose,
         timeout_s=timeout_s,
     )

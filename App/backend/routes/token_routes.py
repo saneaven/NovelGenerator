@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/v1/tokens", tags=["tokens"])
 
 class CountTokensRequest(BaseModel):
     """Request body for token counting."""
-    provider: Literal["openai", "gemini", "claude", "openrouter", "custom", "xai"]
+    provider: Literal["openai", "nanogpt", "gemini", "claude", "openrouter", "custom", "xai"]
     model: str
     text: str
     tokenizer_override: Literal["openai", "claude", "gemini"] | None = None

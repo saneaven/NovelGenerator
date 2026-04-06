@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
 from ..image_providers import gemini_image, novelai_image, openai_image, openrouter_image, xai_image
-from ..image_providers.base import BaseImageProvider, ImageGenerationResult, ReferenceImageData
+from ..image_providers.base import BaseImageProvider, ImageGenerationResult, MaskImageData, ReferenceImageData
 from ..image_providers.registry import ImageProviderRegistry
 from ..models.db_models import (
     Asset,
@@ -268,6 +268,7 @@ def _build_tool_recipe_snapshot(
         "negative_prompt": _styled_prompt_to_dict(negative_payload),
         "provider_settings": sanitize_generation_settings(provider_name, stored_provider_settings),
         "reference_images": None,
+        "mask_image": None,
         "reference_objects": None,
     }
 
@@ -795,6 +796,7 @@ class ImageRunService:
             recipe["requested_aspect_ratio"] = geometry.requested_aspect_ratio
             recipe["requested_image_size"] = geometry.requested_image_size
             recipe["provider_settings"] = sanitize_generation_settings(provider_name, recipe.get("provider_settings"))
+            recipe["mask_image"] = recipe.get("mask_image") if isinstance(recipe.get("mask_image"), dict) else None
             snapshot["recipe"] = recipe
 
             row.provider = provider_name
@@ -858,6 +860,20 @@ class ImageRunService:
                         )
                     )
 
+            mask_image_data: MaskImageData | None = None
+            raw_mask = recipe.get("mask_image")
+            if isinstance(raw_mask, dict) and geometry.supports_image_input:
+                mask_asset_id = raw_mask.get("asset_id") or raw_mask.get("assetId")
+                if mask_asset_id:
+                    mask_asset = db.query(Asset).filter(
+                        Asset.id == _parse_uuid(mask_asset_id, field_name="mask asset_id"),
+                        Asset.project_id == row.project_id,
+                    ).first()
+                    if mask_asset is not None:
+                        image_bytes = storage_service.read_asset_file(str(mask_asset.file_path))
+                        image_bytes = storage_service.to_png_bytes(image_bytes)
+                        mask_image_data = MaskImageData(image_data=image_bytes)
+
             result = await provider.generate_image(
                 prompt=f"{prompt_payload.prefix}{prompt_payload.content}{prompt_payload.postfix}" if isinstance(prompt_payload, StyledPrompt) else None,
                 positive_prompt=(
@@ -878,6 +894,7 @@ class ImageRunService:
                 quality=str(provider_settings.get("quality") or "auto"),
                 provider_settings=provider_settings or None,
                 reference_images=reference_image_data,
+                mask_image=mask_image_data,
             )
             if not result.success:
                 raise ValueError(result.error or "Image generation failed")
@@ -1022,6 +1039,7 @@ class ImageRunService:
                 recipe.get("provider_settings"),
             ),
             generation_reference_images=recipe.get("reference_images") if isinstance(recipe.get("reference_images"), list) else None,
+            generation_mask_image=recipe.get("mask_image") if isinstance(recipe.get("mask_image"), dict) else None,
             generation_reference_objects=recipe.get("reference_objects") if isinstance(recipe.get("reference_objects"), list) else None,
             width=width or result.width,
             height=height or result.height,
@@ -1465,7 +1483,7 @@ class ImageRunService:
             db.query(Asset)
             .filter(
                 Asset.project_id == project_id,
-                Asset.generation_reference_images.isnot(None),
+                (Asset.generation_reference_images.isnot(None) | Asset.generation_mask_image.isnot(None)),
                 ~Asset.id.in_(deleted_asset_ids) if deleted_asset_ids else True,
             )
             .all(),
@@ -1480,7 +1498,7 @@ class ImageRunService:
             db.query(Asset)
             .filter(
                 Asset.project_id == project_id,
-                Asset.generation_reference_images.isnot(None),
+                (Asset.generation_reference_images.isnot(None) | Asset.generation_mask_image.isnot(None)),
                 ~Asset.id.in_(deleted_asset_ids) if deleted_asset_ids else True,
             )
             .all(),

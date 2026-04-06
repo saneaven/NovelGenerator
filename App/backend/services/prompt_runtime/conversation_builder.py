@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from ...models.db_models import RunMessageAttachmentModel, RunMessageModel, RunToolCallModel
-from ...providers.multimodal import attachment_to_content_part
+from ...providers.parsing.multimodal import attachment_to_content_part
 
 
 TERMINAL_TOOL_STATUSES = {"applied", "failed", "rejected"}

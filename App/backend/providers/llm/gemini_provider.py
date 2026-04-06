@@ -309,7 +309,9 @@ class GeminiProvider(BaseProvider):
         custom_kind: Optional[str] = None,
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
+        provider_settings: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
+        del provider_preference, custom_kind, verbosity, provider_settings
         if not self.validate_config():
             yield self._error_event("Gemini API key is required")
             return

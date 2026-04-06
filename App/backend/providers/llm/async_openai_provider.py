@@ -79,6 +79,8 @@ class AsyncOpenAIProvider(BaseProvider):
         max_tokens: Optional[int],
         provider_preference: Optional[Dict],
         thinking_config: Optional[Dict],
+        thinking_mode: Optional[str],
+        provider_settings: Optional[Dict[str, Any]],
     ) -> Dict[str, object]:
         is_gpt5 = self._is_gpt5_model(model)
 
@@ -104,11 +106,17 @@ class AsyncOpenAIProvider(BaseProvider):
             request["tools"] = [{"type": "function", "function": fn} for fn in tools]
             request["tool_choice"] = tool_choice or "auto"
 
-        extra_body = self._build_extra_body(provider_preference, thinking_config, model)
+        extra_body = self._build_extra_body(
+            provider_preference,
+            thinking_config,
+            model,
+            thinking_mode=thinking_mode,
+            provider_settings=provider_settings,
+        )
         if extra_body:
             request["extra_body"] = extra_body
 
-        additional = self._additional_request_kwargs()
+        additional = self._additional_request_kwargs(provider_settings)
         if additional:
             request.update(additional)
 
@@ -119,14 +127,19 @@ class AsyncOpenAIProvider(BaseProvider):
         provider_preference: Optional[Dict],
         thinking_config: Optional[Dict],
         model: str = "",
+        *,
+        thinking_mode: Optional[str] = None,
+        provider_settings: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict]:
+        del thinking_mode, provider_settings
         return None
 
     def _is_gpt5_model(self, model: str) -> bool:
         """Check if model is GPT-5 family. Override in subclasses if needed."""
         return False
 
-    def _additional_request_kwargs(self) -> Dict[str, object]:
+    def _additional_request_kwargs(self, provider_settings: Optional[Dict[str, Any]] = None) -> Dict[str, object]:
+        del provider_settings
         return {}
 
     def _convert_messages(self, messages: List[Dict]) -> List[Dict]:
@@ -479,6 +492,7 @@ class AsyncOpenAIProvider(BaseProvider):
         custom_kind: Optional[str] = None,
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
+        provider_settings: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         if not self.validate_config():
             yield self._error_event("Invalid provider configuration")
@@ -498,6 +512,8 @@ class AsyncOpenAIProvider(BaseProvider):
             max_tokens,
             provider_preference,
             thinking_config,
+            thinking_mode,
+            provider_settings,
         )
 
         # Check if last assistant message has unclosed <thinking> tag

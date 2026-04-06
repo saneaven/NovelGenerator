@@ -14,6 +14,12 @@ function mapReferenceImages(asset: Asset): ReferenceImageRef[] | undefined {
   return refs.map((r) => ({ assetId: r.asset_id, strength: r.strength }));
 }
 
+function mapMaskImage(asset: Asset): { assetId: string } | undefined {
+  const mask = asset.generation_mask_image;
+  if (!mask || !mask.asset_id) return undefined;
+  return { assetId: mask.asset_id };
+}
+
 export function recipeFromAsset(asset: Asset): ImageGenerationRecipe | null {
   const provider = asset.generation_provider;
   const model = asset.generation_model;
@@ -21,8 +27,9 @@ export function recipeFromAsset(asset: Asset): ImageGenerationRecipe | null {
 
   const providerSettings = asset.generation_settings ?? undefined;
   const referenceImages = mapReferenceImages(asset);
+  const maskImage = mapMaskImage(asset);
   const aspectRatio = inferAspectRatio(asset);
-  const imageSize = '1K';
+  const imageSize = asset.width && asset.height ? `${asset.width}x${asset.height}` : '1K';
   const styleId = asset.generation_style_id ?? null;
 
   if (asset.generation_positive_prompt) {
@@ -37,6 +44,7 @@ export function recipeFromAsset(asset: Asset): ImageGenerationRecipe | null {
       providerSettings,
       styleId,
       referenceImages,
+      maskImage,
     };
   }
 
@@ -51,6 +59,7 @@ export function recipeFromAsset(asset: Asset): ImageGenerationRecipe | null {
       providerSettings,
       styleId,
       referenceImages,
+      maskImage,
     };
   }
 

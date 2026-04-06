@@ -310,6 +310,7 @@ def measure_asset_row(row: Asset | object) -> int:
         getattr(row, "generation_negative_prompt", None),
         getattr(row, "generation_settings", None),
         getattr(row, "generation_reference_images", None),
+        getattr(row, "generation_mask_image", None),
         getattr(row, "generation_reference_objects", None),
     )
 
@@ -389,6 +390,7 @@ def snapshot_asset_row(row: Asset | object | None) -> object | None:
         "generation_negative_prompt",
         "generation_settings",
         "generation_reference_images",
+        "generation_mask_image",
         "generation_reference_objects",
     )
 

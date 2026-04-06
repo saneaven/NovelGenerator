@@ -12,6 +12,12 @@ class ReferenceImageData:
 
 
 @dataclass
+class MaskImageData:
+    """Mask image used for inpainting generation."""
+    image_data: bytes
+
+
+@dataclass
 class ImageGenerationResult:
     """Result of an image generation request"""
     success: bool
@@ -55,6 +61,7 @@ class BaseImageProvider(ABC):
         negative_prompt: Optional[str] = None,
         provider_settings: Optional[Dict[str, Any]] = None,
         reference_images: Optional[List['ReferenceImageData']] = None,
+        mask_image: Optional['MaskImageData'] = None,
     ) -> ImageGenerationResult:
         """
         Generate an image from a text prompt
@@ -72,6 +79,7 @@ class BaseImageProvider(ABC):
             negative_prompt: Negative tags for tag-based providers
             provider_settings: Provider-specific settings (e.g., sampler, steps)
             reference_images: List of reference images for image-to-image generation
+            mask_image: Optional inpainting mask image
 
         Returns:
             ImageGenerationResult with image data or error

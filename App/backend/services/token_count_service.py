@@ -11,14 +11,14 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from ..providers.multimodal import (
+from ..providers.parsing.multimodal import (
     _format_text_file,
     _load_text_part,
     build_claude_content,
     build_gemini_binary_parts,
     get_canonical_content_parts,
 )
-from ..providers.tool_call_arguments import parse_tool_call_arguments
+from ..providers.parsing.tool_call_arguments import parse_tool_call_arguments
 from .chat_attachment_service import chat_attachment_service
 from .credential_service import CredentialServiceError, credential_service
 from .token_counting_service import (
@@ -42,7 +42,7 @@ from pypdf import PdfReader
 
 
 TokenizerName = Literal["openai", "claude", "gemini"]
-ProviderName = Literal["openai", "gemini", "claude", "openrouter", "custom", "xai"]
+ProviderName = Literal["openai", "nanogpt", "gemini", "claude", "openrouter", "custom", "xai"]
 CountMethod = Literal["tiktoken", "claude_api", "gemini_api"]
 TokenCountCache = dict[str, Any]
 
@@ -72,7 +72,7 @@ _TIKTOKEN_ENCODERS: dict[str, Any] = {}
 
 def _normalize_provider(provider: str) -> ProviderName:
     normalized = str(provider or "").strip().lower()
-    if normalized not in {"openai", "gemini", "claude", "openrouter", "custom", "xai"}:
+    if normalized not in {"openai", "nanogpt", "gemini", "claude", "openrouter", "custom", "xai"}:
         raise ValueError(f"Unsupported provider: {provider}")
     return normalized  # type: ignore[return-value]
 

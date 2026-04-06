@@ -207,6 +207,32 @@ def scrub_generation_reference_images(db: Session, *, project_id: UUID, deleted_
     return int(scrubbed)
 
 
+def scrub_generation_mask_images(db: Session, *, project_id: UUID, deleted_asset_ids: Sequence[UUID]) -> int:
+    """Remove deleted asset IDs from other assets' generation_mask_image metadata."""
+    if not deleted_asset_ids:
+        return 0
+
+    delete_id_strings = {str(a_id) for a_id in deleted_asset_ids}
+    assets_with_mask = (
+        db.query(Asset)
+        .filter(Asset.project_id == project_id, Asset.generation_mask_image.isnot(None))
+        .all()
+    )
+
+    scrubbed = 0
+    for src in assets_with_mask:
+        mask = getattr(src, "generation_mask_image", None)
+        if not isinstance(mask, dict):
+            continue
+        if str(mask.get("asset_id")) not in delete_id_strings:
+            continue
+        src.generation_mask_image = None  # type: ignore[assignment]
+        src.updated_at = datetime.utcnow()
+        scrubbed += 1
+
+    return int(scrubbed)
+
+
 def delete_assets_with_files(
     db: Session,
     *,
@@ -218,6 +244,7 @@ def delete_assets_with_files(
 
     if scrub_references_in_project_id and deleted_ids:
         scrub_generation_reference_images(db, project_id=scrub_references_in_project_id, deleted_asset_ids=deleted_ids)
+        scrub_generation_mask_images(db, project_id=scrub_references_in_project_id, deleted_asset_ids=deleted_ids)
 
     for asset in assets:
         storage_service.delete_asset_files(asset.file_path)

@@ -79,6 +79,51 @@ const parseOpenAIModelId = (id: string): { series: string; version: string } | n
 // Capitalize first letter
 const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
+const getCapabilityLabels = (model: any): string[] => {
+  const raw = model?.capabilities;
+  if (Array.isArray(raw)) {
+    return raw.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  }
+  if (raw && typeof raw === 'object') {
+    return Object.entries(raw)
+      .filter(([, value]) => Boolean(value))
+      .map(([key]) => key.replace(/_/g, ' '));
+  }
+  return [];
+};
+
+const getAccessTierLabel = (provider: ProviderType, model: any): string | null => {
+  if (provider !== 'nanogpt') return null;
+  const tier = typeof model?.access_tier === 'string' ? model.access_tier.trim().toLowerCase() : '';
+  if (tier === 'subscription') return 'Subscription';
+  if (tier === 'paid') return 'Paid';
+  return null;
+};
+
+const formatCostEstimate = (value: any): string | null => {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (value && typeof value === 'object') {
+    const summary = (value as Record<string, unknown>).summary;
+    if (typeof summary === 'string' && summary.trim()) return summary.trim();
+    const tier = (value as Record<string, unknown>).tier;
+    if (typeof tier === 'string' && tier.trim()) return tier.trim();
+  }
+  return null;
+};
+
+const getPricingDisplayValue = (source: any, key: 'prompt' | 'completion' | 'image'): number | null => {
+  const pricingDisplay = source?.pricing_display;
+  if (!pricingDisplay || typeof pricingDisplay !== 'object') return null;
+  const raw = pricingDisplay[`${key}_per_1m`];
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+};
+
+const formatDisplayUsd = (value: number | null): string | null => {
+  if (value === null || !Number.isFinite(value)) return null;
+  return `$${value.toFixed(2)}`;
+};
+
 // Build tree for OpenRouter (1-level: Family -> Models)
 const buildOpenRouterTree = (models: any[]): TreeNode[] => {
   const familyMap: Record<string, TreeNode> = {};
@@ -438,15 +483,15 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
           return getModelDisplayName(b).localeCompare(getModelDisplayName(a));
         case 'price-asc':
           if (detailsConfig.showPricing) {
-            const priceA = parseFloat(a.pricing?.prompt || '0');
-            const priceB = parseFloat(b.pricing?.prompt || '0');
+            const priceA = getPricingDisplayValue(a, 'prompt') ?? 0;
+            const priceB = getPricingDisplayValue(b, 'prompt') ?? 0;
             return priceA - priceB;
           }
           return 0;
         case 'price-desc':
           if (detailsConfig.showPricing) {
-            const priceA = parseFloat(a.pricing?.prompt || '0');
-            const priceB = parseFloat(b.pricing?.prompt || '0');
+            const priceA = getPricingDisplayValue(a, 'prompt') ?? 0;
+            const priceB = getPricingDisplayValue(b, 'prompt') ?? 0;
             return priceB - priceA;
           }
           return 0;
@@ -511,11 +556,26 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     const MAX_DESC_LENGTH = 150;
     const isDescriptionLong = model.description && model.description.length > MAX_DESC_LENGTH;
     const isDescExpanded = expandedSections.has(`${model.id}-description`);
+    const capabilityLabels = getCapabilityLabels(model);
+    const accessTierLabel = getAccessTierLabel(provider, model);
+    const costEstimateLabel = formatCostEstimate(model.cost_estimate);
+    const hasMetadata = Boolean(
+      model.context_length
+      || model.max_output_tokens
+      || accessTierLabel
+      || model.category
+      || model.owned_by
+      || costEstimateLabel
+      || capabilityLabels.length
+    );
 
     return (
       <div key={model.id} className={`model-card ${isSelected ? 'model-card--selected' : ''}`}>
         <div className="model-card__header">
           <div className="model-card__info">
+            {typeof model.icon_url === 'string' && model.icon_url ? (
+              <img className="model-card__icon" src={model.icon_url} alt="" aria-hidden="true" />
+            ) : null}
             <h4 className="model-card__name">{getModelDisplayName(model)}</h4>
             <span className="model-card__id">{model.id}</span>
             {model.version && <span className="model-card__version">v{model.version}</span>}
@@ -537,7 +597,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
         {detailsConfig.showPricing && model.pricing && (
           <div className="model-card__pricing-inline">
             <span className="model-card__price">
-              ${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)} / ${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)} per 1M tokens
+              {formatDisplayUsd(getPricingDisplayValue(model, 'prompt')) ?? '-'} / {formatDisplayUsd(getPricingDisplayValue(model, 'completion')) ?? '-'} per 1M tokens
             </span>
           </div>
         )}
@@ -563,6 +623,26 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
             )}
           </div>
         )}
+
+        {hasMetadata ? (
+          <div className="model-card__metadata">
+            {model.context_length ? (
+              <span className="model-card__meta-chip">Context {Number(model.context_length).toLocaleString()}</span>
+            ) : null}
+            {model.max_output_tokens ? (
+              <span className="model-card__meta-chip">Max output {Number(model.max_output_tokens).toLocaleString()}</span>
+            ) : null}
+            {accessTierLabel ? <span className="model-card__meta-chip">{accessTierLabel}</span> : null}
+            {model.category ? <span className="model-card__meta-chip">{model.category}</span> : null}
+            {model.owned_by ? <span className="model-card__meta-chip">{model.owned_by}</span> : null}
+            {costEstimateLabel ? <span className="model-card__meta-chip">{costEstimateLabel}</span> : null}
+            {capabilityLabels.map((label) => (
+              <span key={`${model.id}-${label}`} className="model-card__meta-chip">
+                {label}
+              </span>
+            ))}
+          </div>
+        ) : null}
 
         {/* Detail buttons - Only for OpenRouter */}
         {(detailsConfig.showArchitecture || detailsConfig.showPricing || detailsConfig.showEndpoints) && (
@@ -614,9 +694,9 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
           <div className="model-card__details">
             <h5>{t('settings.modelBrowser.pricingPerMillion')}</h5>
             <ul>
-              <li>{t('settings.modelBrowser.prompt')}: ${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)}</li>
-              <li>{t('settings.modelBrowser.completion')}: ${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)}</li>
-              {parseFloat(model.pricing.image) > 0 && <li>{t('settings.modelBrowser.image')}: ${(parseFloat(model.pricing.image) * 1000000).toFixed(2)}</li>}
+              <li>{t('settings.modelBrowser.prompt')}: {formatDisplayUsd(getPricingDisplayValue(model, 'prompt')) ?? '-'}</li>
+              <li>{t('settings.modelBrowser.completion')}: {formatDisplayUsd(getPricingDisplayValue(model, 'completion')) ?? '-'}</li>
+              {getPricingDisplayValue(model, 'image') !== null ? <li>{t('settings.modelBrowser.image')}: {formatDisplayUsd(getPricingDisplayValue(model, 'image'))}</li> : null}
             </ul>
           </div>
         )}
@@ -680,7 +760,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
                           )}
                           {endpoint.pricing && (
                             <span>
-                              ${(parseFloat(endpoint.pricing.prompt) * 1000000).toFixed(2)} / ${(parseFloat(endpoint.pricing.completion) * 1000000).toFixed(2)}
+                              {formatDisplayUsd(getPricingDisplayValue(endpoint, 'prompt')) ?? '-'} / {formatDisplayUsd(getPricingDisplayValue(endpoint, 'completion')) ?? '-'}
                             </span>
                           )}
                         </div>

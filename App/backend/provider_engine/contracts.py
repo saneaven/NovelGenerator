@@ -121,6 +121,7 @@ class ImageModelGeometrySpec:
     default_resolution: str
     resolution_mode: Literal["native_exact", "native_tier", "translated_fixed"]
     native_size_by_ratio: dict[str, str] | None = None
+    supported_geometry_pairs: dict[str, tuple[str, ...]] | None = None
 
 
 @dataclass(frozen=True)
@@ -132,8 +133,16 @@ class ImageModelDescriptor:
     geometry: ImageModelGeometrySpec
     description: str | None = None
     canonical_slug: str | None = None
+    owned_by: str | None = None
+    icon_url: str | None = None
+    tags: tuple[str, ...] | None = None
+    category: str | None = None
     architecture: dict[str, Any] | None = None
     pricing: dict[str, Any] | None = None
+    capabilities: dict[str, Any] | None = None
+    supported_parameters: dict[str, Any] | None = None
+    supports_mask_input: bool = False
+    supports_multi_image_input: bool = False
 
 
 @dataclass(frozen=True)
