@@ -35,7 +35,8 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "copied": "Copied {{value}}",
-    "copyFailed": "Copy failed"
+    "copyFailed": "Copy failed",
+    "default": "Default"
   },
   "streamRecovery": {
     "title": "Live Streaming Reconnecting",
@@ -569,6 +570,13 @@
           "high": "High"
         }
       },
+      "nanogptSettings": {
+        "strength": "Strength",
+        "guidanceScale": "Guidance Scale",
+        "inferenceSteps": "Inference Steps",
+        "seed": "Seed",
+        "kontextMaxMode": "Kontext Max Mode"
+      },
       "novelaiSettings": {
         "title": "NovelAI Settings",
         "description": "Configure NovelAI-specific image generation options.",
@@ -744,6 +752,37 @@
         "max_output_tokens": "Max Output Tokens",
         "max_output_tokensPlaceholder": "Default (provider)",
         "max_output_tokensHint": "Limits the maximum tokens generated in the response. Leave empty to use the provider default."
+      },
+      "nanogpt": {
+        "billing": {
+          "billingMode": "Billing Mode",
+          "billingModeHint": "Leave unset to use NanoGPT's default billing behavior.",
+          "serviceTier": "Service Tier",
+          "serviceTierHint": "Optional NanoGPT tier hint."
+        },
+        "web": {
+          "enabled": "Web Search",
+          "enabledHint": "Enable NanoGPT web search for this task.",
+          "provider": "Search Provider",
+          "providerPlaceholder": "linkup",
+          "depth": "Search Depth",
+          "depthPlaceholder": "standard",
+          "searchContextSize": "Search Context Size",
+          "country": "Country",
+          "city": "City",
+          "region": "Region"
+        },
+        "scraping": "Scraping",
+        "youtube": "YouTube Transcripts",
+        "memory": {
+          "enabled": "Memory",
+          "expirationDays": "Memory Expiration Days",
+          "expirationDaysHint": "Number of days before memory entries expire (1-365).",
+          "modelContextLimit": "Model Context Limit",
+          "modelContextLimitHint": "Token limit for model context in memory mode."
+        },
+        "customFields": "Custom Fields",
+        "customFieldsHint": "JSON object merged into the request body last. If keys collide, these values win."
       }
     },
     "llmLog": {

@@ -35,7 +35,8 @@
     "enabled": "활성화됨",
     "disabled": "비활성화됨",
     "copied": "{{value}} 복사됨",
-    "copyFailed": "복사 실패"
+    "copyFailed": "복사 실패",
+    "default": "기본값"
   },
   "streamRecovery": {
     "title": "실시간 연결 복구 중",
@@ -569,6 +570,13 @@
           "high": "높음"
         }
       },
+      "nanogptSettings": {
+        "strength": "강도",
+        "guidanceScale": "가이던스 스케일",
+        "inferenceSteps": "추론 스텝",
+        "seed": "시드",
+        "kontextMaxMode": "Kontext 맥스 모드"
+      },
       "novelaiSettings": {
         "title": "NovelAI 설정",
         "description": "NovelAI 전용 이미지 생성 옵션을 구성합니다.",
@@ -744,6 +752,37 @@
         "max_output_tokens": "응답 최대 토큰 수",
         "max_output_tokensPlaceholder": "기본값(프로바이더)",
         "max_output_tokensHint": "응답 생성 토큰 수 상한입니다. 비워두면 프로바이더 기본값을 사용합니다."
+      },
+      "nanogpt": {
+        "billing": {
+          "billingMode": "결제 모드",
+          "billingModeHint": "NanoGPT 기본 결제 동작을 사용하려면 비워두세요.",
+          "serviceTier": "서비스 티어",
+          "serviceTierHint": "선택적 NanoGPT 티어 힌트."
+        },
+        "web": {
+          "enabled": "웹 검색",
+          "enabledHint": "이 작업에 NanoGPT 웹 검색을 활성화합니다.",
+          "provider": "검색 프로바이더",
+          "providerPlaceholder": "linkup",
+          "depth": "검색 깊이",
+          "depthPlaceholder": "standard",
+          "searchContextSize": "검색 컨텍스트 크기",
+          "country": "국가",
+          "city": "도시",
+          "region": "지역"
+        },
+        "scraping": "스크래핑",
+        "youtube": "YouTube 자막",
+        "memory": {
+          "enabled": "메모리",
+          "expirationDays": "메모리 만료 기간",
+          "expirationDaysHint": "메모리 항목이 만료되기까지의 일수 (1-365).",
+          "modelContextLimit": "모델 컨텍스트 제한",
+          "modelContextLimitHint": "메모리 모드에서의 모델 컨텍스트 토큰 제한."
+        },
+        "customFields": "��스텀 필드",
+        "customFieldsHint": "요청 본문에 마지막으로 병합되는 JSON 객체입니다. 키가 충돌하면 이 값이 우선합니다."
       }
     },
     "llmLog": {

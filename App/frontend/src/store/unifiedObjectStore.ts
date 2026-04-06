@@ -362,9 +362,13 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     }
 
     const request = run().finally(() => {
-      if (collectionRequestInflight.get(requestKey) === request) {
-        collectionRequestInflight.delete(requestKey);
-      }
+      // Keep the resolved promise in the map for a short grace period so that
+      // rapid SSE-driven invalidations don't trigger immediate re-fetches.
+      setTimeout(() => {
+        if (collectionRequestInflight.get(requestKey) === request) {
+          collectionRequestInflight.delete(requestKey);
+        }
+      }, 500);
     });
     collectionRequestInflight.set(requestKey, request);
     await request;
@@ -1179,14 +1183,20 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       const touchedPreviewProjectsByType = new Map<string, Set<ProjectHydrationKey>>();
 
       for (const obj of upserts) {
+        // Only invalidate collection hydration for NEW objects (not already in
+        // store).  Updates to existing objects are merged directly into the
+        // store below and do not require a full collection re-fetch.  This
+        // prevents an SSE-driven cascade where every object:changed event
+        // triggers redundant collection re-fetches.
+        const isNew = !state.objects[obj.id];
         nextObjects[obj.id] = obj;
-        if (isStoryEntityTreeType(obj.type) && obj.metadata?.project_id) {
+        if (isNew && isStoryEntityTreeType(obj.type) && obj.metadata?.project_id) {
           touchedTreeProjects.add(obj.metadata.project_id);
         }
-        if (obj.type === 'outline' && obj.metadata?.project_id) {
+        if (isNew && obj.type === 'outline' && obj.metadata?.project_id) {
           touchedOutlineProjects.add(obj.metadata.project_id);
         }
-        if (isRichPreviewType(obj.type) && obj.metadata?.project_id) {
+        if (isNew && isRichPreviewType(obj.type) && obj.metadata?.project_id) {
           const keys = touchedPreviewProjectsByType.get(obj.metadata.project_id) ?? new Set<ProjectHydrationKey>();
           keys.add(obj.type);
           if (isStoryEntityTreeType(obj.type)) {

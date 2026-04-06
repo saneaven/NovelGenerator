@@ -74,35 +74,154 @@ SPEC = ProviderSpec(
                     },
                 ),
                 "provider_settings": ObjectSpec(
-                    expose=False,
                     fields={
-                        "billing": ObjectSpec(expose=False, fields={
-                            "billing_mode": FieldSpec(kind="enum", options=("paygo",), expose=False),
-                            "service_tier": FieldSpec(kind="enum", options=("auto", "priority"), expose=False),
+                        "billing": ObjectSpec(fields={
+                            "billing_mode": FieldSpec(
+                                kind="enum",
+                                options=("paygo",),
+                                ui=UIHint(
+                                    label_key="settings.taskConfig.nanogpt.billing.billingMode",
+                                    help_key="settings.taskConfig.nanogpt.billing.billingModeHint",
+                                    order=10,
+                                ),
+                            ),
+                            "service_tier": FieldSpec(
+                                kind="enum",
+                                options=("auto", "priority"),
+                                ui=UIHint(
+                                    label_key="settings.taskConfig.nanogpt.billing.serviceTier",
+                                    help_key="settings.taskConfig.nanogpt.billing.serviceTierHint",
+                                    order=20,
+                                ),
+                            ),
                         }),
-                        "web": ObjectSpec(expose=False, fields={
-                            "enabled": FieldSpec(kind="bool", expose=False),
-                            "provider": FieldSpec(kind="string", expose=False),
-                            "depth": FieldSpec(kind="string", expose=False),
-                            "search_context_size": FieldSpec(kind="enum", options=("low", "medium", "high"), expose=False),
-                            "user_location": ObjectSpec(expose=False, fields={
-                                "country": FieldSpec(kind="string", expose=False),
-                                "city": FieldSpec(kind="string", expose=False),
-                                "region": FieldSpec(kind="string", expose=False),
-                            }),
+                        "web": ObjectSpec(
+                            group_toggle="enabled",
+                            fields={
+                            "enabled": FieldSpec(
+                                kind="bool",
+                                ui=UIHint(
+                                    widget="toggle",
+                                    label_key="settings.taskConfig.nanogpt.web.enabled",
+                                    help_key="settings.taskConfig.nanogpt.web.enabledHint",
+                                    order=10,
+                                ),
+                            ),
+                            "provider": FieldSpec(
+                                kind="string",
+                                ui=UIHint(
+                                    widget="text",
+                                    label_key="settings.taskConfig.nanogpt.web.provider",
+                                    placeholder_key="settings.taskConfig.nanogpt.web.providerPlaceholder",
+                                    order=20,
+                                ),
+                            ),
+                            "depth": FieldSpec(
+                                kind="string",
+                                ui=UIHint(
+                                    widget="text",
+                                    label_key="settings.taskConfig.nanogpt.web.depth",
+                                    placeholder_key="settings.taskConfig.nanogpt.web.depthPlaceholder",
+                                    order=30,
+                                ),
+                            ),
+                            "search_context_size": FieldSpec(
+                                kind="enum",
+                                options=("low", "medium", "high"),
+                                ui=UIHint(
+                                    label_key="settings.taskConfig.nanogpt.web.searchContextSize",
+                                    order=40,
+                                ),
+                            ),
+                            "user_location": ObjectSpec(fields={
+                                    "country": FieldSpec(
+                                        kind="string",
+                                        ui=UIHint(
+                                            widget="text",
+                                            label_key="settings.taskConfig.nanogpt.web.country",
+                                            order=10,
+                                        ),
+                                    ),
+                                    "city": FieldSpec(
+                                        kind="string",
+                                        ui=UIHint(
+                                            widget="text",
+                                            label_key="settings.taskConfig.nanogpt.web.city",
+                                            order=20,
+                                        ),
+                                    ),
+                                    "region": FieldSpec(
+                                        kind="string",
+                                        ui=UIHint(
+                                            widget="text",
+                                            label_key="settings.taskConfig.nanogpt.web.region",
+                                            order=30,
+                                        ),
+                                    ),
+                                },
+                            ),
                         }),
-                        "scraping": ObjectSpec(expose=False, fields={
-                            "scraping": FieldSpec(kind="bool", expose=False),
+                        "scraping": ObjectSpec(fields={
+                            "scraping": FieldSpec(
+                                kind="bool",
+                                ui=UIHint(
+                                    widget="toggle",
+                                    label_key="settings.taskConfig.nanogpt.scraping",
+                                    order=10,
+                                ),
+                            ),
                         }),
-                        "youtube": ObjectSpec(expose=False, fields={
-                            "youtube_transcripts": FieldSpec(kind="bool", expose=False),
+                        "youtube": ObjectSpec(fields={
+                            "youtube_transcripts": FieldSpec(
+                                kind="bool",
+                                ui=UIHint(
+                                    widget="toggle",
+                                    label_key="settings.taskConfig.nanogpt.youtube",
+                                    order=10,
+                                ),
+                            ),
                         }),
-                        "memory": ObjectSpec(expose=False, fields={
-                            "enabled": FieldSpec(kind="bool", expose=False),
-                            "expiration_days": FieldSpec(kind="int", expose=False, min_value=1, max_value=365),
-                            "model_context_limit": FieldSpec(kind="int", expose=False, min_value=1, max_value=10000000),
+                        "memory": ObjectSpec(
+                            group_toggle="enabled",
+                            fields={
+                            "enabled": FieldSpec(
+                                kind="bool",
+                                ui=UIHint(
+                                    widget="toggle",
+                                    label_key="settings.taskConfig.nanogpt.memory.enabled",
+                                    order=10,
+                                ),
+                            ),
+                            "expiration_days": FieldSpec(
+                                kind="int",
+                                min_value=1,
+                                max_value=365,
+                                ui=UIHint(
+                                    label_key="settings.taskConfig.nanogpt.memory.expirationDays",
+                                    help_key="settings.taskConfig.nanogpt.memory.expirationDaysHint",
+                                    order=20,
+                                ),
+                            ),
+                            "model_context_limit": FieldSpec(
+                                kind="int",
+                                min_value=1,
+                                max_value=10000000,
+                                ui=UIHint(
+                                    label_key="settings.taskConfig.nanogpt.memory.modelContextLimit",
+                                    help_key="settings.taskConfig.nanogpt.memory.modelContextLimitHint",
+                                    order=30,
+                                ),
+                            ),
                         }),
-                        "custom_fields": FieldSpec(kind="object", expose=False),
+                        "custom_fields": FieldSpec(
+                            kind="object",
+                            ui=UIHint(
+                                widget="json",
+                                label_key="settings.taskConfig.nanogpt.customFields",
+                                help_key="settings.taskConfig.nanogpt.customFieldsHint",
+                                order=999,
+                            ),
+                        ),
                     },
                 ),
             }),
@@ -137,11 +256,50 @@ SPEC = ProviderSpec(
         prompt_type="natural",
         supports_image_input=True,
         provider_settings=ObjectSpec(fields={
-            "strength": FieldSpec(kind="number", min_value=0, max_value=1),
-            "guidance_scale": FieldSpec(kind="number", min_value=0, max_value=100),
-            "num_inference_steps": FieldSpec(kind="int", min_value=1, max_value=1000),
-            "seed": FieldSpec(kind="int", min_value=0),
-            "kontext_max_mode": FieldSpec(kind="bool"),
+            "strength": FieldSpec(
+                kind="number",
+                min_value=0,
+                max_value=1,
+                ui=UIHint(
+                    label_key="settings.imageGen.nanogptSettings.strength",
+                    order=10,
+                ),
+            ),
+            "guidance_scale": FieldSpec(
+                kind="number",
+                min_value=0,
+                max_value=100,
+                ui=UIHint(
+                    label_key="settings.imageGen.nanogptSettings.guidanceScale",
+                    order=20,
+                ),
+            ),
+            "num_inference_steps": FieldSpec(
+                kind="int",
+                min_value=1,
+                max_value=1000,
+                ui=UIHint(
+                    label_key="settings.imageGen.nanogptSettings.inferenceSteps",
+                    order=30,
+                ),
+            ),
+            "seed": FieldSpec(
+                kind="int",
+                min_value=0,
+                ui=UIHint(
+                    label_key="settings.imageGen.nanogptSettings.seed",
+                    order=40,
+                ),
+            ),
+            "kontext_max_mode": FieldSpec(
+                kind="bool",
+                when=(Condition(op="flag", flag="kontext_model"),),
+                ui=UIHint(
+                    widget="toggle",
+                    label_key="settings.imageGen.nanogptSettings.kontextMaxMode",
+                    order=50,
+                ),
+            ),
         }),
         models_adapter="dynamic",
     ),

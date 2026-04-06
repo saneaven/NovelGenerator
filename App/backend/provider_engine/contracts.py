@@ -70,6 +70,7 @@ class ObjectSpec:
     fields: dict[str, "SchemaNode"]
     when: tuple[Condition, ...] = ()
     expose: bool = True
+    group_toggle: str | None = None
 
 
 SchemaNode = FieldSpec | ObjectSpec

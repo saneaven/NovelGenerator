@@ -17,7 +17,6 @@ import {
 import { UnifiedImageModal } from '../AssetManager';
 import UnifiedImagePromptModal, { type PromptResult, type PromptMode } from './UnifiedImagePromptModal';
 import ImageModelBrowser from './ImageModelBrowser';
-import NanoGptImageSettings from './NanoGptImageSettings';
 import AuthenticatedImage from '../common/AuthenticatedImage';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
@@ -234,15 +233,12 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
     const providerSettingsFlags = useMemo(() => ({
         hasReferenceImages: referenceImages.length > 0,
-    }), [referenceImages.length]);
+        kontext_model: /kontext/i.test(selectedModel?.id ?? model),
+    }), [referenceImages.length, selectedModel, model]);
     const supportsMaskInput = selectedModel?.supports_mask_input ?? false;
     const supportsMultiImageInput = selectedModel?.supports_multi_image_input ?? false;
-    const isNanoGptProvider = provider === 'nanogpt';
     const isNativeExact = selectedModel?.ui_resolution_mode === 'native_exact';
     const supportedImageSizes = resolveSupportedImageSizes(selectedModel, aspectRatio);
-    const showKontextMaxMode = /kontext/i.test(selectedModel?.id ?? model)
-        || Object.prototype.hasOwnProperty.call(providerSettingsDraft, 'kontext_max_mode');
-    const showStrengthField = referenceImages.length > 0 || Object.prototype.hasOwnProperty.call(providerSettingsDraft, 'strength');
     const showReferenceSection = supportsImageInput || referenceImages.length > 0 || Boolean(maskImage);
     const showMaskSection = supportsMaskInput || Boolean(maskImage);
 
@@ -657,7 +653,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         }
 
         const nanogptStrength =
-            isNanoGptProvider && typeof normalizedProviderSettings.strength === 'number'
+            typeof normalizedProviderSettings.strength === 'number'
                 ? normalizedProviderSettings.strength
                 : undefined;
         const referenceImagesData =
@@ -1017,20 +1013,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     )}
                 </div>
 
-                {provider === 'nanogpt' ? (
-                    <div className="provider-settings">
-                        <div className="provider-settings-header">
-                            <label>{t(providerSpec?.image?.settings_title_key || providerSpec?.ui.display_name_key || 'settings.imageGen.provider')}</label>
-                            <p className="provider-settings-description">Optional provider overrides. Leave Override unchecked to use provider defaults.</p>
-                        </div>
-                        <NanoGptImageSettings
-                            value={providerSettingsDraft}
-                            onChange={setProviderSettingsDraft}
-                            showStrength={showStrengthField}
-                            showKontextMaxMode={showKontextMaxMode}
-                        />
-                    </div>
-                ) : providerSettingsSpec ? (
+                {providerSettingsSpec ? (
                     <div className="provider-settings">
                         <div className="provider-settings-header">
                             <label>{t(providerSpec?.image?.settings_title_key || providerSpec?.ui.display_name_key || 'settings.imageGen.provider')}</label>

@@ -12,7 +12,7 @@ import type {
 import { normalizeEffectiveTaskConfig } from '../../store/taskConfigSettings';
 import ModelBrowser from './ModelBrowser';
 import ThinkingTemplateEditor from './ThinkingTemplateEditor';
-import NanoGptTaskSettings from './NanoGptTaskSettings';
+import ProviderSettingsFields from '../../providerEngine/ProviderSettingsFields';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import { Warning, Settings, Advenced } from '../icons';
@@ -85,6 +85,11 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   const visibleAdvancedFields = useMemo(() => {
     return Object.fromEntries(advancedEntries.filter(([, node]) => !isObjectSpec(node))) as Record<string, PublicFieldSpec>;
   }, [advancedEntries]);
+
+  const providerSettingsSpec = useMemo(() => {
+    const node = advancedSpec?.fields.provider_settings;
+    return node && isObjectSpec(node) && node.expose !== false ? node : null;
+  }, [advancedSpec]);
 
   const thinkingConfigSpec = useMemo(() => {
     const node = advancedSpec?.fields.thinking_config;
@@ -464,10 +469,29 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
               </div>
             ) : null}
 
-            {config.provider === 'nanogpt' ? (
-              <NanoGptTaskSettings
-                config={config}
-                onChange={emitChange}
+            {providerSettingsSpec ? (
+              <ProviderSettingsFields
+                spec={providerSettingsSpec}
+                draft={
+                  config.advanced.provider_settings &&
+                  typeof config.advanced.provider_settings === 'object' &&
+                  !Array.isArray(config.advanced.provider_settings)
+                    ? (config.advanced.provider_settings as Record<string, unknown>)
+                    : {}
+                }
+                setDraft={(next) => {
+                  const prev =
+                    config.advanced.provider_settings &&
+                    typeof config.advanced.provider_settings === 'object' &&
+                    !Array.isArray(config.advanced.provider_settings)
+                      ? (config.advanced.provider_settings as Record<string, unknown>)
+                      : {};
+                  const resolved = typeof next === 'function' ? next(prev) : next;
+                  emitChange({
+                    ...config,
+                    advanced: { ...config.advanced, provider_settings: resolved },
+                  });
+                }}
               />
             ) : null}
           </div>

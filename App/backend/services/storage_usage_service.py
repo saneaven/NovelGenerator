@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -933,7 +934,15 @@ def apply_project_usage_delta(
     delta: StorageUsageDelta,
     enforce_quota: bool,
 ) -> StorageUsageSnapshot:
-    user = db.query(User).filter(User.id == user_id).with_for_update().first()
+    # Only acquire a row lock on the User when we need to enforce the storage
+    # quota atomically.  Non-quota paths (the common case) skip the lock to
+    # avoid serialising every storage-delta call behind a single User row,
+    # which was the primary cause of threadpool starvation when the reconciler
+    # held competing locks.
+    if enforce_quota:
+        user = db.query(User).filter(User.id == user_id).with_for_update().first()
+    else:
+        user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise ValueError("User not found")
     if delta.is_zero:
@@ -1149,18 +1158,18 @@ def run_storage_usage_reconcile_batch(
     failed_projects = 0
 
     for target_project_id in target_project_ids:
-        db = session_factory()
+        # --- Phase 1: read-only calculation in a short-lived session ---
+        # This releases the session (and any implicit locks / MVCC snapshot)
+        # before the write phase, preventing long-held transactions that block
+        # user-facing API requests.
+        read_db = session_factory()
         try:
-            result = reconcile_project_usage(db, project_id=target_project_id, apply=apply)
-            if apply:
-                db.commit()
-            else:
-                db.rollback()
-            results.append(result)
+            result = reconcile_project_usage(read_db, project_id=target_project_id, apply=False)
+            read_db.rollback()
         except Exception as exc:  # noqa: BLE001
-            db.rollback()
+            read_db.rollback()
             failed_projects += 1
-            logger.exception("Storage usage reconcile failed for project %s", target_project_id)
+            logger.exception("Storage usage reconcile failed (read phase) for project %s", target_project_id)
             results.append(
                 StorageUsageReconcileProjectResult(
                     project_id=target_project_id,
@@ -1172,8 +1181,57 @@ def run_storage_usage_reconcile_batch(
                     error=str(exc),
                 )
             )
+            read_db.close()
+            time.sleep(0.1)
+            continue
         finally:
-            db.close()
+            read_db.close()
+
+        # --- Phase 2: lightweight write in a separate session ---
+        if apply and result.status not in ("missing", "failed"):
+            write_db = session_factory()
+            try:
+                project = write_db.query(Project).filter(Project.id == target_project_id).first()
+                if project is not None:
+                    row = _get_or_create_usage_row(write_db, project_id=target_project_id, user_id=project.user_id)
+                    row.user_id = project.user_id
+                    _set_usage_row_breakdown(
+                        row,
+                        breakdown=result.after,
+                        needs_reconcile=False,
+                        last_reconciled_at=datetime.utcnow(),
+                    )
+                    write_db.commit()
+                    result = StorageUsageReconcileProjectResult(
+                        project_id=result.project_id,
+                        before=result.before,
+                        after=result.after,
+                        drift_bytes=result.drift_bytes,
+                        needs_reconcile_after=False,
+                        status="reconciled" if result.before.as_dict() != result.after.as_dict() or result.needs_reconcile_after else "unchanged",
+                    )
+                else:
+                    write_db.rollback()
+            except Exception as exc:  # noqa: BLE001
+                write_db.rollback()
+                failed_projects += 1
+                logger.exception("Storage usage reconcile failed (write phase) for project %s", target_project_id)
+                result = StorageUsageReconcileProjectResult(
+                    project_id=target_project_id,
+                    before=result.before,
+                    after=result.after,
+                    drift_bytes=result.drift_bytes,
+                    needs_reconcile_after=True,
+                    status="failed",
+                    error=str(exc),
+                )
+            finally:
+                write_db.close()
+
+        results.append(result)
+        # Yield time between projects so user-facing requests can acquire DB
+        # connections and row locks without contending with the reconciler.
+        time.sleep(0.1)
 
     reconciled_projects = sum(1 for result in results if result.status in {"reconciled", "unchanged", "drifted", "missing"})
     drifted_projects = sum(1 for result in results if result.before.as_dict() != result.after.as_dict())

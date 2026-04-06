@@ -44,6 +44,7 @@ def project_object_spec(spec: ObjectSpec) -> dict[str, Any]:
         "expose": spec.expose,
         "when": [_condition_to_json(item) for item in spec.when],
         "fields": {},
+        "group_toggle": spec.group_toggle,
     }
     for name, node in spec.fields.items():
         if isinstance(node, FieldSpec):

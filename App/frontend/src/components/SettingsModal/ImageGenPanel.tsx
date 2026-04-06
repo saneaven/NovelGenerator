@@ -16,7 +16,6 @@ import {
 } from '../../providerEngine/utils';
 import { CustomSelect } from '../ui/CustomSelect';
 import ImageModelBrowser from '../ImageGeneration/ImageModelBrowser';
-import NanoGptImageSettings from '../ImageGeneration/NanoGptImageSettings';
 import ImageStyleEditorModal from './ImageStyleEditorModal';
 import ProviderSettingsFields from '../../providerEngine/ProviderSettingsFields';
 import './ImageGenPanel.css';
@@ -91,11 +90,11 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
   const styleKey = isTagBased ? 'settings.imageGen.tagBasedStyles' : 'settings.imageGen.naturalStyles';
   const providerSettingsSpec = providerSpec?.image?.provider_settings ?? null;
   const providerSettings = getStoredProviderSettings(config as Record<string, unknown>, config.provider);
-  const isNanoGptProvider = config.provider === 'nanogpt';
   const isNativeExact = selectedModel?.ui_resolution_mode === 'native_exact';
   const supportedSizes = resolveSupportedImageSizes(selectedModel, config.aspect_ratio);
-  const showKontextMaxMode = /kontext/i.test(selectedModel?.id ?? config.model)
-    || Object.prototype.hasOwnProperty.call(providerSettings, 'kontext_max_mode');
+  const providerSettingsFlags = useMemo(() => ({
+    kontext_model: /kontext/i.test(selectedModel?.id ?? config.model),
+  }), [selectedModel, config.model]);
 
   return (
     <div className="image-gen-panel">
@@ -220,22 +219,7 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
         )}
       </div>
 
-      {isNanoGptProvider ? (
-        <div className="provider-settings-section">
-          <div className="section-header">
-            <h4>{t(providerSpec?.image?.settings_title_key || providerSpec?.ui.display_name_key || 'settings.imageGen.provider')}</h4>
-            <p className="section-description">Optional provider overrides. Leave toggles off to use provider defaults.</p>
-          </div>
-          <NanoGptImageSettings
-            value={providerSettings}
-            onChange={(next) => {
-              onChange(setStoredProviderSettings(config as Record<string, unknown>, config.provider, next) as ImageGenConfig);
-            }}
-            showStrength={true}
-            showKontextMaxMode={showKontextMaxMode}
-          />
-        </div>
-      ) : providerSettingsSpec ? (
+      {providerSettingsSpec ? (
         <div className="provider-settings-section">
           <div className="section-header">
             <h4>{t(providerSpec?.image?.settings_title_key || providerSpec?.ui.display_name_key || 'settings.imageGen.provider')}</h4>
@@ -253,6 +237,7 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                   : next;
               onChange(setStoredProviderSettings(config as Record<string, unknown>, config.provider, resolved) as ImageGenConfig);
             }}
+            flags={providerSettingsFlags}
           />
         </div>
       ) : null}

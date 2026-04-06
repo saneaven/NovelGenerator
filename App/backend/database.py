@@ -32,7 +32,7 @@ engine = create_engine(
     # Without these, a sync-in-async deadlock freezes the entire server with
     # no error logs and no automatic recovery.
     connect_args={
-        "options": "-c lock_timeout=20000 -c statement_timeout=30000"
+        "options": "-c lock_timeout=5000 -c statement_timeout=30000"
     },
 )
 

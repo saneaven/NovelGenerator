@@ -1,0 +1,93 @@
+.tri-state-toggle {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tri-state-toggle__track {
+  position: relative;
+  width: 4rem;
+  height: 1.5rem;
+  background: var(--color-surface-disabled);
+  border-radius: var(--border-radius-full);
+  cursor: pointer;
+  transition: background var(--transition-base);
+  flex-shrink: 0;
+}
+
+.tri-state-toggle__thumb {
+  position: absolute;
+  top: 0.125rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  background: var(--color-surface-base);
+  border-radius: var(--border-radius-full);
+  box-shadow: var(--shadow-sm);
+  transition: left var(--transition-base);
+}
+
+/* 3 stop positions */
+.tri-state-toggle--off .tri-state-toggle__thumb {
+  left: 0.125rem;
+}
+
+.tri-state-toggle--default .tri-state-toggle__thumb {
+  left: calc(50% - 0.625rem);
+}
+
+.tri-state-toggle--on .tri-state-toggle__thumb {
+  left: calc(100% - 1.375rem);
+}
+
+/* Track color per state */
+.tri-state-toggle--on .tri-state-toggle__track {
+  background: var(--color-brand-primary);
+}
+
+/* Labels */
+.tri-state-toggle__labels {
+  display: flex;
+  justify-content: space-between;
+  width: 4rem;
+  font-size: 0.625rem;
+  color: var(--color-text-tertiary);
+  user-select: none;
+}
+
+/* Disabled */
+.tri-state-toggle--disabled {
+  opacity: var(--opacity-disabled);
+  pointer-events: none;
+}
+
+.tri-state-toggle--disabled .tri-state-toggle__track {
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .tri-state-toggle__track {
+    width: 3.5rem;
+    height: 1.25rem;
+  }
+
+  .tri-state-toggle__thumb {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .tri-state-toggle--off .tri-state-toggle__thumb {
+    left: 0.125rem;
+  }
+
+  .tri-state-toggle--default .tri-state-toggle__thumb {
+    left: calc(50% - 0.5rem);
+  }
+
+  .tri-state-toggle--on .tri-state-toggle__thumb {
+    left: calc(100% - 1.125rem);
+  }
+
+  .tri-state-toggle__labels {
+    width: 3.5rem;
+  }
+}

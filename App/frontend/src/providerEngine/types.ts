@@ -50,6 +50,7 @@ export interface PublicObjectSpec {
   expose: boolean;
   when: PublicCondition[];
   fields: Record<string, PublicSchemaNode>;
+  group_toggle?: string | null;
 }
 
 export type PublicSchemaNode = PublicFieldSpec | PublicObjectSpec;

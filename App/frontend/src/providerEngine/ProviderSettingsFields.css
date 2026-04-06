@@ -10,6 +10,10 @@
   gap: var(--spacing-sm);
 }
 
+.provider-settings-field--wide {
+  grid-column: 1 / -1;
+}
+
 .provider-settings-label {
   display: flex;
   flex-direction: column;
@@ -35,6 +39,31 @@
   width: 100%;
 }
 
+.provider-settings-text-input {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-base);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.provider-settings-text-input:focus {
+  border-color: var(--color-brand-primary);
+}
+
+.provider-settings-text-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.provider-settings-text-input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
 .provider-settings-slider-row {
   display: flex;
   align-items: center;
@@ -52,4 +81,82 @@
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   font-family: var(--font-mono);
+}
+
+.provider-settings-json-textarea {
+  width: 100%;
+  min-height: 8rem;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family-mono);
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-base);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.15s ease;
+}
+
+.provider-settings-json-textarea:focus {
+  border-color: var(--color-brand-primary);
+}
+
+.provider-settings-json-textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.provider-settings-json-error {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-feedback-error-base);
+}
+
+/* ---- Sectioned layout (for nested ObjectSpec settings) ---- */
+
+.provider-settings-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+.provider-settings-section {
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.provider-settings-section:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.provider-settings-section__title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.provider-settings-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+/* No bottom margin on title when inside header (toggle is inline) */
+.provider-settings-section__header + .provider-settings-fields {
+  margin-top: var(--spacing-sm);
+}
+
+/* Title needs bottom margin when there's no header wrapper (normal sections) */
+.provider-settings-section > .provider-settings-section__title {
+  margin-bottom: var(--spacing-md);
+}
+
+/* Force single-column inside sections */
+.provider-settings-sections .provider-settings-fields {
+  grid-template-columns: 1fr;
 }
