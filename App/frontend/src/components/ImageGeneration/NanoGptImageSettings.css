@@ -34,16 +34,7 @@
 .nanogpt-image-settings__override {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  white-space: nowrap;
   flex-shrink: 0;
-}
-
-.nanogpt-image-settings__override input {
-  accent-color: var(--color-brand-primary);
 }
 
 .nanogpt-image-settings__control > .config-input,
@@ -69,7 +60,4 @@
     align-items: stretch;
   }
 
-  .nanogpt-image-settings__override {
-    white-space: normal;
-  }
 }

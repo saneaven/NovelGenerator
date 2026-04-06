@@ -224,7 +224,7 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
         <div className="provider-settings-section">
           <div className="section-header">
             <h4>{t(providerSpec?.image?.settings_title_key || providerSpec?.ui.display_name_key || 'settings.imageGen.provider')}</h4>
-            <p className="section-description">Optional provider overrides. Leave Override unchecked to use provider defaults.</p>
+            <p className="section-description">Optional provider overrides. Leave toggles off to use provider defaults.</p>
           </div>
           <NanoGptImageSettings
             value={providerSettings}

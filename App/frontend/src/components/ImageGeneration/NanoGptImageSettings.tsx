@@ -120,27 +120,27 @@ const NanoGptImageSettings: React.FC<Props> = ({
           disabled={!numberDrafts[key].overridden}
           className="config-input"
         />
-        <label className="nanogpt-image-settings__override">
-          <input
-            type="checkbox"
+        <div className="nanogpt-image-settings__override">
+          <ToggleSwitch
             checked={numberDrafts[key].overridden}
-            onChange={(event) => {
+            onChange={(checked) => {
               setNumberDrafts((prev) => ({
                 ...prev,
                 [key]: {
                   ...prev[key],
-                  overridden: event.target.checked,
+                  overridden: checked,
                 },
               }));
               commit((next) => {
-                if (!event.target.checked) {
+                if (!checked) {
                   delete next[key];
                 }
               });
             }}
+            label=""
+            mode="bare"
           />
-          <span>Override</span>
-        </label>
+        </div>
       </div>
     </div>
   );
@@ -168,22 +168,22 @@ const NanoGptImageSettings: React.FC<Props> = ({
               label={current.kontext_max_mode === true ? 'Enabled' : 'Disabled'}
               mode="bare"
             />
-            <label className="nanogpt-image-settings__override">
-              <input
-                type="checkbox"
+            <div className="nanogpt-image-settings__override">
+              <ToggleSwitch
                 checked={Object.prototype.hasOwnProperty.call(current, 'kontext_max_mode')}
-                onChange={(event) => {
+                onChange={(checked) => {
                   commit((next) => {
-                    if (!event.target.checked) {
+                    if (!checked) {
                       delete next.kontext_max_mode;
                       return;
                     }
                     next.kontext_max_mode = Boolean(current.kontext_max_mode);
                   });
                 }}
+                label=""
+                mode="bare"
               />
-              <span>Override</span>
-            </label>
+            </div>
           </div>
         </div>
       ) : null}

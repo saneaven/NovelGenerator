@@ -9,6 +9,9 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
 }
 
 .model-browser__content {
@@ -16,6 +19,7 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    min-width: 0;
     overflow: hidden;
 }
 
@@ -71,7 +75,9 @@
 .model-browser__list {
     flex: 1;
     max-height: 300px;
+    min-width: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: var(--spacing-md);
 }
 
@@ -219,6 +225,10 @@
     border: 1px solid;
     border-color: var(--color-border-subtle);
     transition: border-color var(--transition-fast), background-color var(--transition-fast);
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
 }
 
 .model-card:hover {
@@ -243,6 +253,7 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--spacing-md);
+    min-width: 0;
 }
 
 .model-card__info {
@@ -251,13 +262,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-xs);
-}
-
-.model-card__icon {
-    width: 20px;
-    height: 20px;
-    object-fit: contain;
-    border-radius: var(--border-radius-sm);
 }
 
 .model-card__name {
@@ -272,7 +276,8 @@
     font-size: var(--font-size-xs);
     font-family: var(--font-family-mono);
     color: var(--color-text-tertiary);
-    word-break: break-all;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .model-card__version {

@@ -65,16 +65,7 @@
   grid-area: override;
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  white-space: nowrap;
   justify-self: end;
-}
-
-.nanogpt-task-settings__override input {
-  accent-color: var(--color-brand-primary);
 }
 
 .nanogpt-task-settings__row > .config-input,

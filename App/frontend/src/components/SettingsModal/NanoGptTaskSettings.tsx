@@ -179,14 +179,13 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
             <span>Billing Mode</span>
             <span className="field-hint">Leave unset to use NanoGPT&apos;s default billing behavior.</span>
           </div>
-          <label className="nanogpt-task-settings__override">
-            <input
-              type="checkbox"
+          <div className="nanogpt-task-settings__override">
+            <ToggleSwitch
               checked={Object.prototype.hasOwnProperty.call(billing, 'billing_mode')}
-              onChange={(event) => {
+              onChange={(checked) => {
                 commitProviderSettings((next) => {
                   const nextBilling = isObject(next.billing) ? next.billing as Record<string, unknown> : {};
-                  if (!event.target.checked) {
+                  if (!checked) {
                     delete nextBilling.billing_mode;
                   } else {
                     nextBilling.billing_mode = typeof billing.billing_mode === 'string' ? billing.billing_mode : 'paygo';
@@ -194,9 +193,10 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
                   next.billing = nextBilling;
                 });
               }}
+              label=""
+              mode="bare"
             />
-            <span>Override</span>
-          </label>
+          </div>
           <CustomSelect
             value={typeof billing.billing_mode === 'string' ? billing.billing_mode : 'paygo'}
             onChange={(value) => {
@@ -216,14 +216,13 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
             <span>Service Tier</span>
             <span className="field-hint">Optional NanoGPT tier hint.</span>
           </div>
-          <label className="nanogpt-task-settings__override">
-            <input
-              type="checkbox"
+          <div className="nanogpt-task-settings__override">
+            <ToggleSwitch
               checked={Object.prototype.hasOwnProperty.call(billing, 'service_tier')}
-              onChange={(event) => {
+              onChange={(checked) => {
                 commitProviderSettings((next) => {
                   const nextBilling = isObject(next.billing) ? next.billing as Record<string, unknown> : {};
-                  if (!event.target.checked) {
+                  if (!checked) {
                     delete nextBilling.service_tier;
                   } else {
                     nextBilling.service_tier = typeof billing.service_tier === 'string' ? billing.service_tier : 'auto';
@@ -231,9 +230,10 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
                   next.billing = nextBilling;
                 });
               }}
+              label=""
+              mode="bare"
             />
-            <span>Override</span>
-          </label>
+          </div>
           <CustomSelect
             value={typeof billing.service_tier === 'string' ? billing.service_tier : 'auto'}
             onChange={(value) => {
@@ -259,13 +259,12 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
             <span>Web Search</span>
             <span className="field-hint">Enables NanoGPT web search for this task.</span>
           </div>
-          <label className="nanogpt-task-settings__override">
-            <input
-              type="checkbox"
+          <div className="nanogpt-task-settings__override">
+            <ToggleSwitch
               checked={webEnabledOverridden}
-              onChange={(event) => {
+              onChange={(checked) => {
                 commitProviderSettings((next) => {
-                  if (!event.target.checked) {
+                  if (!checked) {
                     delete next.web;
                     resetWebDetailDrafts();
                     return;
@@ -275,9 +274,10 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
                   next.web = nextWeb;
                 });
               }}
+              label=""
+              mode="bare"
             />
-            <span>Override</span>
-          </label>
+          </div>
           <ToggleSwitch
             checked={webEnabled}
             onChange={(checked) => {
@@ -306,24 +306,24 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
               <div className="nanogpt-task-settings__label">
                 <span>Search Provider</span>
               </div>
-              <label className="nanogpt-task-settings__override">
-                <input
-                  type="checkbox"
+              <div className="nanogpt-task-settings__override">
+                <ToggleSwitch
                   checked={webProviderState.overridden}
-                  onChange={(event) => {
+                  onChange={(checked) => {
                     setWebProviderState((prev) => ({
-                      overridden: event.target.checked,
+                      overridden: checked,
                       value: prev.value,
                     }));
                     commitProviderSettings((next) => {
                       const nextWeb = isObject(next.web) ? next.web as Record<string, unknown> : {};
-                      if (!event.target.checked) delete nextWeb.provider;
+                      if (!checked) delete nextWeb.provider;
                       next.web = nextWeb;
                     });
                   }}
+                  label=""
+                  mode="bare"
                 />
-                <span>Override</span>
-              </label>
+              </div>
                 <input
                   type="text"
                   className="config-input"
@@ -347,24 +347,24 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
               <div className="nanogpt-task-settings__label">
                 <span>Search Depth</span>
               </div>
-              <label className="nanogpt-task-settings__override">
-                <input
-                  type="checkbox"
+              <div className="nanogpt-task-settings__override">
+                <ToggleSwitch
                   checked={webDepthState.overridden}
-                  onChange={(event) => {
+                  onChange={(checked) => {
                     setWebDepthState((prev) => ({
-                      overridden: event.target.checked,
+                      overridden: checked,
                       value: prev.value,
                     }));
                     commitProviderSettings((next) => {
                       const nextWeb = isObject(next.web) ? next.web as Record<string, unknown> : {};
-                      if (!event.target.checked) delete nextWeb.depth;
+                      if (!checked) delete nextWeb.depth;
                       next.web = nextWeb;
                     });
                   }}
+                  label=""
+                  mode="bare"
                 />
-                <span>Override</span>
-              </label>
+              </div>
                 <input
                   type="text"
                   className="config-input"
@@ -388,21 +388,21 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
               <div className="nanogpt-task-settings__label">
                 <span>Search Context Size</span>
               </div>
-              <label className="nanogpt-task-settings__override">
-                <input
-                  type="checkbox"
+              <div className="nanogpt-task-settings__override">
+                <ToggleSwitch
                   checked={Object.prototype.hasOwnProperty.call(web, 'search_context_size')}
-                  onChange={(event) => {
+                  onChange={(checked) => {
                     commitProviderSettings((next) => {
                       const nextWeb = isObject(next.web) ? next.web as Record<string, unknown> : {};
-                      if (!event.target.checked) delete nextWeb.search_context_size;
+                      if (!checked) delete nextWeb.search_context_size;
                       else nextWeb.search_context_size = typeof web.search_context_size === 'string' ? web.search_context_size : 'medium';
                       next.web = nextWeb;
                     });
                   }}
+                  label=""
+                  mode="bare"
                 />
-                <span>Override</span>
-              </label>
+              </div>
               <CustomSelect
                 value={typeof web.search_context_size === 'string' ? web.search_context_size : 'medium'}
                 onChange={(value) => {
@@ -426,29 +426,29 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
                 <div className="nanogpt-task-settings__label">
                   <span>{`User Location ${key.charAt(0).toUpperCase()}${key.slice(1)}`}</span>
                 </div>
-                <label className="nanogpt-task-settings__override">
-                  <input
-                  type="checkbox"
+                <div className="nanogpt-task-settings__override">
+                  <ToggleSwitch
                     checked={locationStates[key].overridden}
-                    onChange={(event) => {
+                    onChange={(checked) => {
                       setLocationStates((prev) => ({
                         ...prev,
                         [key]: {
-                          overridden: event.target.checked,
+                          overridden: checked,
                           value: prev[key].value,
                         },
                       }));
                       commitProviderSettings((next) => {
                         const nextWeb = isObject(next.web) ? next.web as Record<string, unknown> : {};
                         const nextLocation = isObject(nextWeb.user_location) ? nextWeb.user_location as Record<string, unknown> : {};
-                        if (!event.target.checked) delete nextLocation[key];
+                        if (!checked) delete nextLocation[key];
                         nextWeb.user_location = nextLocation;
                         next.web = nextWeb;
                       });
                     }}
+                    label=""
+                    mode="bare"
                   />
-                  <span>Override</span>
-                </label>
+                </div>
                 <input
                   type="text"
                   className="config-input"
@@ -485,22 +485,22 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
           <div className="nanogpt-task-settings__label">
             <span>Scraping</span>
           </div>
-          <label className="nanogpt-task-settings__override">
-            <input
-              type="checkbox"
+          <div className="nanogpt-task-settings__override">
+            <ToggleSwitch
               checked={scrapingOverridden}
-              onChange={(event) => {
+              onChange={(checked) => {
                 commitProviderSettings((next) => {
-                  if (!event.target.checked) {
+                  if (!checked) {
                     delete next.scraping;
                     return;
                   }
                   next.scraping = { scraping: scraping.scraping === true };
                 });
               }}
+              label=""
+              mode="bare"
             />
-            <span>Override</span>
-          </label>
+          </div>
           <ToggleSwitch
             checked={scrapingEnabled}
             onChange={(checked) => {
@@ -518,22 +518,22 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
           <div className="nanogpt-task-settings__label">
             <span>YouTube Transcripts</span>
           </div>
-          <label className="nanogpt-task-settings__override">
-            <input
-              type="checkbox"
+          <div className="nanogpt-task-settings__override">
+            <ToggleSwitch
               checked={youtubeOverridden}
-              onChange={(event) => {
+              onChange={(checked) => {
                 commitProviderSettings((next) => {
-                  if (!event.target.checked) {
+                  if (!checked) {
                     delete next.youtube;
                     return;
                   }
                   next.youtube = { youtube_transcripts: youtube.youtube_transcripts === true };
                 });
               }}
+              label=""
+              mode="bare"
             />
-            <span>Override</span>
-          </label>
+          </div>
           <ToggleSwitch
             checked={youtubeEnabled}
             onChange={(checked) => {
@@ -554,13 +554,12 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
           <div className="nanogpt-task-settings__label">
             <span>Memory</span>
           </div>
-          <label className="nanogpt-task-settings__override">
-            <input
-              type="checkbox"
+          <div className="nanogpt-task-settings__override">
+            <ToggleSwitch
               checked={memoryEnabledOverridden}
-              onChange={(event) => {
+              onChange={(checked) => {
                 commitProviderSettings((next) => {
-                  if (!event.target.checked) {
+                  if (!checked) {
                     delete next.memory;
                     return;
                   }
@@ -569,9 +568,10 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
                   next.memory = nextMemory;
                 });
               }}
+              label=""
+              mode="bare"
             />
-            <span>Override</span>
-          </label>
+          </div>
           <ToggleSwitch
             checked={memoryEnabled}
             onChange={(checked) => {
@@ -597,21 +597,21 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
               <div className="nanogpt-task-settings__label">
                 <span>Memory Expiration Days</span>
               </div>
-              <label className="nanogpt-task-settings__override">
-                <input
-                  type="checkbox"
+              <div className="nanogpt-task-settings__override">
+                <ToggleSwitch
                   checked={Object.prototype.hasOwnProperty.call(memory, 'expiration_days')}
-                  onChange={(event) => {
+                  onChange={(checked) => {
                     commitProviderSettings((next) => {
                       const nextMemory = isObject(next.memory) ? next.memory as Record<string, unknown> : {};
-                      if (!event.target.checked) delete nextMemory.expiration_days;
+                      if (!checked) delete nextMemory.expiration_days;
                       else nextMemory.expiration_days = typeof memory.expiration_days === 'number' ? memory.expiration_days : 30;
                       next.memory = nextMemory;
                     });
                   }}
+                  label=""
+                  mode="bare"
                 />
-                <span>Override</span>
-              </label>
+              </div>
               <NumberInput
                 value={typeof memory.expiration_days === 'number' ? memory.expiration_days : undefined}
                 min={1}
@@ -634,21 +634,21 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
               <div className="nanogpt-task-settings__label">
                 <span>Model Context Limit</span>
               </div>
-              <label className="nanogpt-task-settings__override">
-                <input
-                  type="checkbox"
+              <div className="nanogpt-task-settings__override">
+                <ToggleSwitch
                   checked={Object.prototype.hasOwnProperty.call(memory, 'model_context_limit')}
-                  onChange={(event) => {
+                  onChange={(checked) => {
                     commitProviderSettings((next) => {
                       const nextMemory = isObject(next.memory) ? next.memory as Record<string, unknown> : {};
-                      if (!event.target.checked) delete nextMemory.model_context_limit;
+                      if (!checked) delete nextMemory.model_context_limit;
                       else nextMemory.model_context_limit = typeof memory.model_context_limit === 'number' ? memory.model_context_limit : 128000;
                       next.memory = nextMemory;
                     });
                   }}
+                  label=""
+                  mode="bare"
                 />
-                <span>Override</span>
-              </label>
+              </div>
               <NumberInput
                 value={typeof memory.model_context_limit === 'number' ? memory.model_context_limit : undefined}
                 min={1}
@@ -678,12 +678,11 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
               JSON object merged into the request body last. If keys collide, these values win.
             </span>
           </div>
-          <label className="nanogpt-task-settings__override">
-            <input
-              type="checkbox"
+          <div className="nanogpt-task-settings__override">
+            <ToggleSwitch
               checked={customFieldsOverridden}
-              onChange={(event) => {
-                if (!event.target.checked) {
+              onChange={(checked) => {
+                if (!checked) {
                   setCustomFieldsText('');
                   setCustomFieldsError(null);
                   commitProviderSettings((next) => {
@@ -693,9 +692,10 @@ const NanoGptTaskSettings: React.FC<Props> = ({ config, onChange }) => {
                 }
                 setCustomFieldsText((prev) => prev || '{}');
               }}
+              label=""
+              mode="bare"
             />
-            <span>Override</span>
-          </label>
+          </div>
           <textarea
             value={customFieldsText}
             onChange={(event) => {

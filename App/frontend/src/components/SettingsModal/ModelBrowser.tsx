@@ -20,6 +20,7 @@ interface ModelBrowserProps {
 }
 
 type SortOption = 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc';
+type AccessTierFilter = 'all' | 'subscription' | 'paid';
 
 // Tree node for hierarchical display
 interface TreeNode {
@@ -296,9 +297,10 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
 
-  // Search and sort state
+  // Search, filter, and sort state
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<SortOption>('name-asc');
+  const [accessTierFilter, setAccessTierFilter] = useState<AccessTierFilter>('all');
 
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set());
@@ -315,6 +317,11 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
   useEffect(() => {
     void loadProviderSpecs();
   }, [loadProviderSpecs]);
+
+  // Reset access tier filter when provider changes
+  useEffect(() => {
+    setAccessTierFilter('all');
+  }, [provider]);
 
   const loadModels = async () => {
     setLoadingModels(true);
@@ -474,6 +481,15 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
       });
     }
 
+    // Filter by access tier (NanoGPT only)
+    if (provider === 'nanogpt' && accessTierFilter !== 'all') {
+      models = models.filter((model: any) => {
+        const tier = typeof model?.access_tier === 'string'
+          ? model.access_tier.trim().toLowerCase() : '';
+        return tier === accessTierFilter;
+      });
+    }
+
     // Sort models
     models.sort((a: any, b: any) => {
       switch (sortOption) {
@@ -501,7 +517,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     });
 
     return models;
-  }, [detailsConfig.showPricing, modelsData, searchQuery, sortOption]);
+  }, [detailsConfig.showPricing, modelsData, provider, searchQuery, sortOption, accessTierFilter]);
 
   const modelTree = useMemo((): TreeNode[] | null => {
     if (grouping === 'flat' || !processedModels.length) return null;
@@ -570,16 +586,13 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     );
 
     return (
-      <div key={model.id} className={`model-card ${isSelected ? 'model-card--selected' : ''}`}>
-        <div className="model-card__header">
-          <div className="model-card__info">
-            {typeof model.icon_url === 'string' && model.icon_url ? (
-              <img className="model-card__icon" src={model.icon_url} alt="" aria-hidden="true" />
-            ) : null}
-            <h4 className="model-card__name">{getModelDisplayName(model)}</h4>
-            <span className="model-card__id">{model.id}</span>
-            {model.version && <span className="model-card__version">v{model.version}</span>}
-          </div>
+        <div key={model.id} className={`model-card ${isSelected ? 'model-card--selected' : ''}`}>
+          <div className="model-card__header">
+            <div className="model-card__info">
+              <h4 className="model-card__name">{getModelDisplayName(model)}</h4>
+              <span className="model-card__id">{model.id}</span>
+              {model.version && <span className="model-card__version">v{model.version}</span>}
+            </div>
           <button
             type="button"
             onClick={(e) => {
@@ -885,6 +898,17 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
               onChange={(e) => setSearchQuery(e.target.value)}
               className="model-browser__search"
             />
+            {provider === 'nanogpt' && (
+              <CustomSelect
+                value={accessTierFilter}
+                onChange={(value) => setAccessTierFilter(value as AccessTierFilter)}
+                options={[
+                  { value: 'all', label: 'All' },
+                  { value: 'subscription', label: 'Subscription' },
+                  { value: 'paid', label: 'Paid' },
+                ]}
+              />
+            )}
             <CustomSelect
               value={sortOption}
               onChange={(value) => setSortOption(value as SortOption)}

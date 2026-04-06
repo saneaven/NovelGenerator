@@ -5,6 +5,8 @@
     flex-direction: column;
     gap: var(--spacing-xs);
     margin-bottom: var(--spacing-lg);
+    min-width: 0;
+    width: 100%;
 }
 
 .form-field:last-child {
@@ -84,11 +86,14 @@ textarea {
 .template-selector-row {
     display: flex;
     gap: var(--spacing-sm);
+    min-width: 0;
+    width: 100%;
 }
 
 .model-input-row input,
 .template-selector-row .custom-select {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 /* Slider / Range Input */
@@ -279,6 +284,8 @@ input[type="range"]:disabled,
 /* Section Titles */
 .config-section {
     margin-bottom: var(--spacing-2xl);
+    min-width: 0;
+    width: 100%;
 }
 
 .config-section:last-child {
@@ -352,6 +359,9 @@ input[type="range"]:disabled,
 /* Task Config Form */
 .task-config-form {
     margin: auto;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
 }
 
 /* Form Groups (for modals) */
