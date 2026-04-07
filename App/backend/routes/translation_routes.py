@@ -9,6 +9,7 @@ Advanced translation operations:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
@@ -84,6 +85,121 @@ class LanguageAvailabilityResponse(BaseModel):
 # TRANSLATION STATUS ENDPOINTS
 # ============================================================================
 
+def _collect_project_object_ids(
+    db: Session, project_id: UUID
+) -> List[tuple]:
+    """Collect (object_id, object_type, kind_or_none) for every object in a project.
+
+    Returns lightweight tuples – no full ORM objects loaded.
+    """
+    results: List[tuple] = []
+
+    # Types with a direct project_id column
+    direct_types: list[tuple] = [
+        ('basic_info', BasicInfo, None),
+        ('guidelines', Guidelines, None),
+        (STORY_ENTITY_FOLDER_TYPE, StoryEntityFolder, None),
+        (STORY_ENTITY_TYPE, StoryEntity, 'kind'),
+        ('outline', Outline, 'kind'),
+    ]
+    for object_type, model_class, kind_attr in direct_types:
+        cols = [model_class.id]
+        if kind_attr:
+            cols.append(getattr(model_class, kind_attr))
+        rows = db.query(*cols).filter(model_class.project_id == project_id).all()
+        for row in rows:
+            obj_id = row[0] if kind_attr else row[0]
+            kind_val = str(row[1]) if kind_attr else None
+            results.append((obj_id, object_type, kind_val))
+
+    # Manuscript (via Outline join)
+    rows = (
+        db.query(Manuscript.id)
+        .join(Outline, Manuscript.chapter_id == Outline.id)
+        .filter(Outline.project_id == project_id, Outline.kind == 'chapter')
+        .all()
+    )
+    results.extend((row[0], 'manuscript', None) for row in rows)
+
+    # TimelineTrack
+    rows = (
+        db.query(TimelineTrack.id)
+        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+        .filter(Timeline.project_id == project_id)
+        .all()
+    )
+    results.extend((row[0], 'timeline_track', None) for row in rows)
+
+    # TimelineEvent
+    rows = (
+        db.query(TimelineEvent.id)
+        .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+        .filter(Timeline.project_id == project_id)
+        .all()
+    )
+    results.extend((row[0], 'timeline_event', None) for row in rows)
+
+    return results
+
+
+def _batch_latest_versions(
+    db: Session, object_refs: List[tuple]
+) -> Dict[tuple, dict]:
+    """Fetch the latest ObjectVersion.data for a batch of (object_id, object_type) pairs.
+
+    Uses a window function to pick the latest version per (object_type, object_id)
+    in a single query, avoiding the N+1 problem.
+
+    Returns {(str(object_id), object_type): data_dict}.
+    """
+    if not object_refs:
+        return {}
+
+    # Deduplicate (object_id, object_type) pairs
+    unique_pairs: set[tuple] = set()
+    for obj_id, obj_type, _ in object_refs:
+        unique_pairs.add((obj_id, obj_type))
+
+    obj_ids = [pair[0] for pair in unique_pairs]
+    obj_types = list({pair[1] for pair in unique_pairs})
+
+    # Window function: rank versions per (object_type, object_id) by version_number desc
+    row_num = (
+        func.row_number()
+        .over(
+            partition_by=[ObjectVersion.object_type, ObjectVersion.object_id],
+            order_by=ObjectVersion.version_number.desc(),
+        )
+        .label("rn")
+    )
+
+    subq = (
+        db.query(
+            ObjectVersion.object_type,
+            ObjectVersion.object_id,
+            ObjectVersion.data,
+            row_num,
+        )
+        .filter(
+            ObjectVersion.object_id.in_(obj_ids),
+            ObjectVersion.object_type.in_(obj_types),
+        )
+        .subquery()
+    )
+
+    rows = (
+        db.query(subq.c.object_type, subq.c.object_id, subq.c.data)
+        .filter(subq.c.rn == 1)
+        .all()
+    )
+
+    result: Dict[tuple, dict] = {}
+    for obj_type, obj_id, data in rows:
+        result[(str(obj_id), obj_type)] = data if isinstance(data, dict) else {}
+    return result
+
+
 @router.get("/projects/{project_id}/translation-status")
 async def get_project_translation_status(
     project_id: UUID,
@@ -99,70 +215,30 @@ async def get_project_translation_status(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    object_types = {
-        'basic_info': BasicInfo,
-        'guidelines': Guidelines,
-        STORY_ENTITY_FOLDER_TYPE: StoryEntityFolder,
-        STORY_ENTITY_TYPE: StoryEntity,
-        'outline': Outline,
-        'manuscript': Manuscript,
-        'timeline_track': TimelineTrack,
-        'timeline_event': TimelineEvent,
-    }
+    object_refs = _collect_project_object_ids(db, project_id)
+    version_map = _batch_latest_versions(db, object_refs)
 
     status_list = []
+    for obj_id, object_type, kind_val in object_refs:
+        version_data = version_map.get((str(obj_id), object_type), {})
+        available_languages = list(version_data.keys())
 
-    for object_type, model_class in object_types.items():
-        # Get all objects of this type in the project
-        query = db.query(model_class)
+        if target_languages:
+            missing_languages = [lang for lang in target_languages if lang not in available_languages]
+            present_count = sum(1 for lang in target_languages if lang in available_languages)
+            coverage = (present_count / len(target_languages)) * 100 if target_languages else 0
+        else:
+            missing_languages = []
+            coverage = 100.0 if available_languages else 0.0
 
-        # Filter by project_id (different field names for different types)
-        if object_type in ['basic_info', 'guidelines', STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, 'outline']:
-            query = query.filter(model_class.project_id == project_id)
-        elif object_type == 'manuscript':
-            query = query.join(Outline, Manuscript.chapter_id == Outline.id).filter(
-                Outline.project_id == project_id,
-                Outline.kind == 'chapter',
-            )
-        elif object_type == 'timeline_track':
-            query = query.join(Timeline, Timeline.id == TimelineTrack.timeline_id).filter(
-                Timeline.project_id == project_id,
-            )
-        elif object_type == 'timeline_event':
-            query = (
-                query.join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
-                .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
-                .filter(Timeline.project_id == project_id)
-            )
-
-        objects = query.all()
-
-        for obj in objects:
-            latest_version = db.query(ObjectVersion).filter(
-                ObjectVersion.object_type == object_type,
-                ObjectVersion.object_id == obj.id
-            ).order_by(ObjectVersion.version_number.desc()).first()
-
-            version_data = latest_version.data if latest_version else {}
-            available_languages = list(version_data.keys()) if isinstance(version_data, dict) else []
-
-            # Determine missing languages / coverage (only against requested targets)
-            if target_languages:
-                missing_languages = [lang for lang in target_languages if lang not in available_languages]
-                present_count = sum(1 for lang in target_languages if lang in available_languages)
-                coverage = (present_count / len(target_languages)) * 100 if target_languages else 0
-            else:
-                missing_languages = []
-                coverage = 100.0 if available_languages else 0.0
-
-            status_list.append(TranslationStatus(
-                object_id=str(obj.id),
-                object_type=object_type,
-                kind=str(obj.kind) if object_type in {STORY_ENTITY_TYPE, 'outline'} else None,
-                available_languages=available_languages,
-                missing_languages=missing_languages,
-                translation_coverage=coverage
-            ))
+        status_list.append(TranslationStatus(
+            object_id=str(obj_id),
+            object_type=object_type,
+            kind=kind_val,
+            available_languages=available_languages,
+            missing_languages=missing_languages,
+            translation_coverage=coverage
+        ))
 
     return {"translation_status": status_list}
 
@@ -181,68 +257,16 @@ async def get_language_coverage(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    object_ids = set()
+    object_refs = _collect_project_object_ids(db, project_id)
+    total_objects = len(object_refs)
+    version_map = _batch_latest_versions(db, object_refs)
 
-    # Basic info
-    basic_info = db.query(BasicInfo).filter(BasicInfo.project_id == project_id).all()
-    object_ids.update([(str(b.id), 'basic_info') for b in basic_info])
-
-    guidelines = db.query(Guidelines).filter(Guidelines.project_id == project_id).all()
-    object_ids.update([(str(row.id), 'guidelines') for row in guidelines])
-
-    story_entity_folders = db.query(StoryEntityFolder).filter(StoryEntityFolder.project_id == project_id).all()
-    object_ids.update([(str(row.id), STORY_ENTITY_FOLDER_TYPE) for row in story_entity_folders])
-
-    story_entities = db.query(StoryEntity).filter(StoryEntity.project_id == project_id).all()
-    object_ids.update([(str(row.id), STORY_ENTITY_TYPE) for row in story_entities])
-
-    outlines = db.query(Outline).filter(Outline.project_id == project_id).all()
-    object_ids.update([(str(row.id), 'outline') for row in outlines])
-
-    manuscripts = (
-        db.query(Manuscript)
-        .join(Outline, Manuscript.chapter_id == Outline.id)
-        .filter(Outline.project_id == project_id, Outline.kind == 'chapter')
-        .all()
-    )
-    object_ids.update([(str(row.id), 'manuscript') for row in manuscripts])
-
-    timeline_tracks = (
-        db.query(TimelineTrack)
-        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
-        .filter(Timeline.project_id == project_id)
-        .all()
-    )
-    object_ids.update([(str(row.id), 'timeline_track') for row in timeline_tracks])
-
-    timeline_events = (
-        db.query(TimelineEvent)
-        .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
-        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
-        .filter(Timeline.project_id == project_id)
-        .all()
-    )
-    object_ids.update([(str(row.id), 'timeline_event') for row in timeline_events])
-
-    total_objects = len(object_ids)
-
-    # Count available languages per object (based on latest ObjectVersion only)
     language_counts: Dict[str, int] = {}
-
-    for object_id, object_type in object_ids:
-        latest_version = db.query(ObjectVersion).filter(
-            ObjectVersion.object_type == object_type,
-            ObjectVersion.object_id == UUID(object_id)
-        ).order_by(ObjectVersion.version_number.desc()).first()
-
-        version_data = latest_version.data if latest_version else {}
-        if not isinstance(version_data, dict):
-            continue
-
+    for obj_id, object_type, _ in object_refs:
+        version_data = version_map.get((str(obj_id), object_type), {})
         for lang in version_data.keys():
             language_counts[lang] = language_counts.get(lang, 0) + 1
 
-    # Build response
     coverage = [
         LanguageAvailabilityResponse(
             language=lang,
@@ -252,8 +276,6 @@ async def get_language_coverage(
         )
         for lang, count in language_counts.items()
     ]
-
-    # Sort by coverage percentage descending
     coverage.sort(key=lambda x: x.coverage_percentage, reverse=True)
 
     return {

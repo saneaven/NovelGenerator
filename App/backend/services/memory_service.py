@@ -308,13 +308,14 @@ async def archive_thread_until(
             "indexed_count": 0,
         }
 
-    ordered_messages: List[RunMessageModel] = (
-        db.query(RunMessageModel)
+    # Load only IDs first for range selection (avoids loading all messages into memory)
+    ordered_id_rows = (
+        db.query(RunMessageModel.id)
         .filter(RunMessageModel.thread_id == thread_id)
         .order_by(RunMessageModel.seq_in_thread.asc(), RunMessageModel.created_at.asc())
         .all()
     )
-    ordered_ids = [msg.id for msg in ordered_messages]
+    ordered_ids = [row[0] for row in ordered_id_rows]
 
     start_idx, end_idx = _select_message_range(
         ordered_ids=ordered_ids,
@@ -335,7 +336,14 @@ async def archive_thread_until(
             "indexed_count": 0,
         }
 
-    msgs = ordered_messages[start_idx : end_idx + 1]
+    # Load only the messages in the selected range
+    range_ids = ordered_ids[start_idx : end_idx + 1]
+    msgs: List[RunMessageModel] = (
+        db.query(RunMessageModel)
+        .filter(RunMessageModel.id.in_(range_ids))
+        .order_by(RunMessageModel.seq_in_thread.asc(), RunMessageModel.created_at.asc())
+        .all()
+    )
     archived_ids = [msg.id for msg in msgs]
     boundary_message = msgs[-1] if msgs else None
 

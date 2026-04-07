@@ -29,7 +29,7 @@ class _Channel:
 
 
 class InMemoryRunEventBus:
-    def __init__(self, *, ttl_seconds: int = 900, max_history: int = 512) -> None:
+    def __init__(self, *, ttl_seconds: int = 900, max_history: int = 128) -> None:
         self._channels: dict[str, _Channel] = {}
         self._channels_lock = asyncio.Lock()
         self._ttl = timedelta(seconds=max(ttl_seconds, 60))
@@ -142,6 +142,9 @@ class InMemoryRunEventBus:
                 async with channel.lock:
                     channel.subscribers.discard(queue)
                     channel.updated_at = datetime.utcnow()
+                    # Free history memory when no subscribers remain
+                    if not channel.subscribers:
+                        channel.history.clear()
 
         return _generator()
 
