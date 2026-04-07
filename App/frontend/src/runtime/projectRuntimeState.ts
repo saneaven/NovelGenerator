@@ -17,9 +17,7 @@ export async function reconcilePreexistingLiveThreads(
   const state = useThreadStore.getState();
   const completedRows = rows.filter((row) => state.isPreexistingLiveThread(row.id) && isNonLiveThreadStatus(row.status));
 
-  for (const row of completedRows) {
-    await fetchAndReplaceThreadSnapshot(row.id);
-  }
+  await Promise.allSettled(completedRows.map((row) => fetchAndReplaceThreadSnapshot(row.id)));
 }
 
 export function suppressRunningThreadStreaming(projectId: string): string[] {

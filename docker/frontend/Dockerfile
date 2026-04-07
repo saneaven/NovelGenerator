@@ -7,8 +7,11 @@ COPY App/frontend/package-lock.json /app/App/frontend/package-lock.json
 RUN npm ci
 
 COPY App/frontend /app/App/frontend
-COPY docker/frontend/entrypoint.sh /app/docker/frontend/entrypoint.sh
 
+ARG VITE_API_URL=""
+RUN if [ -n "$VITE_API_URL" ]; then npm run build; fi
+
+COPY docker/frontend/entrypoint.sh /app/docker/frontend/entrypoint.sh
 RUN chmod +x /app/docker/frontend/entrypoint.sh
 
 EXPOSE 5173

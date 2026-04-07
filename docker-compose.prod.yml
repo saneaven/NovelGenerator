@@ -12,6 +12,9 @@ services:
       STORAGE_USAGE_RECONCILER_ENABLED: "1"
 
   frontend:
+    build:
+      args:
+        VITE_API_URL: ${VITE_API_URL}
     environment:
       FRONTEND_MODE: "prod"
 

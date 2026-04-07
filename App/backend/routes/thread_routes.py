@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from datetime import datetime
@@ -364,14 +365,20 @@ async def _emit_thread_snapshot_invalidated(
     )
 
 
-async def _apply_tool_decision(
+def _apply_tool_decision_sync(
     *,
     user_id: UUID,
     thread_id: UUID,
     tool_call_id: UUID,
     decision: str,
     reason: str | None,
-) -> dict:
+) -> tuple[dict | None, RuntimeSyncResult | None, Thread | None, object | None]:
+    """Run the synchronous DB portion of tool decision in a thread.
+
+    Returns (result_dict, sync_result, thread, tool_call).
+    If result_dict is not None, the caller can return it directly.
+    If result_dict is None, the caller should proceed to the async accept flow.
+    """
     db = SessionLocal()
     try:
         thread = require_owned_thread(db, thread_id=thread_id, user_id=user_id)
@@ -388,9 +395,7 @@ async def _apply_tool_decision(
             if tool_call.status in {"processing", "working"}:
                 raise HTTPException(status_code=409, detail="Cannot reject in-progress tool call")
             if tool_call.status in {"rejected", "applied", "failed"}:
-                return {
-                    "tool_call": _serialize_tool_call(tool_call),
-                }
+                return {"tool_call": _serialize_tool_call(tool_call)}, None, None, None
             if tool_call.status not in {"pending", "validating", "streaming"}:
                 raise HTTPException(status_code=409, detail=f"Cannot reject tool call in status={tool_call.status}")
 
@@ -401,25 +406,48 @@ async def _apply_tool_decision(
             db.commit()
             db.refresh(tool_call)
 
-            if sync_result.thread is not None:
-                await _emit_tool_call_status(thread=sync_result.thread, tool_call=tool_call)
-            await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
-
-            return {
-                "tool_call": _serialize_tool_call(tool_call),
-            }
+            return (
+                {"tool_call": _serialize_tool_call(tool_call)},
+                sync_result,
+                sync_result.thread,
+                tool_call,
+            )
 
         if decision != "accept":
             raise HTTPException(status_code=422, detail="Invalid decision")
 
         if tool_call.status in {"applied", "failed", "processing", "working", "rejected"}:
-            return {
-                "tool_call": _serialize_tool_call(tool_call),
-            }
+            return {"tool_call": _serialize_tool_call(tool_call)}, None, None, None
         if tool_call.status not in {"pending", "validating", "streaming"}:
             raise HTTPException(status_code=409, detail=f"Cannot accept tool call in status={tool_call.status}")
+
+        return None, None, None, None
     finally:
         db.close()
+
+
+async def _apply_tool_decision(
+    *,
+    user_id: UUID,
+    thread_id: UUID,
+    tool_call_id: UUID,
+    decision: str,
+    reason: str | None,
+) -> dict:
+    result_dict, sync_result, thread, tool_call = await asyncio.to_thread(
+        _apply_tool_decision_sync,
+        user_id=user_id,
+        thread_id=thread_id,
+        tool_call_id=tool_call_id,
+        decision=decision,
+        reason=reason,
+    )
+
+    if result_dict is not None:
+        if sync_result is not None and thread is not None and tool_call is not None:
+            await _emit_tool_call_status(thread=thread, tool_call=tool_call)
+            await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
+        return result_dict
 
     applied_results = await tool_engine.apply_tool_call_ids(
         SessionLocal,
@@ -439,12 +467,13 @@ async def _apply_tool_decision(
     )
     return result_map.get(tool_call_id, {"tool_call": None})
 
-async def _finalize_applied_tool_calls(
+def _finalize_applied_tool_calls_sync(
     *,
     user_id: UUID,
     thread_id: UUID,
     tool_call_ids: list[UUID],
-) -> dict[UUID, dict]:
+) -> tuple[Thread, list[object], list[RuntimeSyncResult], dict[UUID, dict]]:
+    """Sync DB portion: lock rows, sync statuses, commit, return data for async emission."""
     db = SessionLocal()
     try:
         thread = require_owned_thread(db, thread_id=thread_id, user_id=user_id)
@@ -468,12 +497,29 @@ async def _finalize_applied_tool_calls(
         db.commit()
         for row in rows:
             db.refresh(row)
-            await _emit_tool_call_status(thread=thread, tool_call=row)
-        for sync_result in sync_results:
-            await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
-        return {row.id: {"tool_call": _serialize_tool_call(row)} for row in rows}
+        result_map = {row.id: {"tool_call": _serialize_tool_call(row)} for row in rows}
+        return thread, rows, sync_results, result_map
     finally:
         db.close()
+
+
+async def _finalize_applied_tool_calls(
+    *,
+    user_id: UUID,
+    thread_id: UUID,
+    tool_call_ids: list[UUID],
+) -> dict[UUID, dict]:
+    thread, rows, sync_results, result_map = await asyncio.to_thread(
+        _finalize_applied_tool_calls_sync,
+        user_id=user_id,
+        thread_id=thread_id,
+        tool_call_ids=tool_call_ids,
+    )
+    for row in rows:
+        await _emit_tool_call_status(thread=thread, tool_call=row)
+    for sync_result in sync_results:
+        await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
+    return result_map
 
 
 async def _start_applied_tool_call_followups(
@@ -519,34 +565,43 @@ async def _start_applied_tool_call_followups(
         except Exception as exc:  # noqa: BLE001
             if not isinstance(tool_call_id, UUID):
                 continue
-            db = SessionLocal()
-            try:
-                thread = require_owned_thread(db, thread_id=thread_id, user_id=user_id)
-                failed_row = (
-                    db.query(RunToolCallModel)
-                    .with_for_update()
-                    .filter(RunToolCallModel.id == tool_call_id, RunToolCallModel.thread_id == thread.id)
-                    .first()
-                )
-                if failed_row is not None and failed_row.status in {"processing", "working"}:
-                    failed_row.status = "failed"
-                    failed_row.reason = f"Child run start failed: {exc}"
-                    base_result = failed_row.result if isinstance(failed_row.result, dict) else {}
-                    failed_row.result = {
-                        **base_result,
-                        "success": False,
-                        "message": "Child run start failed",
-                        "error": str(exc),
-                    }
-                    failed_row.updated_at = datetime.utcnow()
-                    sync_result = sync_run_thread_status(db, run_id=failed_row.run_id)
-                    db.commit()
-                    db.refresh(failed_row)
-                    if sync_result.thread is not None:
-                        await _emit_tool_call_status(thread=sync_result.thread, tool_call=failed_row)
-                    await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
-            finally:
-                db.close()
+
+            def _mark_child_run_failed(
+                exc: Exception = exc,
+                tc_id: UUID = tool_call_id,
+            ) -> tuple[RuntimeSyncResult | None, Thread | None, object | None]:
+                db = SessionLocal()
+                try:
+                    thread = require_owned_thread(db, thread_id=thread_id, user_id=user_id)
+                    failed_row = (
+                        db.query(RunToolCallModel)
+                        .with_for_update()
+                        .filter(RunToolCallModel.id == tc_id, RunToolCallModel.thread_id == thread.id)
+                        .first()
+                    )
+                    if failed_row is not None and failed_row.status in {"processing", "working"}:
+                        failed_row.status = "failed"
+                        failed_row.reason = f"Child run start failed: {exc}"
+                        base_result = failed_row.result if isinstance(failed_row.result, dict) else {}
+                        failed_row.result = {
+                            **base_result,
+                            "success": False,
+                            "message": "Child run start failed",
+                            "error": str(exc),
+                        }
+                        failed_row.updated_at = datetime.utcnow()
+                        sr = sync_run_thread_status(db, run_id=failed_row.run_id)
+                        db.commit()
+                        db.refresh(failed_row)
+                        return sr, sr.thread, failed_row
+                    return None, None, None
+                finally:
+                    db.close()
+
+            sr, sr_thread, failed_tc = await asyncio.to_thread(_mark_child_run_failed)
+            if sr is not None and sr_thread is not None and failed_tc is not None:
+                await _emit_tool_call_status(thread=sr_thread, tool_call=failed_tc)
+                await emit_runtime_sync_events(runtime_event_dispatcher, result=sr)
 
 
 @router.post("/threads/{thread_id}/start", response_model=ThreadRunResponse)
@@ -626,7 +681,7 @@ async def stream_user_events(
 
 
 @router.get("/projects/{project_id}/threads/runtime", response_model=ProjectThreadRuntimeResponse)
-async def list_project_threads_runtime(
+def list_project_threads_runtime(
     project_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -715,7 +770,7 @@ async def list_project_threads_runtime(
 
 
 @router.get("/threads/{thread_id}/messages", response_model=ThreadMessagesResponse)
-async def list_thread_messages(
+def list_thread_messages(
     thread_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -886,31 +941,35 @@ async def decide_tool_calls_batch(
     has_accept_decision = any(item.decision == "accept" for item in payload.decisions)
 
     if payload.pause_after_apply and has_accept_decision:
-        db = SessionLocal()
-        try:
-            thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
-            latest_run = (
-                db.query(RunModel)
-                .filter(RunModel.thread_id == thread.id)
-                .order_by(RunModel.run_seq.desc())
-                .with_for_update()
-                .first()
-            )
-            sync_result: RuntimeSyncResult | None = None
-            if latest_run is not None and latest_run.status in {"running", "waiting", "processing"}:
-                latest_run.status = "paused"
-                thread.status = "paused"
-                sync_result = sync_explicit_run_thread_status(
-                    db,
-                    run=latest_run,
-                    thread=thread,
-                    error=None,
+        def _pause_before_apply_sync() -> RuntimeSyncResult | None:
+            db = SessionLocal()
+            try:
+                thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
+                latest_run = (
+                    db.query(RunModel)
+                    .filter(RunModel.thread_id == thread.id)
+                    .order_by(RunModel.run_seq.desc())
+                    .with_for_update()
+                    .first()
                 )
-            db.commit()
-            if sync_result is not None:
-                await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
-        finally:
-            db.close()
+                sr: RuntimeSyncResult | None = None
+                if latest_run is not None and latest_run.status in {"running", "waiting", "processing"}:
+                    latest_run.status = "paused"
+                    thread.status = "paused"
+                    sr = sync_explicit_run_thread_status(
+                        db,
+                        run=latest_run,
+                        thread=thread,
+                        error=None,
+                    )
+                db.commit()
+                return sr
+            finally:
+                db.close()
+
+        sync_result = await asyncio.to_thread(_pause_before_apply_sync)
+        if sync_result is not None:
+            await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
 
     result_map: dict[UUID, dict] = {}
     accepted_ids: list[UUID] = []
@@ -952,13 +1011,17 @@ async def decide_tool_calls_batch(
         if item.tool_call_id in result_map:
             ordered.append(result_map[item.tool_call_id])
         else:
-            db_fb = SessionLocal()
-            try:
-                tc = db_fb.query(RunToolCallModel).filter(RunToolCallModel.id == item.tool_call_id).first()
-                if tc is not None:
-                    ordered.append({"tool_call": _serialize_tool_call(tc)})
-            finally:
-                db_fb.close()
+            def _fallback_lookup(tool_call_id: UUID = item.tool_call_id) -> dict | None:
+                db_fb = SessionLocal()
+                try:
+                    tc = db_fb.query(RunToolCallModel).filter(RunToolCallModel.id == tool_call_id).first()
+                    return {"tool_call": _serialize_tool_call(tc)} if tc is not None else None
+                finally:
+                    db_fb.close()
+
+            fallback = await asyncio.to_thread(_fallback_lookup)
+            if fallback is not None:
+                ordered.append(fallback)
     return ToolCallBatchDecisionResponse(results=[ToolCallDecisionResponse(**r) for r in ordered])
 
 

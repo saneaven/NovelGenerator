@@ -21,6 +21,7 @@ class RunEventBus(Protocol):
 
 @dataclass
 class _Channel:
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     subscribers: set[asyncio.Queue] = field(default_factory=set)
     history: deque[dict[str, Any]] = field(default_factory=deque)
     updated_at: datetime = field(default_factory=datetime.utcnow)
@@ -30,7 +31,7 @@ class _Channel:
 class InMemoryRunEventBus:
     def __init__(self, *, ttl_seconds: int = 900, max_history: int = 512) -> None:
         self._channels: dict[str, _Channel] = {}
-        self._lock = asyncio.Lock()
+        self._channels_lock = asyncio.Lock()
         self._ttl = timedelta(seconds=max(ttl_seconds, 60))
         self._max_history = max(int(max_history), 64)
         self._cleanup_task: asyncio.Task | None = None
@@ -50,7 +51,7 @@ class InMemoryRunEventBus:
             while True:
                 await asyncio.sleep(60)
                 cutoff = datetime.utcnow() - self._ttl
-                async with self._lock:
+                async with self._channels_lock:
                     for channel_key in list(self._channels.keys()):
                         channel = self._channels.get(channel_key)
                         if channel is None:
@@ -62,14 +63,20 @@ class InMemoryRunEventBus:
 
         self._cleanup_task = asyncio.create_task(_cleanup_loop())
 
-    async def publish(self, channel_key: str, event: dict[str, Any]) -> None:
-        await self._ensure_cleanup_task()
-        key = self._normalize_channel_key(channel_key)
-        async with self._lock:
+    async def _get_or_create_channel(self, key: str) -> _Channel:
+        async with self._channels_lock:
             channel = self._channels.get(key)
             if channel is None:
                 channel = _Channel()
                 self._channels[key] = channel
+            return channel
+
+    async def publish(self, channel_key: str, event: dict[str, Any]) -> None:
+        await self._ensure_cleanup_task()
+        key = self._normalize_channel_key(channel_key)
+        channel = await self._get_or_create_channel(key)
+
+        async with channel.lock:
             event_id = channel.next_event_id
             channel.next_event_id += 1
             envelope = {"event_id": event_id, "event": event}
@@ -109,11 +116,8 @@ class InMemoryRunEventBus:
             queue: asyncio.Queue = asyncio.Queue(maxsize=256)
             backlog: list[dict[str, Any]] = []
 
-            async with self._lock:
-                channel = self._channels.get(key)
-                if channel is None:
-                    channel = _Channel()
-                    self._channels[key] = channel
+            channel = await self._get_or_create_channel(key)
+            async with channel.lock:
                 if after_event_id is not None:
                     backlog = [
                         item
@@ -135,11 +139,9 @@ class InMemoryRunEventBus:
                     item = await queue.get()
                     yield item
             finally:
-                async with self._lock:
-                    channel = self._channels.get(key)
-                    if channel is not None:
-                        channel.subscribers.discard(queue)
-                        channel.updated_at = datetime.utcnow()
+                async with channel.lock:
+                    channel.subscribers.discard(queue)
+                    channel.updated_at = datetime.utcnow()
 
         return _generator()
 

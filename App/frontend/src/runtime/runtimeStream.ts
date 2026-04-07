@@ -27,6 +27,8 @@ class UserRuntimeConnection {
   private lastStreamActivityAt = 0;
   private recoveryAttemptStartedAt: number | null = null;
   private recoveryCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  private rehydrationInFlight: Promise<void> | null = null;
+  private rehydrationTriggeredByForce = false;
 
   async start(): Promise<void> {
     this.refCount += 1;
@@ -65,6 +67,7 @@ class UserRuntimeConnection {
     const startedAt = Date.now();
     this.recoveryAttemptStartedAt = startedAt;
     this.scheduleRecoveryCheck(startedAt);
+    this.rehydrationTriggeredByForce = true;
     void this.rehydrateRuntimeState(`force:${reason}`);
 
     if (!this.streamTask) {
@@ -109,7 +112,19 @@ class UserRuntimeConnection {
     }
   }
 
-  private async rehydrateRuntimeState(source: string): Promise<void> {
+  private rehydrateRuntimeState(source: string): Promise<void> {
+    if (this.rehydrationInFlight) {
+      return this.rehydrationInFlight;
+    }
+
+    const task = this.doRehydrateRuntimeState(source).finally(() => {
+      this.rehydrationInFlight = null;
+    });
+    this.rehydrationInFlight = task;
+    return task;
+  }
+
+  private async doRehydrateRuntimeState(source: string): Promise<void> {
     const currentProjectId = useProjectStore.getState().currentProjectId;
 
     try {
@@ -161,6 +176,10 @@ class UserRuntimeConnection {
       {
         onReconnect: async () => {
           if (this.disposed || this.connectionGeneration !== generation) return;
+          if (this.rehydrationTriggeredByForce) {
+            this.rehydrationTriggeredByForce = false;
+            return;
+          }
           await this.rehydrateRuntimeState(`stream-reconnect:${reason}`);
         },
         onActivity: () => {
