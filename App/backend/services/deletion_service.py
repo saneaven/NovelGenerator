@@ -248,7 +248,9 @@ def delete_assets_with_files(
 
     for asset in assets:
         storage_service.delete_asset_files(asset.file_path)
-        db.delete(asset)
+
+    if deleted_ids:
+        db.query(Asset).filter(Asset.id.in_(deleted_ids)).delete(synchronize_session=False)
 
     return deleted_ids
 
@@ -268,7 +270,11 @@ def delete_chat_attachments_with_files(
         storage_key = str(attachment.storage_key or "").strip()
         if storage_key:
             storage_service.delete_asset_files(storage_key)
-        db.delete(attachment)
+
+    if deleted_ids:
+        db.query(RunMessageAttachmentModel).filter(
+            RunMessageAttachmentModel.id.in_(deleted_ids),
+        ).delete(synchronize_session=False)
     return deleted_ids
 
 

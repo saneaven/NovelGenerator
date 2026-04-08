@@ -1633,7 +1633,8 @@ class ObjectService:
                     action="deleted",
                 )
 
-        db.delete(obj)
+        model_class = type(obj)
+        db.query(model_class).filter(model_class.id == object_id).delete(synchronize_session=False)
         db.flush()
         if storage_type == STORY_ENTITY_TYPE:
             normalize_story_entity_parent(

@@ -361,7 +361,7 @@ async def delete_project(
     # Delete version history rows for all project objects (object_versions has no FK).
     delete_object_versions_bulk(db, ids_by_type=object_ids_by_type)
 
-    db.delete(project)
+    db.query(Project).filter(Project.id == project_id).delete(synchronize_session=False)
     db.commit()
 
     return None

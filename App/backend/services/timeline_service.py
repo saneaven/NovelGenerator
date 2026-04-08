@@ -964,7 +964,7 @@ class TimelineService:
             ids_by_type=ids_by_type,
         )
         delete_object_versions_bulk(db, ids_by_type=ids_by_type)
-        db.delete(track)
+        db.query(TimelineTrack).filter(TimelineTrack.id.in_(track_ids)).delete(synchronize_session=False)
         db.flush()
         _normalize_track_positions(
             db,
@@ -1225,7 +1225,7 @@ class TimelineService:
             ids_by_type={TIMELINE_EVENT_TYPE: [event.id]},
         )
         delete_object_versions_bulk(db, ids_by_type={TIMELINE_EVENT_TYPE: [event.id]})
-        db.delete(event)
+        db.query(TimelineEvent).filter(TimelineEvent.id == event_id).delete(synchronize_session=False)
         db.flush()
 
         queue_object_change(

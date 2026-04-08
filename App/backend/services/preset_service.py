@@ -713,8 +713,8 @@ class PresetService:
             if other_preset:
                 settings.active_preset_id = other_preset.id
 
-        # Delete preset (cascade will delete prompts, fragments, variables)
-        db.delete(preset)
+        # Delete preset — DB ON DELETE CASCADE handles child rows
+        db.query(PromptPreset).filter(PromptPreset.id == preset_id).delete(synchronize_session=False)
         db.commit()
         return True
 

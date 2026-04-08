@@ -133,8 +133,10 @@ from App.backend.services import journey_service as journey_service_module
 
 
 class FakeQuery:
-    def __init__(self, rows: list[object]) -> None:
+    def __init__(self, rows: list[object], *, owner: "FakeSession | None" = None, model: object = None) -> None:
         self._rows = list(rows)
+        self._owner = owner
+        self._model = model
 
     def filter(self, *_args, **_kwargs) -> "FakeQuery":
         return self
@@ -148,17 +150,30 @@ class FakeQuery:
     def first(self) -> object | None:
         return self._rows[0] if self._rows else None
 
+    def delete(self, *, synchronize_session: object = None) -> int:
+        if self._owner is not None:
+            self._owner.bulk_deleted.append(self._model)
+        return len(self._rows)
+
 
 class FakeSession:
     def __init__(self, rows_by_model: dict[object, list[object]]) -> None:
         self._rows_by_model = rows_by_model
         self.deleted: list[object] = []
+        self.bulk_deleted: list[object] = []
         self.committed = False
         self.rolled_back = False
         self.closed = False
 
-    def query(self, model: object) -> FakeQuery:
-        return FakeQuery(self._rows_by_model.get(model, []))
+    def query(self, entity: object) -> FakeQuery:
+        parent_class = getattr(entity, "class_", None)
+        if parent_class is not None:
+            # Column attribute query (e.g. Journey.id) — return tuples
+            attr_key = entity.key  # type: ignore[union-attr]
+            rows = self._rows_by_model.get(parent_class, [])
+            return FakeQuery([(getattr(r, attr_key),) for r in rows])
+        # Model class query — return full objects
+        return FakeQuery(self._rows_by_model.get(entity, []), owner=self, model=entity)
 
     def delete(self, row: object) -> None:
         self.deleted.append(row)
@@ -280,7 +295,8 @@ def test_delete_all_project_journeys_cancels_active_threads_and_emits_bulk_event
     assert delete_db.rolled_back is False
     assert discovery_db.closed is True
     assert delete_db.closed is True
-    assert delete_db.deleted == [thread_a, journey_a, thread_b, journey_b, thread_c, journey_c]
+    assert Thread in delete_db.bulk_deleted
+    assert Journey in delete_db.bulk_deleted
     assert emitted_user == [
         (
             "notification:bulk_delete",
@@ -300,8 +316,7 @@ def test_delete_all_project_journeys_returns_zero_without_events(monkeypatch) ->
     user_id = uuid4()
     project_id = uuid4()
     discovery_db = FakeSession({Journey: [], Thread: []})
-    delete_db = FakeSession({Journey: [], Thread: []})
-    db_factory = SessionFactory([discovery_db, delete_db])
+    db_factory = SessionFactory([discovery_db])
 
     canceled_thread_ids: list[object] = []
     emitted_user: list[tuple[str, dict[str, object], object | None]] = []
@@ -342,8 +357,7 @@ def test_delete_all_project_journeys_returns_zero_without_events(monkeypatch) ->
     assert emitted_user == []
     assert emitted_project == []
     assert discovery_db.closed is True
-    assert delete_db.closed is True
-    assert delete_db.committed is False
+    assert db_factory.calls == 1
 
 
 def test_delete_all_project_journeys_route_returns_deleted_count(monkeypatch) -> None:

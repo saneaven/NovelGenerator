@@ -432,8 +432,8 @@ class JourneyService:
             )
             if thread is not None:
                 deleted_thread_ids.append(str(thread.id))
-                db.delete(thread)
-            db.delete(journey)
+                db.query(Thread).filter(Thread.id == thread.id).delete(synchronize_session=False)
+            db.query(Journey).filter(Journey.id == journey.id).delete(synchronize_session=False)
             db.commit()
         except Exception:
             db.rollback()
@@ -455,22 +455,26 @@ class JourneyService:
         project_id: UUID,
         user_id: UUID,
     ) -> int:
+        # --- discovery phase: fetch only IDs to find active threads ---
         discovery_db = self._db_factory()
         try:
-            journeys = self._list_owned_project_journeys(
-                discovery_db,
-                project_id=project_id,
-                user_id=user_id,
-            )
-            journey_ids = [journey.id for journey in journeys]
-            thread_by_journey_id = self._load_child_threads_by_journey_id(
-                discovery_db,
-                journey_ids=journey_ids,
-            )
+            journey_ids = [
+                row[0] for row in
+                discovery_db.query(Journey.id)
+                .filter(Journey.project_id == project_id, Journey.user_id == user_id)
+                .all()
+            ]
+            if not journey_ids:
+                return 0
             active_thread_ids = [
-                thread.id
-                for thread in thread_by_journey_id.values()
-                if thread.status in THREAD_DELETE_PRE_CLEANUP_STATUSES
+                row[0] for row in
+                discovery_db.query(Thread.id)
+                .filter(
+                    Thread.thread_type == "journey",
+                    Thread.parent_id.in_(journey_ids),
+                    Thread.status.in_(THREAD_DELETE_PRE_CLEANUP_STATUSES),
+                )
+                .all()
             ]
         finally:
             discovery_db.close()
@@ -478,42 +482,49 @@ class JourneyService:
         for thread_id in active_thread_ids:
             await self._run_pipeline.cancel_run_for_delete(thread_id=thread_id, user_id=user_id)
 
+        # --- deletion phase: bulk SQL DELETE, let DB CASCADE handle children ---
         db = self._db_factory()
         deleted_notifications: list[NotificationDeleteRow] = []
         deleted_thread_ids: list[str] = []
-        deleted_count = 0
         try:
-            journeys = self._list_owned_project_journeys(
-                db,
-                project_id=project_id,
-                user_id=user_id,
-            )
-            if not journeys:
+            # Re-fetch IDs in the deletion session
+            journey_ids = [
+                row[0] for row in
+                db.query(Journey.id)
+                .filter(Journey.project_id == project_id, Journey.user_id == user_id)
+                .all()
+            ]
+            if not journey_ids:
                 return 0
 
-            thread_by_journey_id = self._load_child_threads_by_journey_id(
-                db,
-                journey_ids=[journey.id for journey in journeys],
+            # Fetch thread IDs (lightweight, no child loading)
+            thread_rows = (
+                db.query(Thread.id)
+                .filter(Thread.thread_type == "journey", Thread.parent_id.in_(journey_ids))
+                .all()
             )
+            deleted_thread_ids = [str(row[0]) for row in thread_rows]
+            thread_ids = [row[0] for row in thread_rows]
 
-            for journey in journeys:
+            # Delete notifications per journey (lightweight)
+            for jid in journey_ids:
                 deleted_notification = delete_notification_source(
                     db,
                     user_id=user_id,
                     source_kind="journey",
-                    source_id=journey.id,
+                    source_id=jid,
                 )
                 if deleted_notification is not None:
                     deleted_notifications.append(deleted_notification)
 
-                thread = thread_by_journey_id.get(journey.id)
-                if thread is not None:
-                    deleted_thread_ids.append(str(thread.id))
-                    db.delete(thread)
+            # Bulk delete threads — DB ON DELETE CASCADE handles runs, messages, etc.
+            if thread_ids:
+                db.query(Thread).filter(Thread.id.in_(thread_ids)).delete(synchronize_session=False)
 
-                db.delete(journey)
+            # Bulk delete journeys
+            db.query(Journey).filter(Journey.id.in_(journey_ids)).delete(synchronize_session=False)
 
-            deleted_count = len(journeys)
+            deleted_count = len(journey_ids)
             db.commit()
         except Exception:
             db.rollback()
