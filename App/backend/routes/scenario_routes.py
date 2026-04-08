@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status
@@ -115,6 +114,7 @@ async def get_scenario_versions(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """List scenario versions (metadata only). Use the single-version endpoint to fetch content on demand."""
     preset_id = get_active_preset_id(current_user)
     rows = scenario_service.list_versions(
         db,
@@ -123,19 +123,49 @@ async def get_scenario_versions(
         task_type=task_type,
         task_subtype=task_subtype,
     )
-    out: list[ScenarioVersionHistoryItem] = []
-    for row in rows:
-        scenario_doc = row.scenario if isinstance(row.scenario, dict) else {}
-        out.append(
-            ScenarioVersionHistoryItem(
-                version_number=int(row.version_number),
-                created_at=row.created_at,
-                note=row.note,
-                is_system_default=bool(row.is_default),
-                preview=json.dumps(scenario_doc, indent=2, ensure_ascii=False),
-            )
+    return [
+        ScenarioVersionHistoryItem(
+            version_number=row.version_number,
+            created_at=row.created_at,
+            note=row.note,
+            is_system_default=row.is_default,
+            preview=None,
         )
-    return out
+        for row in rows
+    ]
+
+
+@router.get(
+    "/{task_type}/{task_subtype}/versions/{version_number}",
+    response_model=ScenarioContentResponse,
+)
+async def get_scenario_version(
+    task_type: str,
+    task_subtype: str,
+    version_number: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Fetch a single scenario version with its full document. Used for lazy-loaded preview in the version history modal."""
+    preset_id = get_active_preset_id(current_user)
+    row = scenario_service.get_version_by_number(
+        db,
+        user_id=current_user.id,
+        preset_id=preset_id,
+        task_type=task_type,
+        task_subtype=task_subtype,
+        version_number=version_number,
+    )
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario version not found")
+
+    scenario_doc = row.scenario if isinstance(row.scenario, dict) else {}
+    return ScenarioContentResponse(
+        scenario=ScenarioDocument.model_validate(scenario_doc),
+        version_number=int(row.version_number),
+        created_at=row.created_at,
+        is_system_default=bool(row.is_default),
+    )
 
 
 @router.post(

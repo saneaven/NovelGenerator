@@ -6,6 +6,7 @@ from typing import Any, Iterable
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from ..models.db_models import (
@@ -91,17 +92,30 @@ def _latest_versions_map(db: Session, object_type: str, object_ids: Iterable[UUI
     ids = list({object_id for object_id in object_ids})
     if not ids:
         return {}
+
+    subq = (
+        db.query(
+            ObjectVersion.object_id.label("object_id"),
+            func.max(ObjectVersion.version_number).label("max_version"),
+        )
+        .filter(ObjectVersion.object_type == object_type, ObjectVersion.object_id.in_(ids))
+        .group_by(ObjectVersion.object_id)
+        .subquery()
+    )
+
     rows = (
         db.query(ObjectVersion)
-        .filter(ObjectVersion.object_type == object_type, ObjectVersion.object_id.in_(ids))
-        .order_by(ObjectVersion.object_id, ObjectVersion.version_number.desc())
+        .join(
+            subq,
+            and_(
+                ObjectVersion.object_id == subq.c.object_id,
+                ObjectVersion.version_number == subq.c.max_version,
+            ),
+        )
+        .filter(ObjectVersion.object_type == object_type)
         .all()
     )
-    by_id: dict[UUID, ObjectVersion] = {}
-    for row in rows:
-        if row.object_id not in by_id:
-            by_id[row.object_id] = row
-    return by_id
+    return {row.object_id: row for row in rows}
 
 
 def _extract_version_payload(version: ObjectVersion | None, language: str | None) -> tuple[dict[str, Any], dict[str, Any]]:

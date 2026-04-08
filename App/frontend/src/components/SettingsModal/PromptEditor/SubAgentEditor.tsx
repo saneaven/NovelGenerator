@@ -288,6 +288,10 @@ const SubAgentPromptEditors: React.FC<{
         await scenarioService.restoreScenarioVersion('subAgent', agentNameForHistory, vn);
         await onReloadScenario();
       },
+      loadVersionContent: async (vn: number) => {
+        const result = await scenarioService.getScenarioVersion('subAgent', agentNameForHistory, vn);
+        return JSON.stringify(result.scenario, null, 2);
+      },
     };
   }, [agentNameForHistory, onReloadScenario]);
 

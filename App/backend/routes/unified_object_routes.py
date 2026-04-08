@@ -95,10 +95,11 @@ class ListObjectsResponse(BaseModel):
 
 
 class VersionResponse(BaseModel):
-    """Version history entry"""
+    """Version history entry. ``data`` is omitted in metadata-only responses."""
     id: str
     number: int
-    data: Dict[str, Any]  # All languages
+    data: Optional[Dict[str, Any]] = None  # All languages; None when metadata_only
+    languages: Optional[List[str]] = None  # Language keys, populated when metadata_only
     user_request: Optional[str]
     created_at: str
 
@@ -245,12 +246,17 @@ async def get_versions(
     object_type: str,
     object_id: UUID,
     rich_text_format: RichTextFormat = Query("tiptap"),
+    metadata_only: bool = Query(False, description="Return only version metadata, omitting heavy data"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Get version history for an object.
     Returns all versions in reverse chronological order.
+
+    When ``metadata_only=true``, the response omits the ``data`` field and includes
+    a ``languages`` list instead, avoiding the cost of loading and rendering the
+    full content for every version.
     """
     project_id = resolve_project_id_for_object(
         db,
@@ -265,6 +271,7 @@ async def get_versions(
             object_type=object_type,
             object_id=object_id,
             rich_text_format=rich_text_format,
+            metadata_only=metadata_only,
         )
         return [VersionResponse(**v) for v in versions]
     except StorageQuotaExceededError:
@@ -274,6 +281,49 @@ async def get_versions(
         if "not found" in message.lower():
             raise HTTPException(status_code=404, detail=message)
         raise HTTPException(status_code=400, detail=message)
+
+
+@router.get(
+    "/objects/{object_type}/{object_id}/versions/{version_id}",
+    response_model=VersionResponse,
+)
+async def get_version(
+    object_type: str,
+    object_id: UUID,
+    version_id: UUID,
+    rich_text_format: RichTextFormat = Query("tiptap"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get a single version with its full rendered content.
+
+    Used by the version history modal to lazy-load content when the user expands
+    a version's details, instead of shipping every version's content up front.
+    """
+    project_id = resolve_project_id_for_object(
+        db,
+        object_type=object_type,
+        object_id=object_id,
+        user_id=current_user.id,
+    )
+    try:
+        result = object_service.get_version(
+            db,
+            project_id=project_id,
+            object_type=object_type,
+            object_id=object_id,
+            version_id=version_id,
+            rich_text_format=rich_text_format,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if "not found" in message.lower():
+            raise HTTPException(status_code=404, detail=message)
+        raise HTTPException(status_code=400, detail=message)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Version not found")
+    return VersionResponse(**result)
 
 
 @router.patch("/objects/{object_type}/{object_id}/versions/{version_id}/activate")

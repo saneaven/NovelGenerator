@@ -32,6 +32,10 @@ interface VersionHistoryModalProps {
     title: string;
     loadVersions: () => Promise<TextVersionHistoryItem[]>;
     restoreVersion: (versionNumber: number) => Promise<void>;
+    // Optional: lazy-load full content for a specific version on selection.
+    // When provided, loadVersions can return an empty preview and content
+    // is fetched only when the user actually clicks a version.
+    loadVersionContent?: (versionNumber: number) => Promise<string>;
   };
 }
 
@@ -47,6 +51,12 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   const [versions, setVersions] = useState<any[]>([]);
   const [textVersions, setTextVersions] = useState<TextVersionHistoryItem[]>([]);
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
+  // Lazy-loaded full version content, keyed by version id (story mode only)
+  const [versionContent, setVersionContent] = useState<Record<string, Record<string, Record<string, any>>>>({});
+  const [loadingVersionIds, setLoadingVersionIds] = useState<Set<string>>(new Set());
+  // Lazy-loaded text-mode preview content, keyed by version_number
+  const [textVersionContent, setTextVersionContent] = useState<Record<number, string>>({});
+  const [loadingTextVersions, setLoadingTextVersions] = useState<Set<number>>(new Set());
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -61,14 +71,20 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       setLoading(true);
       try {
         if (mode === 'story' && objectId) {
+          // Metadata-only fetch — full content is lazy-loaded on Details expand
           const versionHistory = await store.getVersions(objectType!, objectId);
           setVersions(versionHistory.sort((a, b) => b.number - a.number));
+          setVersionContent({});
+          setExpandedVersions(new Set());
         } else if (mode === 'text' && textVersionProps) {
           const history = await textVersionProps.loadVersions();
           setTextVersions(history);
+          setTextVersionContent({});
           // Auto-select the latest version (first in the list, which is sorted descending)
           if (history.length > 0) {
             setSelectedVersion(history[0].version_number);
+          } else {
+            setSelectedVersion(null);
           }
         }
       } catch (error) {
@@ -81,6 +97,37 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
     loadVersions();
   }, [isOpen, objectId, objectType, mode]);
+
+  // Lazy-load text-mode version content when the user selects a version
+  useEffect(() => {
+    if (mode !== 'text' || !textVersionProps?.loadVersionContent) return;
+    if (selectedVersion === null) return;
+    if (textVersionContent[selectedVersion] !== undefined) return;
+    if (loadingTextVersions.has(selectedVersion)) return;
+
+    const versionNumber = selectedVersion;
+    const loader = textVersionProps.loadVersionContent;
+    setLoadingTextVersions((prev) => {
+      const next = new Set(prev);
+      next.add(versionNumber);
+      return next;
+    });
+    loader(versionNumber)
+      .then((content) => {
+        setTextVersionContent((prev) => ({ ...prev, [versionNumber]: content }));
+      })
+      .catch((error) => {
+        console.error('Failed to load version content:', error);
+        showAlert({ title: 'Load Error', message: 'Failed to load version content. Please try again.' });
+      })
+      .finally(() => {
+        setLoadingTextVersions((prev) => {
+          const next = new Set(prev);
+          next.delete(versionNumber);
+          return next;
+        });
+      });
+  }, [mode, selectedVersion, textVersionProps, textVersionContent, loadingTextVersions]);
 
   // Story mode helpers
   const currentObject = mode === 'story' ? store.objects[objectId!] : null;
@@ -122,6 +169,8 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       await store.restoreVersion(objectType!, objectId!, versionId);
       const versionHistory = await store.getVersions(objectType!, objectId!);
       setVersions(versionHistory.sort((a, b) => b.number - a.number));
+      setVersionContent({});
+      setExpandedVersions(new Set());
       onRestoreVersion?.();
     } catch (error) {
       console.error('Failed to restore version:', error);
@@ -154,14 +203,39 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     }
   };
 
-  const toggleExpandVersion = (versionId: string) => {
+  const toggleExpandVersion = async (versionId: string) => {
     const newExpanded = new Set(expandedVersions);
     if (newExpanded.has(versionId)) {
       newExpanded.delete(versionId);
-    } else {
-      newExpanded.add(versionId);
+      setExpandedVersions(newExpanded);
+      return;
     }
+    newExpanded.add(versionId);
     setExpandedVersions(newExpanded);
+
+    // Lazy-load full content for this version on first expand
+    if (mode === 'story' && objectType && objectId && !versionContent[versionId]) {
+      setLoadingVersionIds((prev) => {
+        const next = new Set(prev);
+        next.add(versionId);
+        return next;
+      });
+      try {
+        const full = await store.getVersion(objectType, objectId, versionId);
+        if (full.data) {
+          setVersionContent((prev) => ({ ...prev, [versionId]: full.data! }));
+        }
+      } catch (error) {
+        console.error('Failed to load version content:', error);
+        showAlert({ title: 'Load Error', message: 'Failed to load version content. Please try again.' });
+      } finally {
+        setLoadingVersionIds((prev) => {
+          const next = new Set(prev);
+          next.delete(versionId);
+          return next;
+        });
+      }
+    }
   };
 
   const formatDate = (dateStr: string) => {
@@ -370,7 +444,14 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
               )}
 
               <div className="history-preview__content">
-                <pre>{selectedVersionData.preview}</pre>
+                {loadingTextVersions.has(selectedVersionData.version_number) ? (
+                  <div className="loading-state"><Loading size="lg" />Loading content...</div>
+                ) : (
+                  <pre>
+                    {textVersionContent[selectedVersionData.version_number] ??
+                      selectedVersionData.preview}
+                  </pre>
+                )}
               </div>
             </>
           ) : (
@@ -400,7 +481,14 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       <div className="versions-list">
         {versions.map((version) => {
           const isCurrentVersion = currentObject?.version.id === version.id;
-          const versionData = version.data[currentLanguage] || Object.values(version.data)[0] || {};
+          // languages from metadata-only response; fall back to data keys for legacy responses
+          const versionLanguages: string[] =
+            version.languages ?? (version.data ? Object.keys(version.data) : []);
+          const fullData = versionContent[version.id];
+          const isExpanded = expandedVersions.has(version.id);
+          const isContentLoading = loadingVersionIds.has(version.id);
+          const versionData =
+            (fullData && (fullData[currentLanguage] || Object.values(fullData)[0])) || {};
 
           return (
             <div
@@ -424,7 +512,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                       {isCurrentVersion && <span className="badge badge--active">Current</span>}
                       <span className="version-languages-badge">
                         <Globe size="xs" />
-                        {Object.keys(version.data || {}).join(', ') || 'No data'}
+                        {versionLanguages.join(', ') || 'No data'}
                       </span>
 
                       <div className="version-actions">
@@ -433,7 +521,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                         size="sm"
                         onClick={() => toggleExpandVersion(version.id)}
                         >
-                        {expandedVersions.has(version.id) ? 'Collapse' : 'Details'}
+                        {isExpanded ? 'Collapse' : 'Details'}
                         </TextButton>
 
                         {!isCurrentVersion && (
@@ -447,7 +535,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                         )}
                       </div>
                     </div>
-                    
+
                     <div className="version-meta-row">
                       <span className="meta-item">
                         <Clock size="sm" />
@@ -463,20 +551,26 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                   </div>
                 </div>
 
-                {expandedVersions.has(version.id) && (
+                {isExpanded && (
                   <div className="version-content">
                     <div className="content-header">
                         <DocumentAlt size="md" />
                         <span>Data Preview ({currentLanguage})</span>
                     </div>
                     <div className="version-data">
-                      {renderVersionData(versionData, objectType!)}
+                      {isContentLoading ? (
+                        <div className="loading-state"><Loading size="lg" />Loading content...</div>
+                      ) : fullData ? (
+                        renderVersionData(versionData, objectType!)
+                      ) : (
+                        <div className="empty-state"><p>No content available.</p></div>
+                      )}
                     </div>
-                    {Object.keys(version.data).length > 1 && (
+                    {versionLanguages.length > 1 && (
                       <div className="version-languages">
                         <small>
                           <Globe size="xs" />
-                          Available in: {Object.keys(version.data).join(', ')}
+                          Available in: {versionLanguages.join(', ')}
                         </small>
                       </div>
                     )}

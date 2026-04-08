@@ -68,7 +68,9 @@ def _install_import_stubs() -> None:
     storage_usage_service.build_object_version_delta = lambda *_args, **_kwargs: None
     storage_usage_service.build_story_core_delta = lambda *_args, **_kwargs: None
     storage_usage_service.build_story_core_rows_delta = lambda *_args, **_kwargs: None
+    storage_usage_service.build_usage_delta_for_amount = lambda *_args, **_kwargs: None
     storage_usage_service.build_usage_delta_for_measurement_rows = lambda *_args, **_kwargs: None
+    storage_usage_service.measure_object_version_bytes_for_ids = lambda *_args, **_kwargs: 0
     storage_usage_service.measure_object_version_row = lambda *_args, **_kwargs: 0
     storage_usage_service.snapshot_asset_row = lambda *_args, **_kwargs: None
     storage_usage_service.snapshot_object_version_row = lambda *_args, **_kwargs: None

@@ -388,6 +388,10 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
           await scenarioService.restoreScenarioVersion(taskType, taskSubtype, vn);
           await scenarios.restoreScenarioVersion(key, taskType, taskSubtype);
         },
+        loadVersionContent: async (vn: number) => {
+          const result = await scenarioService.getScenarioVersion(taskType, taskSubtype, vn);
+          return JSON.stringify(result.scenario, null, 2);
+        },
       };
     }
 

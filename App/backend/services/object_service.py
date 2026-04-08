@@ -81,8 +81,8 @@ from .storage_usage_service import (
     build_object_version_delta,
     build_story_core_delta,
     build_story_core_rows_delta,
-    build_usage_delta_for_measurement_rows,
-    measure_object_version_row,
+    build_usage_delta_for_amount,
+    measure_object_version_bytes_for_ids,
     snapshot_asset_row,
     snapshot_object_version_row,
     snapshot_rows,
@@ -1242,6 +1242,7 @@ class ObjectService:
         object_type: str,
         object_id: UUID,
         rich_text_format: str = "tiptap",
+        metadata_only: bool = False,
     ) -> list[dict[str, Any]]:
         t = object_type
         storage_type = _canonical_object_type(t)
@@ -1250,6 +1251,17 @@ class ObjectService:
             raise ValueError(f"{t} not found")
 
         versions = _versions_desc(db, storage_type, object_id)
+        if metadata_only:
+            return [
+                {
+                    "id": str(v.id),
+                    "number": int(v.version_number),
+                    "languages": list(v.data.keys()) if isinstance(v.data, dict) else [],
+                    "user_request": v.user_request,
+                    "created_at": v.created_at.isoformat() if v.created_at else None,
+                }
+                for v in versions
+            ]
         return [
             {
                 "id": str(v.id),
@@ -1268,6 +1280,50 @@ class ObjectService:
             }
             for v in versions
         ]
+
+    def get_version(
+        self,
+        db: Session,
+        *,
+        project_id: UUID,
+        object_type: str,
+        object_id: UUID,
+        version_id: UUID,
+        rich_text_format: str = "tiptap",
+    ) -> dict[str, Any] | None:
+        t = object_type
+        storage_type = _canonical_object_type(t)
+        obj = _load_owned_object(db, project_id, t, object_id)
+        if obj is None:
+            raise ValueError(f"{t} not found")
+
+        version = (
+            db.query(ObjectVersion)
+            .filter(
+                ObjectVersion.id == version_id,
+                ObjectVersion.object_type == storage_type,
+                ObjectVersion.object_id == object_id,
+            )
+            .first()
+        )
+        if version is None:
+            return None
+
+        return {
+            "id": str(version.id),
+            "number": int(version.version_number),
+            "data": {
+                lang: _render_language_payload(
+                    object_type=storage_type,
+                    data=lang_data,
+                    rich_text_format=rich_text_format,
+                )
+                for lang, lang_data in (version.data or {}).items()
+                if isinstance(lang_data, dict)
+            } if isinstance(version.data, dict) else {},
+            "user_request": version.user_request,
+            "created_at": version.created_at.isoformat() if version.created_at else None,
+        }
 
     def restore_version(
         self,
@@ -1414,20 +1470,14 @@ class ObjectService:
                 db.query(StoryEntity).filter(StoryEntity.id.in_(entity_ids)).all(),
                 snapshot_story_core_row,
             ) if entity_ids else []
-            story_version_before = []
+            story_version_bytes_before = 0
             for deleted_type, deleted_ids in ids_by_type.items():
                 if not deleted_ids:
                     continue
-                story_version_before.extend(
-                    snapshot_rows(
-                        db.query(ObjectVersion)
-                        .filter(
-                            ObjectVersion.object_type == deleted_type,
-                            ObjectVersion.object_id.in_(list(deleted_ids)),
-                        )
-                        .all(),
-                        snapshot_object_version_row,
-                    )
+                story_version_bytes_before += measure_object_version_bytes_for_ids(
+                    db,
+                    object_type=deleted_type,
+                    object_ids=deleted_ids,
                 )
 
             owned_assets: list[Asset] = []
@@ -1515,11 +1565,10 @@ class ObjectService:
                 project_id=resolved_project_id,
                 deltas=[
                     build_story_core_rows_delta(story_core_before, []),
-                    build_usage_delta_for_measurement_rows(
+                    build_usage_delta_for_amount(
                         category="story",
-                        before_rows=story_version_before,
-                        after_rows=[],
-                        measure_fn=lambda row: measure_object_version_row(row),
+                        before_amount=story_version_bytes_before,
+                        after_amount=0,
                     ),
                     build_asset_rows_delta(deleted_asset_before, []),
                     build_asset_rows_delta(remaining_ref_assets_before, remaining_ref_assets_after),
@@ -1551,21 +1600,20 @@ class ObjectService:
                 )
             )
 
-        story_version_before = []
-        manuscript_version_before = []
+        story_version_bytes_before = 0
+        manuscript_version_bytes_before = 0
         for deleted_type, deleted_ids in ids_by_type.items():
             if not deleted_ids:
                 continue
-            rows = snapshot_rows(
-                db.query(ObjectVersion)
-                .filter(ObjectVersion.object_type == deleted_type, ObjectVersion.object_id.in_(list(deleted_ids)))
-                .all(),
-                snapshot_object_version_row,
+            amount = measure_object_version_bytes_for_ids(
+                db,
+                object_type=deleted_type,
+                object_ids=deleted_ids,
             )
             if deleted_type == "manuscript":
-                manuscript_version_before.extend(rows)
+                manuscript_version_bytes_before += amount
             else:
-                story_version_before.extend(rows)
+                story_version_bytes_before += amount
 
         rich_text_ref_ids_to_delete: list[tuple[str, UUID]] = []
         manuscript_ids = ids_by_type.get("manuscript") or []
@@ -1670,17 +1718,15 @@ class ObjectService:
             project_id=resolved_project_id,
             deltas=[
                 build_story_core_rows_delta(story_core_before, []),
-                build_usage_delta_for_measurement_rows(
+                build_usage_delta_for_amount(
                     category="story",
-                    before_rows=story_version_before,
-                    after_rows=[],
-                    measure_fn=lambda row: measure_object_version_row(row),
+                    before_amount=story_version_bytes_before,
+                    after_amount=0,
                 ),
-                build_usage_delta_for_measurement_rows(
+                build_usage_delta_for_amount(
                     category="manuscript",
-                    before_rows=manuscript_version_before,
-                    after_rows=[],
-                    measure_fn=lambda row: measure_object_version_row(row),
+                    before_amount=manuscript_version_bytes_before,
+                    after_amount=0,
                 ),
                 build_asset_rows_delta(deleted_asset_before, []),
                 build_asset_rows_delta(remaining_ref_assets_before, remaining_ref_assets_after),

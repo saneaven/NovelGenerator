@@ -25,6 +25,7 @@ export interface ScenarioVersionHistoryItem {
   created_at: string;
   note: string | null;
   is_system_default: boolean;
+  // Lazy-loaded via getScenarioVersion. Empty string when not yet fetched.
   preview: string;
 }
 
@@ -73,7 +74,29 @@ export const scenarioService = {
 
   async getScenarioVersions(taskType: TaskType, taskSubtype: string): Promise<ScenarioVersionHistoryItem[]> {
     const path = buildScenarioPath(taskType, taskSubtype);
-    return await apiClient.get<ScenarioVersionHistoryItem[]>(`${path}/versions`);
+    const rows = await apiClient.get<Array<Omit<ScenarioVersionHistoryItem, 'preview'> & { preview?: string | null }>>(
+      `${path}/versions`,
+    );
+    return rows.map((row) => ({
+      version_number: row.version_number,
+      created_at: row.created_at,
+      note: row.note,
+      is_system_default: row.is_system_default,
+      preview: row.preview ?? '',
+    }));
+  },
+
+  /**
+   * Fetch a single scenario version's full document on demand.
+   * Returns the same shape as getScenario, scoped to that specific version.
+   */
+  async getScenarioVersion(
+    taskType: TaskType,
+    taskSubtype: string,
+    versionNumber: number,
+  ): Promise<ScenarioContent> {
+    const path = buildScenarioPath(taskType, taskSubtype);
+    return await apiClient.get<ScenarioContent>(`${path}/versions/${versionNumber}`);
   },
 
   async restoreScenarioVersion(

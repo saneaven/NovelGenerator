@@ -83,7 +83,8 @@ class ScenarioVersionHistoryItem(BaseModel):
     created_at: datetime
     note: Optional[str]
     is_system_default: bool
-    preview: str
+    # Lazy-loaded by GET /scenarios/{task_type}/{task_subtype}/versions/{version_number}
+    preview: Optional[str] = None
 
 
 class ScenarioRestoreRequest(BaseModel):

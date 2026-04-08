@@ -1,6 +1,6 @@
 """Fragment service for managing reusable prompt fragments"""
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
+from sqlalchemy import and_, desc, func
 from typing import Optional, List, Dict
 from datetime import datetime
 from uuid import UUID
@@ -357,23 +357,38 @@ class FragmentService:
         fragment_name: str,
     ) -> List[FragmentVersionHistoryItem]:
         """Get version history for a fragment."""
-        versions = db.query(PromptFragment).filter(
-            and_(
-                PromptFragment.user_id == user_id,
-                PromptFragment.preset_id == preset_id,
-                PromptFragment.folder_id == folder_id if folder_id else PromptFragment.folder_id.is_(None),
-                PromptFragment.fragment_name == fragment_name,
+        preview_col = func.substr(PromptFragment.content, 1, 201).label("preview_chunk")
+        length_col = func.length(PromptFragment.content).label("content_length")
+
+        rows = (
+            db.query(
+                PromptFragment.version_number,
+                PromptFragment.created_at,
+                PromptFragment.note,
+                preview_col,
+                length_col,
             )
-        ).order_by(desc(PromptFragment.version_number)).all()
+            .filter(
+                and_(
+                    PromptFragment.user_id == user_id,
+                    PromptFragment.preset_id == preset_id,
+                    PromptFragment.folder_id == folder_id if folder_id else PromptFragment.folder_id.is_(None),
+                    PromptFragment.fragment_name == fragment_name,
+                )
+            )
+            .order_by(desc(PromptFragment.version_number))
+            .all()
+        )
 
         return [
             FragmentVersionHistoryItem(
-                version_number=v.version_number,
-                created_at=v.created_at,
-                note=v.note,
-                preview=v.content[:200] + ("..." if len(v.content) > 200 else ""),
+                version_number=row.version_number,
+                created_at=row.created_at,
+                note=row.note,
+                preview=(row.preview_chunk or "")[:200]
+                + ("..." if (row.content_length or 0) > 200 else ""),
             )
-            for v in versions
+            for row in rows
         ]
 
     @staticmethod

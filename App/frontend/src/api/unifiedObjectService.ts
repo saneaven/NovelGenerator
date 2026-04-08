@@ -118,12 +118,45 @@ export const unifiedObjectService = {
   },
 
   /**
-   * Get version history for an object
+   * Get version history for an object (metadata only by default).
+   *
+   * The default metadata-only mode omits the heavy ``data`` field for every
+   * version and ships only ``id``, ``number``, ``user_request``, ``created_at``,
+   * and the available ``languages`` keys. Use ``getVersion`` to lazy-load a
+   * single version's full content when the user expands its details.
+   *
    * @param type Object type
    * @param id Object ID
+   * @param options.includeContent When true, returns full rendered content for every version
    */
-  async getVersions(type: ObjectType, id: string): Promise<VersionHistoryEntry[]> {
-    return apiClient.get<VersionHistoryEntry[]>(`/api/v1/objects/${type}/${id}/versions?rich_text_format=markdown`);
+  async getVersions(
+    type: ObjectType,
+    id: string,
+    options?: { includeContent?: boolean },
+  ): Promise<VersionHistoryEntry[]> {
+    if (options?.includeContent) {
+      return apiClient.get<VersionHistoryEntry[]>(
+        `/api/v1/objects/${type}/${id}/versions?rich_text_format=markdown`,
+      );
+    }
+    return apiClient.get<VersionHistoryEntry[]>(
+      `/api/v1/objects/${type}/${id}/versions?metadata_only=true`,
+    );
+  },
+
+  /**
+   * Get a single version with its full rendered content. Used by the
+   * version history modal to lazy-load content on Details expand.
+   */
+  async getVersion(
+    type: ObjectType,
+    id: string,
+    versionId: string,
+    richTextFormat: RichTextFormat = 'markdown',
+  ): Promise<VersionHistoryEntry> {
+    return apiClient.get<VersionHistoryEntry>(
+      `/api/v1/objects/${type}/${id}/versions/${versionId}?rich_text_format=${richTextFormat}`,
+    );
   },
 
   /**

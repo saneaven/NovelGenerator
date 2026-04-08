@@ -91,7 +91,10 @@ export interface VersionInfo {
 export interface VersionHistoryEntry {
   id: string;
   number: number;
-  data: Record<string, Record<string, any>>;  // {language: {field: value}}
+  // Present in full responses; omitted (undefined) in metadata-only listings
+  data?: Record<string, Record<string, any>>;  // {language: {field: value}}
+  // Populated in metadata-only listings; equivalent to Object.keys(data)
+  languages?: string[];
   user_request: string | null;
   created_at: string;
 }

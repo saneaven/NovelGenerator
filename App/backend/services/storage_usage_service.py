@@ -453,6 +453,45 @@ def build_usage_delta_for_measurement_rows(
     return _delta_from_amount(category=category, amount=after_amount - before_amount)
 
 
+def build_usage_delta_for_amount(
+    *,
+    category: str,
+    before_amount: int,
+    after_amount: int,
+) -> StorageUsageDelta:
+    return _delta_from_amount(category=category, amount=int(after_amount) - int(before_amount))
+
+
+def measure_object_version_bytes_for_ids(
+    db: Session,
+    *,
+    object_type: str,
+    object_ids: Sequence[UUID],
+) -> int:
+    """Stream-sum the byte size of (data, user_request) for matching ObjectVersion rows.
+
+    Used by cascade-delete paths to compute the storage usage delta without
+    loading or deepcopying full JSONB payloads. Reuses ``_measure_value`` so
+    the result is numerically identical to ``measure_object_version_row``
+    summed over the same rows.
+    """
+    ids = list(object_ids)
+    if not ids:
+        return 0
+    total = 0
+    query = (
+        db.query(ObjectVersion.data, ObjectVersion.user_request)
+        .filter(
+            ObjectVersion.object_type == object_type,
+            ObjectVersion.object_id.in_(ids),
+        )
+        .yield_per(100)
+    )
+    for data, user_request in query:
+        total += _measure_value(data) + _measure_value(user_request)
+    return total
+
+
 def build_usage_delta_for_object_version(
     *,
     object_type: str,

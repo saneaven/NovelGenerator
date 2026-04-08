@@ -277,7 +277,12 @@ interface UnifiedObjectStore {
   addTranslation: (type: ObjectType, id: string, request: AddTranslationRequest) => Promise<void>;
 
   // Version management
-  getVersions: (type: ObjectType, id: string) => Promise<VersionHistoryEntry[]>;
+  getVersions: (
+    type: ObjectType,
+    id: string,
+    options?: { includeContent?: boolean },
+  ) => Promise<VersionHistoryEntry[]>;
+  getVersion: (type: ObjectType, id: string, versionId: string) => Promise<VersionHistoryEntry>;
   restoreVersion: (type: ObjectType, id: string, versionId: string) => Promise<void>;
 
   // Translation management
@@ -603,13 +608,28 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
   // VERSION MANAGEMENT
   // ========================================================================
 
-  getVersions: async (type: ObjectType, id: string) => {
+  getVersions: async (
+    type: ObjectType,
+    id: string,
+    options?: { includeContent?: boolean },
+  ) => {
     try {
-      const versions = await unifiedObjectService.getVersions(type, id);
+      const versions = await unifiedObjectService.getVersions(type, id, options);
       return versions;
     } catch (error: any) {
       set((state) => ({
         errors: { ...state.errors, [id]: error.message || 'Failed to fetch versions' },
+      }));
+      throw error;
+    }
+  },
+
+  getVersion: async (type: ObjectType, id: string, versionId: string) => {
+    try {
+      return await unifiedObjectService.getVersion(type, id, versionId);
+    } catch (error: any) {
+      set((state) => ({
+        errors: { ...state.errors, [id]: error.message || 'Failed to fetch version' },
       }));
       throw error;
     }

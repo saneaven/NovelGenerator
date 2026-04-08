@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional, List
 import uuid
@@ -11,6 +12,16 @@ from sqlalchemy.orm import Session
 
 from ..models.db_models import PromptScenarioVersion
 from .prompt_runtime.scenario_validation import normalize_and_validate_scenario
+
+
+@dataclass(frozen=True)
+class ScenarioVersionMetadata:
+    """Lightweight metadata for a scenario version (no JSONB content)."""
+    id: uuid.UUID
+    version_number: int
+    created_at: datetime
+    note: Optional[str]
+    is_default: bool
 
 
 class ScenarioService:
@@ -93,9 +104,20 @@ class ScenarioService:
         preset_id: uuid.UUID,
         task_type: str,
         task_subtype: str,
-    ) -> List[PromptScenarioVersion]:
-        return (
-            db.query(PromptScenarioVersion)
+    ) -> List[ScenarioVersionMetadata]:
+        """Return version metadata only — never loads the heavy ``scenario`` JSONB.
+
+        Use ``get_version_by_number`` to lazy-load a single version's full
+        scenario document when the user actually selects it.
+        """
+        rows = (
+            db.query(
+                PromptScenarioVersion.id,
+                PromptScenarioVersion.version_number,
+                PromptScenarioVersion.created_at,
+                PromptScenarioVersion.note,
+                PromptScenarioVersion.is_default,
+            )
             .filter(
                 and_(
                     PromptScenarioVersion.user_id == user_id,
@@ -106,6 +128,41 @@ class ScenarioService:
             )
             .order_by(desc(PromptScenarioVersion.version_number))
             .all()
+        )
+        return [
+            ScenarioVersionMetadata(
+                id=row.id,
+                version_number=int(row.version_number),
+                created_at=row.created_at,
+                note=row.note,
+                is_default=bool(row.is_default),
+            )
+            for row in rows
+        ]
+
+    @staticmethod
+    def get_version_by_number(
+        db: Session,
+        *,
+        user_id: uuid.UUID,
+        preset_id: uuid.UUID,
+        task_type: str,
+        task_subtype: str,
+        version_number: int,
+    ) -> Optional[PromptScenarioVersion]:
+        """Fetch a single scenario version with its full ``scenario`` document."""
+        return (
+            db.query(PromptScenarioVersion)
+            .filter(
+                and_(
+                    PromptScenarioVersion.user_id == user_id,
+                    PromptScenarioVersion.preset_id == preset_id,
+                    PromptScenarioVersion.task_type == task_type,
+                    PromptScenarioVersion.task_subtype == task_subtype,
+                    PromptScenarioVersion.version_number == version_number,
+                )
+            )
+            .first()
         )
 
     @staticmethod
