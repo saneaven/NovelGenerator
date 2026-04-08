@@ -12,8 +12,8 @@ from ..settings_service import settings_service
 from ..storage_usage_service import (
     apply_project_usage_delta,
     apply_project_usage_deltas,
-    build_tool_call_delta,
-    snapshot_tool_call_row,
+    build_usage_delta_for_amount,
+    measure_tool_call_row,
 )
 from ..run_pipeline.status_logic import derive_run_status
 from .contexts import ToolAccessPolicy, ToolExecutionContext, ToolGroupExecutionContext, ToolModuleContext, ToolValidationContext
@@ -436,7 +436,7 @@ class ToolEngineService:
         input_payload: dict[str, Any],
         vector_storage_enabled: bool,
     ) -> AppliedToolCallResult:
-        before = snapshot_tool_call_row(row)
+        before_bytes = measure_tool_call_row(row)
         try:
             exec_ctx = self._build_execution_context(
                 db=db,
@@ -459,7 +459,11 @@ class ToolEngineService:
                 db,
                 user_id=user_id,
                 project_id=project_id,
-                delta=build_tool_call_delta(before, snapshot_tool_call_row(row)),
+                delta=build_usage_delta_for_amount(
+                    category="chat",
+                    before_amount=before_bytes,
+                    after_amount=measure_tool_call_row(row),
+                ),
                 enforce_quota=True,
             )
             db.commit()
@@ -476,13 +480,17 @@ class ToolEngineService:
             failed_row = db.query(RunToolCallModel).filter(RunToolCallModel.id == row.id).first()
             if failed_row is None:
                 raise
-            failed_before = snapshot_tool_call_row(failed_row)
+            failed_before_bytes = measure_tool_call_row(failed_row)
             self._mark_failed(failed_row, str(exc))
             apply_project_usage_delta(
                 db,
                 user_id=user_id,
                 project_id=project_id,
-                delta=build_tool_call_delta(failed_before, snapshot_tool_call_row(failed_row)),
+                delta=build_usage_delta_for_amount(
+                    category="chat",
+                    before_amount=failed_before_bytes,
+                    after_amount=measure_tool_call_row(failed_row),
+                ),
                 enforce_quota=False,
             )
             db.commit()
@@ -519,6 +527,9 @@ class ToolEngineService:
                 input_payload=input_payload,
                 vector_storage_enabled=vector_storage_enabled,
             )
+            before_bytes_by_id: dict[UUID, int] = {
+                row.id: measure_tool_call_row(row) for row in rows_by_id.values()
+            }
             execution_results = await module.apply_group(group=group, ctx=group_ctx)
             deltas = []
             out: list[AppliedToolCallResult] = []
@@ -526,10 +537,16 @@ class ToolEngineService:
                 row = rows_by_id.get(execution_result.tool_call_id)
                 if row is None:
                     continue
-                before = snapshot_tool_call_row(row)
+                before_bytes = before_bytes_by_id.get(row.id, 0)
                 outcome = execution_result.outcome
                 self._apply_execution_outcome(row, outcome)
-                deltas.append(build_tool_call_delta(before, snapshot_tool_call_row(row)))
+                deltas.append(
+                    build_usage_delta_for_amount(
+                        category="chat",
+                        before_amount=before_bytes,
+                        after_amount=measure_tool_call_row(row),
+                    )
+                )
                 out.append(
                     AppliedToolCallResult(
                         tool_call_id=row.id,
@@ -559,9 +576,15 @@ class ToolEngineService:
                 row = db.query(RunToolCallModel).filter(RunToolCallModel.id == item.tool_call_id).first()
                 if row is None:
                     continue
-                before = snapshot_tool_call_row(row)
+                before_bytes = measure_tool_call_row(row)
                 self._mark_failed(row, str(exc))
-                deltas.append(build_tool_call_delta(before, snapshot_tool_call_row(row)))
+                deltas.append(
+                    build_usage_delta_for_amount(
+                        category="chat",
+                        before_amount=before_bytes,
+                        after_amount=measure_tool_call_row(row),
+                    )
+                )
                 out.append(AppliedToolCallResult(tool_call_id=row.id, status=row.status))
             if deltas:
                 apply_project_usage_deltas(
@@ -699,13 +722,17 @@ class ToolEngineService:
 
                     binding = offer.bindings_by_name.get(str(row.tool_name))
                     if binding is None:
-                        before = snapshot_tool_call_row(row)
+                        before_bytes = measure_tool_call_row(row)
                         self._mark_failed(row, f"Tool not available in this session: {row.tool_name}")
                         apply_project_usage_delta(
                             db,
                             user_id=user_id,
                             project_id=effective_project_id,
-                            delta=build_tool_call_delta(before, snapshot_tool_call_row(row)),
+                            delta=build_usage_delta_for_amount(
+                                category="chat",
+                                before_amount=before_bytes,
+                                after_amount=measure_tool_call_row(row),
+                            ),
                             enforce_quota=False,
                         )
                         db.commit()
@@ -828,7 +855,7 @@ class ToolEngineService:
         )
         if parent_tc is None or parent_tc.status != "working":
             return
-        parent_tc_before = snapshot_tool_call_row(parent_tc)
+        parent_tc_before_bytes = measure_tool_call_row(parent_tc)
 
         if run.status == "done":
             final_msg = (
@@ -876,7 +903,11 @@ class ToolEngineService:
             db,
             user_id=parent_run.user_id,
             project_id=parent_thread.project_id,
-            delta=build_tool_call_delta(parent_tc_before, snapshot_tool_call_row(parent_tc)),
+            delta=build_usage_delta_for_amount(
+                category="chat",
+                before_amount=parent_tc_before_bytes,
+                after_amount=measure_tool_call_row(parent_tc),
+            ),
             enforce_quota=False,
         )
         db.commit()

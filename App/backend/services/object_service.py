@@ -83,6 +83,7 @@ from .storage_usage_service import (
     build_story_core_rows_delta,
     build_usage_delta_for_amount,
     measure_object_version_bytes_for_ids,
+    measure_object_version_row,
     snapshot_asset_row,
     snapshot_object_version_row,
     snapshot_rows,
@@ -993,7 +994,11 @@ class ObjectService:
             data=data,
             rich_text_format=rich_text_format,
         )
-        version_before = None if create_new_version else snapshot_object_version_row(_latest_version(db, storage_type, object_id))
+        version_before_bytes = (
+            0
+            if create_new_version
+            else measure_object_version_row(_latest_version(db, storage_type, object_id))
+        )
         rich_text_refs_before = _snapshot_rich_text_refs(db, object_type=storage_type, object_id=object_id)
 
         version = _create_or_update_version(
@@ -1078,11 +1083,13 @@ class ObjectService:
             )
 
         if created_by is not None:
+            version_after_bytes = measure_object_version_row(version)
+            category = "manuscript" if storage_type == "manuscript" else "story"
             deltas = [
-                build_object_version_delta(
-                    object_type=storage_type,
-                    before=version_before if not create_new_version else None,
-                    after=snapshot_object_version_row(version),
+                build_usage_delta_for_amount(
+                    category=category,
+                    before_amount=version_before_bytes,
+                    after_amount=version_after_bytes,
                 )
             ]
 

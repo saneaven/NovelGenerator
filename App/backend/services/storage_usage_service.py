@@ -1368,6 +1368,7 @@ __all__ = [
     "build_story_core_rows_delta",
     "build_thread_delta",
     "build_tool_call_delta",
+    "build_usage_delta_for_amount",
     "build_usage_delta_for_measurement",
     "build_usage_delta_for_measurement_rows",
     "build_usage_delta_for_object_version",

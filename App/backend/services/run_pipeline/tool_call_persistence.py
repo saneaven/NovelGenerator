@@ -11,10 +11,9 @@ from ...models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thr
 from ..settings_service import settings_service
 from ..storage_usage_service import (
     apply_project_usage_deltas,
-    build_run_message_delta,
-    build_tool_call_delta,
-    snapshot_run_message_row,
-    snapshot_tool_call_row,
+    build_usage_delta_for_amount,
+    measure_run_message_row,
+    measure_tool_call_row,
 )
 from ..tool_engine import tool_engine
 from ..tool_engine.contracts import ToolOffer
@@ -148,8 +147,20 @@ class RunToolCallPersistence:
                         else validation.reason
                     )
 
-            deltas.append(build_run_message_delta(None, snapshot_run_message_row(tool_msg)))
-            deltas.append(build_tool_call_delta(None, snapshot_tool_call_row(row)))
+            deltas.append(
+                build_usage_delta_for_amount(
+                    category="chat",
+                    before_amount=0,
+                    after_amount=measure_run_message_row(tool_msg),
+                )
+            )
+            deltas.append(
+                build_usage_delta_for_amount(
+                    category="chat",
+                    before_amount=0,
+                    after_amount=measure_tool_call_row(row),
+                )
+            )
             out.append(row)
 
             await self._runtime.emit(

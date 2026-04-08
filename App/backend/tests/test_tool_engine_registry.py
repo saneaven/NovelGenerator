@@ -23,8 +23,8 @@ sys.modules.setdefault("App.backend.services.settings_service", fake_settings_se
 fake_storage_usage_service = types.ModuleType("App.backend.services.storage_usage_service")
 fake_storage_usage_service.apply_project_usage_delta = lambda *_args, **_kwargs: None
 fake_storage_usage_service.apply_project_usage_deltas = lambda *_args, **_kwargs: None
-fake_storage_usage_service.build_tool_call_delta = lambda *_args, **_kwargs: None
-fake_storage_usage_service.snapshot_tool_call_row = lambda row: row
+fake_storage_usage_service.build_usage_delta_for_amount = lambda *_args, **_kwargs: None
+fake_storage_usage_service.measure_tool_call_row = lambda _row: 0
 sys.modules.setdefault("App.backend.services.storage_usage_service", fake_storage_usage_service)
 
 fake_run_pipeline_package = types.ModuleType("App.backend.services.run_pipeline")
