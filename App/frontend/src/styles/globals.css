@@ -15,7 +15,7 @@
 /* ===== Root & Body ===== */
 html {
   /* Fluid scaling: 14px at 1920px viewport, 16px at 3840px viewport, 14px at 1440px */
-  font-size: clamp(13px, calc(8px + 0.3583dvw), 16px);
+  font-size: 1rem;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -25,7 +25,7 @@ html {
 /* Mobile: fixed 16px */
 @media (max-width: 768px) {
   html {
-    font-size: 16px;
+    font-size: 1rem;
   }
 }
 
