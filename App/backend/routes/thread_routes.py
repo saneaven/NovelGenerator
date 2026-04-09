@@ -405,6 +405,7 @@ def _apply_tool_decision_sync(
             sync_result = sync_run_thread_status(db, run_id=tool_call.run_id)
             db.commit()
             db.refresh(tool_call)
+            db.refresh(sync_result.thread)
 
             return (
                 {"tool_call": _serialize_tool_call(tool_call)},
@@ -497,6 +498,7 @@ def _finalize_applied_tool_calls_sync(
         db.commit()
         for row in rows:
             db.refresh(row)
+        db.refresh(thread)
         result_map = {row.id: {"tool_call": _serialize_tool_call(row)} for row in rows}
         return thread, rows, sync_results, result_map
     finally:
@@ -593,6 +595,7 @@ async def _start_applied_tool_call_followups(
                         sr = sync_run_thread_status(db, run_id=failed_row.run_id)
                         db.commit()
                         db.refresh(failed_row)
+                        db.refresh(sr.thread)
                         return sr, sr.thread, failed_row
                     return None, None, None
                 finally:
