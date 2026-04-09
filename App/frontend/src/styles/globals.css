@@ -22,10 +22,10 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
-/* Mobile: fixed 16px */
+
 @media (max-width: 768px) {
   html {
-    font-size: 1rem;
+    font-size: 0.875rem;
   }
 }
 
