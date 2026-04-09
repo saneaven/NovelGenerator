@@ -628,6 +628,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   const [pendingPromptSelection, setPendingPromptSelection] = useState<PendingPromptSelection | null>(null);
 
   const contextDropdownRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const inputContainerRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const scrollContentRef = useRef<HTMLDivElement | null>(null);
   const hydratedThreadIdsRef = useRef<Set<string>>(new Set());
@@ -1117,6 +1119,26 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   }, []);
 
   useEffect(() => {
+    const panel = panelRef.current;
+    const container = inputContainerRef.current;
+    if (!panel || !container) return;
+
+    const apply = () => {
+      panel.style.setProperty('--agent-input-height', `${container.offsetHeight}px`);
+    };
+
+    apply();
+
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(container);
+
+    return () => {
+      ro.disconnect();
+      panel.style.removeProperty('--agent-input-height');
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isContextDropdownOpen) return;
 
     const handleClickOutside = (event: MouseEvent) => {
@@ -1139,14 +1161,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isContextDropdownOpen]);
-
-  const formatTimestamp = useCallback((input: Date | string | number | undefined | null) => {
-    if (!input) return '';
-
-    const date = input instanceof Date ? input : new Date(input);
-    if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleTimeString();
-  }, []);
 
   const scrollToFirstBlockedMessage = useCallback(() => {
     const firstMessageId = sendBlockingState.unresolvedToolCalls.firstMessageId;
@@ -1504,7 +1518,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   }, [projectId]);
 
   const panelContent = (
-    <div className={`agent-panel ${isAgentVisible ? 'visible' : 'hidden'}`}>
+    <div className={`agent-panel ${isAgentVisible ? 'visible' : 'hidden'}`} ref={panelRef}>
       <div className="agent-header">
         <div className="agent-header-left">
           <TextButton
@@ -1578,15 +1592,75 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
               const hasAnyPending = item.toolCalls.some((tc) => isBlockingToolCallStatus(tc.status));
               const groupMode = hasAnyPending ? 'pending' : 'confirmed';
 
+              const assistantActionButtons = (!isStreamingMessage && !isEditing) ? (
+                <div className="action-buttons">
+                  {translationAvailable && secondaryDisplayLanguage && (
+                    <IconButton
+                      icon={<Globe size="sm" />}
+                      variant="ghost"
+                      size="sm"
+                      isActive={isSecondaryView}
+                      onClick={() => setMessageLanguageView((prev) => ({
+                        ...prev,
+                        [message.source.id]: prev[message.source.id] === 'secondary' ? 'primary' : 'secondary',
+                      }))}
+                      title={isSecondaryView
+                        ? t('agent.switchToLanguage', { language: sourceLanguage })
+                        : t('agent.switchToLanguage', { language: secondaryDisplayLanguage })}
+                    />
+                  )}
+                  {secondaryDisplayLanguage && (
+                    <IconButton
+                      icon={translating ? <CircularArrow size="sm" /> : (translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />)}
+                      onClick={() => void handleTranslateMessage(message.source, primaryPlainContent)}
+                      title={translationAvailable
+                        ? t('agent.refreshTranslation', { language: secondaryDisplayLanguage })
+                        : t('agent.translateTo', { language: secondaryDisplayLanguage })}
+                      variant="ghost"
+                      size="sm"
+                      disabled={translating || !primaryPlainContent}
+                    />
+                  )}
+                  {!isSecondaryView && (
+                    <IconButton
+                      icon={<Edit size="sm" />}
+                      onClick={() => handleStartMessageEdit(message.source.id, primaryPlainContent)}
+                      disabled={!primaryPlainContent}
+                      title={t('agent.edit')}
+                      variant="ghost"
+                      size="sm"
+                    />
+                  )}
+                  <IconButton
+                    icon={<Trash size="sm" />}
+                    onClick={() => void handleDeleteMessage(message.chatMessage.id, 'assistant', item.toolCalls.length)}
+                    title="Delete response"
+                    variant="ghost"
+                    size="sm"
+                    className="icon-button--ghost-danger"
+                  />
+                </div>
+              ) : null;
+
               return (
                 <React.Fragment key={message.chatMessage.id}>
                   <div className={`agent-message assistant${isSameRoleAsPrevious ? ' same-role-as-previous' : ''}`}>
                     <div className="message-wrapper">
-                      {!isSameRoleAsPrevious && (
+                      {!isSameRoleAsPrevious ? (
                         <div className="message-header">
                           <span className="message-role">{t('agent.ai')}</span>
-                          <span className="message-time">{formatTimestamp(message.chatMessage.timestamp)}</span>
+                          {assistantActionButtons && (
+                            <div className="message-actions">
+                              {assistantActionButtons}
+                            </div>
+                          )}
                         </div>
+                      ) : (
+                        assistantActionButtons && (
+                          <div className="message-actions emerging">
+                            {assistantActionButtons}
+                          </div>
+                        )
                       )}
 
                       {!isEditing && (
@@ -1679,58 +1753,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
                           {latestRunError}
                         </div>
                       )}
-
-                      {!isStreamingMessage && !isEditing && (
-                        <div className="message-actions">
-                          <div className="action-buttons">
-                            {translationAvailable && secondaryDisplayLanguage && (
-                              <IconButton
-                                icon={<Globe size="sm" />}
-                                variant="ghost"
-                                size="sm"
-                                isActive={isSecondaryView}
-                                onClick={() => setMessageLanguageView((prev) => ({
-                                  ...prev,
-                                  [message.source.id]: prev[message.source.id] === 'secondary' ? 'primary' : 'secondary',
-                                }))}
-                                title={isSecondaryView
-                                  ? t('agent.switchToLanguage', { language: sourceLanguage })
-                                  : t('agent.switchToLanguage', { language: secondaryDisplayLanguage })}
-                              />
-                            )}
-                            {secondaryDisplayLanguage && (
-                              <IconButton
-                                icon={translating ? <CircularArrow size="sm" /> : (translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />)}
-                                onClick={() => void handleTranslateMessage(message.source, primaryPlainContent)}
-                                title={translationAvailable
-                                  ? t('agent.refreshTranslation', { language: secondaryDisplayLanguage })
-                                  : t('agent.translateTo', { language: secondaryDisplayLanguage })}
-                                variant="ghost"
-                                size="sm"
-                                disabled={translating || !primaryPlainContent}
-                              />
-                            )}
-                            {!isSecondaryView && (
-                              <IconButton
-                                icon={<Edit size="sm" />}
-                                onClick={() => handleStartMessageEdit(message.source.id, primaryPlainContent)}
-                                disabled={!primaryPlainContent}
-                                title={t('agent.edit')}
-                                variant="ghost"
-                                size="sm"
-                              />
-                            )}
-                            <IconButton
-                              icon={<Trash size="sm" />}
-                              onClick={() => void handleDeleteMessage(message.chatMessage.id, 'assistant', item.toolCalls.length)}
-                              title="Delete response"
-                              variant="ghost"
-                              size="sm"
-                              className="icon-button--ghost-danger"
-                            />
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
 
@@ -1745,15 +1767,63 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
               );
             }
 
+            const userActionButtons = (!isStreamingMessage && !isEditing) ? (
+              <div className="action-buttons">
+                {translationAvailable && secondaryDisplayLanguage && (
+                  <IconButton
+                    icon={<Globe size="sm" />}
+                    variant="ghost"
+                    size="sm"
+                    isActive={isSecondaryView}
+                    onClick={() => setMessageLanguageView((prev) => ({
+                      ...prev,
+                      [message.source.id]: prev[message.source.id] === 'secondary' ? 'primary' : 'secondary',
+                    }))}
+                    title={isSecondaryView
+                      ? t('agent.switchToLanguage', { language: sourceLanguage })
+                      : t('agent.switchToLanguage', { language: secondaryDisplayLanguage })}
+                  />
+                )}
+                {!isSecondaryView && (
+                  <IconButton
+                    icon={<Edit size="sm" />}
+                    onClick={() => handleStartMessageEdit(message.source.id, primaryPlainContent)}
+                    disabled={!primaryPlainContent}
+                    title={t('agent.edit')}
+                    variant="ghost"
+                    size="sm"
+                  />
+                )}
+                <IconButton
+                  icon={<Trash size="sm" />}
+                  onClick={() => void handleDeleteMessage(message.chatMessage.id, 'user')}
+                  title={t('agent.delete')}
+                  variant="ghost"
+                  size="sm"
+                  className="icon-button--ghost-danger"
+                />
+              </div>
+            ) : null;
+
             return (
               <React.Fragment key={message.chatMessage.id}>
                 <div className={`agent-message user${isSameRoleAsPrevious ? ' same-role-as-previous' : ''}`}>
                   <div className="message-wrapper">
-                    {!isSameRoleAsPrevious && (
+                    {!isSameRoleAsPrevious ? (
                       <div className="message-header">
                         <span className="message-role">{t('agent.you')}</span>
-                        <span className="message-time">{formatTimestamp(message.chatMessage.timestamp)}</span>
+                        {userActionButtons && (
+                          <div className="message-actions">
+                            {userActionButtons}
+                          </div>
+                        )}
                       </div>
+                    ) : (
+                      userActionButtons && (
+                        <div className="message-actions emerging">
+                          {userActionButtons}
+                        </div>
+                      )
                     )}
 
                     {hasAttachments && (
@@ -1808,46 +1878,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
                         {latestRunError}
                       </div>
                     )}
-
-                    {!isStreamingMessage && !isEditing && (
-                      <div className="message-actions">
-                        <div className="action-buttons">
-                          {translationAvailable && secondaryDisplayLanguage && (
-                            <IconButton
-                              icon={<Globe size="sm" />}
-                              variant="ghost"
-                              size="sm"
-                              isActive={isSecondaryView}
-                              onClick={() => setMessageLanguageView((prev) => ({
-                                ...prev,
-                                [message.source.id]: prev[message.source.id] === 'secondary' ? 'primary' : 'secondary',
-                              }))}
-                              title={isSecondaryView
-                                ? t('agent.switchToLanguage', { language: sourceLanguage })
-                                : t('agent.switchToLanguage', { language: secondaryDisplayLanguage })}
-                            />
-                          )}
-                          {!isSecondaryView && (
-                            <IconButton
-                              icon={<Edit size="sm" />}
-                              onClick={() => handleStartMessageEdit(message.source.id, primaryPlainContent)}
-                              disabled={!primaryPlainContent}
-                              title={t('agent.edit')}
-                              variant="ghost"
-                              size="sm"
-                            />
-                          )}
-                          <IconButton
-                            icon={<Trash size="sm" />}
-                            onClick={() => void handleDeleteMessage(message.chatMessage.id, 'user')}
-                            title={t('agent.delete')}
-                            variant="ghost"
-                            size="sm"
-                            className="icon-button--ghost-danger"
-                          />
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -1877,19 +1907,28 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
             </div>
           )}
         </div>
-
-        {showScrollButton && (
-          <IconButton
-            className="scroll-to-bottom-button"
-            icon={<ChevronDown size="sm" />}
-            onClick={() => scrollToBottom()}
-            title={t('agent.scrollToBottom')}
-            variant="secondary"
-          />
-        )}
       </div>
 
-      <div className="agent-input-container" ref={contextDropdownRef}>
+      <div className="agent-input-wrap">
+        {showScrollButton && (
+          <div className="agent-scroll-button-slot">
+            <IconButton
+              className="scroll-to-bottom-button"
+              icon={<ChevronDown size="sm" />}
+              onClick={() => scrollToBottom()}
+              title={t('agent.scrollToBottom')}
+              variant="secondary"
+            />
+          </div>
+        )}
+
+        <div
+          className="agent-input-container"
+          ref={(el) => {
+            contextDropdownRef.current = el;
+            inputContainerRef.current = el;
+          }}
+        >
         {preflightToast && (
           <div
             className={`agent-preflight-toast ${preflightToast.type === 'error' ? 'agent-preflight-toast--error' : ''}`}
@@ -1950,6 +1989,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
           onSubmit={handleSubmitFromInput}
           onStop={handleStop}
         />
+        </div>
       </div>
 
       <BaseModal

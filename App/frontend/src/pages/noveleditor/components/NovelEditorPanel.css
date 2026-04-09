@@ -285,9 +285,8 @@
 
 
     .agent-panel {
-        position: static;
+        position: relative;
         width: var(--size-agent-panel);
-        height: auto;
         z-index: auto;
         transform: none;
         transition: width var(--duration-normal) ease;

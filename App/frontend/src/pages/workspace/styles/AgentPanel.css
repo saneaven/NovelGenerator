@@ -33,8 +33,6 @@
 /* ===== Desktop Styles ===== */
 @media (min-width: 769px) {
   .agent-panel {
-    position: static;
-    height: auto;
     z-index: auto;
     transform: none;
   }

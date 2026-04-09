@@ -9,8 +9,10 @@
     overflow-y: auto;
     overflow-x: hidden;
     padding: var(--spacing-xl);
+    padding-bottom: calc(var(--agent-input-height, 7rem) + var(--spacing-sm));
     min-height: 0;
     position: relative;
+    isolation: isolate;
     background: var(--color-surface-base);
 }
 
@@ -137,17 +139,6 @@
     font-weight: var(--font-weight-bold);
     text-transform: uppercase;
     letter-spacing: 0.8px;
-}
-
-.agent-message .message-time {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    opacity: 0;
-    transition: opacity var(--transition-base);
-}
-
-.agent-message:hover .message-time {
-    opacity: 1;
 }
 
 /* ===== User Messages ===== */
@@ -324,19 +315,41 @@
 }
 
 /* ===== Message Actions ===== */
-.agent-message .message-actions {
-    padding: 0 var(--spacing-sm);
+/* In-header variant (non-consecutive): opacity only, no layout shift */
+.agent-message .message-header .message-actions {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease-out;
+}
+
+.agent-message:hover .message-header .message-actions,
+.agent-message:focus-within .message-header .message-actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Top-emerging variant (consecutive same-role): slide down from the top
+   like a hidden header emerging. Mirrors the previous footer animation. */
+.agent-message .message-actions.emerging {
     max-height: 0;
     overflow: hidden;
     opacity: 0;
+    padding: 0 var(--spacing-sm);
+    pointer-events: none;
     transition: max-height 0.2s ease-out, opacity 0.2s ease-out, padding 0.2s ease-out;
 }
 
-.agent-message:hover .message-actions {
+.agent-message:hover .message-actions.emerging,
+.agent-message:focus-within .message-actions.emerging {
     max-height: 3rem;
     opacity: 1;
     padding-top: var(--spacing-xs);
-    padding-bottom: var(--spacing-sm);
+    padding-bottom: var(--spacing-xs);
+    pointer-events: auto;
+}
+
+.agent-message .message-actions.emerging .action-buttons {
+    justify-content: flex-end;
 }
 
 .action-buttons {
@@ -424,10 +437,6 @@
 
 /* ===== Scroll to Bottom Button ===== */
 .scroll-to-bottom-button {
-    position: sticky;
-    bottom: var(--spacing-lg);
-    left: 50%;
-    transform: translateX(-50%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -439,28 +448,27 @@
     border: 1px solid var(--color-border-default);
     cursor: pointer;
     box-shadow: var(--shadow-md);
-    z-index: 10;
     transition: transform var(--transition-base), box-shadow var(--transition-base);
     animation: fadeInUp var(--transition-base) ease-out;
 }
 
 .scroll-to-bottom-button.scroll-to-bottom-button:hover {
-    transform: translateX(-50%) translateY(-2px);
+    transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
 }
 
 .scroll-to-bottom-button.scroll-to-bottom-button:active {
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
 }
 
 @keyframes fadeInUp {
     from {
         opacity: 0;
-        transform: translateX(-50%) translateY(10px);
+        transform: translateY(10px);
     }
     to {
         opacity: 1;
-        transform: translateX(-50%) translateY(0);
+        transform: translateY(0);
     }
 }
 
@@ -516,6 +524,7 @@
 @media (max-width: 768px) {
     .agent-messages {
         padding: var(--spacing-lg);
+        padding-bottom: calc(var(--agent-input-height, 7rem) + var(--spacing-xl));
         gap: var(--spacing-lg);
     }
 
