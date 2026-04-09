@@ -85,6 +85,21 @@ def sync_explicit_run_thread_status(
     return RuntimeSyncResult(run=run, thread=thread, notification=notification, status=run.status)
 
 
+def refresh_runtime_sync_result(db: Session, *, result: RuntimeSyncResult | None) -> RuntimeSyncResult | None:
+    if result is None:
+        return None
+
+    # Rehydrate ORM instances after commit so async emitters can safely read
+    # their scalar fields after this session has been closed.
+    if result.run is not None:
+        db.refresh(result.run)
+    if result.thread is not None:
+        db.refresh(result.thread)
+    if result.notification is not None:
+        db.refresh(result.notification)
+    return result
+
+
 async def emit_runtime_sync_events(
     dispatcher: "RuntimeEventDispatcher",
     *,

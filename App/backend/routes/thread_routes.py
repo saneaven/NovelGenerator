@@ -47,6 +47,7 @@ from ..services.thread_parent_runtime_service import resolve_parent, thread_runt
 from ..services.thread_runtime_sync_service import (
     RuntimeSyncResult,
     emit_runtime_sync_events,
+    refresh_runtime_sync_result,
     sync_explicit_run_thread_status,
     sync_run_thread_status,
 )
@@ -404,6 +405,7 @@ def _apply_tool_decision_sync(
             tool_call.updated_at = datetime.utcnow()
             sync_result = sync_run_thread_status(db, run_id=tool_call.run_id)
             db.commit()
+            refresh_runtime_sync_result(db, result=sync_result)
             db.refresh(tool_call)
             db.refresh(sync_result.thread)
 
@@ -496,6 +498,9 @@ def _finalize_applied_tool_calls_sync(
             seen_run_ids.add(row.run_id)
             sync_results.append(sync_run_thread_status(db, run_id=row.run_id))
         db.commit()
+        db.refresh(thread)
+        for sync_result in sync_results:
+            refresh_runtime_sync_result(db, result=sync_result)
         for row in rows:
             db.refresh(row)
         db.refresh(thread)
@@ -594,6 +599,7 @@ async def _start_applied_tool_call_followups(
                         failed_row.updated_at = datetime.utcnow()
                         sr = sync_run_thread_status(db, run_id=failed_row.run_id)
                         db.commit()
+                        refresh_runtime_sync_result(db, result=sr)
                         db.refresh(failed_row)
                         db.refresh(sr.thread)
                         return sr, sr.thread, failed_row
@@ -966,6 +972,7 @@ async def decide_tool_calls_batch(
                         error=None,
                     )
                 db.commit()
+                refresh_runtime_sync_result(db, result=sr)
                 return sr
             finally:
                 db.close()
@@ -1128,5 +1135,3 @@ async def pause_thread(
 ):
     await run_pipeline.pause_run(thread_id=thread_id, user_id=current_user.id)
     return {"success": True}
-
-

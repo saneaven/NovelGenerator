@@ -13,6 +13,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm.exc import DetachedInstanceError
 
 os.environ.setdefault("DEFAULT_STORAGE_QUOTA_BYTES", "0")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
@@ -794,3 +795,299 @@ def test_delete_thread_message_pauses_thread_and_emits_snapshot_invalidation(mon
     assert emitted[1][1]["run_id"] == str(run_id)
 
 
+class ExpiringRow:
+    def __init__(self, **kwargs) -> None:
+        object.__setattr__(self, "_expired_after_commit", False)
+        object.__setattr__(self, "_session_closed", False)
+        for key, value in kwargs.items():
+            object.__setattr__(self, key, value)
+
+    def mark_committed(self) -> None:
+        object.__setattr__(self, "_expired_after_commit", True)
+
+    def mark_refreshed(self) -> None:
+        object.__setattr__(self, "_expired_after_commit", False)
+
+    def mark_closed(self) -> None:
+        object.__setattr__(self, "_session_closed", True)
+
+    def __getattribute__(self, name: str):
+        if name.startswith("_") or name in {"mark_closed", "mark_committed", "mark_refreshed"}:
+            return object.__getattribute__(self, name)
+        if object.__getattribute__(self, "_session_closed") and object.__getattribute__(self, "_expired_after_commit"):
+            raise DetachedInstanceError(f"Detached instance access for {name}")
+        return object.__getattribute__(self, name)
+
+
+class FakeExpiringQuery:
+    def __init__(self, session: "FakeExpiringSession", target: object) -> None:
+        self._session = session
+        self._target = target
+
+    def filter(self, *_args, **_kwargs) -> "FakeExpiringQuery":
+        return self
+
+    def order_by(self, *_args, **_kwargs) -> "FakeExpiringQuery":
+        return self
+
+    def with_for_update(self) -> "FakeExpiringQuery":
+        return self
+
+    def first(self):
+        result = self._session.first_results.get(self._target)
+        if isinstance(result, list):
+            return result[0] if result else None
+        return result
+
+    def all(self):
+        result = self._session.all_results.get(self._target, [])
+        return list(result)
+
+
+class FakeExpiringSession:
+    def __init__(
+        self,
+        *,
+        first_results: dict[object, object] | None = None,
+        all_results: dict[object, list[object]] | None = None,
+        tracked: list[ExpiringRow] | None = None,
+    ) -> None:
+        self.first_results = dict(first_results or {})
+        self.all_results = dict(all_results or {})
+        self.tracked = list(tracked or [])
+        self.refresh_calls: list[object] = []
+        self.committed = False
+        self.closed = False
+
+    def query(self, target: object) -> FakeExpiringQuery:
+        return FakeExpiringQuery(self, target)
+
+    def flush(self) -> None:
+        return None
+
+    def commit(self) -> None:
+        self.committed = True
+        for row in self.tracked:
+            row.mark_committed()
+
+    def refresh(self, obj: object) -> None:
+        self.refresh_calls.append(obj)
+        if isinstance(obj, ExpiringRow):
+            obj.mark_refreshed()
+
+    def close(self) -> None:
+        self.closed = True
+        for row in self.tracked:
+            row.mark_closed()
+
+
+def _make_expiring_tool_call(*, tool_call_id, thread_id, run_id, status: str) -> ExpiringRow:
+    now = datetime.now(UTC)
+    return ExpiringRow(
+        id=tool_call_id,
+        thread_id=thread_id,
+        run_id=run_id,
+        message_id=uuid4(),
+        assistant_message_id=None,
+        call_seq=1,
+        llm_call_id="call_1",
+        tool_name="test_tool",
+        arguments={"value": 1},
+        extra_content=None,
+        status=status,
+        reason=None,
+        result=None,
+        image_run_id=None,
+        child_thread_id=None,
+        accepted_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def _run_immediately(func, /, *args, **kwargs):
+    return func(*args, **kwargs)
+
+
+def test_decide_tool_calls_batch_pause_after_apply_refreshes_sync_result_before_emit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    thread_id = uuid4()
+    user_id = uuid4()
+    project_id = uuid4()
+    run_id = uuid4()
+    tool_call_id = uuid4()
+    thread = ExpiringRow(id=thread_id, user_id=user_id, project_id=project_id, status="running", thread_type="agent")
+    run = ExpiringRow(id=run_id, thread_id=thread_id, user_id=user_id, project_id=project_id, status="running", error=None)
+    tool_call = _make_expiring_tool_call(tool_call_id=tool_call_id, thread_id=thread_id, run_id=run_id, status="applied")
+    session = FakeExpiringSession(
+        first_results={thread_routes.RunModel: run},
+        tracked=[thread, run],
+    )
+    emitted: list[str] = []
+
+    monkeypatch.setattr(thread_routes.asyncio, "to_thread", _run_immediately)
+    monkeypatch.setattr(thread_routes, "SessionLocal", lambda: session)
+    monkeypatch.setattr(thread_routes, "require_owned_thread", lambda *_args, **_kwargs: thread)
+    monkeypatch.setattr(
+        thread_routes,
+        "sync_explicit_run_thread_status",
+        lambda _db, *, run, thread, error: thread_routes.RuntimeSyncResult(
+            run=run,
+            thread=thread,
+            notification=None,
+            status=run.status,
+        ),
+    )
+    async def _fake_apply_tool_call_ids(*_args, **_kwargs) -> list[object]:
+        return []
+
+    monkeypatch.setattr(
+        thread_routes.tool_engine,
+        "apply_tool_call_ids",
+        _fake_apply_tool_call_ids,
+        raising=False,
+    )
+
+    async def _fake_followups(**_kwargs) -> None:
+        return None
+
+    async def _fake_finalize(**_kwargs) -> dict[UUID, dict]:
+        return {tool_call_id: {"tool_call": thread_routes._serialize_tool_call(tool_call)}}
+
+    async def _fake_emit_runtime_event(*, event_name: str, **_kwargs):
+        emitted.append(event_name)
+        return None
+
+    monkeypatch.setattr(thread_routes, "_start_applied_tool_call_followups", _fake_followups)
+    monkeypatch.setattr(thread_routes, "_finalize_applied_tool_calls", _fake_finalize)
+    monkeypatch.setattr(thread_routes.runtime_event_dispatcher, "emit_runtime_event", _fake_emit_runtime_event)
+
+    response = asyncio.run(
+        thread_routes.decide_tool_calls_batch(
+            thread_id=thread_id,
+            payload=thread_routes.ToolCallBatchDecisionRequest(
+                decisions=[{"tool_call_id": tool_call_id, "decision": "accept"}],
+                pause_after_apply=True,
+            ),
+            current_user=SimpleNamespace(id=user_id),
+        )
+    )
+
+    assert response.results[0].tool_call.id == tool_call_id
+    assert emitted == ["run:status"]
+    assert session.committed is True
+    assert session.closed is True
+    assert run in session.refresh_calls
+    assert thread in session.refresh_calls
+
+
+def test_apply_tool_decision_reject_refreshes_thread_and_tool_call_before_emit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    thread_id = uuid4()
+    user_id = uuid4()
+    project_id = uuid4()
+    run_id = uuid4()
+    tool_call_id = uuid4()
+    thread = ExpiringRow(id=thread_id, user_id=user_id, project_id=project_id, status="waiting", thread_type="agent")
+    run = ExpiringRow(id=run_id, thread_id=thread_id, user_id=user_id, project_id=project_id, status="waiting", error=None)
+    tool_call = _make_expiring_tool_call(tool_call_id=tool_call_id, thread_id=thread_id, run_id=run_id, status="pending")
+    session = FakeExpiringSession(
+        first_results={thread_routes.RunToolCallModel: tool_call},
+        tracked=[thread, run, tool_call],
+    )
+    emitted: list[str] = []
+
+    monkeypatch.setattr(thread_routes.asyncio, "to_thread", _run_immediately)
+    monkeypatch.setattr(thread_routes, "SessionLocal", lambda: session)
+    monkeypatch.setattr(thread_routes, "require_owned_thread", lambda *_args, **_kwargs: thread)
+    monkeypatch.setattr(
+        thread_routes,
+        "sync_run_thread_status",
+        lambda _db, *, run_id: thread_routes.RuntimeSyncResult(
+            run=run,
+            thread=thread,
+            notification=None,
+            status=run.status,
+        ),
+    )
+
+    async def _fake_emit_runtime_event(*, event_name: str, **_kwargs):
+        emitted.append(event_name)
+        return None
+
+    monkeypatch.setattr(thread_routes.runtime_event_dispatcher, "emit_runtime_event", _fake_emit_runtime_event)
+
+    result = asyncio.run(
+        thread_routes._apply_tool_decision(
+            user_id=user_id,
+            thread_id=thread_id,
+            tool_call_id=tool_call_id,
+            decision="reject",
+            reason="no thanks",
+        )
+    )
+
+    assert result["tool_call"]["status"] == "rejected"
+    assert result["tool_call"]["reason"] == "no thanks"
+    assert emitted == ["tool_call:status", "run:status"]
+    assert session.committed is True
+    assert session.closed is True
+    assert run in session.refresh_calls
+    assert thread in session.refresh_calls
+    assert tool_call in session.refresh_calls
+
+
+def test_finalize_applied_tool_calls_refreshes_thread_and_sync_results_before_emit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    thread_id = uuid4()
+    user_id = uuid4()
+    project_id = uuid4()
+    run_id = uuid4()
+    tool_call_id = uuid4()
+    thread = ExpiringRow(id=thread_id, user_id=user_id, project_id=project_id, status="processing", thread_type="agent")
+    run = ExpiringRow(id=run_id, thread_id=thread_id, user_id=user_id, project_id=project_id, status="processing", error=None)
+    tool_call = _make_expiring_tool_call(tool_call_id=tool_call_id, thread_id=thread_id, run_id=run_id, status="applied")
+    session = FakeExpiringSession(
+        all_results={thread_routes.RunToolCallModel: [tool_call]},
+        tracked=[thread, run, tool_call],
+    )
+    emitted: list[str] = []
+
+    monkeypatch.setattr(thread_routes.asyncio, "to_thread", _run_immediately)
+    monkeypatch.setattr(thread_routes, "SessionLocal", lambda: session)
+    monkeypatch.setattr(thread_routes, "require_owned_thread", lambda *_args, **_kwargs: thread)
+    monkeypatch.setattr(
+        thread_routes,
+        "sync_run_thread_status",
+        lambda _db, *, run_id: thread_routes.RuntimeSyncResult(
+            run=run,
+            thread=thread,
+            notification=None,
+            status=run.status,
+        ),
+    )
+
+    async def _fake_emit_runtime_event(*, event_name: str, **_kwargs):
+        emitted.append(event_name)
+        return None
+
+    monkeypatch.setattr(thread_routes.runtime_event_dispatcher, "emit_runtime_event", _fake_emit_runtime_event)
+
+    result = asyncio.run(
+        thread_routes._finalize_applied_tool_calls(
+            user_id=user_id,
+            thread_id=thread_id,
+            tool_call_ids=[tool_call_id],
+        )
+    )
+
+    assert result[tool_call_id]["tool_call"]["id"] == tool_call_id
+    assert emitted == ["tool_call:status", "run:status"]
+    assert session.committed is True
+    assert session.closed is True
+    assert run in session.refresh_calls
+    assert thread in session.refresh_calls
+    assert tool_call in session.refresh_calls
