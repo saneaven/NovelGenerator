@@ -157,7 +157,7 @@ function reconcileProjectObjects(
   return nextObjects;
 }
 
-function isRichPreviewType(type: ObjectType): boolean {
+export function isRichPreviewType(type: ObjectType): boolean {
   return Boolean(RICH_PREVIEW_FIELDS[type]);
 }
 
@@ -335,6 +335,7 @@ interface UnifiedObjectStore {
   // Bulk sync from SSE object change events
   applyObjectChanges: (params: {
     upserts?: UnifiedObject[];
+    markdownUpserts?: UnifiedObject[];
     deletes?: string[];
   }) => void;
 }
@@ -1188,8 +1189,8 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     }
   },
 
-  applyObjectChanges: ({ upserts = [], deletes = [] }) => {
-    if (!upserts.length && !deletes.length) return;
+  applyObjectChanges: ({ upserts = [], markdownUpserts = [], deletes = [] }) => {
+    if (!upserts.length && !markdownUpserts.length && !deletes.length) return;
     set((state) => {
       const nextObjects = { ...state.objects };
       let nextMarkdownPreviews = state.markdownPreviews;
@@ -1260,6 +1261,10 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
         delete nextLoading[id];
         delete nextErrors[id];
         delete nextTranslating[id];
+      }
+
+      for (const markdownObject of markdownUpserts) {
+        nextMarkdownPreviews = mergeMarkdownPreviewFromObject(nextMarkdownPreviews, markdownObject);
       }
 
       touchedTreeProjects.forEach((projectId) => {

@@ -72,7 +72,7 @@ export const unifiedObjectService = {
     type: ObjectType,
     id: string,
     language?: string,
-    richTextFormat: RichTextFormat = 'markdown',
+    richTextFormat: RichTextFormat = 'tiptap',
   ): Promise<UnifiedObject<TData>> {
     const query = buildQueryString({ language, rich_text_format: richTextFormat });
     return apiClient.get<UnifiedObject<TData>>(`/api/v1/objects/${type}/${id}${query}`);

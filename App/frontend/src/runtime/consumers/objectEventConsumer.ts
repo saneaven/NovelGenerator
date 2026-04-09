@@ -4,7 +4,7 @@ import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useTimelineStore } from '../../store/timelineStore';
 import type { ObjectChangedEvent } from '../../api/sseClient';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { isRichPreviewType, useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import type { ObjectType, UnifiedObject } from '../../types/unifiedObject';
 
 const FLUSH_DEBOUNCE_MS = 50;
@@ -138,15 +138,23 @@ export class ObjectEventConsumer {
     if (upserts.length === 0) return;
 
     const fetched: UnifiedObject[] = [];
+    const fetchedMarkdown: UnifiedObject[] = [];
     await Promise.all(
       upserts.map(async (item) => {
         const key = this.objectKey(item.objectType, item.objectId);
         try {
-          const object = await unifiedObjectService.getObject(item.objectType, item.objectId);
+          const isRich = isRichPreviewType(item.objectType);
+          const [object, markdownObject] = await Promise.all([
+            unifiedObjectService.getObject(item.objectType, item.objectId),
+            isRich
+              ? unifiedObjectService.getObject(item.objectType, item.objectId, undefined, 'markdown')
+              : Promise.resolve(null),
+          ]);
           const latestRevision = this.revisionByKey.get(key) ?? 0;
           if (latestRevision !== item.revision) return;
           if (deleteKeys.has(key) || this.pendingDeleteKeys.has(key)) return;
           fetched.push(object);
+          if (markdownObject) fetchedMarkdown.push(markdownObject);
         } catch (error) {
           console.warn('Failed to fetch changed object from SSE event', {
             projectId: item.projectId,
@@ -158,8 +166,11 @@ export class ObjectEventConsumer {
       }),
     );
 
-    if (fetched.length > 0) {
-      useUnifiedObjectStore.getState().applyObjectChanges({ upserts: fetched });
+    if (fetched.length > 0 || fetchedMarkdown.length > 0) {
+      useUnifiedObjectStore.getState().applyObjectChanges({
+        upserts: fetched,
+        markdownUpserts: fetchedMarkdown,
+      });
     }
   }
 }
