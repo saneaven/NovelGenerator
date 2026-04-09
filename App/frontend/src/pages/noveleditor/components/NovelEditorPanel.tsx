@@ -144,6 +144,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const panelRef = useRef<HTMLDivElement>(null);
   const pendingScrollRestoreRef = useRef<number | null>(null);
   const lastSavedDocHashRef = useRef<string | null>(null);
+  const stableServerDocHashRef = useRef<string | null>(null);
   const docRef = useRef<TipTapDoc>(doc);
   docRef.current = doc;
 
@@ -253,9 +254,17 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const serverDocHash = useMemo(() => getDocHash(serverDoc), [serverDoc]);
 
   const stableServerDocHash = useMemo(() => {
-    if (lastSavedDocHashRef.current !== null && lastSavedDocHashRef.current === serverDocHash) {
-      return lastSavedDocHashRef.current;
+    // Save round-trip echo: the server just confirmed the hash we intentionally wrote.
+    // Return the previously cached stable value so editorKey does NOT change.
+    if (
+      lastSavedDocHashRef.current !== null &&
+      lastSavedDocHashRef.current === serverDocHash &&
+      stableServerDocHashRef.current !== null
+    ) {
+      return stableServerDocHashRef.current;
     }
+    // External change (initial load, version restore, manuscript switch): adopt new hash.
+    stableServerDocHashRef.current = serverDocHash;
     lastSavedDocHashRef.current = null;
     return serverDocHash;
   }, [serverDocHash]);
@@ -455,6 +464,10 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       setIsSaving(true);
       setSavingType('manual');
 
+      // Mark this hash as "ours" BEFORE the store update re-renders the panel,
+      // so stableServerDocHash recognizes the save echo and keeps editorKey stable.
+      lastSavedDocHashRef.current = getDocHash(latestDoc);
+
       try {
         await updateObject('manuscript', manuscriptId, {
           data: {
@@ -468,13 +481,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         });
 
         setDoc(latestDoc);
-        lastSavedDocHashRef.current = getDocHash(latestDoc);
         editorRef.current?.resetBaseline();
 
         // Clear localStorage cache after successful save
         const cacheKey = getCacheKey(manuscriptId, effectiveLanguage);
         localStorage.removeItem(cacheKey);
       } catch (err) {
+        // Save failed — clear the pending hash so the next render resyncs against real server state.
+        lastSavedDocHashRef.current = null;
         pendingScrollRestoreRef.current = null;
         console.error('Manual save failed:', err);
         showAlert({ title: 'Save Error', message: 'Failed to save. Please try again.' });
