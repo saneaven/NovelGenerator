@@ -13,8 +13,8 @@ from types import SimpleNamespace
 from typing import Any, Callable, Iterable, Sequence
 from uuid import UUID
 
-from sqlalchemy import func, or_, text
-from sqlalchemy.orm import Session
+from sqlalchemy import Text, cast, func, literal, or_, text
+from sqlalchemy.orm import Query, Session
 
 from ..database import SessionLocal
 from ..models.db_models import (
@@ -750,6 +750,40 @@ def _collect_project_object_ids(db: Session, *, project_id: UUID) -> dict[str, l
     }
 
 
+# ---------------------------------------------------------------------------
+# SQL byte-counting helpers used by the reconciler hot path.
+#
+# These compute the same per-row byte totals as the per-row ``measure_*_row``
+# helpers, but they push the work into Postgres so the reconciler never has to
+# hydrate large JSONB rows just to count their length. The byte numbers will
+# differ slightly from the Python ``_measure_value`` formula (PG's ``jsonb::text``
+# emits a single space after each ``:`` and ``,`` and uses JSONB's internal key
+# order rather than Python's compact, sort-keys output) — that drift is
+# expected and self-corrects on the next reconcile cycle.
+# ---------------------------------------------------------------------------
+
+
+def _octet_text(col):
+    """``octet_length(coalesce(col::text, ''))`` — works for Text and JSONB."""
+    return func.octet_length(func.coalesce(cast(col, Text), literal("")))
+
+
+def _coalesce_int(col):
+    return func.coalesce(col, 0)
+
+
+def _sum_text_cols(query: Query, *cols) -> int:
+    """Sum of ``_octet_text(col)`` over every row matched by ``query``."""
+    if not cols:
+        return 0
+    expr = cols[0]
+    expr = _octet_text(expr)
+    for c in cols[1:]:
+        expr = expr + _octet_text(c)
+    value = query.with_entities(func.coalesce(func.sum(expr), 0)).scalar()
+    return int(value or 0)
+
+
 def _sum_object_versions(
     db: Session,
     *,
@@ -761,13 +795,24 @@ def _sum_object_versions(
         object_ids = ids_by_type.get(object_type) or []
         if not object_ids:
             continue
-        rows = (
-            db.query(ObjectVersion)
-            .filter(ObjectVersion.object_type == object_type, ObjectVersion.object_id.in_(object_ids))
-            .all()
+        value = (
+            db.query(
+                func.coalesce(
+                    func.sum(
+                        _octet_text(ObjectVersion.data)
+                        + _octet_text(ObjectVersion.user_request)
+                    ),
+                    0,
+                )
+            )
+            .filter(
+                ObjectVersion.object_type == object_type,
+                ObjectVersion.object_id.in_(object_ids),
+            )
+            .scalar()
         )
-        total += sum(measure_object_version_row(row) for row in rows)
-    return int(total)
+        total += int(value or 0)
+    return total
 
 
 def _get_or_create_usage_row(db: Session, *, project_id: UUID, user_id: UUID) -> ProjectStorageUsage:
@@ -834,81 +879,239 @@ def _set_usage_row_breakdown(
 
 
 def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> StorageUsageBreakdown:
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if project is None:
+    # Combined existence check + project meta size — one query, no row hydration.
+    project_meta_value = db.query(
+        _octet_text(Project.name) + _octet_text(Project.description)
+    ).filter(Project.id == project_id).scalar()
+    if project_meta_value is None:
         return StorageUsageBreakdown()
+    project_meta_bytes = int(project_meta_value)
 
     ids_by_type = _collect_project_object_ids(db, project_id=project_id)
-    project_meta_bytes = measure_project_row(project)
 
-    story_core_rows: list[object] = []
-    story_core_rows.extend(db.query(BasicInfo).filter(BasicInfo.project_id == project_id).all())
-    story_core_rows.extend(db.query(Guidelines).filter(Guidelines.project_id == project_id).all())
-    story_core_rows.extend(db.query(StoryEntity).filter(StoryEntity.project_id == project_id).all())
-    story_core_rows.extend(db.query(Outline).filter(Outline.project_id == project_id).all())
-    story_core_rows.extend(db.query(Timeline).filter(Timeline.project_id == project_id).all())
-    story_core_rows.extend(
+    # ---- story_bytes -------------------------------------------------------
+    # Mirror measure_story_core_row's getattr-with-default semantics by only
+    # summing columns that actually exist on each story-core table:
+    #   BasicInfo / StoryEntity:  image_prompt(_positive|_negative)  (Text)
+    #   Guidelines:               (no measured columns)
+    #   Outline:                  (no measured columns)
+    #   Timeline:                 calendar  (JSONB)
+    #   TimelineTrack:            color  (Text)
+    #   TimelineEvent:            start_date / end_date / tags  (JSONB)
+    basic_info_bytes = _sum_text_cols(
+        db.query(BasicInfo).filter(BasicInfo.project_id == project_id),
+        BasicInfo.image_prompt,
+        BasicInfo.image_prompt_positive,
+        BasicInfo.image_prompt_negative,
+    )
+    story_entity_bytes = _sum_text_cols(
+        db.query(StoryEntity).filter(StoryEntity.project_id == project_id),
+        StoryEntity.image_prompt,
+        StoryEntity.image_prompt_positive,
+        StoryEntity.image_prompt_negative,
+    )
+    timeline_bytes = _sum_text_cols(
+        db.query(Timeline).filter(Timeline.project_id == project_id),
+        Timeline.calendar,
+    )
+    timeline_track_bytes = _sum_text_cols(
         db.query(TimelineTrack)
         .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
-        .filter(Timeline.project_id == project_id)
-        .all()
+        .filter(Timeline.project_id == project_id),
+        TimelineTrack.color,
     )
-    story_core_rows.extend(
+    timeline_event_bytes = _sum_text_cols(
         db.query(TimelineEvent)
         .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
         .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
-        .filter(Timeline.project_id == project_id)
-        .all()
+        .filter(Timeline.project_id == project_id),
+        TimelineEvent.start_date,
+        TimelineEvent.end_date,
+        TimelineEvent.tags,
     )
-    story_bytes = sum(measure_story_core_row(row) for row in story_core_rows)
-    story_bytes += _sum_object_versions(db, ids_by_type=ids_by_type, allowed_types=STORY_ENTITY_CONTEXT_TYPES)
+    story_bytes = (
+        basic_info_bytes
+        + story_entity_bytes
+        + timeline_bytes
+        + timeline_track_bytes
+        + timeline_event_bytes
+        + _sum_object_versions(db, ids_by_type=ids_by_type, allowed_types=STORY_ENTITY_CONTEXT_TYPES)
+    )
 
+    # ---- manuscript_bytes --------------------------------------------------
     manuscript_bytes = _sum_object_versions(db, ids_by_type=ids_by_type, allowed_types=("manuscript",))
 
-    agents = db.query(Agent).filter(Agent.project_id == project_id).all()
-    threads = db.query(Thread).filter(Thread.project_id == project_id).all()
-    runs = db.query(RunModel).filter(RunModel.project_id == project_id).all()
-    run_messages = (
-        db.query(RunMessageModel)
+    # ---- chat_bytes --------------------------------------------------------
+    agent_bytes = int(
+        db.query(func.coalesce(func.sum(_octet_text(Agent.name)), 0))
+        .filter(Agent.project_id == project_id)
+        .scalar()
+        or 0
+    )
+    thread_bytes = int(
+        db.query(
+            func.coalesce(
+                func.sum(
+                    _octet_text(Thread.captured_history_system_prompt)
+                    + _octet_text(Thread.captured_history_conversation_json)
+                ),
+                0,
+            )
+        )
+        .filter(Thread.project_id == project_id)
+        .scalar()
+        or 0
+    )
+    run_bytes = int(
+        db.query(
+            func.coalesce(
+                func.sum(
+                    _octet_text(RunModel.error)
+                    + _octet_text(RunModel.context_object_ids)
+                    + _octet_text(RunModel.journey_target_ids)
+                    + _octet_text(RunModel.input_payload)
+                ),
+                0,
+            )
+        )
+        .filter(RunModel.project_id == project_id)
+        .scalar()
+        or 0
+    )
+    run_message_bytes = int(
+        db.query(func.coalesce(func.sum(_octet_text(RunMessageModel.data)), 0))
         .join(RunModel, RunModel.id == RunMessageModel.run_id)
         .filter(RunModel.project_id == project_id)
-        .all()
+        .scalar()
+        or 0
     )
-    run_message_attachments = (
-        db.query(RunMessageAttachmentModel)
+    # Note: width/height are integer columns; the per-row helper passed them
+    # through _measure_value, which returns 0 for ints, so they have always
+    # contributed nothing to the total. Omitted here for clarity.
+    run_message_attachment_bytes = int(
+        db.query(
+            func.coalesce(
+                func.sum(
+                    _coalesce_int(RunMessageAttachmentModel.file_size)
+                    + _octet_text(RunMessageAttachmentModel.kind)
+                    + _octet_text(RunMessageAttachmentModel.mime_type)
+                    + _octet_text(RunMessageAttachmentModel.original_filename)
+                    + _octet_text(RunMessageAttachmentModel.storage_key)
+                ),
+                0,
+            )
+        )
         .filter(RunMessageAttachmentModel.project_id == project_id)
-        .all()
+        .scalar()
+        or 0
     )
-    tool_calls = (
-        db.query(RunToolCallModel)
+    tool_call_bytes = int(
+        db.query(
+            func.coalesce(
+                func.sum(
+                    _octet_text(RunToolCallModel.arguments)
+                    + _octet_text(RunToolCallModel.extra_content)
+                    + _octet_text(RunToolCallModel.reason)
+                    + _octet_text(RunToolCallModel.result)
+                ),
+                0,
+            )
+        )
         .join(RunModel, RunModel.id == RunToolCallModel.run_id)
         .filter(RunModel.project_id == project_id)
-        .all()
+        .scalar()
+        or 0
     )
     chat_bytes = (
-        sum(measure_agent_row(row) for row in agents)
-        + sum(measure_thread_row(row) for row in threads)
-        + sum(measure_run_row(row) for row in runs)
-        + sum(measure_run_message_row(row) for row in run_messages)
-        + sum(measure_run_message_attachment_row(row) for row in run_message_attachments)
-        + sum(measure_tool_call_row(row) for row in tool_calls)
+        agent_bytes
+        + thread_bytes
+        + run_bytes
+        + run_message_bytes
+        + run_message_attachment_bytes
+        + tool_call_bytes
     )
 
-    notifications = db.query(NotificationModel).filter(NotificationModel.project_id == project_id).all()
-    notification_bytes = sum(measure_notification_row(row) for row in notifications)
+    # ---- notification_bytes ------------------------------------------------
+    notification_bytes = int(
+        db.query(
+            func.coalesce(
+                func.sum(
+                    _octet_text(NotificationModel.label)
+                    + _octet_text(NotificationModel.message)
+                    + _octet_text(NotificationModel.warning)
+                    + _octet_text(NotificationModel.progress_json)
+                    + _octet_text(NotificationModel.custom_slot_json)
+                    + _octet_text(NotificationModel.meta_json)
+                ),
+                0,
+            )
+        )
+        .filter(NotificationModel.project_id == project_id)
+        .scalar()
+        or 0
+    )
 
-    image_runs = db.query(ImageRunModel).filter(ImageRunModel.project_id == project_id).all()
-    image_run_bytes = sum(measure_image_run_row(row) for row in image_runs)
+    # ---- image_run_bytes ---------------------------------------------------
+    image_run_bytes = int(
+        db.query(
+            func.coalesce(
+                func.sum(
+                    _octet_text(ImageRunModel.request_snapshot)
+                    + _octet_text(ImageRunModel.revised_prompt)
+                    + _octet_text(ImageRunModel.before_excerpt)
+                    + _octet_text(ImageRunModel.after_excerpt)
+                    + _octet_text(ImageRunModel.failure_code)
+                    + _octet_text(ImageRunModel.error_message)
+                ),
+                0,
+            )
+        )
+        .filter(ImageRunModel.project_id == project_id)
+        .scalar()
+        or 0
+    )
 
-    assets = db.query(Asset).filter(Asset.project_id == project_id).all()
-    image_bytes = sum(measure_asset_row(row) for row in assets)
+    # ---- image_bytes (assets) ----------------------------------------------
+    image_bytes = int(
+        db.query(
+            func.coalesce(
+                func.sum(
+                    _coalesce_int(Asset.file_size)
+                    + _octet_text(Asset.name)
+                    + _octet_text(Asset.generation_prompt)
+                    + _octet_text(Asset.generation_positive_prompt)
+                    + _octet_text(Asset.generation_negative_prompt)
+                    + _octet_text(Asset.generation_settings)
+                    + _octet_text(Asset.generation_reference_images)
+                    + _octet_text(Asset.generation_mask_image)
+                    + _octet_text(Asset.generation_reference_objects)
+                ),
+                0,
+            )
+        )
+        .filter(Asset.project_id == project_id)
+        .scalar()
+        or 0
+    )
 
-    from .llm_request_service import _measure_request_row
-    llm_requests = db.query(LLMRequest).filter(LLMRequest.project_id == project_id).all()
-    llm_log_bytes = sum(_measure_request_row(row) for row in llm_requests)
+    # ---- llm_log_bytes (the dominant memory term in the old code) ---------
+    llm_log_bytes = int(
+        db.query(
+            func.coalesce(
+                func.sum(
+                    _octet_text(LLMRequest.raw_input)
+                    + _octet_text(LLMRequest.raw_output)
+                ),
+                0,
+            )
+        )
+        .filter(LLMRequest.project_id == project_id)
+        .scalar()
+        or 0
+    )
 
     return StorageUsageBreakdown(
-        project_meta_bytes=int(project_meta_bytes),
+        project_meta_bytes=project_meta_bytes,
         story_bytes=int(story_bytes),
         manuscript_bytes=int(manuscript_bytes),
         chat_bytes=int(chat_bytes),
