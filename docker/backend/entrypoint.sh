@@ -17,4 +17,14 @@ if [ "$RELOAD" = "1" ] || [ "$RELOAD" = "true" ]; then
   RELOAD_ARGS="--reload"
 fi
 
-exec python -m uvicorn "$APP_MODULE" --host "$HOST" --port "$PORT" $RELOAD_ARGS
+MEMRAY="${MEMRAY_ENABLED:-0}"
+
+if [ "$MEMRAY" = "1" ] || [ "$MEMRAY" = "true" ]; then
+  OUTPUT_DIR="/app/memray_output"
+  mkdir -p "$OUTPUT_DIR"
+  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+  exec python -m memray run --output "$OUTPUT_DIR/profile_${TIMESTAMP}.bin" \
+    -m uvicorn "$APP_MODULE" --host "$HOST" --port "$PORT" $RELOAD_ARGS
+else
+  exec python -m uvicorn "$APP_MODULE" --host "$HOST" --port "$PORT" $RELOAD_ARGS
+fi

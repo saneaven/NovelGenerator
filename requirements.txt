@@ -30,6 +30,7 @@ mako
 markdown-it-pyrs
 markupsafe
 mcp
+memray
 openai
 packaging
 partial-json-parser
