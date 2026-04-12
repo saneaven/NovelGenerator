@@ -6,6 +6,7 @@ export function isLiveThreadStatus(status: ThreadStatus | null | undefined): boo
 
 export function isNonLiveThreadStatus(status: ThreadStatus | null | undefined): boolean {
   return status === 'waiting'
+    || status === 'ready'
     || status === 'paused'
     || status === 'done'
     || status === 'error'

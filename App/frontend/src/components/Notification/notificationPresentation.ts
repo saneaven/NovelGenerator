@@ -15,6 +15,8 @@ export function formatNotificationStatusLabelFor(
         return 'Applying changes';
       case 'waiting':
         return 'Needs confirmation';
+      case 'ready':
+        return 'Ready to continue';
       case 'paused':
         return 'Paused';
       case 'done':
@@ -36,6 +38,8 @@ export function formatNotificationStatusLabelFor(
         return 'Applying changes';
       case 'waiting':
         return 'Needs confirmation';
+      case 'ready':
+        return 'Ready to continue';
       case 'paused':
         return 'Paused';
       case 'done':
@@ -96,7 +100,7 @@ export function getNotificationToneFor(
 ): NotificationTone {
   if (sourceKind === 'journey') {
     if (status === 'running' || status === 'processing') return 'active';
-    if (status === 'waiting' || status === 'paused') return 'attention';
+    if (status === 'waiting' || status === 'ready' || status === 'paused') return 'attention';
     if (status === 'done') return 'success';
     if (status === 'error') return 'error';
     return 'neutral';
@@ -104,7 +108,7 @@ export function getNotificationToneFor(
 
   if (sourceKind === 'agent' || sourceKind === 'subAgent') {
     if (status === 'running' || status === 'processing') return 'active';
-    if (status === 'waiting' || status === 'paused') return 'attention';
+    if (status === 'waiting' || status === 'ready' || status === 'paused') return 'attention';
     if (status === 'done') return 'success';
     if (status === 'error') return 'error';
     return 'neutral';

@@ -5,6 +5,7 @@ export type NotificationStatus =
   | 'running'
   | 'waiting'
   | 'processing'
+  | 'ready'
   | 'paused'
   | 'done'
   | 'error'

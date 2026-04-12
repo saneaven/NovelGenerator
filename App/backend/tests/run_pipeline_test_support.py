@@ -85,6 +85,7 @@ def install_import_stubs() -> None:
     fake_storage_usage_service.build_image_run_delta = lambda *_args, **_kwargs: FakeDelta(image_run_bytes=-1)
     fake_storage_usage_service.build_notification_delta = lambda *_args, **_kwargs: FakeDelta(notification_bytes=-1)
     fake_storage_usage_service.build_run_delta = lambda *_args, **_kwargs: FakeDelta(chat_bytes=-1)
+    fake_storage_usage_service.build_usage_delta_for_amount = lambda *_args, **_kwargs: FakeDelta(chat_bytes=-1)
     fake_storage_usage_service.build_run_message_delta = lambda *_args, **_kwargs: FakeDelta(chat_bytes=-1)
     fake_storage_usage_service.build_thread_delta = lambda *_args, **_kwargs: FakeDelta(chat_bytes=-1)
     fake_storage_usage_service.build_run_message_attachment_delta = lambda *_args, **_kwargs: FakeDelta(chat_bytes=-1)
@@ -96,6 +97,8 @@ def install_import_stubs() -> None:
     fake_storage_usage_service.snapshot_run_row = lambda *_args, **_kwargs: None
     fake_storage_usage_service.snapshot_thread_row = lambda *_args, **_kwargs: None
     fake_storage_usage_service.snapshot_tool_call_row = lambda *_args, **_kwargs: None
+    fake_storage_usage_service.measure_run_message_row = lambda *_args, **_kwargs: 0
+    fake_storage_usage_service.measure_tool_call_row = lambda *_args, **_kwargs: 0
     sys.modules["App.backend.services.storage_usage_service"] = fake_storage_usage_service
 
     fake_thread_runtime_sync_service = types.ModuleType("App.backend.services.thread_runtime_sync_service")
@@ -258,7 +261,7 @@ install_import_stubs()
 
 from App.backend.models.db_models import Agent, RunMessageModel, RunModel, RunToolCallModel, Thread, UserSettings
 from App.backend.providers.contracts import DeltaPayload, FinalToolCall
-from App.backend.providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
+from App.backend.providers.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from App.backend.services.run_pipeline import service as run_service
 from App.backend.services.run_pipeline.contracts import CreateContext, ResumeRunCommand
 from App.backend.services.run_pipeline.execution_loop import RunPipelineExecutionLoop, format_user_run_error

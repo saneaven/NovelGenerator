@@ -37,10 +37,10 @@ from .storage_usage_service import (
 )
 
 NOTIFICATION_SOURCE_KIND_VALUES = {"journey", "imageRun", "system", "agent", "subAgent"}
-JOURNEY_NOTIFICATION_STATUS_VALUES = {"running", "waiting", "processing", "paused", "done", "error", "canceled"}
+JOURNEY_NOTIFICATION_STATUS_VALUES = {"running", "waiting", "processing", "ready", "paused", "done", "error", "canceled"}
 IMAGE_RUN_NOTIFICATION_STATUS_VALUES = {"queued", "running", "review", "applying", "applied", "rejected", "failed", "canceled"}
 SYSTEM_NOTIFICATION_STATUS_VALUES = {"running", "done", "error", "canceled"}
-AGENT_NOTIFICATION_STATUS_VALUES = {"running", "waiting", "processing", "paused", "done", "error", "canceled"}
+AGENT_NOTIFICATION_STATUS_VALUES = {"running", "waiting", "processing", "ready", "paused", "done", "error", "canceled"}
 NOTIFICATION_ALLOWED_STATUSES_BY_SOURCE = {
     "journey": JOURNEY_NOTIFICATION_STATUS_VALUES,
     "imageRun": IMAGE_RUN_NOTIFICATION_STATUS_VALUES,
@@ -234,6 +234,8 @@ def _journey_message_for_status(*, status: str, error: str | None = None) -> str
         return "Applying changes..."
     if status == "waiting":
         return "Needs confirmation"
+    if status == "ready":
+        return "Ready to continue"
     if status == "paused":
         return "Paused"
     if status == "done":
@@ -277,7 +279,7 @@ def build_journey_notification_snapshot(
             "journey_kind": journey.kind,
             "project_id": str(journey.project_id),
         },
-        important=status in {"waiting", "error"},
+        important=status in {"waiting", "ready", "error"},
     )
 
 
@@ -288,6 +290,8 @@ def _agent_message_for_status(*, status: str, error: str | None = None) -> str:
         return "Applying changes..."
     if status == "waiting":
         return "Needs confirmation"
+    if status == "ready":
+        return "Ready to continue"
     if status == "paused":
         return "Paused"
     if status == "done":
@@ -329,7 +333,7 @@ def build_agent_notification_snapshot(
             "run_id": str(run.id),
             "project_id": str(agent.project_id),
         },
-        important=status in {"waiting", "error"},
+        important=status in {"waiting", "ready", "error"},
     )
 
 
@@ -368,7 +372,7 @@ def build_sub_agent_notification_snapshot(
             "run_id": str(run.id),
             "project_id": str(thread.project_id),
         },
-        important=status in {"waiting", "error"},
+        important=status in {"waiting", "ready", "error"},
     )
 
 

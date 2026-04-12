@@ -257,7 +257,7 @@ def delete_assets_with_files(
 
 def delete_project_assets_with_files(db: Session, *, project_id: UUID) -> List[UUID]:
     assets = db.query(Asset).filter(Asset.project_id == project_id).all()
-    return delete_assets_with_files(db, assets=assets, scrub_references_in_project_id=project_id)
+    return delete_assets_with_files(db, assets=assets, scrub_references_in_project_id=None)
 
 
 def delete_chat_attachments_with_files(

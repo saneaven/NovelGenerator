@@ -53,7 +53,7 @@ if "App.backend.services.chat_attachment_service" not in sys.modules:
 from App.backend.providers.async_openai_provider import AsyncOpenAIProvider
 from App.backend.providers.custom import CustomProvider
 from App.backend.providers.contracts import DeltaPayload, merge_openai_tool_call_deltas
-from App.backend.providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
+from App.backend.providers.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
 
 
 def test_chunk_to_events_extracts_reasoning_from_delta_thoughts() -> None:

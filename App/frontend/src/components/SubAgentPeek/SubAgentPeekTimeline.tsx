@@ -118,7 +118,9 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
     if (!threadMessages) return [];
     return [...threadMessages]
       .filter((message) => {
-        if (message.role !== 'assistant' || message.isStreaming) return false;
+        if (message.isStreaming) return false;
+        if (message.role === 'user') return true;
+        if (message.role !== 'assistant') return false;
         const attachedToolCalls = (toolCallIdsByAssistantMessageId[message.id] ?? [])
           .map((id) => toolCallsById[id])
           .filter((toolCall): toolCall is ThreadToolCall => Boolean(toolCall));
@@ -278,16 +280,18 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
                   />
                 </div>
               )}
-              <div className="message-actions">
-                <IconButton
-                  icon={<Trash size="sm" />}
-                  onClick={() => handleDeleteMessage(String(message.id))}
-                  title={t('agent.delete')}
-                  variant="ghost"
-                  size="xs"
-                  className="icon-button--ghost-danger"
-                />
-              </div>
+              {message.role === 'assistant' && (
+                <div className="message-actions">
+                  <IconButton
+                    icon={<Trash size="sm" />}
+                    onClick={() => handleDeleteMessage(String(message.id))}
+                    title={t('agent.delete')}
+                    variant="ghost"
+                    size="xs"
+                    className="icon-button--ghost-danger"
+                  />
+                </div>
+              )}
             </div>
           </div>
         );

@@ -169,6 +169,31 @@ def test_serialize_notification_includes_target_and_important() -> None:
     }
 
 
+def test_build_journey_notification_snapshot_allows_ready_status() -> None:
+    journey_id = uuid4()
+    thread_id = uuid4()
+    run_id = uuid4()
+    project_id = uuid4()
+    user_id = uuid4()
+
+    snapshot = notification_service.build_journey_notification_snapshot(
+        journey=SimpleNamespace(
+            id=journey_id,
+            user_id=user_id,
+            project_id=project_id,
+            kind="imagePrompt",
+            display_label="Prompt work",
+        ),
+        thread=SimpleNamespace(id=thread_id),
+        run=SimpleNamespace(id=run_id, status="ready"),
+        error=None,
+    )
+
+    assert snapshot.status == "ready"
+    assert snapshot.message == "Ready to continue"
+    assert snapshot.important is True
+
+
 def test_delete_notifications_for_thread_ids_matches_target_only() -> None:
     user_id = uuid4()
     project_id = uuid4()

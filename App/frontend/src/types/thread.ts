@@ -1,7 +1,7 @@
 import type { McpSelectionAudit } from './mcp';
 
 export type ThreadType = 'agent' | 'subAgent' | 'journey';
-export type ThreadStatus = 'running' | 'waiting' | 'processing' | 'paused' | 'done' | 'error' | 'canceled';
+export type ThreadStatus = 'running' | 'waiting' | 'processing' | 'ready' | 'paused' | 'done' | 'error' | 'canceled';
 export type RunStatus = ThreadStatus;
 export type ToolCallStatus = 'streaming' | 'validating' | 'pending' | 'processing' | 'working' | 'failed' | 'rejected' | 'applied';
 
@@ -178,7 +178,7 @@ export function isPausedLikeThreadStatus(status: ThreadStatus | null | undefined
 }
 
 export function canResumeThreadStatus(status: ThreadStatus | null | undefined): boolean {
-  return isPausedLikeThreadStatus(status);
+  return status === 'ready' || isPausedLikeThreadStatus(status);
 }
 
 export function canPauseThreadStatus(status: ThreadStatus | null | undefined): boolean {
@@ -186,7 +186,7 @@ export function canPauseThreadStatus(status: ThreadStatus | null | undefined): b
 }
 
 export function canCancelThreadStatus(status: ThreadStatus | null | undefined): boolean {
-  return canPauseThreadStatus(status) || isPausedLikeThreadStatus(status);
+  return status === 'ready' || canPauseThreadStatus(status) || isPausedLikeThreadStatus(status);
 }
 
 export function threadPriority(status: ThreadStatus): number {
@@ -197,6 +197,7 @@ export function threadPriority(status: ThreadStatus): number {
       return 1;
     case 'waiting':
       return 2;
+    case 'ready':
     case 'paused':
     case 'error':
       return 3;

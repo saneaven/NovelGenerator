@@ -86,6 +86,11 @@
   color: var(--color-warning);
 }
 
+.journey-detail-status--ready {
+  background: var(--color-warning-light);
+  color: var(--color-warning);
+}
+
 .journey-detail-status--paused {
   background: var(--color-warning-light);
   color: var(--color-warning);

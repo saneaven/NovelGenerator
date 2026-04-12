@@ -111,8 +111,20 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
     for (const tc of parentToolCalls) {
       if (!tc.toolName.startsWith('call_') || !tc.childThreadId) continue;
-      const thread = threadsById[tc.childThreadId];
-      if (!thread) continue;
+      const thread = threadsById[tc.childThreadId] ?? {
+        id: tc.childThreadId,
+        projectId,
+        threadType: 'subAgent' as const,
+        parentId: null,
+        journeyKind: null,
+        displayLabel: null,
+        status: 'running' as const,
+        lastError: null,
+        latestRunId: null,
+        latestRunStatus: null,
+        latestMessageAt: null,
+        unresolvedToolCallCount: 0,
+      };
       const agentName = tc.toolName.slice(5);
       const def = subAgents.find((s) => s.agent_name === agentName);
       result.push({
@@ -126,7 +138,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
     result.sort((a, b) => a.callSeq - b.callSeq);
     return result;
-  }, [toolCallIdsByAssistantMessageId, toolCallsById, parentMessageId, threadsById, subAgents]);
+  }, [toolCallIdsByAssistantMessageId, toolCallsById, parentMessageId, threadsById, projectId, subAgents]);
 
   const pendingCountByKey = useMemo(() => {
     const map: Record<string, number> = {};

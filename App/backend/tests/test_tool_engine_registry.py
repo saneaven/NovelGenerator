@@ -38,15 +38,17 @@ def _derive_run_status(*, current_status: str | None, tool_call_statuses: list[s
     statuses = list(tool_call_statuses)
     if current_status == "paused":
         return "paused"
+    if not statuses:
+        return "done"
     if any(status == "pending" for status in statuses):
         return "waiting"
     if any(status in {"streaming", "validating", "processing", "working"} for status in statuses):
         return "processing"
     if any(status == "rejected" for status in statuses):
         return "paused"
-    if statuses:
-        return "done"
-    return current_status
+    if all(status in {"applied", "failed"} for status in statuses):
+        return "ready"
+    raise ValueError(f"Unknown tool call status combination: {statuses!r}")
 
 
 fake_run_pipeline_status_logic.derive_run_status = _derive_run_status
@@ -390,7 +392,7 @@ def _make_parent_completion_state(*, child_status: str, child_error: str | None 
     return db, child_thread, child_run
 
 
-@pytest.mark.parametrize("child_status", ["waiting", "processing", "paused", "error", "running"])
+@pytest.mark.parametrize("child_status", ["waiting", "processing", "ready", "paused", "error", "running"])
 def test_propagate_child_terminal_state_to_parent_ignores_non_terminal_child_statuses(
     monkeypatch: pytest.MonkeyPatch,
     child_status: str,
@@ -442,8 +444,8 @@ def test_propagate_child_terminal_state_to_parent_applies_done_child(monkeypatch
     assert db.parent_tool_call.status == "applied"
     assert db.parent_tool_call.result == {"success": True, "message": "Child final output"}
     assert db.parent_tool_call.reason is None
-    assert db.parent_run.status == "done"
-    assert db.parent_thread.status == "done"
+    assert db.parent_run.status == "ready"
+    assert db.parent_thread.status == "ready"
     assert [name for name, _payload in emitted] == ["tool_call:status", "run:status"]
 
 
@@ -469,6 +471,6 @@ def test_propagate_child_terminal_state_to_parent_fails_canceled_child(monkeypat
     assert db.parent_tool_call.status == "failed"
     assert db.parent_tool_call.reason == "Sub-agent canceled"
     assert db.parent_tool_call.result == {"success": False, "message": "Sub-agent canceled"}
-    assert db.parent_run.status == "done"
-    assert db.parent_thread.status == "done"
+    assert db.parent_run.status == "ready"
+    assert db.parent_thread.status == "ready"
     assert [name for name, _payload in emitted] == ["tool_call:status", "run:status"]

@@ -250,7 +250,7 @@ export interface ContentPart {
 // ============================================================================
 
 export type RunType = 'agent' | 'subAgent' | 'journey';
-export type RunStatus = 'running' | 'waiting' | 'processing' | 'paused' | 'done' | 'error' | 'canceled';
+export type RunStatus = 'running' | 'waiting' | 'processing' | 'ready' | 'paused' | 'done' | 'error' | 'canceled';
 export type RunMode = 'planMode' | 'agentMode';
 export type RunSurface = 'story-entity' | 'outline-manager' | 'novel-editor' | 'config';
 export type JourneyKind =

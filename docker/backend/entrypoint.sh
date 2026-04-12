@@ -23,7 +23,7 @@ if [ "$MEMRAY" = "1" ] || [ "$MEMRAY" = "true" ]; then
   OUTPUT_DIR="/app/memray_output"
   mkdir -p "$OUTPUT_DIR"
   TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-  exec python -m memray run --output "$OUTPUT_DIR/profile_${TIMESTAMP}.bin" \
+  exec python -m memray run --native --output "$OUTPUT_DIR/profile_${TIMESTAMP}.bin" \
     -m uvicorn "$APP_MODULE" --host "$HOST" --port "$PORT" $RELOAD_ARGS
 else
   exec python -m uvicorn "$APP_MODULE" --host "$HOST" --port "$PORT" $RELOAD_ARGS

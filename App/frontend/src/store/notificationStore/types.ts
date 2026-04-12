@@ -13,13 +13,13 @@ export type NotificationSourceKindType = NotificationSourceKind;
 export type NotificationTarget = NotificationTargetDTO;
 
 export type JourneyNotificationStatus =
-  Extract<ServerNotificationStatus, 'running' | 'waiting' | 'processing' | 'paused' | 'done' | 'error' | 'canceled'>;
+  Extract<ServerNotificationStatus, 'running' | 'waiting' | 'processing' | 'ready' | 'paused' | 'done' | 'error' | 'canceled'>;
 export type ImageRunNotificationStatus =
   Extract<ServerNotificationStatus, 'queued' | 'running' | 'review' | 'applying' | 'applied' | 'rejected' | 'failed' | 'canceled'>;
 export type SystemNotificationStatus =
   Extract<ServerNotificationStatus, 'running' | 'done' | 'error' | 'canceled'>;
 export type AgentNotificationStatus =
-  Extract<ServerNotificationStatus, 'running' | 'waiting' | 'processing' | 'paused' | 'done' | 'error' | 'canceled'>;
+  Extract<ServerNotificationStatus, 'running' | 'waiting' | 'processing' | 'ready' | 'paused' | 'done' | 'error' | 'canceled'>;
 
 export type JourneyNotificationSource = NotificationSourceDTO & {
   kind: 'journey';

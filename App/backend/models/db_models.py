@@ -848,7 +848,7 @@ class Journey(Base):
             name="ck_journeys_kind",
         ),
         CheckConstraint(
-            "status IN ('running','waiting','processing','paused','done','error','canceled')",
+            "status IN ('running','waiting','processing','ready','paused','done','error','canceled')",
             name="ck_journeys_status",
         ),
         Index("ix_journeys_project_status", "project_id", "status"),
@@ -901,7 +901,7 @@ class Thread(Base):
             name='ck_threads_type',
         ),
         CheckConstraint(
-            "status IN ('running','waiting','processing','paused','done','error','canceled')",
+            "status IN ('running','waiting','processing','ready','paused','done','error','canceled')",
             name='ck_threads_status',
         ),
         Index('ix_threads_project_type', 'project_id', 'thread_type'),
@@ -990,7 +990,7 @@ class RunModel(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('running','waiting','processing','paused','done','error','canceled')",
+            "status IN ('running','waiting','processing','ready','paused','done','error','canceled')",
             name='ck_runs_status',
         ),
         Index('ix_runs_thread_status', 'thread_id', 'status'),
@@ -1248,7 +1248,7 @@ class NotificationModel(Base):
         CheckConstraint("source_kind IN ('journey','imageRun','system','agent','subAgent')", name="ck_notifications_source_kind"),
         CheckConstraint(
             "status IN ("
-            "'running','waiting','processing','paused','done','error','canceled',"
+            "'running','waiting','processing','ready','paused','done','error','canceled',"
             "'queued','review','applying','applied','rejected','failed'"
             ")",
             name="ck_notifications_status",

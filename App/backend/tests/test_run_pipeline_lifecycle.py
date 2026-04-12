@@ -222,8 +222,8 @@ def test_resume_run_allows_error_latest_run() -> None:
     assert spawned_run_ids == [run.id]
 
 
-@pytest.mark.parametrize("run_status", ["done", "canceled"])
-def test_resume_run_allows_done_and_canceled_latest_run(run_status: str) -> None:
+@pytest.mark.parametrize("run_status", ["ready", "done", "canceled"])
+def test_resume_run_allows_ready_done_and_canceled_latest_run(run_status: str) -> None:
     thread = Thread(id=uuid4(), project_id=uuid4(), user_id=uuid4(), thread_type="agent", status=run_status)
     run = RunModel(
         id=uuid4(),
@@ -280,6 +280,31 @@ def test_resume_run_allows_done_and_canceled_latest_run(run_status: str) -> None
 )
 def test_derive_run_status_keeps_paused_sticky(tool_statuses: list[str], expected: str) -> None:
     assert derive_run_status(current_status="paused", tool_call_statuses=tool_statuses) == expected
+
+
+@pytest.mark.parametrize(
+    ("tool_statuses", "expected"),
+    [
+        ([], "done"),
+        (["applied"], "ready"),
+        (["failed"], "ready"),
+        (["applied", "failed"], "ready"),
+        (["pending"], "waiting"),
+        (["streaming"], "processing"),
+        (["validating"], "processing"),
+        (["processing"], "processing"),
+        (["working"], "processing"),
+        (["rejected"], "paused"),
+    ],
+)
+def test_derive_run_status_maps_known_tool_statuses(tool_statuses: list[str], expected: str) -> None:
+    assert derive_run_status(current_status="processing", tool_call_statuses=tool_statuses) == expected
+
+
+@pytest.mark.parametrize("tool_statuses", [["applied", "unknown"], ["unknown"]])
+def test_derive_run_status_rejects_unknown_tool_statuses(tool_statuses: list[str]) -> None:
+    with pytest.raises(ValueError, match="Unknown tool call status"):
+        derive_run_status(current_status="processing", tool_call_statuses=tool_statuses)
 
 
 def test_pause_run_marks_sub_agent_paused_without_parent_completion(

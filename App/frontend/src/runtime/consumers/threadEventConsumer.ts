@@ -752,9 +752,9 @@ export class ThreadEventConsumer {
         return;
       }
 
-      // Respect explicit pauses: only auto-continue threads that are not already
-      // running and were not intentionally paused by the user or Apply & Pause.
-      if (thread?.status === 'running' || thread?.status === 'paused') {
+      // Only the explicit ready state means all tool calls are resolved and the
+      // next LLM continuation should be requested.
+      if (thread?.status !== 'ready') {
         console.debug('[AutoContinue] Skipped: thread is not auto-continuable', { threadId, status: thread?.status });
         return;
       }
@@ -1025,7 +1025,10 @@ export class ThreadEventConsumer {
       }
 
       if (childThreadId) {
+        const parentThread = store.threadsById[threadId];
+        const projectId = readNonEmptyString(payload.project_id) ?? parentThread?.projectId;
         this.ensureThread(childThreadId, {
+          ...(projectId ? { projectId } : {}),
           threadType: 'subAgent',
           updatedAt: nowIso(),
         });

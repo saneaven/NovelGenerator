@@ -11,6 +11,7 @@ NotificationStatus = Literal[
     "running",
     "waiting",
     "processing",
+    "ready",
     "paused",
     "done",
     "error",

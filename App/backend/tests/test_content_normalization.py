@@ -6,7 +6,7 @@ from App.backend.providers.content_normalization import (
     normalize_final_snapshot_content,
 )
 from App.backend.providers.contracts import DeltaPayload, FinalSnapshot, extract_native_tool_calls_from_snapshot
-from App.backend.providers.fallback_snapshot_assembler import FallbackSnapshotAssembler
+from App.backend.providers.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
 
 
 def _snapshot(content_parts: list[dict[str, str]]) -> FinalSnapshot:
