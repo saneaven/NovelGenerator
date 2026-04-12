@@ -15,7 +15,7 @@ from ...models.db_models import (
     TimelineEvent,
     TimelineTrack,
 )
-from ...models.translation_models import ObjectVersion
+from ...models.translation_models import ObjectVersion, ObjectVersionLanguage
 from ...utils.timeline_calendar import default_calendar, format_date
 from ...utils.story_entities import STORY_ENTITY_TYPE
 from ..basic_info_utils import basic_info_summary_text, normalize_basic_info_data
@@ -34,9 +34,19 @@ def _latest_version_data(db: Session, object_type: str, object_id: UUID) -> dict
         .order_by(ObjectVersion.version_number.desc())
         .first()
     )
-    if row is None or not isinstance(row.data, dict):
+    if row is None:
         return {}
-    return row.data
+    rows = (
+        db.query(ObjectVersionLanguage)
+        .filter(ObjectVersionLanguage.version_id == row.id)
+        .order_by(ObjectVersionLanguage.created_at.asc())
+        .all()
+    )
+    return {
+        str(lang_row.language): lang_row.data
+        for lang_row in rows
+        if isinstance(lang_row.data, dict)
+    }
 
 
 def _lang_data(all_data: dict[str, Any], language: str) -> dict[str, Any]:

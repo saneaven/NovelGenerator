@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
 from ..models.semantic_models import SemanticSource
-from ..models.translation_models import ObjectVersion
+from ..models.translation_models import ObjectVersion, ObjectVersionLanguage
 from .embedding_config_service import get_embedding_profile
 from .semantic_embedding_service import embed_many
 from .semantic_index_service import get_main_language
@@ -463,7 +463,7 @@ def _batch_resolve_display_names(
         return {}
 
     # Single query: fetch latest version per (object_type, object_id) using OR conditions
-    from sqlalchemy import or_, and_, tuple_
+    from sqlalchemy import or_, and_
 
     conditions = or_(
         *[
@@ -486,7 +486,7 @@ def _batch_resolve_display_names(
     )
 
     rows = (
-        db.query(ObjectVersion)
+        db.query(ObjectVersion, ObjectVersionLanguage)
         .join(
             latest_subq,
             and_(
@@ -495,22 +495,20 @@ def _batch_resolve_display_names(
                 ObjectVersion.version_number == latest_subq.c.max_ver,
             ),
         )
+        .join(
+            ObjectVersionLanguage,
+            and_(
+                ObjectVersionLanguage.version_id == ObjectVersion.id,
+                ObjectVersionLanguage.language == language,
+            ),
+        )
         .all()
     )
 
     result_map: Dict[Tuple[str, str], str] = {}
-    for row in rows:
-        data = row.data if isinstance(row.data, dict) else {}
-        lang_data = data.get(language)
-        if not isinstance(lang_data, dict):
-            for v in data.values():
-                if isinstance(v, dict):
-                    lang_data = v
-                    break
-            else:
-                continue
-
-        key = (row.object_type, str(row.object_id))
+    for version, lang_row in rows:
+        lang_data = lang_row.data if isinstance(lang_row.data, dict) else {}
+        key = (version.object_type, str(version.object_id))
         name = lang_data.get("name") or lang_data.get("title")
         if isinstance(name, str) and name.strip():
             result_map[key] = name.strip()

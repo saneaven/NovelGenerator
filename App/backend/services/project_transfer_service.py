@@ -16,7 +16,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from ..models.db_models import (
     Asset,
@@ -31,12 +31,13 @@ from ..models.db_models import (
     ObjectAssetLink,
     User,
 )
-from ..models.translation_models import ObjectVersion
+from ..models.translation_models import ObjectVersion, ObjectVersionLanguage
 from ..schemas.project_transfer import ProjectExportOptions
 from ..services.image_model_catalog_service import sanitize_generation_settings
 from ..services.ownership import require_owned_project
 from ..services.rich_text import get_rich_text_fields, normalize_tree
 from ..services.rich_text_image_ref_service import rebuild_rich_text_refs_for_object
+from ..services.object_version_language_service import earliest_provenance_from_rows, payload_map_from_rows
 from ..services.storage_service import storage_service
 from ..services.storage_usage_service import (
     StorageQuotaExceededError,
@@ -117,6 +118,7 @@ def _latest_versions_by_object_id(db: Session, object_type: str, object_ids: Lis
 
     rows = (
         db.query(ObjectVersion)
+        .options(selectinload(ObjectVersion.languages))
         .join(
             subq,
             and_(
@@ -527,12 +529,13 @@ class ProjectTransferService:
         payload_objects: List[Dict[str, Any]] = []
         for obj_type, obj in objects:
             v = latest_versions.get((obj_type, obj.id))
-            data = v.data if v is not None else {}
+            data = payload_map_from_rows(v.languages) if v is not None else {}
             version_info = None
             if v is not None:
+                provenance = earliest_provenance_from_rows(v.languages, fallback_created_at=v.created_at)
                 version_info = {
                     "number": int(v.version_number),
-                    "created_at": _dt_to_iso(v.created_at),
+                    "created_at": _dt_to_iso(provenance.created_at),
                 }
 
             meta: Dict[str, Any] = {
@@ -894,18 +897,27 @@ class ProjectTransferService:
             version_info = item.get("version") if isinstance(item.get("version"), dict) else {}
             v_created_at = _iso_to_dt(version_info.get("created_at")) or now
 
-            db.add(
-                ObjectVersion(
-                    id=uuid4(),
-                    object_type=obj_type,
-                    object_id=new_obj_id,
-                    version_number=1,
-                    data=data,
-                    user_request="Project Import",
-                    created_by=user_id,
-                    created_at=v_created_at,
-                )
+            version = ObjectVersion(
+                id=uuid4(),
+                object_type=obj_type,
+                object_id=new_obj_id,
+                version_number=1,
+                created_by=user_id,
+                created_at=v_created_at,
             )
+            for lang, lang_data in data.items():
+                if not isinstance(lang_data, dict):
+                    continue
+                version.languages.append(
+                    ObjectVersionLanguage(
+                        language=str(lang),
+                        data=lang_data,
+                        user_request="Project Import",
+                        created_by=user_id,
+                        created_at=v_created_at,
+                    )
+                )
+            db.add(version)
 
         db.flush()
 
@@ -921,21 +933,21 @@ class ProjectTransferService:
                 continue
             latest_version = (
                 db.query(ObjectVersion)
+                .options(selectinload(ObjectVersion.languages))
                 .filter(ObjectVersion.object_type == object_type, ObjectVersion.object_id == new_obj_id)
                 .order_by(ObjectVersion.version_number.desc())
                 .first()
             )
-            version_data = latest_version.data if latest_version and isinstance(latest_version.data, dict) else {}
-            for lang, lang_data in version_data.items():
-                if not isinstance(lang_data, dict):
+            for lang_row in (latest_version.languages if latest_version is not None else []):
+                if not isinstance(lang_row.data, dict):
                     continue
                 rebuild_rich_text_refs_for_object(
                     db,
                     project_id=new_project_id,
                     object_type=object_type,
                     object_id=new_obj_id,
-                    language=str(lang),
-                    version_data=lang_data,
+                    language=str(lang_row.language),
+                    version_data=lang_row.data,
                 )
 
         return new_project_id

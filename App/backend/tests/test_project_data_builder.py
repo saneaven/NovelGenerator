@@ -41,7 +41,7 @@ _install_import_stubs()
 
 import App.backend.services.prompt_runtime.project_data_builder as project_data_builder_module
 from App.backend.models.db_models import BasicInfo, Guidelines, Manuscript, Outline, StoryEntity
-from App.backend.models.translation_models import ObjectVersion
+from App.backend.models.translation_models import ObjectVersion, ObjectVersionLanguage
 from App.backend.services.prompt_runtime.project_data_builder import _build_outline_numbering, build_project_data
 
 
@@ -66,13 +66,22 @@ def _outline(
 
 
 def _object_version(*, object_type: str, object_id: UUID, data: dict) -> ObjectVersion:
-    return ObjectVersion(
+    version = ObjectVersion(
         id=uuid4(),
         object_type=object_type,
         object_id=object_id,
         version_number=1,
-        data=data,
     )
+    for language, payload in data.items():
+        version.languages.append(
+            ObjectVersionLanguage(
+                version_id=version.id,
+                language=str(language),
+                data=payload,
+                created_at=datetime(2025, 1, 1, 12, 0, 0),
+            )
+        )
+    return version
 
 
 def _operand_value(operand, row: object, joined_outline: Outline | None = None):
@@ -154,7 +163,15 @@ class _FakeQuery:
 
 class _FakeDb:
     def __init__(self, *, rows: dict[object, list[object]], outlines: list[Outline]) -> None:
-        self.rows = rows
+        self.rows = dict(rows)
+        self.rows.setdefault(
+            ObjectVersionLanguage,
+            [
+                lang_row
+                for version in self.rows.get(ObjectVersion, [])
+                for lang_row in getattr(version, "languages", [])
+            ],
+        )
         self.outlines_by_id = {row.id: row for row in outlines}
 
     def query(self, model: object) -> _FakeQuery:

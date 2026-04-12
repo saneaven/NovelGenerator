@@ -384,6 +384,22 @@ def test_update_outline_structure_queues_updated_events_for_affected_siblings(mo
             "data": {"English": {"name": "Chapter", "description": "", "content": ""}},
         },
     )
+    monkeypatch.setattr(
+        object_service_module,
+        "latest_payload_with_fallback",
+        lambda *_args, **_kwargs: (
+            SimpleNamespace(),
+            SimpleNamespace(data={"name": "Chapter", "description": "", "content": ""}),
+        ),
+    )
+    monkeypatch.setattr(
+        object_service_module,
+        "latest_version_with_language",
+        lambda *_args, **_kwargs: (
+            SimpleNamespace(),
+            SimpleNamespace(data={"name": "Chapter", "description": "", "content": ""}),
+        ),
+    )
     monkeypatch.setattr(object_service_module, "_create_or_update_version", lambda *_args, **_kwargs: SimpleNamespace())
     monkeypatch.setattr(object_service_module, "_invalidate_semantic_index", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(object_service_module, "_queue_semantic_index", lambda *_args, **_kwargs: None)

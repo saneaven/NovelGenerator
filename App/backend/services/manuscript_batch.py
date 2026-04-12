@@ -7,8 +7,8 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from ..models.translation_models import ObjectVersion
 from .object_service import ObjectService
+from .object_version_language_service import latest_payload_with_fallback
 from .patch_utils import apply_single_replacement
 from .rich_text import tree_to_markdown
 
@@ -67,22 +67,18 @@ class ManuscriptBatch:
         if existing is not None:
             return key, existing.markdown
 
-        latest = (
-            db.query(ObjectVersion)
-            .filter(
-                ObjectVersion.object_type == "manuscript",
-                ObjectVersion.object_id == manuscript_id,
-            )
-            .order_by(ObjectVersion.version_number.desc())
-            .with_for_update()
-            .first()
+        current = latest_payload_with_fallback(
+            db,
+            "manuscript",
+            manuscript_id,
+            language,
+            for_update=True,
         )
-        if latest is None or not isinstance(latest.data, dict):
+        if current is None:
             raise ValueError("MANUSCRIPT_EMPTY")
 
-        lang_data = latest.data.get(language)
-        if not isinstance(lang_data, dict):
-            lang_data = next((v for v in latest.data.values() if isinstance(v, dict)), None)
+        _latest, lang_row = current
+        lang_data = lang_row.data if lang_row is not None and isinstance(lang_row.data, dict) else None
         if not isinstance(lang_data, dict):
             raise ValueError("MANUSCRIPT_EMPTY")
 

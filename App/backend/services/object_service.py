@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import event
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import event, func, and_
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from ..database import SessionLocal
 from ..models.db_models import (
@@ -27,7 +28,7 @@ from ..models.db_models import (
     TimelineTrack,
     ObjectAssetLink,
 )
-from ..models.translation_models import ObjectVersion
+from ..models.translation_models import ObjectVersion, ObjectVersionLanguage
 from ..services.deletion_service import (
     collect_act_subtree_object_ids,
     collect_chapter_subtree_object_ids,
@@ -88,6 +89,18 @@ from .storage_usage_service import (
     snapshot_object_version_row,
     snapshot_rows,
     snapshot_story_core_row,
+)
+from .object_version_language_service import (
+    create_version_with_language,
+    earliest_provenance_from_rows,
+    latest_payload_with_fallback,
+    latest_version as _latest_object_version,
+    latest_version_with_all_languages,
+    latest_version_with_language,
+    payload_map_from_rows,
+    provenance_for_version,
+    upsert_version_language,
+    versions_desc_with_languages,
 )
 
 _PENDING_SEMANTIC_OPS_KEY = "_pending_semantic_ops"
@@ -242,22 +255,12 @@ def _canonical_object_type(object_type: str) -> str:
 
 def _latest_version(db: Session, object_type: str, object_id: UUID) -> ObjectVersion | None:
     object_type = _canonical_object_type(object_type)
-    return (
-        db.query(ObjectVersion)
-        .filter(ObjectVersion.object_type == object_type, ObjectVersion.object_id == object_id)
-        .order_by(ObjectVersion.version_number.desc())
-        .first()
-    )
+    return _latest_object_version(db, object_type, object_id)
 
 
 def _versions_desc(db: Session, object_type: str, object_id: UUID) -> list[ObjectVersion]:
     object_type = _canonical_object_type(object_type)
-    return (
-        db.query(ObjectVersion)
-        .filter(ObjectVersion.object_type == object_type, ObjectVersion.object_id == object_id)
-        .order_by(ObjectVersion.version_number.desc())
-        .all()
-    )
+    return versions_desc_with_languages(db, object_type, object_id)
 
 
 def _get_metadata(db: Session, obj: Any, object_type: str) -> dict[str, Any]:
@@ -345,38 +348,56 @@ def _serialize_object(
     language: str | None = None,
     rich_text_format: str = "tiptap",
 ) -> dict[str, Any]:
-    latest = _latest_version(db, object_type, obj.id)
-    if latest is None:
-        data: dict[str, Any] = {}
-        version = {"id": None, "number": 0, "created_at": None}
-    else:
-        version_data = latest.data if isinstance(latest.data, dict) else {}
-        if language:
-            if language in version_data and isinstance(version_data[language], dict):
+    storage_type = _canonical_object_type(object_type)
+    if language:
+        latest_result = latest_version_with_language(db, storage_type, obj.id, language)
+        if latest_result is None:
+            data: dict[str, Any] = {}
+            version = {"id": None, "number": 0, "created_at": None}
+        else:
+            latest, lang_row = latest_result
+            if lang_row is not None and isinstance(lang_row.data, dict):
                 data = {
                     language: _render_language_payload(
                         object_type=object_type,
-                        data=version_data[language],
+                        data=lang_row.data,
                         rich_text_format=rich_text_format,
                     )
                 }
             else:
                 data = {}
+            provenance = provenance_for_version(db, latest)
+            version = {
+                "id": str(latest.id),
+                "number": latest.version_number,
+                "created_at": provenance.created_at.isoformat() if provenance.created_at else None,
+            }
+    else:
+        latest = latest_version_with_all_languages(db, storage_type, obj.id)
+        if latest is None:
+            data = {}
+            version = {"id": None, "number": 0, "created_at": None}
         else:
+            rows = list(latest.languages or [])
             data = {
-                lang: _render_language_payload(
+                row.language: _render_language_payload(
                     object_type=object_type,
-                    data=lang_data,
+                    data=row.data,
                     rich_text_format=rich_text_format,
                 )
-                for lang, lang_data in version_data.items()
-                if isinstance(lang_data, dict)
+                for row in rows
+                if isinstance(row.data, dict)
             }
-        version = {
-            "id": str(latest.id),
-            "number": latest.version_number,
-            "created_at": latest.created_at.isoformat() if latest.created_at else None,
-        }
+            provenance = earliest_provenance_from_rows(rows, fallback_created_at=latest.created_at)
+            version = {
+                "id": str(latest.id),
+                "number": latest.version_number,
+                "created_at": provenance.created_at.isoformat() if provenance.created_at else None,
+            }
+
+    if version["id"] is None:
+        data: dict[str, Any] = {}
+        version = {"id": None, "number": 0, "created_at": None}
 
     serialized = {
         "id": str(obj.id),
@@ -542,42 +563,37 @@ def _create_or_update_version(
 
     latest = _latest_version(db, object_type, object_id)
     if latest is None:
-        version = ObjectVersion(
-            id=uuid4(),
+        return create_version_with_language(
+            db,
             object_type=object_type,
             object_id=object_id,
             version_number=1,
-            data={language: new_data},
+            language=language,
+            data=new_data,
             user_request=user_request,
             created_by=created_by,
-            created_at=datetime.utcnow(),
         )
-        db.add(version)
-        db.flush()
-        return version
 
     if create_new:
-        version = ObjectVersion(
-            id=uuid4(),
+        return create_version_with_language(
+            db,
             object_type=object_type,
             object_id=object_id,
             version_number=latest.version_number + 1,
-            data={language: new_data},
+            language=language,
+            data=new_data,
             user_request=user_request,
             created_by=created_by,
-            created_at=datetime.utcnow(),
         )
-        db.add(version)
-        db.flush()
-        return version
 
-    merged = dict(latest.data or {})
-    merged[language] = new_data
-    latest.data = merged
-    latest.user_request = user_request
-    latest.created_by = created_by
-    latest.created_at = datetime.utcnow()
-    db.flush()
+    upsert_version_language(
+        db,
+        version=latest,
+        language=language,
+        data=new_data,
+        user_request=user_request,
+        created_by=created_by,
+    )
     return latest
 
 
@@ -806,18 +822,16 @@ class ObjectService:
             rich_text_format=rich_text_format,
         )
 
-        version = ObjectVersion(
-            id=uuid4(),
+        version = create_version_with_language(
+            db,
             object_type=storage_type,
             object_id=object_id,
             version_number=1,
-            data={language: normalized_data},
+            language=language,
+            data=normalized_data,
             user_request=user_request,
             created_by=created_by,
-            created_at=datetime.utcnow(),
         )
-        db.add(version)
-        db.flush()
         deltas = [
             build_object_version_delta(
                 object_type=storage_type,
@@ -833,18 +847,16 @@ class ObjectService:
             db.add(manuscript_obj)
             db.flush()
 
-            manuscript_version = ObjectVersion(
-                id=uuid4(),
+            manuscript_version = create_version_with_language(
+                db,
                 object_type="manuscript",
                 object_id=manuscript_id,
                 version_number=1,
-                data={language: {"content": empty_doc(), "wordCount": 0}},
+                language=language,
+                data={"content": empty_doc(), "wordCount": 0},
                 user_request=user_request,
                 created_by=created_by,
-                created_at=datetime.utcnow(),
             )
-            db.add(manuscript_version)
-            db.flush()
             deltas.append(
                 build_object_version_delta(
                     object_type="manuscript",
@@ -972,22 +984,18 @@ class ObjectService:
             _handle_metadata_update(db, storage_type, object_id, obj, metadata)
 
         if storage_type != "manuscript" and not data:
-            current_serialized = _serialize_object(db, storage_type, obj)
-            current_data = current_serialized.get("data") if isinstance(current_serialized, dict) else {}
-            if isinstance(current_data, dict):
-                if isinstance(current_data.get(language), dict):
-                    data = dict(current_data[language])
-                else:
-                    for value in current_data.values():
-                        if isinstance(value, dict):
-                            data = dict(value)
-                            break
+            current = latest_payload_with_fallback(db, storage_type, object_id, language)
+            if current is not None:
+                _latest, lang_row = current
+                if lang_row is not None and isinstance(lang_row.data, dict):
+                    data = dict(lang_row.data)
 
         if not data and get_rich_text_fields(storage_type):
-            current_serialized = _serialize_object(db, storage_type, obj, language, rich_text_format="tree")
-            current_data = current_serialized.get("data") if isinstance(current_serialized, dict) else {}
-            if isinstance(current_data, dict) and isinstance(current_data.get(language), dict):
-                data = dict(current_data[language])
+            current = latest_version_with_language(db, storage_type, object_id, language)
+            if current is not None:
+                _latest, lang_row = current
+                if lang_row is not None and isinstance(lang_row.data, dict):
+                    data = dict(lang_row.data)
 
         normalized_data = _normalize_language_payload(
             object_type=storage_type,
@@ -1164,8 +1172,12 @@ class ObjectService:
         latest = _latest_version(db, storage_type, object_id)
         if latest is None:
             raise ValueError("No version found for object")
-        latest_data = latest.data if isinstance(latest.data, dict) else {}
-        if language in latest_data:
+        existing_language = (
+            db.query(ObjectVersionLanguage)
+            .filter(ObjectVersionLanguage.version_id == latest.id, ObjectVersionLanguage.language == language)
+            .first()
+        )
+        if existing_language is not None:
             raise ValueError(f"Translation for {language} already exists in latest version")
 
         normalized_data = _normalize_language_payload(
@@ -1257,18 +1269,61 @@ class ObjectService:
         if obj is None:
             raise ValueError(f"{t} not found")
 
-        versions = _versions_desc(db, storage_type, object_id)
         if metadata_only:
+            row_num = (
+                func.row_number()
+                .over(
+                    partition_by=ObjectVersionLanguage.version_id,
+                    order_by=ObjectVersionLanguage.created_at.asc(),
+                )
+                .label("rn")
+            )
+            earliest_subq = (
+                db.query(
+                    ObjectVersionLanguage.version_id.label("version_id"),
+                    ObjectVersionLanguage.user_request.label("user_request"),
+                    ObjectVersionLanguage.created_at.label("created_at"),
+                    row_num,
+                )
+                .join(ObjectVersion, ObjectVersion.id == ObjectVersionLanguage.version_id)
+                .filter(ObjectVersion.object_type == storage_type, ObjectVersion.object_id == object_id)
+                .subquery()
+            )
+            rows = (
+                db.query(
+                    ObjectVersion.id,
+                    ObjectVersion.version_number,
+                    func.array_agg(ObjectVersionLanguage.language).label("languages"),
+                    earliest_subq.c.user_request,
+                    earliest_subq.c.created_at,
+                )
+                .outerjoin(ObjectVersionLanguage, ObjectVersionLanguage.version_id == ObjectVersion.id)
+                .outerjoin(
+                    earliest_subq,
+                    and_(earliest_subq.c.version_id == ObjectVersion.id, earliest_subq.c.rn == 1),
+                )
+                .filter(ObjectVersion.object_type == storage_type, ObjectVersion.object_id == object_id)
+                .group_by(
+                    ObjectVersion.id,
+                    ObjectVersion.version_number,
+                    earliest_subq.c.user_request,
+                    earliest_subq.c.created_at,
+                )
+                .order_by(ObjectVersion.version_number.desc())
+                .all()
+            )
             return [
                 {
-                    "id": str(v.id),
-                    "number": int(v.version_number),
-                    "languages": list(v.data.keys()) if isinstance(v.data, dict) else [],
-                    "user_request": v.user_request,
-                    "created_at": v.created_at.isoformat() if v.created_at else None,
+                    "id": str(row.id),
+                    "number": int(row.version_number),
+                    "languages": [lang for lang in (row.languages or []) if isinstance(lang, str)],
+                    "user_request": row.user_request,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
                 }
-                for v in versions
+                for row in rows
             ]
+
+        versions = _versions_desc(db, storage_type, object_id)
         return [
             {
                 "id": str(v.id),
@@ -1279,11 +1334,11 @@ class ObjectService:
                         data=lang_data,
                         rich_text_format=rich_text_format,
                     )
-                    for lang, lang_data in (v.data or {}).items()
+                    for lang, lang_data in payload_map_from_rows(v.languages).items()
                     if isinstance(lang_data, dict)
-                } if isinstance(v.data, dict) else {},
-                "user_request": v.user_request,
-                "created_at": v.created_at.isoformat() if v.created_at else None,
+                },
+                "user_request": (provenance := earliest_provenance_from_rows(v.languages, fallback_created_at=v.created_at)).user_request,
+                "created_at": provenance.created_at.isoformat() if provenance.created_at else None,
             }
             for v in versions
         ]
@@ -1306,6 +1361,7 @@ class ObjectService:
 
         version = (
             db.query(ObjectVersion)
+            .options(selectinload(ObjectVersion.languages))
             .filter(
                 ObjectVersion.id == version_id,
                 ObjectVersion.object_type == storage_type,
@@ -1325,11 +1381,11 @@ class ObjectService:
                     data=lang_data,
                     rich_text_format=rich_text_format,
                 )
-                for lang, lang_data in (version.data or {}).items()
+                for lang, lang_data in payload_map_from_rows(version.languages).items()
                 if isinstance(lang_data, dict)
-            } if isinstance(version.data, dict) else {},
-            "user_request": version.user_request,
-            "created_at": version.created_at.isoformat() if version.created_at else None,
+            },
+            "user_request": (provenance := earliest_provenance_from_rows(version.languages, fallback_created_at=version.created_at)).user_request,
+            "created_at": provenance.created_at.isoformat() if provenance.created_at else None,
         }
 
     def restore_version(
@@ -1352,6 +1408,7 @@ class ObjectService:
 
         version_to_restore = (
             db.query(ObjectVersion)
+            .options(selectinload(ObjectVersion.languages))
             .filter(
                 ObjectVersion.id == version_id,
                 ObjectVersion.object_type == storage_type,
@@ -1364,31 +1421,42 @@ class ObjectService:
 
         latest = _latest_version(db, storage_type, object_id)
         next_version_number = (latest.version_number + 1) if latest else 1
+        now = datetime.utcnow()
 
         new_version = ObjectVersion(
             id=uuid4(),
             object_type=storage_type,
             object_id=object_id,
             version_number=next_version_number,
-            data=version_to_restore.data if isinstance(version_to_restore.data, dict) else {},
-            user_request=f"Restored from v{version_to_restore.version_number}",
             created_by=created_by,
-            created_at=datetime.utcnow(),
+            created_at=now,
         )
         db.add(new_version)
+        for src in version_to_restore.languages:
+            if not isinstance(src.data, dict):
+                continue
+            new_version.languages.append(
+                ObjectVersionLanguage(
+                    language=src.language,
+                    data=deepcopy(src.data),
+                    user_request=f"Restored from v{version_to_restore.version_number}",
+                    created_by=created_by,
+                    created_at=now,
+                )
+            )
         obj.updated_at = datetime.utcnow()
         db.flush()
-        if isinstance(new_version.data, dict) and get_rich_text_fields(storage_type):
-            for lang, lang_data in new_version.data.items():
-                if not isinstance(lang_data, dict):
+        if get_rich_text_fields(storage_type):
+            for row in new_version.languages:
+                if not isinstance(row.data, dict):
                     continue
                 rebuild_rich_text_refs_for_object(
                     db,
                     project_id=project_id,
                     object_type=storage_type,
                     object_id=object_id,
-                    language=str(lang),
-                    version_data=lang_data,
+                    language=str(row.language),
+                    version_data=row.data,
                 )
 
         _invalidate_semantic_index(

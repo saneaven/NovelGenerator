@@ -30,10 +30,11 @@ from ..models.db_models import (
     TimelineTrack,
     User,
 )
-from ..models.translation_models import ObjectVersion
+from ..models.translation_models import ObjectVersion, ObjectVersionLanguage
 from ..services.object_change_events import queue_object_change
 from ..services.object_service import object_service
 from ..services.ownership import require_owned_object, resolve_project_id_for_object
+from ..services.storage_usage_service import apply_project_usage_delta, build_object_version_delta, snapshot_object_version_row
 from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, require_story_entity_kind
 
 
@@ -145,13 +146,13 @@ def _collect_project_object_ids(
 
 def _batch_latest_versions(
     db: Session, object_refs: List[tuple]
-) -> Dict[tuple, dict]:
-    """Fetch the latest ObjectVersion.data for a batch of (object_id, object_type) pairs.
+) -> Dict[tuple, list[str]]:
+    """Fetch language names on the latest version for object refs.
 
     Uses a window function to pick the latest version per (object_type, object_id)
-    in a single query, avoiding the N+1 problem.
+    in a single query, avoiding the N+1 problem and never loading payload JSON.
 
-    Returns {(str(object_id), object_type): data_dict}.
+    Returns {(str(object_id), object_type): [language, ...]}.
     """
     if not object_refs:
         return {}
@@ -176,9 +177,9 @@ def _batch_latest_versions(
 
     subq = (
         db.query(
+            ObjectVersion.id.label("version_id"),
             ObjectVersion.object_type,
             ObjectVersion.object_id,
-            ObjectVersion.data,
             row_num,
         )
         .filter(
@@ -189,14 +190,20 @@ def _batch_latest_versions(
     )
 
     rows = (
-        db.query(subq.c.object_type, subq.c.object_id, subq.c.data)
+        db.query(
+            subq.c.object_type,
+            subq.c.object_id,
+            func.array_agg(ObjectVersionLanguage.language).label("languages"),
+        )
+        .outerjoin(ObjectVersionLanguage, ObjectVersionLanguage.version_id == subq.c.version_id)
         .filter(subq.c.rn == 1)
+        .group_by(subq.c.object_type, subq.c.object_id)
         .all()
     )
 
-    result: Dict[tuple, dict] = {}
-    for obj_type, obj_id, data in rows:
-        result[(str(obj_id), obj_type)] = data if isinstance(data, dict) else {}
+    result: Dict[tuple, list[str]] = {}
+    for obj_type, obj_id, languages in rows:
+        result[(str(obj_id), obj_type)] = [lang for lang in (languages or []) if isinstance(lang, str)]
     return result
 
 
@@ -220,8 +227,7 @@ async def get_project_translation_status(
 
     status_list = []
     for obj_id, object_type, kind_val in object_refs:
-        version_data = version_map.get((str(obj_id), object_type), {})
-        available_languages = list(version_data.keys())
+        available_languages = version_map.get((str(obj_id), object_type), [])
 
         if target_languages:
             missing_languages = [lang for lang in target_languages if lang not in available_languages]
@@ -263,8 +269,7 @@ async def get_language_coverage(
 
     language_counts: Dict[str, int] = {}
     for obj_id, object_type, _ in object_refs:
-        version_data = version_map.get((str(obj_id), object_type), {})
-        for lang in version_data.keys():
+        for lang in version_map.get((str(obj_id), object_type), []):
             language_counts[lang] = language_counts.get(lang, 0) + 1
 
     coverage = [
@@ -323,13 +328,20 @@ async def batch_delete_translations(
             if not latest_version:
                 continue
 
-            version_data = latest_version.data or {}
-            if not isinstance(version_data, dict) or language not in version_data:
+            lang_row = (
+                db.query(ObjectVersionLanguage)
+                .filter(
+                    ObjectVersionLanguage.version_id == latest_version.id,
+                    ObjectVersionLanguage.language == language,
+                )
+                .first()
+            )
+            if lang_row is None:
                 continue
-
-            next_data = dict(version_data)
-            del next_data[language]
-            latest_version.data = next_data
+            version_before = snapshot_object_version_row(latest_version)
+            db.delete(lang_row)
+            db.flush()
+            db.expire(latest_version, ["languages"])
             project_id = resolve_project_id_for_object(
                 db,
                 object_type=object_type,
@@ -343,6 +355,17 @@ async def batch_delete_translations(
                 object_type=object_type,
                 object_id=object_id,
                 action="updated",
+            )
+            apply_project_usage_delta(
+                db,
+                user_id=current_user.id,
+                project_id=project_id,
+                delta=build_object_version_delta(
+                    object_type=object_type,
+                    before=version_before,
+                    after=snapshot_object_version_row(latest_version),
+                ),
+                enforce_quota=False,
             )
             deleted_count += 1
 
@@ -469,8 +492,15 @@ async def get_object_languages(
         ObjectVersion.object_id == object_id
     ).order_by(ObjectVersion.version_number.desc()).first()
 
-    version_data = latest_version.data if latest_version else {}
-    languages = sorted(list(version_data.keys())) if isinstance(version_data, dict) else []
+    languages = []
+    if latest_version is not None:
+        rows = (
+            db.query(ObjectVersionLanguage.language)
+            .filter(ObjectVersionLanguage.version_id == latest_version.id)
+            .distinct()
+            .all()
+        )
+        languages = sorted(str(row[0]) for row in rows if row and isinstance(row[0], str))
 
     return {
         "object_id": str(object_id),
@@ -512,22 +542,36 @@ async def delete_translation(
     if not latest_version:
         raise HTTPException(status_code=404, detail="Object not found")
 
-    version_data = latest_version.data or {}
-    if not isinstance(version_data, dict) or not version_data:
+    language_rows = (
+        db.query(ObjectVersionLanguage.language)
+        .filter(ObjectVersionLanguage.version_id == latest_version.id)
+        .all()
+    )
+    languages = [row[0] for row in language_rows if row and isinstance(row[0], str)]
+    if not languages:
         raise HTTPException(status_code=404, detail="No translations available for this object")
 
-    if len(version_data) <= 1:
+    if len(languages) <= 1:
         raise HTTPException(
             status_code=400,
             detail="Cannot delete the only translation. Object must have at least one language."
         )
 
-    if language not in version_data:
+    if language not in languages:
         raise HTTPException(status_code=404, detail=f"Translation not found for language: {language}")
 
-    next_data = dict(version_data)
-    del next_data[language]
-    latest_version.data = next_data
+    lang_row = (
+        db.query(ObjectVersionLanguage)
+        .filter(ObjectVersionLanguage.version_id == latest_version.id, ObjectVersionLanguage.language == language)
+        .first()
+    )
+    if lang_row is None:
+        raise HTTPException(status_code=404, detail=f"Translation not found for language: {language}")
+
+    version_before = snapshot_object_version_row(latest_version)
+    db.delete(lang_row)
+    db.flush()
+    db.expire(latest_version, ["languages"])
     queue_object_change(
         db,
         user_id=current_user.id,
@@ -535,6 +579,17 @@ async def delete_translation(
         object_type=object_type,
         object_id=object_id,
         action="updated",
+    )
+    apply_project_usage_delta(
+        db,
+        user_id=current_user.id,
+        project_id=project_id,
+        delta=build_object_version_delta(
+            object_type=object_type,
+            before=version_before,
+            after=snapshot_object_version_row(latest_version),
+        ),
+        enforce_quota=False,
     )
 
     db.commit()

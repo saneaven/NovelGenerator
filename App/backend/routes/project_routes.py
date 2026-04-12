@@ -11,7 +11,7 @@ from datetime import datetime
 
 from ..database import get_db
 from ..models.db_models import User, Project, ObjectAssetLink, Asset, BasicInfo, Guidelines, Timeline
-from ..models.translation_models import ObjectVersion
+from ..models.translation_models import ObjectVersion, ObjectVersionLanguage
 from ..schemas.projects import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse
 from ..schemas.project_transfer import (
     ProjectExportOptions,
@@ -130,10 +130,17 @@ async def create_project(
         object_type='basic_info',
         object_id=basic_info_id,
         version_number=1,
-        data={project_data.main_language: empty_data},
-        user_request='Project Creation',
         created_by=current_user.id,
         created_at=now
+    )
+    version.languages.append(
+        ObjectVersionLanguage(
+            language=project_data.main_language,
+            data=empty_data,
+            user_request='Project Creation',
+            created_by=current_user.id,
+            created_at=now,
+        )
     )
     db.add(version)
 
@@ -154,10 +161,17 @@ async def create_project(
         object_type='guidelines',
         object_id=guidelines_id,
         version_number=1,
-        data={project_data.main_language: guidelines_data},
-        user_request='Project Creation',
         created_by=current_user.id,
         created_at=now
+    )
+    guidelines_version.languages.append(
+        ObjectVersionLanguage(
+            language=project_data.main_language,
+            data=guidelines_data,
+            user_request='Project Creation',
+            created_by=current_user.id,
+            created_at=now,
+        )
     )
     db.add(guidelines_version)
 

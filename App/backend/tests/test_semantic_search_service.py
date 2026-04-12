@@ -29,6 +29,7 @@ def _install_import_stubs() -> None:
 
     translation_models = types.ModuleType("App.backend.models.translation_models")
     translation_models.ObjectVersion = type("ObjectVersion", (), {})
+    translation_models.ObjectVersionLanguage = type("ObjectVersionLanguage", (), {})
     sys.modules["App.backend.models.translation_models"] = translation_models
 
     embedding_config_service = types.ModuleType("App.backend.services.embedding_config_service")
@@ -171,6 +172,11 @@ def test_search_project_calls_embedding_when_matching_index_exists(monkeypatch) 
 
     monkeypatch.setattr(semantic_search_service, "_run_vector_queries", _fake_run_vector_queries)
 
+    async def _fake_to_thread(fn, /, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(semantic_search_service.asyncio, "to_thread", _fake_to_thread)
+
     result = asyncio.run(
         semantic_search_service.search_project(
             db,
@@ -192,6 +198,7 @@ def test_search_project_calls_embedding_when_matching_index_exists(monkeypatch) 
         "model": "embed",
         "inputs": ["find hero"],
         "config": {"api_key": "x"},
+        "dimensions": None,
         "purpose": "query",
     }
     assert len(vector_calls) == 1

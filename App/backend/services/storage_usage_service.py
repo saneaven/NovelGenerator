@@ -40,7 +40,7 @@ from ..models.db_models import (
     Thread,
     User,
 )
-from ..models.translation_models import ObjectVersion
+from ..models.translation_models import ObjectVersion, ObjectVersionLanguage
 
 
 logger = logging.getLogger(__name__)
@@ -233,8 +233,26 @@ def measure_story_core_row(row: object) -> int:
     )
 
 
+def measure_object_version_language_row(row: ObjectVersionLanguage | object) -> int:
+    return _sum_values(getattr(row, "data", None), getattr(row, "user_request", None))
+
+
+def measure_object_version_parent_row(version: ObjectVersion | object) -> int:
+    return _sum_values(getattr(version, "object_type", None))
+
+
+def _object_version_language_rows(version: ObjectVersion | object) -> list[object]:
+    rows = getattr(version, "languages", None)
+    if rows is not None:
+        return list(rows)
+    return []
+
+
 def measure_object_version_row(version: ObjectVersion | object) -> int:
-    return _sum_values(getattr(version, "data", None), getattr(version, "user_request", None))
+    return measure_object_version_parent_row(version) + sum(
+        measure_object_version_language_row(row)
+        for row in _object_version_language_rows(version)
+    )
 
 
 def measure_agent_row(row: Agent | object) -> int:
@@ -346,7 +364,16 @@ def snapshot_story_core_row(row: object | None) -> object | None:
 
 
 def snapshot_object_version_row(row: ObjectVersion | object | None) -> object | None:
-    return _snapshot_row(row, "data", "user_request")
+    if row is None:
+        return None
+    languages = [
+        _snapshot_row(lang_row, "data", "user_request")
+        for lang_row in _object_version_language_rows(row)
+    ]
+    return SimpleNamespace(
+        object_type=_clone_measurement_value(getattr(row, "object_type", None)),
+        languages=[lang_row for lang_row in languages if lang_row is not None],
+    )
 
 
 def snapshot_agent_row(row: Agent | object | None) -> object | None:
@@ -468,28 +495,42 @@ def measure_object_version_bytes_for_ids(
     object_type: str,
     object_ids: Sequence[UUID],
 ) -> int:
-    """Stream-sum the byte size of (data, user_request) for matching ObjectVersion rows.
+    """Stream-sum logical bytes for matching ObjectVersion rows.
 
     Used by cascade-delete paths to compute the storage usage delta without
-    loading or deepcopying full JSONB payloads. Reuses ``_measure_value`` so
-    the result is numerically identical to ``measure_object_version_row``
-    summed over the same rows.
+    loading or deepcopying full JSONB payloads.
     """
     ids = list(object_ids)
     if not ids:
         return 0
-    total = 0
-    query = (
-        db.query(ObjectVersion.data, ObjectVersion.user_request)
+    parent_total = int(
+        db.query(func.coalesce(func.sum(_octet_text(ObjectVersion.object_type)), 0))
         .filter(
             ObjectVersion.object_type == object_type,
             ObjectVersion.object_id.in_(ids),
         )
-        .yield_per(100)
+        .scalar()
+        or 0
     )
-    for data, user_request in query:
-        total += _measure_value(data) + _measure_value(user_request)
-    return total
+    child_total = int(
+        db.query(
+            func.coalesce(
+                func.sum(
+                    _octet_text(ObjectVersionLanguage.data)
+                    + _octet_text(ObjectVersionLanguage.user_request)
+                ),
+                0,
+            )
+        )
+        .join(ObjectVersion, ObjectVersion.id == ObjectVersionLanguage.version_id)
+        .filter(
+            ObjectVersion.object_type == object_type,
+            ObjectVersion.object_id.in_(ids),
+        )
+        .scalar()
+        or 0
+    )
+    return parent_total + child_total
 
 
 def build_usage_delta_for_object_version(
@@ -799,8 +840,7 @@ def _sum_object_versions(
             db.query(
                 func.coalesce(
                     func.sum(
-                        _octet_text(ObjectVersion.data)
-                        + _octet_text(ObjectVersion.user_request)
+                        _octet_text(ObjectVersion.object_type)
                     ),
                     0,
                 )
@@ -811,7 +851,24 @@ def _sum_object_versions(
             )
             .scalar()
         )
-        total += int(value or 0)
+        child_value = (
+            db.query(
+                func.coalesce(
+                    func.sum(
+                        _octet_text(ObjectVersionLanguage.data)
+                        + _octet_text(ObjectVersionLanguage.user_request)
+                    ),
+                    0,
+                )
+            )
+            .join(ObjectVersion, ObjectVersion.id == ObjectVersionLanguage.version_id)
+            .filter(
+                ObjectVersion.object_type == object_type,
+                ObjectVersion.object_id.in_(object_ids),
+            )
+            .scalar()
+        )
+        total += int(value or 0) + int(child_value or 0)
     return total
 
 

@@ -6,9 +6,10 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from ....models.db_models import BasicInfo, Manuscript, Outline, StoryEntity, Timeline, TimelineEvent, TimelineTrack
-from ....models.translation_models import ObjectVersion
+from ....models.translation_models import ObjectVersionLanguage
 from ....utils.story_entities import STORY_ENTITY_TYPE
 from ...story_entity_tree_service import build_story_entity_folder_content_map, list_story_entity_folders
+from ...object_version_language_service import latest_parents_for_object_ids
 from ..contracts import PersistedToolMeta, ToolBinding, ToolBindingMeta, ToolExecutionOutcome, ToolFeatureModule, ToolSpec
 from ..registry import tool_feature_module
 from ..result_utils import make_result, valid_result
@@ -24,27 +25,32 @@ def _latest_names(
 ) -> dict[UUID, str]:
     if not object_ids:
         return {}
-    rows = (
-        db.query(ObjectVersion)
-        .filter(
-            ObjectVersion.object_type == object_type,
-            ObjectVersion.object_id.in_(object_ids),
-        )
-        .order_by(ObjectVersion.object_id, ObjectVersion.version_number.desc())
+    rows = latest_parents_for_object_ids(db, object_type=object_type, object_ids=object_ids)
+    version_ids = [row.id for row in rows if isinstance(row.id, UUID)]
+    lang_rows = (
+        db.query(ObjectVersionLanguage)
+        .filter(ObjectVersionLanguage.version_id.in_(version_ids))
+        .order_by(ObjectVersionLanguage.created_at.asc())
         .all()
+        if version_ids
+        else []
     )
+    languages_by_version_id: dict[UUID, list[ObjectVersionLanguage]] = {}
+    for lang_row in lang_rows:
+        languages_by_version_id.setdefault(lang_row.version_id, []).append(lang_row)
+
     result: dict[UUID, str] = {}
     for row in rows:
         if row.object_id in result:
             continue
-        data = row.data if isinstance(row.data, dict) else {}
-        lang_data = data.get(language)
+        candidates = languages_by_version_id.get(row.id, [])
+        lang_data = next(
+            (candidate.data for candidate in candidates if candidate.language == language and isinstance(candidate.data, dict)),
+            None,
+        )
         if not isinstance(lang_data, dict):
-            for value in data.values():
-                if isinstance(value, dict):
-                    lang_data = value
-                    break
-        result[row.object_id] = str((lang_data or {}).get("name") or "")
+            lang_data = next((candidate.data for candidate in candidates if isinstance(candidate.data, dict)), None)
+        result[row.object_id] = str((lang_data or {}).get("name") or (lang_data or {}).get("title") or "")
     return result
 
 
@@ -114,22 +120,6 @@ class ProjectTreeFeatureModule(ToolFeatureModule):
             if basic is not None:
                 names = _latest_names(db, "basic_info", [basic.id], language)
                 title = names.get(basic.id, "")
-                if not title:
-                    ver = (
-                        db.query(ObjectVersion)
-                        .filter(ObjectVersion.object_type == "basic_info", ObjectVersion.object_id == basic.id)
-                        .order_by(ObjectVersion.version_number.desc())
-                        .first()
-                    )
-                    if ver and isinstance(ver.data, dict):
-                        lang_data = ver.data.get(language)
-                        if not isinstance(lang_data, dict):
-                            for value in ver.data.values():
-                                if isinstance(value, dict):
-                                    lang_data = value
-                                    break
-                        if isinstance(lang_data, dict):
-                            title = str(lang_data.get("title") or lang_data.get("name") or "")
 
             story_entity_folders = list_story_entity_folders(db, project_id=project_id)
             folder_content_map = build_story_entity_folder_content_map(

@@ -17,7 +17,7 @@ from ..models.db_models import (
     UserSettings,
 )
 from ..models.semantic_models import SemanticChunk, SemanticSource
-from ..models.translation_models import ObjectVersion
+from ..models.translation_models import ObjectVersion, ObjectVersionLanguage
 from ..utils.story_entities import STORY_ENTITY_TYPE
 from .embedding_config_service import get_embedding_profile, set_embedding_dimensions
 from .semantic_chunker import merge_blocks_by_length, split_markdown_blocks, split_plaintext_blocks
@@ -167,11 +167,30 @@ def _latest_version(db: Session, *, object_type: str, object_id: UUID) -> Option
     )
 
 
+def _latest_version_with_language(
+    db: Session,
+    *,
+    object_type: str,
+    object_id: UUID,
+    language: str,
+) -> tuple[ObjectVersion, ObjectVersionLanguage | None] | None:
+    latest = _latest_version(db, object_type=object_type, object_id=object_id)
+    if latest is None:
+        return None
+    lang_row = (
+        db.query(ObjectVersionLanguage)
+        .filter(ObjectVersionLanguage.version_id == latest.id, ObjectVersionLanguage.language == language)
+        .first()
+    )
+    return latest, lang_row
+
+
 def _latest_versions_for_refs(
     db: Session,
     *,
     refs: Sequence[Tuple[str, UUID]],
-) -> Dict[Tuple[str, UUID], ObjectVersion]:
+    language: str,
+) -> Dict[Tuple[str, UUID], Dict[str, Any]]:
     by_type: Dict[str, List[UUID]] = {}
     for object_type, object_id in refs:
         by_type.setdefault(object_type, []).append(object_id)
@@ -205,7 +224,26 @@ def _latest_versions_for_refs(
         for row in rows:
             latest_versions[(object_type, row.object_id)] = row
 
-    return latest_versions
+    version_ids = [row.id for row in latest_versions.values() if isinstance(row.id, UUID)]
+    if not version_ids:
+        return {}
+    language_rows = (
+        db.query(ObjectVersionLanguage)
+        .filter(
+            ObjectVersionLanguage.version_id.in_(version_ids),
+            ObjectVersionLanguage.language == language,
+        )
+        .all()
+    )
+    payload_by_version_id = {
+        row.version_id: row.data
+        for row in language_rows
+        if isinstance(row.data, dict)
+    }
+    return {
+        key: payload_by_version_id.get(version.id, {})
+        for key, version in latest_versions.items()
+    }
 
 
 def compute_order_meta(db: Session, *, project_id: UUID, object_type: str, object_id: UUID) -> OrderMeta:
@@ -277,13 +315,13 @@ def compute_order_meta(db: Session, *, project_id: UUID, object_type: str, objec
 def _build_current_payload(
     *,
     object_type: str,
-    latest: Optional[ObjectVersion],
+    language_payload: dict[str, Any],
     language: str,
 ) -> CurrentPayload:
-    if latest is None or not isinstance(latest.data, dict):
+    if not language_payload:
         return CurrentPayload(has_indexable_text=False, chunks=[], embedding_texts=[], current_hash=None)
 
-    text_by_field = extract_index_text(object_type, latest.data, language)
+    text_by_field = extract_index_text(object_type, {language: language_payload}, language)
     if not text_by_field:
         return CurrentPayload(has_indexable_text=False, chunks=[], embedding_texts=[], current_hash=None)
     if not any((value or "").strip() for value in text_by_field.values()):
@@ -530,8 +568,18 @@ def _prepare_index_job(
         raise ValueError("Semantic embedding profile is not configured")
 
     language = get_main_language(db, user_id=user_id)
-    latest = _latest_version(db, object_type=object_type, object_id=object_id)
-    payload = _build_current_payload(object_type=object_type, latest=latest, language=language)
+    latest_result = _latest_version_with_language(
+        db,
+        object_type=object_type,
+        object_id=object_id,
+        language=language,
+    )
+    lang_row = latest_result[1] if latest_result is not None else None
+    payload = _build_current_payload(
+        object_type=object_type,
+        language_payload=lang_row.data if lang_row is not None and isinstance(lang_row.data, dict) else {},
+        language=language,
+    )
 
     if not payload.has_indexable_text:
         _delete_source_rows(
@@ -600,10 +648,16 @@ def _apply_index_vectors(
         db.commit()
         return {"rebuilt": False, "skipped": True, "missing_main_language": False, "stale": True}
 
-    latest = _latest_version(db, object_type=prepared.object_type, object_id=prepared.object_id)
+    latest_result = _latest_version_with_language(
+        db,
+        object_type=prepared.object_type,
+        object_id=prepared.object_id,
+        language=prepared.language,
+    )
+    lang_row = latest_result[1] if latest_result is not None else None
     payload = _build_current_payload(
         object_type=prepared.object_type,
-        latest=latest,
+        language_payload=lang_row.data if lang_row is not None and isinstance(lang_row.data, dict) else {},
         language=prepared.language,
     )
     if not payload.has_indexable_text or payload.current_hash != prepared.new_hash:
@@ -701,10 +755,16 @@ async def index_object(
         )
         return _apply_index_vectors(db, prepared=prepared, vectors=vectors)
     except Exception as exc:
-        latest = _latest_version(db, object_type=prepared.object_type, object_id=prepared.object_id)
+        latest_result = _latest_version_with_language(
+            db,
+            object_type=prepared.object_type,
+            object_id=prepared.object_id,
+            language=prepared.language,
+        )
+        lang_row = latest_result[1] if latest_result is not None else None
         payload = _build_current_payload(
             object_type=prepared.object_type,
-            latest=latest,
+            language_payload=lang_row.data if lang_row is not None and isinstance(lang_row.data, dict) else {},
             language=prepared.language,
         )
         _record_index_error(
@@ -837,7 +897,7 @@ def get_project_status(db: Session, *, user_id: UUID, project_id: UUID) -> Dict[
         db,
         source_ids=[source.id for source in sources.values()],
     )
-    latest_versions = _latest_versions_for_refs(db, refs=refs)
+    latest_payloads = _latest_versions_for_refs(db, refs=refs, language=language)
 
     ready_sources = 0
     stale_sources = 0
@@ -851,7 +911,7 @@ def get_project_status(db: Session, *, user_id: UUID, project_id: UUID) -> Dict[
     for object_type, object_id in refs:
         payload = _build_current_payload(
             object_type=object_type,
-            latest=latest_versions.get((object_type, object_id)),
+            language_payload=latest_payloads.get((object_type, object_id), {}),
             language=language,
         )
         if not payload.has_indexable_text:

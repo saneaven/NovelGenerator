@@ -25,23 +25,15 @@ from database import Base
 class ObjectVersion(Base):
     """
     Immutable version history - THE single source of truth.
-    Each version stores language-keyed data for an object.
+    Each version stores object/version identity; language payloads live in
+    ObjectVersionLanguage rows.
 
     Note: User edits may create a new version containing only the edited language
     (other languages become stale until re-translated). Translation endpoints
     typically update the latest version in-place to add missing languages.
 
-    Example data structure:
-    {
-        "English": {
-            "name": "John Doe",
-            "description": "Hero of the story"
-        },
-        "Korean": {
-            "name": "존 도",
-            "description": "이야기의 영웅"
-        }
-    }
+    Example wire data structure remains:
+    {"English": {"name": "John Doe"}, "Korean": {"name": "존 도"}}
     """
     __tablename__ = 'object_versions'
 
@@ -54,17 +46,20 @@ class ObjectVersion(Base):
     # Version number (sequential, 1-indexed)
     version_number = Column(Integer, nullable=False)
 
-    # Multilingual data (ALL languages in one JSONB)
-    # {language: {field: value, ...}, ...}
-    data = Column(JSONB, nullable=False)
-
     # Metadata
-    user_request = Column(Text)  # 'User Edit', 'AI Translation', 'AI Generation'
+    # created_by is the actor who initiated the version. Per-language
+    # provenance lives on ObjectVersionLanguage.
     created_by = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='SET NULL'))
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
     user = relationship("User")
+    languages = relationship(
+        "ObjectVersionLanguage",
+        back_populates="version",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
 
     # Constraints
     __table_args__ = (
@@ -76,13 +71,33 @@ class ObjectVersion(Base):
 
         # Index for ordering by creation time
         Index('ix_object_versions_created_at', 'created_at'),
-
-        # GIN index for querying version data
-        Index('ix_object_versions_data', 'data', postgresql_using='gin'),
     )
 
     def __repr__(self):
         return f"<ObjectVersion {self.object_type}:{self.object_id} v{self.version_number}>"
+
+
+class ObjectVersionLanguage(Base):
+    """One language payload for one object version."""
+
+    __tablename__ = 'object_version_languages'
+
+    version_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey('object_versions.id', ondelete='CASCADE'),
+        primary_key=True,
+    )
+    language = Column(String(32), primary_key=True)
+    data = Column(JSONB, nullable=False)
+    user_request = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_by = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='SET NULL'))
+
+    version = relationship("ObjectVersion", back_populates="languages")
+    user = relationship("User")
+
+    def __repr__(self):
+        return f"<ObjectVersionLanguage {self.version_id}:{self.language}>"
 
 
 # ============================================================================

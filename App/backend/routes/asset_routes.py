@@ -20,7 +20,7 @@ from ..models.db_models import (
     StoryEntity,
     Guidelines,
 )
-from ..models.translation_models import ObjectVersion
+from ..models.translation_models import ObjectVersion, ObjectVersionLanguage
 from ..schemas.assets import (
     AssetResponse, AssetListResponse, AssetUpdateRequest,
     ObjectAssetLinkResponse, ObjectAssetLinksResponse, SetMainAssetRequest,
@@ -177,15 +177,25 @@ def _latest_version_display_name(
         .order_by(ObjectVersion.version_number.desc())
         .first()
     )
-    if latest is None or not isinstance(latest.data, dict):
+    if latest is None:
         return object_type.replace("_", " ").title()
+    rows = (
+        db.query(ObjectVersionLanguage)
+        .filter(ObjectVersionLanguage.version_id == latest.id)
+        .order_by(ObjectVersionLanguage.created_at.asc())
+        .all()
+    )
     payloads: list[dict[str, Any]] = []
-    if preferred_language and isinstance(latest.data.get(preferred_language), dict):
-        payloads.append(cast(Dict[str, Any], latest.data.get(preferred_language)))
+    if preferred_language:
+        payloads.extend(
+            cast(Dict[str, Any], row.data)
+            for row in rows
+            if row.language == preferred_language and isinstance(row.data, dict)
+        )
     payloads.extend(
-        cast(Dict[str, Any], value)
-        for key, value in latest.data.items()
-        if key != preferred_language and isinstance(value, dict)
+        cast(Dict[str, Any], row.data)
+        for row in rows
+        if row.language != preferred_language and isinstance(row.data, dict)
     )
     for payload in payloads:
         for key in ("name", "title"):
@@ -1269,9 +1279,15 @@ async def rebuild_rich_text_image_refs_index(
             .order_by(ObjectVersion.version_number.desc())
             .first()
         )
-        version_data = latest_version.data if latest_version and isinstance(latest_version.data, dict) else {}
-        for language, lang_data in version_data.items():
-            if not isinstance(lang_data, dict):
+        language_rows = (
+            db.query(ObjectVersionLanguage)
+            .filter(ObjectVersionLanguage.version_id == latest_version.id)
+            .all()
+            if latest_version is not None
+            else []
+        )
+        for language_row in language_rows:
+            if not isinstance(language_row.data, dict):
                 continue
             languages_processed += 1
             refs_deleted += (
@@ -1279,7 +1295,7 @@ async def rebuild_rich_text_image_refs_index(
                 .filter(
                     RichTextImageRef.object_type == object_type,
                     RichTextImageRef.object_id == object_id,
-                    RichTextImageRef.language == str(language),
+                    RichTextImageRef.language == str(language_row.language),
                 )
                 .count()
             )
@@ -1288,15 +1304,15 @@ async def rebuild_rich_text_image_refs_index(
                 project_id=project_id,
                 object_type=object_type,
                 object_id=object_id,
-                language=str(language),
-                version_data=lang_data,
+                language=str(language_row.language),
+                version_data=language_row.data,
             )
             refs_inserted += (
                 db.query(RichTextImageRef)
                 .filter(
                     RichTextImageRef.object_type == object_type,
                     RichTextImageRef.object_id == object_id,
-                    RichTextImageRef.language == str(language),
+                    RichTextImageRef.language == str(language_row.language),
                 )
                 .count()
             )

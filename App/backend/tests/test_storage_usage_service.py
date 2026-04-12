@@ -6,15 +6,18 @@ from uuid import uuid4
 
 os.environ.setdefault("DEFAULT_STORAGE_QUOTA_BYTES", "1024")
 
-from App.backend.models.translation_models import ObjectVersion
+from App.backend.models.translation_models import ObjectVersion, ObjectVersionLanguage
 from App.backend.services.storage_usage_service import (
     StorageUsageBreakdown,
     StorageUsageDelta,
     _uuid_rows,
     build_asset_rows_delta,
+    build_object_version_delta,
     build_story_core_delta,
     build_tool_call_delta,
     measure_asset_row,
+    measure_object_version_language_row,
+    measure_object_version_parent_row,
     measure_object_version_row,
     measure_project_row,
     snapshot_story_core_row,
@@ -42,6 +45,7 @@ def test_storage_usage_breakdown_total_and_dict() -> None:
         "notification_bytes": 50,
         "image_run_bytes": 60,
         "image_bytes": 70,
+        "llm_log_bytes": 0,
         "total_bytes": 280,
     }
 
@@ -70,14 +74,76 @@ def test_measure_object_version_row_counts_json_and_request() -> None:
         object_type="character",
         object_id=uuid4(),
         version_number=1,
-        data={"Korean": {"name": "이름", "description": "설명"}},
-        user_request="User Edit",
+    )
+    version.languages.append(
+        ObjectVersionLanguage(
+            language="Korean",
+            data={"name": "이름", "description": "설명"},
+            user_request="User Edit",
+        )
     )
 
     size = measure_object_version_row(version)
 
     assert size > len("User Edit".encode("utf-8"))
     assert size >= len("이름".encode("utf-8")) + len("설명".encode("utf-8"))
+
+
+def test_object_version_language_split_deltas_track_child_rows() -> None:
+    version = ObjectVersion(
+        id=uuid4(),
+        object_type="manuscript",
+        object_id=uuid4(),
+        version_number=1,
+    )
+    english = ObjectVersionLanguage(
+        language="English",
+        data={"content": {"type": "doc", "content": [{"type": "paragraph"}]}, "wordCount": 0},
+        user_request="User Edit",
+    )
+    version.languages.append(english)
+
+    parent_bytes = measure_object_version_parent_row(version)
+    english_bytes = measure_object_version_language_row(english)
+    assert measure_object_version_row(version) == parent_bytes + english_bytes
+
+    before_translation = SimpleNamespace(object_type="manuscript", languages=[SimpleNamespace(data=english.data, user_request=english.user_request)])
+    korean = ObjectVersionLanguage(
+        language="Korean",
+        data={"content": {"type": "doc", "content": [{"type": "paragraph", "text": "안녕"}]}, "wordCount": 1},
+        user_request="AI Translation",
+    )
+    after_translation = SimpleNamespace(
+        object_type="manuscript",
+        languages=[
+            SimpleNamespace(data=english.data, user_request=english.user_request),
+            SimpleNamespace(data=korean.data, user_request=korean.user_request),
+        ],
+    )
+    ko_bytes = measure_object_version_language_row(korean)
+    assert build_object_version_delta(
+        object_type="manuscript",
+        before=before_translation,
+        after=after_translation,
+    ).manuscript_bytes == ko_bytes
+
+    restored = SimpleNamespace(
+        object_type="manuscript",
+        languages=[SimpleNamespace(data=english.data, user_request="Restored from v1")],
+    )
+    restored_expected = measure_object_version_parent_row(restored) + measure_object_version_language_row(restored.languages[0])
+    assert build_object_version_delta(
+        object_type="manuscript",
+        before=None,
+        after=restored,
+    ).manuscript_bytes == restored_expected
+
+    after_delete = SimpleNamespace(object_type="manuscript", languages=[SimpleNamespace(data=english.data, user_request=english.user_request)])
+    assert build_object_version_delta(
+        object_type="manuscript",
+        before=after_translation,
+        after=after_delete,
+    ).manuscript_bytes == -ko_bytes
 
 
 def test_measure_asset_row_includes_file_size_and_metadata() -> None:

@@ -9,8 +9,9 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..models.db_models import StoryEntity, StoryEntityFolder
-from ..models.translation_models import ObjectVersion
+from ..models.translation_models import ObjectVersion, ObjectVersionLanguage
 from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE
+from .object_version_language_service import latest_parents_for_object_ids, payload_map_from_rows, provenance_map_for_versions
 
 
 NodeKind = Literal["folder", "entity"]
@@ -165,23 +166,27 @@ def _latest_story_entity_folder_versions(
     db: Session,
     *,
     folder_ids: list[UUID],
-) -> dict[UUID, ObjectVersion]:
+) -> dict[UUID, tuple[ObjectVersion, list[ObjectVersionLanguage]]]:
     if not folder_ids:
         return {}
-    rows = (
-        db.query(ObjectVersion)
-        .filter(
-            ObjectVersion.object_type == STORY_ENTITY_FOLDER_TYPE,
-            ObjectVersion.object_id.in_(folder_ids),
-        )
-        .order_by(ObjectVersion.object_id.asc(), ObjectVersion.version_number.desc())
-        .all()
+    parents = latest_parents_for_object_ids(
+        db,
+        object_type=STORY_ENTITY_FOLDER_TYPE,
+        object_ids=folder_ids,
     )
-    latest: dict[UUID, ObjectVersion] = {}
+    version_ids = [row.id for row in parents if isinstance(row.id, UUID)]
+    rows = (
+        db.query(ObjectVersionLanguage)
+        .filter(ObjectVersionLanguage.version_id.in_(version_ids))
+        .order_by(ObjectVersionLanguage.created_at.asc())
+        .all()
+        if version_ids
+        else []
+    )
+    rows_by_version_id: dict[UUID, list[ObjectVersionLanguage]] = {}
     for row in rows:
-        if row.object_id not in latest:
-            latest[row.object_id] = row
-    return latest
+        rows_by_version_id.setdefault(row.version_id, []).append(row)
+    return {row.object_id: (row, rows_by_version_id.get(row.id, [])) for row in parents}
 
 
 def build_story_entity_folder_content_map(
@@ -197,14 +202,24 @@ def build_story_entity_folder_content_map(
         folder_ids=[folder.id for folder in folders if isinstance(folder.id, UUID)],
     )
     payload: dict[UUID, dict[str, Any]] = {}
+    provenance_by_version_id = provenance_map_for_versions(
+        db,
+        [version.id for version, _rows in latest_by_id.values()],
+    )
     for folder in folders:
-        latest = latest_by_id.get(folder.id)
-        data = latest.data if latest and isinstance(latest.data, dict) else {}
+        latest_entry = latest_by_id.get(folder.id)
+        latest = latest_entry[0] if latest_entry is not None else None
+        rows = latest_entry[1] if latest_entry is not None else []
+        data = payload_map_from_rows(rows)
         lang_data = _resolve_folder_lang_data(
             data,
             language=language,
             fallback_language=fallback_language,
         )
+        version_created_at = None
+        if latest is not None:
+            provenance = provenance_by_version_id.get(latest.id)
+            version_created_at = provenance.created_at if provenance is not None else latest.created_at
         payload[folder.id] = {
             "name": lang_data["name"],
             "description": lang_data["description"],
@@ -212,7 +227,7 @@ def build_story_entity_folder_content_map(
             "version": {
                 "id": str(latest.id) if latest is not None else None,
                 "number": int(latest.version_number) if latest is not None else 0,
-                "created_at": latest.created_at.isoformat() if latest and latest.created_at else None,
+                "created_at": version_created_at.isoformat() if version_created_at else None,
             },
         }
     return payload
