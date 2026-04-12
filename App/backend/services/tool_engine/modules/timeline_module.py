@@ -7,13 +7,15 @@ from ..contracts import (
     PersistedToolMeta,
     ToolBinding,
     ToolBindingMeta,
+    ToolDecisionGroup,
     ToolExecutionOutcome,
+    ToolExecutionResult,
     ToolFeatureModule,
     ToolSpec,
 )
 from ..registry import tool_feature_module
 from ..result_utils import invalid_result, make_result, valid_result
-from .feature_common import filter_allowed_bindings, merge_key_for
+from .feature_common import apply_object_batch_group, filter_allowed_bindings, merge_key_for
 from .object_access import extract_lang_data, patch_object_field, read_object, read_runtime_object, to_uuid
 from .shared import filter_allowed_specs, is_non_journey, is_translation_journey, obj_schema
 from ....models.db_models import TimelineEventLink
@@ -28,6 +30,7 @@ _POSITION = {"type": "integer", "description": "Zero-based sibling position"}
 _PARENT_ID = {"type": "string", "description": "Parent track ID or null", "nullable": True}
 _COLOR = {"type": "string", "description": "Optional track color", "nullable": True}
 _TAGS = {"type": "array", "items": {"type": "string"}}
+_PATCH_FIELD = {"type": "string", "enum": ["name", "description", "content"]}
 
 
 def _date_schema(db, project_id) -> dict[str, Any]:
@@ -74,14 +77,6 @@ def _safe_target_id(args: dict[str, Any], *keys: str) -> str | None:
     return None
 
 
-def _timeline_data_fields(args: dict[str, Any]) -> dict[str, str]:
-    return {
-        "name": str(args.get("name") or ""),
-        "description": str(args.get("description") or ""),
-        "content": str(args.get("content") or ""),
-    }
-
-
 def _persisted_meta(
     *,
     category: str,
@@ -126,6 +121,11 @@ def _binding(
         execute=_execute,
         build_persisted_meta=build_persisted_meta,
     )
+
+
+async def _grouped_execute(_args, _ctx):
+    raise RuntimeError("Grouped timeline tools must execute via apply_group")
+
 
 def _normal_specs(ctx) -> list[ToolSpec]:
     date = _date_schema(ctx.db, ctx.project_id)
@@ -179,34 +179,29 @@ def _normal_specs(ctx) -> list[ToolSpec]:
             ),
             ToolSpec(
                 name="patch_timeline_track",
-                description="Update track content or appearance.",
+                description="Patch timeline track text fields by single replacement.",
                 parameters=obj_schema(
                     {
                         "id": _ID,
-                        "name": {"type": "string"},
-                        "description": {"type": "string"},
-                        "content": {"type": "string", "description": "Rich text content (markdown)"},
-                        "color": _COLOR,
+                        "field": _PATCH_FIELD,
+                        "old": {"type": "string"},
+                        "new": {"type": "string"},
                     },
-                    ["id"],
+                    ["id", "field", "old", "new"],
                 ),
                 auto_approve_category="write",
             ),
             ToolSpec(
                 name="patch_timeline_event",
-                description="Update timeline event content, dates, track, or tags.",
+                description="Patch timeline event text fields by single replacement.",
                 parameters=obj_schema(
                     {
                         "id": _ID,
-                        "trackId": _TRACK_ID,
-                        "name": {"type": "string"},
-                        "description": {"type": "string"},
-                        "content": {"type": "string", "description": "Rich text content (markdown)"},
-                        "startDate": date,
-                        "endDate": {**date, "nullable": True},
-                        "tags": _TAGS,
+                        "field": _PATCH_FIELD,
+                        "old": {"type": "string"},
+                        "new": {"type": "string"},
                     },
-                    ["id"],
+                    ["id", "field", "old", "new"],
                 ),
                 auto_approve_category="write",
             ),
@@ -373,7 +368,7 @@ class TimelineFeatureModule(ToolFeatureModule):
                 name="patch_timeline_track",
                 meta=ToolBindingMeta(feature_key="timeline", category="write", op="patch", target_kind="timeline_track"),
                 validate=self._validate_patch_timeline_track,
-                execute=self._execute_patch_timeline_track,
+                execute=_grouped_execute,
                 build_persisted_meta=_persisted_meta(category="write", op="patch", target_kind="timeline_track", grouped=True),
             )
             add_binding(
@@ -381,7 +376,7 @@ class TimelineFeatureModule(ToolFeatureModule):
                 name="patch_timeline_event",
                 meta=ToolBindingMeta(feature_key="timeline", category="write", op="patch", target_kind="timeline_event"),
                 validate=self._validate_patch_timeline_event,
-                execute=self._execute_patch_timeline_event,
+                execute=_grouped_execute,
                 build_persisted_meta=_persisted_meta(category="write", op="patch", target_kind="timeline_event", grouped=True),
             )
             add_binding(
@@ -456,6 +451,51 @@ class TimelineFeatureModule(ToolFeatureModule):
                 )
 
         return filter_allowed_bindings(ctx, bindings)
+
+    async def apply_group(self, *, group: ToolDecisionGroup, ctx) -> list[ToolExecutionResult]:
+        patch_items = tuple(
+            item
+            for item in group.items
+            if item.meta.op == "patch" and item.meta.target_kind in {"timeline_track", "timeline_event"}
+        )
+        patch_item_ids = {item.tool_call_id for item in patch_items}
+        other_items = tuple(item for item in group.items if item.tool_call_id not in patch_item_ids)
+
+        results: list[ToolExecutionResult] = []
+        if patch_items:
+            results.extend(
+                await apply_object_batch_group(
+                    group=ToolDecisionGroup(
+                        feature_key=group.feature_key,
+                        merge_key=group.merge_key,
+                        items=patch_items,
+                    ),
+                    ctx=ctx,
+                    object_type_for_item=lambda item: item.meta.target_kind,
+                    replace_fields_for_item=lambda _item: {},
+                    metadata_for_item=lambda _item: None,
+                    result_for_item=lambda item: make_result(
+                        f"Applied {item.binding.spec.name}",
+                        object_id=item.meta.target_id,
+                        object_type=item.meta.target_kind,
+                    ),
+                )
+            )
+
+        if other_items:
+            results.extend(
+                await super().apply_group(
+                    group=ToolDecisionGroup(
+                        feature_key=group.feature_key,
+                        merge_key=group.merge_key,
+                        items=other_items,
+                    ),
+                    ctx=ctx,
+                )
+            )
+
+        results_by_id = {result.tool_call_id: result for result in results}
+        return [results_by_id[item.tool_call_id] for item in group.items if item.tool_call_id in results_by_id]
 
     async def _validate_read_timeline(self, args, ctx):
         _ = args
@@ -584,84 +624,47 @@ class TimelineFeatureModule(ToolFeatureModule):
 
     async def _validate_patch_timeline_track(self, args, ctx):
         try:
-            track_id = to_uuid(args.get("id"), "id")
-            if not any(key in args for key in ("name", "description", "content", "color")):
-                raise ValueError("patch_timeline_track requires at least one field")
-            track = object_service.get_object(
+            field = args.get("field")
+            if field not in {"name", "description", "content"}:
+                raise ValueError("field must be one of name|description|content")
+            current = read_runtime_object(
                 ctx.db,
-                object_type="timeline_track",
-                object_id=track_id,
                 project_id=ctx.project_id,
+                object_type="timeline_track",
+                object_id=to_uuid(args.get("id"), "id"),
                 language=ctx.language,
             )
-            if track is None:
-                raise ValueError("timeline_track not found")
+            patch_object_field(
+                extract_lang_data(current, ctx.language),
+                field=str(field),
+                old=str(args.get("old") or ""),
+                new=str(args.get("new") or ""),
+            )
             return valid_result()
         except ValueError as exc:
             return invalid_result("validate_patch_timeline_track", str(exc))
 
-    async def _execute_patch_timeline_track(self, args, ctx):
-        result = timeline_service.update_track(
-            ctx.db,
-            project_id=ctx.project_id,
-            track_id=to_uuid(args.get("id"), "id"),
-            language=ctx.language if any(key in args for key in ("name", "description", "content")) else None,
-            name=str(args.get("name") or "") if "name" in args else None,
-            description=str(args.get("description") or "") if "description" in args else None,
-            content=str(args.get("content") or "") if "content" in args else _UNSET,
-            rich_text_format="markdown",
-            color=(str(args.get("color") or "") if args.get("color") is not None else None) if "color" in args else _UNSET,
-            user_request="tool:patch_timeline_track",
-            create_new_version=True,
-            user_id=ctx.user_id,
-        )
-        return ToolExecutionOutcome(
-            lifecycle="applied",
-            result=make_result("Updated timeline track", object_id=result["id"], object_type="timeline_track"),
-        )
-
     async def _validate_patch_timeline_event(self, args, ctx):
         try:
-            event_id = to_uuid(args.get("id"), "id")
-            if not any(key in args for key in ("trackId", "name", "description", "content", "startDate", "endDate", "tags")):
-                raise ValueError("patch_timeline_event requires at least one field")
-            if "trackId" in args:
-                to_uuid(args.get("trackId"), "trackId")
-            event = object_service.get_object(
+            field = args.get("field")
+            if field not in {"name", "description", "content"}:
+                raise ValueError("field must be one of name|description|content")
+            current = read_runtime_object(
                 ctx.db,
-                object_type="timeline_event",
-                object_id=event_id,
                 project_id=ctx.project_id,
+                object_type="timeline_event",
+                object_id=to_uuid(args.get("id"), "id"),
                 language=ctx.language,
             )
-            if event is None:
-                raise ValueError("timeline_event not found")
+            patch_object_field(
+                extract_lang_data(current, ctx.language),
+                field=str(field),
+                old=str(args.get("old") or ""),
+                new=str(args.get("new") or ""),
+            )
             return valid_result()
         except ValueError as exc:
             return invalid_result("validate_patch_timeline_event", str(exc))
-
-    async def _execute_patch_timeline_event(self, args, ctx):
-        result = timeline_service.update_event(
-            ctx.db,
-            project_id=ctx.project_id,
-            event_id=to_uuid(args.get("id"), "id"),
-            track_id=to_uuid(args.get("trackId"), "trackId") if "trackId" in args else None,
-            language=ctx.language if any(key in args for key in ("name", "description", "content")) else None,
-            name=str(args.get("name") or "") if "name" in args else None,
-            description=str(args.get("description") or "") if "description" in args else None,
-            content=str(args.get("content") or "") if "content" in args else _UNSET,
-            rich_text_format="markdown",
-            start_date=dict(args.get("startDate") or {}) if "startDate" in args else _UNSET,
-            end_date=(dict(args["endDate"]) if isinstance(args.get("endDate"), dict) else None) if "endDate" in args else _UNSET,
-            tags=list(args.get("tags") or []) if "tags" in args else _UNSET,
-            user_request="tool:patch_timeline_event",
-            create_new_version=True,
-            user_id=ctx.user_id,
-        )
-        return ToolExecutionOutcome(
-            lifecycle="applied",
-            result=make_result("Updated timeline event", object_id=result["id"], object_type="timeline_event"),
-        )
 
     async def _validate_delete_timeline_track(self, args, ctx):
         try:

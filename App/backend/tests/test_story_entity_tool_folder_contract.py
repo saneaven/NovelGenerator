@@ -84,9 +84,10 @@ sys.modules.setdefault("App.backend.services.tool_engine.modules.manuscript_acce
 from App.backend.services.tool_engine.contexts import ToolExecutionContext, ToolGroupExecutionContext, ToolModuleContext, ToolValidationContext
 from App.backend.services.tool_engine.contracts import ToolDecisionGroup, ToolDecisionItem, ToolExecutionOutcome, ToolExecutionResult
 from App.backend.services.tool_engine.modules import object_access
-from App.backend.services.tool_engine.modules import outline_module, story_entity_module
+from App.backend.services.tool_engine.modules import outline_module, story_entity_module, timeline_module
 from App.backend.services.tool_engine.modules.outline_module import OutlineFeatureModule
 from App.backend.services.tool_engine.modules.story_entity_module import StoryEntityFeatureModule
+from App.backend.services.tool_engine.modules.timeline_module import TimelineFeatureModule
 
 
 def _module_context() -> ToolModuleContext:
@@ -164,6 +165,7 @@ def _capture_object_group(*, monkeypatch, module_under_test, feature, binding, a
     ):
         _ = ctx
         item = group.items[0]
+        captured["args"] = item.args
         captured["object_type"] = object_type_for_item(item)
         captured["replace_fields"] = replace_fields_for_item(item)
         captured["metadata"] = metadata_for_item(item)
@@ -425,6 +427,123 @@ def test_replace_outline_group_uses_markdown_content_field(monkeypatch) -> None:
 
     assert captured["object_type"] == "outline"
     assert captured["replace_fields"] == {"content": "## New outline content"}
+
+
+def test_timeline_patch_schemas_use_old_new_only(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+    specs = {binding.spec.name: binding.spec for binding in TimelineFeatureModule().list_bindings(_module_context())}
+
+    for tool_name in ("patch_timeline_track", "patch_timeline_event"):
+        params = specs[tool_name].parameters
+        props = params["properties"]
+        assert params["required"] == ["id", "field", "old", "new"]
+        assert props["field"]["enum"] == ["name", "description", "content"]
+
+    track_props = specs["patch_timeline_track"].parameters["properties"]
+    for removed in ("name", "description", "content", "color"):
+        assert removed not in track_props
+
+    event_props = specs["patch_timeline_event"].parameters["properties"]
+    for removed in ("trackId", "name", "description", "content", "startDate", "endDate", "tags"):
+        assert removed not in event_props
+
+
+def test_validate_patch_timeline_event_reads_markdown_projection(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+    captured: dict[str, object] = {}
+
+    def _fake_read_runtime_object(*_args, **kwargs):
+        captured["object_type"] = kwargs.get("object_type")
+        return {
+            "data": {
+                "English": {
+                    "name": "Founding Day",
+                    "description": "A civic marker.",
+                    "content": "The bells ring once at dawn.",
+                }
+            }
+        }
+
+    monkeypatch.setattr(timeline_module, "read_runtime_object", _fake_read_runtime_object)
+    binding = _binding_by_name(TimelineFeatureModule(), _module_context(), "patch_timeline_event")
+
+    result = asyncio.run(
+        binding.validate(
+            {
+                "id": str(uuid4()),
+                "field": "content",
+                "old": "bells ring once",
+                "new": "bells ring twice",
+            },
+            _validation_context(),
+        )
+    )
+
+    assert result.valid is True
+    assert captured["object_type"] == "timeline_event"
+
+
+def test_validate_patch_timeline_track_rejects_non_unique_old_text(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+
+    def _fake_read_runtime_object(*_args, **_kwargs):
+        return {
+            "data": {
+                "English": {
+                    "name": "Era",
+                    "description": "repeat repeat",
+                    "content": "Track content.",
+                }
+            }
+        }
+
+    monkeypatch.setattr(timeline_module, "read_runtime_object", _fake_read_runtime_object)
+    binding = _binding_by_name(TimelineFeatureModule(), _module_context(), "patch_timeline_track")
+
+    result = asyncio.run(
+        binding.validate(
+            {
+                "id": str(uuid4()),
+                "field": "description",
+                "old": "repeat",
+                "new": "echo",
+            },
+            _validation_context(),
+        )
+    )
+
+    assert result.valid is False
+    assert "multiple times" in str(result.reason)
+
+
+def test_timeline_patch_group_uses_object_patch_batch(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+    feature = TimelineFeatureModule()
+
+    for tool_name, object_type in (
+        ("patch_timeline_track", "timeline_track"),
+        ("patch_timeline_event", "timeline_event"),
+    ):
+        args = {
+            "id": str(uuid4()),
+            "field": "content",
+            "old": "old text",
+            "new": "new text",
+        }
+        binding = _binding_by_name(feature, _module_context(), tool_name)
+        captured = _capture_object_group(
+            monkeypatch=monkeypatch,
+            module_under_test=timeline_module,
+            feature=feature,
+            binding=binding,
+            args=args,
+        )
+
+        assert captured["object_type"] == object_type
+        assert captured["replace_fields"] == {}
+        assert captured["metadata"] is None
+        assert captured["args"] == args
+        assert captured["result"]["objectType"] == object_type
 
 
 def test_translate_outline_group_uses_markdown_content_field(monkeypatch) -> None:
