@@ -21,9 +21,78 @@ function createFieldKeysForObjectType(objectType: ObjectCardProps['operation']['
       return ['kind', 'parentId', 'position', 'name', 'description', 'content'];
     case 'manuscript':
       return ['content'];
+    case 'timeline_track':
+      return ['name', 'description', 'content', 'parentId', 'position', 'color'];
+    case 'timeline_event':
+      return ['trackId', 'name', 'description', 'content', 'startDate', 'endDate', 'tags'];
     default:
       return pickExistingKeys({} as Record<string, unknown>);
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function formatRecord(value: Record<string, unknown>): string {
+  return Object.entries(value)
+    .map(([key, entry]) => `${key}: ${String(entry ?? '')}`)
+    .join(', ');
+}
+
+function formatStringList(value: unknown): string | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.map((item) => String(item ?? '').trim()).filter(Boolean);
+  return items.length > 0 ? items.join(', ') : undefined;
+}
+
+function buildTimelineContentMarkdown(
+  objectType: ObjectCardProps['operation']['objectType'],
+  fields: Record<string, unknown>
+): string | undefined {
+  if (objectType !== 'timeline_track' && objectType !== 'timeline_event') {
+    return typeof fields.content === 'string' ? fields.content : undefined;
+  }
+
+  const content = typeof fields.content === 'string' ? fields.content.trim() : '';
+  const details: string[] = [];
+
+  if (objectType === 'timeline_track') {
+    if ('parentId' in fields) {
+      details.push(`Parent: ${typeof fields.parentId === 'string' && fields.parentId.trim() ? fields.parentId : 'Root'}`);
+    }
+    if (typeof fields.position === 'number') {
+      details.push(`Position: ${fields.position}`);
+    }
+    if (typeof fields.color === 'string' && fields.color.trim()) {
+      details.push(`Color: ${fields.color}`);
+    }
+  }
+
+  if (objectType === 'timeline_event') {
+    if (typeof fields.trackId === 'string' && fields.trackId.trim()) {
+      details.push(`Track: ${fields.trackId}`);
+    }
+    if (isRecord(fields.startDate)) {
+      details.push(`Start: ${formatRecord(fields.startDate)}`);
+    }
+    if ('endDate' in fields) {
+      details.push(isRecord(fields.endDate) ? `End: ${formatRecord(fields.endDate)}` : 'End: none');
+    }
+    const tags = formatStringList(fields.tags);
+    if (tags) {
+      details.push(`Tags: ${tags}`);
+    }
+  }
+
+  if (details.length === 0) {
+    return content || undefined;
+  }
+
+  return [
+    content,
+    ['**Details**', ...details.map((detail) => `- ${detail}`)].join('\n'),
+  ].filter(Boolean).join('\n\n');
 }
 
 export const CreateCallCard: React.FC<ObjectCardProps> = ({
@@ -86,6 +155,7 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
         values={fields}
         mode="create"
         objectType={operation.objectType}
+        contentMarkdown={buildTimelineContentMarkdown(operation.objectType, fields)}
       />
     );
   };
