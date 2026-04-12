@@ -24,16 +24,12 @@ DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NA
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,  # Verify connections before using them
-    pool_size=10,  # Connection pool size
-    max_overflow=20,  # Max overflow connections
+    pool_size=50,  # Connection pool size
+    max_overflow=100,  # Max overflow connections
     echo=False,  # Set to True for SQL query logging during development
-    # Safety net: prevent synchronous SELECT FOR UPDATE from blocking the
-    # asyncio event loop forever when another transaction holds a row lock.
-    # Without these, a sync-in-async deadlock freezes the entire server with
-    # no error logs and no automatic recovery.
     connect_args={
         "options": "-c lock_timeout=5000 -c statement_timeout=30000"
-    },
+    }, # Set timeouts to prevent long-running queries from hanging the application
 )
 
 # Create SessionLocal class
