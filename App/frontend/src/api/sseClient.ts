@@ -96,14 +96,12 @@ export type ThreadRuntimeEvent =
       message_id: string;
       provider: string;
       model: string;
-      raw_request: Record<string, unknown>;
     }}
   | { event: 'llm:response'; data: RuntimeEventBase & {
       request_id?: string;
       message_id: string;
       provider: string;
       model: string;
-      raw_response: Record<string, unknown> | null;
     }}
   | { event: string; data: Record<string, unknown> };
 

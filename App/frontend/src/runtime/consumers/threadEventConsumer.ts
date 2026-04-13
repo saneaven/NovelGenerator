@@ -848,7 +848,6 @@ export class ThreadEventConsumer {
       if (d.retry_count !== undefined) {
         console.log('Retry Count:', d.retry_count);
       }
-      console.log('Raw Request:', d.raw_request);
       console.groupEnd();
       return;
     }
@@ -862,7 +861,6 @@ export class ThreadEventConsumer {
         'color: var(--color-success); font-weight: bold',
         'color: inherit',
       );
-      console.log('Raw Response:', d.raw_response);
       console.groupEnd();
       return;
     }

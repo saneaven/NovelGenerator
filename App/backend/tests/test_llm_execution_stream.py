@@ -370,7 +370,7 @@ def test_execute_stream_merges_mixed_id_index_tool_call_deltas(monkeypatch: pyte
     assert log_events == [("request", {"messages": []}), ("complete", None)]
 
 
-def test_execute_stream_emits_full_raw_request_to_frontend(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_execute_stream_keeps_raw_request_out_of_frontend_event(monkeypatch: pytest.MonkeyPatch) -> None:
     run, thread, assistant_message = _make_run_thread_message()
     emitted_payloads: list[dict[str, object]] = []
     session_requests: list[dict[str, object]] = []
@@ -445,10 +445,6 @@ def test_execute_stream_emits_full_raw_request_to_frontend(monkeypatch: pytest.M
             "retry_count": 0,
             "provider": "test",
             "model": "model-a",
-            "raw_request": {
-                "messages": [],
-                "extra_headers": {"Authorization": "secret"},
-                "extra_body": {"metadata": {"request_id": "req_test"}},
-            },
         }
     ]
+    assert "raw_request" not in emitted_payloads[0]
