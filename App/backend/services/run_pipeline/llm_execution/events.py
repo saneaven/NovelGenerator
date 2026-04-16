@@ -46,6 +46,7 @@ async def emit_llm_request(
     model: str,
     raw_request: dict[str, Any],
 ) -> None:
+    _ = raw_request
     await callbacks.emit_fn(
         user_id=run.user_id,
         project_id=run.project_id,
@@ -58,7 +59,6 @@ async def emit_llm_request(
             "retry_count": retry_count,
             "provider": provider,
             "model": model,
-            "raw_request": raw_request,
         },
     )
 
@@ -212,7 +212,6 @@ async def emit_terminal_events(
             "request_id": request_id,
             "provider": final_snapshot.provider,
             "model": final_snapshot.model,
-            "raw_response": final_snapshot.raw_native_response,
         },
     )
 

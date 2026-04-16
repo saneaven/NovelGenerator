@@ -134,6 +134,7 @@ def test_emit_terminal_events_propagates_child_terminal_state_to_parent(monkeypa
         content_parts=[{"type": "content", "text": "done"}],
         tool_calls=[],
         reasoning_details=[],
+        raw_native_response={"large": "provider payload"},
     )
 
     order: list[str] = []
@@ -181,4 +182,5 @@ def test_emit_terminal_events_propagates_child_terminal_state_to_parent(monkeypa
         "propagate_parent",
     ]
     assert emitted_payloads[0][1]["request_id"] == "req_123"
+    assert "raw_response" not in emitted_payloads[0][1]
     assert emitted_payloads[1][1]["request_id"] == "req_123"

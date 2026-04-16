@@ -752,9 +752,9 @@ export class ThreadEventConsumer {
         return;
       }
 
-      // Only the explicit ready state means all tool calls are resolved and the
-      // next LLM continuation should be requested.
-      if (thread?.status !== 'ready') {
+      // Tool-call resolution above is the authoritative auto-continue signal.
+      // The thread status can lag behind SSE/hydration, so only block active or explicit pause states.
+      if (thread?.status === 'running' || thread?.status === 'paused') {
         console.debug('[AutoContinue] Skipped: thread is not auto-continuable', { threadId, status: thread?.status });
         return;
       }
@@ -848,7 +848,6 @@ export class ThreadEventConsumer {
       if (d.retry_count !== undefined) {
         console.log('Retry Count:', d.retry_count);
       }
-      console.log('Raw Request:', d.raw_request);
       console.groupEnd();
       return;
     }
@@ -862,7 +861,6 @@ export class ThreadEventConsumer {
         'color: var(--color-success); font-weight: bold',
         'color: inherit',
       );
-      console.log('Raw Response:', d.raw_response);
       console.groupEnd();
       return;
     }
