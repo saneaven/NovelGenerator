@@ -20,6 +20,7 @@ services:
     environment:
       FRONTEND_MODE: "dev"
       CHOKIDAR_USEPOLLING: "true"
+      VITE_ADMIN_MEMORY_DIAGNOSTICS_ENABLED: ${ADMIN_MEMORY_DIAGNOSTICS_ENABLED:-1}
     volumes:
       - ./App/frontend:/app/App/frontend
       - frontend_node_modules:/app/App/frontend/node_modules

@@ -463,3 +463,37 @@ export interface AdminUserUpdateRequest {
   is_admin?: boolean;
   storage_quota_bytes?: number | null;
 }
+
+// Memory diagnostics
+export interface AdminMemoryTopType {
+  type: string;
+  count: number;
+}
+
+export interface AdminMemoryTopAllocation {
+  location: string;
+  size_bytes: number;
+  count: number;
+}
+
+export interface AdminMemoryTracemallocState {
+  enabled: boolean;
+  traced_memory_current: number | null;
+  traced_memory_peak: number | null;
+  top_allocations: AdminMemoryTopAllocation[] | null;
+}
+
+export interface AdminMemoryGcSnapshot {
+  stats: Record<string, unknown>[];
+  total_objects_gen2: number;
+  top_types_by_count: AdminMemoryTopType[];
+}
+
+export interface AdminMemorySummaryResponse {
+  rss_bytes: number | null;
+  vms_bytes: number | null;
+  gc: AdminMemoryGcSnapshot;
+  tracemalloc: AdminMemoryTracemallocState;
+}
+
+export type AdminMemoryTracemallocAction = 'start' | 'stop' | 'reset';

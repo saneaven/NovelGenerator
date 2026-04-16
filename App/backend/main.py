@@ -108,6 +108,7 @@ from .routes.token_routes import router as token_router
 # Account / Admin routes
 from .routes.account_routes import router as account_router
 from .routes.admin_routes import router as admin_router
+from .routes.admin_memory_routes import router as admin_memory_router
 
 load_dotenv()
 validate_default_preset_seed()
@@ -190,6 +191,12 @@ app.include_router(token_router)
 # Account / Admin
 app.include_router(account_router)
 app.include_router(admin_router)
+
+if os.getenv("ADMIN_MEMORY_DIAGNOSTICS_ENABLED", "0").lower() in {"1", "true"}:
+    import tracemalloc
+
+    tracemalloc.start(25)
+    app.include_router(admin_memory_router)
 
 @app.get("/storage/assets/{asset_key:path}", include_in_schema=False)
 async def proxy_asset(

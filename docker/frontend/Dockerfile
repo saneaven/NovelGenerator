@@ -9,6 +9,8 @@ RUN npm ci
 COPY App/frontend /app/App/frontend
 
 ARG VITE_API_URL=""
+ARG VITE_ADMIN_MEMORY_DIAGNOSTICS_ENABLED="0"
+ENV VITE_ADMIN_MEMORY_DIAGNOSTICS_ENABLED=$VITE_ADMIN_MEMORY_DIAGNOSTICS_ENABLED
 RUN if [ -n "$VITE_API_URL" ]; then npm run build; fi
 
 COPY docker/frontend/entrypoint.sh /app/docker/frontend/entrypoint.sh

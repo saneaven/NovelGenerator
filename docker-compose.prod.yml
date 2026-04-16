@@ -15,6 +15,7 @@ services:
     build:
       args:
         VITE_API_URL: ${VITE_API_URL}
+        VITE_ADMIN_MEMORY_DIAGNOSTICS_ENABLED: ${ADMIN_MEMORY_DIAGNOSTICS_ENABLED:-0}
     environment:
       FRONTEND_MODE: "prod"
 

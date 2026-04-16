@@ -18,12 +18,17 @@ if [ "$RELOAD" = "1" ] || [ "$RELOAD" = "true" ]; then
 fi
 
 MEMRAY="${MEMRAY_ENABLED:-0}"
+MEMRAY_NATIVE="${MEMRAY_NATIVE:-1}"
 
 if [ "$MEMRAY" = "1" ] || [ "$MEMRAY" = "true" ]; then
   OUTPUT_DIR="/app/memray_output"
   mkdir -p "$OUTPUT_DIR"
   TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-  exec python -m memray run --native --output "$OUTPUT_DIR/profile_${TIMESTAMP}.bin" \
+  MEMRAY_ARGS=""
+  if [ "$MEMRAY_NATIVE" = "1" ] || [ "$MEMRAY_NATIVE" = "true" ]; then
+    MEMRAY_ARGS="--native"
+  fi
+  exec python -m memray run $MEMRAY_ARGS --output "$OUTPUT_DIR/profile_${TIMESTAMP}.bin" \
     -m uvicorn "$APP_MODULE" --host "$HOST" --port "$PORT" $RELOAD_ARGS
 else
   exec python -m uvicorn "$APP_MODULE" --host "$HOST" --port "$PORT" $RELOAD_ARGS

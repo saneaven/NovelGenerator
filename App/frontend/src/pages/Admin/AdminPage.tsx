@@ -1,12 +1,18 @@
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { adminService, type AdminUserStorageItem } from '../../api';
+import {
+  adminService,
+  type AdminMemorySummaryResponse,
+  type AdminMemoryTracemallocAction,
+  type AdminUserStorageItem,
+} from '../../api';
 import { useAuthStore } from '../../store/authStore';
 import { Loading } from '../../components/common/Loading';
 import { TextButton } from '../../components/TextButton';
 import { CustomSelect } from '../../components/ui/CustomSelect';
 import { ArrowLeft, People, Refresh, Star, Warning } from '../../components/icons';
 import { StorageUsageSummary, formatBytes } from '../../components/StorageUsageSummary';
+import { isAdminMemoryDiagnosticsEnabled } from '../../config/features';
 import './AdminPage.css';
 
 type AdminFilter = 'all' | 'admins' | 'members';
@@ -46,6 +52,13 @@ const AdminPage: React.FC = () => {
   const [pendingActions, setPendingActions] = useState<Record<string, PendingAction>>({});
   const [rowErrors, setRowErrors] = useState<Record<string, string | null>>({});
 
+  const memoryDiagnosticsEnabled = isAdminMemoryDiagnosticsEnabled();
+  const [memoryData, setMemoryData] = useState<AdminMemorySummaryResponse | null>(null);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
+  const [tracemallocPending, setTracemallocPending] =
+    useState<AdminMemoryTracemallocAction | null>(null);
+
   const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase());
 
   const loadUsers = async () => {
@@ -75,6 +88,38 @@ const AdminPage: React.FC = () => {
     void loadUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadMemory = async () => {
+    setMemoryLoading(true);
+    setMemoryError(null);
+    try {
+      const response = await adminService.getMemorySummary();
+      setMemoryData(response);
+    } catch (err) {
+      setMemoryError(err instanceof Error ? err.message : 'Failed to load memory diagnostics.');
+    } finally {
+      setMemoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!memoryDiagnosticsEnabled) return;
+    void loadMemory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memoryDiagnosticsEnabled]);
+
+  const handleTracemallocAction = async (action: AdminMemoryTracemallocAction) => {
+    setTracemallocPending(action);
+    setMemoryError(null);
+    try {
+      await adminService.controlTracemalloc(action);
+      await loadMemory();
+    } catch (err) {
+      setMemoryError(err instanceof Error ? err.message : 'Failed to update tracemalloc.');
+    } finally {
+      setTracemallocPending(null);
+    }
+  };
 
   const replaceUser = (nextUser: AdminUserStorageItem) => {
     setUsers((prev) => prev.map((user) => (user.user_id === nextUser.user_id ? nextUser : user)));
@@ -390,6 +435,145 @@ const AdminPage: React.FC = () => {
             </div>
           )}
         </section>
+
+        {memoryDiagnosticsEnabled && (
+          <section className="admin-page__panel admin-memory-panel">
+            <div className="admin-page__panel-header">
+              <div>
+                <h2>Memory Diagnostics</h2>
+                <p>Inspect the backend process heap. Snapshot now, compare later.</p>
+              </div>
+              <TextButton
+                variant="primary"
+                iconLeft={<Refresh size="md" />}
+                onClick={() => {
+                  void loadMemory();
+                }}
+                loading={memoryLoading}
+              >
+                Refresh
+              </TextButton>
+            </div>
+
+            {memoryError && <div className="admin-page__error">{memoryError}</div>}
+
+            {memoryData ? (
+              <>
+                <div className="admin-memory-cards">
+                  <article className="admin-summary-card">
+                    <div className="admin-summary-card__label">RSS</div>
+                    <div className="admin-summary-card__value">
+                      {memoryData.rss_bytes != null ? formatBytes(memoryData.rss_bytes) : '—'}
+                    </div>
+                  </article>
+                  <article className="admin-summary-card">
+                    <div className="admin-summary-card__label">VMS</div>
+                    <div className="admin-summary-card__value">
+                      {memoryData.vms_bytes != null ? formatBytes(memoryData.vms_bytes) : '—'}
+                    </div>
+                  </article>
+                  <article className="admin-summary-card">
+                    <div className="admin-summary-card__label">Gen-2 Objects</div>
+                    <div className="admin-summary-card__value">
+                      {memoryData.gc.total_objects_gen2.toLocaleString()}
+                    </div>
+                  </article>
+                  <article className="admin-summary-card">
+                    <div className="admin-summary-card__label">Tracemalloc</div>
+                    <div className="admin-summary-card__value">
+                      {memoryData.tracemalloc.enabled
+                        ? `On · ${formatBytes(memoryData.tracemalloc.traced_memory_current ?? 0)} / peak ${formatBytes(memoryData.tracemalloc.traced_memory_peak ?? 0)}`
+                        : 'Off'}
+                    </div>
+                  </article>
+                </div>
+
+                <div className="admin-memory-controls">
+                  <TextButton
+                    variant="primary"
+                    onClick={() => {
+                      void handleTracemallocAction('start');
+                    }}
+                    disabled={memoryData.tracemalloc.enabled}
+                    loading={tracemallocPending === 'start'}
+                  >
+                    Start Tracemalloc
+                  </TextButton>
+                  <TextButton
+                    variant="secondary"
+                    onClick={() => {
+                      void handleTracemallocAction('reset');
+                    }}
+                    disabled={!memoryData.tracemalloc.enabled}
+                    loading={tracemallocPending === 'reset'}
+                  >
+                    Reset Baseline
+                  </TextButton>
+                  <TextButton
+                    variant="warning"
+                    onClick={() => {
+                      void handleTracemallocAction('stop');
+                    }}
+                    disabled={!memoryData.tracemalloc.enabled}
+                    loading={tracemallocPending === 'stop'}
+                  >
+                    Stop Tracemalloc
+                  </TextButton>
+                </div>
+
+                <div className="admin-memory-tables">
+                  <div className="admin-memory-table">
+                    <h3>Top Types by Count (gen-2)</h3>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>Count</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {memoryData.gc.top_types_by_count.map((entry) => (
+                          <tr key={entry.type}>
+                            <td>{entry.type}</td>
+                            <td>{entry.count.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {memoryData.tracemalloc.enabled && memoryData.tracemalloc.top_allocations && (
+                    <div className="admin-memory-table">
+                      <h3>Top Allocations</h3>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Location</th>
+                            <th>Size</th>
+                            <th>Count</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {memoryData.tracemalloc.top_allocations.map((entry, idx) => (
+                            <tr key={`${entry.location}-${idx}`}>
+                              <td className="admin-memory-table__location">{entry.location}</td>
+                              <td>{formatBytes(entry.size_bytes)}</td>
+                              <td>{entry.count.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="admin-page__loading">
+                <Loading text="Loading memory diagnostics..." />
+              </div>
+            )}
+          </section>
+        )}
       </main>
     </div>
   );

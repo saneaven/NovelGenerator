@@ -346,9 +346,74 @@
   color: var(--color-feedback-error-contrast);
 }
 
+.admin-memory-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.admin-memory-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.admin-memory-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.admin-memory-tables {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.admin-memory-table h3 {
+  margin: 0 0 var(--spacing-sm);
+  font-size: var(--font-size-md);
+  color: var(--color-text-inverse);
+}
+
+.admin-memory-table table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface-inverse-elevated);
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
+}
+
+.admin-memory-table th,
+.admin-memory-table td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border-contrast-soft);
+  color: var(--color-text-inverse);
+}
+
+.admin-memory-table th {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-inverse-muted);
+  background: var(--color-surface-inverse-muted);
+}
+
+.admin-memory-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-memory-table__location {
+  font-family: var(--font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--font-size-xs);
+  word-break: break-all;
+}
+
 @media (max-width: 1024px) {
   .admin-page__summary-grid,
-  .admin-user-grid {
+  .admin-user-grid,
+  .admin-memory-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -371,7 +436,8 @@
 
   .admin-page__summary-grid,
   .admin-user-grid,
-  .admin-page__filters {
+  .admin-page__filters,
+  .admin-memory-cards {
     grid-template-columns: 1fr;
   }
 

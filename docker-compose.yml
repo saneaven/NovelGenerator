@@ -41,6 +41,7 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       DEFAULT_STORAGE_QUOTA_BYTES: ${DEFAULT_STORAGE_QUOTA_BYTES:?set in .env.dev/.env.prod}
+      ADMIN_MEMORY_DIAGNOSTICS_ENABLED: ${ADMIN_MEMORY_DIAGNOSTICS_ENABLED:-0}
     depends_on:
       db:
         condition: service_healthy
