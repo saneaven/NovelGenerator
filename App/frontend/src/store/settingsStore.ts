@@ -61,9 +61,12 @@ export type ProviderCredentialDraft = Record<string, string>;
 export type ProviderCredentials = Record<string, ProviderCredentialDraft>;
 
 // Custom thinking template types
+export type CustomThinkingEffortValueType = 'string' | 'number' | 'boolean';
+
 export interface CustomThinkingEffortField {
     path: string;
     value: string;
+    value_type?: CustomThinkingEffortValueType;
 }
 
 export interface CustomThinkingResponseField {

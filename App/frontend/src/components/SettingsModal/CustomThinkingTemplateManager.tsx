@@ -22,7 +22,12 @@ const CustomThinkingTemplateManager: React.FC<Props> = ({ template, onUpdate }) 
   // --- Effort field helpers ---
 
   const addEffortField = () => {
-    onUpdate({ effort_fields: [...template.effort_fields, { path: '', value: '' }] });
+    onUpdate({
+      effort_fields: [
+        ...template.effort_fields,
+        { path: '', value: '', value_type: 'string' },
+      ],
+    });
   };
 
   const updateEffortField = (idx: number, field: Partial<CustomThinkingEffortField>) => {
@@ -99,7 +104,7 @@ const CustomThinkingTemplateManager: React.FC<Props> = ({ template, onUpdate }) 
         <label className="field-section-label">{t(`${tp}.effortFields`)}</label>
         <p className="field-section-hint">{t(`${tp}.effortFieldsHint`)}</p>
         {template.effort_fields.map((field, idx) => (
-          <div key={idx} className="template-field-row">
+          <div key={idx} className="template-field-row effort-row">
             <div className="template-field">
               <label>{t(`${tp}.path`)}</label>
               <input
@@ -119,6 +124,22 @@ const CustomThinkingTemplateManager: React.FC<Props> = ({ template, onUpdate }) 
                 placeholder="e.g. high"
                 className="template-field-input mono"
               />
+            </div>
+            <div className="template-field value-type-field">
+              <label>{t(`${tp}.valueType`)}</label>
+              <select
+                value={field.value_type ?? 'string'}
+                onChange={(e) =>
+                  updateEffortField(idx, {
+                    value_type: e.target.value as CustomThinkingEffortField['value_type'],
+                  })
+                }
+                className="template-field-input mono"
+              >
+                <option value="string">{t(`${tp}.valueTypeString`)}</option>
+                <option value="number">{t(`${tp}.valueTypeNumber`)}</option>
+                <option value="boolean">{t(`${tp}.valueTypeBoolean`)}</option>
+              </select>
             </div>
             <button className="remove-field-button" onClick={() => removeEffortField(idx)}>
               &times;
