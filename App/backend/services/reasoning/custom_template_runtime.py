@@ -135,7 +135,9 @@ def compile_template(raw: dict[str, Any]) -> dict[str, Any] | None:
         value = field.get("value")
         if not (isinstance(path, str) and path.strip() and isinstance(value, str)):
             continue
-        value_type = field.get("value_type") if isinstance(field.get("value_type"), str) else "string"
+        value_type = field.get("value_type")
+        if value_type not in ("string", "number", "boolean"):
+            continue
         coerced = _coerce_effort_value(value, value_type)
         if coerced is _COERCE_FAIL:
             continue

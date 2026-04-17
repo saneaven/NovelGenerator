@@ -128,7 +128,7 @@ const CustomThinkingTemplateManager: React.FC<Props> = ({ template, onUpdate }) 
             <div className="template-field value-type-field">
               <label>{t(`${tp}.valueType`)}</label>
               <select
-                value={field.value_type ?? 'string'}
+                value={field.value_type}
                 onChange={(e) =>
                   updateEffortField(idx, {
                     value_type: e.target.value as CustomThinkingEffortField['value_type'],
