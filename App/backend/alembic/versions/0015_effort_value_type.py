@@ -16,7 +16,7 @@ depends_on = None
 def upgrade() -> None:
     conn = op.get_bind()
     rows = conn.execute(
-        sa.text("SELECT id, custom_thinking_templates FROM settings")
+        sa.text("SELECT id, custom_thinking_templates FROM user_settings")
     ).fetchall()
 
     for row_id, templates in rows:
@@ -38,7 +38,7 @@ def upgrade() -> None:
         if changed:
             conn.execute(
                 sa.text(
-                    "UPDATE settings SET custom_thinking_templates = :t WHERE id = :id"
+                    "UPDATE user_settings SET custom_thinking_templates = :t WHERE id = :id"
                 ),
                 {"t": json.dumps(templates), "id": row_id},
             )
@@ -47,7 +47,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     conn = op.get_bind()
     rows = conn.execute(
-        sa.text("SELECT id, custom_thinking_templates FROM settings")
+        sa.text("SELECT id, custom_thinking_templates FROM user_settings")
     ).fetchall()
 
     for row_id, templates in rows:
@@ -68,7 +68,7 @@ def downgrade() -> None:
         if changed:
             conn.execute(
                 sa.text(
-                    "UPDATE settings SET custom_thinking_templates = :t WHERE id = :id"
+                    "UPDATE user_settings SET custom_thinking_templates = :t WHERE id = :id"
                 ),
                 {"t": json.dumps(templates), "id": row_id},
             )
