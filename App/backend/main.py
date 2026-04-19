@@ -193,9 +193,6 @@ app.include_router(account_router)
 app.include_router(admin_router)
 
 if os.getenv("ADMIN_MEMORY_DIAGNOSTICS_ENABLED", "0").lower() in {"1", "true"}:
-    import tracemalloc
-
-    tracemalloc.start(25)
     app.include_router(admin_memory_router)
 
 @app.get("/storage/assets/{asset_key:path}", include_in_schema=False)
