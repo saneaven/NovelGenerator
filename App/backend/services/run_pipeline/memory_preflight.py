@@ -41,63 +41,70 @@ async def run_summary_model(
     summary_cfg = resolved_runtime.task_config
 
     provider = ProviderRegistry.get_provider(summary_cfg.provider, resolved_runtime.provider_config)
-    if not provider.validate_config():
-        raise RuntimeError(f"Invalid summary provider configuration: {summary_cfg.provider}")
+    try:
+        if not provider.validate_config():
+            raise RuntimeError(f"Invalid summary provider configuration: {summary_cfg.provider}")
 
-    retry_cfg = normalize_retry_config(settings_service.get_retry_config(db, user_id))
+        retry_cfg = normalize_retry_config(settings_service.get_retry_config(db, user_id))
 
-    def _create_stream():
-        return provider.stream_chat(
-            messages=[
-                {"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]},
-                {"role": "user", "content_parts": [{"type": "content", "text": user_prompt}]},
-            ],
-            model=summary_cfg.model,
-            temperature=float(summary_cfg.temperature),
-            tools=None,
-            tool_choice=None,
-            max_tokens=summary_cfg.max_output_tokens,
-            provider_preference=getattr(summary_cfg, "provider_preference", None),
-            thinking_config=summary_cfg.advanced.get("thinking_config") if isinstance(summary_cfg.advanced, dict) else None,
-            thinking_mode=summary_cfg.advanced.get("thinking_mode") if isinstance(summary_cfg.advanced, dict) else "off",
-            custom_kind=summary_cfg.advanced.get("custom_kind") if isinstance(summary_cfg.advanced, dict) else None,
-            native_tool_call=False,
-        )
+        def _create_stream():
+            return provider.stream_chat(
+                messages=[
+                    {"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]},
+                    {"role": "user", "content_parts": [{"type": "content", "text": user_prompt}]},
+                ],
+                model=summary_cfg.model,
+                temperature=float(summary_cfg.temperature),
+                tools=None,
+                tool_choice=None,
+                max_tokens=summary_cfg.max_output_tokens,
+                provider_preference=getattr(summary_cfg, "provider_preference", None),
+                thinking_config=summary_cfg.advanced.get("thinking_config") if isinstance(summary_cfg.advanced, dict) else None,
+                thinking_mode=summary_cfg.advanced.get("thinking_mode") if isinstance(summary_cfg.advanced, dict) else "off",
+                custom_kind=summary_cfg.advanced.get("custom_kind") if isinstance(summary_cfg.advanced, dict) else None,
+                native_tool_call=False,
+            )
 
-    stream = stream_with_retry(_create_stream, retry_cfg)
+        stream = stream_with_retry(_create_stream, retry_cfg)
 
-    assembler = FallbackSnapshotAssembler(provider=summary_cfg.provider, model=summary_cfg.model)
-    native_final = None
-    merged_meta: MetaPayload | None = None
+        assembler = FallbackSnapshotAssembler(provider=summary_cfg.provider, model=summary_cfg.model)
+        native_final = None
+        merged_meta: MetaPayload | None = None
 
-    async for event in stream:
-        if event.kind == "delta" and event.delta is not None:
-            assembler.apply_delta(event.delta)
-        elif event.kind == "meta" and event.meta is not None:
-            assembler.apply_meta(event.meta)
-            merged_meta = merge_meta_payload(merged_meta, event.meta)
-        elif event.kind == "final_native" and event.final_native is not None:
-            native_final = event.final_native
-        elif event.kind == "error":
-            err = event.error or ProviderErrorPayload(message="Unknown provider error", status=None)
-            raise RuntimeError(err.message)
+        try:
+            async for event in stream:
+                if event.kind == "delta" and event.delta is not None:
+                    assembler.apply_delta(event.delta)
+                elif event.kind == "meta" and event.meta is not None:
+                    assembler.apply_meta(event.meta)
+                    merged_meta = merge_meta_payload(merged_meta, event.meta)
+                elif event.kind == "final_native" and event.final_native is not None:
+                    native_final = event.final_native
+                elif event.kind == "error":
+                    err = event.error or ProviderErrorPayload(message="Unknown provider error", status=None)
+                    raise RuntimeError(err.message)
+        finally:
+            if hasattr(stream, "aclose"):
+                await stream.aclose()
 
-    if hasattr(stream, "aclose"):
-        await stream.aclose()
+        if native_final is not None:
+            final_snapshot = patch_snapshot_with_meta(native_final, merged_meta)
+        else:
+            final_snapshot = assembler.finalize_or_raise()
 
-    if native_final is not None:
-        final_snapshot = patch_snapshot_with_meta(native_final, merged_meta)
-    else:
-        final_snapshot = assembler.finalize_or_raise()
-
-    summary_text = "".join(
-        str(part.get("text") or "")
-        for part in final_snapshot.content_parts
-        if isinstance(part, dict) and str(part.get("type") or "") == "content"
-    ).strip()
-    if not summary_text:
-        raise RuntimeError("Summary model returned empty content")
-    return summary_text
+        summary_text = "".join(
+            str(part.get("text") or "")
+            for part in final_snapshot.content_parts
+            if isinstance(part, dict) and str(part.get("type") or "") == "content"
+        ).strip()
+        if not summary_text:
+            raise RuntimeError("Summary model returned empty content")
+        return summary_text
+    finally:
+        try:
+            await provider.aclose()
+        except Exception:
+            pass
 
 
 async def prepare_thread_memory_preflight(

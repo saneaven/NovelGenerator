@@ -39,6 +39,75 @@ function parseQuotaInput(raw: string): number | null | 'invalid' {
   return parsed;
 }
 
+const PROCESS_STATUS_ROWS = [
+  { key: 'VmRSS', label: 'VmRSS', kind: 'bytes' },
+  { key: 'VmHWM', label: 'VmHWM', kind: 'bytes' },
+  { key: 'VmSize', label: 'VmSize', kind: 'bytes' },
+  { key: 'VmData', label: 'VmData', kind: 'bytes' },
+  { key: 'VmStk', label: 'VmStk', kind: 'bytes' },
+  { key: 'VmExe', label: 'VmExe', kind: 'bytes' },
+  { key: 'VmLib', label: 'VmLib', kind: 'bytes' },
+  { key: 'VmPTE', label: 'VmPTE', kind: 'bytes' },
+  { key: 'RssAnon', label: 'RssAnon', kind: 'bytes' },
+  { key: 'RssFile', label: 'RssFile', kind: 'bytes' },
+  { key: 'RssShmem', label: 'RssShmem', kind: 'bytes' },
+  { key: 'Threads', label: 'Threads', kind: 'count' },
+] as const;
+
+const SMAPS_ROLLUP_ROWS = [
+  { key: 'Rss', label: 'Rss' },
+  { key: 'Pss', label: 'Pss' },
+  { key: 'Private_Clean', label: 'Private Clean' },
+  { key: 'Private_Dirty', label: 'Private Dirty' },
+  { key: 'Shared_Clean', label: 'Shared Clean' },
+  { key: 'Shared_Dirty', label: 'Shared Dirty' },
+  { key: 'Anonymous', label: 'Anonymous' },
+  { key: 'File', label: 'File' },
+  { key: 'Swap', label: 'Swap' },
+] as const;
+
+function metricValue(source: Record<string, number | null> | undefined, key: string): number | null {
+  const value = source?.[key];
+  return typeof value === 'number' ? value : null;
+}
+
+function formatCount(value: number | null | undefined): string {
+  return typeof value === 'number' ? value.toLocaleString() : '—';
+}
+
+function formatMemoryBytes(value: number | null | undefined): string {
+  return typeof value === 'number' ? formatBytes(value) : '—';
+}
+
+function formatDiagnosticValue(value: number | null | undefined, kind: 'bytes' | 'count'): string {
+  return kind === 'bytes' ? formatMemoryBytes(value) : formatCount(value);
+}
+
+function buildJsonTimestamp(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    '-',
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join('');
+}
+
+function downloadRawJson(data: unknown, prefix: string): void {
+  const blob = new Blob([`${JSON.stringify(data, null, 2)}\n`], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${prefix}-${buildJsonTimestamp()}.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.user);
@@ -119,6 +188,11 @@ const AdminPage: React.FC = () => {
     } finally {
       setTracemallocPending(null);
     }
+  };
+
+  const handleDownloadMemoryJson = () => {
+    if (!memoryData) return;
+    downloadRawJson(memoryData, 'memory-summary');
   };
 
   const replaceUser = (nextUser: AdminUserStorageItem) => {
@@ -216,6 +290,28 @@ const AdminPage: React.FC = () => {
       return haystack.includes(deferredSearchQuery);
     });
   }, [deferredSearchQuery, filter, users]);
+
+  const memorySummaryCards = useMemo(() => {
+    if (!memoryData) return [];
+    return [
+      { label: 'RSS', value: formatMemoryBytes(memoryData.rss_bytes) },
+      { label: 'VMS', value: formatMemoryBytes(memoryData.vms_bytes) },
+      { label: 'VmHWM', value: formatMemoryBytes(metricValue(memoryData.process_status, 'VmHWM')) },
+      { label: 'RssAnon', value: formatMemoryBytes(metricValue(memoryData.process_status, 'RssAnon')) },
+      { label: 'RssFile', value: formatMemoryBytes(metricValue(memoryData.process_status, 'RssFile')) },
+      { label: 'Private Dirty', value: formatMemoryBytes(metricValue(memoryData.smaps_rollup, 'Private_Dirty')) },
+      { label: 'Threads', value: formatCount(metricValue(memoryData.process_status, 'Threads')) },
+      { label: 'FD Sockets', value: formatCount(memoryData.fd?.sockets) },
+      { label: 'Async Pending', value: formatCount(memoryData.asyncio?.pending) },
+      { label: 'Gen-2 Objects', value: memoryData.gc.total_objects_gen2.toLocaleString() },
+      {
+        label: 'Tracemalloc',
+        value: memoryData.tracemalloc.enabled
+          ? `On · ${formatMemoryBytes(memoryData.tracemalloc.traced_memory_current)} / peak ${formatMemoryBytes(memoryData.tracemalloc.traced_memory_peak)}`
+          : 'Off',
+      },
+    ];
+  }, [memoryData]);
 
   if (!currentUser?.is_admin) {
     return <Navigate to="/dashboard" replace />;
@@ -443,16 +539,25 @@ const AdminPage: React.FC = () => {
                 <h2>Memory Diagnostics</h2>
                 <p>Inspect the backend process heap. Snapshot now, compare later.</p>
               </div>
-              <TextButton
-                variant="primary"
-                iconLeft={<Refresh size="md" />}
-                onClick={() => {
-                  void loadMemory();
-                }}
-                loading={memoryLoading}
-              >
-                Refresh
-              </TextButton>
+              <div className="admin-memory-header-actions">
+                <TextButton
+                  variant="secondary"
+                  onClick={handleDownloadMemoryJson}
+                  disabled={!memoryData}
+                >
+                  Download Summary JSON
+                </TextButton>
+                <TextButton
+                  variant="primary"
+                  iconLeft={<Refresh size="md" />}
+                  onClick={() => {
+                    void loadMemory();
+                  }}
+                  loading={memoryLoading}
+                >
+                  Refresh
+                </TextButton>
+              </div>
             </div>
 
             {memoryError && <div className="admin-page__error">{memoryError}</div>}
@@ -460,32 +565,12 @@ const AdminPage: React.FC = () => {
             {memoryData ? (
               <>
                 <div className="admin-memory-cards">
-                  <article className="admin-summary-card">
-                    <div className="admin-summary-card__label">RSS</div>
-                    <div className="admin-summary-card__value">
-                      {memoryData.rss_bytes != null ? formatBytes(memoryData.rss_bytes) : '—'}
-                    </div>
-                  </article>
-                  <article className="admin-summary-card">
-                    <div className="admin-summary-card__label">VMS</div>
-                    <div className="admin-summary-card__value">
-                      {memoryData.vms_bytes != null ? formatBytes(memoryData.vms_bytes) : '—'}
-                    </div>
-                  </article>
-                  <article className="admin-summary-card">
-                    <div className="admin-summary-card__label">Gen-2 Objects</div>
-                    <div className="admin-summary-card__value">
-                      {memoryData.gc.total_objects_gen2.toLocaleString()}
-                    </div>
-                  </article>
-                  <article className="admin-summary-card">
-                    <div className="admin-summary-card__label">Tracemalloc</div>
-                    <div className="admin-summary-card__value">
-                      {memoryData.tracemalloc.enabled
-                        ? `On · ${formatBytes(memoryData.tracemalloc.traced_memory_current ?? 0)} / peak ${formatBytes(memoryData.tracemalloc.traced_memory_peak ?? 0)}`
-                        : 'Off'}
-                    </div>
-                  </article>
+                  {memorySummaryCards.map((card) => (
+                    <article key={card.label} className="admin-summary-card">
+                      <div className="admin-summary-card__label">{card.label}</div>
+                      <div className="admin-summary-card__value">{card.value}</div>
+                    </article>
+                  ))}
                 </div>
 
                 <div className="admin-memory-controls">
@@ -522,6 +607,98 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <div className="admin-memory-tables">
+                  <div className="admin-memory-diagnostic-grid">
+                    <div className="admin-memory-table admin-memory-table--compact">
+                      <h3>Process Status</h3>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Metric</th>
+                            <th>Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {PROCESS_STATUS_ROWS.map((entry) => (
+                            <tr key={entry.key}>
+                              <td>{entry.label}</td>
+                              <td>{formatDiagnosticValue(metricValue(memoryData.process_status, entry.key), entry.kind)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="admin-memory-table admin-memory-table--compact">
+                      <h3>smaps Rollup</h3>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Metric</th>
+                            <th>Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {SMAPS_ROLLUP_ROWS.map((entry) => (
+                            <tr key={entry.key}>
+                              <td>{entry.label}</td>
+                              <td>{formatMemoryBytes(metricValue(memoryData.smaps_rollup, entry.key))}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="admin-memory-table admin-memory-table--compact">
+                      <h3>Runtime Counters</h3>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Metric</th>
+                            <th>Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>FD Total</td>
+                            <td>{formatCount(memoryData.fd?.total)}</td>
+                          </tr>
+                          <tr>
+                            <td>FD Sockets</td>
+                            <td>{formatCount(memoryData.fd?.sockets)}</td>
+                          </tr>
+                          <tr>
+                            <td>FD Regular Files</td>
+                            <td>{formatCount(memoryData.fd?.regular_files)}</td>
+                          </tr>
+                          <tr>
+                            <td>FD Other</td>
+                            <td>{formatCount(memoryData.fd?.other)}</td>
+                          </tr>
+                          <tr>
+                            <td>Asyncio Tasks</td>
+                            <td>{formatCount(memoryData.asyncio?.total)}</td>
+                          </tr>
+                          <tr>
+                            <td>Asyncio Pending</td>
+                            <td>{formatCount(memoryData.asyncio?.pending)}</td>
+                          </tr>
+                          <tr>
+                            <td>Asyncio Done</td>
+                            <td>{formatCount(memoryData.asyncio?.done)}</td>
+                          </tr>
+                          <tr>
+                            <td>GC Count</td>
+                            <td>{Array.isArray(memoryData.gc.count) ? memoryData.gc.count.join(' / ') : '—'}</td>
+                          </tr>
+                          <tr>
+                            <td>GC Threshold</td>
+                            <td>{Array.isArray(memoryData.gc.threshold) ? memoryData.gc.threshold.join(' / ') : '—'}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
                   <div className="admin-memory-table">
                     <h3>Top Types by Count (gen-2)</h3>
                     <table>

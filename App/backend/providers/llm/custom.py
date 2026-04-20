@@ -464,39 +464,45 @@ class CustomProvider(AsyncOpenAIProvider):
 
         if effective_custom_kind == "claude":
             claude_provider = self._build_claude_delegate()
-            async for event in claude_provider.stream_chat(
-                messages=messages,
-                model=model,
-                temperature=temperature,
-                tools=tools,
-                tool_choice=tool_choice,
-                max_tokens=max_tokens,
-                provider_preference=provider_preference,
-                thinking_config=thinking_config,
-                thinking_mode=thinking_mode,
-                custom_kind=effective_custom_kind,
-                native_tool_call=native_tool_call,
-            ):
-                yield event
+            try:
+                async for event in claude_provider.stream_chat(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    max_tokens=max_tokens,
+                    provider_preference=provider_preference,
+                    thinking_config=thinking_config,
+                    thinking_mode=thinking_mode,
+                    custom_kind=effective_custom_kind,
+                    native_tool_call=native_tool_call,
+                ):
+                    yield event
+            finally:
+                await claude_provider.aclose()
             return
 
         if effective_custom_kind == "openai_response":
             responses_provider = self._build_openai_response_delegate()
-            async for event in responses_provider.stream_chat(
-                messages=messages,
-                model=model,
-                temperature=temperature,
-                tools=tools,
-                tool_choice=tool_choice,
-                max_tokens=max_tokens,
-                provider_preference=provider_preference,
-                thinking_config=thinking_config if thinking_mode == "model" else None,
-                thinking_mode=thinking_mode,
-                custom_kind=effective_custom_kind,
-                native_tool_call=native_tool_call,
-                verbosity=verbosity,
-            ):
-                yield event
+            try:
+                async for event in responses_provider.stream_chat(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    max_tokens=max_tokens,
+                    provider_preference=provider_preference,
+                    thinking_config=thinking_config if thinking_mode == "model" else None,
+                    thinking_mode=thinking_mode,
+                    custom_kind=effective_custom_kind,
+                    native_tool_call=native_tool_call,
+                    verbosity=verbosity,
+                ):
+                    yield event
+            finally:
+                await responses_provider.aclose()
             return
 
         # openai_completion path
@@ -523,11 +529,17 @@ class CustomProvider(AsyncOpenAIProvider):
 
         if effective_custom_kind == "claude":
             claude_provider = self._build_claude_delegate()
-            return await claude_provider.get_models(extra_headers=headers)
+            try:
+                return await claude_provider.get_models(extra_headers=headers)
+            finally:
+                await claude_provider.aclose()
 
         if effective_custom_kind == "openai_response":
             responses_provider = self._build_openai_response_delegate()
-            return await responses_provider.get_models(extra_headers=headers)
+            try:
+                return await responses_provider.get_models(extra_headers=headers)
+            finally:
+                await responses_provider.aclose()
 
         client = self._ensure_client()
         try:
@@ -536,12 +548,54 @@ class CustomProvider(AsyncOpenAIProvider):
         except OpenAIError as exc:
             raise Exception(f"Error fetching models: {exc}") from exc
 
+    def _read_openai_response_reasoning_detail(
+        self,
+        final_snapshot: Any,
+        advanced: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        del advanced
+        items = OpenAIResponsesProvider._filter_reasoning_items(
+            self._snapshot_reasoning_details(final_snapshot)
+        )
+        reasoning_text = self._reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
+        if not items and not reasoning_text:
+            return None
+
+        data: dict[str, Any] = {"items": items}
+        raw = getattr(final_snapshot, "raw_native_response", None)
+        if isinstance(raw, dict):
+            for output_item in raw.get("output") or []:
+                if not isinstance(output_item, dict):
+                    continue
+                if output_item.get("type") == "message":
+                    msg_id = output_item.get("id")
+                    if isinstance(msg_id, str) and msg_id:
+                        data["output_msg_id"] = msg_id
+                elif output_item.get("type") == "function_call":
+                    call_id = output_item.get("call_id")
+                    item_id = output_item.get("id")
+                    if isinstance(call_id, str) and call_id and isinstance(item_id, str) and item_id:
+                        fc_ids = data.setdefault("function_call_item_ids", {})
+                        fc_ids[call_id] = item_id
+
+        meta: dict[str, Any] = {"provider": "openai"}
+        if reasoning_text:
+            data["reasoning_text"] = reasoning_text
+            meta["thinking_display"] = "reasoning_text"
+
+        return {
+            "type": "openai",
+            "meta": meta,
+            "data": data,
+            "token_count": 0,
+        }
+
     def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
         effective_custom_kind = self._effective_custom_kind(advanced.get("custom_kind"))
         if effective_custom_kind == "claude":
-            return self._build_claude_delegate().read_reasoning_detail(final_snapshot, advanced)
+            return ClaudeProvider.read_reasoning_detail(self, final_snapshot, advanced)
         if effective_custom_kind == "openai_response":
-            return self._build_openai_response_delegate().read_reasoning_detail(final_snapshot, advanced)
+            return self._read_openai_response_reasoning_detail(final_snapshot, advanced)
 
         template_id = advanced.get("custom_thinking_template_id")
         details = self._snapshot_reasoning_details(final_snapshot)
@@ -592,17 +646,15 @@ class CustomProvider(AsyncOpenAIProvider):
 
     def read_reasoning_tokens(self, final_snapshot: Any) -> int | None:
         if self._active_custom_kind == "claude":
-            return self._build_claude_delegate().read_reasoning_tokens(final_snapshot)
+            return None
         if self._active_custom_kind == "openai_response":
-            return self._build_openai_response_delegate().read_reasoning_tokens(final_snapshot)
+            return super().read_reasoning_tokens(final_snapshot)
         return super().read_reasoning_tokens(final_snapshot)
 
     def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
         effective_custom_kind = self._effective_custom_kind(advanced.get("custom_kind"))
-        if effective_custom_kind == "claude":
-            return self._build_claude_delegate().get_stream_thinking_display_path(advanced)
-        if effective_custom_kind == "openai_response":
-            return self._build_openai_response_delegate().get_stream_thinking_display_path(advanced)
+        if effective_custom_kind in {"claude", "openai_response"}:
+            return "reasoning_text"
 
         template_id = advanced.get("custom_thinking_template_id")
         if template_id:

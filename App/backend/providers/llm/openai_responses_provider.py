@@ -80,6 +80,11 @@ class OpenAIResponsesProvider(BaseProvider):
             self._client = self._build_client()
         return self._client
 
+    async def aclose(self) -> None:
+        client = self._client
+        self._client = None
+        await self._close_sdk_client(client)
+
     @staticmethod
     def _filter_reasoning_items(items: Any) -> List[Dict]:
         if not isinstance(items, list):

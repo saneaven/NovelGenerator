@@ -281,6 +281,7 @@ async def get_models(
     db: Session = Depends(get_db),
 ):
     """Get available models for a specific provider"""
+    provider_instance = None
     try:
         provider_config = credential_service.get_provider_config(db, current_user.id, provider)
         provider_instance = ProviderRegistry.get_provider(
@@ -310,6 +311,12 @@ async def get_models(
         raise HTTPException(status_code=400, detail=message)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if provider_instance is not None:
+            try:
+                await provider_instance.aclose()
+            except Exception:
+                pass
 
 
 @app.post("/api/v1/providers/{provider}/embedding-models")
