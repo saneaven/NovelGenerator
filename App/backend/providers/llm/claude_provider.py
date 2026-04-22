@@ -242,7 +242,7 @@ class ClaudeProvider(BaseProvider):
         if effort not in {"low", "medium", "high", "max"}:
             raise ValueError("Claude adaptive thinking effort must be one of: low, medium, high, max")
 
-        thinking: Dict[str, object] = {"type": "adaptive"}
+        thinking: Dict[str, object] = {"type": "adaptive", "display": "summarized"}
         output_config: Dict[str, object] = {"effort": effort}
         return thinking, output_config
 

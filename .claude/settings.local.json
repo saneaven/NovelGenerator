@@ -12,7 +12,8 @@
       "mcp__context7__query-docs",
       "Bash(grep -E \"router\\\\.\\(ts|tsx\\)$\")",
       "WebFetch(domain:nano-gpt.com)",
-      "WebFetch(domain:docs.nano-gpt.com)"
+      "WebFetch(domain:docs.nano-gpt.com)",
+      "mcp__context7__resolve-library-id"
     ],
     "deny": [],
     "ask": []
