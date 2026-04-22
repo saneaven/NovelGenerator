@@ -68,6 +68,11 @@ class AsyncOpenAIProvider(BaseProvider):
             self._client = self._build_client()
         return self._client
 
+    async def aclose(self) -> None:
+        client = self._client
+        self._client = None
+        await self._close_sdk_client(client)
+
     # ----- Request preparation hooks --------------------------------------------------
     def _prepare_request_kwargs(
         self,

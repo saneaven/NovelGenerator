@@ -60,6 +60,7 @@ class CustomThinkingEffortField(BaseModel):
     """A single effort field: a dot-path into the request body and the value to inject."""
     path: str
     value: str
+    value_type: Literal["string", "number", "boolean"]
 
 
 class CustomThinkingResponseField(BaseModel):

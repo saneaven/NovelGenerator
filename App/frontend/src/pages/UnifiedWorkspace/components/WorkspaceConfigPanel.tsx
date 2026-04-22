@@ -450,7 +450,27 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       }
     } catch (err: any) {
       console.error('Vector storage reindex failed:', err);
-      showAlert({ title: 'Vector Storage', message: 'Failed to reindex project.' });
+      const status = typeof err?.status === 'number' ? err.status : undefined;
+      const backendMessage = typeof err?.message === 'string' && err.message.length > 0
+        ? err.message
+        : 'Failed to reindex project.';
+      const detailParts: string[] = [];
+      if (status !== undefined) detailParts.push(`HTTP ${status}`);
+      if (err?.data !== undefined && err?.data !== null) {
+        try {
+          detailParts.push(typeof err.data === 'string' ? err.data : JSON.stringify(err.data, null, 2));
+        } catch {
+          detailParts.push(String(err.data));
+        }
+      } else if (err?.stack) {
+        detailParts.push(String(err.stack));
+      }
+      showAlert({
+        title: 'Vector Storage',
+        message: backendMessage,
+        variant: 'danger',
+        detail: detailParts.length > 0 ? detailParts.join('\n\n') : null,
+      });
     } finally {
       setIsVectorStorageReindexing(false);
     }

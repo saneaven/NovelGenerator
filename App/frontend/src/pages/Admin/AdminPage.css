@@ -358,6 +358,14 @@
   gap: var(--spacing-lg);
 }
 
+.admin-memory-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
 .admin-memory-controls {
   display: flex;
   flex-wrap: wrap;
@@ -367,6 +375,12 @@
 .admin-memory-tables {
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.admin-memory-diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--spacing-lg);
 }
 
@@ -410,10 +424,20 @@
   word-break: break-all;
 }
 
+.admin-memory-table--compact td:first-child {
+  color: var(--color-text-inverse-secondary);
+  white-space: nowrap;
+}
+
+.admin-memory-panel .admin-summary-card__value {
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 1024px) {
   .admin-page__summary-grid,
   .admin-user-grid,
-  .admin-memory-cards {
+  .admin-memory-cards,
+  .admin-memory-diagnostic-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -429,7 +453,8 @@
   .admin-page__panel-header,
   .admin-user-card__header,
   .admin-user-card__meta,
-  .admin-user-card__quota-row {
+  .admin-user-card__quota-row,
+  .admin-memory-header-actions {
     flex-direction: column;
     align-items: stretch;
   }
@@ -437,7 +462,8 @@
   .admin-page__summary-grid,
   .admin-user-grid,
   .admin-page__filters,
-  .admin-memory-cards {
+  .admin-memory-cards,
+  .admin-memory-diagnostic-grid {
     grid-template-columns: 1fr;
   }
 

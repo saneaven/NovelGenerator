@@ -6,7 +6,9 @@ When disabled, these endpoints are never mounted on the FastAPI app.
 
 from __future__ import annotations
 
+import asyncio
 import gc
+import os
 import tracemalloc
 from collections import Counter
 from typing import Any, Literal
@@ -41,13 +43,32 @@ class TracemallocState(BaseModel):
 
 class GcSnapshot(BaseModel):
     stats: list[dict[str, Any]]
+    count: list[int]
+    threshold: list[int]
     total_objects_gen2: int
     top_types_by_count: list[TopTypeEntry]
+
+
+class FdSnapshot(BaseModel):
+    total: int | None = None
+    sockets: int | None = None
+    regular_files: int | None = None
+    other: int | None = None
+
+
+class AsyncioSnapshot(BaseModel):
+    total: int | None = None
+    done: int | None = None
+    pending: int | None = None
 
 
 class MemorySummary(BaseModel):
     rss_bytes: int | None
     vms_bytes: int | None
+    process_status: dict[str, int | None]
+    smaps_rollup: dict[str, int | None]
+    fd: FdSnapshot
+    asyncio: AsyncioSnapshot
     gc: GcSnapshot
     tracemalloc: TracemallocState
 
@@ -56,24 +77,122 @@ class TracemallocRequest(BaseModel):
     action: Literal["start", "stop", "reset"]
 
 
-def _read_proc_self_status() -> dict[str, int]:
-    """Parse /proc/self/status for VmRSS and VmSize. Returns bytes."""
-    result: dict[str, int] = {}
+PROC_STATUS_FIELDS = (
+    "VmRSS",
+    "VmHWM",
+    "VmSize",
+    "VmData",
+    "VmStk",
+    "VmExe",
+    "VmLib",
+    "VmPTE",
+    "RssAnon",
+    "RssFile",
+    "RssShmem",
+    "Threads",
+)
+PROC_STATUS_BYTE_FIELDS = set(PROC_STATUS_FIELDS) - {"Threads"}
+SMAPS_ROLLUP_FIELDS = (
+    "Rss",
+    "Pss",
+    "Private_Clean",
+    "Private_Dirty",
+    "Shared_Clean",
+    "Shared_Dirty",
+    "Anonymous",
+    "File",
+    "Swap",
+)
+
+
+def _empty_metric_map(keys: tuple[str, ...]) -> dict[str, int | None]:
+    return {key: None for key in keys}
+
+
+def _read_proc_self_status() -> dict[str, int | None]:
+    """Parse selected /proc/self/status fields. Memory values are bytes."""
+    result = _empty_metric_map(PROC_STATUS_FIELDS)
     try:
         with open("/proc/self/status", "r", encoding="utf-8") as fh:
             for line in fh:
-                if line.startswith("VmRSS:") or line.startswith("VmSize:"):
-                    parts = line.split()
-                    # Format: "VmRSS:    12345 kB"
-                    if len(parts) >= 2:
-                        try:
-                            kb = int(parts[1])
-                            result[parts[0].rstrip(":")] = kb * 1024
-                        except ValueError:
-                            pass
+                parts = line.split()
+                if len(parts) < 2:
+                    continue
+                key = parts[0].rstrip(":")
+                if key not in result:
+                    continue
+                try:
+                    value = int(parts[1])
+                except ValueError:
+                    continue
+                result[key] = value * 1024 if key in PROC_STATUS_BYTE_FIELDS else value
     except OSError:
         pass
     return result
+
+
+def _read_smaps_rollup() -> dict[str, int | None]:
+    """Parse selected /proc/self/smaps_rollup fields. Values are bytes."""
+    result = _empty_metric_map(SMAPS_ROLLUP_FIELDS)
+    try:
+        with open("/proc/self/smaps_rollup", "r", encoding="utf-8") as fh:
+            for line in fh:
+                parts = line.split()
+                if len(parts) < 2:
+                    continue
+                key = parts[0].rstrip(":")
+                if key not in result:
+                    continue
+                try:
+                    result[key] = int(parts[1]) * 1024
+                except ValueError:
+                    continue
+    except OSError:
+        pass
+    return result
+
+
+def _build_fd_snapshot() -> FdSnapshot:
+    try:
+        fd_names = os.listdir("/proc/self/fd")
+    except OSError:
+        return FdSnapshot()
+
+    sockets = 0
+    regular_files = 0
+    other = 0
+    for fd_name in fd_names:
+        try:
+            target = os.readlink(f"/proc/self/fd/{fd_name}")
+        except OSError:
+            other += 1
+            continue
+
+        if target.startswith("socket:"):
+            sockets += 1
+        elif target.startswith("/") and os.path.isfile(target):
+            regular_files += 1
+        else:
+            other += 1
+
+    return FdSnapshot(
+        total=len(fd_names),
+        sockets=sockets,
+        regular_files=regular_files,
+        other=other,
+    )
+
+
+def _build_asyncio_snapshot() -> AsyncioSnapshot:
+    try:
+        loop = asyncio.get_running_loop()
+        tasks = list(asyncio.all_tasks(loop))
+    except RuntimeError:
+        return AsyncioSnapshot()
+
+    done = sum(1 for task in tasks if task.done())
+    pending = len(tasks) - done
+    return AsyncioSnapshot(total=len(tasks), done=done, pending=pending)
 
 
 def _build_tracemalloc_state() -> TracemallocState:
@@ -105,7 +224,8 @@ def _build_tracemalloc_state() -> TracemallocState:
 async def get_memory_summary(
     current_admin: User = Depends(require_admin),
 ) -> MemorySummary:
-    proc = _read_proc_self_status()
+    process_status = _read_proc_self_status()
+    smaps_rollup = _read_smaps_rollup()
 
     objs = gc.get_objects(generation=2)
     total_gen2 = len(objs)
@@ -118,10 +238,16 @@ async def get_memory_summary(
     ]
 
     return MemorySummary(
-        rss_bytes=proc.get("VmRSS"),
-        vms_bytes=proc.get("VmSize"),
+        rss_bytes=process_status.get("VmRSS"),
+        vms_bytes=process_status.get("VmSize"),
+        process_status=process_status,
+        smaps_rollup=smaps_rollup,
+        fd=_build_fd_snapshot(),
+        asyncio=_build_asyncio_snapshot(),
         gc=GcSnapshot(
             stats=gc.get_stats(),
+            count=list(gc.get_count()),
+            threshold=list(gc.get_threshold()),
             total_objects_gen2=total_gen2,
             top_types_by_count=top_types,
         ),

@@ -63,6 +63,11 @@ class ClaudeProvider(BaseProvider):
             self._client = self._build_client()
         return self._client
 
+    async def aclose(self) -> None:
+        client = self._client
+        self._client = None
+        await self._close_sdk_client(client)
+
     def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
         blocks: list[dict[str, Any]] = []
         for block in self._snapshot_reasoning_details(final_snapshot):

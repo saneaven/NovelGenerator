@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 import sys
 import types
@@ -76,6 +77,8 @@ def _ensure_provider_stubs() -> None:
             NONE = "NONE"
 
         fake_genai.Client = _StubClient
+        fake_errors.APIError = Exception
+        fake_genai.errors = fake_errors
         fake_types.HttpOptions = _StubHttpOptions
         fake_types.Part = _StubPart
         fake_types.Content = _StubContent
@@ -107,12 +110,12 @@ def _ensure_provider_stubs() -> None:
 
 def _load_providers():
     _ensure_provider_stubs()
-    from App.backend.providers.claude_provider import ClaudeProvider
-    from App.backend.providers.custom import CustomProvider
-    from App.backend.providers.gemini_provider import GeminiProvider
-    from App.backend.providers.openai_responses_provider import OpenAIResponsesProvider
-    from App.backend.providers.openrouter import OpenRouterProvider
-    from App.backend.providers.xai_provider import XAIProvider
+    from App.backend.providers.llm.claude_provider import ClaudeProvider
+    from App.backend.providers.llm.custom import CustomProvider
+    from App.backend.providers.llm.gemini_provider import GeminiProvider
+    from App.backend.providers.llm.openai_responses_provider import OpenAIResponsesProvider
+    from App.backend.providers.llm.openrouter import OpenRouterProvider
+    from App.backend.providers.llm.xai_provider import XAIProvider
 
     return ClaudeProvider, CustomProvider, GeminiProvider, OpenAIResponsesProvider, OpenRouterProvider, XAIProvider
 
@@ -238,9 +241,14 @@ def test_openai_read_reasoning_detail_no_raw_response() -> None:
     assert detail["data"]["items"][0]["id"] == "rs_abc"
 
 
-def test_custom_openai_response_read_reasoning_detail_delegates_to_responses_provider() -> None:
+def test_custom_openai_response_read_reasoning_detail_does_not_build_delegate(monkeypatch) -> None:
     _, CustomProvider, _, _, _, _ = _load_providers()
     provider = CustomProvider({})
+    monkeypatch.setattr(
+        provider,
+        "_build_openai_response_delegate",
+        lambda: (_ for _ in ()).throw(AssertionError("delegate should not be built")),
+    )
     snapshot = _Snapshot(
         content_parts=[{"type": "content", "text": "Hello"}],
         reasoning_details=[
@@ -260,9 +268,14 @@ def test_custom_openai_response_read_reasoning_detail_delegates_to_responses_pro
     assert detail["data"]["output_msg_id"] == "msg_xyz"
 
 
-def test_custom_claude_read_reasoning_detail_delegates_to_claude_provider() -> None:
+def test_custom_claude_read_reasoning_detail_does_not_build_delegate(monkeypatch) -> None:
     _, CustomProvider, _, _, _, _ = _load_providers()
     provider = CustomProvider({})
+    monkeypatch.setattr(
+        provider,
+        "_build_claude_delegate",
+        lambda: (_ for _ in ()).throw(AssertionError("delegate should not be built")),
+    )
     snapshot = _Snapshot(
         content_parts=[{"type": "content", "text": "Hello"}],
         reasoning_details=[
@@ -276,6 +289,36 @@ def test_custom_claude_read_reasoning_detail_delegates_to_claude_provider() -> N
     assert detail["type"] == "claude"
     assert detail["data"]["blocks"][0]["thinking"] == "step one"
     assert detail["data"]["blocks"][0]["signature"] == "sig_123"
+
+
+def test_custom_stream_closes_delegate(monkeypatch) -> None:
+    _, CustomProvider, _, _, _, _ = _load_providers()
+    provider = CustomProvider({})
+    closed: list[str] = []
+
+    class _Delegate:
+        async def stream_chat(self, **_kwargs):
+            yield types.SimpleNamespace(kind="meta")
+
+        async def aclose(self) -> None:
+            closed.append("closed")
+
+    monkeypatch.setattr(provider, "_build_claude_delegate", lambda: _Delegate())
+
+    async def _collect() -> list[object]:
+        return [
+            event
+            async for event in provider.stream_chat(
+                messages=[],
+                model="model-a",
+                custom_kind="claude",
+            )
+        ]
+
+    events = asyncio.run(_collect())
+
+    assert len(events) == 1
+    assert closed == ["closed"]
 
 
 def test_custom_openai_completion_convert_messages_applies_history_inject() -> None:

@@ -1,8 +1,10 @@
 import copy
+import inspect
 from abc import ABC, abstractmethod
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from .contracts import ProviderEvent
+
 
 class BaseProvider(ABC):
     """Base class for all LLM providers"""
@@ -71,6 +73,45 @@ class BaseProvider(ABC):
 
     def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
         return None
+
+    async def aclose(self) -> None:
+        """Release provider-owned SDK resources."""
+        return None
+
+    @classmethod
+    async def _call_close_method(cls, target: Any, method_name: str, label: str) -> bool:
+        del label
+        method = getattr(target, method_name, None)
+        if not callable(method):
+            return False
+        try:
+            result = method()
+            if inspect.isawaitable(result):
+                await result
+            return True
+        except Exception:
+            return False
+
+    @classmethod
+    async def _close_sdk_client(cls, client: Any) -> None:
+        if client is None:
+            return
+
+        if await cls._call_close_method(client, "aclose", "client.aclose"):
+            return
+        if await cls._call_close_method(client, "close", "client.close"):
+            return
+
+        try:
+            aio_client = getattr(client, "aio", None)
+        except Exception:
+            return
+
+        if aio_client is None:
+            return
+        if await cls._call_close_method(aio_client, "aclose", "client.aio.aclose"):
+            return
+        await cls._call_close_method(aio_client, "close", "client.aio.close")
 
     @abstractmethod
     def stream_chat(

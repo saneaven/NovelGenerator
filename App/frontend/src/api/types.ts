@@ -485,13 +485,34 @@ export interface AdminMemoryTracemallocState {
 
 export interface AdminMemoryGcSnapshot {
   stats: Record<string, unknown>[];
+  count: number[];
+  threshold: number[];
   total_objects_gen2: number;
   top_types_by_count: AdminMemoryTopType[];
 }
 
+export interface AdminMemoryFdSnapshot {
+  total: number | null;
+  sockets: number | null;
+  regular_files: number | null;
+  other: number | null;
+}
+
+export interface AdminMemoryAsyncioSnapshot {
+  total: number | null;
+  done: number | null;
+  pending: number | null;
+}
+
+export type AdminMemoryMetricMap = Record<string, number | null>;
+
 export interface AdminMemorySummaryResponse {
   rss_bytes: number | null;
   vms_bytes: number | null;
+  process_status: AdminMemoryMetricMap;
+  smaps_rollup: AdminMemoryMetricMap;
+  fd: AdminMemoryFdSnapshot;
+  asyncio: AdminMemoryAsyncioSnapshot;
   gc: AdminMemoryGcSnapshot;
   tracemalloc: AdminMemoryTracemallocState;
 }

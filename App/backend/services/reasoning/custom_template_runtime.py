@@ -90,6 +90,31 @@ def delete_nested_path(obj: dict[str, Any], path: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Effort value coercion
+# ---------------------------------------------------------------------------
+
+_COERCE_FAIL = object()
+
+
+def _coerce_effort_value(raw: str, value_type: str) -> Any:
+    """Coerce a raw string input to the declared type. Returns _COERCE_FAIL on invalid input."""
+    if value_type == "number":
+        try:
+            num = float(raw.strip())
+        except (ValueError, AttributeError):
+            return _COERCE_FAIL
+        return int(num) if num.is_integer() else num
+    if value_type == "boolean":
+        normalized = raw.strip().lower()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+        return _COERCE_FAIL
+    return raw
+
+
+# ---------------------------------------------------------------------------
 # Template compilation (validate & filter valid rows)
 # ---------------------------------------------------------------------------
 
@@ -102,14 +127,25 @@ def compile_template(raw: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(name, str) or not name.strip():
         return None
 
-    effort_fields: list[dict[str, str]] = []
+    effort_fields: list[dict[str, Any]] = []
     for field in raw.get("effort_fields") or []:
         if not isinstance(field, dict):
             continue
         path = field.get("path")
         value = field.get("value")
-        if isinstance(path, str) and path.strip() and isinstance(value, str):
-            effort_fields.append({"path": path.strip(), "value": value})
+        if not (isinstance(path, str) and path.strip() and isinstance(value, str)):
+            continue
+        value_type = field.get("value_type")
+        if value_type not in ("string", "number", "boolean"):
+            continue
+        coerced = _coerce_effort_value(value, value_type)
+        if coerced is _COERCE_FAIL:
+            continue
+        effort_fields.append({
+            "path": path.strip(),
+            "value": coerced,
+            "value_type": value_type,
+        })
 
     response_fields: list[dict[str, Any]] = []
     for field in raw.get("response_fields") or []:
@@ -146,13 +182,12 @@ def compile_template(raw: dict[str, Any]) -> dict[str, Any] | None:
 # Effort: inject into request body
 # ---------------------------------------------------------------------------
 
-def apply_effort_fields(request: dict[str, Any], effort_fields: list[dict[str, str]]) -> None:
+def apply_effort_fields(request: dict[str, Any], effort_fields: list[dict[str, Any]]) -> None:
     """Inject effort field values into *request* at their declared paths."""
     for field in effort_fields:
         path = field.get("path")
-        value = field.get("value")
-        if isinstance(path, str) and path and isinstance(value, str):
-            set_nested_path(request, path, value)
+        if isinstance(path, str) and path:
+            set_nested_path(request, path, field.get("value"))
 
 
 # ---------------------------------------------------------------------------
