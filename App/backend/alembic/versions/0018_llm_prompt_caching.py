@@ -1,4 +1,4 @@
-"""Add prompt caching settings, prompt snapshots, and prompt cache artifacts."""
+"""Add prompt caching settings, thread cache plans, and prompt cache artifacts."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def upgrade() -> None:
             ),
         ),
     )
-    op.add_column("threads", sa.Column("captured_prompt_snapshot", JSONB(), nullable=True))
+    op.add_column("threads", sa.Column("captured_history_cache_plan_json", JSONB(), nullable=True))
 
     op.create_table(
         "thread_prompt_caches",
@@ -82,5 +82,5 @@ def downgrade() -> None:
     op.drop_index("ix_thread_prompt_caches_project_provider", table_name="thread_prompt_caches")
     op.drop_index("ix_thread_prompt_caches_thread_provider", table_name="thread_prompt_caches")
     op.drop_table("thread_prompt_caches")
-    op.drop_column("threads", "captured_prompt_snapshot")
+    op.drop_column("threads", "captured_history_cache_plan_json")
     op.drop_column("user_settings", "llm_cache_settings")
