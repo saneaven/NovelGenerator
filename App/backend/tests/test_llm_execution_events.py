@@ -102,6 +102,48 @@ from App.backend.models.db_models import RunMessageModel, RunModel, Thread
 from App.backend.providers.shared.contracts import FinalSnapshot
 
 events_module = importlib.import_module("App.backend.services.run_pipeline.llm_execution.events")
+stage_events_module = importlib.import_module("App.backend.services.run_pipeline.llm_execution.stage_events")
+
+
+def test_emit_stage_emits_run_stage_payload() -> None:
+    run = RunModel(
+        id=uuid4(),
+        thread_id=uuid4(),
+        user_id=uuid4(),
+        project_id=uuid4(),
+        status="running",
+        language="English",
+    )
+    thread = Thread(
+        id=run.thread_id,
+        project_id=run.project_id,
+        user_id=run.user_id,
+        thread_type="agent",
+        status="running",
+    )
+    emitted_payloads: list[tuple[str, dict[str, object]]] = []
+
+    async def _emit_fn(*, event_name: str, data: dict[str, object], **_kwargs) -> None:
+        emitted_payloads.append((event_name, data))
+
+    asyncio.run(
+        stage_events_module.emit_stage(
+            _emit_fn,
+            run=run,
+            thread=thread,
+            stage="retrieving_memory",
+        )
+    )
+
+    assert emitted_payloads == [
+        (
+            "run:stage",
+            {
+                "run_id": str(run.id),
+                "stage": "retrieving_memory",
+            },
+        )
+    ]
 
 
 def test_emit_terminal_events_propagates_child_terminal_state_to_parent(monkeypatch) -> None:

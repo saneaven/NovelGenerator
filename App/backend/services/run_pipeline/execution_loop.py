@@ -164,6 +164,7 @@ class RunPipelineExecutionLoop:
                     run=run,
                     thread=thread,
                     create_ctx=create_ctx,
+                    emit_fn=self._runtime.emit,
                 )
             else:
                 system_prompt, conversation, scenario_bundle = await prompt_assembly.assemble_resume(
@@ -171,6 +172,7 @@ class RunPipelineExecutionLoop:
                     run=run,
                     thread=thread,
                     input_payload=restored_payload,
+                    emit_fn=self._runtime.emit,
                 )
 
             db.refresh(run)
@@ -190,6 +192,7 @@ class RunPipelineExecutionLoop:
                         create_ctx.input_payload if create_ctx is not None else restored_payload
                     ),
                     checkpoint=execution_checkpoint,
+                    emit_fn=self._runtime.emit,
                 ),
                 LLMExecutionCallbacks(
                     emit_fn=self._runtime.emit,

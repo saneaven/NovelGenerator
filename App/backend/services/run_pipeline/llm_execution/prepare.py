@@ -18,6 +18,7 @@ from ...token_count_service import count_conversation_tokens
 from ...tool_engine import tool_engine
 from .. import prompt_assembly
 from .contracts import LLMExecutionRequest, PreparedLLMExecution
+from .stage_events import emit_stage
 
 
 MAX_ARCHIVE_LOOPS = 4
@@ -205,6 +206,12 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
             if total_tokens <= budget_tokens:
                 break
 
+            await emit_stage(
+                request.emit_fn,
+                run=run,
+                thread=thread,
+                stage="summarizing_context",
+            )
             boundary = archive_orchestrator.pick_boundary(
                 db,
                 thread=thread,

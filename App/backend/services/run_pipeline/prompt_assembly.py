@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,25 @@ from ..settings_service import settings_service
 from ..storage_usage_service import apply_project_usage_delta, build_thread_delta, snapshot_thread_row
 from .contracts import CreateContext
 from .text_utils import extract_last_texts
+
+EmitFn = Callable[..., Awaitable[None]]
+
+
+async def _emit_stage(
+    emit_fn: EmitFn | None,
+    *,
+    run: RunModel,
+    thread: Thread,
+    stage: str,
+) -> None:
+    from .llm_execution.stage_events import emit_stage
+
+    await emit_stage(
+        emit_fn,
+        run=run,
+        thread=thread,
+        stage=stage,
+    )
 
 
 @dataclass(frozen=True)
@@ -136,6 +155,7 @@ async def _render(
     template_data: dict[str, Any],
     bundle_inputs: _BundleInputs,
     archived_until_seq: int | None,
+    emit_fn: EmitFn | None = None,
 ) -> tuple[str, list[dict[str, Any]], ScenarioBundle]:
     bundle = _build_scenario_bundle(
         run=run,
@@ -148,6 +168,12 @@ async def _render(
         run=run,
         thread=thread,
         archived_until_seq=archived_until_seq,
+    )
+    await _emit_stage(
+        emit_fn,
+        run=run,
+        thread=thread,
+        stage="rendering_prompt",
     )
     system_prompt, conversation = assemble_scenario(
         template_renderer=template_renderer,
@@ -183,6 +209,7 @@ async def assemble_create(
     run: RunModel,
     thread: Thread,
     create_ctx: CreateContext,
+    emit_fn: EmitFn | None = None,
 ) -> tuple[str, list[dict[str, Any]], ScenarioBundle]:
     bundle_inputs = await _load_bundle_inputs(
         db,
@@ -205,6 +232,12 @@ async def assemble_create(
     )
     last_user_text, last_assistant_text = extract_last_texts(source_messages)
     template_data = dict(bundle_inputs.template_data)
+    await _emit_stage(
+        emit_fn,
+        run=run,
+        thread=thread,
+        stage="retrieving_memory",
+    )
     template_data["memory"] = await memory_retrieval.build_memory_data(
         db,
         user_id=run.user_id,
@@ -222,6 +255,7 @@ async def assemble_create(
         template_data=template_data,
         bundle_inputs=bundle_inputs,
         archived_until_seq=archived_until_seq,
+        emit_fn=emit_fn,
     )
 
 
@@ -231,6 +265,7 @@ async def reassemble_create(
     run: RunModel,
     thread: Thread,
     scenario_bundle: ScenarioBundle,
+    emit_fn: EmitFn | None = None,
 ) -> tuple[str, list[dict[str, Any]], ScenarioBundle]:
     archived_until_seq = memory_state.latest_archived_seq(
         db,
@@ -247,6 +282,12 @@ async def reassemble_create(
     last_user_text, last_assistant_text = extract_last_texts(source_messages)
 
     template_data = dict(scenario_bundle.template_data)
+    await _emit_stage(
+        emit_fn,
+        run=run,
+        thread=thread,
+        stage="retrieving_memory",
+    )
     template_data["memory"] = await memory_retrieval.build_memory_data(
         db,
         user_id=run.user_id,
@@ -272,6 +313,7 @@ async def reassemble_create(
             template_renderer_factory=scenario_bundle.template_renderer_factory,
         ),
         archived_until_seq=archived_until_seq,
+        emit_fn=emit_fn,
     )
 
 
@@ -281,6 +323,7 @@ async def assemble_resume(
     run: RunModel,
     thread: Thread,
     input_payload: dict[str, Any],
+    emit_fn: EmitFn | None = None,
 ) -> tuple[str, list[dict[str, Any]], ScenarioBundle]:
     if thread.captured_history_conversation_json is None:
         return await assemble_create(
@@ -288,6 +331,7 @@ async def assemble_resume(
             run=run,
             thread=thread,
             create_ctx=CreateContext(input_text="", input_payload=input_payload),
+            emit_fn=emit_fn,
         )
 
     last_msg_role = (
@@ -303,6 +347,7 @@ async def assemble_resume(
             run=run,
             thread=thread,
             create_ctx=CreateContext(input_text="", input_payload=input_payload),
+            emit_fn=emit_fn,
         )
 
     bundle_inputs = await _load_bundle_inputs(

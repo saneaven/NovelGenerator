@@ -294,3 +294,70 @@ def test_execute_loop_cancelled_error_preserves_paused_status(monkeypatch: pytes
 
     assert run.status == "paused"
     assert thread.status == "paused"
+
+
+def test_execute_loop_forwards_emit_fn_through_create_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, thread = make_run_and_thread()
+    session = FakeSession(run=run, thread=thread)
+    stack = build_runtime_stack(lambda: session)
+    captured: dict[str, object] = {}
+
+    async def _assemble_create(*_args: object, **kwargs: object) -> tuple[str, list[dict[str, object]], object]:
+        captured["assemble_emit_fn"] = kwargs.get("emit_fn")
+        return "system", [], {}
+
+    async def _execute(_self: object, request: object, callbacks: object) -> None:
+        captured["request_emit_fn"] = request.emit_fn
+        captured["callbacks_emit_fn"] = callbacks.emit_fn
+
+    monkeypatch.setattr(
+        execution_loop_module.settings_service,
+        "_get_settings",
+        lambda *_args, **_kwargs: UserSettings(),
+    )
+    monkeypatch.setattr(execution_loop_module.prompt_assembly, "assemble_create", _assemble_create)
+    monkeypatch.setattr(execution_loop_module.LLMExecutionOrchestrator, "execute", _execute)
+
+    asyncio.run(
+        stack.execution_loop.execute_loop(
+            run.id,
+            create_ctx=run_service.CreateContext(input_text="hello", input_payload={}),
+        )
+    )
+
+    assert captured == {
+        "assemble_emit_fn": stack.runtime.emit,
+        "request_emit_fn": stack.runtime.emit,
+        "callbacks_emit_fn": stack.runtime.emit,
+    }
+
+
+def test_execute_loop_forwards_emit_fn_through_resume_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, thread = make_run_and_thread()
+    session = FakeSession(run=run, thread=thread)
+    stack = build_runtime_stack(lambda: session)
+    captured: dict[str, object] = {}
+
+    async def _assemble_resume(*_args: object, **kwargs: object) -> tuple[str, list[dict[str, object]], object]:
+        captured["assemble_emit_fn"] = kwargs.get("emit_fn")
+        return "system", [], {}
+
+    async def _execute(_self: object, request: object, callbacks: object) -> None:
+        captured["request_emit_fn"] = request.emit_fn
+        captured["callbacks_emit_fn"] = callbacks.emit_fn
+
+    monkeypatch.setattr(
+        execution_loop_module.settings_service,
+        "_get_settings",
+        lambda *_args, **_kwargs: UserSettings(),
+    )
+    monkeypatch.setattr(execution_loop_module.prompt_assembly, "assemble_resume", _assemble_resume)
+    monkeypatch.setattr(execution_loop_module.LLMExecutionOrchestrator, "execute", _execute)
+
+    asyncio.run(stack.execution_loop.execute_loop(run.id))
+
+    assert captured == {
+        "assemble_emit_fn": stack.runtime.emit,
+        "request_emit_fn": stack.runtime.emit,
+        "callbacks_emit_fn": stack.runtime.emit,
+    }

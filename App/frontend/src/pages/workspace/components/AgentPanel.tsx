@@ -33,6 +33,7 @@ import { FunctionCallsThread } from '../../../toolCall/ui';
 import { SubAgentPeekDock } from '../../../components/SubAgentPeek';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
+import StageIndicator from './StageIndicator';
 import AuthenticatedImage from '../../../components/common/AuthenticatedImage';
 import AgentRunModeToggle from '../../../components/ui/AgentRunModeToggle';
 import { DropdownItem, DropdownMenu } from '../../../components/ui/DropdownMenu';
@@ -1894,6 +1895,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
 
           {isMessageRunActive && !hasStreamingMessage && liveView?.noticeKind === 'preexisting_live_run' && (
             <PreexistingLiveRunNotice />
+          )}
+
+          {threadId && (
+            <StageIndicator
+              threadId={threadId}
+              isMessageRunActive={isMessageRunActive}
+              threadStatus={thread?.status}
+            />
           )}
 
           {isMessageRunActive

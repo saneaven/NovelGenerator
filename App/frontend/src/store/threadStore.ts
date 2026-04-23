@@ -38,6 +38,7 @@ export interface ThreadState {
   pendingToolCallIdsByThread: Record<string, string[] | undefined>;
   pendingToolCallMessageByThread: Record<string, string | undefined>;
   activeStreamByThread: Record<string, boolean | undefined>;
+  currentStageByThread: Record<string, string | null>;
 
   upsertThread: (thread: ThreadInfo) => void;
   upsertThreadsRuntime: (threads: ThreadInfo[]) => void;
@@ -82,6 +83,7 @@ export interface ThreadState {
 
   setThreadStreamActive: (threadId: string, active: boolean) => void;
   isThreadStreamActive: (threadId: string) => boolean;
+  setThreadStage: (threadId: string, stage: string | null) => void;
   clearThreadStreamingState: (threadId: string) => void;
   discardStreamingAssistantMessage: (threadId: string, messageId: string) => void;
 
@@ -230,6 +232,7 @@ function removeThreadsCascadeState(state: ThreadState, threadIds: string[]): Par
   const nextMessagesByThreadId = { ...state.messagesByThreadId };
   const nextPreexistingLiveThreadsById = { ...state.preexistingLiveThreadsById };
   const nextActiveStreamByThread = { ...state.activeStreamByThread };
+  const nextCurrentStageByThread = { ...state.currentStageByThread };
 
   for (const threadId of toDelete) {
     for (const message of nextMessagesByThreadId[threadId] ?? []) {
@@ -239,6 +242,7 @@ function removeThreadsCascadeState(state: ThreadState, threadIds: string[]): Par
     delete nextMessagesByThreadId[threadId];
     delete nextPreexistingLiveThreadsById[threadId];
     delete nextActiveStreamByThread[threadId];
+    delete nextCurrentStageByThread[threadId];
   }
 
   const nextToolCallsById: Record<string, ThreadToolCall | undefined> = {};
@@ -253,6 +257,7 @@ function removeThreadsCascadeState(state: ThreadState, threadIds: string[]): Par
     preexistingLiveThreadsById: nextPreexistingLiveThreadsById,
     ...buildThreadScopedToolCallState(nextToolCallsById),
     activeStreamByThread: nextActiveStreamByThread,
+    currentStageByThread: nextCurrentStageByThread,
   };
 }
 
@@ -269,6 +274,7 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
   pendingToolCallIdsByThread: {},
   pendingToolCallMessageByThread: {},
   activeStreamByThread: {},
+  currentStageByThread: {},
 
   upsertThread: (thread) =>
     set((s) => {
@@ -337,10 +343,12 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
       const { [threadId]: _, ...rest } = s.threadsById;
       const { [threadId]: __, ...restMsgs } = s.messagesByThreadId;
       const { [threadId]: ___, ...restPreexisting } = s.preexistingLiveThreadsById;
+      const { [threadId]: ____, ...restStages } = s.currentStageByThread;
       return {
         threadsById: rest,
         messagesByThreadId: restMsgs,
         preexistingLiveThreadsById: restPreexisting,
+        currentStageByThread: restStages,
       };
     }),
 
@@ -715,6 +723,18 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
 
   isThreadStreamActive: (threadId) => Boolean(get().activeStreamByThread[threadId]),
 
+  setThreadStage: (threadId, stage) =>
+    set((s) => {
+      const current = s.currentStageByThread[threadId] ?? null;
+      if (current === stage) return s;
+      return {
+        currentStageByThread: {
+          ...s.currentStageByThread,
+          [threadId]: stage,
+        },
+      };
+    }),
+
   clearThreadStreamingState: (threadId) =>
     set((s) => {
       const messages = s.messagesByThreadId[threadId] ?? [];
@@ -732,7 +752,8 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
       });
 
       const streamActive = Boolean(s.activeStreamByThread[threadId]);
-      if (!changed && !streamActive) return s;
+      const currentStage = s.currentStageByThread[threadId] ?? null;
+      if (!changed && !streamActive && currentStage === null) return s;
 
       return {
         messagesByThreadId: changed
@@ -742,6 +763,10 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
           ...s.activeStreamByThread,
           [threadId]: false,
         },
+        currentStageByThread: {
+          ...s.currentStageByThread,
+          [threadId]: null,
+        },
       };
     }),
 
@@ -749,7 +774,16 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
     set((s) => {
       const messages = s.messagesByThreadId[threadId] ?? [];
       const target = messages.find((message) => message.id === messageId);
-      if (!target?.isStreaming || target.role !== 'assistant') return s;
+      const currentStage = s.currentStageByThread[threadId] ?? null;
+      if (!target?.isStreaming || target.role !== 'assistant') {
+        if (currentStage === null) return s;
+        return {
+          currentStageByThread: {
+            ...s.currentStageByThread,
+            [threadId]: null,
+          },
+        };
+      }
 
       revokeMessageAttachmentObjectUrls(target);
 
@@ -778,6 +812,10 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
           ...s.activeStreamByThread,
           [threadId]: false,
         },
+        currentStageByThread: {
+          ...s.currentStageByThread,
+          [threadId]: null,
+        },
       };
     }),
 
@@ -801,5 +839,6 @@ export const useThreadStore = create<ThreadState>()((set, get) => ({
       pendingToolCallIdsByThread: {},
       pendingToolCallMessageByThread: {},
       activeStreamByThread: {},
+      currentStageByThread: {},
     }),
 }));

@@ -395,6 +395,15 @@
 }
 
 /* ===== Typing Indicator ===== */
+.stage-indicator {
+    width: 100%;
+    margin: var(--spacing-xs) 0 0;
+    color: var(--color-text-tertiary);
+    font-size: 12px;
+    line-height: 1.4;
+    text-align: center;
+}
+
 .typing-indicator {
     display: flex;
     align-items: center;

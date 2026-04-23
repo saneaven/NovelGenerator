@@ -1,2 +1,1 @@
-- Every UI elements and prompts should be written in English.
 - You must think and talk in English even user is talking in Korean.

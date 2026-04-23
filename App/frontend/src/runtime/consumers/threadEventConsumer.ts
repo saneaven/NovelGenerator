@@ -836,8 +836,19 @@ export class ThreadEventConsumer {
       return;
     }
 
+    if (event.event === 'run:stage') {
+      const stage = typeof payload.stage === 'string' ? payload.stage : null;
+      if (!stage) return;
+      useThreadStore.getState().setThreadStage(threadId, stage);
+      return;
+    }
+
     if (event.event === 'llm:request') {
       const d = event.data as Record<string, unknown>;
+      const retryCount = typeof d.retry_count === 'number' ? d.retry_count : Number(d.retry_count ?? 0);
+      if (Number.isFinite(retryCount) && retryCount > 0) {
+        useThreadStore.getState().setThreadStage(threadId, 'retrying');
+      }
       const runId = d.run_id ? String(d.run_id) : 'n/a';
       const requestId = d.request_id ? String(d.request_id) : 'n/a';
       console.groupCollapsed(
@@ -871,6 +882,7 @@ export class ThreadEventConsumer {
       this.patchThreadFromRunStatus(threadId, status, error, payload);
       if (isNonLiveThreadStatus(status)) {
         useThreadStore.getState().setThreadStreamActive(threadId, false);
+        useThreadStore.getState().setThreadStage(threadId, null);
       }
       if (isNonLiveThreadStatus(status) && useThreadStore.getState().isPreexistingLiveThread(threadId)) {
         void fetchAndReplaceThreadSnapshot(threadId);
@@ -928,6 +940,7 @@ export class ThreadEventConsumer {
     }
 
     if (event.event === 'content:delta') {
+      useThreadStore.getState().setThreadStage(threadId, null);
       if (this.isSuppressed(threadId)) return;
       const requestId = readRequestId(payload);
       const messageId = String(payload.message_id ?? '');

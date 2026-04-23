@@ -1316,6 +1316,12 @@
         "tools": "Tools"
       }
     },
+    "stage": {
+      "retrievingMemory": "Searching past chat logs",
+      "renderingPrompt": "Rendering prompt",
+      "summarizingContext": "Summarizing context",
+      "retrying": "Retrying"
+    },
     "memory": {
       "preflight": {
         "summarizing": "Preparing context…",

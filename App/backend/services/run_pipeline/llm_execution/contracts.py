@@ -44,6 +44,7 @@ class LLMExecutionRequest:
     scenario_bundle: ScenarioBundle
     input_payload: dict[str, Any]
     checkpoint: ExecutionCheckpoint
+    emit_fn: EmitFn | None = None
 
 
 @dataclass
