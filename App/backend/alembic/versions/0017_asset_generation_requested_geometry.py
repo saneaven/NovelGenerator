@@ -6,7 +6,7 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision = "0017_asset_generation_requested_geometry"
+revision = "0017_asset_requested_geometry"
 down_revision = "0016_gpt_image_2_openai_defaults"
 branch_labels = None
 depends_on = None

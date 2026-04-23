@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import sys
 
 
@@ -10,6 +11,17 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from App.backend.services.default_preset_seed import load_default_preset_seed
+
+
+def _load_alembic_revision_ids() -> list[str]:
+    backend_root = Path(__file__).resolve().parents[1]
+    revision_pattern = re.compile(r'^revision\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+    revisions: list[str] = []
+    for path in sorted((backend_root / "alembic" / "versions").glob("*.py")):
+        match = revision_pattern.search(path.read_text(encoding="utf-8"))
+        assert match is not None, f"Missing Alembic revision in {path.name}"
+        revisions.append(match.group(1))
+    return revisions
 
 
 def _load_default_prompt_document() -> dict:
@@ -44,6 +56,14 @@ def test_alembic_versions_include_baseline() -> None:
     )
 
     assert "0001_baseline.py" in version_files
+
+
+def test_alembic_revision_ids_fit_version_table_limit() -> None:
+    revisions = _load_alembic_revision_ids()
+
+    assert all(len(revision) <= 32 for revision in revisions), (
+        "Alembic revision IDs must fit within alembic_version.version_num VARCHAR(32)"
+    )
 
 
 def test_default_prompt_places_project_reference_and_guidelines_in_expected_sections() -> None:
