@@ -20,8 +20,9 @@ import ImageGenPanel from './ImageGenPanel';
 import ProfilePanel from './ProfilePanel';
 import SearchMemoryPanel from './SearchMemoryPanel';
 import LLMLogViewer from './LLMLogViewer';
+import LLMCachePanel from './LLMCachePanel';
 import { SettingsToastProvider, type SettingsToastApi, type SettingsToastKind } from './SettingsToastContext';
-import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu, People, List, Star } from '../icons';
+import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu, People, List, Star, Lightning } from '../icons';
 import { TextButton } from '../TextButton';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
 import apiClient from '../../api/client';
@@ -40,6 +41,7 @@ type MainTab =
   | 'profile'
   | 'credentials'
   | 'searchMemory'
+  | 'llmCache'
   | 'general'
   | 'imageGen'
   | 'prompts'
@@ -50,7 +52,7 @@ type MainTab =
 type GeneralConfigTarget = 'general' | AITaskType;
 type SearchMemoryConfigTarget = 'general' | SearchMemoryTarget;
 
-const DEMO_LOCKED_TABS = new Set<MainTab>(['credentials', 'searchMemory', 'imageGen', 'prompts', 'advanced']);
+const DEMO_LOCKED_TABS = new Set<MainTab>(['credentials', 'searchMemory', 'llmCache', 'imageGen', 'prompts', 'advanced']);
 type NormalizedProviderConfig = Record<string, unknown>;
 
 function buildEmptyCredentialDraft(specs: Record<string, any>): ProviderCredentials {
@@ -676,6 +678,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           </li>
           <li>
             <button
+              className={`settings-mobile-sidebar-item ${mainTab === 'llmCache' ? 'active' : ''} ${isDemoLockedTab('llmCache') ? 'settings-sidebar-item--locked' : ''}`}
+              onClick={() => { handleMainTabSelect('llmCache', true); }}
+              aria-disabled={isDemoLockedTab('llmCache')}
+              data-locked={isDemoLockedTab('llmCache') ? 'true' : undefined}
+            >
+              <Lightning size="md" />
+              <span>{t('settings.tabs.llmCache', { defaultValue: 'LLM Cache' })}</span>
+            </button>
+          </li>
+          <li>
+            <button
               className={`settings-mobile-sidebar-item ${mainTab === 'imageGen' ? 'active' : ''} ${isDemoLockedTab('imageGen') ? 'settings-sidebar-item--locked' : ''}`}
               onClick={() => { handleMainTabSelect('imageGen', true); }}
               aria-disabled={isDemoLockedTab('imageGen')}
@@ -786,6 +799,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             </li>
             <li>
               <button
+                className={`settings-desktop-sidebar-item ${mainTab === 'llmCache' ? 'active' : ''} ${isDemoLockedTab('llmCache') ? 'settings-sidebar-item--locked' : ''}`}
+                onClick={() => handleMainTabSelect('llmCache')}
+                aria-disabled={isDemoLockedTab('llmCache')}
+                data-locked={isDemoLockedTab('llmCache') ? 'true' : undefined}
+              >
+                <Lightning size="md" />
+                <span>{t('settings.tabs.llmCache', { defaultValue: 'LLM Cache' })}</span>
+              </button>
+            </li>
+            <li>
+              <button
                 className={`settings-desktop-sidebar-item ${mainTab === 'imageGen' ? 'active' : ''} ${isDemoLockedTab('imageGen') ? 'settings-sidebar-item--locked' : ''}`}
                 onClick={() => handleMainTabSelect('imageGen')}
                 aria-disabled={isDemoLockedTab('imageGen')}
@@ -850,7 +874,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         </aside>
 
         {/* Panel Content */}
-        <div className={`settings-panel-content${mainTab === 'prompts' || mainTab === 'general' || mainTab === 'searchMemory' ? ' settings-panel-content--fill' : ''}`}>
+        <div className={`settings-panel-content${mainTab === 'prompts' || mainTab === 'general' || mainTab === 'searchMemory' || mainTab === 'llmCache' ? ' settings-panel-content--fill' : ''}`}>
         {mainTab === 'profile' && <ProfilePanel />}
 
         {mainTab === 'credentials' && !localSettings.demoModeEnabled && (
@@ -874,6 +898,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               }))
             }
             mainLanguage={localSettings.mainLanguage}
+          />
+        )}
+
+        {mainTab === 'llmCache' && !localSettings.demoModeEnabled && (
+          <LLMCachePanel
+            settings={localSettings.llmCacheSettings}
+            providerSpecs={providerSpecs}
+            onChange={(llmCacheSettings) =>
+              setLocalSettings((prev) => ({
+                ...prev,
+                llmCacheSettings,
+              }))
+            }
           />
         )}
 

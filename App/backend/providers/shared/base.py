@@ -129,6 +129,8 @@ class BaseProvider(ABC):
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
         provider_settings: Optional[Dict[str, Any]] = None,
+        cache_settings: Optional[Dict[str, Any]] = None,
+        cache_plan: Any = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         """
         Stream chat completions from the provider
@@ -147,6 +149,8 @@ class BaseProvider(ABC):
             native_tool_call: If true, provider should parse <tool_call> tags from text and emit tool_calls deltas.
             verbosity: GPT-5 output verbosity ('low', 'medium', 'high'). Maps to text.verbosity in Responses API.
             provider_settings: Provider-specific runtime settings for the active provider.
+            cache_settings: Global provider cache preferences resolved from user settings.
+            cache_plan: Prepared provider cache plan for this request.
 
         Yields:
             ProviderEvent objects. SSE formatting is handled by the API endpoint.

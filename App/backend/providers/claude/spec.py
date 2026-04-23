@@ -80,5 +80,35 @@ SPEC = ProviderSpec(
         default_variant="default",
         supports_tools=True,
         supports_thinking=True,
+        cache_settings=ObjectSpec(fields={
+            "enabled": FieldSpec(
+                kind="bool",
+                default=True,
+                ui=UIHint(
+                    widget="toggle",
+                    label_key="settings.llmCache.fields.enabled",
+                    order=10,
+                ),
+            ),
+            "ttl": FieldSpec(
+                kind="enum",
+                default="5m",
+                options=("5m", "1h"),
+                ui=UIHint(
+                    widget="select",
+                    label_key="settings.llmCache.fields.ttl",
+                    option_label_prefix="settings.llmCache.options.commonTtl",
+                    order=20,
+                ),
+            ),
+        }),
+        cache_capabilities={
+            "supports_explicit_checkpoints": True,
+            "max_explicit_checkpoints": 4,
+            "supports_single_selected_checkpoint": False,
+            "supports_ttl": True,
+            "supports_sticky_provider": False,
+            "notes_key": "settings.llmCache.notes.claude",
+        },
     ),
 )

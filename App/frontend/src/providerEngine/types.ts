@@ -65,6 +65,8 @@ export interface PublicLLMSpec {
   default_variant?: string | null;
   supports_tools: boolean;
   supports_thinking: boolean;
+  cache_settings?: PublicObjectSpec | null;
+  cache_capabilities?: Record<string, unknown> | null;
   common_task_config: PublicObjectSpec;
   variants: Record<string, PublicLLMVariantSpec>;
 }

@@ -276,6 +276,8 @@ class NanoGPTProvider(AsyncOpenAIProvider):
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
         provider_settings: Optional[Dict[str, Any]] = None,
+        cache_settings: Optional[Dict[str, Any]] = None,
+        cache_plan: Any = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         del provider_preference, custom_kind, verbosity
         if not self.validate_config():
@@ -314,6 +316,18 @@ class NanoGPTProvider(AsyncOpenAIProvider):
             **self._build_extra_headers(provider_settings),
         }
 
+        if isinstance(cache_settings, dict) and bool(cache_settings.get("enabled", False)):
+            prompt_caching: dict[str, Any] = {
+                "enabled": True,
+                "ttl": str(cache_settings.get("ttl") or "5m"),
+                "stickyProvider": bool(cache_settings.get("stickyProvider", False)),
+            }
+            selected_count = int(getattr(cache_plan, "selected_provider_message_count", 0) or 0)
+            if selected_count > 0:
+                prompt_caching["cut_after_message_index"] = selected_count - 1
+            final_body["prompt_caching"] = prompt_caching
+            headers["anthropic-beta"] = "prompt-caching-2024-07-31"
+
         yield ProviderEvent(kind="meta", raw_request={"headers": headers, "json": final_body})
 
         parser = None
@@ -331,10 +345,11 @@ class NanoGPTProvider(AsyncOpenAIProvider):
         last_finish_reason = None
         captured_usage: Optional[Dict[str, Any]] = None
         captured_reasoning_tokens: Optional[int] = None
+        captured_cache_metrics: Optional[Dict[str, Any]] = None
         raw_accumulated: Dict[str, Any] = {}
 
         def _update_meta_from_chunk(chunk_dict: Dict[str, Any]) -> None:
-            nonlocal captured_usage, captured_reasoning_tokens, last_finish_reason
+            nonlocal captured_usage, captured_reasoning_tokens, last_finish_reason, captured_cache_metrics
             usage = chunk_dict.get("usage")
             if isinstance(usage, dict):
                 captured_usage = usage
@@ -348,6 +363,19 @@ class NanoGPTProvider(AsyncOpenAIProvider):
                     reasoning_tokens = prompt_details.get("reasoning_tokens")
                     if isinstance(reasoning_tokens, (int, float)):
                         captured_reasoning_tokens = int(reasoning_tokens)
+                metrics: dict[str, Any] = {}
+                if isinstance(prompt_details, dict):
+                    cached_tokens = prompt_details.get("cached_tokens")
+                    if isinstance(cached_tokens, (int, float)):
+                        metrics["cached_tokens"] = int(cached_tokens)
+                    cache_read_tokens = prompt_details.get("cache_read_input_tokens")
+                    if isinstance(cache_read_tokens, (int, float)):
+                        metrics["cache_read_tokens"] = int(cache_read_tokens)
+                    cache_write_tokens = prompt_details.get("cache_creation_input_tokens")
+                    if isinstance(cache_write_tokens, (int, float)):
+                        metrics["cache_write_tokens"] = int(cache_write_tokens)
+                if metrics:
+                    captured_cache_metrics = metrics
             for choice in chunk_dict.get("choices", []):
                 if isinstance(choice, dict) and choice.get("finish_reason") is not None:
                     last_finish_reason = str(choice.get("finish_reason"))
@@ -477,6 +505,7 @@ class NanoGPTProvider(AsyncOpenAIProvider):
                     usage=usage_payload,
                     finish_reason=last_finish_reason,
                     reasoning_tokens=captured_reasoning_tokens,
+                    cache_metrics=captured_cache_metrics,
                 ),
                 raw_response=raw_accumulated or None,
             )

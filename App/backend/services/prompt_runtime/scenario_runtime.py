@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any, Iterable
 
 from .template_renderer import TemplateRenderer
@@ -87,6 +89,23 @@ def _shallow_copy_dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
+def _build_prefix_digest(system_prompt: str, conversation_prefix: list[dict[str, Any]]) -> str:
+    payload = {
+        "system_prompt": system_prompt,
+        "conversation": conversation_prefix,
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _prefix_label(rendered_message_count: int) -> str:
+    if rendered_message_count <= 0:
+        return "System prompt only"
+    if rendered_message_count == 1:
+        return "1 message"
+    return f"{rendered_message_count} messages"
+
+
 def _patched_template_data(*, template_data: dict[str, Any], input_key: str, source_text: str) -> dict[str, Any]:
     root = _shallow_copy_dict(template_data)
     inp = _shallow_copy_dict(root.get("input"))
@@ -107,7 +126,7 @@ def _assistant_has_structured_payload(message: dict[str, Any], attached_tool_res
     return isinstance(attached_tool_results, list) and any(isinstance(item, dict) for item in attached_tool_results)
 
 
-def assemble_scenario(
+def assemble_scenario_with_cache_plan(
     *,
     template_renderer: TemplateRenderer,
     task_type: str,
@@ -115,7 +134,7 @@ def assemble_scenario(
     blocks: list[dict[str, Any]],
     source_conversation: list[dict[str, Any]],
     template_data: dict[str, Any],
-) -> tuple[str, list[dict[str, Any]]]:
+) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
     """Assemble a scenario into (system_prompt, conversation).
 
     - source_conversation messages are grouped into runs by run_id.
@@ -188,6 +207,7 @@ def assemble_scenario(
     rendered_system_prompt = template_renderer.render_text(system_template or "", template_data).strip()
 
     rendered_conversation: list[dict[str, Any]] = []
+    cache_plan: list[dict[str, Any]] = []
     # Patch rules differ for subAgent.
     is_sub_agent = str(task_type or "") == "subAgent"
     user_input_key = "agentMessage" if is_sub_agent else "userMessage"
@@ -218,6 +238,34 @@ def assemble_scenario(
                 {
                     "role": role,
                     "content_parts": [{"type": "content", "text": rendered}],
+                }
+            )
+            continue
+
+        if btype == "cachePoint":
+            checkpoint_id = str(block.get("id") or "")
+            prefix_conversation = list(rendered_conversation)
+            last_message = prefix_conversation[-1] if prefix_conversation else None
+            last_seq_in_thread = (
+                int(last_message.get("seq_in_thread"))
+                if isinstance(last_message, dict) and isinstance(last_message.get("seq_in_thread"), int)
+                else None
+            )
+            last_role = (
+                str(last_message.get("role") or "")
+                if isinstance(last_message, dict) and isinstance(last_message.get("role"), str)
+                else ("system" if not prefix_conversation else None)
+            )
+            cache_plan.append(
+                {
+                    "checkpoint_id": checkpoint_id,
+                    "block_id": checkpoint_id,
+                    "block_order": int(block.get("block_order") or 0),
+                    "rendered_message_count": len(prefix_conversation),
+                    "last_seq_in_thread": last_seq_in_thread,
+                    "last_role": last_role,
+                    "prefix_label": _prefix_label(len(prefix_conversation)),
+                    "prefix_digest_raw": _build_prefix_digest(rendered_system_prompt, prefix_conversation),
                 }
             )
             continue
@@ -323,4 +371,37 @@ def assemble_scenario(
                         if isinstance(tool_msg, dict):
                             rendered_conversation.append(dict(tool_msg))
 
+    seen_prefixes: set[str] = set()
+    deduped_cache_plan: list[dict[str, Any]] = []
+    for checkpoint in cache_plan:
+        prefix_digest = str(checkpoint.get("prefix_digest_raw") or "")
+        if not prefix_digest:
+            continue
+        if prefix_digest in seen_prefixes:
+            checkpoint = dict(checkpoint)
+            checkpoint["duplicate_prefix"] = True
+        else:
+            seen_prefixes.add(prefix_digest)
+        deduped_cache_plan.append(checkpoint)
+
+    return rendered_system_prompt, rendered_conversation, deduped_cache_plan
+
+
+def assemble_scenario(
+    *,
+    template_renderer: TemplateRenderer,
+    task_type: str,
+    system_template: str,
+    blocks: list[dict[str, Any]],
+    source_conversation: list[dict[str, Any]],
+    template_data: dict[str, Any],
+) -> tuple[str, list[dict[str, Any]]]:
+    rendered_system_prompt, rendered_conversation, _cache_plan = assemble_scenario_with_cache_plan(
+        template_renderer=template_renderer,
+        task_type=task_type,
+        system_template=system_template,
+        blocks=blocks,
+        source_conversation=source_conversation,
+        template_data=template_data,
+    )
     return rendered_system_prompt, rendered_conversation

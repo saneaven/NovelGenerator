@@ -33,6 +33,19 @@ def _install_import_stubs() -> None:
     semantic_embedding_service.embed_many = lambda *_args, **_kwargs: None
     sys.modules["App.backend.services.semantic_embedding_service"] = semantic_embedding_service
 
+    memory_pkg = types.ModuleType("App.backend.services.memory")
+    memory_pkg.__path__ = [str(ROOT / "App" / "backend" / "services" / "memory")]
+    sys.modules["App.backend.services.memory"] = memory_pkg
+
+    tool_engine_pkg = types.ModuleType("App.backend.services.tool_engine")
+    tool_engine_pkg.__path__ = [str(ROOT / "App" / "backend" / "services" / "tool_engine")]
+    sys.modules["App.backend.services.tool_engine"] = tool_engine_pkg
+
+    grant_catalog = types.ModuleType("App.backend.services.tool_engine.grant_catalog")
+    grant_catalog.FeatureKey = str
+    grant_catalog.ToolCategory = str
+    sys.modules["App.backend.services.tool_engine.grant_catalog"] = grant_catalog
+
     mistune = types.ModuleType("mistune")
     mistune.create_markdown = lambda **_kwargs: (lambda _text: [])
     sys.modules["mistune"] = mistune
@@ -148,6 +161,7 @@ def test_archive_orchestrator_invalidates_resume_cache() -> None:
 
     assert "thread.captured_history_system_prompt = None" in source
     assert "thread.captured_history_conversation_json = None" in source
+    assert "thread.captured_history_cache_plan_json = None" in source
 
 
 def test_settings_contract_uses_search_memory_settings_field() -> None:

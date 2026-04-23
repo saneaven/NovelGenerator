@@ -86,7 +86,10 @@ class AsyncOpenAIProvider(BaseProvider):
         thinking_config: Optional[Dict],
         thinking_mode: Optional[str],
         provider_settings: Optional[Dict[str, Any]],
+        cache_settings: Optional[Dict[str, Any]] = None,
+        cache_plan: Any = None,
     ) -> Dict[str, object]:
+        del cache_settings, cache_plan
         is_gpt5 = self._is_gpt5_model(model)
 
         request: Dict[str, object] = {
@@ -146,6 +149,31 @@ class AsyncOpenAIProvider(BaseProvider):
     def _additional_request_kwargs(self, provider_settings: Optional[Dict[str, Any]] = None) -> Dict[str, object]:
         del provider_settings
         return {}
+
+    def _extract_cache_metrics(self, usage: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not isinstance(usage, dict):
+            return None
+        metrics: Dict[str, Any] = {}
+        prompt_details = usage.get("prompt_tokens_details")
+        if isinstance(prompt_details, dict):
+            cached_tokens = prompt_details.get("cached_tokens")
+            if isinstance(cached_tokens, (int, float)):
+                metrics["cached_tokens"] = int(cached_tokens)
+            cache_read_tokens = prompt_details.get("cache_read_input_tokens")
+            if isinstance(cache_read_tokens, (int, float)):
+                metrics["cache_read_tokens"] = int(cache_read_tokens)
+            cache_write_tokens = prompt_details.get("cache_creation_input_tokens")
+            if isinstance(cache_write_tokens, (int, float)):
+                metrics["cache_write_tokens"] = int(cache_write_tokens)
+        completion_details = usage.get("completion_tokens_details")
+        if isinstance(completion_details, dict):
+            cache_read_tokens = completion_details.get("cache_read_input_tokens")
+            if isinstance(cache_read_tokens, (int, float)):
+                metrics["cache_read_tokens"] = int(cache_read_tokens)
+            cache_write_tokens = completion_details.get("cache_creation_input_tokens")
+            if isinstance(cache_write_tokens, (int, float)):
+                metrics["cache_write_tokens"] = int(cache_write_tokens)
+        return metrics or None
 
     def _convert_messages(self, messages: List[Dict]) -> List[Dict]:
         """Convert messages to OpenAI Chat Completions format.
@@ -498,6 +526,8 @@ class AsyncOpenAIProvider(BaseProvider):
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
         provider_settings: Optional[Dict[str, Any]] = None,
+        cache_settings: Optional[Dict[str, Any]] = None,
+        cache_plan: Any = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         if not self.validate_config():
             yield self._error_event("Invalid provider configuration")
@@ -519,6 +549,8 @@ class AsyncOpenAIProvider(BaseProvider):
             thinking_config,
             thinking_mode,
             provider_settings,
+            cache_settings,
+            cache_plan,
         )
 
         # Check if last assistant message has unclosed <thinking> tag
@@ -531,9 +563,10 @@ class AsyncOpenAIProvider(BaseProvider):
         last_finish_reason = None
         captured_usage: Optional[Dict] = None
         captured_reasoning_tokens: Optional[int] = None
+        captured_cache_metrics: Optional[Dict[str, Any]] = None
 
         def _update_meta_from_chunk(chunk_dict: Dict) -> None:
-            nonlocal captured_usage, captured_reasoning_tokens, last_finish_reason
+            nonlocal captured_usage, captured_reasoning_tokens, last_finish_reason, captured_cache_metrics
             if "usage" in chunk_dict and chunk_dict["usage"]:
                 captured_usage = chunk_dict["usage"]
                 usage_details = chunk_dict["usage"] if isinstance(chunk_dict["usage"], dict) else {}
@@ -542,6 +575,7 @@ class AsyncOpenAIProvider(BaseProvider):
                     rt = completion_details.get("reasoning_tokens")
                     if isinstance(rt, (int, float)):
                         captured_reasoning_tokens = int(rt)
+                captured_cache_metrics = self._extract_cache_metrics(usage_details)
             for choice in chunk_dict.get("choices", []):
                 if choice.get("finish_reason"):
                     last_finish_reason = choice.get("finish_reason")
@@ -663,6 +697,7 @@ class AsyncOpenAIProvider(BaseProvider):
                     if isinstance(captured_usage, dict)
                     else None,
                     reasoning_tokens=captured_reasoning_tokens,
+                    cache_metrics=captured_cache_metrics,
                 ),
                 raw_response=raw_accumulated if raw_accumulated else None,
             )

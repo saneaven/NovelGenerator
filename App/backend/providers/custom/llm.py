@@ -461,6 +461,8 @@ class CustomProvider(AsyncOpenAIProvider):
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
         provider_settings: Optional[Dict[str, Any]] = None,
+        cache_settings: Optional[Dict[str, Any]] = None,
+        cache_plan: Any = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         del provider_settings
         effective_custom_kind = self._effective_custom_kind(custom_kind)
@@ -481,6 +483,8 @@ class CustomProvider(AsyncOpenAIProvider):
                     thinking_mode=thinking_mode,
                     custom_kind=effective_custom_kind,
                     native_tool_call=native_tool_call,
+                    cache_settings=cache_settings,
+                    cache_plan=cache_plan,
                 ):
                     yield event
             finally:
@@ -503,6 +507,8 @@ class CustomProvider(AsyncOpenAIProvider):
                     custom_kind=effective_custom_kind,
                     native_tool_call=native_tool_call,
                     verbosity=verbosity,
+                    cache_settings=cache_settings,
+                    cache_plan=cache_plan,
                 ):
                     yield event
             finally:
@@ -524,6 +530,8 @@ class CustomProvider(AsyncOpenAIProvider):
             thinking_mode=thinking_mode,
             custom_kind=effective_custom_kind,
             native_tool_call=native_tool_call,
+            cache_settings=cache_settings,
+            cache_plan=cache_plan,
         ):
             yield event
 

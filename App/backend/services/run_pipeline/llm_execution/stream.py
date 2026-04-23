@@ -34,6 +34,8 @@ async def execute_stream(
     provider = prepared.provider
     task_config = prepared.task_config
     advanced = prepared.advanced
+    cache_settings = getattr(prepared, "llm_cache_settings", None)
+    prepared_cache_plan = getattr(prepared, "prepared_cache_plan", None)
 
     def _create_stream():
         if prepared.output_mode == "raw_output":
@@ -57,6 +59,8 @@ async def execute_stream(
             native_tool_call=prepared.native_tool_call_mode,
             verbosity=advanced.get("verbosity"),
             provider_settings=advanced.get("provider_settings"),
+            cache_settings=cache_settings,
+            cache_plan=prepared_cache_plan,
         )
 
     session = LLMRequestSession(
@@ -85,7 +89,12 @@ async def execute_stream(
         request_id=request_id,
     )
     native_final = None
-    merged_meta: MetaPayload | None = None
+    seed_cache_metrics = (
+        prepared_cache_plan.as_metrics()
+        if prepared_cache_plan is not None and hasattr(prepared_cache_plan, "as_metrics")
+        else None
+    )
+    merged_meta: MetaPayload | None = MetaPayload(cache_metrics=seed_cache_metrics)
     raw_response: dict | None = None
 
     try:

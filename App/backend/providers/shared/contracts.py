@@ -109,6 +109,8 @@ class LLMSpec:
     derived_flags: tuple[DerivedFlag, ...] = ()
     supports_tools: bool = False
     supports_thinking: bool = False
+    cache_settings: ObjectSpec | None = None
+    cache_capabilities: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -381,6 +383,7 @@ class MetaPayload:
     usage: Optional[Dict[str, int]] = None
     finish_reason: Optional[str] = None
     reasoning_tokens: Optional[int] = None
+    cache_metrics: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -403,6 +406,7 @@ class FinalSnapshot:
     reasoning_details: List[Dict[str, Any]]
     usage: Optional[Dict[str, int]] = None
     reasoning_tokens: Optional[int] = None
+    cache_metrics: Optional[Dict[str, Any]] = None
     final_source: FinalSource = "native"
     raw_native_response: Optional[Dict[str, Any]] = None
 
@@ -445,13 +449,23 @@ def merge_meta_payload(left: Optional[MetaPayload], right: Optional[MetaPayload]
             usage=normalize_usage_dict(right.usage) if right else None,
             finish_reason=(right.finish_reason if right else None),
             reasoning_tokens=(right.reasoning_tokens if right else None),
+            cache_metrics=(copy.deepcopy(right.cache_metrics) if right and isinstance(right.cache_metrics, dict) else None),
         )
     if right is None:
         return MetaPayload(
             usage=normalize_usage_dict(left.usage),
             finish_reason=left.finish_reason,
             reasoning_tokens=left.reasoning_tokens,
+            cache_metrics=(copy.deepcopy(left.cache_metrics) if isinstance(left.cache_metrics, dict) else None),
         )
+
+    merged_cache_metrics: Dict[str, Any] | None = None
+    if isinstance(left.cache_metrics, dict) or isinstance(right.cache_metrics, dict):
+        merged_cache_metrics = {}
+        if isinstance(left.cache_metrics, dict):
+            merged_cache_metrics.update(copy.deepcopy(left.cache_metrics))
+        if isinstance(right.cache_metrics, dict):
+            merged_cache_metrics.update(copy.deepcopy(right.cache_metrics))
 
     return MetaPayload(
         usage=normalize_usage_dict(right.usage) or normalize_usage_dict(left.usage),
@@ -461,6 +475,7 @@ def merge_meta_payload(left: Optional[MetaPayload], right: Optional[MetaPayload]
             if isinstance(right.reasoning_tokens, int)
             else left.reasoning_tokens
         ),
+        cache_metrics=merged_cache_metrics,
     )
 
 
@@ -473,6 +488,8 @@ def patch_snapshot_with_meta(snapshot: FinalSnapshot, meta: Optional[MetaPayload
         snapshot.finish_reason = meta.finish_reason
     if snapshot.reasoning_tokens is None and isinstance(meta.reasoning_tokens, int):
         snapshot.reasoning_tokens = meta.reasoning_tokens
+    if snapshot.cache_metrics is None and isinstance(meta.cache_metrics, dict):
+        snapshot.cache_metrics = copy.deepcopy(meta.cache_metrics)
     return snapshot
 
 
@@ -573,6 +590,7 @@ def extract_native_tool_calls_from_snapshot(snapshot: FinalSnapshot) -> FinalSna
         reasoning_details=snapshot.reasoning_details,
         usage=snapshot.usage,
         reasoning_tokens=snapshot.reasoning_tokens,
+        cache_metrics=snapshot.cache_metrics,
         final_source=snapshot.final_source,
     )
 
@@ -587,5 +605,6 @@ def final_snapshot_to_wire(snapshot: FinalSnapshot) -> Dict[str, Any]:
         "reasoningDetail": snapshot.reasoning_details,
         "usage": normalize_usage_dict(snapshot.usage),
         "reasoningTokens": snapshot.reasoning_tokens,
+        "cacheMetrics": copy.deepcopy(snapshot.cache_metrics) if isinstance(snapshot.cache_metrics, dict) else None,
         "finalSource": snapshot.final_source,
     }

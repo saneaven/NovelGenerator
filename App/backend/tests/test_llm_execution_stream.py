@@ -99,6 +99,68 @@ def _install_import_stubs() -> None:
     fake_llm_execution.__path__ = [str(ROOT / "App" / "backend" / "services" / "run_pipeline" / "llm_execution")]
     sys.modules["App.backend.services.run_pipeline.llm_execution"] = fake_llm_execution
 
+    fake_contracts = types.ModuleType("App.backend.services.run_pipeline.llm_execution.contracts")
+
+    @dataclass(frozen=True)
+    class ExecutionCheckpoint:
+        message_id: object | None = None
+        request_id: str | None = None
+        finalized: bool = False
+
+    @dataclass(frozen=True)
+    class LLMExecutionCallbacks:
+        emit_fn: object
+        persist_tool_calls_fn: object | None = None
+        sync_status_fn: object | None = None
+
+    @dataclass(frozen=True)
+    class LLMExecutionRequest:
+        db: object
+        run: object
+        thread: object
+        settings: object
+        system_prompt: str = ""
+        conversation: list[dict[str, object]] = field(default_factory=list)
+        scenario_bundle: object | None = None
+        input_payload: dict[str, object] = field(default_factory=dict)
+        checkpoint: object | None = None
+        emit_fn: object | None = None
+
+    @dataclass
+    class PreparedLLMExecution:
+        preset_id: object | None = None
+        runtime: object | None = None
+        task_config: object | None = None
+        provider: object | None = None
+        tool_offer: object | None = None
+        output_mode: str = "tool_call"
+        native_tool_call_mode: bool = False
+        advanced: dict[str, object] = field(default_factory=dict)
+        thinking_mode: str = "off"
+        effective_thinking_config: dict[str, object] | None = None
+        provider_messages: list[dict[str, object]] = field(default_factory=list)
+        llm_cache_settings: dict[str, object] = field(default_factory=dict)
+        prepared_cache_plan: object | None = None
+        stream_thinking_display: str | None = None
+        retry_cfg: object | None = None
+
+    @dataclass(frozen=True)
+    class StreamExecutionResult:
+        final_snapshot: object
+        raw_response: dict[str, object] | None
+        request_id: str | None = None
+
+    fake_contracts.ExecutionCheckpoint = ExecutionCheckpoint
+    fake_contracts.LLMExecutionCallbacks = LLMExecutionCallbacks
+    fake_contracts.LLMExecutionRequest = LLMExecutionRequest
+    fake_contracts.PreparedLLMExecution = PreparedLLMExecution
+    fake_contracts.StreamExecutionResult = StreamExecutionResult
+    sys.modules["App.backend.services.run_pipeline.llm_execution.contracts"] = fake_contracts
+
+    fake_stream_retry = types.ModuleType("App.backend.providers.shared.transport.stream_retry")
+    fake_stream_retry.stream_with_retry = lambda factory, _cfg, on_retry=None: factory()
+    sys.modules["App.backend.providers.shared.transport.stream_retry"] = fake_stream_retry
+
 
 _install_import_stubs()
 

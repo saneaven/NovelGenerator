@@ -356,6 +356,7 @@ async def run(
         )
         thread.captured_history_system_prompt = None
         thread.captured_history_conversation_json = None
+        thread.captured_history_cache_plan_json = None
         db.commit()
     except Exception as exc:
         db.rollback()

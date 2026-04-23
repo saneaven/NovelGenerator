@@ -115,6 +115,15 @@ class UserSettings(Base):
         "overrides": {}
     }""")
 
+    # LLM prompt cache settings (global per-provider cache preferences).
+    llm_cache_settings = Column(JSONB, nullable=False, server_default="""{
+        "openai": {"enabled": true, "retention": "default"},
+        "claude": {"enabled": true, "ttl": "5m"},
+        "gemini": {"enabled": true, "implicit": true, "explicit": true, "explicit_ttl_preset": "1h"},
+        "xai": {"enabled": true},
+        "nanogpt": {"enabled": true, "ttl": "5m", "stickyProvider": false}
+    }""")
+
     # Patch auto-retry - automatically retry with replace mode if patch fails
     patch_auto_retry = Column(Boolean, default=True, nullable=False)
 
@@ -885,6 +894,7 @@ class Thread(Base):
     # Rendered conversation snapshot — re-captured on every create, reused on resume.
     captured_history_system_prompt = Column(Text, nullable=True)
     captured_history_conversation_json = Column(JSONB, nullable=True)
+    captured_history_cache_plan_json = Column(JSONB, nullable=True)
 
     # Stable per-thread run ordering (1-based)
     next_run_seq = Column(BigInteger, default=1, nullable=False)
@@ -898,6 +908,7 @@ class Thread(Base):
     project = relationship("Project")
     user = relationship("User")
     runs = relationship("RunModel", back_populates="thread", cascade="all, delete-orphan", order_by="RunModel.run_seq")
+    prompt_caches = relationship("ThreadPromptCache", back_populates="thread", cascade="all, delete-orphan")
 
     __table_args__ = (
         CheckConstraint(
@@ -1403,4 +1414,45 @@ class LLMRequest(Base):
         Index("ix_llm_requests_user_created", "user_id", created_at.desc()),
         Index("ix_llm_requests_run_id", "run_id"),
         Index("ix_llm_requests_thread_id", "thread_id"),
+    )
+
+
+class ThreadPromptCache(Base):
+    """Persisted prompt cache artifacts and logical prefix rows."""
+    __tablename__ = "thread_prompt_caches"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    thread_id = Column(UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    provider = Column(String(50), nullable=False)
+    model = Column(String(200), nullable=False)
+    checkpoint_id = Column(String(120), nullable=False)
+    prefix_digest = Column(String(128), nullable=False)
+    strategy = Column(String(50), nullable=False)
+    external_handle = Column(String(255), nullable=True)
+    ttl_label = Column(String(32), nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+    last_hit_at = Column(DateTime, nullable=True)
+    status = Column(String(20), nullable=False, default="active")
+    meta = Column(JSONB, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    thread = relationship("Thread", back_populates="prompt_caches")
+    user = relationship("User")
+    project = relationship("Project")
+
+    __table_args__ = (
+        UniqueConstraint("thread_id", "provider", "model", "prefix_digest", name="uq_thread_prompt_caches_prefix"),
+        Index("ix_thread_prompt_caches_thread_provider", "thread_id", "provider"),
+        Index("ix_thread_prompt_caches_project_provider", "project_id", "provider"),
+        CheckConstraint(
+            "strategy IN ('logical_prefix','gemini_cached_content')",
+            name="ck_thread_prompt_caches_strategy",
+        ),
+        CheckConstraint(
+            "status IN ('active','expired','error')",
+            name="ck_thread_prompt_caches_status",
+        ),
     )

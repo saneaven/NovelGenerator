@@ -10,6 +10,7 @@ from ....providers.shared.base import BaseProvider
 from ....providers.shared.contracts import FinalSnapshot
 from ....providers.shared.transport.stream_retry import NormalizedRetryConfig
 from ...llm_runtime_service import LLMRuntime
+from ...prompt_cache_service import PreparedCachePlan
 from ...prompt_runtime.contracts import ScenarioBundle
 from ...settings_service import TaskConfig
 from ...tool_engine.contracts import ToolOffer
@@ -60,6 +61,8 @@ class PreparedLLMExecution:
     thinking_mode: str
     effective_thinking_config: dict[str, Any] | None
     provider_messages: list[dict[str, Any]]
+    llm_cache_settings: dict[str, Any]
+    prepared_cache_plan: PreparedCachePlan
     stream_thinking_display: str | None
     retry_cfg: NormalizedRetryConfig | None
 

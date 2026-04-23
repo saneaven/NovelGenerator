@@ -12,6 +12,7 @@ from ..database import get_db
 from ..models.db_models import User, UserSettings
 from ..schemas.settings import UserSettingsResponse, UserSettingsUpdate
 from ..providers.shared.image.settings import default_image_gen_config, validate_image_gen_config
+from ..services.llm_cache_settings import validate_llm_cache_settings
 from ..services.memory_service import wipe_memory_index
 from ..services.semantic_index_service import wipe_user_semantic_index
 from ..services.search_memory_settings import (
@@ -118,6 +119,13 @@ def _build_settings_response(settings: UserSettings) -> UserSettingsResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Stored search memory settings are invalid: {exc}",
         ) from exc
+    try:
+        llm_cache_settings = validate_llm_cache_settings(getattr(settings, "llm_cache_settings", None))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Stored llm cache settings are invalid: {exc}",
+        ) from exc
 
     return UserSettingsResponse(
         taskConfigSettings=task_config_settings,
@@ -130,6 +138,7 @@ def _build_settings_response(settings: UserSettings) -> UserSettingsResponse:
         customThinkingTemplates=getattr(settings, "custom_thinking_templates", []) or [],
         nativeOutputMode=settings.native_output_mode,
         searchMemorySettings=search_memory_settings,  # type: ignore[arg-type]
+        llmCacheSettings=llm_cache_settings,  # type: ignore[arg-type]
         patchAutoRetry=getattr(settings, "patch_auto_retry", True),
         llmLoggingEnabled=getattr(settings, "llm_logging_enabled", False),
         toolCallHistoryLimit=getattr(settings, "tool_call_history_limit", 5),
@@ -265,6 +274,14 @@ async def update_user_settings(
             next_search_memory_settings = clear_dimensions_for_target(next_search_memory_settings, "memory")
 
         settings.search_memory_settings = next_search_memory_settings  # type: ignore[assignment]
+
+    if not demo_mode_enabled and update_data.llmCacheSettings is not None:
+        try:
+            settings.llm_cache_settings = validate_llm_cache_settings(
+                update_data.llmCacheSettings.model_dump(mode="json")
+            )  # type: ignore[assignment]
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
     if not demo_mode_enabled and update_data.patchAutoRetry is not None:
         settings.patch_auto_retry = update_data.patchAutoRetry  # type: ignore[assignment]

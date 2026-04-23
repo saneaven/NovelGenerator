@@ -126,6 +126,8 @@ class LLMRequestSession:
             partial["content_parts"] = content_parts
         if merged_meta and merged_meta.usage:
             partial["usage"] = merged_meta.usage
+        if merged_meta and merged_meta.cache_metrics:
+            partial["cache_metrics"] = merged_meta.cache_metrics
         return partial or None
 
     def _build_meta(self, merged_meta: MetaPayload | None) -> dict[str, Any]:
@@ -137,6 +139,8 @@ class LLMRequestSession:
                 meta["finish_reason"] = merged_meta.finish_reason
             if merged_meta.reasoning_tokens is not None:
                 meta["reasoning_tokens"] = merged_meta.reasoning_tokens
+            if merged_meta.cache_metrics:
+                meta["cache_metrics"] = merged_meta.cache_metrics
         return meta
 
     def _elapsed_ms(self) -> int:

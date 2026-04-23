@@ -227,6 +227,67 @@ class ClaudeProvider(BaseProvider):
         system_prompt = "\n\n".join(system_parts) if system_parts else None
         return system_prompt, anthropic_messages
 
+    @staticmethod
+    def _cache_control_payload(ttl_label: str | None) -> Dict[str, str]:
+        payload: Dict[str, str] = {"type": "ephemeral"}
+        if str(ttl_label or "").strip() == "1h":
+            payload["ttl"] = "1h"
+        return payload
+
+    def _apply_explicit_cache_controls(
+        self,
+        *,
+        system_prompt: Optional[str],
+        anthropic_messages: List[Dict],
+        cache_plan: Any,
+    ) -> tuple[Optional[str | List[Dict[str, Any]]], List[Dict]]:
+        plan_strategy = str(getattr(cache_plan, "provider_strategy", "") or "")
+        if plan_strategy != "claude_explicit":
+            return system_prompt, anthropic_messages
+
+        applied_ids = set(getattr(cache_plan, "applied_checkpoint_ids", []) or [])
+        checkpoints = [
+            checkpoint
+            for checkpoint in list(getattr(cache_plan, "checkpoints", []) or [])
+            if checkpoint.checkpoint_id in applied_ids
+        ]
+        checkpoints.sort(key=lambda checkpoint: (checkpoint.provider_message_count, checkpoint.block_order))
+        ttl_label = getattr(cache_plan, "ttl_label", None)
+
+        system_blocks: Optional[List[Dict[str, Any]]] = None
+        if isinstance(system_prompt, str) and system_prompt:
+            system_blocks = [{"type": "text", "text": system_prompt}]
+
+        seen_targets: set[tuple[str, int]] = set()
+        for checkpoint in checkpoints:
+            target_count = int(checkpoint.provider_message_count)
+            if target_count <= 0:
+                if not system_blocks:
+                    continue
+                target_key = ("system", 0)
+                if target_key in seen_targets:
+                    continue
+                system_blocks[-1]["cache_control"] = self._cache_control_payload(ttl_label)
+                seen_targets.add(target_key)
+                continue
+
+            message_index = target_count - 1
+            if message_index < 0 or message_index >= len(anthropic_messages):
+                continue
+            content = anthropic_messages[message_index].get("content")
+            if not isinstance(content, list) or not content:
+                continue
+            target_key = ("message", message_index)
+            if target_key in seen_targets:
+                continue
+            last_block = content[-1]
+            if not isinstance(last_block, dict):
+                continue
+            last_block["cache_control"] = self._cache_control_payload(ttl_label)
+            seen_targets.add(target_key)
+
+        return system_blocks if system_blocks else system_prompt, anthropic_messages
+
     def _build_thinking_kwargs(
         self,
         thinking_mode: Optional[str],
@@ -281,6 +342,8 @@ class ClaudeProvider(BaseProvider):
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
         provider_settings: Optional[Dict[str, Any]] = None,
+        cache_settings: Optional[Dict[str, Any]] = None,
+        cache_plan: Any = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         del provider_preference, custom_kind, verbosity, provider_settings
         if not self.validate_config():
@@ -289,6 +352,11 @@ class ClaudeProvider(BaseProvider):
 
         client = self._ensure_client()
         system_prompt, anthropic_messages = self._convert_messages(messages)
+        system_prompt, anthropic_messages = self._apply_explicit_cache_controls(
+            system_prompt=system_prompt,
+            anthropic_messages=anthropic_messages,
+            cache_plan=cache_plan,
+        )
 
         request: Dict[str, object] = {
             "model": model,
@@ -299,6 +367,11 @@ class ClaudeProvider(BaseProvider):
 
         if system_prompt:
             request["system"] = system_prompt
+
+        if isinstance(cache_settings, dict) and bool(cache_settings.get("enabled", False)):
+            ttl_label = str(getattr(cache_plan, "ttl_label", None) or cache_settings.get("ttl") or "5m")
+            if str(getattr(cache_plan, "provider_strategy", "") or "") == "claude_automatic":
+                request["cache_control"] = self._cache_control_payload(ttl_label)
 
         thinking_kwargs, output_config = self._build_thinking_kwargs(thinking_mode, thinking_config)
         if thinking_kwargs:
@@ -579,13 +652,20 @@ class ClaudeProvider(BaseProvider):
 
                 usage_obj = getattr(final_message, "usage", None)
                 usage_payload = None
+                cache_metrics = None
                 if usage_obj:
                     input_tokens = int(getattr(usage_obj, "input_tokens", 0) or 0)
                     output_tokens = int(getattr(usage_obj, "output_tokens", 0) or 0)
+                    cache_read_tokens = int(getattr(usage_obj, "cache_read_input_tokens", 0) or 0)
+                    cache_write_tokens = int(getattr(usage_obj, "cache_creation_input_tokens", 0) or 0)
                     usage_payload = {
-                        "prompt_tokens": input_tokens,
+                        "prompt_tokens": input_tokens + cache_read_tokens + cache_write_tokens,
                         "completion_tokens": output_tokens,
-                        "total_tokens": input_tokens + output_tokens,
+                        "total_tokens": input_tokens + cache_read_tokens + cache_write_tokens + output_tokens,
+                    }
+                    cache_metrics = {
+                        "cache_read_tokens": cache_read_tokens,
+                        "cache_write_tokens": cache_write_tokens,
                     }
 
                 finish_reason = self._normalize_finish_reason(stop_reason)
@@ -597,6 +677,7 @@ class ClaudeProvider(BaseProvider):
                         meta=MetaPayload(
                             usage=usage_payload,
                             finish_reason=finish_reason,
+                            cache_metrics=cache_metrics,
                         ),
                     )
 

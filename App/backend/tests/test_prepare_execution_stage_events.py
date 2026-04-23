@@ -42,9 +42,14 @@ class _RunMessageModel:
     role = object()
 
 
+class _ThreadPromptCache:
+    pass
+
+
 fake_db_models.RunModel = _RunModel
 fake_db_models.Thread = _Thread
 fake_db_models.RunMessageModel = _RunMessageModel
+fake_db_models.ThreadPromptCache = _ThreadPromptCache
 sys.modules["App.backend.models.db_models"] = fake_db_models
 
 fake_registry = types.ModuleType("App.backend.providers.registry")
@@ -99,6 +104,11 @@ fake_tool_engine = types.ModuleType("App.backend.services.tool_engine")
 fake_tool_engine.tool_engine = SimpleNamespace(build_offer_for_run=lambda *_args, **_kwargs: None)
 sys.modules["App.backend.services.tool_engine"] = fake_tool_engine
 
+fake_prompt_cache_service = types.ModuleType("App.backend.services.prompt_cache_service")
+fake_prompt_cache_service.annotate_conversation_render_indices = lambda conversation: list(conversation)
+fake_prompt_cache_service.build_prepared_cache_plan = lambda **_kwargs: SimpleNamespace(as_metrics=lambda: {})
+sys.modules["App.backend.services.prompt_cache_service"] = fake_prompt_cache_service
+
 fake_run_pipeline = types.ModuleType("App.backend.services.run_pipeline")
 fake_run_pipeline.__path__ = [str(ROOT / "App" / "backend" / "services" / "run_pipeline")]
 sys.modules["App.backend.services.run_pipeline"] = fake_run_pipeline
@@ -144,6 +154,8 @@ class _PreparedLLMExecution:
     thinking_mode: str
     effective_thinking_config: dict[str, object] | None
     provider_messages: list[dict[str, object]]
+    llm_cache_settings: dict[str, object]
+    prepared_cache_plan: object
     stream_thinking_display: str | None
     retry_cfg: object | None
 

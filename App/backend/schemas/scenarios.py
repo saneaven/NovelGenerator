@@ -6,7 +6,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-ScenarioBlockType = Literal["staticPrompt", "rangeMapping"]
+ScenarioBlockType = Literal["staticPrompt", "rangeMapping", "cachePoint"]
 StaticRole = Literal["user", "assistant"]
 
 
@@ -36,6 +36,7 @@ class ScenarioBlock(BaseModel):
 
     staticPrompt: Optional[ScenarioStaticPrompt] = None
     rangeMapping: Optional[ScenarioRangeMapping] = None
+    cachePoint: Optional[dict[str, Any]] = None
 
     @model_validator(mode="after")
     def _check_shape(self) -> "ScenarioBlock":
@@ -43,7 +44,19 @@ class ScenarioBlock(BaseModel):
             raise ValueError("staticPrompt is required when type=staticPrompt")
         if self.type == "rangeMapping" and self.rangeMapping is None:
             raise ValueError("rangeMapping is required when type=rangeMapping")
+        if self.type == "cachePoint" and self.cachePoint is not None and not isinstance(self.cachePoint, dict):
+            raise ValueError("cachePoint must be an object when provided")
         return self
+
+
+class ScenarioCacheCheckpoint(BaseModel):
+    checkpoint_id: str
+    block_id: str
+    block_order: int
+    rendered_message_count: int
+    last_seq_in_thread: Optional[int] = None
+    last_role: Optional[str] = None
+    prefix_label: str
 
 
 class ScenarioDocument(BaseModel):
@@ -104,3 +117,4 @@ class ScenarioSimulateRequest(BaseModel):
 class ScenarioSimulateResponse(BaseModel):
     rendered_system_prompt: str
     rendered_conversation: list[dict[str, Any]]
+    cache_checkpoints: list[ScenarioCacheCheckpoint] = Field(default_factory=list)

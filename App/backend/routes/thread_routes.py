@@ -900,6 +900,7 @@ async def patch_thread_message(
     updated[language] = entry
     row.data = updated
     thread.captured_history_conversation_json = None
+    thread.captured_history_cache_plan_json = None
     db.commit()
     db.refresh(row)
 
@@ -1090,6 +1091,7 @@ async def delete_thread_message(
             error=None,
         )
     thread.captured_history_conversation_json = None
+    thread.captured_history_cache_plan_json = None
     deltas = [
         build_run_message_delta(message_before, None),
         build_thread_delta(thread_before, snapshot_thread_row(thread)),

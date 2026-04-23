@@ -40,6 +40,45 @@ class XAIProvider(AsyncOpenAIProvider):
 
     def get_stream_thinking_display_path(self, advanced: dict[str, object]) -> str | None:
         return "reasoning_text"
+
+    def _prepare_request_kwargs(
+        self,
+        messages,
+        model,
+        temperature,
+        tools,
+        tool_choice,
+        max_tokens,
+        provider_preference,
+        thinking_config,
+        thinking_mode,
+        provider_settings,
+        cache_settings=None,
+        cache_plan=None,
+    ):
+        request = super()._prepare_request_kwargs(
+            messages,
+            model,
+            temperature,
+            tools,
+            tool_choice,
+            max_tokens,
+            provider_preference,
+            thinking_config,
+            thinking_mode,
+            provider_settings,
+            cache_settings,
+            cache_plan,
+        )
+        if isinstance(cache_settings, dict) and bool(cache_settings.get("enabled", False)):
+            cache_key = getattr(cache_plan, "thread_cache_key", None)
+            if isinstance(cache_key, str) and cache_key:
+                extra_headers = request.get("extra_headers") if isinstance(request.get("extra_headers"), dict) else {}
+                request["extra_headers"] = {
+                    **extra_headers,
+                    "x-grok-conv-id": cache_key,
+                }
+        return request
     # get_models() inherited from AsyncOpenAIProvider - xAI supports /v1/models endpoint
 
 

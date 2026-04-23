@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ....models.db_models import RunMessageModel, RunToolCallModel
+from ....models.db_models import RunMessageModel, RunToolCallModel, ThreadPromptCache
 from ...reasoning.normalize import normalize_reasoning_detail
+from ...prompt_cache_service import touch_thread_prompt_cache, upsert_thread_prompt_cache
 from ...run_status_logic import derive_run_status
 from ...storage_usage_service import (
     apply_project_usage_delta,
@@ -63,6 +64,86 @@ def _content_only_parts(parts: Any) -> list[dict[str, str]]:
             continue
         out.append({"type": "content", "text": text})
     return out
+
+
+def _cache_metrics_dict(final_snapshot: Any) -> dict[str, Any]:
+    return final_snapshot.cache_metrics if isinstance(getattr(final_snapshot, "cache_metrics", None), dict) else {}
+
+
+def _touch_selected_prompt_cache_row(db: Any, row_id: Any) -> None:
+    if not row_id:
+        return
+    row = db.query(ThreadPromptCache).filter(ThreadPromptCache.id == row_id).first()
+    if row is not None:
+        touch_thread_prompt_cache(row)
+
+
+def _persist_prompt_cache_rows(
+    request: LLMExecutionRequest,
+    prepared: PreparedLLMExecution,
+    final_snapshot: Any,
+) -> None:
+    cache_plan = getattr(prepared, "prepared_cache_plan", None)
+    if cache_plan is None:
+        return
+
+    metrics = _cache_metrics_dict(final_snapshot)
+    _touch_selected_prompt_cache_row(request.db, getattr(cache_plan, "selected_cache_row_id", None))
+
+    provider = str(getattr(prepared.task_config, "provider", "") or "")
+    selected_checkpoint_id = (
+        str(metrics.get("selected_checkpoint_id") or getattr(cache_plan, "selected_checkpoint_id", "") or "").strip()
+    )
+    selected_prefix_digest = (
+        str(getattr(cache_plan, "selected_prefix_digest", "") or "").strip()
+    )
+    ttl_label = str(getattr(cache_plan, "ttl_label", "") or "").strip() or None
+    selected_provider_message_count = getattr(cache_plan, "selected_provider_message_count", None)
+
+    if provider == "gemini" and str(getattr(cache_plan, "provider_strategy", "") or "") == "gemini_explicit":
+        cache_handle = str(metrics.get("cache_handle") or getattr(cache_plan, "selected_cache_handle", "") or "").strip()
+        if cache_handle and selected_checkpoint_id and selected_prefix_digest:
+            upsert_thread_prompt_cache(
+                request.db,
+                thread_id=request.thread.id,
+                user_id=request.run.user_id,
+                project_id=request.run.project_id,
+                provider=provider,
+                model=str(prepared.task_config.model),
+                checkpoint_id=selected_checkpoint_id,
+                prefix_digest=selected_prefix_digest,
+                strategy="gemini_cached_content",
+                external_handle=cache_handle,
+                ttl_label=ttl_label,
+                meta={
+                    "provider_strategy": getattr(cache_plan, "provider_strategy", None),
+                    "selected_provider_message_count": selected_provider_message_count,
+                    "cache_metrics": metrics or None,
+                },
+            )
+        return
+
+    if provider == "nanogpt" and str(getattr(cache_plan, "provider_strategy", "") or "") == "nanogpt_single_checkpoint":
+        if selected_checkpoint_id and selected_prefix_digest:
+            upsert_thread_prompt_cache(
+                request.db,
+                thread_id=request.thread.id,
+                user_id=request.run.user_id,
+                project_id=request.run.project_id,
+                provider=provider,
+                model=str(prepared.task_config.model),
+                checkpoint_id=selected_checkpoint_id,
+                prefix_digest=selected_prefix_digest,
+                strategy="logical_prefix",
+                external_handle=None,
+                ttl_label=ttl_label,
+                meta={
+                    "provider_strategy": getattr(cache_plan, "provider_strategy", None),
+                    "selected_provider_message_count": selected_provider_message_count,
+                    "sticky_provider": bool(getattr(prepared, "llm_cache_settings", {}).get("stickyProvider", False)),
+                    "cache_metrics": metrics or None,
+                },
+            )
 
 
 async def _fill_reasoning_token_count(
@@ -153,6 +234,8 @@ async def persist_execution(
             prepared,
             final_snapshot,
         )
+
+    _persist_prompt_cache_rows(request, prepared, final_snapshot)
 
     db.refresh(run)
     db.refresh(thread)

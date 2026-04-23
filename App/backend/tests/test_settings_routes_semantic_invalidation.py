@@ -273,3 +273,48 @@ def test_update_user_settings_rejects_enabled_search_memory_without_effective_mo
 
     assert exc_info.value.status_code == 422
     assert "Search embedding provider/model is required" in str(exc_info.value.detail)
+
+
+def test_update_user_settings_accepts_llm_cache_settings(monkeypatch) -> None:
+    user_id = uuid4()
+    settings = SimpleNamespace(
+        user_id=user_id,
+        demo_mode_enabled=False,
+        main_language="English",
+        search_memory_settings={
+            "enabled": False,
+            "general": {
+                "embedding": {"provider": "openai", "model": "", "dimensions": None},
+                "retrieval": {"topKPerQuery": 20, "neighborWindow": 0, "maxPrimaryItems": 20, "maxTotalItems": 60},
+                "regexPageSize": 20,
+            },
+            "overrides": {},
+        },
+        llm_cache_settings=None,
+    )
+    db = FakeDB(settings)
+
+    monkeypatch.setattr(settings_routes, "wipe_user_semantic_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(settings_routes, "wipe_memory_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(settings_routes, "_build_settings_response", lambda current: current)
+
+    result = asyncio.run(
+        settings_routes.update_user_settings(
+            UserSettingsUpdate(
+                llmCacheSettings={
+                    "openai": {"enabled": True, "retention": "24h"},
+                    "claude": {"enabled": True, "ttl": "1h"},
+                    "gemini": {"enabled": True, "implicit": True, "explicit": True, "explicit_ttl_preset": "6h"},
+                    "xai": {"enabled": False},
+                    "nanogpt": {"enabled": True, "ttl": "1h", "stickyProvider": True},
+                }
+            ),
+            current_user=SimpleNamespace(id=user_id),
+            db=db,
+        )
+    )
+
+    assert result.llm_cache_settings["openai"]["retention"] == "24h"
+    assert result.llm_cache_settings["claude"]["ttl"] == "1h"
+    assert result.llm_cache_settings["gemini"]["explicit_ttl_preset"] == "6h"
+    assert result.llm_cache_settings["nanogpt"]["stickyProvider"] is True

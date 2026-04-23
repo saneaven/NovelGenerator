@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 
-ALLOWED_BLOCK_TYPES = {"staticPrompt", "rangeMapping"}
+ALLOWED_BLOCK_TYPES = {"staticPrompt", "rangeMapping", "cachePoint"}
 ALLOWED_STATIC_ROLES = {"user", "assistant"}
 
 
@@ -93,6 +93,22 @@ def normalize_and_validate_scenario(scenario: Any) -> tuple[dict[str, Any], list
             )
             continue
 
+        if btype == "cachePoint":
+            raw_cache_point = block.get("cachePoint")
+            if raw_cache_point is not None and not isinstance(raw_cache_point, dict):
+                raise ValueError(f"INVALID_SCENARIO::cachePoint_invalid::block_id={block_id}")
+
+            normalized_blocks.append(
+                {
+                    "id": block_id,
+                    "block_order": int(order),
+                    "enabled": enabled,
+                    "type": "cachePoint",
+                    "cachePoint": {},
+                }
+            )
+            continue
+
         rm = block.get("rangeMapping")
         if not isinstance(rm, dict):
             raise ValueError(f"INVALID_SCENARIO::rangeMapping_required::block_id={block_id}")
@@ -124,6 +140,14 @@ def normalize_and_validate_scenario(scenario: Any) -> tuple[dict[str, Any], list
                 },
             }
         )
+
+    previous_type: str | None = None
+    for block in normalized_blocks:
+        btype = str(block.get("type") or "")
+        if btype == "cachePoint":
+            if previous_type == "cachePoint":
+                warnings.append(f"CACHE_POINT_CONSECUTIVE::block_id={block['id']}")
+        previous_type = btype
 
     normalized = {
         "system_template": system_template,

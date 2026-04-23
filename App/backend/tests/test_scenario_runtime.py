@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from App.backend.services.prompt_runtime.scenario_runtime import _group_by_run, _normalize_index, assemble_scenario
+from App.backend.services.prompt_runtime.scenario_runtime import (
+    _group_by_run,
+    _normalize_index,
+    assemble_scenario,
+    assemble_scenario_with_cache_plan,
+)
 from App.backend.services.prompt_runtime.template_renderer import TemplateRenderer
 
 
@@ -369,3 +374,85 @@ def test_run_based_owner_overwrite() -> None:
     texts = [m["content_parts"][0]["text"] for m in convo if m["role"] in {"user", "assistant"}]  # type: ignore[index]
     # Block 0 emits its owned runs (0, 2) first, then block 1 emits run 1.
     assert texts == ["A:u1", "A:a1", "A:u3", "A:a3", "B:u2", "B:a2"]
+
+
+def test_cache_points_build_prefix_cache_plan() -> None:
+    renderer = TemplateRenderer(fragment_map={})
+    system, convo, cache_plan = assemble_scenario_with_cache_plan(
+        template_renderer=renderer,
+        task_type="agent",
+        system_template="sys",
+        blocks=[
+            {
+                "id": "cp-top",
+                "block_order": 0,
+                "enabled": True,
+                "type": "cachePoint",
+                "cachePoint": {},
+            },
+            {
+                "id": "range-1",
+                "block_order": 1,
+                "enabled": True,
+                "type": "rangeMapping",
+                "rangeMapping": {
+                    "start_index": 0,
+                    "end_index": 0,
+                    "user_template": "U:{{input.userMessage}}",
+                    "assistant_template": "A:{{input.agentMessage}}",
+                },
+            },
+            {
+                "id": "cp-middle",
+                "block_order": 2,
+                "enabled": True,
+                "type": "cachePoint",
+                "cachePoint": {},
+            },
+        ],
+        source_conversation=[
+            _msg("user", "hello", seq_in_thread=1, run_id="run-1"),
+            _msg("assistant", "world", seq_in_thread=2, run_id="run-1"),
+        ],
+        template_data=_template_data(),
+    )
+
+    assert system == "sys"
+    assert [message["role"] for message in convo] == ["user", "assistant"]
+    assert [checkpoint["checkpoint_id"] for checkpoint in cache_plan] == ["cp-top", "cp-middle"]
+    assert cache_plan[0]["rendered_message_count"] == 0
+    assert cache_plan[0]["last_role"] == "system"
+    assert cache_plan[1]["rendered_message_count"] == 2
+    assert cache_plan[1]["last_seq_in_thread"] == 2
+    assert cache_plan[1]["last_role"] == "assistant"
+
+
+def test_duplicate_cache_points_are_marked_in_cache_plan() -> None:
+    renderer = TemplateRenderer(fragment_map={})
+    _, _convo, cache_plan = assemble_scenario_with_cache_plan(
+        template_renderer=renderer,
+        task_type="agent",
+        system_template="sys",
+        blocks=[
+            {
+                "id": "cp-1",
+                "block_order": 0,
+                "enabled": True,
+                "type": "cachePoint",
+                "cachePoint": {},
+            },
+            {
+                "id": "cp-2",
+                "block_order": 1,
+                "enabled": True,
+                "type": "cachePoint",
+                "cachePoint": {},
+            },
+        ],
+        source_conversation=[],
+        template_data=_template_data(),
+    )
+
+    assert [checkpoint["checkpoint_id"] for checkpoint in cache_plan] == ["cp-1", "cp-2"]
+    assert cache_plan[0].get("duplicate_prefix") is not True
+    assert cache_plan[1]["duplicate_prefix"] is True

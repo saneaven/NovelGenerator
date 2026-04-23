@@ -14,7 +14,10 @@ interface LLMRequestSummary {
   created_at: string;
   completed_at: string | null;
   retry_count: number;
-  meta: { response_time_ms?: number } | null;
+  meta: {
+    response_time_ms?: number;
+    cache_metrics?: Record<string, unknown>;
+  } | null;
 }
 
 interface LLMRequestDetail extends LLMRequestSummary {
@@ -24,7 +27,14 @@ interface LLMRequestDetail extends LLMRequestSummary {
   raw_input: Record<string, unknown> | null;
   raw_output: Record<string, unknown> | null;
   error: string | null;
-  meta: { response_time_ms?: number; retry_errors?: Array<Record<string, unknown>> } | null;
+  meta: {
+    response_time_ms?: number;
+    retry_errors?: Array<Record<string, unknown>>;
+    usage?: Record<string, unknown>;
+    finish_reason?: string;
+    reasoning_tokens?: number;
+    cache_metrics?: Record<string, unknown>;
+  } | null;
 }
 
 interface LLMRequestListResponse {
@@ -179,6 +189,12 @@ const LLMLogViewer: React.FC<LLMLogViewerProps> = ({ onClose }) => {
                         <div className="llm-log-payload">
                           <h4>Retry Errors</h4>
                           <pre>{JSON.stringify(detail.meta.retry_errors, null, 2)}</pre>
+                        </div>
+                      )}
+                      {detail.meta?.cache_metrics && (
+                        <div className="llm-log-payload">
+                          <h4>Cache Metrics</h4>
+                          <pre>{JSON.stringify(detail.meta.cache_metrics, null, 2)}</pre>
                         </div>
                       )}
                       <div className="llm-log-payload">

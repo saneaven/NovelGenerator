@@ -281,6 +281,8 @@ class OpenAIResponsesProvider(BaseProvider):
         max_tokens: Optional[int],
         thinking_config: Optional[Dict],
         verbosity: Optional[str],
+        cache_settings: Optional[Dict[str, Any]] = None,
+        cache_plan: Any = None,
     ) -> Dict:
         """Build the request dict for responses.create().
 
@@ -310,6 +312,14 @@ class OpenAIResponsesProvider(BaseProvider):
         # Add max tokens (Responses API uses max_output_tokens)
         if max_tokens is not None:
             request["max_output_tokens"] = max_tokens
+
+        if isinstance(cache_settings, dict) and bool(cache_settings.get("enabled", False)):
+            cache_key = getattr(cache_plan, "thread_cache_key", None)
+            if isinstance(cache_key, str) and cache_key:
+                request["prompt_cache_key"] = cache_key
+            retention = str(cache_settings.get("retention") or "default")
+            if retention != "default":
+                request["prompt_cache_retention"] = retention
 
         # Add tools if provided
         # Responses API uses flat tool format: {type, name, description, parameters}
@@ -344,6 +354,8 @@ class OpenAIResponsesProvider(BaseProvider):
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
         provider_settings: Optional[Dict[str, Any]] = None,
+        cache_settings: Optional[Dict[str, Any]] = None,
+        cache_plan: Any = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         """
         Stream chat using OpenAI Responses API.
@@ -371,6 +383,8 @@ class OpenAIResponsesProvider(BaseProvider):
             max_tokens=max_tokens,
             thinking_config=thinking_config,
             verbosity=verbosity,
+            cache_settings=cache_settings,
+            cache_plan=cache_plan,
         )
 
         yield ProviderEvent(kind="meta", raw_request=request)
@@ -383,6 +397,7 @@ class OpenAIResponsesProvider(BaseProvider):
         native_response = None
         tool_finish_emitted = False
         captured_reasoning_tokens: Optional[int] = None
+        captured_cache_metrics: Optional[Dict[str, Any]] = None
 
         try:
             stream = await client.responses.create(**request)
@@ -488,6 +503,7 @@ class OpenAIResponsesProvider(BaseProvider):
                         native_response = response_obj
                         usage = getattr(response_obj, "usage", None)
                         if usage:
+                            input_tokens_details = getattr(usage, "input_tokens_details", None)
                             output_tokens_details = getattr(usage, "output_tokens_details", None)
                             if output_tokens_details is not None:
                                 rt = getattr(output_tokens_details, "reasoning_tokens", None)
@@ -501,6 +517,13 @@ class OpenAIResponsesProvider(BaseProvider):
                                     getattr(usage, "output_tokens", 0)
                                 )
                             }
+                            cached_tokens = None
+                            if input_tokens_details is not None:
+                                cached_tokens = getattr(input_tokens_details, "cached_tokens", None)
+                            if captured_cache_metrics is None:
+                                captured_cache_metrics = {}
+                            if isinstance(cached_tokens, (int, float)):
+                                captured_cache_metrics["cached_tokens"] = int(cached_tokens)
                     yield ProviderEvent(
                         kind="meta",
                         meta=MetaPayload(finish_reason="stop", reasoning_tokens=captured_reasoning_tokens),
@@ -566,7 +589,14 @@ class OpenAIResponsesProvider(BaseProvider):
 
         # Emit usage metadata (used to patch missing snapshot fields).
         if captured_usage:
-            yield ProviderEvent(kind="meta", meta=MetaPayload(usage=captured_usage, reasoning_tokens=captured_reasoning_tokens))
+            yield ProviderEvent(
+                kind="meta",
+                meta=MetaPayload(
+                    usage=captured_usage,
+                    reasoning_tokens=captured_reasoning_tokens,
+                    cache_metrics=captured_cache_metrics,
+                ),
+            )
 
     async def get_models(self) -> Dict:
         """Fetch available OpenAI models, filtered to text/chat models only."""

@@ -133,6 +133,37 @@ SPEC = ProviderSpec(
         default_variant="default",
         supports_tools=False,
         supports_thinking=True,
+        cache_settings=ObjectSpec(fields={
+            "enabled": FieldSpec(
+                kind="bool",
+                default=True,
+                ui=UIHint(
+                    widget="toggle",
+                    label_key="settings.llmCache.fields.enabled",
+                    help_key="settings.llmCache.fields.openaiEnabledHint",
+                    order=10,
+                ),
+            ),
+            "retention": FieldSpec(
+                kind="enum",
+                default="default",
+                options=("default", "in_memory", "24h"),
+                ui=UIHint(
+                    widget="select",
+                    label_key="settings.llmCache.fields.retention",
+                    option_label_prefix="settings.llmCache.options.openaiRetention",
+                    order=20,
+                ),
+            ),
+        }),
+        cache_capabilities={
+            "supports_explicit_checkpoints": False,
+            "max_explicit_checkpoints": 0,
+            "supports_single_selected_checkpoint": False,
+            "supports_ttl": True,
+            "supports_sticky_provider": False,
+            "notes_key": "settings.llmCache.notes.openai",
+        },
     ),
     embedding=EmbeddingSpec(
         runtime=RuntimeSpec(adapter="default"),

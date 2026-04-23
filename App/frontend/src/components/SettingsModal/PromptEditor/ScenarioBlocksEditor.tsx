@@ -199,33 +199,102 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
     setBlocks(next);
   };
 
-  const addBlock = (kind: 'range' | 'static') => {
+  const addBlock = (kind: 'range' | 'static' | 'cache') => {
     const id = safeUUID();
     const base: ScenarioBlock = {
       id,
       block_order: orderedBlocks.length,
       enabled: true,
-      type: kind === 'range' ? 'rangeMapping' : 'staticPrompt',
+      type: kind === 'range' ? 'rangeMapping' : kind === 'cache' ? 'cachePoint' : 'staticPrompt',
     };
 
-    const block: ScenarioBlock =
-      kind === 'range'
-        ? {
-            ...base,
-            type: 'rangeMapping',
-            rangeMapping: { start_index: 0, end_index: -1, user_template: '', assistant_template: '' },
-          }
-        : {
-            ...base,
-            type: 'staticPrompt',
-            staticPrompt: {
-              role: 'user',
-              template: '',
-            },
-          };
+    let block: ScenarioBlock;
+    if (kind === 'range') {
+      block = {
+        ...base,
+        type: 'rangeMapping',
+        rangeMapping: { start_index: 0, end_index: -1, user_template: '', assistant_template: '' },
+      };
+    } else if (kind === 'cache') {
+      block = {
+        ...base,
+        type: 'cachePoint',
+        cachePoint: {},
+      };
+    } else {
+      block = {
+        ...base,
+        type: 'staticPrompt',
+        staticPrompt: {
+          role: 'user',
+          template: '',
+        },
+      };
+    }
 
     setBlocks([...orderedBlocks, block]);
     setExpanded((prev) => new Set(prev).add(id));
+  };
+
+  const splitRangeBlock = (block: ScenarioBlock) => {
+    if (block.type !== 'rangeMapping' || !block.rangeMapping) return;
+
+    const start = block.rangeMapping.start_index ?? 0;
+    const end = block.rangeMapping.end_index ?? -1;
+    if (start < 0) {
+      window.alert('Convert the range start to a non-negative run index before splitting.');
+      return;
+    }
+
+    const suggested = end >= start ? Math.floor((start + end) / 2) : start;
+    const raw = window.prompt('Split after run index', String(suggested));
+    if (raw == null) return;
+
+    const splitAfter = parseInt(raw, 10);
+    if (!Number.isFinite(splitAfter)) {
+      window.alert('Enter a valid run index.');
+      return;
+    }
+    if (splitAfter < start) {
+      window.alert('Split index must be inside the current range.');
+      return;
+    }
+    if (end >= 0 && splitAfter >= end) {
+      window.alert('Split index must be before the current end index.');
+      return;
+    }
+
+    const nextBlocks: ScenarioBlock[] = [];
+    const newBlockId = safeUUID();
+    for (const item of orderedBlocks) {
+      if (item.id !== block.id) {
+        nextBlocks.push(item);
+        continue;
+      }
+      nextBlocks.push({
+        ...item,
+        rangeMapping: {
+          ...item.rangeMapping!,
+          end_index: splitAfter,
+        },
+      });
+      nextBlocks.push({
+        ...JSON.parse(JSON.stringify(item)),
+        id: newBlockId,
+        rangeMapping: {
+          ...item.rangeMapping!,
+          start_index: splitAfter + 1,
+          end_index: end,
+        },
+      });
+    }
+    setBlocks(nextBlocks);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.add(block.id);
+      next.add(newBlockId);
+      return next;
+    });
   };
 
   const duplicateBlock = (block: ScenarioBlock) => {
@@ -318,6 +387,12 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
           label: 'Add range mapping',
           onClick: () => addBlock('range'),
         },
+        {
+          key: 'add-cache-point',
+          icon: <Plus size="sm" />,
+          label: 'Add cache point',
+          onClick: () => addBlock('cache'),
+        },
       ]}
     />
   );
@@ -339,6 +414,9 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                 if (block.type === 'staticPrompt') {
                   const role = block.staticPrompt?.role || 'user';
                   return `Static (${role})`;
+                }
+                if (block.type === 'cachePoint') {
+                  return 'Cache point';
                 }
                 const s = block.rangeMapping?.start_index ?? 0;
                 const e = block.rangeMapping?.end_index ?? -1;
@@ -371,7 +449,16 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                           label="Duplicate"
                           onClick={() => duplicateBlock(block)}
                         />
-                        <DropdownDivider />
+                        {block.type === 'rangeMapping' && (
+                          <>
+                            <DropdownItem
+                              icon={<Plus size="sm" />}
+                              label="Split range"
+                              onClick={() => splitRangeBlock(block)}
+                            />
+                            <DropdownDivider />
+                          </>
+                        )}
                         <DropdownItem
                           icon={<Trash size="sm" />}
                           label="Delete"
@@ -386,6 +473,8 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                     <div className="scenario-block-card__preview">
                       {block.type === 'staticPrompt' ? (
                         <span>{oneLinePreview(block.staticPrompt?.template || '')}</span>
+                      ) : block.type === 'cachePoint' ? (
+                        <span>Cache everything rendered above this marker.</span>
                       ) : (
                         <span>
                           U: {oneLinePreview(block.rangeMapping?.user_template || '')} • A:{' '}
@@ -535,6 +624,16 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                           )}
                         </>
                       )}
+
+                      {block.type === 'cachePoint' && (
+                        <div className="scenario-block-cache-point">
+                          <strong>Prefix cache marker</strong>
+                          <p>
+                            Everything rendered above this marker becomes a cache checkpoint candidate. Put it near the top
+                            to cache the system prompt, or place it before later ranges to cache only the earlier prefix.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -613,6 +712,30 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                     </div>
                   ))}
                 </div>
+              </details>
+
+              <details open>
+                <summary>Cache checkpoints</summary>
+                <div className="scenario-simulation-modal__messages">
+                  {Array.isArray(simResult.cache_checkpoints) && simResult.cache_checkpoints.length > 0 ? (
+                    simResult.cache_checkpoints.map((checkpoint: any) => (
+                      <div
+                        key={checkpoint.checkpoint_id}
+                        className="scenario-sim-msg scenario-sim-msg--cache"
+                      >
+                        <div className="scenario-sim-msg__role">{checkpoint.checkpoint_id}</div>
+                        <pre className="scenario-sim-msg__content">{JSON.stringify(checkpoint, null, 2)}</pre>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="scenario-simulation-modal__empty">No cache checkpoints.</div>
+                  )}
+                </div>
+                {Array.isArray(simResult.cache_checkpoints) && simResult.cache_checkpoints.length > 4 && (
+                  <div className="scenario-simulation-modal__warning">
+                    Claude can use at most the first 4 explicit checkpoints.
+                  </div>
+                )}
               </details>
 
             </div>

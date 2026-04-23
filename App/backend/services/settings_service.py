@@ -7,6 +7,10 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from ..models.db_models import UserSettings
+from .llm_cache_settings import (
+    make_initial_llm_cache_settings,
+    validate_llm_cache_settings,
+)
 from .search_memory_settings import (
     make_initial_search_memory_settings,
     resolve_memory_settings,
@@ -74,6 +78,7 @@ class SettingsService:
             user_id=user_id,
             task_config_settings=make_initial_task_config_settings(),
             search_memory_settings=make_initial_search_memory_settings(),
+            llm_cache_settings=make_initial_llm_cache_settings(),
             main_language="English",
             sub_languages=[],
             default_sub_language=None,
@@ -128,6 +133,11 @@ class SettingsService:
         if not isinstance(raw, dict):
             raise ValueError("Stored search_memory_settings must be an object")
         return validate_search_memory_settings(raw)
+
+    def get_llm_cache_settings(self, db: Session, user_id: UUID) -> dict[str, Any]:
+        settings = self._get_settings(db, user_id)
+        raw = getattr(settings, "llm_cache_settings", None)
+        return validate_llm_cache_settings(raw if isinstance(raw, dict) else None)
 
     def is_vector_storage_enabled(self, db: Session, user_id: UUID) -> bool:
         settings = self.get_search_memory_settings(db, user_id)

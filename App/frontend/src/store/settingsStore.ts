@@ -96,6 +96,41 @@ export interface RetryConfig {
     retryDelayMs: number;              // Delay between retries in ms
 }
 
+export interface OpenAILLMCacheSettings {
+    enabled: boolean;
+    retention: 'default' | 'in_memory' | '24h';
+}
+
+export interface ClaudeLLMCacheSettings {
+    enabled: boolean;
+    ttl: '5m' | '1h';
+}
+
+export interface GeminiLLMCacheSettings {
+    enabled: boolean;
+    implicit: boolean;
+    explicit: boolean;
+    explicit_ttl_preset: '5m' | '30m' | '1h' | '6h' | '24h';
+}
+
+export interface XAILLMCacheSettings {
+    enabled: boolean;
+}
+
+export interface NanoGPTLLMCacheSettings {
+    enabled: boolean;
+    ttl: '5m' | '1h';
+    stickyProvider: boolean;
+}
+
+export interface LLMCacheSettings {
+    openai: OpenAILLMCacheSettings;
+    claude: ClaudeLLMCacheSettings;
+    gemini: GeminiLLMCacheSettings;
+    xai: XAILLMCacheSettings;
+    nanogpt: NanoGPTLLMCacheSettings;
+}
+
 // Tool call auto-approve configuration (confirmation bypass)
 export type ToolCallAutoApproveCategory =
   | 'read'
@@ -183,6 +218,9 @@ export interface Settings {
     // Search & Memory settings
     searchMemorySettings: SearchMemorySettings;
 
+    // Global provider cache preferences
+    llmCacheSettings: LLMCacheSettings;
+
     // LLM request logging - enable logging of LLM requests for debugging
     llmLoggingEnabled: boolean;
 
@@ -213,6 +251,7 @@ export interface SettingsUpdatePayload {
     retryConfig?: RetryConfig;
     nativeOutputMode?: boolean;
     searchMemorySettings?: SearchMemorySettings;
+    llmCacheSettings?: LLMCacheSettings;
     llmLoggingEnabled?: boolean;
     toolCallHistoryLimit?: number;
     thinkingHistoryLimit?: number;

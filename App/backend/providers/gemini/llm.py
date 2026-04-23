@@ -12,6 +12,7 @@ from ..shared.parsing.final_mappers import _to_raw_dict
 from ..shared.parsing.multimodal import build_gemini_binary_parts, get_canonical_content_parts
 from ..shared.parsing.native_tool_calls_parser import NativeToolCallsStreamParser
 from ..shared.parsing.thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
+from ...services.prompt_cache_service import gemini_ttl_seconds
 from ...utils.outbound_http import validate_outbound_base_url
 
 class GeminiProvider(BaseProvider):
@@ -179,6 +180,43 @@ class GeminiProvider(BaseProvider):
                 config["thinkingBudget"] = thinking_config.get("gemini_budget_tokens")
         return config
 
+    @staticmethod
+    def _cached_content_name(value: Any) -> Optional[str]:
+        name = getattr(value, "name", None)
+        if isinstance(name, str) and name:
+            return name
+        if isinstance(value, dict):
+            raw = value.get("name")
+            if isinstance(raw, str) and raw:
+                return raw
+        return None
+
+    async def _create_cached_content(
+        self,
+        *,
+        client: genai.Client,
+        model: str,
+        contents: List[types.Content],
+        system_instruction: Optional[types.Content],
+        ttl_seconds: str,
+    ) -> Optional[str]:
+        aio_client = getattr(client, "aio", None)
+        caches_api = getattr(aio_client, "caches", None) if aio_client is not None else getattr(client, "caches", None)
+        create_fn = getattr(caches_api, "create", None)
+        if not callable(create_fn):
+            return None
+
+        config_payload: Dict[str, Any] = {
+            "contents": [_to_raw_dict(content) for content in contents],
+            "ttl": ttl_seconds,
+        }
+        if system_instruction is not None:
+            config_payload["system_instruction"] = _to_raw_dict(system_instruction)
+
+        create_result = create_fn(model=model, config=config_payload)
+        cache = await create_result if inspect.isawaitable(create_result) else create_result
+        return self._cached_content_name(cache)
+
     # ------------------------------------------------------------------ #
     # Message conversion
     # ------------------------------------------------------------------ #
@@ -313,6 +351,8 @@ class GeminiProvider(BaseProvider):
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
         provider_settings: Optional[Dict[str, Any]] = None,
+        cache_settings: Optional[Dict[str, Any]] = None,
+        cache_plan: Any = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         del provider_preference, custom_kind, verbosity, provider_settings
         if not self.validate_config():
@@ -340,6 +380,44 @@ class GeminiProvider(BaseProvider):
         thinking_cfg = self._build_thinking_config(model, thinking_mode, thinking_config)
         if thinking_cfg:
             config_dict["thinkingConfig"] = thinking_cfg
+
+        explicit_cache_enabled = (
+            isinstance(cache_settings, dict)
+            and bool(cache_settings.get("enabled", False))
+            and bool(cache_settings.get("explicit", True))
+            and str(getattr(cache_plan, "provider_strategy", "") or "") == "gemini_explicit"
+        )
+        selected_prefix_count = int(getattr(cache_plan, "selected_provider_message_count", 0) or 0)
+        selected_cache_handle = (
+            str(getattr(cache_plan, "selected_cache_handle", "") or "")
+            if explicit_cache_enabled
+            else ""
+        )
+        selected_checkpoint_id = (
+            str(getattr(cache_plan, "selected_checkpoint_id", "") or "")
+            if explicit_cache_enabled
+            else ""
+        )
+
+        if explicit_cache_enabled and selected_prefix_count > 0 and selected_prefix_count < len(contents):
+            if not selected_cache_handle:
+                ttl_seconds = gemini_ttl_seconds(str(getattr(cache_plan, "ttl_label", None) or cache_settings.get("explicit_ttl_preset") or "1h"))
+                selected_cache_handle = (
+                    await self._create_cached_content(
+                        client=client,
+                        model=model,
+                        contents=contents[:selected_prefix_count],
+                        system_instruction=system_instruction,
+                        ttl_seconds=ttl_seconds,
+                    )
+                    or ""
+                )
+            if selected_cache_handle:
+                config_dict["cached_content"] = selected_cache_handle
+                contents = contents[selected_prefix_count:]
+                if system_instruction is not None:
+                    system_instruction = None
+                    config_dict.pop("systemInstruction", None)
 
         if tools:
             function_declarations: List[types.FunctionDeclaration] = []
@@ -385,6 +463,7 @@ class GeminiProvider(BaseProvider):
         chat = None
         captured_usage: Optional[Dict[str, int]] = None
         captured_reasoning_tokens: Optional[int] = None
+        captured_cache_metrics: Optional[Dict[str, Any]] = None
         last_finish_reason: Any = None
         tool_finish_emitted = False
 
@@ -455,6 +534,9 @@ class GeminiProvider(BaseProvider):
                     thought_tokens = getattr(usage_meta, "thoughts_token_count", None)
                     if isinstance(thought_tokens, (int, float)):
                         captured_reasoning_tokens = int(thought_tokens)
+                    cached_content_tokens = getattr(usage_meta, "cached_content_token_count", None)
+                    if isinstance(cached_content_tokens, (int, float)):
+                        captured_cache_metrics = {"cached_tokens": int(cached_content_tokens)}
 
                 candidates = getattr(chunk, "candidates", None) or []
                 for cand in candidates:
@@ -606,6 +688,19 @@ class GeminiProvider(BaseProvider):
                         usage=captured_usage,
                         finish_reason=finish_reason,
                         reasoning_tokens=captured_reasoning_tokens,
+                        cache_metrics={
+                            **(captured_cache_metrics or {}),
+                            **(
+                                {
+                                    "cache_handle": selected_cache_handle,
+                                    "selected_checkpoint_id": selected_checkpoint_id,
+                                }
+                                if selected_cache_handle
+                                else {}
+                            ),
+                        }
+                        if captured_cache_metrics or selected_cache_handle
+                        else None,
                     ),
                     raw_response=raw_accumulated if raw_accumulated else None,
                 )

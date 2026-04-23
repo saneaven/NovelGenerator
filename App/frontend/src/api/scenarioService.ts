@@ -46,6 +46,15 @@ export interface ScenarioSimulatePayload {
 export interface ScenarioSimulateResult {
   rendered_system_prompt: string;
   rendered_conversation: Array<Record<string, any>>;
+  cache_checkpoints: Array<{
+    checkpoint_id: string;
+    block_id: string;
+    block_order: number;
+    rendered_message_count: number;
+    last_seq_in_thread: number | null;
+    last_role: string | null;
+    prefix_label: string;
+  }>;
 }
 
 function buildScenarioPath(taskType: TaskType, taskSubtype: string): string {

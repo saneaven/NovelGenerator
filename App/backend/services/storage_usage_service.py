@@ -38,6 +38,7 @@ from ..models.db_models import (
     TimelineEvent,
     TimelineTrack,
     Thread,
+    ThreadPromptCache,
     User,
 )
 from ..models.translation_models import ObjectVersion, ObjectVersionLanguage
@@ -263,6 +264,7 @@ def measure_thread_row(row: Thread | object) -> int:
     return _sum_values(
         getattr(row, "captured_history_system_prompt", None),
         getattr(row, "captured_history_conversation_json", None),
+        getattr(row, "captured_history_cache_plan_json", None),
     )
 
 
@@ -296,6 +298,18 @@ def measure_tool_call_row(row: RunToolCallModel | object) -> int:
         getattr(row, "extra_content", None),
         getattr(row, "reason", None),
         getattr(row, "result", None),
+    )
+
+
+def measure_thread_prompt_cache_row(row: ThreadPromptCache | object) -> int:
+    return _sum_values(
+        getattr(row, "checkpoint_id", None),
+        getattr(row, "prefix_digest", None),
+        getattr(row, "strategy", None),
+        getattr(row, "external_handle", None),
+        getattr(row, "ttl_label", None),
+        getattr(row, "status", None),
+        getattr(row, "meta", None),
     )
 
 
@@ -383,7 +397,12 @@ def snapshot_agent_row(row: Agent | object | None) -> object | None:
 
 
 def snapshot_thread_row(row: Thread | object | None) -> object | None:
-    return _snapshot_row(row, "captured_history_system_prompt", "captured_history_conversation_json")
+    return _snapshot_row(
+        row,
+        "captured_history_system_prompt",
+        "captured_history_conversation_json",
+        "captured_history_cache_plan_json",
+    )
 
 
 def snapshot_run_row(row: RunModel | object | None) -> object | None:
@@ -400,6 +419,19 @@ def snapshot_run_message_attachment_row(row: RunMessageAttachmentModel | object 
 
 def snapshot_tool_call_row(row: RunToolCallModel | object | None) -> object | None:
     return _snapshot_row(row, "arguments", "extra_content", "reason", "result")
+
+
+def snapshot_thread_prompt_cache_row(row: ThreadPromptCache | object | None) -> object | None:
+    return _snapshot_row(
+        row,
+        "checkpoint_id",
+        "prefix_digest",
+        "strategy",
+        "external_handle",
+        "ttl_label",
+        "status",
+        "meta",
+    )
 
 
 def snapshot_notification_row(row: NotificationModel | object | None) -> object | None:
@@ -646,6 +678,15 @@ def build_tool_call_delta(before: object | None, after: object | None) -> Storag
         before=before,
         after=after,
         measure_fn=measure_tool_call_row,
+    )
+
+
+def build_thread_prompt_cache_delta(before: object | None, after: object | None) -> StorageUsageDelta:
+    return build_usage_delta_for_measurement(
+        category="chat",
+        before=before,
+        after=after,
+        measure_fn=measure_thread_prompt_cache_row,
     )
 
 
@@ -1015,6 +1056,7 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
                 func.sum(
                     _octet_text(Thread.captured_history_system_prompt)
                     + _octet_text(Thread.captured_history_conversation_json)
+                    + _octet_text(Thread.captured_history_cache_plan_json)
                 ),
                 0,
             )
@@ -1083,6 +1125,25 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
         .scalar()
         or 0
     )
+    thread_prompt_cache_bytes = int(
+        db.query(
+            func.coalesce(
+                func.sum(
+                    _octet_text(ThreadPromptCache.checkpoint_id)
+                    + _octet_text(ThreadPromptCache.prefix_digest)
+                    + _octet_text(ThreadPromptCache.strategy)
+                    + _octet_text(ThreadPromptCache.external_handle)
+                    + _octet_text(ThreadPromptCache.ttl_label)
+                    + _octet_text(ThreadPromptCache.status)
+                    + _octet_text(ThreadPromptCache.meta)
+                ),
+                0,
+            )
+        )
+        .filter(ThreadPromptCache.project_id == project_id)
+        .scalar()
+        or 0
+    )
     chat_bytes = (
         agent_bytes
         + thread_bytes
@@ -1090,6 +1151,7 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
         + run_message_bytes
         + run_message_attachment_bytes
         + tool_call_bytes
+        + thread_prompt_cache_bytes
     )
 
     # ---- notification_bytes ------------------------------------------------
@@ -1633,6 +1695,7 @@ __all__ = [
     "build_story_core_delta",
     "build_story_core_rows_delta",
     "build_thread_delta",
+    "build_thread_prompt_cache_delta",
     "build_tool_call_delta",
     "build_usage_delta_for_amount",
     "build_usage_delta_for_measurement",
@@ -1656,6 +1719,7 @@ __all__ = [
     "measure_run_row",
     "measure_story_core_row",
     "measure_thread_row",
+    "measure_thread_prompt_cache_row",
     "measure_tool_call_row",
     "recalculate_project_usage",
     "recalculate_project_usage_and_enforce_quota",
@@ -1677,6 +1741,7 @@ __all__ = [
     "snapshot_run_row",
     "snapshot_story_core_row",
     "snapshot_thread_row",
+    "snapshot_thread_prompt_cache_row",
     "snapshot_tool_call_row",
     "try_acquire_reconcile_advisory_lock",
 ]

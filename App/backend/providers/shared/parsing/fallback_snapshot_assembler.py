@@ -28,6 +28,7 @@ class FallbackSnapshotAssembler:
         self._usage: Optional[Dict[str, int]] = None
         self._finish_reason: Optional[str] = None
         self._reasoning_tokens: Optional[int] = None
+        self._cache_metrics: Optional[Dict[str, Any]] = None
         self._anonymous_tool_counter = 0
         self._saw_content_delta = False
 
@@ -54,6 +55,8 @@ class FallbackSnapshotAssembler:
             self._finish_reason = payload.finish_reason
         if isinstance(payload.reasoning_tokens, int):
             self._reasoning_tokens = payload.reasoning_tokens
+        if isinstance(payload.cache_metrics, dict):
+            self._cache_metrics = dict(payload.cache_metrics)
 
     def finalize_or_raise(self) -> FinalSnapshot:
         has_any_data = (
@@ -96,6 +99,7 @@ class FallbackSnapshotAssembler:
             reasoning_details=list(self._reasoning_details),
             usage=self._usage,
             reasoning_tokens=self._reasoning_tokens,
+            cache_metrics=self._cache_metrics,
             final_source="reducer_fallback",
         )
 

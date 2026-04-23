@@ -12,7 +12,7 @@ from ..memory import state as memory_state
 from ..prompt_runtime.contracts import ScenarioBundle
 from ..prompt_runtime.project_data_builder import build_project_data
 from ..prompt_runtime.scenario_manager import ScenarioManager
-from ..prompt_runtime.scenario_runtime import assemble_scenario
+from ..prompt_runtime.scenario_runtime import assemble_scenario, assemble_scenario_with_cache_plan
 from ..prompt_runtime.template_renderer import TemplateRenderer, load_user_fragment_map
 from ..settings_service import settings_service
 from ..storage_usage_service import apply_project_usage_delta, build_thread_delta, snapshot_thread_row
@@ -175,7 +175,7 @@ async def _render(
         thread=thread,
         stage="rendering_prompt",
     )
-    system_prompt, conversation = assemble_scenario(
+    system_prompt, conversation, cache_plan = assemble_scenario_with_cache_plan(
         template_renderer=template_renderer,
         task_type=bundle.task_type,
         system_template=bundle.system_template,
@@ -191,6 +191,7 @@ async def _render(
     before = snapshot_thread_row(thread)
     thread.captured_history_system_prompt = system_prompt
     thread.captured_history_conversation_json = conversation
+    thread.captured_history_cache_plan_json = cache_plan
     apply_project_usage_delta(
         db,
         user_id=run.user_id,

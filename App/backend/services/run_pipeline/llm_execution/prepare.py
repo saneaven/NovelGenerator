@@ -10,8 +10,13 @@ from ...llm_runtime_service import get_llm_runtime
 from ...mcp import mcp_sync_service
 from ...memory import archive_orchestrator
 from ...prompt_runtime.output_mode import resolve_output_mode
+from ...prompt_cache_service import (
+    annotate_conversation_render_indices,
+    build_prepared_cache_plan,
+)
 from ...reasoning.history_filter import filter_history_by_run
 from ...reasoning.mode_policy import apply_thinking_mode
+from ...llm_cache_settings import validate_llm_cache_settings
 from ...settings_service import settings_service
 from ...thread_parent_runtime_service import resolve_parent
 from ...token_count_service import count_conversation_tokens
@@ -36,6 +41,7 @@ def _strip_internal_message_keys(messages: list[dict[str, Any]]) -> list[dict[st
         item = dict(message)
         item.pop("run_id", None)
         item.pop("seq_in_thread", None)
+        item.pop("_render_index", None)
         out.append(item)
     return out
 
@@ -181,7 +187,7 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
     thinking_history_limit = int(getattr(settings, "thinking_history_limit", 5) or 0)
 
     current_system_prompt = request.system_prompt
-    current_conversation = list(conversation)
+    current_conversation = annotate_conversation_render_indices(list(conversation))
     current_bundle = scenario_bundle
     provider_messages = _apply_provider_history_filters(
         system_prompt=current_system_prompt,
@@ -265,6 +271,22 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
                     provider.set_thinking_template(thinking_template)
                     advanced["_resolved_template"] = thinking_template
 
+    all_llm_cache_settings = validate_llm_cache_settings(getattr(settings, "llm_cache_settings", None))
+    provider_cache_settings = (
+        dict(all_llm_cache_settings.get(task_config.provider))
+        if isinstance(all_llm_cache_settings.get(task_config.provider), dict)
+        else {}
+    )
+    prepared_cache_plan = build_prepared_cache_plan(
+        db=db,
+        thread_id=thread.id,
+        provider=task_config.provider,
+        model=task_config.model,
+        cache_settings=provider_cache_settings,
+        raw_cache_plan=getattr(thread, "captured_history_cache_plan_json", None),
+        provider_messages_with_internal_keys=provider_messages,
+    )
+
     provider_messages = _strip_internal_message_keys(provider_messages)
 
     if advanced.get("_resolved_template"):
@@ -292,6 +314,8 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
         thinking_mode=thinking_mode,
         effective_thinking_config=effective_thinking_config,
         provider_messages=provider_messages,
+        llm_cache_settings=provider_cache_settings,
+        prepared_cache_plan=prepared_cache_plan,
         stream_thinking_display=stream_thinking_display,
         retry_cfg=retry_cfg,
     )

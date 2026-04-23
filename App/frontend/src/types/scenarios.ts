@@ -1,6 +1,6 @@
 export type TaskType = 'agent' | 'memory' | 'translation' | 'editAssistant' | 'imagePrompt' | 'subAgent';
 
-export type ScenarioBlockType = 'staticPrompt' | 'rangeMapping';
+export type ScenarioBlockType = 'staticPrompt' | 'rangeMapping' | 'cachePoint';
 export type StaticRole = 'user' | 'assistant';
 
 export interface ScenarioStaticPrompt {
@@ -22,6 +22,7 @@ export interface ScenarioBlock {
   type: ScenarioBlockType;
   staticPrompt?: ScenarioStaticPrompt;
   rangeMapping?: ScenarioRangeMapping;
+  cachePoint?: Record<string, never>;
 }
 
 export interface ScenarioDocument {
