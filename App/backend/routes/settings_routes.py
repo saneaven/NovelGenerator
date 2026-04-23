@@ -11,7 +11,7 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..models.db_models import User, UserSettings
 from ..schemas.settings import UserSettingsResponse, UserSettingsUpdate
-from ..services.image_model_catalog_service import default_image_gen_config, migrate_image_gen_config
+from ..image_engine.settings import default_image_gen_config, validate_image_gen_config
 from ..services.memory_service import wipe_memory_index
 from ..services.semantic_index_service import wipe_user_semantic_index
 from ..services.search_memory_settings import (
@@ -97,7 +97,13 @@ def _build_settings_response(settings: UserSettings) -> UserSettingsResponse:
         "retryDelayMs": 1000,
     }
     image_gen_config_raw = getattr(settings, "image_gen_config", None) or deepcopy(default_image_gen_config())
-    image_gen_config_dict = migrate_image_gen_config(image_gen_config_raw)
+    try:
+        image_gen_config_dict = validate_image_gen_config(image_gen_config_raw)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Stored image generation settings are invalid: {exc}",
+        ) from exc
     tool_call_auto_approve_dict = _build_tool_call_auto_approve(getattr(settings, "tool_call_auto_approve", None))
     raw_search_memory_settings = getattr(settings, "search_memory_settings", None)
     if not isinstance(raw_search_memory_settings, dict):
@@ -204,7 +210,12 @@ async def update_user_settings(
         settings.retry_config = update_data.retryConfig.model_dump()  # type: ignore[assignment]
 
     if not demo_mode_enabled and update_data.imageGenConfig is not None:
-        settings.image_gen_config = update_data.imageGenConfig.model_dump()  # type: ignore[assignment]
+        try:
+            settings.image_gen_config = validate_image_gen_config(
+                update_data.imageGenConfig.model_dump()
+            )  # type: ignore[assignment]
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
     if not demo_mode_enabled and update_data.customThinkingTemplates is not None:
         templates = []

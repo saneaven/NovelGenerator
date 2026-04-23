@@ -8,12 +8,14 @@ import { getAssetUrl } from '../../utils/assetUrl';
 import type { ImageGenerationBinding, ImageGenerationRecipe } from '../../imageRun';
 import { ImageRunRuntime, useImageRunStore } from '../../imageRun';
 import {
-    aspectRatioFromImageSize,
-    resolveAspectRatio,
-    resolveImageSize,
-    resolveSupportedImageSizes,
-    useImageModelCatalog,
-} from '../../imageRun/useImageModelCatalog';
+    applyAspectRatioChange,
+    applyImageSizeChange,
+} from '../../imageRun/form/selection';
+import { useImageGenerationForm } from '../../imageRun/form/useImageGenerationForm';
+import {
+    buildNaturalImageRecipe,
+    buildTagBasedImageRecipe,
+} from '../../imageRun/form/recipe';
 import { UnifiedImageModal } from '../AssetManager';
 import UnifiedImagePromptModal, { type PromptResult, type PromptMode } from './UnifiedImagePromptModal';
 import ImageModelBrowser from './ImageModelBrowser';
@@ -29,13 +31,8 @@ import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import { alert as showAlert } from '../../store/dialogStore';
 import type { StoryEntityKind } from '../../types/unifiedObject';
-import { useProviderSpecStore } from '../../providerEngine/store';
 import ProviderSettingsFields from '../../providerEngine/ProviderSettingsFields';
-import {
-    buildDefaultObjectValue,
-    getStoredProviderSettings,
-    normalizeByPublicSpec,
-} from '../../providerEngine/utils';
+import { buildImageProviderSettingsDraft } from '../../imageRun/form/providerSettings';
 import './ImageGenerationModal.css';
 
 // Reference image item
@@ -121,9 +118,6 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const [model, setModel] = useState(settings.imageGenConfig.model);
     const [aspectRatio, setAspectRatio] = useState(settings.imageGenConfig.aspect_ratio);
     const [imageSize, setImageSize] = useState(settings.imageGenConfig.image_size);
-    const loadProviderSpecs = useProviderSpecStore((state) => state.load);
-    const providerSpecs = useProviderSpecStore((state) => state.specs);
-    const providerSpec = providerSpecs[provider];
 
     const [taskId, setTaskId] = useState<string | null>(null);
     const session = useImageRunStore((state) => (taskId ? state.runsById[taskId] : undefined));
@@ -156,9 +150,6 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const [streamingMode, setStreamingMode] = useState<PromptMode | null>(null);
     const [streamingError, setStreamingError] = useState<string | null>(null);
     const previousStreamingStatusRef = useRef<'running' | 'done' | 'halted' | null>(null);
-
-    const { models, loading: modelsLoading, error: modelError, selectedModel } = useImageModelCatalog(provider, model);
-    const providerSettingsSpec = providerSpec?.image?.provider_settings ?? null;
     const [providerSettingsDraft, setProviderSettingsDraft] = useState<Record<string, unknown>>({});
 
     // Style selection
@@ -180,65 +171,50 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const [referenceImages, setReferenceImages] = useState<ReferenceImageItem[]>([]);
     const [maskImage, setMaskImage] = useState<MaskImageItem | null>(null);
     const [assetPickerMode, setAssetPickerMode] = useState<'reference' | 'mask' | null>(null);
+    const {
+        providerSpecs,
+        providerSpec,
+        imageProviders,
+        models,
+        loading: modelsLoading,
+        error: modelError,
+        selectedModel,
+        currentPromptType,
+        isTagBased,
+        providerSettingsSpec,
+        normalizedProviderSettings,
+        providerSettingsFlags,
+        supportsImageInput,
+        supportsMaskInput,
+        supportsMultiImageInput,
+        isNativeExact,
+        supportedImageSizes,
+        generationBlocker,
+        reconciledSelection,
+    } = useImageGenerationForm({
+        provider,
+        model,
+        aspectRatio,
+        imageSize,
+        providerSettingsDraft,
+        referenceImageCount: referenceImages.length,
+        hasMaskImage: Boolean(maskImage),
+    });
 
     const isInitialMount = useRef(true);
     const previousProvider = useRef(provider);
     const seededProviderSettings = useRef<string | null>(null);
-
-    useEffect(() => {
-        void loadProviderSpecs();
-    }, [loadProviderSpecs]);
-
-    const imageProviders = useMemo(() => {
-        const providers = Object.values(providerSpecs).filter((item) => Boolean(item.image));
-        providers.sort((a, b) => {
-            const left = a.ui.image_order ?? 999;
-            const right = b.ui.image_order ?? 999;
-            return left - right || a.id.localeCompare(b.id);
-        });
-        return providers;
-    }, [providerSpecs]);
-
-    const supportsImageInput = selectedModel?.supports_image_input ?? false;
     const buildProviderSettingsDraft = useCallback((
         providerId: string,
         recipe?: ImageGenerationRecipe | null,
     ): Record<string, unknown> => {
-        const spec = providerSpecs[providerId]?.image?.provider_settings;
-        if (!spec) return {};
-
-        const defaults = providerId === 'nanogpt' ? {} : buildDefaultObjectValue(spec);
-        const stored = getStoredProviderSettings(settings.imageGenConfig as Record<string, unknown>, providerId);
-        const retry =
-            recipe?.provider === providerId && recipe.providerSettings && typeof recipe.providerSettings === 'object' && !Array.isArray(recipe.providerSettings)
-                ? recipe.providerSettings as Record<string, unknown>
-                : {};
-        const merged = {
-            ...defaults,
-            ...stored,
-            ...retry,
-        };
-        return normalizeByPublicSpec(merged, spec, merged);
+        return buildImageProviderSettingsDraft(
+            providerId,
+            providerSpecs,
+            settings.imageGenConfig as Record<string, unknown>,
+            recipe,
+        );
     }, [providerSpecs, settings.imageGenConfig]);
-
-    const normalizedProviderSettings = useMemo<Record<string, unknown>>(() => {
-        if (!providerSettingsSpec) return {};
-        if (provider === 'nanogpt') {
-            return providerSettingsDraft && typeof providerSettingsDraft === 'object' && !Array.isArray(providerSettingsDraft)
-                ? providerSettingsDraft
-                : {};
-        }
-        return normalizeByPublicSpec(providerSettingsDraft, providerSettingsSpec, providerSettingsDraft);
-    }, [provider, providerSettingsDraft, providerSettingsSpec]);
-
-    const providerSettingsFlags = useMemo(() => ({
-        hasReferenceImages: referenceImages.length > 0,
-        kontext_model: /kontext/i.test(selectedModel?.id ?? model),
-    }), [referenceImages.length, selectedModel, model]);
-    const supportsMaskInput = selectedModel?.supports_mask_input ?? false;
-    const supportsMultiImageInput = selectedModel?.supports_multi_image_input ?? false;
-    const isNativeExact = selectedModel?.ui_resolution_mode === 'native_exact';
-    const supportedImageSizes = resolveSupportedImageSizes(selectedModel, aspectRatio);
     const showReferenceSection = supportsImageInput || referenceImages.length > 0 || Boolean(maskImage);
     const showMaskSection = supportsMaskInput || Boolean(maskImage);
 
@@ -274,8 +250,6 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         [imageProviders, t]
     );
 
-    const currentPromptType = selectedModel?.prompt_type ?? providerSpec?.image?.prompt_type ?? 'natural';
-    const isTagBased = currentPromptType === 'tag_based';
     const naturalStyles = useMemo(
         () => settings.imageGenConfig.naturalStyles ?? [],
         [settings.imageGenConfig.naturalStyles],
@@ -445,26 +419,10 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     }, [provider, buildProviderSettingsDraft]);
 
     useEffect(() => {
-        if (!selectedModel) return;
-        const nextModel = selectedModel.id;
-        let nextAspectRatio = aspectRatio;
-        let nextImageSize = imageSize;
-
-        if (selectedModel.ui_resolution_mode === 'native_exact') {
-            nextImageSize = resolveImageSize(selectedModel, imageSize);
-            nextAspectRatio = aspectRatioFromImageSize(nextImageSize);
-        } else {
-            nextAspectRatio = resolveAspectRatio(selectedModel, aspectRatio);
-            const nextSizes = resolveSupportedImageSizes(selectedModel, nextAspectRatio);
-            nextImageSize = nextSizes.includes(imageSize)
-                ? imageSize
-                : (nextSizes[0] ?? resolveImageSize(selectedModel, imageSize));
-        }
-
-        if (nextModel !== model) setModel(nextModel);
-        if (nextAspectRatio !== aspectRatio) setAspectRatio(nextAspectRatio);
-        if (nextImageSize !== imageSize) setImageSize(nextImageSize);
-    }, [selectedModel, model, aspectRatio, imageSize]);
+        if (reconciledSelection.model !== model) setModel(reconciledSelection.model);
+        if (reconciledSelection.aspectRatio !== aspectRatio) setAspectRatio(reconciledSelection.aspectRatio);
+        if (reconciledSelection.imageSize !== imageSize) setImageSize(reconciledSelection.imageSize);
+    }, [reconciledSelection, model, aspectRatio, imageSize]);
 
     const journeyThreadId = useJourneyStore((state) =>
         streamingSessionId ? state.journeys[streamingSessionId]?.threadId : undefined
@@ -612,22 +570,6 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         return objectType && objectId ? { type: 'object', objectType, objectId } : null;
     }, [assetType, manuscriptId, objectType, objectId]);
 
-    const generationBlocker = useMemo(() => {
-        if (referenceImages.length > 0 && !supportsImageInput) {
-            return 'The selected model does not support reference images.';
-        }
-        if (referenceImages.length > 1 && !supportsMultiImageInput) {
-            return 'The selected model supports only one input image.';
-        }
-        if (maskImage && !supportsMaskInput) {
-            return 'The selected model does not support mask input.';
-        }
-        if (maskImage && referenceImages.length === 0) {
-            return 'Add a reference image before using a mask.';
-        }
-        return null;
-    }, [maskImage, referenceImages.length, supportsImageInput, supportsMaskInput, supportsMultiImageInput]);
-
     const handleGenerate = async () => {
         if (!binding) {
             showAlert({
@@ -652,15 +594,11 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             return;
         }
 
-        const nanogptStrength =
-            typeof normalizedProviderSettings.strength === 'number'
-                ? normalizedProviderSettings.strength
-                : undefined;
         const referenceImagesData =
             supportsImageInput && referenceImages.length > 0
                 ? referenceImages.map((img) => ({
                     assetId: img.assetId,
-                    strength: nanogptStrength ?? img.strength,
+                    strength: img.strength,
                 }))
                 : undefined;
         const maskImageData = maskImage ? { assetId: maskImage.assetId } : undefined;
@@ -691,8 +629,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     ? { prefix: negPrefix, content: negContent, postfix: negPostfix }
                     : undefined;
 
-            const recipe: ImageGenerationRecipe = {
-                promptType: 'tag_based',
+            const recipe: ImageGenerationRecipe = buildTagBasedImageRecipe({
                 provider,
                 model,
                 aspectRatio,
@@ -703,7 +640,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 styleId: selectedTagBasedStyleId,
                 referenceImages: referenceImagesData,
                 maskImage: maskImageData,
-            };
+            });
 
                 const { imageRunId: newTaskId } = await ImageRunRuntime.start(
                     { projectId: currentProjectId, binding, recipe, label: 'Generate image' },
@@ -728,8 +665,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 postfix: (style?.postfix ?? customNaturalPostfix) || '',
             };
 
-            const recipe: ImageGenerationRecipe = {
-                promptType: 'natural',
+            const recipe: ImageGenerationRecipe = buildNaturalImageRecipe({
                 provider,
                 model,
                 aspectRatio,
@@ -739,7 +675,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 styleId: selectedNaturalStyleId,
                 referenceImages: referenceImagesData,
                 maskImage: maskImageData,
-            };
+            });
 
             const { imageRunId: newTaskId } = await ImageRunRuntime.start(
                 { projectId: currentProjectId, binding, recipe, label: 'Generate image' },
@@ -910,12 +846,13 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                                 <select
                                     value={aspectRatio}
                                     onChange={(e) => {
-                                        const nextAspectRatio = e.target.value;
-                                        const nextSizes = resolveSupportedImageSizes(selectedModel, nextAspectRatio);
-                                        setAspectRatio(nextAspectRatio);
-                                        if (!nextSizes.includes(imageSize)) {
-                                            setImageSize(nextSizes[0] ?? imageSize);
-                                        }
+                                        const nextSelection = applyAspectRatioChange(
+                                            selectedModel,
+                                            { model, aspectRatio, imageSize },
+                                            e.target.value,
+                                        );
+                                        setAspectRatio(nextSelection.aspectRatio);
+                                        setImageSize(nextSelection.imageSize);
                                     }}
                                     className="config-select"
                                     disabled={!selectedModel || selectedModel.supported_aspect_ratios.length <= 1}
@@ -931,7 +868,15 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                                 <label>Image Size</label>
                                 <select
                                     value={imageSize}
-                                    onChange={(e) => setImageSize(e.target.value)}
+                                    onChange={(e) => {
+                                        const nextSelection = applyImageSizeChange(
+                                            selectedModel,
+                                            { model, aspectRatio, imageSize },
+                                            e.target.value,
+                                        );
+                                        setAspectRatio(nextSelection.aspectRatio);
+                                        setImageSize(nextSelection.imageSize);
+                                    }}
                                     className="config-select"
                                     disabled={!selectedModel || supportedImageSizes.length <= 1}
                                 >
@@ -950,9 +895,13 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                                 <select
                                     value={imageSize}
                                     onChange={(e) => {
-                                        const nextSize = e.target.value;
-                                        setImageSize(nextSize);
-                                        setAspectRatio(aspectRatioFromImageSize(nextSize));
+                                        const nextSelection = applyImageSizeChange(
+                                            selectedModel,
+                                            { model, aspectRatio, imageSize },
+                                            e.target.value,
+                                        );
+                                        setImageSize(nextSelection.imageSize);
+                                        setAspectRatio(nextSelection.aspectRatio);
                                     }}
                                     className="config-select"
                                     disabled={!selectedModel || selectedModel.supported_image_sizes.length <= 1}

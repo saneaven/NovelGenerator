@@ -168,6 +168,8 @@ class ImageSpec:
     settings_description_key: str | None = None
     models: tuple[ImageModelDescriptor, ...] = ()
     models_adapter: str | None = None
+    catalog_cache_policy: Literal["static", "session", "none"] = "static"
+    allow_missing_credentials_for_model_listing: bool = False
 
 
 @dataclass(frozen=True)

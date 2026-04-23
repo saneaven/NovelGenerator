@@ -1,6 +1,18 @@
 from __future__ import annotations
 
+from math import isqrt
 from typing import Any, Dict
+
+from ....image_engine.contracts import ResolvedGeometry
+
+OPENAI_GPT_IMAGE_2_SUPPORTED_IMAGE_SIZES = ("1K", "2K", "4K")
+OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY = 16
+OPENAI_GPT_IMAGE_2_MAX_EDGE = 3840
+OPENAI_GPT_IMAGE_2_TARGET_PIXELS = {
+    "1K": 1024 * 1024,
+    "2K": 2048 * 2048,
+    "4K": 3840 * 2160,
+}
 
 
 _OPENAI_EMBEDDING_ALLOWLIST = [
@@ -104,7 +116,95 @@ async def embed_many(
 
 
 def create_image_runtime(*, provider_config: dict[str, Any], runtime_spec: Any):
-    del runtime_spec
-    from ....image_providers.openai_image import OpenAIImageProvider
+    del provider_config, runtime_spec
+    raise NotImplementedError("create_image_runtime is no longer supported for OpenAI image")
 
-    return OpenAIImageProvider(provider_config)
+
+def create_image_adapter(*, provider_config: dict[str, Any], runtime_spec: Any):
+    del runtime_spec
+    from .image_adapter import OpenAIImageAdapter
+
+    return OpenAIImageAdapter(provider_config)
+
+
+def _gcd(a: int, b: int) -> int:
+    while b:
+        a, b = b, a % b
+    return a or 1
+
+
+def _lcm(a: int, b: int) -> int:
+    return abs(a * b) // _gcd(a, b)
+
+
+def _parse_ratio_pair(raw: str) -> tuple[int, int]:
+    left, right = str(raw).split(":", 1)
+    return int(left), int(right)
+
+
+def _resolve_openai_native_size(*, aspect_ratio: str, image_size: str) -> str:
+    width_ratio, height_ratio = _parse_ratio_pair(aspect_ratio)
+    reduced_divisor = _gcd(width_ratio, height_ratio)
+    width_ratio //= reduced_divisor
+    height_ratio //= reduced_divisor
+
+    target_pixels = OPENAI_GPT_IMAGE_2_TARGET_PIXELS.get(
+        image_size,
+        OPENAI_GPT_IMAGE_2_TARGET_PIXELS["1K"],
+    )
+    width_step = OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY // _gcd(
+        width_ratio,
+        OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY,
+    )
+    height_step = OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY // _gcd(
+        height_ratio,
+        OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY,
+    )
+    scale_step = _lcm(width_step, height_step)
+    pixels_per_scale = width_ratio * height_ratio
+    approx_scale = isqrt(target_pixels // pixels_per_scale)
+    lower_scale = (approx_scale // scale_step) * scale_step
+    upper_scale = ((approx_scale + scale_step - 1) // scale_step) * scale_step
+    if lower_scale == 0:
+        lower_scale = scale_step
+    if upper_scale == 0:
+        upper_scale = scale_step
+    candidate_scales = {lower_scale, upper_scale}
+    best_scale = min(
+        candidate_scales,
+        key=lambda scale: abs(
+            (width_ratio * scale * height_ratio * scale) - target_pixels
+        ),
+    )
+    max_scale = (
+        OPENAI_GPT_IMAGE_2_MAX_EDGE
+        // max(width_ratio, height_ratio)
+        // scale_step
+    ) * scale_step
+    if best_scale > max_scale:
+        best_scale = max_scale
+    width = width_ratio * best_scale
+    height = height_ratio * best_scale
+    return f"{width}x{height}"
+
+
+async def resolve_image_geometry(
+    *,
+    provider_config: dict[str, Any],
+    runtime_spec: Any,
+    descriptor: Any,
+    requested_aspect_ratio: str,
+    requested_image_size: str,
+    resolved_geometry: ResolvedGeometry,
+) -> ResolvedGeometry:
+    del provider_config, runtime_spec, descriptor, requested_aspect_ratio
+    return ResolvedGeometry(
+        requested_aspect_ratio=resolved_geometry.requested_aspect_ratio,
+        requested_image_size=resolved_geometry.requested_image_size,
+        resolved_aspect_ratio=resolved_geometry.resolved_aspect_ratio,
+        resolved_image_size=resolved_geometry.resolved_image_size,
+        resolved_native_size=_resolve_openai_native_size(
+            aspect_ratio=resolved_geometry.resolved_aspect_ratio,
+            image_size=resolved_geometry.resolved_image_size,
+        ),
+    )

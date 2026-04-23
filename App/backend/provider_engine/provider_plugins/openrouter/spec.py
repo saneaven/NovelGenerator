@@ -130,5 +130,6 @@ SPEC = ProviderSpec(
         prompt_type="natural",
         supports_image_input=False,
         models_adapter="dynamic",
+        catalog_cache_policy="none",
     ),
 )

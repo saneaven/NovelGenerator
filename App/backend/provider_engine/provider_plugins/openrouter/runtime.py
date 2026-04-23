@@ -122,10 +122,15 @@ async def embed_many(
 
 
 def create_image_runtime(*, provider_config: dict[str, Any], runtime_spec: Any):
-    del runtime_spec
-    from ....image_providers.openrouter_image import OpenRouterImageProvider
+    del provider_config, runtime_spec
+    raise NotImplementedError("create_image_runtime is no longer supported for OpenRouter image")
 
-    return OpenRouterImageProvider(provider_config)
+
+def create_image_adapter(*, provider_config: dict[str, Any], runtime_spec: Any):
+    del runtime_spec
+    from .image_adapter import OpenRouterImageAdapter
+
+    return OpenRouterImageAdapter(provider_config)
 
 
 async def list_image_models(*, provider_config: dict[str, Any], runtime_spec: Any, models_adapter: str) -> list[ImageModelDescriptor]:

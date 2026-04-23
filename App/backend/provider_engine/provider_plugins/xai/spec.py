@@ -88,6 +88,7 @@ SPEC = ProviderSpec(
         runtime=RuntimeSpec(adapter="default"),
         prompt_type="natural",
         supports_image_input=False,
+        catalog_cache_policy="static",
         models=(
             ImageModelDescriptor(
                 id="grok-2-image",

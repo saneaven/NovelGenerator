@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Any
 
 from .conditions import get_path
-from .contracts import DerivedFlag, EmbeddingSpec, ImageSpec, LLMSpec, ProviderSpec
+from .contracts import DerivedFlag, LLMSpec
 from .normalize import merge_specs, normalize_by_spec
 from .registry import (
     require_provider,
@@ -122,14 +122,40 @@ def sanitize_provider_settings(provider_id: str, settings: Any) -> dict[str, Any
     return normalized or None
 
 
-def create_image_provider_instance(provider_id: str, provider_config: dict[str, Any]):
+def create_image_adapter(provider_id: str, provider_config: dict[str, Any]):
     provider = require_provider(provider_id)
     if provider.image is None:
         raise ValueError(f"Provider '{provider_id}' does not support image")
     runtime_module = require_runtime_module(provider_id)
-    return runtime_module.create_image_runtime(
+    return runtime_module.create_image_adapter(
         provider_config=deepcopy(provider_config),
         runtime_spec=provider.image.runtime,
+    )
+
+
+async def resolve_image_geometry(
+    provider_id: str,
+    *,
+    provider_config: dict[str, Any],
+    descriptor: Any,
+    requested_aspect_ratio: str,
+    requested_image_size: str,
+    resolved_geometry: Any,
+):
+    provider = require_provider(provider_id)
+    if provider.image is None:
+        raise ValueError(f"Provider '{provider_id}' does not support image")
+    runtime_module = require_runtime_module(provider_id)
+    resolver = getattr(runtime_module, "resolve_image_geometry", None)
+    if resolver is None:
+        return resolved_geometry
+    return await resolver(
+        provider_config=deepcopy(provider_config),
+        runtime_spec=provider.image.runtime,
+        descriptor=descriptor,
+        requested_aspect_ratio=requested_aspect_ratio,
+        requested_image_size=requested_image_size,
+        resolved_geometry=resolved_geometry,
     )
 
 

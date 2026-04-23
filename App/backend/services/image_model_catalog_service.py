@@ -1,159 +1,16 @@
 from __future__ import annotations
 
-from copy import deepcopy
-from math import isqrt
-from typing import Any, Optional
+from typing import Any
 
-from ..image_providers.model_capabilities import OPENAI_DEFAULT_MODEL
-from ..provider_engine.contracts import ImageModelDescriptor, ImageModelGeometrySpec, MISSING, ObjectSpec, ResolvedImageGeometry
-from ..provider_engine.registry import list_providers, require_provider
-from ..provider_engine.runtime_dispatch import list_image_models as _list_image_models
-from ..provider_engine.runtime_dispatch import sanitize_provider_settings
-
-OPENAI_GPT_IMAGE_2_SUPPORTED_ASPECT_RATIOS = (
-    "1:1",
-    "2:3",
-    "3:2",
-    "3:4",
-    "4:3",
-    "4:5",
-    "5:4",
-    "9:16",
-    "16:9",
-    "21:9",
+from ..image_engine.geometry import resolve_descriptor_geometry
+from ..image_engine.settings import default_image_gen_config as _default_image_gen_config
+from ..provider_engine.contracts import ImageModelDescriptor, ImageModelGeometrySpec
+from ..provider_engine.registry import require_provider
+from ..provider_engine.runtime_dispatch import (
+    list_image_models as _list_image_models,
+    resolve_image_geometry as _resolve_image_geometry,
+    sanitize_provider_settings,
 )
-OPENAI_GPT_IMAGE_2_SUPPORTED_IMAGE_SIZES = ("1K", "2K", "4K")
-OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY = 16
-OPENAI_GPT_IMAGE_2_MAX_EDGE = 3840
-OPENAI_GPT_IMAGE_2_TARGET_PIXELS = {
-    "1K": 1024 * 1024,
-    "2K": 2048 * 2048,
-    "4K": 3840 * 2160,
-}
-
-
-def _defaults_from_object_spec(spec: ObjectSpec | None) -> dict[str, Any]:
-    if spec is None:
-        return {}
-    out: dict[str, Any] = {}
-    for key, node in spec.fields.items():
-        if isinstance(node, ObjectSpec):
-            child = _defaults_from_object_spec(node)
-            if child:
-                out[key] = child
-            continue
-        if node.default is not MISSING:
-            out[key] = deepcopy(node.default)
-    return out
-
-
-def _normalize_ratio_text(raw: Any, *, fallback: str = "1:1") -> str:
-    text = str(raw or "").strip()
-    if not text:
-        return fallback
-    for sep in (":", "/", "x"):
-        if sep not in text:
-            continue
-        left, right = text.split(sep, 1)
-        try:
-            width = int(float(left.strip()))
-            height = int(float(right.strip()))
-        except ValueError:
-            return fallback
-        if width <= 0 or height <= 0:
-            return fallback
-        divisor = _gcd(width, height)
-        return f"{width // divisor}:{height // divisor}"
-    return fallback
-
-
-def _gcd(a: int, b: int) -> int:
-    while b:
-        a, b = b, a % b
-    return a or 1
-
-
-def _lcm(a: int, b: int) -> int:
-    return abs(a * b) // _gcd(a, b)
-
-
-def _ratio_value(raw: str) -> float:
-    normalized = _normalize_ratio_text(raw)
-    left, right = normalized.split(":")
-    return int(left) / int(right)
-
-
-def _ratio_score(candidate: str, requested: str) -> float:
-    return abs(_ratio_value(candidate) - _ratio_value(requested))
-
-
-def _pick_ratio(candidates: list[str], requested: str, *, fallback: str) -> str:
-    if not candidates:
-        return fallback
-    normalized_requested = _normalize_ratio_text(requested, fallback=fallback)
-    if normalized_requested in candidates:
-        return normalized_requested
-    return min(candidates, key=lambda candidate: _ratio_score(candidate, normalized_requested))
-
-
-def _normalize_openai_model(provider: str, model: Any) -> str:
-    if str(provider or "").strip() == "openai":
-        return OPENAI_DEFAULT_MODEL
-    return str(model or "").strip()
-
-
-def _normalize_openai_image_size(raw: Any) -> str:
-    text = str(raw or "").strip()
-    if text in OPENAI_GPT_IMAGE_2_SUPPORTED_IMAGE_SIZES:
-        return text
-    if "x" in text.lower():
-        return "1K"
-    return "1K"
-
-
-def _normalize_openai_aspect_ratio(raw: Any) -> str:
-    return _pick_ratio(
-        list(OPENAI_GPT_IMAGE_2_SUPPORTED_ASPECT_RATIOS),
-        _normalize_ratio_text(raw, fallback="1:1"),
-        fallback="1:1",
-    )
-
-
-def _parse_ratio_pair(raw: str) -> tuple[int, int]:
-    normalized = _normalize_ratio_text(raw, fallback="1:1")
-    left, right = normalized.split(":")
-    return int(left), int(right)
-
-
-def _resolve_openai_native_size(*, aspect_ratio: str, image_size: str) -> str:
-    width_ratio, height_ratio = _parse_ratio_pair(aspect_ratio)
-    reduced_divisor = _gcd(width_ratio, height_ratio)
-    width_ratio //= reduced_divisor
-    height_ratio //= reduced_divisor
-
-    target_pixels = OPENAI_GPT_IMAGE_2_TARGET_PIXELS.get(image_size, OPENAI_GPT_IMAGE_2_TARGET_PIXELS["1K"])
-    width_step = OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY // _gcd(width_ratio, OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY)
-    height_step = OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY // _gcd(height_ratio, OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY)
-    scale_step = _lcm(width_step, height_step)
-    pixels_per_scale = width_ratio * height_ratio
-    approx_scale = isqrt(target_pixels // pixels_per_scale)
-    lower_scale = (approx_scale // scale_step) * scale_step
-    upper_scale = ((approx_scale + scale_step - 1) // scale_step) * scale_step
-    if lower_scale == 0:
-        lower_scale = scale_step
-    if upper_scale == 0:
-        upper_scale = scale_step
-    candidate_scales = {lower_scale, upper_scale}
-    best_scale = min(
-        candidate_scales,
-        key=lambda scale: abs((width_ratio * scale * height_ratio * scale) - target_pixels),
-    )
-    max_scale = (OPENAI_GPT_IMAGE_2_MAX_EDGE // max(width_ratio, height_ratio) // scale_step) * scale_step
-    if best_scale > max_scale:
-        best_scale = max_scale
-    width = width_ratio * best_scale
-    height = height_ratio * best_scale
-    return f"{width}x{height}"
 
 
 def sanitize_generation_settings(provider: str, settings: Any) -> dict[str, Any] | None:
@@ -191,135 +48,7 @@ def _descriptor_to_api_dict(model: ImageModelDescriptor) -> dict[str, Any]:
 
 
 def default_image_gen_config() -> dict[str, Any]:
-    openai_image = require_provider("openai").image
-    openai_model = openai_image.models[0]
-    provider_settings: dict[str, dict[str, Any]] = {}
-    for provider in list_providers():
-        if provider.image is None:
-            continue
-        provider_settings[provider.id] = _defaults_from_object_spec(provider.image.provider_settings)
-    return {
-        "provider": "openai",
-        "model": openai_model.id,
-        "aspect_ratio": openai_model.geometry.default_aspect_ratio,
-        "image_size": openai_model.geometry.default_resolution,
-        "naturalStyles": [],
-        "tagBasedStyles": [],
-        "selectedNaturalStyleId": None,
-        "selectedTagBasedStyleId": None,
-        "providerSettings": provider_settings,
-    }
-
-
-def migrate_image_gen_config(raw: Any) -> dict[str, Any]:
-    defaults = default_image_gen_config()
-    if not isinstance(raw, dict):
-        return defaults
-
-    provider = str(raw.get("provider") or defaults["provider"]).strip() or defaults["provider"]
-    model = _normalize_openai_model(provider, raw.get("model") or defaults["model"])
-
-    if isinstance(raw.get("aspect_ratio"), str) and raw.get("aspect_ratio"):
-        aspect_ratio = _normalize_ratio_text(raw.get("aspect_ratio"), fallback=defaults["aspect_ratio"])
-    elif isinstance(raw.get("size"), str) and raw.get("size"):
-        aspect_ratio = _normalize_ratio_text(raw.get("size"), fallback=defaults["aspect_ratio"])
-    elif isinstance(raw.get("geminiSettings"), dict):
-        aspect_ratio = _normalize_ratio_text(raw["geminiSettings"].get("aspect_ratio"), fallback=defaults["aspect_ratio"])
-    else:
-        aspect_ratio = defaults["aspect_ratio"]
-
-    if isinstance(raw.get("image_size"), str) and raw.get("image_size"):
-        image_size = str(raw.get("image_size")).strip()
-    elif isinstance(raw.get("geminiSettings"), dict) and raw["geminiSettings"].get("image_resolution"):
-        image_size = str(raw["geminiSettings"]["image_resolution"]).strip()
-    else:
-        image_size = defaults["image_size"]
-
-    if provider == "openai":
-        model = OPENAI_DEFAULT_MODEL
-        aspect_ratio = _normalize_openai_aspect_ratio(aspect_ratio)
-        image_size = _normalize_openai_image_size(image_size)
-
-    raw_provider_settings = raw.get("providerSettings") if isinstance(raw.get("providerSettings"), dict) else {}
-    provider_settings = deepcopy(defaults["providerSettings"])
-    for provider_id, value in raw_provider_settings.items():
-        if not isinstance(provider_id, str) or not isinstance(value, dict):
-            continue
-        provider_settings[provider_id] = provider_settings.get(provider_id, {}) | value
-    if isinstance(raw.get("openaiSettings"), dict):
-        provider_settings["openai"] = provider_settings.get("openai", {}) | raw["openaiSettings"]
-    if isinstance(raw.get("novelaiSettings"), dict):
-        provider_settings["novelai"] = provider_settings.get("novelai", {}) | raw["novelaiSettings"]
-
-    normalized_provider_settings: dict[str, dict[str, Any]] = {}
-    for provider_id, value in provider_settings.items():
-        if not isinstance(value, dict):
-            continue
-        try:
-            normalized = sanitize_provider_settings(provider_id, value)
-        except ValueError:
-            normalized_provider_settings[provider_id] = value
-            continue
-        normalized_provider_settings[provider_id] = normalized or {}
-
-    migrated = {
-        "provider": provider,
-        "model": model,
-        "aspect_ratio": aspect_ratio,
-        "image_size": image_size,
-        "naturalStyles": raw.get("naturalStyles") if isinstance(raw.get("naturalStyles"), list) else [],
-        "tagBasedStyles": raw.get("tagBasedStyles") if isinstance(raw.get("tagBasedStyles"), list) else [],
-        "selectedNaturalStyleId": raw.get("selectedNaturalStyleId"),
-        "selectedTagBasedStyleId": raw.get("selectedTagBasedStyleId"),
-        "providerSettings": normalized_provider_settings,
-    }
-    return migrated
-
-
-def rewrite_image_run_recipe(raw: Any) -> dict[str, Any]:
-    if not isinstance(raw, dict):
-        return {}
-
-    provider = str(raw.get("provider") or "").strip()
-    if isinstance(raw.get("requested_aspect_ratio"), str) and raw.get("requested_aspect_ratio"):
-        requested_aspect_ratio = _normalize_ratio_text(raw.get("requested_aspect_ratio"))
-    elif isinstance(raw.get("requested_ratio"), str) and raw.get("requested_ratio"):
-        requested_aspect_ratio = _normalize_ratio_text(raw.get("requested_ratio"))
-    elif isinstance(raw.get("aspect_ratio"), str) and raw.get("aspect_ratio"):
-        requested_aspect_ratio = _normalize_ratio_text(raw.get("aspect_ratio"))
-    else:
-        requested_aspect_ratio = "1:1"
-
-    requested_image_size = str(raw.get("requested_image_size") or "").strip()
-    if not requested_image_size:
-        provider_settings = raw.get("provider_settings") if isinstance(raw.get("provider_settings"), dict) else {}
-        if isinstance(provider_settings.get("image_size"), str) and provider_settings.get("image_size"):
-            requested_image_size = str(provider_settings["image_size"]).strip()
-        elif isinstance(provider_settings.get("image_resolution"), str) and provider_settings.get("image_resolution"):
-            requested_image_size = str(provider_settings["image_resolution"]).strip()
-        else:
-            requested_image_size = "1K"
-
-    model = _normalize_openai_model(provider, raw.get("model"))
-    if provider == "openai":
-        requested_aspect_ratio = _normalize_openai_aspect_ratio(requested_aspect_ratio)
-        requested_image_size = _normalize_openai_image_size(requested_image_size)
-
-    return {
-        "prompt_type": raw.get("prompt_type"),
-        "provider": provider,
-        "model": model,
-        "requested_aspect_ratio": requested_aspect_ratio,
-        "requested_image_size": requested_image_size,
-        "style_id": raw.get("style_id"),
-        "prompt": raw.get("prompt"),
-        "positive_prompt": raw.get("positive_prompt"),
-        "negative_prompt": raw.get("negative_prompt"),
-        "provider_settings": sanitize_generation_settings(provider, raw.get("provider_settings")),
-        "reference_images": raw.get("reference_images") if isinstance(raw.get("reference_images"), list) else None,
-        "mask_image": raw.get("mask_image") if isinstance(raw.get("mask_image"), dict) else None,
-        "reference_objects": raw.get("reference_objects") if isinstance(raw.get("reference_objects"), list) else None,
-    }
+    return _default_image_gen_config()
 
 
 class ImageModelCatalogService:
@@ -327,66 +56,13 @@ class ImageModelCatalogService:
         descriptors = await _list_image_models(provider, provider_config)
         return [_descriptor_to_api_dict(item) for item in descriptors]
 
-    async def resolve_geometry(
+    async def get_descriptor(
         self,
         *,
         provider: str,
         model: str,
-        requested_aspect_ratio: str,
-        requested_image_size: str,
-        provider_config: dict[str, Any] | None = None,
-    ) -> ResolvedImageGeometry:
-        descriptor = await self._find_descriptor(provider=provider, model=model, provider_config=provider_config or {})
-        if descriptor is None:
-            raise ValueError(f"Unknown image provider '{provider}'")
-
-        geometry = descriptor.geometry
-        supported_sizes = list(geometry.supported_resolutions)
-        supported_pairs = {
-            key: list(value)
-            for key, value in (geometry.supported_geometry_pairs or {}).items()
-        }
-        requested_ratio = _normalize_ratio_text(requested_aspect_ratio, fallback=geometry.default_aspect_ratio)
-        requested_size = str(requested_image_size or geometry.default_resolution).strip() or geometry.default_resolution
-
-        if geometry.resolution_mode == "native_exact":
-            resolved_image_size = requested_size if requested_size in supported_sizes else geometry.default_resolution
-            resolved_ratio = _normalize_ratio_text(resolved_image_size, fallback=geometry.default_aspect_ratio)
-        else:
-            resolved_ratio = _pick_ratio(
-                list(geometry.supported_aspect_ratios),
-                requested_ratio,
-                fallback=geometry.default_aspect_ratio,
-            )
-            allowed_sizes = supported_pairs.get(resolved_ratio) or supported_sizes
-            resolved_image_size = requested_size if requested_size in allowed_sizes else (
-                geometry.default_resolution if geometry.default_resolution in allowed_sizes else allowed_sizes[0]
-            )
-
-        if provider == "openai" and (descriptor.id or model) == OPENAI_DEFAULT_MODEL:
-            resolved_native_size = _resolve_openai_native_size(
-                aspect_ratio=resolved_ratio,
-                image_size=resolved_image_size,
-            )
-        elif geometry.resolution_mode == "translated_fixed":
-            native_size_by_ratio = geometry.native_size_by_ratio or {}
-            resolved_native_size = native_size_by_ratio.get(resolved_ratio) or next(iter(native_size_by_ratio.values()), "1024x1024")
-        else:
-            resolved_native_size = resolved_image_size
-
-        effective_model = descriptor.id or model
-        return ResolvedImageGeometry(
-            model=effective_model,
-            prompt_type=descriptor.prompt_type,
-            supports_image_input=descriptor.supports_image_input,
-            requested_aspect_ratio=_normalize_ratio_text(requested_aspect_ratio, fallback=resolved_ratio),
-            requested_image_size=str(requested_image_size or resolved_image_size).strip() or resolved_image_size,
-            resolved_aspect_ratio=resolved_ratio,
-            resolved_image_size=resolved_image_size,
-            resolved_native_size=resolved_native_size,
-        )
-
-    async def _find_descriptor(self, *, provider: str, model: str, provider_config: dict[str, Any]) -> Optional[ImageModelDescriptor]:
+        provider_config: dict[str, Any],
+    ) -> ImageModelDescriptor | None:
         descriptors = await _list_image_models(provider, provider_config)
         if model:
             for descriptor in descriptors:
@@ -397,11 +73,23 @@ class ImageModelCatalogService:
 
         provider_spec = require_provider(provider)
         image_spec = provider_spec.image
-        if image_spec is None or not image_spec.models_adapter:
+        if image_spec is None:
+            raise ValueError(f"Provider '{provider}' does not support image")
+        if image_spec.models:
+            if model:
+                for descriptor in image_spec.models:
+                    if descriptor.id == model:
+                        return descriptor
+            return image_spec.models[0]
+        if not image_spec.models_adapter:
             return None
 
-        fallback_ratios = tuple(image_spec.runtime.server_only.get("fallback_aspect_ratios") or ("1:1",))
-        fallback_resolutions = tuple(image_spec.runtime.server_only.get("fallback_resolutions") or ("1K",))
+        fallback_ratios = tuple(
+            image_spec.runtime.server_only.get("fallback_aspect_ratios") or ("1:1",)
+        )
+        fallback_resolutions = tuple(
+            image_spec.runtime.server_only.get("fallback_resolutions") or ("1K",)
+        )
         return ImageModelDescriptor(
             id=str(model or provider),
             name=str(model or provider),
@@ -415,6 +103,38 @@ class ImageModelCatalogService:
                 resolution_mode="native_tier",
             ),
             canonical_slug=str(model or provider),
+        )
+
+    async def resolve_geometry(
+        self,
+        *,
+        provider: str,
+        model: str,
+        requested_aspect_ratio: str,
+        requested_image_size: str,
+        provider_config: dict[str, Any] | None = None,
+    ):
+        provider_config = provider_config or {}
+        descriptor = await self.get_descriptor(
+            provider=provider,
+            model=model,
+            provider_config=provider_config,
+        )
+        if descriptor is None:
+            raise ValueError(f"Unknown image provider '{provider}'")
+
+        resolved_geometry = resolve_descriptor_geometry(
+            descriptor,
+            requested_aspect_ratio=requested_aspect_ratio,
+            requested_image_size=requested_image_size,
+        )
+        return await _resolve_image_geometry(
+            provider,
+            provider_config=provider_config,
+            descriptor=descriptor,
+            requested_aspect_ratio=requested_aspect_ratio,
+            requested_image_size=requested_image_size,
+            resolved_geometry=resolved_geometry,
         )
 
 

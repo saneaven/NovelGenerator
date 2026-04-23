@@ -1,16 +1,12 @@
-"""OpenRouter image generation provider."""
-
 from __future__ import annotations
 
 import base64
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
-from .base import BaseImageProvider, ImageGenerationResult, MaskImageData, ReferenceImageData
-from .registry import ImageProviderRegistry
-from ..services.image_model_catalog_service import image_model_catalog_service
-from ..utils.outbound_http import filter_additional_headers
+from ....image_engine.contracts import ImageGenerationOutput, PreparedImageRequest
+from ....utils.outbound_http import filter_additional_headers
 
 
 OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -51,55 +47,35 @@ def _extract_message_text(message: dict[str, Any]) -> str:
     return "\n".join(texts).strip()
 
 
-@ImageProviderRegistry.register
-class OpenRouterImageProvider(BaseImageProvider):
-    """OpenRouter multimodal image generation provider."""
+class OpenRouterImageAdapter:
+    def __init__(self, provider_config: dict[str, Any]):
+        self._api_key = str(provider_config.get("api_key") or "").strip()
+        self._additional_headers = filter_additional_headers(
+            provider_config.get("additional_headers")
+        )
 
-    @property
-    def name(self) -> str:
-        return "openrouter"
+    async def generate(self, request: PreparedImageRequest) -> ImageGenerationOutput:
+        if not self._api_key:
+            return ImageGenerationOutput(
+                success=False,
+                error="OpenRouter client not initialized. Check API key.",
+            )
 
-    @property
-    def display_name(self) -> str:
-        return "OpenRouter Image"
-
-    def validate_config(self) -> bool:
-        return bool(self.api_key)
-
-    def supports_image_input(self) -> bool:
-        return True
-
-    async def get_models(self) -> Dict:
-        return {
-            "data": await image_model_catalog_service.list_models("openrouter", self.config),
-        }
-
-    async def generate_image(
-        self,
-        prompt: Optional[str] = None,
-        model: str = "",
-        size: str = "1024x1024",
-        aspect_ratio: str = "1:1",
-        image_size: str = "1K",
-        resolved_native_size: str = "1K",
-        quality: str = "auto",
-        n: int = 1,
-        positive_prompt: Optional[str] = None,
-        negative_prompt: Optional[str] = None,
-        provider_settings: Optional[Dict[str, Any]] = None,
-        reference_images: Optional[List[ReferenceImageData]] = None,
-        mask_image: Optional[MaskImageData] = None,
-    ) -> ImageGenerationResult:
-        del size, quality, n, positive_prompt, negative_prompt, mask_image
-
-        if not self.validate_config():
-            return ImageGenerationResult(success=False, error="OpenRouter client not initialized. Check API key.")
-        if not prompt:
-            return ImageGenerationResult(success=False, error="Prompt is required for OpenRouter image generation.")
+        prompt = request.prompt_payload.prompt
+        if prompt is None:
+            return ImageGenerationOutput(
+                success=False,
+                error="Prompt is required for OpenRouter image generation.",
+            )
 
         try:
-            message_content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
-            for reference in reference_images or []:
+            message_content: list[dict[str, Any]] = [
+                {
+                    "type": "text",
+                    "text": f"{prompt.prefix}{prompt.content}{prompt.postfix}",
+                }
+            ]
+            for reference in request.reference_images:
                 message_content.append(
                     {
                         "type": "image_url",
@@ -107,9 +83,14 @@ class OpenRouterImageProvider(BaseImageProvider):
                     }
                 )
 
-            modalities = await self._resolve_modalities(model)
+            output_modalities = (
+                request.model_descriptor.architecture.get("output_modalities")
+                if isinstance(request.model_descriptor.architecture, dict)
+                else None
+            )
+            modalities = ["image", "text"] if isinstance(output_modalities, list) and "text" in output_modalities else ["image"]
             payload = {
-                "model": model,
+                "model": request.model_descriptor.id,
                 "messages": [
                     {
                         "role": "user",
@@ -118,8 +99,8 @@ class OpenRouterImageProvider(BaseImageProvider):
                 ],
                 "modalities": modalities,
                 "image_config": {
-                    "aspect_ratio": aspect_ratio,
-                    "image_size": image_size,
+                    "aspect_ratio": request.resolved_geometry.resolved_aspect_ratio,
+                    "image_size": request.resolved_geometry.resolved_image_size,
                 },
             }
 
@@ -133,14 +114,14 @@ class OpenRouterImageProvider(BaseImageProvider):
                 body = response.json()
                 image_result = await self._parse_response(client, body)
         except httpx.HTTPError as exc:
-            return ImageGenerationResult(success=False, error=f"OpenRouter API error: {exc}")
+            return ImageGenerationOutput(success=False, error=f"OpenRouter API error: {exc}")
         except Exception as exc:  # noqa: BLE001
-            return ImageGenerationResult(success=False, error=f"Unexpected error: {exc}")
+            return ImageGenerationOutput(success=False, error=f"Unexpected error: {exc}")
 
         if image_result is None:
-            return ImageGenerationResult(success=False, error="No image data in OpenRouter response")
+            return ImageGenerationOutput(success=False, error="No image data in OpenRouter response")
 
-        return ImageGenerationResult(
+        return ImageGenerationOutput(
             success=True,
             image_data=image_result["image_data"],
             revised_prompt=image_result.get("text"),
@@ -151,27 +132,19 @@ class OpenRouterImageProvider(BaseImageProvider):
 
     def _build_headers(self) -> dict[str, str]:
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
             "HTTP-Referer": "https://novelgenerator.local",
             "X-Title": "NovelGenerator",
         }
-        headers.update(filter_additional_headers(self.config.get("additional_headers")))
+        headers.update(self._additional_headers)
         return headers
-
-    async def _resolve_modalities(self, model: str) -> list[str]:
-        records = await image_model_catalog_service.list_models("openrouter", self.config)
-        matched = next((record for record in records if str(record.get("id")) == model), None)
-        output_modalities = matched.get("architecture", {}).get("output_modalities") if isinstance(matched, dict) else None
-        if isinstance(output_modalities, list) and "text" in output_modalities:
-            return ["image", "text"]
-        return ["image"]
 
     async def _parse_response(
         self,
         client: httpx.AsyncClient,
         payload: dict[str, Any],
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         choices = payload.get("choices")
         if not isinstance(choices, list) or not choices:
             return None
@@ -189,7 +162,7 @@ class OpenRouterImageProvider(BaseImageProvider):
         self,
         client: httpx.AsyncClient,
         message: dict[str, Any],
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         images = message.get("images")
         if isinstance(images, list):
             for image in images:
@@ -210,7 +183,7 @@ class OpenRouterImageProvider(BaseImageProvider):
         self,
         client: httpx.AsyncClient,
         item: Any,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         if not isinstance(item, dict):
             return None
 
@@ -233,12 +206,15 @@ class OpenRouterImageProvider(BaseImageProvider):
             data = str(item["data"])
             if data.startswith("data:"):
                 image_data = _decode_data_url(data)
-                return {"image_data": image_data, "format": _guess_mime_type(image_data).split("/", 1)[1]}
+                return {
+                    "image_data": image_data,
+                    "format": _guess_mime_type(image_data).split("/", 1)[1],
+                }
             return {"image_data": base64.b64decode(data), "format": "png"}
 
         return None
 
-    async def _read_image_url(self, client: httpx.AsyncClient, url: str) -> Optional[dict[str, Any]]:
+    async def _read_image_url(self, client: httpx.AsyncClient, url: str) -> dict[str, Any] | None:
         if url.startswith("data:"):
             image_data = _decode_data_url(url)
             return {

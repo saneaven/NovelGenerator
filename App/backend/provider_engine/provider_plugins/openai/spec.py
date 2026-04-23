@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-from ....image_providers.model_capabilities import (
-    OPENAI_DEFAULT_MODEL,
-    get_openai_supported_aspect_ratios,
-    get_openai_supported_resolutions,
-)
 from ...contracts import (
     Condition,
     EmbeddingSpec,
@@ -20,6 +15,21 @@ from ...contracts import (
     RuntimeSpec,
     UIHint,
 )
+
+OPENAI_DEFAULT_MODEL = "gpt-image-2"
+OPENAI_SUPPORTED_ASPECT_RATIOS = (
+    "1:1",
+    "2:3",
+    "3:2",
+    "3:4",
+    "4:3",
+    "4:5",
+    "5:4",
+    "9:16",
+    "16:9",
+    "21:9",
+)
+OPENAI_SUPPORTED_RESOLUTIONS = ("1K", "2K", "4K")
 
 
 SPEC = ProviderSpec(
@@ -136,6 +146,7 @@ SPEC = ProviderSpec(
         runtime=RuntimeSpec(adapter="default"),
         prompt_type="natural",
         supports_image_input=True,
+        catalog_cache_policy="static",
         settings_title_key="settings.imageGen.openaiSettings.title",
         settings_description_key="settings.imageGen.openaiSettings.description",
         provider_settings=ObjectSpec(fields={
@@ -210,14 +221,14 @@ SPEC = ProviderSpec(
                 supports_mask_input=True,
                 supports_multi_image_input=True,
                 geometry=ImageModelGeometrySpec(
-                    supported_aspect_ratios=tuple(get_openai_supported_aspect_ratios(OPENAI_DEFAULT_MODEL)),
-                    supported_resolutions=tuple(get_openai_supported_resolutions(OPENAI_DEFAULT_MODEL)),
+                    supported_aspect_ratios=OPENAI_SUPPORTED_ASPECT_RATIOS,
+                    supported_resolutions=OPENAI_SUPPORTED_RESOLUTIONS,
                     default_aspect_ratio="1:1",
                     default_resolution="1K",
                     resolution_mode="native_tier",
                     supported_geometry_pairs={
-                        ratio: tuple(get_openai_supported_resolutions(OPENAI_DEFAULT_MODEL))
-                        for ratio in get_openai_supported_aspect_ratios(OPENAI_DEFAULT_MODEL)
+                        ratio: OPENAI_SUPPORTED_RESOLUTIONS
+                        for ratio in OPENAI_SUPPORTED_ASPECT_RATIOS
                     },
                 ),
                 description="Flexible OpenAI image model for generation, multi-image edits, and masking. 4K output is experimental.",
@@ -236,8 +247,8 @@ SPEC = ProviderSpec(
                     "experimental_4k": True,
                 },
                 supported_parameters={
-                    "aspect_ratios": get_openai_supported_aspect_ratios(OPENAI_DEFAULT_MODEL),
-                    "resolutions": get_openai_supported_resolutions(OPENAI_DEFAULT_MODEL),
+                    "aspect_ratios": list(OPENAI_SUPPORTED_ASPECT_RATIOS),
+                    "resolutions": list(OPENAI_SUPPORTED_RESOLUTIONS),
                     "quality": ["auto", "low", "medium", "high"],
                     "background": ["auto", "opaque"],
                     "output_format": ["png", "jpeg", "webp"],

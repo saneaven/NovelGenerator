@@ -16,6 +16,37 @@ from ...contracts import (
     UIHint,
 )
 
+GEMINI_FLASH_IMAGE_ASPECT_RATIOS = (
+    "1:1",
+    "2:3",
+    "3:2",
+    "3:4",
+    "4:3",
+    "4:5",
+    "5:4",
+    "9:16",
+    "16:9",
+    "21:9",
+    "1:4",
+    "4:1",
+    "1:8",
+    "8:1",
+)
+GEMINI_PRO_IMAGE_ASPECT_RATIOS = (
+    "1:1",
+    "2:3",
+    "3:2",
+    "3:4",
+    "4:3",
+    "4:5",
+    "5:4",
+    "9:16",
+    "16:9",
+    "21:9",
+)
+GEMINI_FLASH_IMAGE_SIZES = ("512px", "1K", "2K", "4K")
+GEMINI_PRO_IMAGE_SIZES = ("1K", "2K", "4K")
+
 
 SPEC = ProviderSpec(
     id="gemini",
@@ -122,6 +153,7 @@ SPEC = ProviderSpec(
         runtime=RuntimeSpec(adapter="default"),
         prompt_type="natural",
         supports_image_input=True,
+        catalog_cache_policy="static",
         models=(
             ImageModelDescriptor(
                 id="gemini-3.1-flash-image-preview",
@@ -129,8 +161,8 @@ SPEC = ProviderSpec(
                 prompt_type="natural",
                 supports_image_input=True,
                 geometry=ImageModelGeometrySpec(
-                    supported_aspect_ratios=("1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1"),
-                    supported_resolutions=("512px", "1K", "2K", "4K"),
+                    supported_aspect_ratios=GEMINI_FLASH_IMAGE_ASPECT_RATIOS,
+                    supported_resolutions=GEMINI_FLASH_IMAGE_SIZES,
                     default_aspect_ratio="1:1",
                     default_resolution="1K",
                     resolution_mode="native_tier",
@@ -142,8 +174,8 @@ SPEC = ProviderSpec(
                 prompt_type="natural",
                 supports_image_input=True,
                 geometry=ImageModelGeometrySpec(
-                    supported_aspect_ratios=("1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"),
-                    supported_resolutions=("1K", "2K", "4K"),
+                    supported_aspect_ratios=GEMINI_PRO_IMAGE_ASPECT_RATIOS,
+                    supported_resolutions=GEMINI_PRO_IMAGE_SIZES,
                     default_aspect_ratio="1:1",
                     default_resolution="1K",
                     resolution_mode="native_tier",

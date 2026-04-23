@@ -229,10 +229,15 @@ async def embed_many(
 
 
 def create_image_runtime(*, provider_config: dict[str, Any], runtime_spec: Any):
-    del runtime_spec
-    from ....image_providers.nanogpt_image import NanoGPTImageProvider
+    del provider_config, runtime_spec
+    raise NotImplementedError("create_image_runtime is no longer supported for NanoGPT image")
 
-    return NanoGPTImageProvider(provider_config)
+
+def create_image_adapter(*, provider_config: dict[str, Any], runtime_spec: Any):
+    del runtime_spec
+    from .image_adapter import NanoGPTImageAdapter
+
+    return NanoGPTImageAdapter(provider_config)
 
 
 async def list_image_models(*, provider_config: dict[str, Any], runtime_spec: Any, models_adapter: str) -> list[ImageModelDescriptor]:

@@ -255,6 +255,8 @@ SPEC = ProviderSpec(
         ),
         prompt_type="natural",
         supports_image_input=True,
+        catalog_cache_policy="session",
+        allow_missing_credentials_for_model_listing=True,
         provider_settings=ObjectSpec(fields={
             "strength": FieldSpec(
                 kind="number",

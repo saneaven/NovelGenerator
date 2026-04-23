@@ -8,6 +8,7 @@ from .contracts import ProviderSpec
 
 _PROVIDERS: dict[str, ProviderSpec] = {}
 _RUNTIME_MODULES: dict[str, Any] = {}
+_RUNTIME_MODULE_PATHS: dict[str, str] = {}
 _LOADED = False
 
 _BUILTINS = ("openai", "nanogpt", "gemini", "claude", "openrouter", "xai", "novelai", "custom")
@@ -24,9 +25,8 @@ def load_builtin_plugins() -> None:
     if _LOADED:
         return
     for provider_id in _BUILTINS:
-        runtime_module = importlib.import_module(f"App.backend.provider_engine.provider_plugins.{provider_id}.runtime")
         module = importlib.import_module(f"App.backend.provider_engine.provider_plugins.{provider_id}.spec")
-        _RUNTIME_MODULES[provider_id] = runtime_module
+        _RUNTIME_MODULE_PATHS[provider_id] = f"App.backend.provider_engine.provider_plugins.{provider_id}.runtime"
         register_provider_spec(module.SPEC)
     _LOADED = True
 
@@ -47,7 +47,13 @@ def list_providers() -> list[ProviderSpec]:
 
 def require_runtime_module(provider_id: str) -> Any:
     load_builtin_plugins()
-    module = _RUNTIME_MODULES.get(str(provider_id or "").strip())
-    if module is None:
+    normalized = str(provider_id or "").strip()
+    module = _RUNTIME_MODULES.get(normalized)
+    if module is not None:
+        return module
+    module_path = _RUNTIME_MODULE_PATHS.get(normalized)
+    if module_path is None:
         raise ValueError(f"Unknown provider runtime '{provider_id}'")
+    module = importlib.import_module(module_path)
+    _RUNTIME_MODULES[normalized] = module
     return module

@@ -120,6 +120,8 @@ export interface PublicImageSpec {
   settings_description_key?: string | null;
   models: PublicImageModelDescriptor[];
   has_dynamic_models: boolean;
+  catalog_cache_policy: 'static' | 'session' | 'none';
+  allow_missing_credentials_for_model_listing: boolean;
 }
 
 export interface PublicProviderUI {

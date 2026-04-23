@@ -1,35 +1,21 @@
 from __future__ import annotations
 
 import asyncio
-import importlib
 import io
-import sys
-import types
 import zipfile
 
-from App.backend.image_providers.base import ReferenceImageData
+from App.backend.image_engine.contracts import (
+    ImagePromptPayload,
+    PreparedImageRequest,
+    PreparedReferenceImage,
+    ResolvedGeometry,
+)
+from App.backend.provider_engine.contracts import ImageModelDescriptor, ImageModelGeometrySpec
+from App.backend.provider_engine.provider_plugins.novelai import image_adapter as novelai_image_module
+from App.backend.schemas.assets import StyledPrompt
 
 
-fake_httpx = types.ModuleType("httpx")
-
-
-class _PlaceholderAsyncClient:
-    def __init__(self, *args, **kwargs) -> None:
-        raise AssertionError("AsyncClient should be monkeypatched in tests")
-
-
-class _FakeTimeoutException(Exception):
-    pass
-
-
-fake_httpx.AsyncClient = _PlaceholderAsyncClient
-fake_httpx.TimeoutException = _FakeTimeoutException
-sys.modules.setdefault("httpx", fake_httpx)
-
-novelai_image_module = importlib.import_module("App.backend.image_providers.novelai_image")
-
-
-NovelAIImageProvider = novelai_image_module.NovelAIImageProvider
+NovelAIImageAdapter = novelai_image_module.NovelAIImageAdapter
 
 
 def _build_zip_image() -> bytes:
@@ -61,16 +47,61 @@ class _RecordingAsyncClient:
         return _FakeResponse(content=_build_zip_image())
 
 
+def _build_request(
+    *,
+    positive_prompt: str,
+    negative_prompt: str | None = None,
+    native_size: str = "1024x1024",
+    provider_settings: dict | None = None,
+    reference_images: tuple[PreparedReferenceImage, ...] = (),
+) -> PreparedImageRequest:
+    return PreparedImageRequest(
+        provider="novelai",
+        model_descriptor=ImageModelDescriptor(
+            id="nai-diffusion-4-5-full",
+            name="NovelAI Diffusion V4.5 Full",
+            prompt_type="tag_based",
+            supports_image_input=True,
+            geometry=ImageModelGeometrySpec(
+                supported_aspect_ratios=("1:1",),
+                supported_resolutions=("1024x1024",),
+                default_aspect_ratio="1:1",
+                default_resolution="1024x1024",
+                resolution_mode="translated_fixed",
+                native_size_by_ratio={"1:1": "1024x1024"},
+            ),
+        ),
+        prompt_payload=ImagePromptPayload(
+            prompt_type="tag_based",
+            positive_prompt=StyledPrompt(prefix="", content=positive_prompt, postfix=""),
+            negative_prompt=(
+                StyledPrompt(prefix="", content=negative_prompt, postfix="")
+                if negative_prompt is not None
+                else None
+            ),
+        ),
+        resolved_geometry=ResolvedGeometry(
+            requested_aspect_ratio="1:1",
+            requested_image_size="1K",
+            resolved_aspect_ratio="1:1",
+            resolved_image_size="1K",
+            resolved_native_size=native_size,
+        ),
+        reference_images=reference_images,
+        provider_settings=provider_settings or {},
+    )
+
+
 def test_generate_image_omits_hidden_quality_uc_and_negative_when_negative_missing(monkeypatch) -> None:
     client = _RecordingAsyncClient()
     monkeypatch.setattr(novelai_image_module.httpx, "AsyncClient", lambda *args, **kwargs: client)
 
-    provider = NovelAIImageProvider({"api_key": "test-token"})
+    adapter = NovelAIImageAdapter({"api_key": "test-token"})
     result = asyncio.run(
-        provider.generate_image(
-            positive_prompt="1girl, city lights",
-            model="nai-diffusion-4-5-full",
-            size="1024x1024",
+        adapter.generate(
+            _build_request(
+                positive_prompt="1girl, city lights",
+            )
         )
     )
 
@@ -89,13 +120,13 @@ def test_generate_image_uses_only_explicit_negative_prompt(monkeypatch) -> None:
     client = _RecordingAsyncClient()
     monkeypatch.setattr(novelai_image_module.httpx, "AsyncClient", lambda *args, **kwargs: client)
 
-    provider = NovelAIImageProvider({"api_key": "test-token"})
+    adapter = NovelAIImageAdapter({"api_key": "test-token"})
     result = asyncio.run(
-        provider.generate_image(
-            positive_prompt="1girl, city lights",
-            negative_prompt="lowres, blurry",
-            model="nai-diffusion-4-5-full",
-            size="1024x1024",
+        adapter.generate(
+            _build_request(
+                positive_prompt="1girl, city lights",
+                negative_prompt="lowres, blurry",
+            )
         )
     )
 
@@ -111,19 +142,20 @@ def test_generate_image_preserves_style_composed_prompts_and_reference_settings(
     client = _RecordingAsyncClient()
     monkeypatch.setattr(novelai_image_module.httpx, "AsyncClient", lambda *args, **kwargs: client)
 
-    provider = NovelAIImageProvider({"api_key": "test-token"})
+    adapter = NovelAIImageAdapter({"api_key": "test-token"})
     result = asyncio.run(
-        provider.generate_image(
-            positive_prompt="masterpiece, 1girl, detailed eyes",
-            negative_prompt="lowres, blurry, bad hands",
-            model="nai-diffusion-4-5-full",
-            size="832x1216",
-            provider_settings={
-                "referenceMode": "i2i",
-                "strength": 0.45,
-                "i2iNoise": 0.2,
-            },
-            reference_images=[ReferenceImageData(image_data=b"ref-image", strength=0.7)],
+        adapter.generate(
+            _build_request(
+                positive_prompt="masterpiece, 1girl, detailed eyes",
+                negative_prompt="lowres, blurry, bad hands",
+                native_size="832x1216",
+                provider_settings={
+                    "referenceMode": "i2i",
+                    "strength": 0.45,
+                    "i2iNoise": 0.2,
+                },
+                reference_images=(PreparedReferenceImage(image_data=b"ref-image", strength=0.7),),
+            )
         )
     )
 

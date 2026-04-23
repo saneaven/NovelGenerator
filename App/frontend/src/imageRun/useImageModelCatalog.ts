@@ -1,56 +1,81 @@
 import { useEffect, useMemo, useState } from 'react';
 import { assetService, type ImageModelInfo } from '../api/assetService';
+import { useProviderSpecStore } from '../providerEngine/store';
+import { projectImageModels, toImageModelInfo } from '../providerEngine/utils';
+import {
+  resolveAspectRatio,
+  resolveCatalogSelection,
+  resolveImageSize,
+  resolveSupportedImageSizes,
+  aspectRatioFromImageSize,
+} from './form/selection';
 
 const catalogCache = new Map<string, ImageModelInfo[]>();
 
-export function resolveCatalogSelection(models: ImageModelInfo[], currentModel: string): ImageModelInfo | null {
-  if (models.length === 0) return null;
-  return models.find((model) => model.id === currentModel) ?? models[0];
+function shouldCacheCatalog(cachePolicy: 'static' | 'session' | 'none' | undefined): boolean {
+  return cachePolicy === 'static' || cachePolicy === 'session';
 }
 
-export function resolveAspectRatio(model: ImageModelInfo | null, currentValue: string): string {
-  if (!model) return currentValue || '1:1';
-  return model.supported_aspect_ratios.includes(currentValue) ? currentValue : model.default_aspect_ratio;
-}
-
-export function resolveImageSize(model: ImageModelInfo | null, currentValue: string): string {
-  if (!model) return currentValue || '1K';
-  return model.supported_image_sizes.includes(currentValue) ? currentValue : model.default_image_size;
-}
-
-export function resolveSupportedImageSizes(model: ImageModelInfo | null, aspectRatio: string): string[] {
-  if (!model) return [];
-  if (model.ui_resolution_mode === 'native_exact') {
-    return model.supported_image_sizes;
-  }
-  const paired = model.supported_geometry_pairs?.[aspectRatio];
-  if (Array.isArray(paired) && paired.length > 0) {
-    return paired;
-  }
-  return model.supported_image_sizes;
-}
-
-export function aspectRatioFromImageSize(size: string): string {
-  const text = String(size || '').trim().toLowerCase();
-  if (!text.includes('x')) return '1:1';
-  const [widthText, heightText] = text.split('x', 2);
-  const width = Number.parseInt(widthText, 10);
-  const height = Number.parseInt(heightText, 10);
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    return '1:1';
-  }
-  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
-  const divisor = gcd(width, height) || 1;
-  return `${Math.floor(width / divisor)}:${Math.floor(height / divisor)}`;
-}
+export {
+  resolveCatalogSelection,
+  resolveAspectRatio,
+  resolveImageSize,
+  resolveSupportedImageSizes,
+  aspectRatioFromImageSize,
+};
 
 export function useImageModelCatalog(provider: string, currentModel: string) {
-  const shouldUseCache = provider !== 'openrouter';
-  const [models, setModels] = useState<ImageModelInfo[]>(() => shouldUseCache ? (catalogCache.get(provider) ?? []) : []);
-  const [loading, setLoading] = useState(shouldUseCache ? !catalogCache.has(provider) : true);
+  const loadProviderSpecs = useProviderSpecStore((state) => state.load);
+  const providerSpec = useProviderSpecStore((state) => state.specs[provider]);
+  const staticModels = useMemo(
+    () => (
+      providerSpec?.image && !providerSpec.image.has_dynamic_models
+        ? projectImageModels(providerSpec).map(toImageModelInfo)
+        : null
+    ),
+    [providerSpec],
+  );
+  const cachePolicy = providerSpec?.image?.catalog_cache_policy;
+  const shouldUseCache = shouldCacheCatalog(cachePolicy);
+  const shouldFetchDynamicModels = Boolean(providerSpec?.image?.has_dynamic_models);
+
+  const [models, setModels] = useState<ImageModelInfo[]>(() => {
+    if (staticModels) return staticModels;
+    return shouldUseCache ? (catalogCache.get(provider) ?? []) : [];
+  });
+  const [loading, setLoading] = useState(() => {
+    if (!providerSpec) return true;
+    if (staticModels) return false;
+    return shouldUseCache ? !catalogCache.has(provider) : shouldFetchDynamicModels;
+  });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    void loadProviderSpecs();
+  }, [loadProviderSpecs]);
+
+  useEffect(() => {
+    if (!providerSpec) {
+      setModels([]);
+      setLoading(true);
+      setError(null);
+      return;
+    }
+
+    if (staticModels) {
+      setModels(staticModels);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    if (!shouldFetchDynamicModels) {
+      setModels([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     let cancelled = false;
     const cached = shouldUseCache ? catalogCache.get(provider) : undefined;
     if (cached) {
@@ -84,7 +109,7 @@ export function useImageModelCatalog(provider: string, currentModel: string) {
     return () => {
       cancelled = true;
     };
-  }, [provider, shouldUseCache]);
+  }, [provider, providerSpec, shouldFetchDynamicModels, shouldUseCache, staticModels]);
 
   const selectedModel = useMemo(() => resolveCatalogSelection(models, currentModel), [models, currentModel]);
 

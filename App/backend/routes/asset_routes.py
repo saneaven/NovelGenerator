@@ -53,11 +53,8 @@ from ..services.storage_usage_service import (
 )
 from ..services.credential_service import CredentialServiceError, credential_service
 from ..services.ownership import require_owned_object
-from ..image_providers.registry import ImageProviderRegistry
+from ..provider_engine.registry import list_providers as list_provider_specs, require_provider
 from ..utils.story_entities import STORY_ENTITY_TYPE
-
-# Import providers to register them
-from ..image_providers import openai_image, gemini_image, xai_image, novelai_image, openrouter_image, nanogpt_image
 
 router = APIRouter(prefix="/api/v1/assets", tags=["assets"])
 
@@ -421,17 +418,23 @@ def _asset_to_scene_response(asset: Asset, usages: List[AssetUsage]) -> SceneAss
 @router.get("/image-providers", response_model=ImageProvidersResponse)
 async def list_image_providers():
     """List available image generation providers"""
-    providers = ImageProviderRegistry.list_providers()
+    providers = [spec for spec in list_provider_specs() if spec.image is not None]
+    providers.sort(
+        key=lambda spec: (
+            spec.ui.image_order if spec.ui.image_order is not None else 999,
+            spec.id,
+        )
+    )
     return ImageProvidersResponse(
         providers=[
             ImageProviderInfo(
-                name=p["name"],
-                display_name=p["display_name"],
-                prompt_type=p.get("prompt_type", "natural"),
-                settings_schema=p.get("settings_schema"),
-                supports_image_input=p.get("supports_image_input", False)
+                name=spec.id,
+                display_name=spec.ui.display_name_key,
+                prompt_type=spec.image.prompt_type,
+                settings_schema=None,
+                supports_image_input=spec.image.supports_image_input,
             )
-            for p in providers
+            for spec in providers
         ]
     )
 
@@ -444,15 +447,15 @@ async def get_image_models(
 ):
     """Get available models for an image provider"""
     try:
-        if provider == "nanogpt":
-            try:
-                provider_config = credential_service.get_provider_config(db, current_user.id, provider)
-            except CredentialServiceError:
-                provider_config = {}
-        else:
-            provider_config = credential_service.get_provider_config(db, current_user.id, provider)
-        if not ImageProviderRegistry.has_provider(provider):
+        provider_spec = require_provider(provider)
+        if provider_spec.image is None:
             raise HTTPException(status_code=404, detail=f"Unknown image provider '{provider}'")
+        try:
+            provider_config = credential_service.get_provider_config(db, current_user.id, provider)
+        except CredentialServiceError:
+            if not provider_spec.image.allow_missing_credentials_for_model_listing:
+                raise
+            provider_config = {}
         models = await image_model_catalog_service.list_models(provider, provider_config)
         return ImageModelsResponse(data=[ImageModelInfo.model_validate(model) for model in models])
     except CredentialServiceError as e:

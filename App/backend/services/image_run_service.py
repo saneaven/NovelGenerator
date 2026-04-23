@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import math
 from datetime import datetime
 from typing import Any, Callable
 from uuid import UUID, uuid4
@@ -10,9 +9,10 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
-from ..image_providers import gemini_image, novelai_image, openai_image, openrouter_image, xai_image
-from ..image_providers.base import BaseImageProvider, ImageGenerationResult, MaskImageData, ReferenceImageData
-from ..image_providers.registry import ImageProviderRegistry
+from ..image_engine.orchestrator import prepare_image_request
+from ..image_engine.request_validation import validate_canonical_recipe
+from ..image_engine.settings import validate_image_gen_config
+from ..image_engine.contracts import ImageGenerationOutput
 from ..models.db_models import (
     Asset,
     BasicInfo,
@@ -24,16 +24,10 @@ from ..models.db_models import (
     ObjectAssetLink,
     UserSettings,
 )
+from ..provider_engine.registry import require_provider
 from ..schemas.assets import CreateImageRunRequest, ImageRunResponse, StyledPrompt
-from ..schemas.settings import ImageGenConfig
-from ..services.credential_service import credential_service
 from ..services.deletion_service import delete_assets_with_files
-from ..services.image_model_catalog_service import (
-    image_model_catalog_service,
-    migrate_image_gen_config,
-    rewrite_image_run_recipe,
-    sanitize_generation_settings,
-)
+from ..services.image_model_catalog_service import sanitize_generation_settings
 from ..services.notification_service import (
     build_image_run_notification_snapshot,
     serialize_notification,
@@ -134,90 +128,46 @@ def _object_display_name(obj: dict[str, Any], language: str, *, fallback: str) -
     return fallback
 
 
-def _parse_ratio_value(raw: str | None) -> float | None:
-    text = str(raw or "").strip().lower()
-    if not text:
-        return None
-    for sep in (":", "/", "x"):
-        if sep in text:
-            left, right = text.split(sep, 1)
-            try:
-                width = float(left.strip())
-                height = float(right.strip())
-            except ValueError:
-                return None
-            if width <= 0 or height <= 0:
-                return None
-            return width / height
-    try:
-        value = float(text)
-    except ValueError:
-        return None
-    return value if value > 0 else None
+def _resolve_prompt_type(provider_name: str, model_name: str) -> str:
+    provider_spec = require_provider(provider_name)
+    image_spec = provider_spec.image
+    if image_spec is None:
+        raise ValueError(f"Provider '{provider_name}' does not support image")
+    if model_name:
+        for descriptor in image_spec.models:
+            if descriptor.id == model_name:
+                return descriptor.prompt_type
+    return image_spec.prompt_type
 
 
-def _ratio_from_size(size: str) -> float | None:
-    return _parse_ratio_value(size)
-
-
-def _simplify_ratio(width: int, height: int) -> str:
-    divisor = math.gcd(width, height) or 1
-    return f"{width // divisor}:{height // divisor}"
-
-
-def _ratio_label_from_size(size: str) -> str:
-    text = str(size or "").strip()
-    if "x" not in text:
-        return text or "1:1"
-    try:
-        width_text, height_text = text.split("x", 1)
-        return _simplify_ratio(int(width_text), int(height_text))
-    except ValueError:
-        return text or "1:1"
-
-
-def _pick_nearest_ratio_label(candidates: list[str], requested_ratio: float | None) -> str:
-    if not candidates:
-        return "1:1"
-    if requested_ratio is None:
-        return str(candidates[0])
-    return min(
-        candidates,
-        key=lambda candidate: abs((_parse_ratio_value(candidate) or requested_ratio) - requested_ratio),
-    )
-
-
-def _pick_nearest_size(candidates: list[str], requested_ratio: float | None, fallback: str) -> str:
-    if not candidates:
-        return fallback
-    if requested_ratio is None:
-        return str(candidates[0])
-    return min(
-        candidates,
-        key=lambda size: abs((_ratio_from_size(size) or requested_ratio) - requested_ratio),
-    )
-
-
-def _get_image_settings(settings_row: UserSettings) -> ImageGenConfig:
-    raw = settings_row.image_gen_config if isinstance(settings_row.image_gen_config, dict) else {}
-    return ImageGenConfig.model_validate(migrate_image_gen_config(raw))
-
-
-def _provider_template(provider_name: str) -> BaseImageProvider:
-    return ImageProviderRegistry.get_provider(provider_name, {})
-
-
-def _selected_style(config: ImageGenConfig) -> tuple[str | None, dict[str, Any] | None]:
-    provider = config.provider
-    if provider == "novelai":
-        selected_id = config.selectedTagBasedStyleId
+def _selected_style(config: Any, prompt_type: str) -> tuple[str | None, dict[str, Any] | None]:
+    selected_natural_style_id = str(config.get("selectedNaturalStyleId") or "").strip() or None
+    selected_tag_style_id = str(config.get("selectedTagBasedStyleId") or "").strip() or None
+    natural_styles = config.get("naturalStyles") if isinstance(config.get("naturalStyles"), list) else []
+    tag_based_styles = config.get("tagBasedStyles") if isinstance(config.get("tagBasedStyles"), list) else []
+    if prompt_type == "tag_based":
+        selected_id = selected_tag_style_id
         if not selected_id:
             return None, None
-        return selected_id, next((style.model_dump() for style in config.tagBasedStyles if style.id == selected_id), None)
-    selected_id = config.selectedNaturalStyleId
+        return selected_id, next(
+            (
+                dict(style)
+                for style in tag_based_styles
+                if isinstance(style, dict) and str(style.get("id") or "") == selected_id
+            ),
+            None,
+        )
+    selected_id = selected_natural_style_id
     if not selected_id:
         return None, None
-    return selected_id, next((style.model_dump() for style in config.naturalStyles if style.id == selected_id), None)
+    return selected_id, next(
+        (
+            dict(style)
+            for style in natural_styles
+            if isinstance(style, dict) and str(style.get("id") or "") == selected_id
+        ),
+        None,
+    )
 
 
 def _build_tool_recipe_snapshot(
@@ -227,11 +177,13 @@ def _build_tool_recipe_snapshot(
     requested_aspect_ratio: str,
     requested_image_size: str | None,
 ) -> dict[str, Any]:
-    config = _get_image_settings(settings_row)
-    provider_name = config.provider
-    provider = _provider_template(provider_name)
-    prompt_type = provider.get_prompt_type()
-    style_id, style = _selected_style(config)
+    raw = settings_row.image_gen_config if isinstance(settings_row.image_gen_config, dict) else {}
+    config = validate_image_gen_config(raw)
+    provider_name = str(config.get("provider") or "").strip()
+    model_name = str(config.get("model") or "").strip()
+    image_size = str(config.get("image_size") or "").strip() or "1K"
+    prompt_type = _resolve_prompt_type(provider_name, model_name)
+    style_id, style = _selected_style(config, prompt_type)
     style = style or {}
 
     prompt_payload: StyledPrompt | None = None
@@ -254,15 +206,15 @@ def _build_tool_recipe_snapshot(
             postfix=str(style.get("postfix") or ""),
         )
 
-    provider_settings_map = config.providerSettings if isinstance(config.providerSettings, dict) else {}
+    provider_settings_map = config.get("providerSettings") if isinstance(config.get("providerSettings"), dict) else {}
     stored_provider_settings = _json_dict(provider_settings_map.get(provider_name))
 
     return {
         "prompt_type": prompt_type,
         "provider": provider_name,
-        "model": config.model,
+        "model": model_name,
         "requested_aspect_ratio": requested_aspect_ratio,
-        "requested_image_size": str(requested_image_size or config.image_size).strip() or config.image_size,
+        "requested_image_size": str(requested_image_size or image_size).strip() or image_size,
         "style_id": style_id,
         "prompt": _styled_prompt_to_dict(prompt_payload),
         "positive_prompt": _styled_prompt_to_dict(positive_payload),
@@ -489,7 +441,7 @@ class ImageRunService:
     ) -> ImageRunModel:
         target, apply_kind = self._normalize_direct_target(target=request.target.model_dump())
         self._validate_direct_target(db, project_id=project_id, target=target)
-        recipe_snapshot = rewrite_image_run_recipe(request.recipe.model_dump())
+        recipe_snapshot = validate_canonical_recipe(request.recipe.model_dump())
 
         row = ImageRunModel(
             id=uuid4(),
@@ -765,7 +717,7 @@ class ImageRunService:
                 error_message=str(exc),
             )
 
-    async def _generate_image_result(self, image_run_id: UUID) -> tuple[dict[str, Any], ImageGenerationResult]:
+    async def _generate_image_result(self, image_run_id: UUID) -> tuple[dict[str, Any], ImageGenerationOutput]:
         db = self._db_factory()
         try:
             row = db.query(ImageRunModel).filter(ImageRunModel.id == image_run_id).first()
@@ -773,35 +725,20 @@ class ImageRunService:
                 raise ValueError("Image run not found")
             snapshot = _json_dict(row.request_snapshot)
             recipe = _json_dict(snapshot.get("recipe"))
-            provider_name = str(recipe.get("provider") or "").strip()
-            if not provider_name:
-                raise ValueError("Image provider is required")
-            provider_config = credential_service.get_provider_config(db, row.user_id, provider_name)
-            provider = ImageProviderRegistry.get_provider(provider_name, provider_config)
-            if not provider.validate_config():
-                raise ValueError("Invalid provider configuration")
-
-            geometry = await image_model_catalog_service.resolve_geometry(
-                provider=provider_name,
-                model=str(recipe.get("model") or "").strip(),
-                requested_aspect_ratio=str(recipe.get("requested_aspect_ratio") or "").strip(),
-                requested_image_size=str(recipe.get("requested_image_size") or "").strip(),
-                provider_config=provider_config,
+            sanitized_recipe, prepared_request, adapter = await prepare_image_request(
+                db,
+                user_id=row.user_id,
+                project_id=row.project_id,
+                raw_recipe=recipe,
             )
+            snapshot["recipe"] = sanitized_recipe
 
-            recipe["model"] = geometry.model
-            recipe["requested_aspect_ratio"] = geometry.requested_aspect_ratio
-            recipe["requested_image_size"] = geometry.requested_image_size
-            recipe["provider_settings"] = sanitize_generation_settings(provider_name, recipe.get("provider_settings"))
-            recipe["mask_image"] = recipe.get("mask_image") if isinstance(recipe.get("mask_image"), dict) else None
-            snapshot["recipe"] = recipe
-
-            row.provider = provider_name
-            row.model = geometry.model
+            row.provider = prepared_request.provider
+            row.model = prepared_request.model_descriptor.id
             row.request_snapshot = snapshot
-            row.resolved_aspect_ratio = geometry.resolved_aspect_ratio
-            row.resolved_image_size = geometry.resolved_image_size
-            row.resolved_native_size = geometry.resolved_native_size
+            row.resolved_aspect_ratio = prepared_request.resolved_geometry.resolved_aspect_ratio
+            row.resolved_image_size = prepared_request.resolved_geometry.resolved_image_size
+            row.resolved_native_size = prepared_request.resolved_geometry.resolved_native_size
             row.stage = "generating"
             row.updated_at = datetime.utcnow()
             db.commit()
@@ -817,82 +754,13 @@ class ImageRunService:
                 raise ValueError("Image run not found")
             snapshot = _json_dict(row.request_snapshot)
             recipe = _json_dict(snapshot.get("recipe"))
-            provider_name = str(recipe.get("provider") or "").strip()
-            provider_config = credential_service.get_provider_config(db, row.user_id, provider_name)
-            provider = ImageProviderRegistry.get_provider(provider_name, provider_config)
-            provider_settings = sanitize_generation_settings(provider_name, recipe.get("provider_settings")) or {}
-            prompt_payload = _styled_prompt_from_dict(recipe.get("prompt"))
-            positive_prompt = _styled_prompt_from_dict(recipe.get("positive_prompt"))
-            negative_prompt = _styled_prompt_from_dict(recipe.get("negative_prompt"))
-            geometry = await image_model_catalog_service.resolve_geometry(
-                provider=provider_name,
-                model=str(row.model or recipe.get("model") or "").strip(),
-                requested_aspect_ratio=str(recipe.get("requested_aspect_ratio") or "").strip(),
-                requested_image_size=str(recipe.get("requested_image_size") or "").strip(),
-                provider_config=provider_config,
+            _, prepared_request, adapter = await prepare_image_request(
+                db,
+                user_id=row.user_id,
+                project_id=row.project_id,
+                raw_recipe=recipe,
             )
-
-            reference_image_data: list[ReferenceImageData] | None = None
-            raw_refs = recipe.get("reference_images")
-            if isinstance(raw_refs, list) and geometry.supports_image_input:
-                reference_image_data = []
-                for raw_ref in raw_refs:
-                    if not isinstance(raw_ref, dict):
-                        continue
-                    asset_id = raw_ref.get("asset_id") or raw_ref.get("assetId")
-                    if not asset_id:
-                        continue
-                    ref_asset = db.query(Asset).filter(
-                        Asset.id == _parse_uuid(asset_id, field_name="reference asset_id"),
-                        Asset.project_id == row.project_id,
-                    ).first()
-                    if ref_asset is None:
-                        continue
-                    image_bytes = storage_service.read_asset_file(str(ref_asset.file_path))
-                    image_bytes = storage_service.to_png_bytes(image_bytes)
-                    reference_image_data.append(
-                        ReferenceImageData(
-                            image_data=image_bytes,
-                            strength=float(raw_ref.get("strength") or 0.7),
-                        )
-                    )
-
-            mask_image_data: MaskImageData | None = None
-            raw_mask = recipe.get("mask_image")
-            if isinstance(raw_mask, dict) and geometry.supports_image_input:
-                mask_asset_id = raw_mask.get("asset_id") or raw_mask.get("assetId")
-                if mask_asset_id:
-                    mask_asset = db.query(Asset).filter(
-                        Asset.id == _parse_uuid(mask_asset_id, field_name="mask asset_id"),
-                        Asset.project_id == row.project_id,
-                    ).first()
-                    if mask_asset is not None:
-                        image_bytes = storage_service.read_asset_file(str(mask_asset.file_path))
-                        image_bytes = storage_service.to_png_bytes(image_bytes)
-                        mask_image_data = MaskImageData(image_data=image_bytes)
-
-            result = await provider.generate_image(
-                prompt=f"{prompt_payload.prefix}{prompt_payload.content}{prompt_payload.postfix}" if isinstance(prompt_payload, StyledPrompt) else None,
-                positive_prompt=(
-                    f"{positive_prompt.prefix}{positive_prompt.content}{positive_prompt.postfix}"
-                    if isinstance(positive_prompt, StyledPrompt)
-                    else None
-                ),
-                negative_prompt=(
-                    f"{negative_prompt.prefix}{negative_prompt.content}{negative_prompt.postfix}"
-                    if isinstance(negative_prompt, StyledPrompt)
-                    else None
-                ),
-                model=str(row.model or recipe.get("model") or ""),
-                size=str(row.resolved_native_size or "1024x1024"),
-                aspect_ratio=str(row.resolved_aspect_ratio or geometry.resolved_aspect_ratio),
-                image_size=str(row.resolved_image_size or geometry.resolved_image_size),
-                resolved_native_size=str(row.resolved_native_size or geometry.resolved_native_size),
-                quality=str(provider_settings.get("quality") or "auto"),
-                provider_settings=provider_settings or None,
-                reference_images=reference_image_data,
-                mask_image=mask_image_data,
-            )
+            result = await adapter.generate(prepared_request)
             if not result.success:
                 raise ValueError(result.error or "Image generation failed")
             return recipe, result
@@ -904,7 +772,7 @@ class ImageRunService:
         *,
         image_run_id: UUID,
         recipe: dict[str, Any],
-        result: ImageGenerationResult,
+        result: ImageGenerationOutput,
     ) -> None:
         db = self._db_factory()
         try:
@@ -990,7 +858,7 @@ class ImageRunService:
         db: Session,
         row: ImageRunModel,
         recipe: dict[str, Any],
-        result: ImageGenerationResult,
+        result: ImageGenerationOutput,
         is_preview: bool,
     ) -> Asset:
         asset_id = uuid4()

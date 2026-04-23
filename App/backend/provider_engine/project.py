@@ -142,6 +142,8 @@ def _project_image_spec(spec: Any) -> dict[str, Any]:
         "settings_description_key": spec.settings_description_key,
         "models": [_project_image_model(model) for model in spec.models],
         "has_dynamic_models": bool(spec.models_adapter),
+        "catalog_cache_policy": spec.catalog_cache_policy,
+        "allow_missing_credentials_for_model_listing": spec.allow_missing_credentials_for_model_listing,
     }
 
 

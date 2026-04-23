@@ -37,6 +37,7 @@ SPEC = ProviderSpec(
         runtime=RuntimeSpec(adapter="default"),
         prompt_type="tag_based",
         supports_image_input=True,
+        catalog_cache_policy="static",
         settings_title_key="settings.imageGen.novelaiSettings.title",
         settings_description_key="settings.imageGen.novelaiSettings.description",
         provider_settings=ObjectSpec(fields={

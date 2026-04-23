@@ -1,19 +1,13 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ImageGenConfig, ImageProviderType } from '../../store/settingsStore';
 import {
-  resolveAspectRatio,
-  resolveImageSize,
-  resolveSupportedImageSizes,
-  aspectRatioFromImageSize,
-  useImageModelCatalog,
-} from '../../imageRun/useImageModelCatalog';
-import { useProviderSpecStore } from '../../providerEngine/store';
-import {
-  buildDefaultObjectValue,
-  getStoredProviderSettings,
-  setStoredProviderSettings,
-} from '../../providerEngine/utils';
+  applyAspectRatioChange,
+  applyImageSizeChange,
+} from '../../imageRun/form/selection';
+import { useImageGenerationForm } from '../../imageRun/form/useImageGenerationForm';
+import { buildImageProviderSettingsDraft } from '../../imageRun/form/providerSettings';
+import { getStoredProviderSettings, setStoredProviderSettings } from '../../providerEngine/utils';
 import { CustomSelect } from '../ui/CustomSelect';
 import ImageModelBrowser from '../ImageGeneration/ImageModelBrowser';
 import ImageStyleEditorModal from './ImageStyleEditorModal';
@@ -27,74 +21,53 @@ interface ImageGenPanelProps {
 
 const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
   const { t } = useTranslation();
-  const specs = useProviderSpecStore((state) => state.specs);
-  const loadProviderSpecs = useProviderSpecStore((state) => state.load);
-  const providerSpec = specs[config.provider];
-  const { models, loading, error: modelError, selectedModel } = useImageModelCatalog(config.provider, config.model);
+  const {
+    providerSpecs: specs,
+    providerSpec,
+    imageProviders,
+    models,
+    loading,
+    error: modelError,
+    selectedModel,
+    isTagBased,
+    providerSettingsSpec,
+    providerSettingsFlags,
+    isNativeExact,
+    supportedImageSizes: supportedSizes,
+    reconciledSelection,
+  } = useImageGenerationForm({
+    provider: config.provider,
+    model: config.model,
+    aspectRatio: config.aspect_ratio,
+    imageSize: config.image_size,
+    providerSettingsDraft: getStoredProviderSettings(config as Record<string, unknown>, config.provider),
+  });
 
   useEffect(() => {
-    void loadProviderSpecs();
-  }, [loadProviderSpecs]);
-
-  const imageProviders = useMemo(() => {
-    const providers = Object.values(specs).filter((provider) => Boolean(provider.image));
-    providers.sort((a, b) => {
-      const left = a.ui.image_order ?? 999;
-      const right = b.ui.image_order ?? 999;
-      return left - right || a.id.localeCompare(b.id);
-    });
-    return providers;
-  }, [specs]);
-
-  useEffect(() => {
-    if (!selectedModel) return;
-    const nextModel = selectedModel.id;
-    let nextAspectRatio = config.aspect_ratio;
-    let nextImageSize = config.image_size;
-
-    if (selectedModel.ui_resolution_mode === 'native_exact') {
-      nextImageSize = resolveImageSize(selectedModel, config.image_size);
-      nextAspectRatio = aspectRatioFromImageSize(nextImageSize);
-    } else {
-      nextAspectRatio = resolveAspectRatio(selectedModel, config.aspect_ratio);
-      const supportedSizes = resolveSupportedImageSizes(selectedModel, nextAspectRatio);
-      nextImageSize = supportedSizes.includes(config.image_size)
-        ? config.image_size
-        : (supportedSizes[0] ?? resolveImageSize(selectedModel, config.image_size));
-    }
-
     if (
-      nextModel === config.model
-      && nextAspectRatio === config.aspect_ratio
-      && nextImageSize === config.image_size
+      reconciledSelection.model === config.model
+      && reconciledSelection.aspectRatio === config.aspect_ratio
+      && reconciledSelection.imageSize === config.image_size
     ) {
       return;
     }
     onChange({
       ...config,
-      model: nextModel,
-      aspect_ratio: nextAspectRatio,
-      image_size: nextImageSize,
+      model: reconciledSelection.model,
+      aspect_ratio: reconciledSelection.aspectRatio,
+      image_size: reconciledSelection.imageSize,
     });
-  }, [config, onChange, selectedModel]);
+  }, [config, onChange, reconciledSelection]);
 
   const providerOptions = imageProviders.map((provider) => ({
     value: provider.id,
     label: t(provider.ui.display_name_key),
   }));
 
-  const currentPromptType = selectedModel?.prompt_type ?? providerSpec?.image?.prompt_type ?? 'natural';
-  const isTagBased = currentPromptType === 'tag_based';
   const currentStyles = isTagBased ? config.tagBasedStyles : config.naturalStyles;
   const selectedStyleId = isTagBased ? config.selectedTagBasedStyleId : config.selectedNaturalStyleId;
   const styleKey = isTagBased ? 'settings.imageGen.tagBasedStyles' : 'settings.imageGen.naturalStyles';
-  const providerSettingsSpec = providerSpec?.image?.provider_settings ?? null;
   const providerSettings = getStoredProviderSettings(config as Record<string, unknown>, config.provider);
-  const isNativeExact = selectedModel?.ui_resolution_mode === 'native_exact';
-  const supportedSizes = resolveSupportedImageSizes(selectedModel, config.aspect_ratio);
-  const providerSettingsFlags = useMemo(() => ({
-    kontext_model: /kontext/i.test(selectedModel?.id ?? config.model),
-  }), [selectedModel, config.model]);
 
   return (
     <div className="image-gen-panel">
@@ -112,11 +85,11 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
           <CustomSelect
             value={config.provider}
             onChange={(value) => {
-              const nextProviderSpec = imageProviders.find((provider) => provider.id === value);
-              const existingSettings = getStoredProviderSettings(config as Record<string, unknown>, value);
-              const nextSettings = Object.keys(existingSettings).length > 0
-                ? existingSettings
-                : (value === 'nanogpt' ? {} : buildDefaultObjectValue(nextProviderSpec?.image?.provider_settings));
+              const nextSettings = buildImageProviderSettingsDraft(
+                value,
+                specs,
+                config as Record<string, unknown>,
+              );
               const nextConfig = setStoredProviderSettings(
                 { ...config, provider: value as ImageProviderType, model: '' } as Record<string, unknown>,
                 value,
@@ -153,13 +126,19 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
               <CustomSelect
                 value={config.aspect_ratio}
                 onChange={(value) => {
-                  const nextSizes = resolveSupportedImageSizes(selectedModel, value);
+                  const nextSelection = applyAspectRatioChange(
+                    selectedModel,
+                    {
+                      model: config.model,
+                      aspectRatio: config.aspect_ratio,
+                      imageSize: config.image_size,
+                    },
+                    value,
+                  );
                   onChange({
                     ...config,
-                    aspect_ratio: value,
-                    image_size: nextSizes.includes(config.image_size)
-                      ? config.image_size
-                      : (nextSizes[0] ?? config.image_size),
+                    aspect_ratio: nextSelection.aspectRatio,
+                    image_size: nextSelection.imageSize,
                   });
                 }}
                 disabled={!selectedModel || selectedModel.supported_aspect_ratios.length <= 1}
@@ -177,7 +156,22 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
               </label>
               <CustomSelect
                 value={config.image_size}
-                onChange={(value) => onChange({ ...config, image_size: value })}
+                onChange={(value) => {
+                  const nextSelection = applyImageSizeChange(
+                    selectedModel,
+                    {
+                      model: config.model,
+                      aspectRatio: config.aspect_ratio,
+                      imageSize: config.image_size,
+                    },
+                    value,
+                  );
+                  onChange({
+                    ...config,
+                    aspect_ratio: nextSelection.aspectRatio,
+                    image_size: nextSelection.imageSize,
+                  });
+                }}
                 disabled={!selectedModel || supportedSizes.length <= 1}
                 options={(supportedSizes.length > 0 ? supportedSizes : [config.image_size]).map((size) => ({
                   value: size,
@@ -195,11 +189,22 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
               </label>
               <CustomSelect
                 value={config.image_size}
-                onChange={(value) => onChange({
-                  ...config,
-                  image_size: value,
-                  aspect_ratio: aspectRatioFromImageSize(value),
-                })}
+                onChange={(value) => {
+                  const nextSelection = applyImageSizeChange(
+                    selectedModel,
+                    {
+                      model: config.model,
+                      aspectRatio: config.aspect_ratio,
+                      imageSize: config.image_size,
+                    },
+                    value,
+                  );
+                  onChange({
+                    ...config,
+                    image_size: nextSelection.imageSize,
+                    aspect_ratio: nextSelection.aspectRatio,
+                  });
+                }}
                 disabled={!selectedModel || selectedModel.supported_image_sizes.length <= 1}
                 options={(selectedModel?.supported_image_sizes ?? [config.image_size]).map((size) => ({
                   value: size,
