@@ -50,10 +50,10 @@ if "App.backend.services.chat_attachment_service" not in sys.modules:
     )
     sys.modules["App.backend.services.chat_attachment_service"] = fake_chat_attachment_service
 
-from App.backend.providers.async_openai_provider import AsyncOpenAIProvider
-from App.backend.providers.custom import CustomProvider
-from App.backend.providers.contracts import DeltaPayload, merge_openai_tool_call_deltas
-from App.backend.providers.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
+from App.backend.providers.shared.async_openai_provider import AsyncOpenAIProvider
+from App.backend.providers.custom.llm import CustomProvider
+from App.backend.providers.shared.contracts import DeltaPayload, merge_openai_tool_call_deltas
+from App.backend.providers.shared.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
 
 
 def test_chunk_to_events_extracts_reasoning_from_delta_thoughts() -> None:

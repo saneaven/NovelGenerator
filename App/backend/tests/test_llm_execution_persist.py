@@ -62,7 +62,7 @@ def _install_import_stubs() -> None:
 _install_import_stubs()
 
 from App.backend.models.db_models import RunMessageModel, RunModel, Thread
-from App.backend.providers.contracts import FinalSnapshot, FinalToolCall
+from App.backend.providers.shared.contracts import FinalSnapshot, FinalToolCall
 
 persist_module = importlib.import_module("App.backend.services.run_pipeline.llm_execution.persist")
 

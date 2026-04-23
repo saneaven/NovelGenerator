@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ....providers.registry import ProviderRegistry
-from ....providers.transport.stream_retry import normalize_retry_config
+from ....providers.registry import create_llm_provider
+from ....providers.shared.transport.stream_retry import normalize_retry_config
 from ...context_manager import fit_to_context_window
 from ...llm_runtime_service import get_llm_runtime
 from ...mcp import mcp_sync_service
@@ -165,7 +165,11 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
         vector_storage_enabled=settings_service.is_vector_storage_enabled(db, run.user_id),
     )
 
-    provider = ProviderRegistry.get_provider(task_config.provider, runtime.provider_config)
+    provider = create_llm_provider(
+        task_config.provider,
+        runtime.provider_config,
+        task_config=task_config.__dict__,
+    )
     if not provider.validate_config():
         raise RuntimeError(f"Invalid provider configuration: {task_config.provider}")
 

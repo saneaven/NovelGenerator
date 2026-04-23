@@ -11,14 +11,14 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from ..providers.parsing.multimodal import (
+from ..providers.shared.parsing.multimodal import (
     _format_text_file,
     _load_text_part,
     build_claude_content,
     build_gemini_binary_parts,
     get_canonical_content_parts,
 )
-from ..providers.parsing.tool_call_arguments import parse_tool_call_arguments
+from ..providers.shared.parsing.tool_call_arguments import parse_tool_call_arguments
 from .chat_attachment_service import chat_attachment_service
 from .credential_service import CredentialServiceError, credential_service
 from .token_counting_service import (

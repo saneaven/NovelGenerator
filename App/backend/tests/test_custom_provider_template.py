@@ -11,10 +11,10 @@ import pytest
 from sqlalchemy.orm import declarative_base
 
 for module_name in (
-    "App.backend.providers.custom",
-    "App.backend.providers.async_openai_provider",
-    "App.backend.providers.claude_provider",
-    "App.backend.providers.openai_responses_provider",
+    "App.backend.providers.custom.llm",
+    "App.backend.providers.shared.async_openai_provider",
+    "App.backend.providers.claude.llm",
+    "App.backend.providers.openai.llm",
 ):
     sys.modules.pop(module_name, None)
 
@@ -57,8 +57,8 @@ if "openai" not in sys.modules:
     fake_openai.RateLimitError = _OpenAIError
     sys.modules["openai"] = fake_openai
 
-if "App.backend.providers.async_openai_provider" not in sys.modules:
-    fake_async_openai_provider = types.ModuleType("App.backend.providers.async_openai_provider")
+if "App.backend.providers.shared.async_openai_provider" not in sys.modules:
+    fake_async_openai_provider = types.ModuleType("App.backend.providers.shared.async_openai_provider")
 
     class _AsyncOpenAIProvider:
         def __init__(self, config):
@@ -75,25 +75,36 @@ if "App.backend.providers.async_openai_provider" not in sys.modules:
             max_tokens,
             provider_preference,
             thinking_config,
+            thinking_mode=None,
+            provider_settings=None,
         ):
-            _ = temperature, tools, tool_choice, max_tokens, provider_preference, thinking_config
+            _ = (
+                temperature,
+                tools,
+                tool_choice,
+                max_tokens,
+                provider_preference,
+                thinking_config,
+                thinking_mode,
+                provider_settings,
+            )
             return {"messages": messages, "model": model}
 
     fake_async_openai_provider.AsyncOpenAIProvider = _AsyncOpenAIProvider
-    sys.modules["App.backend.providers.async_openai_provider"] = fake_async_openai_provider
+    sys.modules["App.backend.providers.shared.async_openai_provider"] = fake_async_openai_provider
 
-if "App.backend.providers.claude_provider" not in sys.modules:
-    fake_claude_provider = types.ModuleType("App.backend.providers.claude_provider")
+if "App.backend.providers.claude.llm" not in sys.modules:
+    fake_claude_provider = types.ModuleType("App.backend.providers.claude.llm")
 
     class _ClaudeProvider:
         def __init__(self, config):
             self.config = config
 
     fake_claude_provider.ClaudeProvider = _ClaudeProvider
-    sys.modules["App.backend.providers.claude_provider"] = fake_claude_provider
+    sys.modules["App.backend.providers.claude.llm"] = fake_claude_provider
 
-if "App.backend.providers.openai_responses_provider" not in sys.modules:
-    fake_openai_responses_provider = types.ModuleType("App.backend.providers.openai_responses_provider")
+if "App.backend.providers.openai.llm" not in sys.modules:
+    fake_openai_responses_provider = types.ModuleType("App.backend.providers.openai.llm")
 
     class _OpenAIResponsesProvider:
         def __init__(self, config):
@@ -115,9 +126,14 @@ if "App.backend.providers.openai_responses_provider" not in sys.modules:
             return {}
 
     fake_openai_responses_provider.OpenAIResponsesProvider = _OpenAIResponsesProvider
-    sys.modules["App.backend.providers.openai_responses_provider"] = fake_openai_responses_provider
+    sys.modules["App.backend.providers.openai.llm"] = fake_openai_responses_provider
 
-from App.backend.providers.custom import CustomProvider, _CustomClaudeProvider, _CustomOpenAIResponseProvider, build_request_context
+from App.backend.providers.custom.llm import (
+    CustomProvider,
+    _CustomClaudeProvider,
+    _CustomOpenAIResponseProvider,
+    build_request_context,
+)
 
 
 def _base_config(**overrides) -> dict:
@@ -161,6 +177,8 @@ class TestCompletionPath:
             max_tokens=None,
             provider_preference=None,
             thinking_config=None,
+            thinking_mode=None,
+            provider_settings=None,
         )
         assert request["extra_headers"] == {"X-Static": "plain", "X-Run": "aaa-bbb"}
 
@@ -176,6 +194,8 @@ class TestCompletionPath:
             max_tokens=None,
             provider_preference=None,
             thinking_config=None,
+            thinking_mode=None,
+            provider_settings=None,
         )
         extra_body = request.get("extra_body", {})
         assert extra_body["custom_field"] == "subAgent"
@@ -192,6 +212,8 @@ class TestCompletionPath:
             max_tokens=None,
             provider_preference=None,
             thinking_config=None,
+            thinking_mode=None,
+            provider_settings=None,
         )
         assert "extra_headers" not in request
 
@@ -206,6 +228,8 @@ class TestCompletionPath:
             max_tokens=None,
             provider_preference=None,
             thinking_config=None,
+            thinking_mode=None,
+            provider_settings=None,
         )
         extra_body = request.get("extra_body", {})
         assert extra_body["custom_field"] == "{{ thread_type }}"
@@ -224,6 +248,8 @@ class TestCompletionPath:
             max_tokens=None,
             provider_preference=None,
             thinking_config=None,
+            thinking_mode=None,
+            provider_settings=None,
         )
         assert request["extra_headers"] == {"X-Static": "plain"}
 
@@ -310,6 +336,8 @@ class TestListBody:
             max_tokens=None,
             provider_preference=None,
             thinking_config=None,
+            thinking_mode=None,
+            provider_settings=None,
         )
         extra_body = request.get("extra_body", {})
         assert extra_body["tags"] == ["aaa-bbb", "static", "gpt-4o"]
@@ -391,16 +419,16 @@ class TestBuildRequestContext:
         assert ctx["last_role"] == ""
 
 
-class TestDefaultHeadersEmpty:
-    """default_headers should not contain custom headers — all headers go via extra_headers."""
+class TestDefaultHeaders:
+    """default_headers should preserve static headers while template headers stay request-scoped."""
 
-    def test_custom_provider_default_headers_empty(self):
+    def test_custom_provider_default_headers_filter_out_template_values(self):
         provider = CustomProvider(_base_config())
-        assert provider.default_headers == {}
+        assert provider.default_headers == {"X-Static": "plain"}
 
-    def test_custom_provider_default_headers_empty_with_static_only(self):
+    def test_custom_provider_default_headers_keep_static_only_values(self):
         provider = CustomProvider(_base_config(additional_headers={"X-Static": "plain"}))
-        assert provider.default_headers == {}
+        assert provider.default_headers == {"X-Static": "plain"}
 
 
 class TestGetModelsHeaders:

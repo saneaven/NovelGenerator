@@ -28,17 +28,17 @@ except ImportError:  # pragma: no cover - fallback for stripped-down test envs.
 
     import httpx
 
-import App.backend.providers.async_openai_provider as async_openai_provider_module
-import App.backend.providers.claude_provider as claude_provider_module
-import App.backend.providers.custom as custom_provider_module
-import App.backend.providers.openai_responses_provider as openai_responses_provider_module
-from App.backend.providers.async_openai_provider import AsyncOpenAIProvider
-from App.backend.providers.claude_provider import ClaudeProvider
-from App.backend.providers.client_timeouts import (
+import App.backend.providers.shared.async_openai_provider as async_openai_provider_module
+import App.backend.providers.claude.llm as claude_provider_module
+import App.backend.providers.custom.llm as custom_provider_module
+import App.backend.providers.openai.llm as openai_responses_provider_module
+from App.backend.providers.shared.async_openai_provider import AsyncOpenAIProvider
+from App.backend.providers.claude.llm import ClaudeProvider
+from App.backend.providers.shared.transport.client_timeouts import (
     LLM_STREAM_TIMEOUT_ENV_VAR,
     get_llm_stream_timeout,
 )
-from App.backend.providers.openai_responses_provider import OpenAIResponsesProvider
+from App.backend.providers.openai.llm import OpenAIResponsesProvider
 
 
 def _assert_default_timeout(timeout: object) -> None:

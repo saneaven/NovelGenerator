@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ....models.db_models import RunMessageModel, RunModel, Thread
-from ....providers.contracts import FinalSnapshot
+from ....providers.shared.contracts import FinalSnapshot
 from ...tool_engine import tool_engine
 from .contracts import LLMExecutionCallbacks
 

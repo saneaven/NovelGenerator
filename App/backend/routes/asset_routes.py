@@ -53,7 +53,7 @@ from ..services.storage_usage_service import (
 )
 from ..services.credential_service import CredentialServiceError, credential_service
 from ..services.ownership import require_owned_object
-from ..provider_engine.registry import list_providers as list_provider_specs, require_provider
+from ..providers.registry import list_specs as list_provider_specs, require_spec
 from ..utils.story_entities import STORY_ENTITY_TYPE
 
 router = APIRouter(prefix="/api/v1/assets", tags=["assets"])
@@ -447,14 +447,12 @@ async def get_image_models(
 ):
     """Get available models for an image provider"""
     try:
-        provider_spec = require_provider(provider)
+        provider_spec = require_spec(provider)
         if provider_spec.image is None:
             raise HTTPException(status_code=404, detail=f"Unknown image provider '{provider}'")
         try:
             provider_config = credential_service.get_provider_config(db, current_user.id, provider)
         except CredentialServiceError:
-            if not provider_spec.image.allow_missing_credentials_for_model_listing:
-                raise
             provider_config = {}
         models = await image_model_catalog_service.list_models(provider, provider_config)
         return ImageModelsResponse(data=[ImageModelInfo.model_validate(model) for model in models])

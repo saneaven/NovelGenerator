@@ -110,12 +110,12 @@ def _ensure_provider_stubs() -> None:
 
 def _load_providers():
     _ensure_provider_stubs()
-    from App.backend.providers.llm.claude_provider import ClaudeProvider
-    from App.backend.providers.llm.custom import CustomProvider
-    from App.backend.providers.llm.gemini_provider import GeminiProvider
-    from App.backend.providers.llm.openai_responses_provider import OpenAIResponsesProvider
-    from App.backend.providers.llm.openrouter import OpenRouterProvider
-    from App.backend.providers.llm.xai_provider import XAIProvider
+    from App.backend.providers.claude.llm import ClaudeProvider
+    from App.backend.providers.custom.llm import CustomProvider
+    from App.backend.providers.gemini.llm import GeminiProvider
+    from App.backend.providers.openai.llm import OpenAIResponsesProvider
+    from App.backend.providers.openrouter.llm import OpenRouterProvider
+    from App.backend.providers.xai.llm import XAIProvider
 
     return ClaudeProvider, CustomProvider, GeminiProvider, OpenAIResponsesProvider, OpenRouterProvider, XAIProvider
 

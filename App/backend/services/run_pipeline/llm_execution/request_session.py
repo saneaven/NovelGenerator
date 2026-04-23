@@ -5,8 +5,8 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from ....providers.contracts import MetaPayload
-from ....providers.transport.request_logging import build_logged_request_body
+from ....providers.shared.contracts import MetaPayload
+from ....providers.shared.transport.request_logging import build_logged_request_body
 from ...llm_request_service import llm_request_service
 
 logger = logging.getLogger(__name__)

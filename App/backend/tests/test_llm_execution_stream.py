@@ -101,7 +101,7 @@ def _install_import_stubs() -> None:
 _install_import_stubs()
 
 from App.backend.models.db_models import RunMessageModel, RunModel, Thread
-from App.backend.providers.contracts import DeltaPayload, ProviderErrorPayload, ProviderEvent
+from App.backend.providers.shared.contracts import DeltaPayload, ProviderErrorPayload, ProviderEvent
 
 stream_module = importlib.import_module("App.backend.services.run_pipeline.llm_execution.stream")
 

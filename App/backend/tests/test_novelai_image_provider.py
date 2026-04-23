@@ -4,14 +4,14 @@ import asyncio
 import io
 import zipfile
 
-from App.backend.image_engine.contracts import (
+from App.backend.providers.shared.image.contracts import (
     ImagePromptPayload,
     PreparedImageRequest,
     PreparedReferenceImage,
     ResolvedGeometry,
 )
-from App.backend.provider_engine.contracts import ImageModelDescriptor, ImageModelGeometrySpec
-from App.backend.provider_engine.provider_plugins.novelai import image_adapter as novelai_image_module
+from App.backend.providers.shared.contracts import ImageModelDescriptor, ImageModelGeometrySpec
+from App.backend.providers.novelai import image as novelai_image_module
 from App.backend.schemas.assets import StyledPrompt
 
 

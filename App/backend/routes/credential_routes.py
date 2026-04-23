@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user
 from ..database import get_db
 from ..models.db_models import User
-from ..provider_engine.runtime_dispatch import normalize_credentials
+from ..providers.registry import normalize_credentials
 from ..services.credential_service import CredentialServiceError, credential_service
 from ..services.demo_policy import require_demo_off
 

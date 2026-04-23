@@ -246,13 +246,13 @@ def install_import_stubs() -> None:
     sys.modules["App.backend.services.run_pipeline.prompt_assembly"] = fake_prompt_assembly
 
     for module_name in (
-        "App.backend.providers.async_openai_provider",
-        "App.backend.providers.claude_provider",
-        "App.backend.providers.gemini_provider",
-        "App.backend.providers.openai_responses_provider",
-        "App.backend.providers.openrouter",
-        "App.backend.providers.xai_provider",
-        "App.backend.providers.custom",
+        "App.backend.providers.shared.async_openai_provider",
+        "App.backend.providers.claude.llm",
+        "App.backend.providers.gemini.llm",
+        "App.backend.providers.openai.llm",
+        "App.backend.providers.openrouter.llm",
+        "App.backend.providers.xai.llm",
+        "App.backend.providers.custom.llm",
     ):
         sys.modules[module_name] = types.ModuleType(module_name)
 
@@ -260,8 +260,8 @@ def install_import_stubs() -> None:
 install_import_stubs()
 
 from App.backend.models.db_models import Agent, RunMessageModel, RunModel, RunToolCallModel, Thread, UserSettings
-from App.backend.providers.contracts import DeltaPayload, FinalToolCall
-from App.backend.providers.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
+from App.backend.providers.shared.contracts import DeltaPayload, FinalToolCall
+from App.backend.providers.shared.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from App.backend.services.run_pipeline import service as run_service
 from App.backend.services.run_pipeline.contracts import CreateContext, ResumeRunCommand
 from App.backend.services.run_pipeline.execution_loop import RunPipelineExecutionLoop, format_user_run_error

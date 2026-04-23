@@ -5,8 +5,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from ..provider_engine.registry import require_provider
-from ..provider_engine.runtime_dispatch import normalize_task_config
+from ..providers.registry import require_spec
+from ..providers.registry import normalize_task_config
 from ..schemas.settings import TaskAIConfig, TaskConfigSettings
 
 
@@ -52,7 +52,7 @@ def _validate_effective_task_config_semantics(config: dict[str, Any]) -> None:
     advanced = config.get("advanced")
     if not isinstance(advanced, dict):
         raise ValueError("Task config advanced settings must be an object")
-    provider_spec = require_provider(str(provider or "").strip())
+    provider_spec = require_spec(str(provider or "").strip())
     if provider_spec.llm is None:
         raise ValueError(f"Provider '{provider}' does not support llm")
 

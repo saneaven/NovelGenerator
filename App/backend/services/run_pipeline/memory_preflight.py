@@ -6,9 +6,9 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from ...models.db_models import RunMessageAttachmentModel, RunMessageModel, RunModel, RunToolCallModel, Thread
-from ...providers.contracts import ProviderErrorPayload, merge_meta_payload, patch_snapshot_with_meta, MetaPayload
-from ...providers.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
-from ...providers.registry import ProviderRegistry
+from ...providers.shared.contracts import ProviderErrorPayload, merge_meta_payload, patch_snapshot_with_meta, MetaPayload
+from ...providers.shared.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
+from ...providers.registry import create_llm_provider
 from ..memory_builder import render_memory_summary_prompt
 from ..memory_service import archive_thread_until, get_thread_memory_status
 from ..embedding_config_service import get_embedding_profile
@@ -18,7 +18,7 @@ from ..prompt_runtime.template_renderer import TemplateRenderer
 from ..settings_service import settings_service
 from ..llm_runtime_service import get_llm_runtime
 from ..token_count_service import count_message_tokens
-from ...providers.transport.stream_retry import normalize_retry_config, stream_with_retry
+from ...providers.shared.transport.stream_retry import normalize_retry_config, stream_with_retry
 from .text_utils import (
     build_archive_payload_for_message,
     build_active_messages_for_budget,
@@ -40,7 +40,11 @@ async def run_summary_model(
     resolved_runtime = get_llm_runtime(db, user_id=user_id, task_type="summary")
     summary_cfg = resolved_runtime.task_config
 
-    provider = ProviderRegistry.get_provider(summary_cfg.provider, resolved_runtime.provider_config)
+    provider = create_llm_provider(
+        summary_cfg.provider,
+        resolved_runtime.provider_config,
+        task_config=summary_cfg.__dict__,
+    )
     try:
         if not provider.validate_config():
             raise RuntimeError(f"Invalid summary provider configuration: {summary_cfg.provider}")

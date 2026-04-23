@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from App.backend.providers.base import BaseProvider
+from App.backend.providers.shared.base import BaseProvider
 
 
 ROOT = Path(__file__).resolve().parents[3]

@@ -17,7 +17,7 @@ from ..auth import get_current_user
 from ..database import SessionLocal, get_db
 from ..models.db_models import Project, RunMessageAttachmentModel, RunMessageModel, RunModel, RunToolCallModel, Thread, User
 from ..models.memory_models import MessageMemorySummary
-from ..providers.transport.sse_encoder import encode_sse, iter_sse_with_heartbeat
+from ..providers.shared.transport.sse_encoder import encode_sse, iter_sse_with_heartbeat
 from ..schemas.thread_api import (
     MessageResponse,
     PatchMessageRequest,

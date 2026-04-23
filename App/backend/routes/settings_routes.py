@@ -11,7 +11,7 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..models.db_models import User, UserSettings
 from ..schemas.settings import UserSettingsResponse, UserSettingsUpdate
-from ..image_engine.settings import default_image_gen_config, validate_image_gen_config
+from ..providers.shared.image.settings import default_image_gen_config, validate_image_gen_config
 from ..services.memory_service import wipe_memory_index
 from ..services.semantic_index_service import wipe_user_semantic_index
 from ..services.search_memory_settings import (

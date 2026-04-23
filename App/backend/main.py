@@ -1,49 +1,18 @@
-import asyncio
 import mimetypes
 import os
 from pathlib import Path
 
-import httpx
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from .models.requests import ChatCompletionRequest, ProviderModelsRequest
-from .provider_engine.project import to_public_provider_spec
-from .provider_engine.registry import list_providers as list_provider_specs
-from .providers.registry import ProviderRegistry
-from .providers.llm.openrouter import OpenRouterProvider
-from .providers.llm.custom import CustomProvider
-from .providers.llm.claude_provider import ClaudeProvider
-from .providers.llm.gemini_provider import GeminiProvider
-from .providers.llm.openai_responses_provider import OpenAIResponsesProvider
-from .providers.llm.xai_provider import XAIProvider
-from .providers.contracts import (
-    MetaPayload,
-    ProviderErrorPayload,
-    final_snapshot_to_wire,
-    delta_payload_to_wire,
-    merge_meta_payload,
-    patch_snapshot_with_meta,
-    extract_native_tool_calls_from_snapshot,
-)
-from .providers.parsing.content_normalization import (
-    StreamContentNormalizer,
-    has_effective_delta,
-    normalize_final_snapshot_content,
-)
-from .providers.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
-from .providers.transport.sse_encoder import encode_sse
-from .providers.transport.stream_retry import normalize_retry_config, stream_with_retry
 from .auth import get_current_user
 from .database import get_db
 from .models.db_models import User
-from .services.credential_service import CredentialServiceError, credential_service
 from .services.default_preset_seed import validate_default_preset_seed
 from .services.demo_runtime import get_demo_runtime_config
-from .services.embedding_models_service import list_embedding_models
 from .services.asset_change_events import register_asset_change_event_hooks
 from .services.object_change_events import register_object_change_event_hooks
 from .services.asset_proxy import build_asset_proxy_response
@@ -82,6 +51,7 @@ from .routes.timeline_routes import router as timeline_router
 # Asset management routes
 from .routes.asset_routes import router as asset_router
 from .routes.image_run_routes import router as image_run_router
+from .routes.provider_routes import router as provider_router
 
 # Fragment & folder management routes
 from .routes.fragment_routes import router as fragment_router
@@ -165,6 +135,7 @@ app.include_router(timeline_router)
 # Include asset management router
 app.include_router(asset_router)
 app.include_router(image_run_router)
+app.include_router(provider_router)
 
 # Include fragment & folder management routers
 app.include_router(fragment_router)
@@ -227,348 +198,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.get("/api/v1/providers")
-async def list_providers():
-    """List all available LLM providers"""
-    providers_info = []
-
-    llm_specs = [spec for spec in list_provider_specs() if spec.llm is not None]
-    llm_specs.sort(key=lambda spec: spec.ui.llm_order if spec.ui.llm_order is not None else 999)
-
-    for spec in llm_specs:
-        provider_name = spec.id
-
-        # Add metadata for each provider
-        metadata = {
-            "name": provider_name,
-            "display_name": spec.ui.display_name_key,
-            "display_name_key": spec.ui.display_name_key,
-            "description_key": spec.ui.description_key,
-            "capabilities": {
-                "chat": True,
-                "models": True,
-                "tools": bool(spec.llm.supports_tools),
-                "thinking": bool(spec.llm.supports_thinking),
-            }
-        }
-
-        providers_info.append(metadata)
-
-    return {"providers": providers_info}
-
-
-@app.get("/api/v1/provider-specs")
-async def get_provider_specs():
-    providers = [to_public_provider_spec(spec) for spec in list_provider_specs()]
-    providers.sort(
-        key=lambda item: (
-            item["ui"]["llm_order"] if item["llm"] is not None and item["ui"]["llm_order"] is not None else 999,
-            item["ui"]["embedding_order"] if item["embedding"] is not None and item["ui"]["embedding_order"] is not None else 999,
-            item["ui"]["image_order"] if item["image"] is not None and item["ui"]["image_order"] is not None else 999,
-            item["id"],
-        )
-    )
-    return {"providers": providers}
-
-
-@app.post("/api/v1/providers/{provider}/models")
-async def get_models(
-    provider: str,
-    request: ProviderModelsRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Get available models for a specific provider"""
-    provider_instance = None
-    try:
-        provider_config = credential_service.get_provider_config(db, current_user.id, provider)
-        provider_instance = ProviderRegistry.get_provider(
-            provider,
-            provider_config,
-            variant_hint=request.custom_kind,
-        )
-
-        # All providers now require API key for model listing
-        if not provider_instance.validate_config():
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid configuration for provider '{provider}'"
-            )
-
-        models_data = await provider_instance.get_models()
-        return models_data
-
-    except HTTPException:
-        raise
-    except CredentialServiceError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ValueError as e:
-        message = str(e)
-        if message.startswith("Unknown provider"):
-            raise HTTPException(status_code=404, detail=message)
-        raise HTTPException(status_code=400, detail=message)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if provider_instance is not None:
-            try:
-                await provider_instance.aclose()
-            except Exception:
-                pass
-
-
-@app.post("/api/v1/providers/{provider}/embedding-models")
-async def get_embedding_models(
-    provider: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Get available embedding models for a specific provider."""
-    try:
-        config = {}
-        requires_credential = provider != "nanogpt"
-        if requires_credential:
-            config = credential_service.get_provider_config(db, current_user.id, provider)
-            provider_instance = ProviderRegistry.get_provider(
-                provider,
-                config,
-            )
-            if not provider_instance.validate_config():
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid configuration for provider '{provider}'",
-                )
-        else:
-            try:
-                config = credential_service.get_provider_config(db, current_user.id, provider)
-            except CredentialServiceError:
-                config = {}
-
-        return await list_embedding_models(provider=provider, config=config)
-    except HTTPException:
-        raise
-    except CredentialServiceError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ValueError as e:
-        message = str(e)
-        if message.startswith("Unknown provider"):
-            raise HTTPException(status_code=404, detail=message)
-        raise HTTPException(status_code=400, detail=message)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/v1/chat/completions/{provider}/stream")
-async def stream_chat(
-    provider: str,
-    request: ChatCompletionRequest,
-    req: Request,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Stream chat completions from specified provider"""
-    try:
-        if request.native_tool_call and request.tools:
-            raise HTTPException(
-                status_code=400,
-                detail="native_tool_call requires tools to be omitted",
-            )
-
-        provider_config = credential_service.get_provider_config(db, current_user.id, provider)
-        provider_instance = ProviderRegistry.get_provider(
-            provider,
-            provider_config,
-            variant_hint=request.custom_kind,
-        )
-
-        if not provider_instance.validate_config():
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid configuration for provider '{provider}'"
-            )
-
-        # Keep canonical message shape for providers (role + content_parts)
-        messages = []
-        for msg in request.messages:
-            message_dict: dict = {
-                "role": msg.role,
-                "content_parts": [part.model_dump() for part in msg.content_parts],
-            }
-            # Include tool_calls for assistant messages if present
-            if msg.tool_calls:
-                message_dict["tool_calls"] = [tc.model_dump(exclude_none=True) for tc in msg.tool_calls]
-            # Include tool_results for tool_results role messages
-            if msg.tool_results:
-                message_dict["tool_results"] = [tr.model_dump() for tr in msg.tool_results]
-            messages.append(message_dict)
-
-        async def event_gen():
-            # Prepare provider preference for OpenRouter
-            provider_pref = request.provider_preference.model_dump(exclude_none=True) if request.provider_preference else None
-
-            # Thinking config is provider-agnostic; each provider maps fields they understand
-            thinking_cfg = request.thinking_config.model_dump(exclude_none=True) if request.thinking_config else None
-
-            # Retry config for error handling
-            retry_cfg = normalize_retry_config(
-                request.retry_config.model_dump() if request.retry_config else None
-            )
-
-            def _create_stream():
-                return provider_instance.stream_chat(
-                    messages=messages,
-                    model=request.model,
-                    temperature=request.temperature,
-                    tools=request.tools,
-                    tool_choice=request.tool_choice,
-                    max_tokens=request.max_tokens,
-                    provider_preference=provider_pref,
-                    thinking_config=thinking_cfg,
-                    thinking_mode=request.thinking_mode,
-                    custom_kind=request.custom_kind,
-                    native_tool_call=request.native_tool_call,
-                    verbosity=request.verbosity,
-                    provider_settings=request.provider_settings,
-                )
-
-            stream = stream_with_retry(_create_stream, retry_cfg)
-
-            seq = 0
-            native_final = None
-            merged_meta: MetaPayload | None = None
-            assembler = FallbackSnapshotAssembler(provider=provider, model=request.model)
-            content_normalizer = StreamContentNormalizer()
-
-            try:
-                async for event in stream:
-                    # Check if client disconnected
-                    if await req.is_disconnected():
-                        print("Client disconnected, stopping stream")
-                        break
-
-                    if event.kind == "delta" and event.delta is not None:
-                        delta = content_normalizer.normalize_delta(event.delta)
-                        assembler.apply_delta(delta)
-                        if not has_effective_delta(delta):
-                            continue
-                        seq += 1
-                        yield encode_sse("delta", delta_payload_to_wire(seq, delta))
-                        continue
-
-                    if event.kind == "meta" and event.meta is not None:
-                        assembler.apply_meta(event.meta)
-                        merged_meta = merge_meta_payload(merged_meta, event.meta)
-                        continue
-
-                    if event.kind == "final_native" and event.final_native is not None:
-                        if native_final is not None:
-                            raise ValueError("Provider emitted multiple native final snapshots")
-                        native_final = event.final_native
-                        continue
-
-                    if event.kind == "error":
-                        err = event.error or ProviderErrorPayload(message="Unknown provider error", status=None)
-                        yield encode_sse("error", {"message": err.message, "status": err.status})
-                        yield encode_sse("done", {"ok": False})
-                        return
-            except asyncio.CancelledError:
-                print("Stream cancelled due to client disconnect")
-                raise  # Re-raise to let FastAPI handle cleanup
-            except Exception as exc:
-                if not await req.is_disconnected():
-                    yield encode_sse("error", {"message": str(exc), "status": getattr(exc, "status_code", None)})
-                    yield encode_sse("done", {"ok": False})
-                return
-            finally:
-                # Ensure generator is closed
-                if hasattr(stream, 'aclose'):
-                    await stream.aclose()
-
-            if await req.is_disconnected():
-                return
-
-            try:
-                if native_final is not None:
-                    final_snapshot = patch_snapshot_with_meta(native_final, merged_meta)
-                else:
-                    final_snapshot = assembler.finalize_or_raise()
-
-                if request.native_tool_call:
-                    final_snapshot = extract_native_tool_calls_from_snapshot(final_snapshot)
-                final_snapshot = normalize_final_snapshot_content(final_snapshot)
-
-                yield encode_sse("final", {"snapshot": final_snapshot_to_wire(final_snapshot)})
-                yield encode_sse("done", {"ok": True})
-            except Exception as exc:
-                yield encode_sse("error", {"message": str(exc), "status": getattr(exc, "status_code", None)})
-                yield encode_sse("done", {"ok": False})
-                return
-
-        return StreamingResponse(
-            event_gen(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "X-Accel-Buffering": "no",
-                "Connection": "keep-alive",
-            }
-        )
-
-    except HTTPException:
-        raise
-    except CredentialServiceError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ValueError as e:
-        message = str(e)
-        if message.startswith("Unknown provider"):
-            raise HTTPException(status_code=404, detail=message)
-        raise HTTPException(status_code=400, detail=message)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/v1/providers/openrouter/models/{canonical_slug:path}/endpoints")
-async def get_openrouter_model_endpoints(
-    canonical_slug: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Proxy OpenRouter model endpoint info with server-side credential resolution."""
-    try:
-        provider_config = credential_service.get_provider_config(db, current_user.id, "openrouter")
-        api_key = str(provider_config.get("api_key") or "").strip()
-        if not api_key:
-            raise HTTPException(status_code=400, detail="Credential for provider 'openrouter' not found")
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://novelbuds.local",
-            "X-Title": "Novel Buds",
-        }
-        additional_headers = provider_config.get("additional_headers")
-        if isinstance(additional_headers, dict):
-            for key, value in additional_headers.items():
-                if isinstance(key, str) and isinstance(value, str):
-                    headers[key] = value
-
-        url = f"https://openrouter.ai/api/v1/models/{canonical_slug}/endpoints"
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(url, headers=headers)
-
-        if response.status_code >= 400:
-            detail = response.text or f"OpenRouter request failed ({response.status_code})"
-            raise HTTPException(status_code=response.status_code, detail=detail)
-
-        return OpenRouterProvider.annotate_endpoints_payload_for_ui(response.json())
-    except HTTPException:
-        raise
-    except CredentialServiceError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/healthz")

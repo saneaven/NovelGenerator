@@ -1,4 +1,4 @@
-"""Tests for providers.stream_retry module."""
+"""Tests for providers.shared.transport.stream_retry module."""
 
 from __future__ import annotations
 
@@ -6,14 +6,14 @@ import asyncio
 from typing import AsyncGenerator
 from unittest.mock import AsyncMock, patch
 
-from App.backend.providers.contracts import DeltaPayload, ProviderErrorPayload, ProviderEvent
-from App.backend.providers.stream_retry import (
+from App.backend.providers.shared.contracts import DeltaPayload, ProviderErrorPayload, ProviderEvent
+from App.backend.providers.shared.transport.stream_retry import (
     NormalizedRetryConfig,
     normalize_retry_config,
     stream_with_retry,
 )
 
-SLEEP_TARGET = "App.backend.providers.stream_retry.asyncio.sleep"
+SLEEP_TARGET = "App.backend.providers.shared.transport.stream_retry.asyncio.sleep"
 
 
 # ---------------------------------------------------------------------------

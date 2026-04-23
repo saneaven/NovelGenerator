@@ -1,8 +1,8 @@
-from App.backend.provider_engine.registry import require_provider
+from App.backend.providers.registry import require_spec
 
 
 def test_openai_image_provider_lists_only_gpt_image_models() -> None:
-    image_spec = require_provider("openai").image
+    image_spec = require_spec("openai").image
     assert image_spec is not None
     assert [item.id for item in image_spec.models] == [
         "gpt-image-2",
@@ -10,7 +10,7 @@ def test_openai_image_provider_lists_only_gpt_image_models() -> None:
 
 
 def test_gemini_image_provider_lists_latest_models() -> None:
-    image_spec = require_provider("gemini").image
+    image_spec = require_spec("gemini").image
     assert image_spec is not None
     assert [item.id for item in image_spec.models] == [
         "gemini-3.1-flash-image-preview",
@@ -19,7 +19,7 @@ def test_gemini_image_provider_lists_latest_models() -> None:
 
 
 def test_gemini_flash_image_supports_extended_aspect_ratios_and_512px() -> None:
-    image_spec = require_provider("gemini").image
+    image_spec = require_spec("gemini").image
     assert image_spec is not None
     model = next(item for item in image_spec.models if item.id == "gemini-3.1-flash-image-preview")
 
@@ -29,7 +29,7 @@ def test_gemini_flash_image_supports_extended_aspect_ratios_and_512px() -> None:
 
 
 def test_gemini_pro_image_resolution_excludes_512px() -> None:
-    image_spec = require_provider("gemini").image
+    image_spec = require_spec("gemini").image
     assert image_spec is not None
     model = next(item for item in image_spec.models if item.id == "gemini-3-pro-image-preview")
 
@@ -38,7 +38,7 @@ def test_gemini_pro_image_resolution_excludes_512px() -> None:
 
 
 def test_openai_image_supports_gpt_image_2_ratios_and_tiers() -> None:
-    image_spec = require_provider("openai").image
+    image_spec = require_spec("openai").image
     assert image_spec is not None
     model = image_spec.models[0]
 

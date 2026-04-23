@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal
 
-from ..provider_engine.runtime_dispatch import embed_many as _embed_many
+from ..providers.registry import embed_many as _embed_many
 
 
 async def embed_many(

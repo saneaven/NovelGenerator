@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from ....providers.parsing.content_normalization import (
+from ....providers.shared.parsing.content_normalization import (
     StreamContentNormalizer,
     has_effective_delta,
     normalize_final_snapshot_content,
 )
-from ....providers.contracts import (
+from ....providers.shared.contracts import (
     DeltaPayload,
     MetaPayload,
     ProviderErrorPayload,
@@ -13,8 +13,8 @@ from ....providers.contracts import (
     merge_meta_payload,
     patch_snapshot_with_meta,
 )
-from ....providers.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
-from ....providers.transport.stream_retry import stream_with_retry
+from ....providers.shared.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
+from ....providers.shared.transport.stream_retry import stream_with_retry
 from . import events
 from .contracts import LLMExecutionCallbacks, LLMExecutionRequest, PreparedLLMExecution, StreamExecutionResult
 from .request_session import LLMRequestSession

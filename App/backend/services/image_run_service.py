@@ -9,10 +9,10 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
-from ..image_engine.orchestrator import prepare_image_request
-from ..image_engine.request_validation import validate_canonical_recipe
-from ..image_engine.settings import validate_image_gen_config
-from ..image_engine.contracts import ImageGenerationOutput
+from ..providers.shared.image.orchestrator import prepare_image_request
+from ..providers.shared.image.request_validation import validate_canonical_recipe
+from ..providers.shared.image.settings import validate_image_gen_config
+from ..providers.shared.image.contracts import ImageGenerationOutput
 from ..models.db_models import (
     Asset,
     BasicInfo,
@@ -24,7 +24,7 @@ from ..models.db_models import (
     ObjectAssetLink,
     UserSettings,
 )
-from ..provider_engine.registry import require_provider
+from ..providers.registry import require_spec
 from ..schemas.assets import CreateImageRunRequest, ImageRunResponse, StyledPrompt
 from ..services.deletion_service import delete_assets_with_files
 from ..services.image_model_catalog_service import sanitize_generation_settings
@@ -129,7 +129,7 @@ def _object_display_name(obj: dict[str, Any], language: str, *, fallback: str) -
 
 
 def _resolve_prompt_type(provider_name: str, model_name: str) -> str:
-    provider_spec = require_provider(provider_name)
+    provider_spec = require_spec(provider_name)
     image_spec = provider_spec.image
     if image_spec is None:
         raise ValueError(f"Provider '{provider_name}' does not support image")

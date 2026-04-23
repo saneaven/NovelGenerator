@@ -2,19 +2,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..image_engine.geometry import resolve_descriptor_geometry
-from ..image_engine.settings import default_image_gen_config as _default_image_gen_config
-from ..provider_engine.contracts import ImageModelDescriptor, ImageModelGeometrySpec
-from ..provider_engine.registry import require_provider
-from ..provider_engine.runtime_dispatch import (
+from ..providers.shared.image.geometry import resolve_descriptor_geometry
+from ..providers.shared.image.settings import default_image_gen_config as _default_image_gen_config
+from ..providers.shared.contracts import ImageModelDescriptor, ImageModelGeometrySpec
+from ..providers.registry import require_spec
+from ..providers.registry import (
     list_image_models as _list_image_models,
     resolve_image_geometry as _resolve_image_geometry,
-    sanitize_provider_settings,
+    sanitize_image_settings,
 )
 
 
 def sanitize_generation_settings(provider: str, settings: Any) -> dict[str, Any] | None:
-    return sanitize_provider_settings(provider, settings)
+    return sanitize_image_settings(provider, settings)
 
 
 def _descriptor_to_api_dict(model: ImageModelDescriptor) -> dict[str, Any]:
@@ -71,7 +71,7 @@ class ImageModelCatalogService:
         if descriptors:
             return descriptors[0]
 
-        provider_spec = require_provider(provider)
+        provider_spec = require_spec(provider)
         image_spec = provider_spec.image
         if image_spec is None:
             raise ValueError(f"Provider '{provider}' does not support image")

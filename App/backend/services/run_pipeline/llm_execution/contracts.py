@@ -6,9 +6,9 @@ from typing import Any, Awaitable, Callable
 from sqlalchemy.orm import Session
 
 from ....models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thread, UserSettings
-from ....providers.base import BaseProvider
-from ....providers.contracts import FinalSnapshot
-from ....providers.transport.stream_retry import NormalizedRetryConfig
+from ....providers.shared.base import BaseProvider
+from ....providers.shared.contracts import FinalSnapshot
+from ....providers.shared.transport.stream_retry import NormalizedRetryConfig
 from ...llm_runtime_service import LLMRuntime
 from ...prompt_runtime.contracts import ScenarioBundle
 from ...settings_service import TaskConfig

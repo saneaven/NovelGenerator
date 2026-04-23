@@ -4,9 +4,9 @@ import asyncio
 
 import pytest
 
-from App.backend.image_engine.request_validation import validate_canonical_recipe
-from App.backend.image_engine.settings import validate_image_gen_config
-from App.backend.provider_engine.contracts import ImageModelDescriptor, ImageModelGeometrySpec
+from App.backend.providers.shared.image.request_validation import validate_canonical_recipe
+from App.backend.providers.shared.image.settings import validate_image_gen_config
+from App.backend.providers.shared.contracts import ImageModelDescriptor, ImageModelGeometrySpec
 from App.backend.services.image_model_catalog_service import (
     image_model_catalog_service,
     sanitize_generation_settings,

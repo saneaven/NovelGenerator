@@ -11,7 +11,7 @@ from anthropic import AsyncAnthropic
 from google import genai
 from google.genai import types
 
-from ..providers.base import BaseProvider
+from ..providers.shared.base import BaseProvider
 from ..utils.outbound_http import validate_outbound_base_url
 
 
