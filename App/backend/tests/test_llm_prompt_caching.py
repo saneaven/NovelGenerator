@@ -91,7 +91,7 @@ def test_claude_explicit_cache_controls_mark_system_and_message_targets() -> Non
 
 
 def test_build_prepared_cache_plan_limits_claude_explicit_checkpoints() -> None:
-    raw_cache_plan = [
+    cache_boundaries = [
         {
             "checkpoint_id": f"cp-{index}",
             "block_id": f"cp-{index}",
@@ -110,7 +110,7 @@ def test_build_prepared_cache_plan_limits_claude_explicit_checkpoints() -> None:
         provider="claude",
         model="claude-sonnet-4",
         cache_settings={"enabled": True, "ttl": "1h"},
-        raw_cache_plan=raw_cache_plan,
+        cache_boundaries=cache_boundaries,
         provider_messages_with_internal_keys=[
             {"role": "system"},
             *[

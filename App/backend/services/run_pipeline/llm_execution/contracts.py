@@ -42,6 +42,7 @@ class LLMExecutionRequest:
     settings: UserSettings
     system_prompt: str
     conversation: list[dict[str, Any]]
+    cache_boundaries: list[dict[str, Any]]
     scenario_bundle: ScenarioBundle
     input_payload: dict[str, Any]
     checkpoint: ExecutionCheckpoint

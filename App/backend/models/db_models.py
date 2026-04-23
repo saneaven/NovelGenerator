@@ -891,10 +891,8 @@ class Thread(Base):
 
     status = Column(String(20), nullable=False, default='done')
 
-    # Rendered conversation snapshot — re-captured on every create, reused on resume.
-    captured_history_system_prompt = Column(Text, nullable=True)
-    captured_history_conversation_json = Column(JSONB, nullable=True)
-    captured_history_cache_plan_json = Column(JSONB, nullable=True)
+    # Scenario-block prompt snapshot — re-captured on create, extended on resume.
+    captured_prompt_snapshot = Column(JSONB, nullable=True)
 
     # Stable per-thread run ordering (1-based)
     next_run_seq = Column(BigInteger, default=1, nullable=False)

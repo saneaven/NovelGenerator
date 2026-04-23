@@ -135,6 +135,7 @@ class _LLMExecutionRequest:
     settings: object
     system_prompt: str
     conversation: list[dict[str, object]]
+    cache_boundaries: list[dict[str, object]]
     scenario_bundle: object
     input_payload: dict[str, object]
     checkpoint: object
@@ -228,7 +229,7 @@ def test_prepare_execution_emits_summarizing_stage_per_archive_iteration(monkeyp
 
     async def _reassemble_create(*_args, **kwargs):
         reassemble_calls.append(kwargs)
-        return "system", [], scenario_bundle
+        return "system", [], scenario_bundle, []
 
     async def _count_provider_messages_tokens(**_kwargs) -> int:
         return next(token_counts)
@@ -269,6 +270,7 @@ def test_prepare_execution_emits_summarizing_stage_per_archive_iteration(monkeyp
         ),
         system_prompt="system",
         conversation=[],
+        cache_boundaries=[],
         scenario_bundle=scenario_bundle,
         input_payload={},
         checkpoint=SimpleNamespace(),

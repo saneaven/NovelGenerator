@@ -226,6 +226,7 @@ def install_import_stubs() -> None:
         settings: object
         system_prompt: str
         conversation: list[dict[str, object]]
+        cache_boundaries: list[dict[str, object]]
         scenario_bundle: object
         input_payload: dict[str, object]
         checkpoint: ExecutionCheckpoint

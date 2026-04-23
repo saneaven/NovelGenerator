@@ -730,7 +730,7 @@ def test_delete_thread_message_pauses_thread_and_emits_snapshot_invalidation(mon
         user_id=user_id,
         project_id=project_id,
         status="waiting",
-        captured_history_conversation_json=None,
+        captured_prompt_snapshot=None,
     )
     run = SimpleNamespace(
         id=run_id,

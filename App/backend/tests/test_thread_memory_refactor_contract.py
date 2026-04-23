@@ -159,9 +159,7 @@ def test_archive_orchestrator_invalidates_resume_cache() -> None:
     backend_root = Path(__file__).resolve().parents[1]
     source = (backend_root / "services" / "memory" / "archive_orchestrator.py").read_text(encoding="utf-8")
 
-    assert "thread.captured_history_system_prompt = None" in source
-    assert "thread.captured_history_conversation_json = None" in source
-    assert "thread.captured_history_cache_plan_json = None" in source
+    assert "thread.captured_prompt_snapshot = None" in source
 
 
 def test_settings_contract_uses_search_memory_settings_field() -> None:

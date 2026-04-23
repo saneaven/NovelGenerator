@@ -135,6 +135,7 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
     scenario_bundle = request.scenario_bundle
     input_payload = request.input_payload if isinstance(request.input_payload, dict) else {}
     conversation = request.conversation
+    cache_boundaries = list(request.cache_boundaries or [])
 
     preset_id = settings_service.get_active_preset_id(db, run.user_id)
     if preset_id is None:
@@ -237,12 +238,13 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
                 boundary=boundary,
                 scenario_bundle=current_bundle,
             )
-            current_system_prompt, current_conversation, current_bundle = await prompt_assembly.reassemble_create(
+            current_system_prompt, current_conversation, current_bundle, cache_boundaries = await prompt_assembly.reassemble_create(
                 db,
                 run=run,
                 thread=thread,
                 scenario_bundle=current_bundle,
             )
+            current_conversation = annotate_conversation_render_indices(list(current_conversation))
             provider_messages = _apply_provider_history_filters(
                 system_prompt=current_system_prompt,
                 conversation=current_conversation,
@@ -283,7 +285,7 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
         provider=task_config.provider,
         model=task_config.model,
         cache_settings=provider_cache_settings,
-        raw_cache_plan=getattr(thread, "captured_history_cache_plan_json", None),
+        cache_boundaries=cache_boundaries,
         provider_messages_with_internal_keys=provider_messages,
     )
 

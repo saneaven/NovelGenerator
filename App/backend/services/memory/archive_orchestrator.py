@@ -354,9 +354,7 @@ async def run(
             language=run.language,
             vector_batch=vector_batch,
         )
-        thread.captured_history_system_prompt = None
-        thread.captured_history_conversation_json = None
-        thread.captured_history_cache_plan_json = None
+        thread.captured_prompt_snapshot = None
         db.commit()
     except Exception as exc:
         db.rollback()

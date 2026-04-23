@@ -106,6 +106,143 @@ def _prefix_label(rendered_message_count: int) -> str:
     return f"{rendered_message_count} messages"
 
 
+def _block_order_of(block: dict[str, Any]) -> int:
+    return int(block.get("block_order") or 0)
+
+
+def _snapshot_key(item: dict[str, Any], key: str) -> Any:
+    if key in item:
+        return item.get(key)
+    # Snapshot metadata uses camelCase while rendered messages retain provider-facing keys.
+    camel = key.split("_")[0] + "".join(part[:1].upper() + part[1:] for part in key.split("_")[1:])
+    return item.get(camel)
+
+
+def _last_message_metadata(prefix_conversation: list[dict[str, Any]]) -> tuple[int | None, str | None]:
+    last_message = prefix_conversation[-1] if prefix_conversation else None
+    last_seq_in_thread = (
+        int(last_message.get("seq_in_thread"))
+        if isinstance(last_message, dict) and isinstance(last_message.get("seq_in_thread"), int)
+        else None
+    )
+    last_role = (
+        str(last_message.get("role") or "")
+        if isinstance(last_message, dict) and isinstance(last_message.get("role"), str)
+        else ("system" if not prefix_conversation else None)
+    )
+    return last_seq_in_thread, last_role
+
+
+def _message_identity(message: dict[str, Any]) -> str:
+    return json.dumps(message, ensure_ascii=False, separators=(",", ":"), sort_keys=True, default=str)
+
+
+def cache_boundaries_from_snapshot(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    system_prompt = str(snapshot.get("systemPrompt") or "")
+    raw_segments = snapshot.get("segments")
+    segments = [item for item in raw_segments if isinstance(item, dict)] if isinstance(raw_segments, list) else []
+    raw_cache_points = snapshot.get("cachePoints")
+    cache_points = [item for item in raw_cache_points if isinstance(item, dict)] if isinstance(raw_cache_points, list) else []
+
+    boundaries: list[dict[str, Any]] = []
+    for cache_point in sorted(cache_points, key=lambda item: int(_snapshot_key(item, "block_order") or 0)):
+        checkpoint_id = str(_snapshot_key(cache_point, "checkpoint_id") or _snapshot_key(cache_point, "block_id") or "")
+        after_block_order_raw = _snapshot_key(cache_point, "after_block_order")
+        try:
+            after_block_order = int(after_block_order_raw) if after_block_order_raw is not None else None
+        except (TypeError, ValueError):
+            after_block_order = None
+
+        prefix_conversation: list[dict[str, Any]] = []
+        if after_block_order is not None:
+            for segment in segments:
+                try:
+                    segment_order = int(_snapshot_key(segment, "block_order") or 0)
+                except (TypeError, ValueError):
+                    continue
+                if segment_order > after_block_order:
+                    continue
+                messages = segment.get("messages")
+                if isinstance(messages, list):
+                    prefix_conversation.extend(dict(message) for message in messages if isinstance(message, dict))
+
+        last_seq_in_thread, last_role = _last_message_metadata(prefix_conversation)
+        boundaries.append(
+            {
+                "checkpoint_id": checkpoint_id,
+                "block_id": str(_snapshot_key(cache_point, "block_id") or checkpoint_id),
+                "block_order": int(_snapshot_key(cache_point, "block_order") or 0),
+                "after_block_order": after_block_order,
+                "rendered_message_count": len(prefix_conversation),
+                "last_seq_in_thread": last_seq_in_thread,
+                "last_role": last_role,
+                "prefix_label": _prefix_label(len(prefix_conversation)),
+                "prefix_digest_raw": _build_prefix_digest(system_prompt, prefix_conversation),
+            }
+        )
+
+    seen_prefixes: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for boundary in boundaries:
+        prefix_digest = str(boundary.get("prefix_digest_raw") or "")
+        if not prefix_digest:
+            continue
+        if prefix_digest in seen_prefixes:
+            boundary = dict(boundary)
+            boundary["duplicate_prefix"] = True
+        else:
+            seen_prefixes.add(prefix_digest)
+        deduped.append(boundary)
+    return deduped
+
+
+def flatten_prompt_snapshot(snapshot: dict[str, Any]) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
+    system_prompt = str(snapshot.get("systemPrompt") or "")
+    raw_segments = snapshot.get("segments")
+    segments = [item for item in raw_segments if isinstance(item, dict)] if isinstance(raw_segments, list) else []
+    conversation: list[dict[str, Any]] = []
+    for segment in segments:
+        messages = segment.get("messages")
+        if isinstance(messages, list):
+            conversation.extend(dict(message) for message in messages if isinstance(message, dict))
+    return system_prompt, conversation, cache_boundaries_from_snapshot(snapshot)
+
+
+def extend_prompt_snapshot_with_resume_tail(
+    snapshot: dict[str, Any],
+    *,
+    tail_messages: list[dict[str, Any]],
+) -> dict[str, Any]:
+    patched = dict(snapshot)
+    raw_segments = snapshot.get("segments")
+    segments = [dict(item) for item in raw_segments if isinstance(item, dict)] if isinstance(raw_segments, list) else []
+    open_segment_index = next((idx for idx in range(len(segments) - 1, -1, -1) if bool(segments[idx].get("open"))), None)
+    if open_segment_index is None:
+        patched["segments"] = segments
+        return patched
+
+    segment = dict(segments[open_segment_index])
+    raw_messages = segment.get("messages")
+    messages = [dict(item) for item in raw_messages if isinstance(item, dict)] if isinstance(raw_messages, list) else []
+    existing_messages = {_message_identity(item) for item in messages}
+
+    for item in tail_messages:
+        if not isinstance(item, dict):
+            continue
+        if item.get("role") == "user":
+            continue
+        identity = _message_identity(item)
+        if identity in existing_messages:
+            continue
+        messages.append(dict(item))
+        existing_messages.add(identity)
+
+    segment["messages"] = messages
+    segments[open_segment_index] = segment
+    patched["segments"] = segments
+    return patched
+
+
 def _patched_template_data(*, template_data: dict[str, Any], input_key: str, source_text: str) -> dict[str, Any]:
     root = _shallow_copy_dict(template_data)
     inp = _shallow_copy_dict(root.get("input"))
@@ -126,7 +263,7 @@ def _assistant_has_structured_payload(message: dict[str, Any], attached_tool_res
     return isinstance(attached_tool_results, list) and any(isinstance(item, dict) for item in attached_tool_results)
 
 
-def assemble_scenario_with_cache_plan(
+def assemble_scenario_snapshot(
     *,
     template_renderer: TemplateRenderer,
     task_type: str,
@@ -134,8 +271,9 @@ def assemble_scenario_with_cache_plan(
     blocks: list[dict[str, Any]],
     source_conversation: list[dict[str, Any]],
     template_data: dict[str, Any],
-) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
-    """Assemble a scenario into (system_prompt, conversation).
+    current_run_id: str | None = None,
+) -> dict[str, Any]:
+    """Assemble a scenario into a block-segment prompt snapshot.
 
     - source_conversation messages are grouped into runs by run_id.
     - rangeMapping start_index/end_index refer to run positions (not individual messages).
@@ -207,7 +345,9 @@ def assemble_scenario_with_cache_plan(
     rendered_system_prompt = template_renderer.render_text(system_template or "", template_data).strip()
 
     rendered_conversation: list[dict[str, Any]] = []
-    cache_plan: list[dict[str, Any]] = []
+    segments: list[dict[str, Any]] = []
+    cache_points: list[dict[str, Any]] = []
+    last_rendered_block_order: int | None = None
     # Patch rules differ for subAgent.
     is_sub_agent = str(task_type or "") == "subAgent"
     user_input_key = "agentMessage" if is_sub_agent else "userMessage"
@@ -234,38 +374,32 @@ def assemble_scenario_with_cache_plan(
             if not rendered:
                 continue
 
-            rendered_conversation.append(
+            block_order = _block_order_of(block)
+            message = {
+                "role": role,
+                "content_parts": [{"type": "content", "text": rendered}],
+            }
+            segments.append(
                 {
-                    "role": role,
-                    "content_parts": [{"type": "content", "text": rendered}],
+                    "blockId": str(block.get("id") or ""),
+                    "blockOrder": block_order,
+                    "type": "staticPrompt",
+                    "messages": [message],
+                    "open": False,
                 }
             )
+            rendered_conversation.append(message)
+            last_rendered_block_order = block_order
             continue
 
         if btype == "cachePoint":
             checkpoint_id = str(block.get("id") or "")
-            prefix_conversation = list(rendered_conversation)
-            last_message = prefix_conversation[-1] if prefix_conversation else None
-            last_seq_in_thread = (
-                int(last_message.get("seq_in_thread"))
-                if isinstance(last_message, dict) and isinstance(last_message.get("seq_in_thread"), int)
-                else None
-            )
-            last_role = (
-                str(last_message.get("role") or "")
-                if isinstance(last_message, dict) and isinstance(last_message.get("role"), str)
-                else ("system" if not prefix_conversation else None)
-            )
-            cache_plan.append(
+            cache_points.append(
                 {
-                    "checkpoint_id": checkpoint_id,
-                    "block_id": checkpoint_id,
-                    "block_order": int(block.get("block_order") or 0),
-                    "rendered_message_count": len(prefix_conversation),
-                    "last_seq_in_thread": last_seq_in_thread,
-                    "last_role": last_role,
-                    "prefix_label": _prefix_label(len(prefix_conversation)),
-                    "prefix_digest_raw": _build_prefix_digest(rendered_system_prompt, prefix_conversation),
+                    "checkpointId": checkpoint_id,
+                    "blockId": checkpoint_id,
+                    "blockOrder": _block_order_of(block),
+                    "afterBlockOrder": last_rendered_block_order,
                 }
             )
             continue
@@ -290,11 +424,12 @@ def assemble_scenario_with_cache_plan(
         if start_norm > end_norm:
             continue
 
-        block_order = int(block.get("block_order") or 0)
+        block_order = _block_order_of(block)
         user_template = mapping.get("user_template") if isinstance(mapping.get("user_template"), str) else ""
         assistant_template = (
             mapping.get("assistant_template") if isinstance(mapping.get("assistant_template"), str) else ""
         )
+        block_messages: list[dict[str, Any]] = []
 
         for run_index in range(start_norm, end_norm + 1):
             if owner.get(run_index) != block_order:
@@ -331,7 +466,7 @@ def assemble_scenario_with_cache_plan(
                     seq_in_thread = src_msg.get("seq_in_thread")
                     if isinstance(seq_in_thread, int):
                         out_msg["seq_in_thread"] = seq_in_thread
-                    rendered_conversation.append(out_msg)
+                    block_messages.append(out_msg)
                     continue
 
                 patched = _patched_template_data(
@@ -364,27 +499,58 @@ def assemble_scenario_with_cache_plan(
                 if isinstance(reasoning_detail, dict) and reasoning_detail:
                     out_msg["reasoning_detail"] = reasoning_detail
 
-                rendered_conversation.append(out_msg)
+                block_messages.append(out_msg)
 
                 if isinstance(attached, list) and attached:
                     for tool_msg in attached:
                         if isinstance(tool_msg, dict):
-                            rendered_conversation.append(dict(tool_msg))
+                            block_messages.append(dict(tool_msg))
 
-    seen_prefixes: set[str] = set()
-    deduped_cache_plan: list[dict[str, Any]] = []
-    for checkpoint in cache_plan:
-        prefix_digest = str(checkpoint.get("prefix_digest_raw") or "")
-        if not prefix_digest:
-            continue
-        if prefix_digest in seen_prefixes:
-            checkpoint = dict(checkpoint)
-            checkpoint["duplicate_prefix"] = True
-        else:
-            seen_prefixes.add(prefix_digest)
-        deduped_cache_plan.append(checkpoint)
+        if block_messages:
+            rendered_conversation.extend(block_messages)
+            is_open = bool(
+                current_run_id
+                and any(str(message.get("run_id") or "") == str(current_run_id) for message in block_messages)
+            )
+            segments.append(
+                {
+                    "blockId": str(block.get("id") or ""),
+                    "blockOrder": block_order,
+                    "type": "rangeMapping",
+                    "messages": block_messages,
+                    "open": is_open,
+                }
+            )
+            last_rendered_block_order = block_order
 
-    return rendered_system_prompt, rendered_conversation, deduped_cache_plan
+    return {
+        "version": 1,
+        "systemPrompt": rendered_system_prompt,
+        "segments": segments,
+        "cachePoints": cache_points,
+    }
+
+
+def assemble_scenario_with_cache_plan(
+    *,
+    template_renderer: TemplateRenderer,
+    task_type: str,
+    system_template: str,
+    blocks: list[dict[str, Any]],
+    source_conversation: list[dict[str, Any]],
+    template_data: dict[str, Any],
+    current_run_id: str | None = None,
+) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
+    snapshot = assemble_scenario_snapshot(
+        template_renderer=template_renderer,
+        task_type=task_type,
+        system_template=system_template,
+        blocks=blocks,
+        source_conversation=source_conversation,
+        template_data=template_data,
+        current_run_id=current_run_id,
+    )
+    return flatten_prompt_snapshot(snapshot)
 
 
 def assemble_scenario(

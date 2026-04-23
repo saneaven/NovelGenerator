@@ -210,16 +210,14 @@ def test_collect_thread_delete_deltas_groups_graph_by_project() -> None:
                     user_id=user_id,
                     project_id=project_a,
                     thread_type="subAgent",
-                    captured_history_system_prompt="a",
-                    captured_history_conversation_json=[{"role": "assistant", "content": "done"}],
+                    captured_prompt_snapshot={"systemPrompt": "a", "segments": [{"messages": [{"role": "assistant", "content": "done"}]}]},
                 ),
                 SimpleNamespace(
                     id=thread_b,
                     user_id=user_id,
                     project_id=project_b,
                     thread_type="subAgent",
-                    captured_history_system_prompt="b",
-                    captured_history_conversation_json=[{"role": "assistant", "content": "done"}],
+                    captured_prompt_snapshot={"systemPrompt": "b", "segments": [{"messages": [{"role": "assistant", "content": "done"}]}]},
                 ),
             ],
             RunModel: [

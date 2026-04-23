@@ -4,7 +4,10 @@ from App.backend.services.prompt_runtime.scenario_runtime import (
     _group_by_run,
     _normalize_index,
     assemble_scenario,
+    assemble_scenario_snapshot,
     assemble_scenario_with_cache_plan,
+    extend_prompt_snapshot_with_resume_tail,
+    flatten_prompt_snapshot,
 )
 from App.backend.services.prompt_runtime.template_renderer import TemplateRenderer
 
@@ -456,3 +459,56 @@ def test_duplicate_cache_points_are_marked_in_cache_plan() -> None:
     assert [checkpoint["checkpoint_id"] for checkpoint in cache_plan] == ["cp-1", "cp-2"]
     assert cache_plan[0].get("duplicate_prefix") is not True
     assert cache_plan[1]["duplicate_prefix"] is True
+
+
+def test_snapshot_cache_point_after_open_segment_moves_with_resume_tail() -> None:
+    renderer = TemplateRenderer(fragment_map={})
+    snapshot = assemble_scenario_snapshot(
+        template_renderer=renderer,
+        task_type="agent",
+        system_template="sys",
+        blocks=[
+            {
+                "id": "range-current",
+                "block_order": 4,
+                "enabled": True,
+                "type": "rangeMapping",
+                "rangeMapping": {
+                    "start_index": -1,
+                    "end_index": -1,
+                    "user_template": "U:{{input.userMessage}}",
+                    "assistant_template": "A:{{input.agentMessage}}",
+                },
+            },
+            {
+                "id": "cp-tail",
+                "block_order": 5,
+                "enabled": True,
+                "type": "cachePoint",
+                "cachePoint": {},
+            },
+        ],
+        source_conversation=[
+            _msg("user", "hello", seq_in_thread=1, run_id="run-1"),
+        ],
+        template_data=_template_data(),
+        current_run_id="run-1",
+    )
+
+    assert snapshot["segments"][0]["open"] is True
+
+    patched = extend_prompt_snapshot_with_resume_tail(
+        snapshot,
+        tail_messages=[
+            _msg("assistant", "tool please", seq_in_thread=2, run_id="run-1"),
+            _msg("tool_results", '{"ok":true}', seq_in_thread=2, run_id="run-1"),
+        ],
+    )
+    system, convo, cache_boundaries = flatten_prompt_snapshot(patched)
+
+    assert system == "sys"
+    assert [message["role"] for message in convo] == ["user", "assistant", "tool_results"]
+    assert cache_boundaries[0]["checkpoint_id"] == "cp-tail"
+    assert cache_boundaries[0]["rendered_message_count"] == 3
+    assert cache_boundaries[0]["last_role"] == "tool_results"
+    assert cache_boundaries[0]["last_seq_in_thread"] == 2

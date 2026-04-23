@@ -262,9 +262,7 @@ def measure_agent_row(row: Agent | object) -> int:
 
 def measure_thread_row(row: Thread | object) -> int:
     return _sum_values(
-        getattr(row, "captured_history_system_prompt", None),
-        getattr(row, "captured_history_conversation_json", None),
-        getattr(row, "captured_history_cache_plan_json", None),
+        getattr(row, "captured_prompt_snapshot", None),
     )
 
 
@@ -399,9 +397,7 @@ def snapshot_agent_row(row: Agent | object | None) -> object | None:
 def snapshot_thread_row(row: Thread | object | None) -> object | None:
     return _snapshot_row(
         row,
-        "captured_history_system_prompt",
-        "captured_history_conversation_json",
-        "captured_history_cache_plan_json",
+        "captured_prompt_snapshot",
     )
 
 
@@ -1054,9 +1050,7 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
         db.query(
             func.coalesce(
                 func.sum(
-                    _octet_text(Thread.captured_history_system_prompt)
-                    + _octet_text(Thread.captured_history_conversation_json)
-                    + _octet_text(Thread.captured_history_cache_plan_json)
+                    _octet_text(Thread.captured_prompt_snapshot)
                 ),
                 0,
             )

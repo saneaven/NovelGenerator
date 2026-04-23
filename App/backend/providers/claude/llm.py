@@ -280,7 +280,15 @@ class ClaudeProvider(BaseProvider):
             target_key = ("message", message_index)
             if target_key in seen_targets:
                 continue
-            last_block = content[-1]
+            last_block = next(
+                (
+                    block
+                    for block in reversed(content)
+                    if isinstance(block, dict)
+                    and str(block.get("type") or "") not in {"thinking", "redacted_thinking"}
+                ),
+                None,
+            )
             if not isinstance(last_block, dict):
                 continue
             last_block["cache_control"] = self._cache_control_payload(ttl_label)

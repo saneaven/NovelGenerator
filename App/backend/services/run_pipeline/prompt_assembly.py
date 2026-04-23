@@ -12,7 +12,11 @@ from ..memory import state as memory_state
 from ..prompt_runtime.contracts import ScenarioBundle
 from ..prompt_runtime.project_data_builder import build_project_data
 from ..prompt_runtime.scenario_manager import ScenarioManager
-from ..prompt_runtime.scenario_runtime import assemble_scenario, assemble_scenario_with_cache_plan
+from ..prompt_runtime.scenario_runtime import (
+    assemble_scenario_snapshot,
+    extend_prompt_snapshot_with_resume_tail,
+    flatten_prompt_snapshot,
+)
 from ..prompt_runtime.template_renderer import TemplateRenderer, load_user_fragment_map
 from ..settings_service import settings_service
 from ..storage_usage_service import apply_project_usage_delta, build_thread_delta, snapshot_thread_row
@@ -156,7 +160,7 @@ async def _render(
     bundle_inputs: _BundleInputs,
     archived_until_seq: int | None,
     emit_fn: EmitFn | None = None,
-) -> tuple[str, list[dict[str, Any]], ScenarioBundle]:
+) -> tuple[str, list[dict[str, Any]], ScenarioBundle, list[dict[str, Any]]]:
     bundle = _build_scenario_bundle(
         run=run,
         bundle_inputs=bundle_inputs,
@@ -175,23 +179,30 @@ async def _render(
         thread=thread,
         stage="rendering_prompt",
     )
-    system_prompt, conversation, cache_plan = assemble_scenario_with_cache_plan(
+    prompt_snapshot = assemble_scenario_snapshot(
         template_renderer=template_renderer,
         task_type=bundle.task_type,
         system_template=bundle.system_template,
         blocks=bundle.blocks,
         source_conversation=messages,
         template_data=bundle.template_data,
+        current_run_id=str(run.id),
     )
+    system_prompt, conversation, cache_boundaries = flatten_prompt_snapshot(prompt_snapshot)
     system_prompt = McpMessageAssembler.merge_system_overlays(
         system_prompt,
         run.mcp_resolution_json.get("system_overlays") if isinstance(run.mcp_resolution_json, dict) else None,
     )
+    prompt_snapshot = dict(prompt_snapshot)
+    prompt_snapshot["systemPrompt"] = system_prompt
+    prompt_snapshot["scenario"] = {
+        "taskType": bundle.task_type,
+        "taskSubtype": bundle.task_subtype,
+    }
+    system_prompt, conversation, cache_boundaries = flatten_prompt_snapshot(prompt_snapshot)
 
     before = snapshot_thread_row(thread)
-    thread.captured_history_system_prompt = system_prompt
-    thread.captured_history_conversation_json = conversation
-    thread.captured_history_cache_plan_json = cache_plan
+    thread.captured_prompt_snapshot = prompt_snapshot
     apply_project_usage_delta(
         db,
         user_id=run.user_id,
@@ -201,7 +212,7 @@ async def _render(
     )
     db.commit()
 
-    return system_prompt, conversation, bundle
+    return system_prompt, conversation, bundle, cache_boundaries
 
 
 async def assemble_create(
@@ -211,7 +222,7 @@ async def assemble_create(
     thread: Thread,
     create_ctx: CreateContext,
     emit_fn: EmitFn | None = None,
-) -> tuple[str, list[dict[str, Any]], ScenarioBundle]:
+) -> tuple[str, list[dict[str, Any]], ScenarioBundle, list[dict[str, Any]]]:
     bundle_inputs = await _load_bundle_inputs(
         db,
         run=run,
@@ -267,7 +278,7 @@ async def reassemble_create(
     thread: Thread,
     scenario_bundle: ScenarioBundle,
     emit_fn: EmitFn | None = None,
-) -> tuple[str, list[dict[str, Any]], ScenarioBundle]:
+) -> tuple[str, list[dict[str, Any]], ScenarioBundle, list[dict[str, Any]]]:
     archived_until_seq = memory_state.latest_archived_seq(
         db,
         user_id=run.user_id,
@@ -325,8 +336,8 @@ async def assemble_resume(
     thread: Thread,
     input_payload: dict[str, Any],
     emit_fn: EmitFn | None = None,
-) -> tuple[str, list[dict[str, Any]], ScenarioBundle]:
-    if thread.captured_history_conversation_json is None:
+) -> tuple[str, list[dict[str, Any]], ScenarioBundle, list[dict[str, Any]]]:
+    if not isinstance(thread.captured_prompt_snapshot, dict):
         return await assemble_create(
             db,
             run=run,
@@ -362,8 +373,7 @@ async def assemble_resume(
         run=run,
         bundle_inputs=bundle_inputs,
     )
-    system_prompt = thread.captured_history_system_prompt or ""
-    conversation = list(thread.captured_history_conversation_json)
+    prompt_snapshot = dict(thread.captured_prompt_snapshot)
     archived_until_seq = memory_state.latest_archived_seq(
         db,
         user_id=run.user_id,
@@ -377,15 +387,10 @@ async def assemble_resume(
         include_run_ids=[run.id],
         archived_until_seq_in_thread=archived_until_seq,
     )
-
-    max_cached_seq = max(
-        (item.get("seq_in_thread") for item in conversation if isinstance(item.get("seq_in_thread"), int)),
-        default=-1,
+    prompt_snapshot = extend_prompt_snapshot_with_resume_tail(
+        prompt_snapshot,
+        tail_messages=recent,
     )
-    conversation.extend(
-        item for item in recent
-        if item.get("role") != "user"
-        and (not isinstance(item.get("seq_in_thread"), int) or item["seq_in_thread"] > max_cached_seq)
-    )
+    system_prompt, conversation, cache_boundaries = flatten_prompt_snapshot(prompt_snapshot)
 
-    return system_prompt, conversation, bundle
+    return system_prompt, conversation, bundle, cache_boundaries

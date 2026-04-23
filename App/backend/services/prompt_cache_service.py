@@ -73,7 +73,7 @@ def annotate_conversation_render_indices(conversation: list[dict[str, Any]]) -> 
     return annotated
 
 
-def normalize_cache_plan(raw: Any) -> list[dict[str, Any]]:
+def normalize_cache_boundaries(raw: Any) -> list[dict[str, Any]]:
     if not isinstance(raw, list):
         return []
     normalized: list[dict[str, Any]] = []
@@ -106,11 +106,11 @@ def normalize_cache_plan(raw: Any) -> list[dict[str, Any]]:
     return normalized
 
 
-def remap_cache_plan_for_provider(
-    raw_cache_plan: Any,
+def remap_cache_boundaries_for_provider(
+    cache_boundaries: Any,
     provider_messages_with_internal_keys: list[dict[str, Any]],
 ) -> list[CacheCheckpoint]:
-    normalized = normalize_cache_plan(raw_cache_plan)
+    normalized = normalize_cache_boundaries(cache_boundaries)
     if not normalized:
         return []
 
@@ -320,11 +320,11 @@ def build_prepared_cache_plan(
     provider: str,
     model: str,
     cache_settings: dict[str, Any],
-    raw_cache_plan: Any,
+    cache_boundaries: Any,
     provider_messages_with_internal_keys: list[dict[str, Any]],
 ) -> PreparedCachePlan:
     enabled = bool(cache_settings.get("enabled", False))
-    checkpoints = remap_cache_plan_for_provider(raw_cache_plan, provider_messages_with_internal_keys)
+    checkpoints = remap_cache_boundaries_for_provider(cache_boundaries, provider_messages_with_internal_keys)
 
     if not enabled:
         return PreparedCachePlan(
