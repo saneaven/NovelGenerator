@@ -1,37 +1,85 @@
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
-from ...models.db_models import RunMessageModel, RunModel, Thread, UserSettings
+from ...models.db_models import RunMessageModel, RunModel, Thread
 from ..mcp import McpMessageAssembler
+from ..memory import retrieval as memory_retrieval
+from ..memory import state as memory_state
+from ..prompt_runtime.contracts import ScenarioBundle
 from ..prompt_runtime.project_data_builder import build_project_data
 from ..prompt_runtime.scenario_manager import ScenarioManager
 from ..prompt_runtime.scenario_runtime import assemble_scenario
 from ..prompt_runtime.template_renderer import TemplateRenderer, load_user_fragment_map
-from ..prompt_runtime.contracts import ScenarioBundle
 from ..settings_service import settings_service
 from ..storage_usage_service import apply_project_usage_delta, build_thread_delta, snapshot_thread_row
 from .contracts import CreateContext
+from .text_utils import extract_last_texts
 
 
-async def assemble_create(
+@dataclass(frozen=True)
+class _BundleInputs:
+    task_type: str
+    task_subtype: str
+    template_data: dict[str, Any]
+    system_template: str
+    blocks: list[dict[str, Any]]
+    project_data: dict[str, Any]
+    template_renderer_factory: Callable[[], TemplateRenderer]
+
+
+def _make_template_renderer_factory(fragment_map: dict[str, str]) -> Callable[[], TemplateRenderer]:
+    snapshot = dict(fragment_map)
+    return lambda: TemplateRenderer(fragment_map=dict(snapshot))
+
+
+def _patch_mcp_contexts(template_data: dict[str, Any], run: RunModel) -> dict[str, Any]:
+    patched = dict(template_data)
+    if isinstance(run.mcp_resolution_json, dict):
+        patched["mcpContexts"] = list(run.mcp_resolution_json.get("template_contexts") or [])
+    else:
+        patched.pop("mcpContexts", None)
+    return patched
+
+
+def _load_source_messages(
     db: Session,
     *,
     run: RunModel,
     thread: Thread,
-    settings: UserSettings,
-    create_ctx: CreateContext,
-) -> tuple[str, list[dict[str, Any]], ScenarioBundle]:
+    archived_until_seq: int | None,
+) -> list[dict[str, Any]]:
+    messages = McpMessageAssembler.build_thread_messages(
+        db,
+        thread_id=thread.id,
+        language=run.language,
+        archived_until_seq_in_thread=archived_until_seq,
+    )
+    return McpMessageAssembler.merge_run_mcp_content(
+        messages,
+        run_id=run.id,
+        resolution=run.mcp_resolution_json if isinstance(run.mcp_resolution_json, dict) else None,
+    )
+
+
+async def _load_bundle_inputs(
+    db: Session,
+    *,
+    run: RunModel,
+    thread: Thread,
+    input_text: str,
+    input_payload: dict[str, Any],
+) -> _BundleInputs:
     preset_id = settings_service.get_active_preset_id(db, run.user_id)
     if preset_id is None:
         raise RuntimeError("No active preset selected")
 
     scenario_manager = ScenarioManager()
+    target = scenario_manager.resolve_target(db, thread=thread, run=run, payload=input_payload)
     project_data = await build_project_data(db, run.project_id, run.language)
-
-    target = scenario_manager.resolve_target(db, thread=thread, run=run, payload=create_ctx.input_payload)
     template_data = scenario_manager.build_template_data(
         db,
         user_id=run.user_id,
@@ -40,12 +88,9 @@ async def assemble_create(
         thread=thread,
         run=run,
         project_data=project_data,
-        input_text=create_ctx.input_text,
-        input_payload=create_ctx.input_payload,
+        input_text=input_text,
+        input_payload=input_payload,
     )
-    if isinstance(run.mcp_resolution_json, dict):
-        template_data["mcpContexts"] = list(run.mcp_resolution_json.get("template_contexts") or [])
-
     scenario = scenario_manager.load_active_scenario(
         db,
         user_id=run.user_id,
@@ -53,25 +98,64 @@ async def assemble_create(
         task_type=target.task_type,
         task_subtype=target.task_subtype,
     )
-    system_template = str(scenario.get("system_template") or "")
-    blocks = scenario.get("blocks") if isinstance(scenario.get("blocks"), list) else []
 
-    fragment_map = load_user_fragment_map(db, run.user_id, preset_id)
-    template_renderer = TemplateRenderer(fragment_map=fragment_map)
-
-    messages = McpMessageAssembler.build_thread_messages(db, thread_id=thread.id, language=run.language)
-    messages = McpMessageAssembler.merge_run_mcp_content(
-        messages,
-        run_id=run.id,
-        resolution=run.mcp_resolution_json if isinstance(run.mcp_resolution_json, dict) else None,
-    )
-    system_prompt, conversation, memory_template = assemble_scenario(
-        template_renderer=template_renderer,
+    return _BundleInputs(
         task_type=target.task_type,
-        system_template=system_template,
-        blocks=blocks,
-        source_conversation=messages,
+        task_subtype=target.task_subtype,
         template_data=template_data,
+        system_template=str(scenario.get("system_template") or ""),
+        blocks=scenario.get("blocks") if isinstance(scenario.get("blocks"), list) else [],
+        project_data=project_data,
+        template_renderer_factory=_make_template_renderer_factory(load_user_fragment_map(db, run.user_id, preset_id)),
+    )
+
+
+def _build_scenario_bundle(
+    *,
+    run: RunModel,
+    bundle_inputs: _BundleInputs,
+    template_data: dict[str, Any] | None = None,
+) -> ScenarioBundle:
+    effective_template_data = bundle_inputs.template_data if template_data is None else template_data
+    return ScenarioBundle(
+        task_type=bundle_inputs.task_type,
+        task_subtype=bundle_inputs.task_subtype,
+        template_data=_patch_mcp_contexts(effective_template_data, run),
+        blocks=bundle_inputs.blocks,
+        system_template=bundle_inputs.system_template,
+        project_data=bundle_inputs.project_data,
+        template_renderer_factory=bundle_inputs.template_renderer_factory,
+    )
+
+
+async def _render(
+    db: Session,
+    *,
+    run: RunModel,
+    thread: Thread,
+    template_data: dict[str, Any],
+    bundle_inputs: _BundleInputs,
+    archived_until_seq: int | None,
+) -> tuple[str, list[dict[str, Any]], ScenarioBundle]:
+    bundle = _build_scenario_bundle(
+        run=run,
+        bundle_inputs=bundle_inputs,
+        template_data=template_data,
+    )
+    template_renderer = bundle.template_renderer_factory()
+    messages = _load_source_messages(
+        db,
+        run=run,
+        thread=thread,
+        archived_until_seq=archived_until_seq,
+    )
+    system_prompt, conversation = assemble_scenario(
+        template_renderer=template_renderer,
+        task_type=bundle.task_type,
+        system_template=bundle.system_template,
+        blocks=bundle.blocks,
+        source_conversation=messages,
+        template_data=bundle.template_data,
     )
     system_prompt = McpMessageAssembler.merge_system_overlays(
         system_prompt,
@@ -90,15 +174,105 @@ async def assemble_create(
     )
     db.commit()
 
-    bundle = ScenarioBundle(
-        task_type=target.task_type,
-        task_subtype=target.task_subtype,
-        template_data=template_data,
-        system_prompt=system_prompt,
-        memory_template=memory_template,
+    return system_prompt, conversation, bundle
+
+
+async def assemble_create(
+    db: Session,
+    *,
+    run: RunModel,
+    thread: Thread,
+    create_ctx: CreateContext,
+) -> tuple[str, list[dict[str, Any]], ScenarioBundle]:
+    bundle_inputs = await _load_bundle_inputs(
+        db,
+        run=run,
+        thread=thread,
+        input_text=create_ctx.input_text,
+        input_payload=create_ctx.input_payload,
+    )
+    archived_until_seq = memory_state.latest_archived_seq(
+        db,
+        user_id=run.user_id,
+        project_id=run.project_id,
+        thread_id=thread.id,
+    )
+    source_messages = _load_source_messages(
+        db,
+        run=run,
+        thread=thread,
+        archived_until_seq=archived_until_seq,
+    )
+    last_user_text, last_assistant_text = extract_last_texts(source_messages)
+    template_data = dict(bundle_inputs.template_data)
+    template_data["memory"] = await memory_retrieval.build_memory_data(
+        db,
+        user_id=run.user_id,
+        project_id=run.project_id,
+        thread_id=thread.id,
+        language=run.language,
+        last_user_text=last_user_text,
+        last_assistant_text=last_assistant_text,
     )
 
-    return system_prompt, conversation, bundle
+    return await _render(
+        db,
+        run=run,
+        thread=thread,
+        template_data=template_data,
+        bundle_inputs=bundle_inputs,
+        archived_until_seq=archived_until_seq,
+    )
+
+
+async def reassemble_create(
+    db: Session,
+    *,
+    run: RunModel,
+    thread: Thread,
+    scenario_bundle: ScenarioBundle,
+) -> tuple[str, list[dict[str, Any]], ScenarioBundle]:
+    archived_until_seq = memory_state.latest_archived_seq(
+        db,
+        user_id=run.user_id,
+        project_id=run.project_id,
+        thread_id=thread.id,
+    )
+    source_messages = _load_source_messages(
+        db,
+        run=run,
+        thread=thread,
+        archived_until_seq=archived_until_seq,
+    )
+    last_user_text, last_assistant_text = extract_last_texts(source_messages)
+
+    template_data = dict(scenario_bundle.template_data)
+    template_data["memory"] = await memory_retrieval.build_memory_data(
+        db,
+        user_id=run.user_id,
+        project_id=run.project_id,
+        thread_id=thread.id,
+        language=run.language,
+        last_user_text=last_user_text,
+        last_assistant_text=last_assistant_text,
+    )
+
+    return await _render(
+        db,
+        run=run,
+        thread=thread,
+        template_data=template_data,
+        bundle_inputs=_BundleInputs(
+            task_type=scenario_bundle.task_type,
+            task_subtype=scenario_bundle.task_subtype,
+            template_data=scenario_bundle.template_data,
+            system_template=scenario_bundle.system_template,
+            blocks=scenario_bundle.blocks,
+            project_data=scenario_bundle.project_data,
+            template_renderer_factory=scenario_bundle.template_renderer_factory,
+        ),
+        archived_until_seq=archived_until_seq,
+    )
 
 
 async def assemble_resume(
@@ -106,19 +280,16 @@ async def assemble_resume(
     *,
     run: RunModel,
     thread: Thread,
-    settings: UserSettings,
     input_payload: dict[str, Any],
-) -> tuple[str, list[dict[str, Any]], ScenarioBundle | None]:
+) -> tuple[str, list[dict[str, Any]], ScenarioBundle]:
     if thread.captured_history_conversation_json is None:
-        # Cache invalidated (e.g. message deleted) — full rebuild through the
-        # same rendering pipeline as create so conversation blocks are applied.
         return await assemble_create(
-            db, run=run, thread=thread, settings=settings,
+            db,
+            run=run,
+            thread=thread,
             create_ctx=CreateContext(input_text="", input_payload=input_payload),
         )
 
-    # If the last message in this run is a user turn, break the cache
-    # and do a full re-render so the prompt reflects the latest context.
     last_msg_role = (
         db.query(RunMessageModel.role)
         .filter(RunMessageModel.run_id == run.id)
@@ -128,83 +299,47 @@ async def assemble_resume(
     )
     if last_msg_role == "user":
         return await assemble_create(
-            db, run=run, thread=thread, settings=settings,
+            db,
+            run=run,
+            thread=thread,
             create_ctx=CreateContext(input_text="", input_payload=input_payload),
         )
 
-    system_prompt = thread.captured_history_system_prompt
+    bundle_inputs = await _load_bundle_inputs(
+        db,
+        run=run,
+        thread=thread,
+        input_text="",
+        input_payload=input_payload,
+    )
+    bundle = _build_scenario_bundle(
+        run=run,
+        bundle_inputs=bundle_inputs,
+    )
+    system_prompt = thread.captured_history_system_prompt or ""
     conversation = list(thread.captured_history_conversation_json)
-
+    archived_until_seq = memory_state.latest_archived_seq(
+        db,
+        user_id=run.user_id,
+        project_id=run.project_id,
+        thread_id=thread.id,
+    )
     recent = McpMessageAssembler.build_thread_messages(
         db,
         thread_id=thread.id,
         language=run.language,
         include_run_ids=[run.id],
+        archived_until_seq_in_thread=archived_until_seq,
     )
-    # Deduplicate: only append messages whose seq_in_thread exceeds the
-    # highest sequence already present in the cached conversation.
+
     max_cached_seq = max(
-        (m.get("seq_in_thread") for m in conversation if isinstance(m.get("seq_in_thread"), int)),
+        (item.get("seq_in_thread") for item in conversation if isinstance(item.get("seq_in_thread"), int)),
         default=-1,
     )
     conversation.extend(
-        m for m in recent
-        if m.get("role") != "user"
-        and (not isinstance(m.get("seq_in_thread"), int) or m["seq_in_thread"] > max_cached_seq)
+        item for item in recent
+        if item.get("role") != "user"
+        and (not isinstance(item.get("seq_in_thread"), int) or item["seq_in_thread"] > max_cached_seq)
     )
-
-    bundle: ScenarioBundle | None = None
-    task_type = ScenarioManager.resolve_task_type(db, thread=thread, run=run)
-    if task_type == "agent":
-        preset_id = settings_service.get_active_preset_id(db, run.user_id)
-        if preset_id is not None:
-            scenario_manager = ScenarioManager()
-            task_subtype = "planMode" if run.run_mode == "planMode" else "agentMode"
-            scenario = scenario_manager.load_active_scenario(
-                db,
-                user_id=run.user_id,
-                preset_id=preset_id,
-                task_type=task_type,
-                task_subtype=task_subtype,
-            )
-            blocks = scenario.get("blocks") if isinstance(scenario.get("blocks"), list) else []
-            memory_template: str | None = None
-            for blk in blocks:
-                if not isinstance(blk, dict) or not bool(blk.get("enabled", True)):
-                    continue
-                if blk.get("type") != "staticPrompt":
-                    continue
-                sp = blk.get("staticPrompt")
-                if not isinstance(sp, dict):
-                    continue
-                if str(sp.get("subtype") or "") != "memory":
-                    continue
-                tpl = sp.get("template")
-                if isinstance(tpl, str) and tpl.strip():
-                    memory_template = tpl
-                    break
-
-            if memory_template is not None:
-                project_data = await build_project_data(db, run.project_id, run.language)
-                template_data = scenario_manager.build_template_data(
-                    db,
-                    user_id=run.user_id,
-                    preset_id=preset_id,
-                    task_type=task_type,
-                    thread=thread,
-                    run=run,
-                    project_data=project_data,
-                    input_text="",
-                    input_payload=input_payload,
-                )
-                if isinstance(run.mcp_resolution_json, dict):
-                    template_data["mcpContexts"] = list(run.mcp_resolution_json.get("template_contexts") or [])
-                bundle = ScenarioBundle(
-                    task_type=task_type,
-                    task_subtype=task_subtype,
-                    template_data=template_data,
-                    system_prompt=system_prompt,
-                    memory_template=memory_template,
-                )
 
     return system_prompt, conversation, bundle

@@ -62,8 +62,10 @@ def _install_import_stubs() -> None:
         task_type: str = "agent"
         task_subtype: str = "agentMode"
         template_data: dict[str, object] = field(default_factory=dict)
-        system_prompt: str = ""
-        memory_template: str | None = None
+        blocks: list[dict[str, object]] = field(default_factory=list)
+        system_template: str = ""
+        project_data: dict[str, object] = field(default_factory=dict)
+        template_renderer_factory: object | None = None
 
     fake_prompt_contracts.ScenarioBundle = ScenarioBundle
     sys.modules["App.backend.services.prompt_runtime.contracts"] = fake_prompt_contracts

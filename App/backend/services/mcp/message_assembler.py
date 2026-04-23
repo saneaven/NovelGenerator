@@ -14,8 +14,15 @@ def build_thread_messages(
     thread_id: UUID,
     language: str,
     include_run_ids: list[UUID] | None = None,
+    archived_until_seq_in_thread: int | None = None,
 ) -> list[dict[str, Any]]:
-    return build_from_runs(db, thread_id=thread_id, language=language, include_run_ids=include_run_ids)
+    return build_from_runs(
+        db,
+        thread_id=thread_id,
+        language=language,
+        include_run_ids=include_run_ids,
+        archived_until_seq_in_thread=archived_until_seq_in_thread,
+    )
 
 
 def merge_run_mcp_content(

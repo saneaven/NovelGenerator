@@ -173,10 +173,13 @@ def build_from_runs(
     thread_id: UUID,
     language: str,
     include_run_ids: list[UUID] | None = None,
+    archived_until_seq_in_thread: int | None = None,
 ) -> list[dict[str, Any]]:
     q = db.query(RunMessageModel).filter(RunMessageModel.thread_id == thread_id)
     if include_run_ids is not None:
         q = q.filter(RunMessageModel.run_id.in_(include_run_ids))
+    if archived_until_seq_in_thread is not None:
+        q = q.filter(RunMessageModel.seq_in_thread > int(archived_until_seq_in_thread))
 
     rows = q.order_by(RunMessageModel.seq_in_thread.asc(), RunMessageModel.created_at.asc()).all()
     if not rows:

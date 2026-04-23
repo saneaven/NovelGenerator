@@ -424,7 +424,6 @@ const SubAgentPromptEditors: React.FC<{
           taskType="subAgent"
           taskSubtype={agentNameForPreview || agentNameForHistory}
           injectedInputKey={activeTab === 'userPrompt' ? 'agentMessage' : null}
-          isMemoryPrompt={false}
         />
       )}
     </section>

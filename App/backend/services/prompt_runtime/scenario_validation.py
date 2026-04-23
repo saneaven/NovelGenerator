@@ -5,7 +5,6 @@ from typing import Any
 
 ALLOWED_BLOCK_TYPES = {"staticPrompt", "rangeMapping"}
 ALLOWED_STATIC_ROLES = {"user", "assistant"}
-ALLOWED_STATIC_SUBTYPES = {"normal", "memory"}
 
 
 def _coerce_int_strict(value: Any, *, field_name: str) -> int:
@@ -46,8 +45,6 @@ def normalize_and_validate_scenario(scenario: Any) -> tuple[dict[str, Any], list
         raise ValueError("INVALID_SCENARIO::blocks_required")
 
     warnings: list[str] = []
-    memory_blocks = 0
-
     normalized_blocks: list[dict[str, Any]] = []
     for order, block in enumerate(blocks):
         if not isinstance(block, dict):
@@ -70,9 +67,9 @@ def normalize_and_validate_scenario(scenario: Any) -> tuple[dict[str, Any], list
             if not isinstance(sp, dict):
                 raise ValueError(f"INVALID_SCENARIO::staticPrompt_required::block_id={block_id}")
 
-            subtype = sp.get("subtype")
-            if not isinstance(subtype, str) or subtype not in ALLOWED_STATIC_SUBTYPES:
-                raise ValueError(f"INVALID_SCENARIO::invalid_static_subtype::block_id={block_id}")
+            extra_fields = sorted(key for key in sp.keys() if key not in {"role", "template"})
+            if extra_fields:
+                raise ValueError(f"INVALID_SCENARIO::invalid_static_prompt_field::block_id={block_id}")
 
             role = sp.get("role")
             if not isinstance(role, str) or role not in ALLOWED_STATIC_ROLES:
@@ -82,13 +79,6 @@ def normalize_and_validate_scenario(scenario: Any) -> tuple[dict[str, Any], list
             if not isinstance(template, str):
                 raise ValueError(f"INVALID_SCENARIO::static_template_required::block_id={block_id}")
 
-            if subtype == "memory":
-                memory_blocks += 1
-                if memory_blocks > 1:
-                    raise ValueError("INVALID_SCENARIO::multiple_memory_blocks")
-                if role != "user":
-                    raise ValueError("INVALID_SCENARIO::memory_role_must_be_user")
-
             normalized_blocks.append(
                 {
                     "id": block_id,
@@ -96,7 +86,6 @@ def normalize_and_validate_scenario(scenario: Any) -> tuple[dict[str, Any], list
                     "enabled": enabled,
                     "type": "staticPrompt",
                     "staticPrompt": {
-                        "subtype": subtype,
                         "role": role,
                         "template": template,
                     },
@@ -141,4 +130,3 @@ def normalize_and_validate_scenario(scenario: Any) -> tuple[dict[str, Any], list
         "blocks": normalized_blocks,
     }
     return normalized, warnings
-

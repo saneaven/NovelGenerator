@@ -163,7 +163,6 @@ class RunPipelineExecutionLoop:
                     db,
                     run=run,
                     thread=thread,
-                    settings=settings,
                     create_ctx=create_ctx,
                 )
             else:
@@ -171,7 +170,6 @@ class RunPipelineExecutionLoop:
                     db,
                     run=run,
                     thread=thread,
-                    settings=settings,
                     input_payload=restored_payload,
                 )
 

@@ -26,11 +26,8 @@ import PromptPreviewModal from './PromptPreviewModal';
 import { buildPreviewData } from './previewDataBuilder';
 import { scenarioService } from '../../../api/scenarioService';
 import { useProjectStore } from '../../../store/projectStore';
-import type { ScenarioBlock, ScenarioDocument, StaticPromptSubtype, TaskType } from '../../../types/scenarios';
-import { confirm } from '../../../store/dialogStore';
+import type { ScenarioBlock, ScenarioDocument, TaskType } from '../../../types/scenarios';
 import './ScenarioBlocksEditor.css';
-
-type ToastKind = 'success' | 'warning' | 'error';
 
 function normalizeBlockOrders(blocks: ScenarioBlock[]): ScenarioBlock[] {
   return blocks.map((b, idx) => ({ ...b, block_order: idx }));
@@ -42,17 +39,6 @@ function safeUUID(): string {
   } catch {
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
-}
-
-function isPinned(block: ScenarioBlock): boolean {
-  if (block.type !== 'staticPrompt') return false;
-  const subtype = block.staticPrompt?.subtype;
-  return subtype === 'memory';
-}
-
-function getStaticSubtypeLabel(subtype: StaticPromptSubtype): string {
-  if (subtype === 'memory') return 'Memory';
-  return 'Static';
 }
 
 function oneLinePreview(text: string, maxLen = 120): string {
@@ -104,17 +90,14 @@ function buildSampleConversation(runCount: number, includeToolResults: boolean):
 interface SortableBlockCardProps {
   block: ScenarioBlock;
   children: React.ReactNode;
-  disabled?: boolean;
 }
 
 const SortableBlockCard: React.FC<SortableBlockCardProps> = ({
   block,
   children,
-  disabled,
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: block.id,
-    disabled,
   });
 
   const style: React.CSSProperties = {
@@ -124,14 +107,11 @@ const SortableBlockCard: React.FC<SortableBlockCardProps> = ({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const pinned = isPinned(block);
-
   return (
-    <div ref={setNodeRef} style={style} className={`scenario-block-card ${pinned ? 'is-pinned' : ''}`}>
+    <div ref={setNodeRef} style={style} className="scenario-block-card">
       <div className="scenario-block-card__drag-row">
         <DragHandle
           orientation="horizontal"
-          disabled={pinned}
           handleProps={{ ...attributes, ...listeners } as React.HTMLAttributes<HTMLDivElement>}
         />
       </div>
@@ -146,7 +126,6 @@ interface ScenarioBlocksEditorProps {
   systemTemplate: string;
   blocks: ScenarioBlock[];
   onBlocksChange: (blocks: ScenarioBlock[]) => void;
-  onToast?: (kind: ToastKind, message: string) => void;
   headerActionsRef?: React.RefObject<HTMLElement | null>;
   onOpenVersionHistory?: () => void;
   versionHistoryDisabled?: boolean;
@@ -159,7 +138,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
   blocks,
   onBlocksChange,
   headerActionsRef,
-  onToast,
   onOpenVersionHistory,
   versionHistoryDisabled = false,
 }) => {
@@ -177,18 +155,13 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
     return list;
   }, [blocks]);
 
-  const hasMemory = useMemo(
-    () => orderedBlocks.some((b) => b.type === 'staticPrompt' && b.staticPrompt?.subtype === 'memory'),
-    [orderedBlocks]
-  );
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [activeTemplateTab, setActiveTemplateTab] = useState<Record<string, 'user' | 'assistant'>>({});
   const [preview, setPreview] = useState<{
     open: boolean;
     content: string;
     injectedInputKey: 'userMessage' | 'agentMessage' | 'subAgentMessage' | null;
-    isMemoryPrompt: boolean;
-  }>({ open: false, content: '', injectedInputKey: null, isMemoryPrompt: false });
+  }>({ open: false, content: '', injectedInputKey: null });
 
   const sensors = useDndSensors();
 
@@ -226,12 +199,7 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
     setBlocks(next);
   };
 
-  const addBlock = (kind: 'range' | 'static' | 'memory') => {
-    if (kind === 'memory' && hasMemory) {
-      onToast?.('warning', 'Memory block already exists.');
-      return;
-    }
-
+  const addBlock = (kind: 'range' | 'static') => {
     const id = safeUUID();
     const base: ScenarioBlock = {
       id,
@@ -251,7 +219,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
             ...base,
             type: 'staticPrompt',
             staticPrompt: {
-              subtype: kind === 'memory' ? 'memory' : 'normal',
               role: 'user',
               template: '',
             },
@@ -262,10 +229,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
   };
 
   const duplicateBlock = (block: ScenarioBlock) => {
-    if (isPinned(block)) {
-      onToast?.('warning', 'Pinned blocks cannot be duplicated.');
-      return;
-    }
     const id = safeUUID();
     const clone: ScenarioBlock = JSON.parse(JSON.stringify(block));
     clone.id = id;
@@ -275,15 +238,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
   };
 
   const deleteBlock = async (block: ScenarioBlock) => {
-    if (isPinned(block)) {
-      const ok = await confirm({
-        title: 'Delete Pinned Block',
-        message: 'Delete this pinned block?',
-        variant: 'danger',
-        confirmLabel: 'Delete',
-      });
-      if (!ok) return;
-    }
     setBlocks(orderedBlocks.filter((b) => b.id !== block.id));
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -312,7 +266,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
         taskType,
         taskSubtype,
         injectedInputKey: null,
-        isMemoryPrompt: false,
         showProjectContext: false,
         includeAllFilteredIds: false,
         projectId: currentProjectId,
@@ -365,13 +318,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
           label: 'Add range mapping',
           onClick: () => addBlock('range'),
         },
-        {
-          key: 'add-memory-block',
-          icon: <Plus size="sm" />,
-          label: 'Add memory block',
-          onClick: () => addBlock('memory'),
-          disabled: hasMemory,
-        },
       ]}
     />
   );
@@ -388,13 +334,11 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
           <div className="scenario-blocks-editor__list">
             {orderedBlocks.map((block, idx) => {
               const expandedNow = expanded.has(block.id);
-              const pinned = isPinned(block);
 
               const headerLabel = (() => {
                 if (block.type === 'staticPrompt') {
-                  const subtype = block.staticPrompt?.subtype || 'normal';
                   const role = block.staticPrompt?.role || 'user';
-                  return `${getStaticSubtypeLabel(subtype as StaticPromptSubtype)} (${role})`;
+                  return `Static (${role})`;
                 }
                 const s = block.rangeMapping?.start_index ?? 0;
                 const e = block.rangeMapping?.end_index ?? -1;
@@ -405,7 +349,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                 <SortableBlockCard
                   key={block.id}
                   block={block}
-                  disabled={pinned}
                 >
                   <div className="scenario-block-card__header">
                     <div className="scenario-block-card__title">
@@ -427,7 +370,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                           icon={<Copy size="sm" />}
                           label="Duplicate"
                           onClick={() => duplicateBlock(block)}
-                          disabled={pinned}
                         />
                         <DropdownDivider />
                         <DropdownItem
@@ -468,7 +410,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                                   staticPrompt: { ...b.staticPrompt!, role },
                                 }));
                               }}
-                              disabled={block.staticPrompt.subtype === 'memory'}
                             >
                               <option value="user">user</option>
                               <option value="assistant">assistant</option>
@@ -480,7 +421,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                                   open: true,
                                   content: block.staticPrompt?.template || '',
                                   injectedInputKey: null,
-                                  isMemoryPrompt: block.staticPrompt?.subtype === 'memory',
                                 })
                               }
                               title="Preview"
@@ -558,7 +498,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                                     ? (block.rangeMapping?.user_template || '')
                                     : (block.rangeMapping?.assistant_template || ''),
                                   injectedInputKey,
-                                  isMemoryPrompt: false,
                                 });
                               }}
                               title="Preview"
@@ -676,10 +615,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
                 </div>
               </details>
 
-              <details>
-                <summary>Memory template</summary>
-                <pre>{simResult.memory_template ?? '(null)'}</pre>
-              </details>
             </div>
           )}
         </div>
@@ -693,7 +628,6 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
           taskType={taskType}
           taskSubtype={taskSubtype}
           injectedInputKey={preview.injectedInputKey}
-          isMemoryPrompt={preview.isMemoryPrompt}
         />
       )}
     </div>

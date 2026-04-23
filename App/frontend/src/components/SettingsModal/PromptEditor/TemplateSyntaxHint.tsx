@@ -89,7 +89,6 @@ function buildTooltip(desc: string, example: any): string {
 function getSchemaKey(taskType: string, taskSubtype?: string): PromptType | null {
     switch (taskType) {
         case 'agent': return 'agent';
-        case 'memory': return 'memory';
         case 'translation': return 'translation';
         case 'editAssistant': return 'editAssistant';
         case 'imagePrompt':

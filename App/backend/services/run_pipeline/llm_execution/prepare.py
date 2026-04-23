@@ -1,25 +1,32 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
+from ....models.db_models import RunMessageModel
 from ....providers.registry import create_llm_provider
 from ....providers.shared.transport.stream_retry import normalize_retry_config
-from ...context_manager import fit_to_context_window
 from ...llm_runtime_service import get_llm_runtime
 from ...mcp import mcp_sync_service
-from ...memory_builder import build_memory_prompt
+from ...memory import archive_orchestrator
 from ...prompt_runtime.output_mode import resolve_output_mode
-from ...prompt_runtime.scenario_manager import ScenarioManager
-from ...prompt_runtime.template_renderer import TemplateRenderer, load_user_fragment_map
 from ...reasoning.history_filter import filter_history_by_run
 from ...reasoning.mode_policy import apply_thinking_mode
 from ...settings_service import settings_service
 from ...thread_parent_runtime_service import resolve_parent
 from ...token_count_service import count_conversation_tokens
 from ...tool_engine import tool_engine
-from .. import memory_preflight as _mem
-from ..text_utils import extract_last_texts
+from .. import prompt_assembly
 from .contracts import LLMExecutionRequest, PreparedLLMExecution
+
+
+MAX_ARCHIVE_LOOPS = 4
+ARCHIVE_SAFETY_MARGIN = 256
+DEFAULT_RESERVED_COMPLETION = 2048
+
+
+class ContextOverflowError(RuntimeError):
+    pass
 
 
 def _strip_internal_message_keys(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -28,9 +35,89 @@ def _strip_internal_message_keys(messages: list[dict[str, Any]]) -> list[dict[st
         item = dict(message)
         item.pop("run_id", None)
         item.pop("seq_in_thread", None)
-        item.pop("is_memory_prompt", None)
         out.append(item)
     return out
+
+
+def _apply_provider_history_filters(
+    *,
+    system_prompt: str,
+    conversation: list[dict[str, Any]],
+    run_id: UUID,
+    tool_history_limit: int,
+    thinking_history_limit: int,
+    thinking_mode: str,
+) -> list[dict[str, Any]]:
+    messages = [{"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]}] + list(conversation)
+    messages = filter_history_by_run(
+        messages,
+        current_run_id=str(run_id),
+        tool_limit=tool_history_limit,
+        thinking_limit=thinking_history_limit,
+    )
+    return apply_thinking_mode(messages, thinking_mode)
+
+
+def _split_system_prompt(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+    if not messages:
+        return "", []
+    if messages[0].get("role") != "system":
+        return "", list(messages)
+
+    system_parts = messages[0].get("content_parts")
+    system_prompt = ""
+    if isinstance(system_parts, list):
+        system_prompt = "".join(
+            str(part.get("text") or "")
+            for part in system_parts
+            if isinstance(part, dict) and part.get("type") == "content"
+        )
+    return system_prompt, list(messages[1:])
+
+
+async def _count_provider_messages_tokens(
+    *,
+    db: Any,
+    run: Any,
+    task_config: Any,
+    tokenizer_override: str | None,
+    messages: list[dict[str, Any]],
+) -> int:
+    system_prompt, conversation = _split_system_prompt(messages)
+    return await count_conversation_tokens(
+        db,
+        user_id=run.user_id,
+        provider=task_config.provider,
+        model=task_config.model,
+        system_prompt=system_prompt,
+        conversation=conversation,
+        tokenizer_override=tokenizer_override,
+    )
+
+
+def _context_budget_tokens(task_config: Any) -> int:
+    context_window_tokens = int(task_config.context_window_tokens or 0)
+    if context_window_tokens <= 0:
+        return 0
+    reserved_completion = (
+        int(task_config.max_output_tokens)
+        if task_config.max_output_tokens is not None
+        else DEFAULT_RESERVED_COMPLETION
+    )
+    return context_window_tokens - reserved_completion - ARCHIVE_SAFETY_MARGIN
+
+
+def _current_run_user_message_id(db: Any, run: Any) -> UUID | None:
+    return (
+        db.query(RunMessageModel.id)
+        .filter(
+            RunMessageModel.run_id == run.id,
+            RunMessageModel.role == "user",
+        )
+        .order_by(RunMessageModel.seq.desc())
+        .limit(1)
+        .scalar()
+    )
 
 
 async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecution:
@@ -46,97 +133,10 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
     if preset_id is None:
         raise RuntimeError("No active preset selected")
 
-    template_renderer: TemplateRenderer | None = None
-    if scenario_bundle is not None and isinstance(scenario_bundle.memory_template, str) and scenario_bundle.memory_template.strip():
-        fragment_map = load_user_fragment_map(db, run.user_id, preset_id)
-        template_renderer = TemplateRenderer(fragment_map=fragment_map)
-
-    task_type = scenario_bundle.task_type if scenario_bundle else ScenarioManager.resolve_task_type(db, thread=thread, run=run)
+    task_type = scenario_bundle.task_type
     runtime = get_llm_runtime(db, user_id=run.user_id, task_type=task_type)
     task_config = runtime.task_config
     tokenizer_override = task_config.advanced.get("tokenizer_override") if isinstance(task_config.advanced, dict) else None
-
-    if scenario_bundle is not None and template_renderer is not None:
-        try:
-            await _mem.prepare_thread_memory_preflight(
-                db,
-                run=run,
-                thread=thread,
-                task_config=task_config,
-                tokenizer_override=tokenizer_override,
-                scenario_bundle=scenario_bundle,
-                template_renderer=template_renderer,
-                preset_id=preset_id,
-            )
-        except Exception:
-            pass
-
-    last_user_text, last_assistant_text = extract_last_texts(conversation)
-    memory_prompt: str | None = None
-    if scenario_bundle is not None and template_renderer is not None and scenario_bundle.memory_template is not None:
-        memory_prompt = await build_memory_prompt(
-            db,
-            template_renderer=template_renderer,
-            memory_template=scenario_bundle.memory_template,
-            template_data=scenario_bundle.template_data,
-            user_id=run.user_id,
-            project_id=run.project_id,
-            thread_id=thread.id,
-            language=run.language,
-            last_user_text=last_user_text,
-            last_assistant_text=last_assistant_text,
-        )
-    memory_message_ref: dict[str, Any] | None = None
-    if memory_prompt:
-        memory_message_ref = {
-            "role": "user",
-            "content_parts": [{"type": "content", "text": memory_prompt}],
-            "is_memory_prompt": True,
-        }
-        conversation.insert(0, memory_message_ref)
-
-    async def _conversation_token_counter(
-        current_system_prompt: str,
-        current_conversation: list[dict[str, Any]],
-    ) -> int:
-        return await count_conversation_tokens(
-            db,
-            user_id=run.user_id,
-            provider=task_config.provider,
-            model=task_config.model,
-            system_prompt=current_system_prompt,
-            conversation=current_conversation,
-            tokenizer_override=tokenizer_override,
-        )
-
-    async def _rebuild_memory(current_conversation: list[dict]) -> tuple[list[dict], str | None]:
-        nonlocal memory_message_ref
-        if scenario_bundle is None or template_renderer is None or not scenario_bundle.memory_template:
-            return current_conversation, None
-        cleaned = list(current_conversation)
-        cleaned = [m for m in cleaned if not (isinstance(m, dict) and m.get("is_memory_prompt") is True)]
-        new_user, new_asst = extract_last_texts(cleaned)
-        new_mem = await build_memory_prompt(
-            db,
-            template_renderer=template_renderer,
-            memory_template=scenario_bundle.memory_template,
-            template_data=scenario_bundle.template_data,
-            user_id=run.user_id,
-            project_id=run.project_id,
-            thread_id=thread.id,
-            language=run.language,
-            last_user_text=new_user,
-            last_assistant_text=new_asst,
-        )
-        memory_message_ref = None
-        if new_mem:
-            memory_message_ref = {
-                "role": "user",
-                "content_parts": [{"type": "content", "text": new_mem}],
-                "is_memory_prompt": True,
-            }
-            cleaned.insert(0, memory_message_ref)
-        return cleaned, new_mem
 
     parent = resolve_parent(db, thread)
     output_mode = resolve_output_mode(
@@ -174,47 +174,72 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
         raise RuntimeError(f"Invalid provider configuration: {task_config.provider}")
 
     native_tool_call_mode = output_mode == "native_tool_call"
-    if output_mode == "raw_output":
-        tools_wire = None
-    elif native_tool_call_mode:
-        tools_wire = None
-    else:
-        tools_wire = tool_offer.provider_tools
-
     advanced = task_config.advanced if isinstance(task_config.advanced, dict) else {}
     thinking_mode = str(advanced.get("thinking_mode") or "off")
     tool_history_limit = int(getattr(settings, "tool_call_history_limit", 5) or 0)
     thinking_history_limit = int(getattr(settings, "thinking_history_limit", 5) or 0)
-    messages = [{"role": "system", "content_parts": [{"type": "content", "text": request.system_prompt}]}] + conversation
-    messages = filter_history_by_run(
-        messages,
-        current_run_id=str(run.id),
-        tool_limit=tool_history_limit,
-        thinking_limit=thinking_history_limit,
-    )
-    messages = apply_thinking_mode(messages, thinking_mode)
 
-    fit_system_prompt = request.system_prompt
-    fit_conversation = list(messages)
-    if fit_conversation and fit_conversation[0].get("role") == "system":
-        system_parts = fit_conversation[0].get("content_parts")
-        if isinstance(system_parts, list):
-            fit_system_prompt = "".join(
-                str(part.get("text") or "")
-                for part in system_parts
-                if isinstance(part, dict) and part.get("type") == "content"
+    current_system_prompt = request.system_prompt
+    current_conversation = list(conversation)
+    current_bundle = scenario_bundle
+    provider_messages = _apply_provider_history_filters(
+        system_prompt=current_system_prompt,
+        conversation=current_conversation,
+        run_id=run.id,
+        tool_history_limit=tool_history_limit,
+        thinking_history_limit=thinking_history_limit,
+        thinking_mode=thinking_mode,
+    )
+
+    budget_tokens = _context_budget_tokens(task_config)
+    if budget_tokens > 0:
+        current_run_user_message_id = _current_run_user_message_id(db, run)
+        for _ in range(MAX_ARCHIVE_LOOPS):
+            total_tokens = await _count_provider_messages_tokens(
+                db=db,
+                run=run,
+                task_config=task_config,
+                tokenizer_override=tokenizer_override,
+                messages=provider_messages,
             )
-        fit_conversation = fit_conversation[1:]
+            if total_tokens <= budget_tokens:
+                break
 
-    fit_conversation, _memory_prompt = await fit_to_context_window(
-        fit_system_prompt,
-        fit_conversation,
-        int(task_config.context_window_tokens or 32000),
-        rebuild_memory_cb=_rebuild_memory,
-        count_tokens_cb=_conversation_token_counter,
-    )
+            boundary = archive_orchestrator.pick_boundary(
+                db,
+                thread=thread,
+                user_id=run.user_id,
+                project_id=run.project_id,
+                current_run_user_message_id=current_run_user_message_id,
+            )
+            if boundary is None:
+                raise ContextOverflowError(
+                    f"Context overflow: no archivable boundary found (tokens={total_tokens}, limit={budget_tokens})"
+                )
 
-    messages = [{"role": "system", "content_parts": [{"type": "content", "text": fit_system_prompt}]}] + fit_conversation
+            await archive_orchestrator.run(
+                db,
+                run=run,
+                thread=thread,
+                boundary=boundary,
+                scenario_bundle=current_bundle,
+            )
+            current_system_prompt, current_conversation, current_bundle = await prompt_assembly.reassemble_create(
+                db,
+                run=run,
+                thread=thread,
+                scenario_bundle=current_bundle,
+            )
+            provider_messages = _apply_provider_history_filters(
+                system_prompt=current_system_prompt,
+                conversation=current_conversation,
+                run_id=run.id,
+                tool_history_limit=tool_history_limit,
+                thinking_history_limit=thinking_history_limit,
+                thinking_mode=thinking_mode,
+            )
+        else:
+            raise ContextOverflowError(f"Could not fit context after {MAX_ARCHIVE_LOOPS} archive cycles")
 
     if (
         task_config.provider == "custom"
@@ -233,7 +258,7 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
                     provider.set_thinking_template(thinking_template)
                     advanced["_resolved_template"] = thinking_template
 
-    provider_messages = _strip_internal_message_keys(messages)
+    provider_messages = _strip_internal_message_keys(provider_messages)
 
     if advanced.get("_resolved_template"):
         effective_thinking_config = None

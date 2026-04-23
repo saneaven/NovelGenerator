@@ -24,7 +24,6 @@ interface PromptPreviewModalProps {
   taskType: TaskType;
   taskSubtype: string;
   injectedInputKey?: 'userMessage' | 'agentMessage' | 'subAgentMessage' | null;
-  isMemoryPrompt?: boolean;
 }
 
 const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
@@ -34,7 +33,6 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
   taskType,
   taskSubtype,
   injectedInputKey,
-  isMemoryPrompt,
 }) => {
   const { t } = useTranslation();
   const currentProjectId = useProjectStore(state => state.currentProjectId);
@@ -68,7 +66,6 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
     taskType,
     taskSubtype: taskSubtype || '',
     injectedInputKey,
-    isMemoryPrompt,
   });
 
   // Get fields for the current prompt type

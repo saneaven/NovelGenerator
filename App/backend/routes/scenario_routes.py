@@ -219,7 +219,7 @@ async def simulate_scenario(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     try:
-        rendered_system_prompt, rendered_conversation, memory_template = assemble_scenario(
+        rendered_system_prompt, rendered_conversation = assemble_scenario(
             template_renderer=template_renderer,
             task_type=str(data.task_type or ""),
             system_template=system_template,
@@ -233,5 +233,4 @@ async def simulate_scenario(
     return ScenarioSimulateResponse(
         rendered_system_prompt=rendered_system_prompt,
         rendered_conversation=rendered_conversation,
-        memory_template=memory_template,
     )

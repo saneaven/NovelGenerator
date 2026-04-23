@@ -28,7 +28,7 @@ def test_normalize_index_handles_negative_and_bounds() -> None:
 
 def test_empty_range_is_skipped() -> None:
     renderer = TemplateRenderer(fragment_map={})
-    system, convo, memory = assemble_scenario(
+    system, convo = assemble_scenario(
         template_renderer=renderer,
         task_type="agent",
         system_template="sys",
@@ -51,12 +51,11 @@ def test_empty_range_is_skipped() -> None:
     )
     assert system == "sys"
     assert convo == []
-    assert memory is None
 
 
 def test_owner_overwrite_prefers_later_block() -> None:
     renderer = TemplateRenderer(fragment_map={})
-    _, convo, _ = assemble_scenario(
+    _, convo = assemble_scenario(
         template_renderer=renderer,
         task_type="agent",
         system_template="",
@@ -122,7 +121,7 @@ def test_tool_results_attached_only_when_assistant_emitted() -> None:
         }
     ]
 
-    _, convo, _ = assemble_scenario(
+    _, convo = assemble_scenario(
         template_renderer=renderer,
         task_type="agent",
         system_template="",
@@ -149,7 +148,7 @@ def test_tool_results_attached_only_when_assistant_emitted() -> None:
             },
         }
     ]
-    _, convo2, _ = assemble_scenario(
+    _, convo2 = assemble_scenario(
         template_renderer=renderer,
         task_type="agent",
         system_template="",
@@ -185,7 +184,7 @@ def test_empty_assistant_without_metadata_is_skipped() -> None:
         }
     ]
 
-    _, convo, _ = assemble_scenario(
+    _, convo = assemble_scenario(
         template_renderer=renderer,
         task_type="agent",
         system_template="",
@@ -214,7 +213,7 @@ def test_subagent_range_mapping_patches_input_keys() -> None:
         }
     ]
 
-    _, convo, _ = assemble_scenario(
+    _, convo = assemble_scenario(
         template_renderer=renderer,
         task_type="subAgent",
         system_template="",
@@ -274,7 +273,7 @@ def test_run_based_indexing_selects_entire_run() -> None:
             },
         }
     ]
-    _, convo, _ = assemble_scenario(
+    _, convo = assemble_scenario(
         template_renderer=renderer,
         task_type="agent",
         system_template="",
@@ -309,7 +308,7 @@ def test_run_based_negative_index_selects_last_run() -> None:
             },
         }
     ]
-    _, convo, _ = assemble_scenario(
+    _, convo = assemble_scenario(
         template_renderer=renderer,
         task_type="agent",
         system_template="",
@@ -359,7 +358,7 @@ def test_run_based_owner_overwrite() -> None:
             },
         },
     ]
-    _, convo, _ = assemble_scenario(
+    _, convo = assemble_scenario(
         template_renderer=renderer,
         task_type="agent",
         system_template="",
@@ -370,4 +369,3 @@ def test_run_based_owner_overwrite() -> None:
     texts = [m["content_parts"][0]["text"] for m in convo if m["role"] in {"user", "assistant"}]  # type: ignore[index]
     # Block 0 emits its owned runs (0, 2) first, then block 1 emits run 1.
     assert texts == ["A:u1", "A:a1", "A:u3", "A:a3", "B:u2", "B:a2"]
-

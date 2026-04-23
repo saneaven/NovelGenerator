@@ -46,7 +46,6 @@ export interface ScenarioSimulatePayload {
 export interface ScenarioSimulateResult {
   rendered_system_prompt: string;
   rendered_conversation: Array<Record<string, any>>;
-  memory_template: string | null;
 }
 
 function buildScenarioPath(taskType: TaskType, taskSubtype: string): string {
@@ -112,4 +111,3 @@ export const scenarioService = {
     return await apiClient.post<ScenarioSimulateResult>('/api/v1/scenarios/simulate', payload);
   },
 };
-

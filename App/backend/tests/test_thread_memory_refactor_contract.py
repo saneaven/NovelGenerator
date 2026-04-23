@@ -57,7 +57,7 @@ _install_import_stubs()
 
 from App.backend.schemas.thread_api import ThreadInfoResponse
 from App.backend.services.default_preset_seed import load_default_preset_seed
-from App.backend.services.memory_service import _build_memory_chunks
+from App.backend.services.memory.vector_pipeline import _build_memory_chunks
 
 
 def test_memory_fragment_uses_current_memory_sections() -> None:
@@ -107,18 +107,26 @@ def test_thread_info_response_exposes_memory_boundary_message_id() -> None:
     assert "memory_boundary_message_id" in fields
 
 
-def test_run_pipeline_executes_preflight_before_memory_prompt_build() -> None:
+def test_prepare_execution_uses_archive_loop_reassembly_without_memory_injection() -> None:
     backend_root = Path(__file__).resolve().parents[1]
     source = (
         backend_root / "services" / "run_pipeline" / "llm_execution" / "prepare.py"
     ).read_text(encoding="utf-8")
 
-    preflight_idx = source.find("await _mem.prepare_thread_memory_preflight(")
-    memory_prompt_idx = source.find("memory_prompt = await build_memory_prompt(")
+    assert "archive_orchestrator.pick_boundary(" in source
+    assert "prompt_assembly.reassemble_create(" in source
+    assert "current_bundle is None" not in source
+    assert "is_memory_prompt" not in source
 
-    assert preflight_idx != -1
-    assert memory_prompt_idx != -1
-    assert preflight_idx < memory_prompt_idx
+
+def test_prompt_assembly_resume_keeps_bundle_contract() -> None:
+    backend_root = Path(__file__).resolve().parents[1]
+    source = (
+        backend_root / "services" / "run_pipeline" / "prompt_assembly.py"
+    ).read_text(encoding="utf-8")
+
+    assert "ScenarioBundle | None" not in source
+    assert "return system_prompt, conversation, bundle" in source
 
 
 def test_search_tools_are_offer_gated_by_vector_storage() -> None:
@@ -134,19 +142,12 @@ def test_search_tools_are_offer_gated_by_vector_storage() -> None:
     assert legacy_gate not in source
 
 
-def test_memory_preflight_short_circuits_without_vector_storage() -> None:
+def test_archive_orchestrator_invalidates_resume_cache() -> None:
     backend_root = Path(__file__).resolve().parents[1]
-    source = (backend_root / "services" / "run_pipeline" / "memory_preflight.py").read_text(encoding="utf-8")
+    source = (backend_root / "services" / "memory" / "archive_orchestrator.py").read_text(encoding="utf-8")
 
-    vector_gate_idx = source.find("if not settings_service.is_vector_storage_enabled(db, run.user_id):")
-    profile_gate_idx = source.find('if get_embedding_profile(db, user_id=run.user_id, feature="memory") is None:')
-    budget_idx = source.find("context_window_tokens = int(task_config.context_window_tokens or 32000)")
-
-    assert vector_gate_idx != -1
-    assert profile_gate_idx != -1
-    assert budget_idx != -1
-    assert vector_gate_idx < budget_idx
-    assert profile_gate_idx < budget_idx
+    assert "thread.captured_history_system_prompt = None" in source
+    assert "thread.captured_history_conversation_json = None" in source
 
 
 def test_settings_contract_uses_search_memory_settings_field() -> None:
@@ -165,3 +166,11 @@ def test_thread_memory_search_query_is_thread_scoped() -> None:
     source = (backend_root / "services" / "memory_service.py").read_text(encoding="utf-8")
 
     assert "AND s.thread_id = :thread_id" in source
+
+
+def test_thread_message_builder_filters_archived_sequences() -> None:
+    backend_root = Path(__file__).resolve().parents[1]
+    source = (backend_root / "services" / "prompt_runtime" / "conversation_builder.py").read_text(encoding="utf-8")
+
+    assert "archived_until_seq_in_thread" in source
+    assert "RunMessageModel.seq_in_thread > int(archived_until_seq_in_thread)" in source

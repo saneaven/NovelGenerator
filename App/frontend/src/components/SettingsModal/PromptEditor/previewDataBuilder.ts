@@ -19,7 +19,6 @@ export interface PreviewDataOptions {
   taskType: TaskType;
   taskSubtype: string;
   injectedInputKey?: 'userMessage' | 'agentMessage' | 'subAgentMessage' | null;
-  isMemoryPrompt?: boolean;
   showProjectContext: boolean;
   includeAllFilteredIds: boolean;
   projectId: string | null;
@@ -127,6 +126,8 @@ export function getPromptTypeFromTask(taskType: TaskType, taskSubtype: string): 
   switch (taskType) {
     case 'agent':
       return 'agent';
+    case 'subAgent':
+      return 'subAgent';
     case 'memory':
       return 'memory';
     case 'editAssistant':
@@ -231,6 +232,7 @@ export function buildModeSpecificData(
 
   switch (taskType) {
     case 'agent':
+    case 'subAgent':
       modeData = {
         agent: {
           runMode: taskSubtype === 'planMode' ? 'planMode' : 'agentMode',
@@ -440,7 +442,6 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
     taskType,
     taskSubtype,
     injectedInputKey,
-    isMemoryPrompt,
     showProjectContext,
     includeAllFilteredIds,
     projectId,
@@ -517,8 +518,7 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
     ...modeData,
   };
 
-  // Provide richer agent-memory preview data for Memory Prompt templates
-  if (taskType === 'agent' && isMemoryPrompt && templateData.memory) {
+  if ((taskType === 'agent' || taskType === 'subAgent') && templateData.memory) {
     templateData.memory.summaries = [
       [
         '- Project: [Placeholder Project]',

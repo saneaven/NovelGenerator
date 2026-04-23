@@ -145,8 +145,8 @@ def test_execute_loop_midstream_failure_emits_message_error_and_discards_placeho
     stack = build_runtime_stack(lambda: session)
     request_fail_calls: list[dict[str, object]] = []
 
-    async def _assemble_create(*_args: object, **_kwargs: object) -> tuple[str, list[dict[str, object]], None]:
-        return "system", [], None
+    async def _assemble_create(*_args: object, **_kwargs: object) -> tuple[str, list[dict[str, object]], object]:
+        return "system", [], {}
 
     async def _failing_execute(_self: object, request: object, _callbacks: object) -> None:
         request.checkpoint.message_id = assistant_message.id
@@ -215,8 +215,8 @@ def test_execute_loop_finalized_failure_keeps_message_without_message_error(
     session = FakeSession(run=run, thread=thread, assistant_message=assistant_message)
     stack = build_runtime_stack(lambda: session)
 
-    async def _assemble_create(*_args: object, **_kwargs: object) -> tuple[str, list[dict[str, object]], None]:
-        return "system", [], None
+    async def _assemble_create(*_args: object, **_kwargs: object) -> tuple[str, list[dict[str, object]], object]:
+        return "system", [], {}
 
     async def _finalized_then_fail(_self: object, request: object, callbacks: object) -> None:
         request.checkpoint.message_id = assistant_message.id
@@ -268,8 +268,8 @@ def test_execute_loop_cancelled_error_preserves_paused_status(monkeypatch: pytes
     session = FakeSession(run=run, thread=thread)
     stack = build_runtime_stack(lambda: session)
 
-    async def _assemble_create(*_args: object, **_kwargs: object) -> tuple[str, list[dict[str, object]], None]:
-        return "system", [], None
+    async def _assemble_create(*_args: object, **_kwargs: object) -> tuple[str, list[dict[str, object]], object]:
+        return "system", [], {}
 
     async def _cancelled_execute(_self: object, request: object, _callbacks: object) -> None:
         request.run.status = "paused"

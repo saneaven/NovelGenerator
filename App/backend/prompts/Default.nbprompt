@@ -15,8 +15,7 @@
             "block_order": 0,
             "staticPrompt": {
               "role": "user",
-              "subtype": "memory",
-              "template": "This message contains injected long-term memory context (summary + retrieved relevant chats). It is not a new user request. Use it only as background context for the next user message.\n\n{% include \"fragment:common/memory/section\" %}\n\n"
+              "template": "{% if memory.summaries or memory.historyChats %}\nThis message contains injected long-term memory context (summary + retrieved relevant chats). It is not a new user request. Use it only as background context for the next user message.\n\n{% include \"fragment:common/memory/section\" %}\n\n{% endif %}"
             }
           },
           {
@@ -55,8 +54,7 @@
             "block_order": 0,
             "staticPrompt": {
               "role": "user",
-              "subtype": "memory",
-              "template": "This message contains injected long-term memory context (summary + retrieved relevant chats). It is not a new user request. Use it only as background context for the next user message.\n\n{% include \"fragment:common/memory/section\" %}"
+              "template": "{% if memory.summaries or memory.historyChats %}\nThis message contains injected long-term memory context (summary + retrieved relevant chats). It is not a new user request. Use it only as background context for the next user message.\n\n{% include \"fragment:common/memory/section\" %}\n{% endif %}"
             }
           },
           {
@@ -306,7 +304,6 @@
             "block_order": 0,
             "staticPrompt": {
               "role": "user",
-              "subtype": "normal",
               "template": "Update the rolling memory summary using the previous summary and the new messages.\n\n<language>\n{{ memorySummary.language }}\n</language>\n\n<previous_summary>\n{{ memorySummary.previousSummary }}\n</previous_summary>\n\n<messages archive_until_message_id=\"{{ memorySummary.archiveUntilMessageId }}\">\n{% for this in memorySummary.messages %}\n<message id=\"{{ this.messageId }}\" role=\"{{ this.role }}\" created_at=\"{{ this.createdAt }}\">\n{{ this.content }}\n</message>\n{% endfor %}\n</messages>\n\nReturn the updated summary only.\n"
             }
           }

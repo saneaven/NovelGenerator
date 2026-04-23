@@ -579,10 +579,6 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                               return { ...cur, scenario: nextScenario, dirty, saveWarnings: [] };
                             });
                           }}
-                          onToast={(kind, message) => {
-                            if (kind === 'success') toast.success(message);
-                            else toast.error(message);
-                          }}
                         />
                       </div>
                     )}
@@ -595,7 +591,6 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                         taskType={selectedPrompt.taskType!}
                         taskSubtype={selectedPrompt.taskSubtype!}
                         injectedInputKey={null}
-                        isMemoryPrompt={false}
                       />
                     )}
                   </>

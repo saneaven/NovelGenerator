@@ -19,7 +19,6 @@ export interface UsePromptPreviewOptions {
   taskType: TaskType;
   taskSubtype: string;
   injectedInputKey?: 'userMessage' | 'agentMessage' | 'subAgentMessage' | null;
-  isMemoryPrompt?: boolean;
 }
 
 export interface UsePromptPreviewResult {
@@ -66,7 +65,7 @@ export interface UsePromptPreviewResult {
 const DEBOUNCE_DELAY = 300;
 
 export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPreviewResult {
-  const { templateContent, taskType, taskSubtype, injectedInputKey, isMemoryPrompt } = options;
+  const { templateContent, taskType, taskSubtype, injectedInputKey } = options;
 
   // Store access
   const currentProjectId = useProjectStore(state => state.currentProjectId);
@@ -100,7 +99,6 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
         taskType,
         taskSubtype,
         injectedInputKey,
-        isMemoryPrompt,
         showProjectContext,
         includeAllFilteredIds,
         projectId: currentProjectId,
@@ -126,7 +124,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
     } finally {
       setIsLoading(false);
     }
-  }, [templateContent, taskType, taskSubtype, injectedInputKey, isMemoryPrompt, showProjectContext, includeAllFilteredIds, currentProjectId, configOverrides, promptTypeOverrides, variableOverrides]);
+  }, [templateContent, taskType, taskSubtype, injectedInputKey, showProjectContext, includeAllFilteredIds, currentProjectId, configOverrides, promptTypeOverrides, variableOverrides]);
 
   // Debounced render effect
   useEffect(() => {
