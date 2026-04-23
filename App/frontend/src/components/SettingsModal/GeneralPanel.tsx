@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconButton } from '../IconButton';
-import type { AITaskType, CustomThinkingTemplate, TaskConfigSettings } from '../../store/settingsStore';
+import type { AITaskType, CustomThinkingTemplate, LLMCacheSettings, TaskConfigSettings } from '../../store/settingsStore';
 import {
   TASK_CONFIG_TASK_TYPES,
   hasTaskOverride,
@@ -9,9 +9,11 @@ import {
   resolveAllTaskConfigs,
 } from '../../store/taskConfigSettings';
 import TaskConfigForm from './TaskConfigForm';
+import LLMCachePanel from './LLMCachePanel';
 import ToggleSwitch from '../common/ToggleSwitch';
 import { TextButton } from '../TextButton';
 import { ChevronLeft, ChevronRight, SpeechBubble, Globe, Edit, Palette, Document, People, Settings } from '../icons';
+import type { PublicProviderSpec } from '../../providerEngine/types';
 import './GeneralPanel.css';
 
 type GeneralConfigTarget = 'general' | AITaskType;
@@ -21,6 +23,12 @@ interface GeneralPanelProps {
   activeTarget: GeneralConfigTarget;
   onTargetChange: (target: GeneralConfigTarget) => void;
   onTaskConfigSettingsChange: (taskConfigSettings: TaskConfigSettings) => void;
+  llmCacheSettings: LLMCacheSettings;
+  providerSpecs: Record<string, PublicProviderSpec>;
+  providerSpecsLoaded: boolean;
+  providerSpecsLoading: boolean;
+  providerSpecsError: string | null;
+  onLlmCacheSettingsChange: (settings: LLMCacheSettings) => void;
   customThinkingTemplates?: CustomThinkingTemplate[];
   onTemplatesChange?: (templates: CustomThinkingTemplate[]) => void;
 }
@@ -43,6 +51,12 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
   activeTarget,
   onTargetChange,
   onTaskConfigSettingsChange,
+  llmCacheSettings,
+  providerSpecs,
+  providerSpecsLoaded,
+  providerSpecsLoading,
+  providerSpecsError,
+  onLlmCacheSettingsChange,
   customThinkingTemplates,
   onTemplatesChange,
 }) => {
@@ -174,6 +188,18 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
                     customThinkingTemplates={customThinkingTemplates}
                     onTemplatesChange={onTemplatesChange}
                   />
+
+                  <div className="general-panel__cache-section">
+                    <LLMCachePanel
+                      embedded
+                      settings={llmCacheSettings}
+                      providerSpecs={providerSpecs}
+                      loaded={providerSpecsLoaded}
+                      loading={providerSpecsLoading}
+                      error={providerSpecsError}
+                      onChange={onLlmCacheSettingsChange}
+                    />
+                  </div>
                 </>
               ) : activeTaskType && activeTaskConfig ? (
                 <>

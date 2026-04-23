@@ -159,10 +159,65 @@
 	      "language": "언어",
 	      "general": "일반",
 	      "credentials": "자격 증명",
+	      "llmCache": "LLM 캐시",
       "theme": "테마",
       "imageGen": "이미지 생성",
       "advanced": "고급",
       "prompts": "프롬프트 & 템플릿"
+    },
+    "llmCache": {
+      "title": "LLM 캐시",
+      "description": "프로바이더별 프롬프트 캐시 동작을 설정합니다. 어떤 프로바이더는 자동 캐시 힌트를 사용하고, 어떤 프로바이더는 명시적 캐시 체크포인트를 지원하며, 어떤 프로바이더는 런타임에 체크포인트 하나를 선택합니다.",
+      "initializing": "프로바이더 캐시 설정을 준비하는 중입니다...",
+      "loading": "프로바이더 캐시 설정을 불러오는 중입니다...",
+      "loadError": "프로바이더 캐시 설정을 불러오지 못했습니다. {{error}}",
+      "empty": "캐시를 지원하는 LLM 프로바이더가 없습니다.",
+      "fields": {
+        "enabled": "캐시 최적화 사용",
+        "retention": "보존 기간",
+        "ttl": "TTL",
+        "implicit": "암묵적 캐시 사용",
+        "explicit": "명시적 체크포인트 캐시 사용",
+        "explicitTtlPreset": "명시적 캐시 TTL",
+        "stickyProvider": "고정 프로바이더 라우팅 우선",
+        "openaiEnabledHint": "켜면 OpenAI 프롬프트 캐시 힌트를 추가합니다. 프로바이더 내부의 암묵적 캐시까지 꺼지지는 않습니다.",
+        "xaiEnabledHint": "켜면 xAI 대화 캐시 힌트를 추가합니다. 프로바이더 내부의 암묵적 캐시까지 꺼지지는 않습니다.",
+        "geminiEnabledHint": "앱이 관리하는 Gemini 캐시 기능을 켭니다. 프로바이더 측 암묵적 캐시는 별도로 동작할 수 있습니다.",
+        "geminiImplicitHint": "프롬프트 prefix를 안정적으로 유지해서 Gemini가 암묵적 캐시를 더 잘 재사용하도록 돕습니다.",
+        "nanogptStickyHint": "NanoGPT가 sticky cache 재사용을 지원할 때 같은 upstream 경로로 계속 라우팅하는 쪽을 우선합니다."
+      },
+      "options": {
+        "openaiRetention": {
+          "default": "기본값",
+          "in_memory": "메모리 유지",
+          "24h": "24시간"
+        },
+        "commonTtl": {
+          "5m": "5분",
+          "1h": "1시간"
+        },
+        "geminiExplicitTtl": {
+          "5m": "5분",
+          "30m": "30분",
+          "1h": "1시간",
+          "6h": "6시간",
+          "24h": "24시간"
+        }
+      },
+      "tags": {
+        "explicitCheckpoints": "명시적 체크포인트 (최대 {{count}}개)",
+        "singleSelectedCheckpoint": "단일 선택 체크포인트",
+        "automaticCacheHints": "자동 캐시 힌트",
+        "ttlConfigurable": "TTL 설정 가능",
+        "stickyProvider": "고정 프로바이더"
+      },
+      "notes": {
+        "openai": "스레드 수준 프롬프트 캐시 힌트만 사용합니다. 이 옵션을 꺼도 프로바이더 내부의 암묵적 캐시까지 꺼지는 것은 아닙니다.",
+        "claude": "여러 개의 명시적 캐시 체크포인트를 지원합니다. 캐시 포인트가 있으면 이 프로바이더는 명시적 체크포인트 직렬화를 사용합니다.",
+        "gemini": "암묵적 캐시와 cached content handle 기반의 런타임 단일 체크포인트 선택을 지원합니다.",
+        "xai": "대화 수준 캐시 힌트만 사용합니다. 이 옵션을 꺼도 프로바이더 내부의 암묵적 캐시까지 꺼지는 것은 아닙니다.",
+        "nanogpt": "런타임 단일 체크포인트 선택과 TTL, 선택적 sticky-provider 라우팅을 지원합니다."
+      }
     },
     "searchMemory": {
       "title": "검색 & 메모리",

@@ -13,23 +13,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function fallbackNote(providerId: CacheProviderId): string {
-  switch (providerId) {
-    case 'claude':
-      return 'Supports multiple explicit cache checkpoints. When cache points exist, this provider uses explicit checkpoint serialization.';
-    case 'gemini':
-      return 'Supports implicit caching and one runtime-selected explicit checkpoint backed by cached content handles.';
-    case 'nanogpt':
-      return 'Supports one runtime-selected checkpoint plus TTL and optional sticky-provider routing.';
-    case 'xai':
-      return 'Uses conversation-level cache hints only. Disabling this only turns off app-managed cache hints.';
-    case 'openai':
-    default:
-      return 'Uses thread-level prompt cache hints only. Disabling this only turns off app-managed cache hints.';
-  }
+function fallbackNoteKey(providerId: CacheProviderId): string {
+  return `settings.llmCache.notes.${providerId}`;
 }
 
-function capabilityTags(capabilities: Record<string, unknown> | null | undefined): string[] {
+function capabilityTags(
+  t: ReturnType<typeof useTranslation>['t'],
+  capabilities: Record<string, unknown> | null | undefined
+): string[] {
   const tags: string[] = [];
   const supportsExplicit = Boolean(capabilities?.supports_explicit_checkpoints);
   const maxExplicit = Number(capabilities?.max_explicit_checkpoints ?? 0);
@@ -38,18 +29,18 @@ function capabilityTags(capabilities: Record<string, unknown> | null | undefined
   const stickyProvider = Boolean(capabilities?.supports_sticky_provider);
 
   if (supportsExplicit && maxExplicit > 0) {
-    tags.push(`Explicit checkpoints (${maxExplicit} max)`);
+    tags.push(t('settings.llmCache.tags.explicitCheckpoints', { count: maxExplicit }));
   } else if (singleSelected) {
-    tags.push('Single selected checkpoint');
+    tags.push(t('settings.llmCache.tags.singleSelectedCheckpoint'));
   } else {
-    tags.push('Automatic cache hints');
+    tags.push(t('settings.llmCache.tags.automaticCacheHints'));
   }
 
   if (supportsTtl) {
-    tags.push('TTL configurable');
+    tags.push(t('settings.llmCache.tags.ttlConfigurable'));
   }
   if (stickyProvider) {
-    tags.push('Sticky provider');
+    tags.push(t('settings.llmCache.tags.stickyProvider'));
   }
 
   return tags;
@@ -59,12 +50,20 @@ interface LLMCachePanelProps {
   settings: LLMCacheSettings;
   providerSpecs: Record<string, PublicProviderSpec>;
   onChange: (settings: LLMCacheSettings) => void;
+  embedded?: boolean;
+  loaded?: boolean;
+  loading?: boolean;
+  error?: string | null;
 }
 
 const LLMCachePanel: React.FC<LLMCachePanelProps> = ({
   settings,
   providerSpecs,
   onChange,
+  embedded = false,
+  loaded = false,
+  loading = false,
+  error = null,
 }) => {
   const { t } = useTranslation();
 
@@ -80,21 +79,28 @@ const LLMCachePanel: React.FC<LLMCachePanelProps> = ({
   );
 
   return (
-    <div className="llm-cache-panel">
+    <div className={`llm-cache-panel${embedded ? ' llm-cache-panel--embedded' : ''}`}>
       <div className="panel-header">
-        <h3>{t('settings.tabs.llmCache', { defaultValue: 'LLM Cache' })}</h3>
+        <h3>{t('settings.llmCache.title')}</h3>
         <p className="panel-description">
-          {t('settings.llmCache.description', {
-            defaultValue:
-              'Configure provider-level prompt caching behavior. Providers differ: some reuse automatic cache hints, some support explicit cache checkpoints, and some select one checkpoint at runtime.',
-          })}
+          {t('settings.llmCache.description')}
         </p>
       </div>
 
-      {providers.length === 0 ? (
+      {!loaded && !error ? (
+        <div className="loading-state">
+          {loading ? t('settings.llmCache.loading') : t('settings.llmCache.initializing')}
+        </div>
+      ) : error ? (
         <div className="empty-state">
           <p className="empty-state__text">
-            {t('settings.llmCache.empty', { defaultValue: 'No cache-capable LLM providers are available.' })}
+            {t('settings.llmCache.loadError', { error })}
+          </p>
+        </div>
+      ) : providers.length === 0 ? (
+        <div className="empty-state">
+          <p className="empty-state__text">
+            {t('settings.llmCache.empty')}
           </p>
         </div>
       ) : (
@@ -102,13 +108,11 @@ const LLMCachePanel: React.FC<LLMCachePanelProps> = ({
           const providerId = provider.id as CacheProviderId;
           const llmSpec = provider.llm;
           const draft = isPlainObject(settings[providerId]) ? settings[providerId] : {};
-          const tags = capabilityTags(llmSpec?.cache_capabilities);
+          const tags = capabilityTags(t, llmSpec?.cache_capabilities);
           const notesKey = typeof llmSpec?.cache_capabilities?.notes_key === 'string'
             ? llmSpec.cache_capabilities.notes_key
-            : '';
-          const note = notesKey
-            ? t(notesKey, { defaultValue: fallbackNote(providerId) })
-            : fallbackNote(providerId);
+            : fallbackNoteKey(providerId);
+          const note = t(notesKey);
 
           return (
             <div key={provider.id} className="settings-panel-card llm-cache-card">
@@ -131,6 +135,7 @@ const LLMCachePanel: React.FC<LLMCachePanelProps> = ({
                 <ProviderSettingsFields
                   spec={llmSpec.cache_settings}
                   draft={draft}
+                  className="llm-cache-card__fields"
                   setDraft={(nextDraft) => {
                     const currentDraft = isPlainObject(settings[providerId]) ? settings[providerId] : {};
                     const resolvedDraft = typeof nextDraft === 'function' ? nextDraft(currentDraft) : nextDraft;

@@ -178,7 +178,7 @@ export const ProviderSettingsFields: React.FC<ProviderSettingsFieldsProps> = ({
           <ToggleSwitch
             checked={value === true}
             onChange={(checked) => updateField(fieldName, checked || undefined)}
-            label={value === true ? 'Enabled' : 'Disabled'}
+            label={value === true ? t('common.enabled') : t('common.disabled')}
             mode="bare"
             disabled={disabled}
           />
@@ -346,7 +346,7 @@ export const ProviderSettingsFields: React.FC<ProviderSettingsFieldsProps> = ({
                         : {}
                       );
                     }}
-                    label={isToggleOn ? 'Enabled' : 'Disabled'}
+                    label={isToggleOn ? t('common.enabled') : t('common.disabled')}
                     mode="bare"
                   />
                 </div>

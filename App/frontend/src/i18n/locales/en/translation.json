@@ -159,10 +159,65 @@
 	      "general": "General",
 	      "credentials": "Credentials",
 	      "searchMemory": "Search & Memory",
+	      "llmCache": "LLM Cache",
 	      "theme": "Theme",
 	      "imageGen": "Image Generation",
 	      "advanced": "Advanced",
       "prompts": "Prompts & Templates"
+    },
+    "llmCache": {
+      "title": "LLM Cache",
+      "description": "Configure provider-level prompt caching behavior. Some providers use automatic cache hints, some support explicit cache checkpoints, and some select one checkpoint at runtime.",
+      "initializing": "Preparing provider cache settings...",
+      "loading": "Loading provider cache settings...",
+      "loadError": "Failed to load provider cache settings. {{error}}",
+      "empty": "No cache-capable LLM providers are available.",
+      "fields": {
+        "enabled": "Enable cache optimization",
+        "retention": "Retention",
+        "ttl": "TTL",
+        "implicit": "Use implicit cache",
+        "explicit": "Use explicit checkpoint cache",
+        "explicitTtlPreset": "Explicit cache TTL",
+        "stickyProvider": "Prefer sticky provider routing",
+        "openaiEnabledHint": "Adds OpenAI prompt cache hints when enabled. This does not disable any provider-managed implicit caching.",
+        "xaiEnabledHint": "Adds xAI conversation cache hints when enabled. This does not disable any provider-managed implicit caching.",
+        "geminiEnabledHint": "Enables Gemini cache features managed by the app. Provider-side implicit behavior may still apply separately.",
+        "geminiImplicitHint": "Keeps prompt prefixes stable so Gemini can reuse its implicit cache more effectively.",
+        "nanogptStickyHint": "Prefer routing repeated requests to the same upstream path when NanoGPT supports sticky cache reuse."
+      },
+      "options": {
+        "openaiRetention": {
+          "default": "Default",
+          "in_memory": "In memory",
+          "24h": "24 hours"
+        },
+        "commonTtl": {
+          "5m": "5 minutes",
+          "1h": "1 hour"
+        },
+        "geminiExplicitTtl": {
+          "5m": "5 minutes",
+          "30m": "30 minutes",
+          "1h": "1 hour",
+          "6h": "6 hours",
+          "24h": "24 hours"
+        }
+      },
+      "tags": {
+        "explicitCheckpoints": "Explicit checkpoints ({{count}} max)",
+        "singleSelectedCheckpoint": "Single selected checkpoint",
+        "automaticCacheHints": "Automatic cache hints",
+        "ttlConfigurable": "TTL configurable",
+        "stickyProvider": "Sticky provider"
+      },
+      "notes": {
+        "openai": "Uses thread-level prompt cache hints only. Disabling this turns off app-managed cache hints, not any provider-managed implicit caching.",
+        "claude": "Supports multiple explicit cache checkpoints. When cache points exist, this provider uses explicit checkpoint serialization.",
+        "gemini": "Supports implicit caching and one runtime-selected explicit checkpoint backed by cached content handles.",
+        "xai": "Uses conversation-level cache hints only. Disabling this turns off app-managed cache hints, not any provider-managed implicit caching.",
+        "nanogpt": "Supports one runtime-selected checkpoint plus TTL and optional sticky-provider routing."
+      }
     },
     "searchMemory": {
       "title": "Search & Memory",

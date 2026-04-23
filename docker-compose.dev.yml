@@ -2,9 +2,9 @@ services:
   backend:
     environment:
       ASSET_STORAGE_BACKEND: "local"
-      UVICORN_RELOAD: "0"
+      UVICORN_RELOAD: "1"
       WATCHFILES_FORCE_POLLING: "true"
-      MEMRAY_ENABLED: "1"
+      MEMRAY_ENABLED: "0"
     volumes:
       - ./App/backend:/app/App/backend
       - assets_data:/app/App/backend/storage/assets

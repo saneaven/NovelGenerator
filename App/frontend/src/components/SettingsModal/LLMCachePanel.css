@@ -4,6 +4,14 @@
   gap: var(--spacing-lg);
 }
 
+.llm-cache-panel--embedded {
+  gap: var(--spacing-md);
+}
+
+.llm-cache-panel--embedded > .panel-header {
+  margin-bottom: var(--spacing-md);
+}
+
 .llm-cache-card {
   display: flex;
   flex-direction: column;
@@ -36,4 +44,17 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   line-height: 1.5;
+}
+
+.llm-cache-card__fields {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.llm-cache-card__fields .provider-settings-field {
+  min-width: 0;
+}
+
+.llm-cache-card__fields .provider-settings-label-text,
+.llm-cache-card__fields .provider-settings-label-hint {
+  overflow-wrap: anywhere;
 }

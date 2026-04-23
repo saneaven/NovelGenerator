@@ -260,6 +260,11 @@
     word-break: break-word;
 }
 
+.general-panel__cache-section {
+    margin-top: var(--spacing-xl);
+    padding-bottom: var(--spacing-md);
+}
+
 .task-description {
     margin-bottom: var(--spacing-xl);
     padding: var(--spacing-lg);
