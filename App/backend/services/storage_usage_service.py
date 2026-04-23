@@ -327,6 +327,8 @@ def measure_asset_row(row: Asset | object) -> int:
         getattr(row, "generation_prompt", None),
         getattr(row, "generation_positive_prompt", None),
         getattr(row, "generation_negative_prompt", None),
+        getattr(row, "generation_requested_aspect_ratio", None),
+        getattr(row, "generation_requested_image_size", None),
         getattr(row, "generation_settings", None),
         getattr(row, "generation_reference_images", None),
         getattr(row, "generation_mask_image", None),
@@ -416,6 +418,8 @@ def snapshot_asset_row(row: Asset | object | None) -> object | None:
         "generation_prompt",
         "generation_positive_prompt",
         "generation_negative_prompt",
+        "generation_requested_aspect_ratio",
+        "generation_requested_image_size",
         "generation_settings",
         "generation_reference_images",
         "generation_mask_image",
@@ -1138,6 +1142,8 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
                     + _octet_text(Asset.generation_prompt)
                     + _octet_text(Asset.generation_positive_prompt)
                     + _octet_text(Asset.generation_negative_prompt)
+                    + _octet_text(Asset.generation_requested_aspect_ratio)
+                    + _octet_text(Asset.generation_requested_image_size)
                     + _octet_text(Asset.generation_settings)
                     + _octet_text(Asset.generation_reference_images)
                     + _octet_text(Asset.generation_mask_image)

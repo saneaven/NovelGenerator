@@ -24,6 +24,7 @@ OPENAI_GPT_IMAGE_2_SUPPORTED_ASPECT_RATIOS = (
 )
 OPENAI_GPT_IMAGE_2_SUPPORTED_IMAGE_SIZES = ("1K", "2K", "4K")
 OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY = 16
+OPENAI_GPT_IMAGE_2_MAX_EDGE = 3840
 OPENAI_GPT_IMAGE_2_TARGET_PIXELS = {
     "1K": 1024 * 1024,
     "2K": 2048 * 2048,
@@ -123,6 +124,7 @@ def _parse_ratio_pair(raw: str) -> tuple[int, int]:
     left, right = normalized.split(":")
     return int(left), int(right)
 
+
 def _resolve_openai_native_size(*, aspect_ratio: str, image_size: str) -> str:
     width_ratio, height_ratio = _parse_ratio_pair(aspect_ratio)
     reduced_divisor = _gcd(width_ratio, height_ratio)
@@ -146,6 +148,9 @@ def _resolve_openai_native_size(*, aspect_ratio: str, image_size: str) -> str:
         candidate_scales,
         key=lambda scale: abs((width_ratio * scale * height_ratio * scale) - target_pixels),
     )
+    max_scale = (OPENAI_GPT_IMAGE_2_MAX_EDGE // max(width_ratio, height_ratio) // scale_step) * scale_step
+    if best_scale > max_scale:
+        best_scale = max_scale
     width = width_ratio * best_scale
     height = height_ratio * best_scale
     return f"{width}x{height}"

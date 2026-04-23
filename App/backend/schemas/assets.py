@@ -185,6 +185,8 @@ class AssetResponse(BaseModel):
     generation_provider: Optional[str] = None
     generation_model: Optional[str] = None
     generation_style_id: Optional[str] = None
+    generation_requested_aspect_ratio: Optional[str] = None
+    generation_requested_image_size: Optional[str] = None
     generation_settings: Optional[Dict[str, Any]] = None  # Provider-specific settings
     generation_reference_images: Optional[List[ReferenceImage]] = None  # Reference images used during generation
     generation_mask_image: Optional[MaskImage] = None
@@ -272,6 +274,8 @@ class SceneAssetResponse(BaseModel):
     generation_provider: Optional[str] = None
     generation_model: Optional[str] = None
     generation_style_id: Optional[str] = None
+    generation_requested_aspect_ratio: Optional[str] = None
+    generation_requested_image_size: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
     file_size: Optional[int] = None

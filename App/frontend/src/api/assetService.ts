@@ -44,6 +44,8 @@ export interface Asset {
     generation_provider: string | null;
     generation_model: string | null;
     generation_style_id: string | null;
+    generation_requested_aspect_ratio: string | null;
+    generation_requested_image_size: string | null;
     generation_settings: Record<string, any> | null;  // Provider-specific settings
     generation_reference_images: ReferenceImage[] | null;  // Reference images used during generation
     generation_mask_image: MaskImage | null;

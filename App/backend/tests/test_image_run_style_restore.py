@@ -292,6 +292,8 @@ def test_create_asset_for_run_persists_generation_style_id(monkeypatch) -> None:
             "provider": "openai",
             "model": "gpt-image-2",
             "style_id": "style-natural-1",
+            "requested_aspect_ratio": "16:9",
+            "requested_image_size": "4K",
             "prompt": {"prefix": "cinematic ", "content": "castle", "postfix": " at night"},
             "provider_settings": {"quality": "high"},
         },
@@ -300,4 +302,6 @@ def test_create_asset_for_run_persists_generation_style_id(monkeypatch) -> None:
     )
 
     assert asset.generation_style_id == "style-natural-1"
+    assert asset.generation_requested_aspect_ratio == "16:9"
+    assert asset.generation_requested_image_size == "4K"
     assert db.added[-1] is asset

@@ -160,7 +160,7 @@ def test_resolve_geometry_translates_openai_ultrawide_4k_to_native_size() -> Non
 
     assert geometry.resolved_aspect_ratio == "21:9"
     assert geometry.resolved_image_size == "4K"
-    assert geometry.resolved_native_size == "4368x1872"
+    assert geometry.resolved_native_size == "3808x1632"
 
 
 def test_resolve_geometry_uses_openrouter_override_without_fetch() -> None:

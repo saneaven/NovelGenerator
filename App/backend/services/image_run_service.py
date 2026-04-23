@@ -1031,6 +1031,8 @@ class ImageRunService:
             generation_provider=str(recipe.get("provider") or ""),
             generation_model=str(recipe.get("model") or ""),
             generation_style_id=str(recipe.get("style_id") or "") or None,
+            generation_requested_aspect_ratio=str(recipe.get("requested_aspect_ratio") or "") or None,
+            generation_requested_image_size=str(recipe.get("requested_image_size") or "") or None,
             generation_settings=sanitize_generation_settings(
                 str(recipe.get("provider") or ""),
                 recipe.get("provider_settings"),

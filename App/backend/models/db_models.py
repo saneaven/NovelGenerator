@@ -1300,6 +1300,8 @@ class Asset(Base):
     generation_provider = Column(String(50), nullable=True)  # 'openai', 'gemini', 'xai', 'novelai'
     generation_model = Column(String(100), nullable=True)
     generation_style_id = Column(String(255), nullable=True)
+    generation_requested_aspect_ratio = Column(String(32), nullable=True)
+    generation_requested_image_size = Column(String(32), nullable=True)
     generation_settings = Column(JSONB, nullable=True)  # Provider-specific settings (sampler, steps, etc.)
     generation_reference_images = Column(JSONB, nullable=True)  # Reference images used during generation (asset_id + strength)
     generation_mask_image = Column(JSONB, nullable=True)  # Mask image used during generation (asset_id)

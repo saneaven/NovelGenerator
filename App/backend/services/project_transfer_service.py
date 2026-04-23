@@ -469,6 +469,8 @@ class ProjectTransferService:
                 "negative_prompt": asset.generation_negative_prompt,
                 "provider": asset.generation_provider,
                 "model": asset.generation_model,
+                "requested_aspect_ratio": asset.generation_requested_aspect_ratio,
+                "requested_image_size": asset.generation_requested_image_size,
                 "settings": asset.generation_settings,
                 "reference_images": asset.generation_reference_images,
                 "mask_image": asset.generation_mask_image,
@@ -819,6 +821,8 @@ class ProjectTransferService:
                         generation_negative_prompt=gen.get("negative_prompt"),
                         generation_provider=gen.get("provider"),
                         generation_model=gen.get("model"),
+                        generation_requested_aspect_ratio=gen.get("requested_aspect_ratio"),
+                        generation_requested_image_size=gen.get("requested_image_size"),
                         generation_settings=sanitize_generation_settings(
                             str(gen.get("provider") or ""),
                             gen.get("settings"),
