@@ -538,7 +538,7 @@
       "resolutionHint": "이미지 해상도",
       "openaiSettings": {
         "title": "OpenAI 설정",
-        "description": "GPT Image 출력 및 편집 기본값을 구성합니다.",
+        "description": "GPT Image 2 출력 및 편집 기본값을 구성합니다. 4K 출력은 실험적 기능입니다.",
         "quality": "품질",
         "qualityHint": "이미지 품질 수준",
         "qualityOptions": {
@@ -548,11 +548,10 @@
           "high": "높음"
         },
         "background": "배경",
-        "backgroundHint": "배경 렌더링 방식",
+        "backgroundHint": "GPT Image 2용 배경 렌더링 방식",
         "backgroundOptions": {
           "auto": "자동",
-          "opaque": "불투명",
-          "transparent": "투명"
+          "opaque": "불투명"
         },
         "format": "형식",
         "formatHint": "출력 이미지 형식",
@@ -563,6 +562,12 @@
         },
         "compression": "압축",
         "compressionHint": "JPEG/WebP 압축 수준 (0-100)",
+        "moderation": "모더레이션",
+        "moderationHint": "이미지 요청에 적용할 안전 필터 수준",
+        "moderationOptions": {
+          "auto": "자동",
+          "low": "낮음"
+        },
         "inputFidelity": "입력 충실도",
         "inputFidelityHint": "편집 시 참조 이미지를 얼마나 강하게 유지할지",
         "inputFidelityOptions": {

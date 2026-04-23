@@ -42,7 +42,7 @@ def test_sanitize_generation_settings_drops_geometry_keys_and_unknown_values() -
         "background": "auto",
         "output_format": "png",
         "output_compression": 90,
-        "input_fidelity": "high",
+        "moderation": "auto",
     }
 
 
@@ -57,6 +57,7 @@ def test_rewrite_image_run_recipe_normalizes_requested_geometry() -> None:
         }
     )
 
+    assert rewritten["model"] == "gpt-image-2"
     assert rewritten["requested_aspect_ratio"] == "3:2"
     assert rewritten["requested_image_size"] == "1K"
     assert rewritten["provider_settings"] == {
@@ -64,7 +65,7 @@ def test_rewrite_image_run_recipe_normalizes_requested_geometry() -> None:
         "background": "auto",
         "output_format": "png",
         "output_compression": 90,
-        "input_fidelity": "high",
+        "moderation": "auto",
     }
 
 
@@ -83,20 +84,83 @@ def test_rewrite_image_run_recipe_preserves_mask_image() -> None:
     assert rewritten["mask_image"] == {"asset_id": "mask-asset-1"}
 
 
-def test_resolve_geometry_translates_fixed_provider_to_native_size() -> None:
+def test_migrate_image_gen_config_upgrades_openai_legacy_model_and_settings() -> None:
+    migrated = migrate_image_gen_config(
+        {
+            "provider": "openai",
+            "model": "gpt-image-1.5",
+            "aspect_ratio": "4:1",
+            "image_size": "1536x1024",
+            "providerSettings": {
+                "openai": {
+                    "quality": "high",
+                    "background": "transparent",
+                    "output_format": "png",
+                    "output_compression": 90,
+                    "input_fidelity": "high",
+                }
+            },
+        }
+    )
+
+    assert migrated["model"] == "gpt-image-2"
+    assert migrated["aspect_ratio"] == "21:9"
+    assert migrated["image_size"] == "1K"
+    assert migrated["providerSettings"]["openai"] == {
+        "quality": "high",
+        "background": "auto",
+        "output_format": "png",
+        "output_compression": 90,
+        "moderation": "auto",
+    }
+
+
+def test_resolve_geometry_translates_openai_tier_to_native_size() -> None:
     geometry = asyncio.run(
         image_model_catalog_service.resolve_geometry(
             provider="openai",
-            model="gpt-image-1.5",
-            requested_aspect_ratio="3:2",
+            model="gpt-image-2",
+            requested_aspect_ratio="16:9",
             requested_image_size="4K",
             provider_config={},
         )
     )
 
-    assert geometry.resolved_aspect_ratio == "3:2"
-    assert geometry.resolved_image_size == "1K"
-    assert geometry.resolved_native_size == "1536x1024"
+    assert geometry.resolved_aspect_ratio == "16:9"
+    assert geometry.resolved_image_size == "4K"
+    assert geometry.resolved_native_size == "3840x2160"
+
+
+def test_resolve_geometry_translates_openai_square_4k_to_native_size() -> None:
+    geometry = asyncio.run(
+        image_model_catalog_service.resolve_geometry(
+            provider="openai",
+            model="gpt-image-2",
+            requested_aspect_ratio="1:1",
+            requested_image_size="4K",
+            provider_config={},
+        )
+    )
+
+    assert geometry.resolved_aspect_ratio == "1:1"
+    assert geometry.resolved_image_size == "4K"
+    assert geometry.resolved_native_size == "2880x2880"
+
+
+def test_resolve_geometry_translates_openai_ultrawide_4k_to_native_size() -> None:
+    geometry = asyncio.run(
+        image_model_catalog_service.resolve_geometry(
+            provider="openai",
+            model="gpt-image-2",
+            requested_aspect_ratio="21:9",
+            requested_image_size="4K",
+            provider_config={},
+        )
+    )
+
+    assert geometry.resolved_aspect_ratio == "21:9"
+    assert geometry.resolved_image_size == "4K"
+    assert geometry.resolved_native_size == "4368x1872"
 
 
 def test_resolve_geometry_uses_openrouter_override_without_fetch() -> None:

@@ -131,6 +131,7 @@ def test_create_direct_run_snapshot_preserves_style_id(monkeypatch) -> None:
     row = service.create_direct_run(db, project_id=project_id, user_id=user_id, request=request)
 
     assert row.request_snapshot["recipe"]["style_id"] == "style-natural-1"
+    assert row.request_snapshot["recipe"]["model"] == "gpt-image-2"
 
 
 def test_build_tool_recipe_snapshot_uses_selected_natural_style_id(monkeypatch) -> None:
@@ -153,10 +154,9 @@ def test_build_tool_recipe_snapshot_uses_selected_natural_style_id(monkeypatch) 
             "providerSettings": {
                 "openai": {
                     "quality": "high",
-                    "background": "auto",
+                    "background": "transparent",
                     "output_format": "png",
                     "output_compression": 90,
-                    "input_fidelity": "high",
                 },
                 "novelai": {
                     "sampler": "k_euler_ancestral",
@@ -182,6 +182,14 @@ def test_build_tool_recipe_snapshot_uses_selected_natural_style_id(monkeypatch) 
     )
 
     assert snapshot["style_id"] == "style-natural-1"
+    assert snapshot["model"] == "gpt-image-2"
+    assert snapshot["provider_settings"] == {
+        "quality": "high",
+        "background": "auto",
+        "output_format": "png",
+        "output_compression": 90,
+        "moderation": "auto",
+    }
     assert snapshot["prompt"] == {
         "prefix": "painterly ",
         "content": "a hero portrait",
@@ -214,7 +222,6 @@ def test_build_tool_recipe_snapshot_uses_selected_tag_based_style_id(monkeypatch
                     "background": "auto",
                     "output_format": "png",
                     "output_compression": 90,
-                    "input_fidelity": "high",
                 },
                 "novelai": {
                     "sampler": "k_euler_ancestral",
@@ -283,7 +290,7 @@ def test_create_asset_for_run_persists_generation_style_id(monkeypatch) -> None:
         row=row,
         recipe={
             "provider": "openai",
-            "model": "gpt-image-1.5",
+            "model": "gpt-image-2",
             "style_id": "style-natural-1",
             "prompt": {"prefix": "cinematic ", "content": "castle", "postfix": " at night"},
             "provider_settings": {"quality": "high"},

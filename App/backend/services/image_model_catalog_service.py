@@ -1,12 +1,34 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from math import isqrt
 from typing import Any, Optional
 
+from ..image_providers.model_capabilities import OPENAI_DEFAULT_MODEL
 from ..provider_engine.contracts import ImageModelDescriptor, ImageModelGeometrySpec, MISSING, ObjectSpec, ResolvedImageGeometry
 from ..provider_engine.registry import list_providers, require_provider
 from ..provider_engine.runtime_dispatch import list_image_models as _list_image_models
 from ..provider_engine.runtime_dispatch import sanitize_provider_settings
+
+OPENAI_GPT_IMAGE_2_SUPPORTED_ASPECT_RATIOS = (
+    "1:1",
+    "2:3",
+    "3:2",
+    "3:4",
+    "4:3",
+    "4:5",
+    "5:4",
+    "9:16",
+    "16:9",
+    "21:9",
+)
+OPENAI_GPT_IMAGE_2_SUPPORTED_IMAGE_SIZES = ("1K", "2K", "4K")
+OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY = 16
+OPENAI_GPT_IMAGE_2_TARGET_PIXELS = {
+    "1K": 1024 * 1024,
+    "2K": 2048 * 2048,
+    "4K": 3840 * 2160,
+}
 
 
 def _defaults_from_object_spec(spec: ObjectSpec | None) -> dict[str, Any]:
@@ -50,6 +72,10 @@ def _gcd(a: int, b: int) -> int:
     return a or 1
 
 
+def _lcm(a: int, b: int) -> int:
+    return abs(a * b) // _gcd(a, b)
+
+
 def _ratio_value(raw: str) -> float:
     normalized = _normalize_ratio_text(raw)
     left, right = normalized.split(":")
@@ -67,6 +93,62 @@ def _pick_ratio(candidates: list[str], requested: str, *, fallback: str) -> str:
     if normalized_requested in candidates:
         return normalized_requested
     return min(candidates, key=lambda candidate: _ratio_score(candidate, normalized_requested))
+
+
+def _normalize_openai_model(provider: str, model: Any) -> str:
+    if str(provider or "").strip() == "openai":
+        return OPENAI_DEFAULT_MODEL
+    return str(model or "").strip()
+
+
+def _normalize_openai_image_size(raw: Any) -> str:
+    text = str(raw or "").strip()
+    if text in OPENAI_GPT_IMAGE_2_SUPPORTED_IMAGE_SIZES:
+        return text
+    if "x" in text.lower():
+        return "1K"
+    return "1K"
+
+
+def _normalize_openai_aspect_ratio(raw: Any) -> str:
+    return _pick_ratio(
+        list(OPENAI_GPT_IMAGE_2_SUPPORTED_ASPECT_RATIOS),
+        _normalize_ratio_text(raw, fallback="1:1"),
+        fallback="1:1",
+    )
+
+
+def _parse_ratio_pair(raw: str) -> tuple[int, int]:
+    normalized = _normalize_ratio_text(raw, fallback="1:1")
+    left, right = normalized.split(":")
+    return int(left), int(right)
+
+def _resolve_openai_native_size(*, aspect_ratio: str, image_size: str) -> str:
+    width_ratio, height_ratio = _parse_ratio_pair(aspect_ratio)
+    reduced_divisor = _gcd(width_ratio, height_ratio)
+    width_ratio //= reduced_divisor
+    height_ratio //= reduced_divisor
+
+    target_pixels = OPENAI_GPT_IMAGE_2_TARGET_PIXELS.get(image_size, OPENAI_GPT_IMAGE_2_TARGET_PIXELS["1K"])
+    width_step = OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY // _gcd(width_ratio, OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY)
+    height_step = OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY // _gcd(height_ratio, OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY)
+    scale_step = _lcm(width_step, height_step)
+    pixels_per_scale = width_ratio * height_ratio
+    approx_scale = isqrt(target_pixels // pixels_per_scale)
+    lower_scale = (approx_scale // scale_step) * scale_step
+    upper_scale = ((approx_scale + scale_step - 1) // scale_step) * scale_step
+    if lower_scale == 0:
+        lower_scale = scale_step
+    if upper_scale == 0:
+        upper_scale = scale_step
+    candidate_scales = {lower_scale, upper_scale}
+    best_scale = min(
+        candidate_scales,
+        key=lambda scale: abs((width_ratio * scale * height_ratio * scale) - target_pixels),
+    )
+    width = width_ratio * best_scale
+    height = height_ratio * best_scale
+    return f"{width}x{height}"
 
 
 def sanitize_generation_settings(provider: str, settings: Any) -> dict[str, Any] | None:
@@ -130,7 +212,7 @@ def migrate_image_gen_config(raw: Any) -> dict[str, Any]:
         return defaults
 
     provider = str(raw.get("provider") or defaults["provider"]).strip() or defaults["provider"]
-    model = str(raw.get("model") or defaults["model"]).strip() or defaults["model"]
+    model = _normalize_openai_model(provider, raw.get("model") or defaults["model"])
 
     if isinstance(raw.get("aspect_ratio"), str) and raw.get("aspect_ratio"):
         aspect_ratio = _normalize_ratio_text(raw.get("aspect_ratio"), fallback=defaults["aspect_ratio"])
@@ -147,6 +229,11 @@ def migrate_image_gen_config(raw: Any) -> dict[str, Any]:
         image_size = str(raw["geminiSettings"]["image_resolution"]).strip()
     else:
         image_size = defaults["image_size"]
+
+    if provider == "openai":
+        model = OPENAI_DEFAULT_MODEL
+        aspect_ratio = _normalize_openai_aspect_ratio(aspect_ratio)
+        image_size = _normalize_openai_image_size(image_size)
 
     raw_provider_settings = raw.get("providerSettings") if isinstance(raw.get("providerSettings"), dict) else {}
     provider_settings = deepcopy(defaults["providerSettings"])
@@ -208,12 +295,18 @@ def rewrite_image_run_recipe(raw: Any) -> dict[str, Any]:
         else:
             requested_image_size = "1K"
 
+    model = _normalize_openai_model(provider, raw.get("model"))
+    if provider == "openai":
+        requested_aspect_ratio = _normalize_openai_aspect_ratio(requested_aspect_ratio)
+        requested_image_size = _normalize_openai_image_size(requested_image_size)
+
     return {
         "prompt_type": raw.get("prompt_type"),
         "provider": provider,
-        "model": str(raw.get("model") or "").strip(),
+        "model": model,
         "requested_aspect_ratio": requested_aspect_ratio,
         "requested_image_size": requested_image_size,
+        "style_id": raw.get("style_id"),
         "prompt": raw.get("prompt"),
         "positive_prompt": raw.get("positive_prompt"),
         "negative_prompt": raw.get("negative_prompt"),
@@ -265,7 +358,12 @@ class ImageModelCatalogService:
                 geometry.default_resolution if geometry.default_resolution in allowed_sizes else allowed_sizes[0]
             )
 
-        if geometry.resolution_mode == "translated_fixed":
+        if provider == "openai" and (descriptor.id or model) == OPENAI_DEFAULT_MODEL:
+            resolved_native_size = _resolve_openai_native_size(
+                aspect_ratio=resolved_ratio,
+                image_size=resolved_image_size,
+            )
+        elif geometry.resolution_mode == "translated_fixed":
             native_size_by_ratio = geometry.native_size_by_ratio or {}
             resolved_native_size = native_size_by_ratio.get(resolved_ratio) or next(iter(native_size_by_ratio.values()), "1024x1024")
         else:

@@ -286,7 +286,7 @@ class ImageGenConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: str = "openai"
-    model: str = "gpt-image-1.5"
+    model: str = "gpt-image-2"
     aspect_ratio: str = "1:1"
     image_size: str = "1K"
     naturalStyles: List[NaturalImageStyle] = []

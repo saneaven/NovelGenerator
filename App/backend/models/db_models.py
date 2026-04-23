@@ -74,7 +74,7 @@ class UserSettings(Base):
     # Image generation configuration
     image_gen_config = Column(JSONB, nullable=False, server_default="""{
         "provider": "openai",
-        "model": "gpt-image-1.5",
+        "model": "gpt-image-2",
         "aspect_ratio": "1:1",
         "image_size": "1K",
         "naturalStyles": [],
@@ -82,7 +82,7 @@ class UserSettings(Base):
         "selectedNaturalStyleId": null,
         "selectedTagBasedStyleId": null,
         "providerSettings": {
-            "openai": {"quality": "auto", "background": "auto", "output_format": "png", "output_compression": 90, "input_fidelity": "high"},
+            "openai": {"quality": "medium", "background": "auto", "output_format": "png", "output_compression": 90, "moderation": "auto"},
             "novelai": {
                 "sampler": "k_euler_ancestral",
                 "steps": 28,
@@ -93,7 +93,11 @@ class UserSettings(Base):
                 "i2iNoise": 0.0,
                 "vibeStrength": 0.6,
                 "vibeInfoExtracted": 1.0
-            }
+            },
+            "gemini": {},
+            "xai": {},
+            "openrouter": {},
+            "nanogpt": {}
         }
     }""")
 

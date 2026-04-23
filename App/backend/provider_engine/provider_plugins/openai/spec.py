@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from ....image_providers.model_capabilities import (
+    OPENAI_DEFAULT_MODEL,
+    get_openai_supported_aspect_ratios,
+    get_openai_supported_resolutions,
+)
 from ...contracts import (
     Condition,
     EmbeddingSpec,
@@ -136,7 +141,7 @@ SPEC = ProviderSpec(
         provider_settings=ObjectSpec(fields={
             "quality": FieldSpec(
                 kind="enum",
-                default="auto",
+                default="medium",
                 options=("auto", "low", "medium", "high"),
                 ui=UIHint(
                     widget="select",
@@ -149,7 +154,7 @@ SPEC = ProviderSpec(
             "background": FieldSpec(
                 kind="enum",
                 default="auto",
-                options=("auto", "opaque", "transparent"),
+                options=("auto", "opaque"),
                 ui=UIHint(
                     widget="select",
                     label_key="settings.imageGen.openaiSettings.background",
@@ -183,47 +188,62 @@ SPEC = ProviderSpec(
                     order=40,
                 ),
             ),
-            "input_fidelity": FieldSpec(
+            "moderation": FieldSpec(
                 kind="enum",
-                default="high",
-                options=("low", "high"),
+                default="auto",
+                options=("auto", "low"),
                 ui=UIHint(
                     widget="select",
-                    label_key="settings.imageGen.openaiSettings.inputFidelity",
-                    help_key="settings.imageGen.openaiSettings.inputFidelityHint",
-                    option_label_prefix="settings.imageGen.openaiSettings.inputFidelityOptions",
+                    label_key="settings.imageGen.openaiSettings.moderation",
+                    help_key="settings.imageGen.openaiSettings.moderationHint",
+                    option_label_prefix="settings.imageGen.openaiSettings.moderationOptions",
                     order=50,
                 ),
             ),
         }),
         models=(
             ImageModelDescriptor(
-                id="gpt-image-1.5",
-                name="GPT Image 1.5",
+                id=OPENAI_DEFAULT_MODEL,
+                name="GPT Image 2",
                 prompt_type="natural",
                 supports_image_input=True,
+                supports_mask_input=True,
+                supports_multi_image_input=True,
                 geometry=ImageModelGeometrySpec(
-                    supported_aspect_ratios=("1:1", "3:2", "2:3"),
-                    supported_resolutions=("1K",),
+                    supported_aspect_ratios=tuple(get_openai_supported_aspect_ratios(OPENAI_DEFAULT_MODEL)),
+                    supported_resolutions=tuple(get_openai_supported_resolutions(OPENAI_DEFAULT_MODEL)),
                     default_aspect_ratio="1:1",
                     default_resolution="1K",
-                    resolution_mode="translated_fixed",
-                    native_size_by_ratio={"1:1": "1024x1024", "3:2": "1536x1024", "2:3": "1024x1536"},
+                    resolution_mode="native_tier",
+                    supported_geometry_pairs={
+                        ratio: tuple(get_openai_supported_resolutions(OPENAI_DEFAULT_MODEL))
+                        for ratio in get_openai_supported_aspect_ratios(OPENAI_DEFAULT_MODEL)
+                    },
                 ),
-            ),
-            ImageModelDescriptor(
-                id="gpt-image-1",
-                name="GPT Image 1",
-                prompt_type="natural",
-                supports_image_input=True,
-                geometry=ImageModelGeometrySpec(
-                    supported_aspect_ratios=("1:1", "3:2", "2:3"),
-                    supported_resolutions=("1K",),
-                    default_aspect_ratio="1:1",
-                    default_resolution="1K",
-                    resolution_mode="translated_fixed",
-                    native_size_by_ratio={"1:1": "1024x1024", "3:2": "1536x1024", "2:3": "1024x1536"},
-                ),
+                description="Flexible OpenAI image model for generation, multi-image edits, and masking. 4K output is experimental.",
+                tags=("latest", "4k-experimental"),
+                category="image",
+                architecture={
+                    "input_modalities": ["text", "image"],
+                    "output_modalities": ["image"],
+                },
+                capabilities={
+                    "text_to_image": True,
+                    "image_to_image": True,
+                    "masking": True,
+                    "multi_image_edit": True,
+                    "flexible_resolution": True,
+                    "experimental_4k": True,
+                },
+                supported_parameters={
+                    "aspect_ratios": get_openai_supported_aspect_ratios(OPENAI_DEFAULT_MODEL),
+                    "resolutions": get_openai_supported_resolutions(OPENAI_DEFAULT_MODEL),
+                    "quality": ["auto", "low", "medium", "high"],
+                    "background": ["auto", "opaque"],
+                    "output_format": ["png", "jpeg", "webp"],
+                    "moderation": ["auto", "low"],
+                    "experimental_resolutions": ["4K"],
+                },
             ),
         ),
     ),

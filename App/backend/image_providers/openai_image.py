@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from openai import AsyncOpenAI, OpenAIError
 
 from .base import BaseImageProvider, ImageGenerationResult, MaskImageData, ReferenceImageData
-from .model_capabilities import OPENAI_DEFAULT_MODEL, OPENAI_MODEL_OPTIONS, get_openai_supported_sizes
+from .model_capabilities import OPENAI_DEFAULT_MODEL, OPENAI_MODEL_OPTIONS, get_openai_supported_resolutions
 from .registry import ImageProviderRegistry
 
 
@@ -33,7 +33,7 @@ class OpenAIImageProvider(BaseImageProvider):
         return bool(self.api_key)
 
     def get_supported_sizes(self) -> List[str]:
-        return get_openai_supported_sizes(self.DEFAULT_MODEL)
+        return get_openai_supported_resolutions(self.DEFAULT_MODEL)
 
     def get_supported_qualities(self) -> List[str]:
         return ["auto", "low", "medium", "high"]
@@ -65,7 +65,7 @@ class OpenAIImageProvider(BaseImageProvider):
         mask_image: Optional[MaskImageData] = None,
     ) -> ImageGenerationResult:
         """Generate image using OpenAI API"""
-        del aspect_ratio, image_size, resolved_native_size
+        del aspect_ratio, image_size
         if not self._client:
             return ImageGenerationResult(
                 success=False,
@@ -80,14 +80,15 @@ class OpenAIImageProvider(BaseImageProvider):
 
         try:
             effective_model = model if model in self.SUPPORTED_MODELS else self.DEFAULT_MODEL
-            if provider_settings:
-                quality = provider_settings.get("quality", quality)
+            settings = provider_settings if isinstance(provider_settings, dict) else {}
+            quality = str(settings.get("quality") or quality or "medium")
+            effective_size = str(resolved_native_size or size or "1024x1024").strip() or "1024x1024"
 
             # Parse size for later use
             width, height = 1024, 1024
-            if size:
+            if effective_size:
                 try:
-                    w, h = size.split("x")
+                    w, h = effective_size.split("x")
                     width, height = int(w), int(h)
                 except ValueError:
                     pass
@@ -97,25 +98,25 @@ class OpenAIImageProvider(BaseImageProvider):
                 return await self._generate_with_reference(
                     prompt=prompt,
                     model=effective_model,
-                    size=size,
+                    size=effective_size,
                     reference_images=reference_images,
                     width=width,
                     height=height,
                     quality=quality,
                     n=n,
-                    provider_settings=provider_settings,
+                    provider_settings=settings,
                     mask_image=mask_image,
                 )
 
             return await self._generate_text_to_image(
                 prompt=prompt,
                 model=effective_model,
-                size=size,
+                size=effective_size,
                 quality=quality,
                 n=n,
                 width=width,
                 height=height,
-                provider_settings=provider_settings,
+                provider_settings=settings,
             )
 
         except OpenAIError as e:
@@ -142,6 +143,7 @@ class OpenAIImageProvider(BaseImageProvider):
     ) -> ImageGenerationResult:
         """Standard text-to-image generation for GPT Image models"""
         output_format = str((provider_settings or {}).get("output_format") or "png")
+        moderation = str((provider_settings or {}).get("moderation") or "auto")
         params = {
             "model": model,
             "prompt": prompt,
@@ -150,6 +152,7 @@ class OpenAIImageProvider(BaseImageProvider):
             "quality": quality,
             "background": (provider_settings or {}).get("background", "auto"),
             "output_format": output_format,
+            "moderation": moderation,
         }
 
         if output_format in {"jpeg", "webp"}:
@@ -188,21 +191,20 @@ class OpenAIImageProvider(BaseImageProvider):
         mask_image: Optional[MaskImageData],
     ) -> ImageGenerationResult:
         """Image-to-image generation using one or more reference images."""
-        supported_sizes = get_openai_supported_sizes(model)
-        edit_size = size if size in supported_sizes else supported_sizes[0]
         output_format = str((provider_settings or {}).get("output_format") or "png")
+        moderation = str((provider_settings or {}).get("moderation") or "auto")
         images = [self._build_upload_image(ref.image_data, index) for index, ref in enumerate(reference_images)]
 
         params = {
             "model": model,
             "image": images if len(images) > 1 else images[0],
             "prompt": prompt,
-            "size": edit_size,
+            "size": size,
             "quality": quality,
             "n": n,
             "background": (provider_settings or {}).get("background", "auto"),
             "output_format": output_format,
-            "input_fidelity": (provider_settings or {}).get("input_fidelity", "high"),
+            "moderation": moderation,
         }
         if mask_image is not None:
             params["mask"] = self._build_upload_image(mask_image.image_data, "mask")

@@ -3,14 +3,14 @@ from App.backend.image_providers.model_capabilities import (
     OPENAI_MODEL_OPTIONS,
     get_gemini_supported_aspect_ratios,
     get_gemini_supported_resolutions,
-    get_openai_supported_sizes,
+    get_openai_supported_aspect_ratios,
+    get_openai_supported_resolutions,
 )
 
 
 def test_openai_image_provider_lists_only_gpt_image_models() -> None:
     assert [item["id"] for item in OPENAI_MODEL_OPTIONS] == [
-        "gpt-image-1.5",
-        "gpt-image-1",
+        "gpt-image-2",
     ]
 
 
@@ -37,7 +37,10 @@ def test_gemini_pro_image_resolution_excludes_512px() -> None:
     assert resolutions == ["1K", "2K", "4K"]
 
 
-def test_openai_image_size_resolution_uses_gpt_image_sizes() -> None:
-    sizes = get_openai_supported_sizes("gpt-image-1.5")
+def test_openai_image_supports_gpt_image_2_ratios_and_tiers() -> None:
+    aspect_ratios = get_openai_supported_aspect_ratios("gpt-image-2")
+    resolutions = get_openai_supported_resolutions("gpt-image-2")
 
-    assert sizes == ["1024x1024", "1536x1024", "1024x1536"]
+    assert "21:9" in aspect_ratios
+    assert "1:8" not in aspect_ratios
+    assert resolutions == ["1K", "2K", "4K"]

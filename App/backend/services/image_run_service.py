@@ -31,6 +31,7 @@ from ..services.deletion_service import delete_assets_with_files
 from ..services.image_model_catalog_service import (
     image_model_catalog_service,
     migrate_image_gen_config,
+    rewrite_image_run_recipe,
     sanitize_generation_settings,
 )
 from ..services.notification_service import (
@@ -488,11 +489,7 @@ class ImageRunService:
     ) -> ImageRunModel:
         target, apply_kind = self._normalize_direct_target(target=request.target.model_dump())
         self._validate_direct_target(db, project_id=project_id, target=target)
-        recipe_snapshot = request.recipe.model_dump()
-        recipe_snapshot["provider_settings"] = sanitize_generation_settings(
-            str(recipe_snapshot.get("provider") or ""),
-            recipe_snapshot.get("provider_settings"),
-        )
+        recipe_snapshot = rewrite_image_run_recipe(request.recipe.model_dump())
 
         row = ImageRunModel(
             id=uuid4(),

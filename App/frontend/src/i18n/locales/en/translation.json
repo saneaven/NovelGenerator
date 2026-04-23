@@ -538,7 +538,7 @@
       "resolutionHint": "Image resolution",
       "openaiSettings": {
         "title": "OpenAI Settings",
-        "description": "Configure GPT Image output and editing defaults.",
+        "description": "Configure GPT Image 2 output and editing defaults. 4K output is experimental.",
         "quality": "Quality",
         "qualityHint": "Image quality level",
         "qualityOptions": {
@@ -548,11 +548,10 @@
           "high": "High"
         },
         "background": "Background",
-        "backgroundHint": "Background rendering mode",
+        "backgroundHint": "Background rendering mode for GPT Image 2",
         "backgroundOptions": {
           "auto": "Auto",
-          "opaque": "Opaque",
-          "transparent": "Transparent"
+          "opaque": "Opaque"
         },
         "format": "Format",
         "formatHint": "Output image format",
@@ -563,6 +562,12 @@
         },
         "compression": "Compression",
         "compressionHint": "JPEG/WebP compression level (0-100)",
+        "moderation": "Moderation",
+        "moderationHint": "Safety filtering level applied to image requests",
+        "moderationOptions": {
+          "auto": "Auto",
+          "low": "Low"
+        },
         "inputFidelity": "Input Fidelity",
         "inputFidelityHint": "How strongly edits preserve reference images",
         "inputFidelityOptions": {
