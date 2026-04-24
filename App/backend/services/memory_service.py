@@ -80,6 +80,39 @@ def _vec_to_pg(vec: list[float]) -> str:
     return "[" + ",".join(str(float(x)) for x in vec) + "]"
 
 
+def _has_searchable_memory_chunks(
+    db: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+    thread_id: UUID,
+    language: str,
+) -> bool:
+    stmt = sql_text(
+        """
+        SELECT 1
+        FROM message_semantic_chunks c
+        JOIN message_semantic_sources s ON s.id = c.source_id
+        WHERE s.user_id = :user_id
+          AND s.project_id = :project_id
+          AND s.thread_id = :thread_id
+          AND s.language = :language
+          AND s.index_state = 'ready'
+        LIMIT 1
+        """
+    )
+    row = db.execute(
+        stmt,
+        {
+            "user_id": user_id,
+            "project_id": project_id,
+            "thread_id": thread_id,
+            "language": language,
+        },
+    ).first()
+    return row is not None
+
+
 async def search_thread_memory(
     db: Session,
     *,
@@ -95,6 +128,15 @@ async def search_thread_memory(
 
     profile = get_embedding_profile(db, user_id=user_id, feature="memory")
     if not profile:
+        return []
+
+    if not _has_searchable_memory_chunks(
+        db,
+        user_id=user_id,
+        project_id=project_id,
+        thread_id=thread_id,
+        language=language,
+    ):
         return []
 
     memory_settings = settings_service.get_memory_settings(db, user_id)
