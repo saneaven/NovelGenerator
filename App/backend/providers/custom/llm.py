@@ -365,6 +365,7 @@ class CustomProvider(AsyncOpenAIProvider):
         thinking_config: Optional[Dict],
         thinking_mode: Optional[str],
         provider_settings: Optional[Dict[str, Any]],
+        cache_plan: Any = None,
     ) -> Dict[str, object]:
         del provider_settings
         request = super()._prepare_request_kwargs(
@@ -378,6 +379,7 @@ class CustomProvider(AsyncOpenAIProvider):
             thinking_config=thinking_config,
             thinking_mode=thinking_mode,
             provider_settings=None,
+            cache_plan=cache_plan,
         )
 
         if self._current_thinking_template:

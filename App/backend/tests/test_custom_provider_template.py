@@ -77,6 +77,7 @@ if "App.backend.providers.shared.async_openai_provider" not in sys.modules:
             thinking_config,
             thinking_mode=None,
             provider_settings=None,
+            cache_plan=None,
         ):
             _ = (
                 temperature,
@@ -87,6 +88,7 @@ if "App.backend.providers.shared.async_openai_provider" not in sys.modules:
                 thinking_config,
                 thinking_mode,
                 provider_settings,
+                cache_plan,
             )
             return {"messages": messages, "model": model}
 
@@ -252,6 +254,25 @@ class TestCompletionPath:
             provider_settings=None,
         )
         assert request["extra_headers"] == {"X-Static": "plain"}
+
+    def test_cache_plan_argument_is_accepted_without_cache_hints(self):
+        provider = CustomProvider(_base_config())
+        request = provider._prepare_request_kwargs(
+            messages=[{"role": "user", "content": "hi"}],
+            model="gpt-4o",
+            temperature=0.7,
+            tools=None,
+            tool_choice=None,
+            max_tokens=None,
+            provider_preference=None,
+            thinking_config=None,
+            thinking_mode=None,
+            provider_settings={"cache": {"enabled": True, "retention": "24h"}},
+            cache_plan=SimpleNamespace(thread_cache_key="thread-123"),
+        )
+        assert request["model"] == "gpt-4o"
+        assert "prompt_cache_key" not in request
+        assert "prompt_cache_retention" not in request
 
 
 class TestClaudeDelegatePath:
