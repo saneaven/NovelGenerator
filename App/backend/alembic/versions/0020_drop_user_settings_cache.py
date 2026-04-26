@@ -7,7 +7,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
 
-revision = "0020_drop_user_settings_llm_cache"
+revision = "0020_drop_user_settings_cache"
 down_revision = "0019_add_thread_prompt_snapshot"
 branch_labels = None
 depends_on = None
