@@ -71,6 +71,20 @@ SPEC = ProviderSpec(
                         ),
                     },
                 ),
+                "provider_settings": ObjectSpec(fields={
+                    "cache": ObjectSpec(fields={
+                        "enabled": FieldSpec(
+                            kind="bool",
+                            default=True,
+                            ui=UIHint(
+                                widget="toggle",
+                                label_key="settings.llmCache.fields.enabled",
+                                help_key="settings.llmCache.fields.xaiEnabledHint",
+                                order=10,
+                            ),
+                        ),
+                    }),
+                }),
             }),
         }),
         variants={
@@ -83,26 +97,6 @@ SPEC = ProviderSpec(
         default_variant="default",
         supports_tools=False,
         supports_thinking=True,
-        cache_settings=ObjectSpec(fields={
-            "enabled": FieldSpec(
-                kind="bool",
-                default=True,
-                ui=UIHint(
-                    widget="toggle",
-                    label_key="settings.llmCache.fields.enabled",
-                    help_key="settings.llmCache.fields.xaiEnabledHint",
-                    order=10,
-                ),
-            ),
-        }),
-        cache_capabilities={
-            "supports_explicit_checkpoints": False,
-            "max_explicit_checkpoints": 0,
-            "supports_single_selected_checkpoint": False,
-            "supports_ttl": False,
-            "supports_sticky_provider": False,
-            "notes_key": "settings.llmCache.notes.xai",
-        },
     ),
     image=ImageSpec(
         runtime=RuntimeSpec(adapter="default"),

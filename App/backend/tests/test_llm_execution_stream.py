@@ -139,7 +139,6 @@ def _install_import_stubs() -> None:
         thinking_mode: str = "off"
         effective_thinking_config: dict[str, object] | None = None
         provider_messages: list[dict[str, object]] = field(default_factory=list)
-        llm_cache_settings: dict[str, object] = field(default_factory=dict)
         prepared_cache_plan: object | None = None
         stream_thinking_display: str | None = None
         retry_cfg: object | None = None

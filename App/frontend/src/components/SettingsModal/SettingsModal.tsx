@@ -101,9 +101,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const settings = useSettings();
   const user = useAuthStore((state) => state.user);
   const providerSpecs = useProviderSpecStore((state) => state.specs);
-  const providerSpecsLoaded = useProviderSpecStore((state) => state.loaded);
-  const providerSpecsLoading = useProviderSpecStore((state) => state.loading);
-  const providerSpecsError = useProviderSpecStore((state) => state.error);
   const loadProviderSpecs = useProviderSpecStore((state) => state.load);
   const [localSettings, setLocalSettings] = useState<Settings>(settings);
   const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>({});
@@ -895,17 +892,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 setLocalSettings((prev) => ({
                   ...prev,
                   taskConfigSettings,
-                }))
-              }
-              llmCacheSettings={localSettings.llmCacheSettings}
-              providerSpecs={providerSpecs}
-              providerSpecsLoaded={providerSpecsLoaded}
-              providerSpecsLoading={providerSpecsLoading}
-              providerSpecsError={providerSpecsError}
-              onLlmCacheSettingsChange={(llmCacheSettings) =>
-                setLocalSettings((prev) => ({
-                  ...prev,
-                  llmCacheSettings,
                 }))
               }
               customThinkingTemplates={localSettings.customThinkingTemplates}

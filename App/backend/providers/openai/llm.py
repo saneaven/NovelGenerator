@@ -281,7 +281,7 @@ class OpenAIResponsesProvider(BaseProvider):
         max_tokens: Optional[int],
         thinking_config: Optional[Dict],
         verbosity: Optional[str],
-        cache_settings: Optional[Dict[str, Any]] = None,
+        provider_settings: Optional[Dict[str, Any]] = None,
         cache_plan: Any = None,
     ) -> Dict:
         """Build the request dict for responses.create().
@@ -313,11 +313,12 @@ class OpenAIResponsesProvider(BaseProvider):
         if max_tokens is not None:
             request["max_output_tokens"] = max_tokens
 
-        if isinstance(cache_settings, dict) and bool(cache_settings.get("enabled", False)):
+        cache_config = self._cache_config_from_provider_settings(provider_settings)
+        if bool(cache_config.get("enabled", False)):
             cache_key = getattr(cache_plan, "thread_cache_key", None)
             if isinstance(cache_key, str) and cache_key:
                 request["prompt_cache_key"] = cache_key
-            retention = str(cache_settings.get("retention") or "default")
+            retention = str(cache_config.get("retention") or "default")
             if retention != "default":
                 request["prompt_cache_retention"] = retention
 
@@ -354,7 +355,6 @@ class OpenAIResponsesProvider(BaseProvider):
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
         provider_settings: Optional[Dict[str, Any]] = None,
-        cache_settings: Optional[Dict[str, Any]] = None,
         cache_plan: Any = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         """
@@ -366,7 +366,7 @@ class OpenAIResponsesProvider(BaseProvider):
         if not self.validate_config():
             yield self._error_event("Invalid provider configuration")
             return
-        del provider_preference, thinking_mode, custom_kind, provider_settings
+        del provider_preference, thinking_mode, custom_kind
 
         client = self._ensure_client()
 
@@ -383,7 +383,7 @@ class OpenAIResponsesProvider(BaseProvider):
             max_tokens=max_tokens,
             thinking_config=thinking_config,
             verbosity=verbosity,
-            cache_settings=cache_settings,
+            provider_settings=provider_settings,
             cache_plan=cache_plan,
         )
 

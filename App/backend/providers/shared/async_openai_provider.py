@@ -86,10 +86,9 @@ class AsyncOpenAIProvider(BaseProvider):
         thinking_config: Optional[Dict],
         thinking_mode: Optional[str],
         provider_settings: Optional[Dict[str, Any]],
-        cache_settings: Optional[Dict[str, Any]] = None,
         cache_plan: Any = None,
     ) -> Dict[str, object]:
-        del cache_settings, cache_plan
+        del cache_plan
         is_gpt5 = self._is_gpt5_model(model)
 
         request: Dict[str, object] = {
@@ -526,7 +525,6 @@ class AsyncOpenAIProvider(BaseProvider):
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
         provider_settings: Optional[Dict[str, Any]] = None,
-        cache_settings: Optional[Dict[str, Any]] = None,
         cache_plan: Any = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         if not self.validate_config():
@@ -549,7 +547,6 @@ class AsyncOpenAIProvider(BaseProvider):
             thinking_config,
             thinking_mode,
             provider_settings,
-            cache_settings,
             cache_plan,
         )
 

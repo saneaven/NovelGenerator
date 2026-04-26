@@ -479,6 +479,7 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                     ? (config.advanced.provider_settings as Record<string, unknown>)
                     : {}
                 }
+                rootDraft={config as unknown as Record<string, unknown>}
                 setDraft={(next) => {
                   const prev =
                     config.advanced.provider_settings &&

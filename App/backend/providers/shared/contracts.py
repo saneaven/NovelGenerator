@@ -109,8 +109,6 @@ class LLMSpec:
     derived_flags: tuple[DerivedFlag, ...] = ()
     supports_tools: bool = False
     supports_thinking: bool = False
-    cache_settings: ObjectSpec | None = None
-    cache_capabilities: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

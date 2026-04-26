@@ -275,7 +275,7 @@ def test_update_user_settings_rejects_enabled_search_memory_without_effective_mo
     assert "Search embedding provider/model is required" in str(exc_info.value.detail)
 
 
-def test_update_user_settings_accepts_llm_cache_settings(monkeypatch) -> None:
+def test_update_user_settings_accepts_provider_cache_settings_inside_task_config(monkeypatch) -> None:
     user_id = uuid4()
     settings = SimpleNamespace(
         user_id=user_id,
@@ -290,7 +290,6 @@ def test_update_user_settings_accepts_llm_cache_settings(monkeypatch) -> None:
             },
             "overrides": {},
         },
-        llm_cache_settings=None,
     )
     db = FakeDB(settings)
 
@@ -301,20 +300,48 @@ def test_update_user_settings_accepts_llm_cache_settings(monkeypatch) -> None:
     result = asyncio.run(
         settings_routes.update_user_settings(
             UserSettingsUpdate(
-                llmCacheSettings={
-                    "openai": {"enabled": True, "retention": "24h"},
-                    "claude": {"enabled": True, "ttl": "1h"},
-                    "gemini": {"enabled": True, "implicit": True, "explicit": True, "explicit_ttl_preset": "6h"},
-                    "xai": {"enabled": False},
-                    "nanogpt": {"enabled": True, "ttl": "1h", "stickyProvider": True},
-                }
+                taskConfigSettings={
+                    "general": {
+                        "provider": "openai",
+                        "model": "gpt-5-mini",
+                        "temperature": 0.7,
+                        "max_output_tokens": None,
+                        "context_window_tokens": 32000,
+                        "advanced": {
+                            "thinking_mode": "off",
+                            "provider_settings": {
+                                "cache": {
+                                    "enabled": False,
+                                    "retention": "24h",
+                                }
+                            },
+                        },
+                    },
+                    "overrides": {
+                        "summary": {
+                            "provider": "claude",
+                            "model": "claude-sonnet-4",
+                            "temperature": 0.7,
+                            "max_output_tokens": None,
+                            "context_window_tokens": 32000,
+                            "advanced": {
+                                "thinking_mode": "off",
+                                "provider_settings": {
+                                    "cache": {
+                                        "enabled": True,
+                                        "ttl": "1h",
+                                    }
+                                },
+                            },
+                        }
+                    },
+                },
             ),
             current_user=SimpleNamespace(id=user_id),
             db=db,
         )
     )
 
-    assert result.llm_cache_settings["openai"]["retention"] == "24h"
-    assert result.llm_cache_settings["claude"]["ttl"] == "1h"
-    assert result.llm_cache_settings["gemini"]["explicit_ttl_preset"] == "6h"
-    assert result.llm_cache_settings["nanogpt"]["stickyProvider"] is True
+    assert result.task_config_settings["general"]["advanced"]["provider_settings"]["cache"]["enabled"] is False
+    assert result.task_config_settings["general"]["advanced"]["provider_settings"]["cache"]["retention"] == "24h"
+    assert result.task_config_settings["overrides"]["summary"]["advanced"]["provider_settings"]["cache"]["ttl"] == "1h"

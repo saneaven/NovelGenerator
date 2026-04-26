@@ -79,8 +79,6 @@ def _project_llm_spec(spec: Any) -> dict[str, Any]:
         "default_variant": spec.default_variant,
         "supports_tools": spec.supports_tools,
         "supports_thinking": spec.supports_thinking,
-        "cache_settings": project_object_spec(spec.cache_settings) if spec.cache_settings else None,
-        "cache_capabilities": spec.cache_capabilities,
         "common_task_config": project_object_spec(spec.common_task_config),
         "variants": {
             key: {

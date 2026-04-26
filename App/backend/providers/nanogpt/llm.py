@@ -276,7 +276,6 @@ class NanoGPTProvider(AsyncOpenAIProvider):
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
         provider_settings: Optional[Dict[str, Any]] = None,
-        cache_settings: Optional[Dict[str, Any]] = None,
         cache_plan: Any = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
         del provider_preference, custom_kind, verbosity
@@ -316,11 +315,12 @@ class NanoGPTProvider(AsyncOpenAIProvider):
             **self._build_extra_headers(provider_settings),
         }
 
-        if isinstance(cache_settings, dict) and bool(cache_settings.get("enabled", False)):
+        cache_config = self._cache_config_from_provider_settings(provider_settings)
+        if bool(cache_config.get("enabled", False)):
             prompt_caching: dict[str, Any] = {
                 "enabled": True,
-                "ttl": str(cache_settings.get("ttl") or "5m"),
-                "stickyProvider": bool(cache_settings.get("stickyProvider", False)),
+                "ttl": str(cache_config.get("ttl") or "5m"),
+                "stickyProvider": bool(cache_config.get("stickyProvider", False)),
             }
             selected_count = int(getattr(cache_plan, "selected_provider_message_count", 0) or 0)
             if selected_count > 0:

@@ -53,7 +53,6 @@ class XAIProvider(AsyncOpenAIProvider):
         thinking_config,
         thinking_mode,
         provider_settings,
-        cache_settings=None,
         cache_plan=None,
     ):
         request = super()._prepare_request_kwargs(
@@ -67,10 +66,10 @@ class XAIProvider(AsyncOpenAIProvider):
             thinking_config,
             thinking_mode,
             provider_settings,
-            cache_settings,
             cache_plan,
         )
-        if isinstance(cache_settings, dict) and bool(cache_settings.get("enabled", False)):
+        cache_config = self._cache_config_from_provider_settings(provider_settings)
+        if bool(cache_config.get("enabled", False)):
             cache_key = getattr(cache_plan, "thread_cache_key", None)
             if isinstance(cache_key, str) and cache_key:
                 extra_headers = request.get("extra_headers") if isinstance(request.get("extra_headers"), dict) else {}

@@ -125,6 +125,8 @@ def _persist_prompt_cache_rows(
 
     if provider == "nanogpt" and str(getattr(cache_plan, "provider_strategy", "") or "") == "nanogpt_single_checkpoint":
         if selected_checkpoint_id and selected_prefix_digest:
+            provider_settings = prepared.advanced.get("provider_settings") if isinstance(prepared.advanced, dict) else {}
+            cache_settings = provider_settings.get("cache") if isinstance(provider_settings, dict) else {}
             upsert_thread_prompt_cache(
                 request.db,
                 thread_id=request.thread.id,
@@ -140,7 +142,7 @@ def _persist_prompt_cache_rows(
                 meta={
                     "provider_strategy": getattr(cache_plan, "provider_strategy", None),
                     "selected_provider_message_count": selected_provider_message_count,
-                    "sticky_provider": bool(getattr(prepared, "llm_cache_settings", {}).get("stickyProvider", False)),
+                    "sticky_provider": bool(cache_settings.get("stickyProvider", False)) if isinstance(cache_settings, dict) else False,
                     "cache_metrics": metrics or None,
                 },
             )

@@ -128,6 +128,51 @@ SPEC = ProviderSpec(
                         ),
                     },
                 ),
+                "provider_settings": ObjectSpec(fields={
+                    "cache": ObjectSpec(fields={
+                        "enabled": FieldSpec(
+                            kind="bool",
+                            default=True,
+                            ui=UIHint(
+                                widget="toggle",
+                                label_key="settings.llmCache.fields.enabled",
+                                help_key="settings.llmCache.fields.geminiEnabledHint",
+                                order=10,
+                            ),
+                        ),
+                        "implicit": FieldSpec(
+                            kind="bool",
+                            default=True,
+                            ui=UIHint(
+                                widget="toggle",
+                                label_key="settings.llmCache.fields.implicit",
+                                help_key="settings.llmCache.fields.geminiImplicitHint",
+                                order=20,
+                            ),
+                        ),
+                        "explicit": FieldSpec(
+                            kind="bool",
+                            default=True,
+                            ui=UIHint(
+                                widget="toggle",
+                                label_key="settings.llmCache.fields.explicit",
+                                order=30,
+                            ),
+                        ),
+                        "explicit_ttl_preset": FieldSpec(
+                            kind="enum",
+                            default="1h",
+                            options=("5m", "30m", "1h", "6h", "24h"),
+                            when=(Condition(op="truthy", path="advanced.provider_settings.cache.explicit"),),
+                            ui=UIHint(
+                                widget="select",
+                                label_key="settings.llmCache.fields.explicitTtlPreset",
+                                option_label_prefix="settings.llmCache.options.geminiExplicitTtl",
+                                order=40,
+                            ),
+                        ),
+                    }),
+                }),
             }),
         }),
         variants={
@@ -140,57 +185,6 @@ SPEC = ProviderSpec(
         default_variant="default",
         supports_tools=True,
         supports_thinking=True,
-        cache_settings=ObjectSpec(fields={
-            "enabled": FieldSpec(
-                kind="bool",
-                default=True,
-                ui=UIHint(
-                    widget="toggle",
-                    label_key="settings.llmCache.fields.enabled",
-                    help_key="settings.llmCache.fields.geminiEnabledHint",
-                    order=10,
-                ),
-            ),
-            "implicit": FieldSpec(
-                kind="bool",
-                default=True,
-                ui=UIHint(
-                    widget="toggle",
-                    label_key="settings.llmCache.fields.implicit",
-                    help_key="settings.llmCache.fields.geminiImplicitHint",
-                    order=20,
-                ),
-            ),
-            "explicit": FieldSpec(
-                kind="bool",
-                default=True,
-                ui=UIHint(
-                    widget="toggle",
-                    label_key="settings.llmCache.fields.explicit",
-                    order=30,
-                ),
-            ),
-            "explicit_ttl_preset": FieldSpec(
-                kind="enum",
-                default="1h",
-                options=("5m", "30m", "1h", "6h", "24h"),
-                when=(Condition(op="truthy", path="explicit"),),
-                ui=UIHint(
-                    widget="select",
-                    label_key="settings.llmCache.fields.explicitTtlPreset",
-                    option_label_prefix="settings.llmCache.options.geminiExplicitTtl",
-                    order=40,
-                ),
-            ),
-        }),
-        cache_capabilities={
-            "supports_explicit_checkpoints": False,
-            "max_explicit_checkpoints": 0,
-            "supports_single_selected_checkpoint": True,
-            "supports_ttl": True,
-            "supports_sticky_provider": False,
-            "notes_key": "settings.llmCache.notes.gemini",
-        },
     ),
     embedding=EmbeddingSpec(
         runtime=RuntimeSpec(adapter="default"),

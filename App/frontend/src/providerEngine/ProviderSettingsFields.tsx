@@ -21,6 +21,7 @@ type ProviderSettingsFieldsProps = {
   setDraft: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
   className?: string;
   flags?: Record<string, unknown>;
+  rootDraft?: Record<string, unknown>;
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -123,9 +124,11 @@ export const ProviderSettingsFields: React.FC<ProviderSettingsFieldsProps> = ({
   setDraft,
   className,
   flags = {},
+  rootDraft,
 }) => {
   const { t } = useTranslation();
-  const entries = getVisibleSpecEntries(spec, draft, flags);
+  const evaluationDraft = isPlainObject(rootDraft) ? rootDraft : draft;
+  const entries = getVisibleSpecEntries(spec, evaluationDraft, flags);
 
   if (entries.length === 0) return null;
 
@@ -148,6 +151,7 @@ export const ProviderSettingsFields: React.FC<ProviderSettingsFieldsProps> = ({
         spec={node}
         draft={childDraft}
         flags={flags}
+        rootDraft={evaluationDraft}
         setDraft={(next) => {
           if (typeof next === 'function') {
             const resolved = next(childDraft);
@@ -163,11 +167,11 @@ export const ProviderSettingsFields: React.FC<ProviderSettingsFieldsProps> = ({
   const renderField = (fieldName: string, node: PublicFieldSpec) => {
     const label = translateFieldLabel(t, node) || fieldName;
     const hint = translateFieldHelp(t, node);
-    const disabled = isNodeDisabled(node, draft, flags);
+    const disabled = isNodeDisabled(node, evaluationDraft, flags);
     const value = draft[fieldName];
     const isSet = Object.prototype.hasOwnProperty.call(draft, fieldName);
 
-    /* Bool / Toggle — ON = true in draft, OFF = remove key */
+    /* Bool / Toggle — persist explicit false so defaults are not silently restored */
     if (node.kind === 'bool' || node.ui?.widget === 'toggle') {
       return (
         <div key={fieldName} className="provider-settings-field">
@@ -177,7 +181,7 @@ export const ProviderSettingsFields: React.FC<ProviderSettingsFieldsProps> = ({
           </label>
           <ToggleSwitch
             checked={value === true}
-            onChange={(checked) => updateField(fieldName, checked || undefined)}
+            onChange={(checked) => updateField(fieldName, checked)}
             label={value === true ? t('common.enabled') : t('common.disabled')}
             mode="bare"
             disabled={disabled}
@@ -343,7 +347,7 @@ export const ProviderSettingsFields: React.FC<ProviderSettingsFieldsProps> = ({
                     onChange={(checked) => {
                       updateNestedDraft(setDraft, fieldName, checked
                         ? { ...childDraft, [toggleFieldName]: true }
-                        : {}
+                        : { [toggleFieldName]: false }
                       );
                     }}
                     label={isToggleOn ? t('common.enabled') : t('common.disabled')}
@@ -355,6 +359,7 @@ export const ProviderSettingsFields: React.FC<ProviderSettingsFieldsProps> = ({
                     spec={childSpecWithoutToggle}
                     draft={childDraft}
                     flags={flags}
+                    rootDraft={evaluationDraft}
                     setDraft={(next) => {
                       if (typeof next === 'function') {
                         const resolved = next(childDraft);
@@ -371,7 +376,7 @@ export const ProviderSettingsFields: React.FC<ProviderSettingsFieldsProps> = ({
 
           /* Single-bool ObjectSpec (e.g. scraping, youtube) → full-width toggle with label inside */
           {
-            const childEntries = getVisibleSpecEntries(node, childDraft, flags);
+            const childEntries = getVisibleSpecEntries(node, evaluationDraft, flags);
             if (
               childEntries.length === 1
               && !isObjectSpec(childEntries[0][1])
@@ -385,7 +390,7 @@ export const ProviderSettingsFields: React.FC<ProviderSettingsFieldsProps> = ({
                   <ToggleSwitch
                     checked={boolValue === true}
                     onChange={(checked) => {
-                      updateNestedDraft(setDraft, fieldName, checked ? { [boolName]: true } : {});
+                      updateNestedDraft(setDraft, fieldName, { [boolName]: checked });
                     }}
                     label={boolLabel}
                   />

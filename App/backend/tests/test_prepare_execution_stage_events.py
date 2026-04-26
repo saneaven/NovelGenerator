@@ -155,7 +155,6 @@ class _PreparedLLMExecution:
     thinking_mode: str
     effective_thinking_config: dict[str, object] | None
     provider_messages: list[dict[str, object]]
-    llm_cache_settings: dict[str, object]
     prepared_cache_plan: object
     stream_thinking_display: str | None
     retry_cfg: object | None

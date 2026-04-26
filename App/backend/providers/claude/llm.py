@@ -350,10 +350,9 @@ class ClaudeProvider(BaseProvider):
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
         provider_settings: Optional[Dict[str, Any]] = None,
-        cache_settings: Optional[Dict[str, Any]] = None,
         cache_plan: Any = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
-        del provider_preference, custom_kind, verbosity, provider_settings
+        del provider_preference, custom_kind, verbosity
         if not self.validate_config():
             yield self._error_event("Claude API key is required")
             return
@@ -376,8 +375,9 @@ class ClaudeProvider(BaseProvider):
         if system_prompt:
             request["system"] = system_prompt
 
-        if isinstance(cache_settings, dict) and bool(cache_settings.get("enabled", False)):
-            ttl_label = str(getattr(cache_plan, "ttl_label", None) or cache_settings.get("ttl") or "5m")
+        cache_config = self._cache_config_from_provider_settings(provider_settings)
+        if bool(cache_config.get("enabled", False)):
+            ttl_label = str(getattr(cache_plan, "ttl_label", None) or cache_config.get("ttl") or "5m")
             if str(getattr(cache_plan, "provider_strategy", "") or "") == "claude_automatic":
                 request["cache_control"] = self._cache_control_payload(ttl_label)
 

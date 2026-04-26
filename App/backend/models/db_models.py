@@ -115,15 +115,6 @@ class UserSettings(Base):
         "overrides": {}
     }""")
 
-    # LLM prompt cache settings (global per-provider cache preferences).
-    llm_cache_settings = Column(JSONB, nullable=False, server_default="""{
-        "openai": {"enabled": true, "retention": "default"},
-        "claude": {"enabled": true, "ttl": "5m"},
-        "gemini": {"enabled": true, "implicit": true, "explicit": true, "explicit_ttl_preset": "1h"},
-        "xai": {"enabled": true},
-        "nanogpt": {"enabled": true, "ttl": "5m", "stickyProvider": false}
-    }""")
-
     # Patch auto-retry - automatically retry with replace mode if patch fails
     patch_auto_retry = Column(Boolean, default=True, nullable=False)
 

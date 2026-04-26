@@ -1,31 +1,115 @@
 from __future__ import annotations
 
+import sys
+import types
 from types import SimpleNamespace
+
+if "anthropic" not in sys.modules:
+    anthropic_stub = types.ModuleType("anthropic")
+    anthropic_stub.AsyncAnthropic = object
+    sys.modules["anthropic"] = anthropic_stub
+
+if "openai" not in sys.modules:
+    openai_stub = types.ModuleType("openai")
+
+    class OpenAIError(Exception):
+        pass
+
+    class APIConnectionError(OpenAIError):
+        pass
+
+    class APIStatusError(OpenAIError):
+        pass
+
+    class AuthenticationError(OpenAIError):
+        pass
+
+    class BadRequestError(OpenAIError):
+        pass
+
+    class RateLimitError(OpenAIError):
+        pass
+
+    class AsyncOpenAI:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+    openai_stub.OpenAIError = OpenAIError
+    openai_stub.APIConnectionError = APIConnectionError
+    openai_stub.APIStatusError = APIStatusError
+    openai_stub.AuthenticationError = AuthenticationError
+    openai_stub.BadRequestError = BadRequestError
+    openai_stub.RateLimitError = RateLimitError
+    openai_stub.AsyncOpenAI = AsyncOpenAI
+    sys.modules["openai"] = openai_stub
+
+if "App.backend.models.db_models" not in sys.modules:
+    db_models_stub = types.ModuleType("App.backend.models.db_models")
+
+    class RunMessageAttachmentModel:  # pragma: no cover - import stub for provider unit tests
+        pass
+
+    class ThreadPromptCache:  # pragma: no cover - import stub for cache planner unit tests
+        pass
+
+    db_models_stub.RunMessageAttachmentModel = RunMessageAttachmentModel
+    db_models_stub.ThreadPromptCache = ThreadPromptCache
+    sys.modules["App.backend.models.db_models"] = db_models_stub
+
+if "App.backend.services.chat_attachment_service" not in sys.modules:
+    attachment_service_stub = types.ModuleType("App.backend.services.chat_attachment_service")
+    attachment_service_stub.chat_attachment_service = SimpleNamespace(
+        load_attachment_bytes=lambda *_args, **_kwargs: b"",
+        to_data_url=lambda mime_type, _data: f"data:{mime_type};base64,",
+    )
+    sys.modules["App.backend.services.chat_attachment_service"] = attachment_service_stub
+
+if "App.backend.services.storage_usage_service" not in sys.modules:
+    storage_usage_stub = types.ModuleType("App.backend.services.storage_usage_service")
+    storage_usage_stub.apply_project_usage_delta = lambda *args, **kwargs: None
+    storage_usage_stub.build_thread_prompt_cache_delta = lambda *args, **kwargs: {}
+    storage_usage_stub.snapshot_thread_prompt_cache_row = lambda row: row
+    sys.modules["App.backend.services.storage_usage_service"] = storage_usage_stub
 
 from App.backend.providers.claude.llm import ClaudeProvider
 from App.backend.providers.openai.llm import OpenAIResponsesProvider
 from App.backend.providers.xai.llm import XAIProvider
-from App.backend.services.llm_cache_settings import validate_llm_cache_settings
 from App.backend.services.prompt_cache_service import (
     PreparedCachePlan,
     build_prepared_cache_plan,
     gemini_ttl_seconds,
 )
+from App.backend.services.task_config_settings import normalize_effective_task_config
 
 
-def test_validate_llm_cache_settings_fills_defaults() -> None:
-    settings = validate_llm_cache_settings({"openai": {"retention": "24h"}})
+def test_normalize_effective_task_config_keeps_explicit_cache_false() -> None:
+    normalized = normalize_effective_task_config(
+        {
+            "provider": "openai",
+            "model": "gpt-5-mini",
+            "temperature": 0.7,
+            "provider_preference": None,
+            "max_output_tokens": None,
+            "context_window_tokens": 32000,
+            "advanced": {
+                "thinking_mode": "off",
+                "provider_settings": {
+                    "cache": {
+                        "enabled": False,
+                        "retention": "24h",
+                    }
+                },
+            },
+        }
+    )
 
-    assert settings["openai"]["enabled"] is True
-    assert settings["openai"]["retention"] == "24h"
-    assert settings["claude"]["ttl"] == "5m"
-    assert settings["gemini"]["explicit_ttl_preset"] == "1h"
-    assert settings["xai"]["enabled"] is True
-    assert settings["nanogpt"]["stickyProvider"] is False
+    assert normalized["advanced"]["provider_settings"]["cache"]["enabled"] is False
+    assert normalized["advanced"]["provider_settings"]["cache"]["retention"] == "24h"
 
 
 def test_openai_prepare_responses_request_includes_prompt_cache_hints() -> None:
-    provider = OpenAIResponsesProvider({"api_key": "test-key"})
+    provider = OpenAIResponsesProvider({})
     request = provider._prepare_responses_request(
         model="gpt-5-mini",
         input_items=[{"role": "user", "content": [{"type": "input_text", "text": "hi"}]}],
@@ -35,7 +119,7 @@ def test_openai_prepare_responses_request_includes_prompt_cache_hints() -> None:
         max_tokens=100,
         thinking_config=None,
         verbosity=None,
-        cache_settings={"enabled": True, "retention": "24h"},
+        provider_settings={"cache": {"enabled": True, "retention": "24h"}},
         cache_plan=SimpleNamespace(thread_cache_key="thread-123"),
     )
 
@@ -43,8 +127,27 @@ def test_openai_prepare_responses_request_includes_prompt_cache_hints() -> None:
     assert request["prompt_cache_retention"] == "24h"
 
 
+def test_openai_prepare_responses_request_omits_prompt_cache_hints_when_disabled() -> None:
+    provider = OpenAIResponsesProvider({})
+    request = provider._prepare_responses_request(
+        model="gpt-5-mini",
+        input_items=[{"role": "user", "content": [{"type": "input_text", "text": "hi"}]}],
+        temperature=0.2,
+        tools=None,
+        tool_choice=None,
+        max_tokens=100,
+        thinking_config=None,
+        verbosity=None,
+        provider_settings={"cache": {"enabled": False, "retention": "24h"}},
+        cache_plan=SimpleNamespace(thread_cache_key="thread-123"),
+    )
+
+    assert "prompt_cache_key" not in request
+    assert "prompt_cache_retention" not in request
+
+
 def test_xai_request_kwargs_include_grok_conversation_header() -> None:
-    provider = XAIProvider({"api_key": "test-key"})
+    provider = XAIProvider({})
     request = provider._prepare_request_kwargs(
         messages=[{"role": "user", "content_parts": [{"type": "content", "text": "hi"}]}],
         model="grok-4",
@@ -55,16 +158,34 @@ def test_xai_request_kwargs_include_grok_conversation_header() -> None:
         provider_preference=None,
         thinking_config=None,
         thinking_mode="off",
-        provider_settings=None,
-        cache_settings={"enabled": True},
+        provider_settings={"cache": {"enabled": True}},
         cache_plan=SimpleNamespace(thread_cache_key="thread-xyz"),
     )
 
     assert request["extra_headers"]["x-grok-conv-id"] == "thread-xyz"
 
 
+def test_xai_request_kwargs_omits_grok_conversation_header_when_cache_disabled() -> None:
+    provider = XAIProvider({})
+    request = provider._prepare_request_kwargs(
+        messages=[{"role": "user", "content_parts": [{"type": "content", "text": "hi"}]}],
+        model="grok-4",
+        temperature=0.2,
+        tools=None,
+        tool_choice=None,
+        max_tokens=32,
+        provider_preference=None,
+        thinking_config=None,
+        thinking_mode="off",
+        provider_settings={"cache": {"enabled": False}},
+        cache_plan=SimpleNamespace(thread_cache_key="thread-xyz"),
+    )
+
+    assert "extra_headers" not in request or "x-grok-conv-id" not in request.get("extra_headers", {})
+
+
 def test_claude_explicit_cache_controls_mark_system_and_message_targets() -> None:
-    provider = ClaudeProvider({"api_key": "test-key"})
+    provider = ClaudeProvider({})
     cache_plan = PreparedCachePlan(
         provider="claude",
         provider_strategy="claude_explicit",

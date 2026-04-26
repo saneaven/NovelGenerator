@@ -34,7 +34,6 @@ async def execute_stream(
     provider = prepared.provider
     task_config = prepared.task_config
     advanced = prepared.advanced
-    cache_settings = getattr(prepared, "llm_cache_settings", None)
     prepared_cache_plan = getattr(prepared, "prepared_cache_plan", None)
 
     def _create_stream():
@@ -59,7 +58,6 @@ async def execute_stream(
             native_tool_call=prepared.native_tool_call_mode,
             verbosity=advanced.get("verbosity"),
             provider_settings=advanced.get("provider_settings"),
-            cache_settings=cache_settings,
             cache_plan=prepared_cache_plan,
         )
 

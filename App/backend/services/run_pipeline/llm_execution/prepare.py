@@ -16,7 +16,6 @@ from ...prompt_cache_service import (
 )
 from ...reasoning.history_filter import filter_history_by_run
 from ...reasoning.mode_policy import apply_thinking_mode
-from ...llm_cache_settings import validate_llm_cache_settings
 from ...settings_service import settings_service
 from ...thread_parent_runtime_service import resolve_parent
 from ...token_count_service import count_conversation_tokens
@@ -273,10 +272,10 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
                     provider.set_thinking_template(thinking_template)
                     advanced["_resolved_template"] = thinking_template
 
-    all_llm_cache_settings = validate_llm_cache_settings(getattr(settings, "llm_cache_settings", None))
+    provider_settings = advanced.get("provider_settings") if isinstance(advanced.get("provider_settings"), dict) else {}
     provider_cache_settings = (
-        dict(all_llm_cache_settings.get(task_config.provider))
-        if isinstance(all_llm_cache_settings.get(task_config.provider), dict)
+        dict(provider_settings.get("cache"))
+        if isinstance(provider_settings.get("cache"), dict)
         else {}
     )
     prepared_cache_plan = build_prepared_cache_plan(
@@ -316,7 +315,6 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
         thinking_mode=thinking_mode,
         effective_thinking_config=effective_thinking_config,
         provider_messages=provider_messages,
-        llm_cache_settings=provider_cache_settings,
         prepared_cache_plan=prepared_cache_plan,
         stream_thinking_display=stream_thinking_display,
         retry_cfg=retry_cfg,

@@ -62,7 +62,6 @@ class PreparedLLMExecution:
     thinking_mode: str
     effective_thinking_config: dict[str, Any] | None
     provider_messages: list[dict[str, Any]]
-    llm_cache_settings: dict[str, Any]
     prepared_cache_plan: PreparedCachePlan
     stream_thinking_display: str | None
     retry_cfg: NormalizedRetryConfig | None

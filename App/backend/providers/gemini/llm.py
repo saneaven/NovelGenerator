@@ -351,10 +351,9 @@ class GeminiProvider(BaseProvider):
         native_tool_call: bool = False,
         verbosity: Optional[str] = None,
         provider_settings: Optional[Dict[str, Any]] = None,
-        cache_settings: Optional[Dict[str, Any]] = None,
         cache_plan: Any = None,
     ) -> AsyncGenerator[ProviderEvent, None]:
-        del provider_preference, custom_kind, verbosity, provider_settings
+        del provider_preference, custom_kind, verbosity
         if not self.validate_config():
             yield self._error_event("Gemini API key is required")
             return
@@ -381,10 +380,10 @@ class GeminiProvider(BaseProvider):
         if thinking_cfg:
             config_dict["thinkingConfig"] = thinking_cfg
 
+        cache_config = self._cache_config_from_provider_settings(provider_settings)
         explicit_cache_enabled = (
-            isinstance(cache_settings, dict)
-            and bool(cache_settings.get("enabled", False))
-            and bool(cache_settings.get("explicit", True))
+            bool(cache_config.get("enabled", False))
+            and bool(cache_config.get("explicit", True))
             and str(getattr(cache_plan, "provider_strategy", "") or "") == "gemini_explicit"
         )
         selected_prefix_count = int(getattr(cache_plan, "selected_provider_message_count", 0) or 0)
@@ -401,7 +400,7 @@ class GeminiProvider(BaseProvider):
 
         if explicit_cache_enabled and selected_prefix_count > 0 and selected_prefix_count < len(contents):
             if not selected_cache_handle:
-                ttl_seconds = gemini_ttl_seconds(str(getattr(cache_plan, "ttl_label", None) or cache_settings.get("explicit_ttl_preset") or "1h"))
+                ttl_seconds = gemini_ttl_seconds(str(getattr(cache_plan, "ttl_label", None) or cache_config.get("explicit_ttl_preset") or "1h"))
                 selected_cache_handle = (
                     await self._create_cached_content(
                         client=client,

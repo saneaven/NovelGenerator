@@ -262,53 +262,6 @@ class SearchMemorySettings(BaseModel):
     overrides: SearchMemoryOverrides = Field(default_factory=SearchMemoryOverrides)
 
 
-class OpenAILLMCacheSettings(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    enabled: bool = True
-    retention: Literal["default", "in_memory", "24h"] = "default"
-
-
-class ClaudeLLMCacheSettings(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    enabled: bool = True
-    ttl: Literal["5m", "1h"] = "5m"
-
-
-class GeminiLLMCacheSettings(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    enabled: bool = True
-    implicit: bool = True
-    explicit: bool = True
-    explicit_ttl_preset: Literal["5m", "30m", "1h", "6h", "24h"] = "1h"
-
-
-class XAILLMCacheSettings(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    enabled: bool = True
-
-
-class NanoGPTLLMCacheSettings(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    enabled: bool = True
-    ttl: Literal["5m", "1h"] = "5m"
-    stickyProvider: bool = False
-
-
-class LLMCacheSettings(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    openai: OpenAILLMCacheSettings = Field(default_factory=OpenAILLMCacheSettings)
-    claude: ClaudeLLMCacheSettings = Field(default_factory=ClaudeLLMCacheSettings)
-    gemini: GeminiLLMCacheSettings = Field(default_factory=GeminiLLMCacheSettings)
-    xai: XAILLMCacheSettings = Field(default_factory=XAILLMCacheSettings)
-    nanogpt: NanoGPTLLMCacheSettings = Field(default_factory=NanoGPTLLMCacheSettings)
-
-
 # Image generation settings schemas
 class NaturalImageStyle(BaseModel):
     """Custom image style for natural language providers (prefix/postfix)"""
@@ -355,7 +308,6 @@ class UserSettingsResponse(BaseModel):
     customThinkingTemplates: List[CustomThinkingTemplate] = []
     nativeOutputMode: bool = False
     searchMemorySettings: SearchMemorySettings = Field(default_factory=SearchMemorySettings)
-    llmCacheSettings: LLMCacheSettings = Field(default_factory=LLMCacheSettings)
     patchAutoRetry: bool = True
     llmLoggingEnabled: bool = False
     toolCallHistoryLimit: int = 5
@@ -380,7 +332,6 @@ class UserSettingsUpdate(BaseModel):
     customThinkingTemplates: Optional[List[CustomThinkingTemplate]] = None
     nativeOutputMode: Optional[bool] = None
     searchMemorySettings: Optional[SearchMemorySettings] = None
-    llmCacheSettings: Optional[LLMCacheSettings] = None
     patchAutoRetry: Optional[bool] = None
     llmLoggingEnabled: Optional[bool] = None
     toolCallHistoryLimit: Optional[int] = None
