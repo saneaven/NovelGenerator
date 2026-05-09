@@ -148,7 +148,6 @@ class GeminiProvider(BaseProvider):
     @staticmethod
     def _normalize_thought_signature(value: Any) -> Optional[str]:
         if isinstance(value, str):
-            value = value.strip()
             return value or None
         if isinstance(value, (bytes, bytearray)):
             return base64.b64encode(bytes(value)).decode("utf-8")

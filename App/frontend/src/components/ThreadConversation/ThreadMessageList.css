@@ -126,6 +126,29 @@
   pointer-events: auto;
 }
 
+.thread-message-row__actions-emerging {
+  display: flex;
+  justify-content: flex-end;
+  max-height: 0;
+  overflow: hidden;
+  padding: 0 var(--spacing-sm);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    max-height var(--transition-base),
+    opacity var(--transition-base),
+    padding var(--transition-base);
+}
+
+.thread-message-row-group:hover .thread-message-row__actions-emerging,
+.thread-message-row-group:focus-within .thread-message-row__actions-emerging {
+  max-height: var(--size-12);
+  padding-top: var(--spacing-xs);
+  padding-bottom: var(--spacing-xs);
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .thread-message-row__content {
   width: 100%;
   padding: var(--spacing-lg) var(--spacing-xl);

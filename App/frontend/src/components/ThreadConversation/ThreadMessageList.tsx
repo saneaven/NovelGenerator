@@ -230,9 +230,11 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
             </div>
           )}
 
-          {rows.map((row) => {
+          {rows.map((row, index) => {
+            const previousRow = index > 0 ? rows[index - 1] : null;
             const isUser = row.role === 'user';
             const isAssistant = row.role === 'assistant';
+            const isSameRoleAsPrevious = previousRow?.role === row.role;
             const roleLabel = isUser
               ? (roleLabels?.user ?? t('agent.you'))
               : (roleLabels?.assistant ?? t('agent.ai'));
@@ -260,33 +262,44 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
             const hasSubAgentCalls = row.toolCalls.some((toolCall) => (
               toolCall.toolName.startsWith('call_') && Boolean(toolCall.childThreadId)
             ));
+            const hasToolbar = canEdit || canTranslate || canToggleLanguage || canDelete;
 
-            const messageHeader = (
+            const messageToolbar = hasToolbar ? (
+              <MessageRowToolbar
+                canEdit={canEdit}
+                canTranslate={canTranslate}
+                canToggleLanguage={canToggleLanguage}
+                canDelete={canDelete}
+                editDisabled={!row.primaryText}
+                translateDisabled={!secondaryLanguage || translating || !row.primaryText}
+                deleteDisabled={false}
+                languageToggleActive={row.isSecondaryView}
+                isTranslating={translating}
+                translationAvailable={row.translationAvailable}
+                sourceLanguage={sourceLanguage}
+                targetLanguage={secondaryLanguage}
+                onEdit={() => startEdit(row.message.id, row.primaryText)}
+                onTranslate={() => void translateMessage(row.message, row.primaryText)}
+                onToggleLanguage={() => setMessageLanguageView((prev) => ({
+                  ...prev,
+                  [row.message.id]: row.isSecondaryView ? 'primary' : 'secondary',
+                }))}
+                onDelete={() => void deleteMessage(row.message, row.toolCalls.length)}
+              />
+            ) : null;
+
+            const messageHeader = isSameRoleAsPrevious ? null : (
               <div className="thread-message-row__header">
                 <span className="thread-message-row__role">{roleLabel}</span>
-                <MessageRowToolbar
-                  canEdit={canEdit}
-                  canTranslate={canTranslate}
-                  canToggleLanguage={canToggleLanguage}
-                  canDelete={canDelete}
-                  editDisabled={!row.primaryText}
-                  translateDisabled={!secondaryLanguage || translating || !row.primaryText}
-                  deleteDisabled={false}
-                  languageToggleActive={row.isSecondaryView}
-                  isTranslating={translating}
-                  translationAvailable={row.translationAvailable}
-                  sourceLanguage={sourceLanguage}
-                  targetLanguage={secondaryLanguage}
-                  onEdit={() => startEdit(row.message.id, row.primaryText)}
-                  onTranslate={() => void translateMessage(row.message, row.primaryText)}
-                  onToggleLanguage={() => setMessageLanguageView((prev) => ({
-                    ...prev,
-                    [row.message.id]: row.isSecondaryView ? 'primary' : 'secondary',
-                  }))}
-                  onDelete={() => void deleteMessage(row.message, row.toolCalls.length)}
-                />
+                {messageToolbar}
               </div>
             );
+
+            const emergingToolbar = isSameRoleAsPrevious && messageToolbar ? (
+              <div className="thread-message-row__actions-emerging">
+                {messageToolbar}
+              </div>
+            ) : null;
 
             const thinkingBlock = isAssistant ? (
               <ThinkingDisplay
@@ -362,6 +375,7 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
             ) : null;
 
             const bodyBlock = thinkingBlock || contentBlock || toolCallsBlock || subAgentBlock;
+            const metaBlock = messageHeader || emergingToolbar || attachmentBlock || mcpBlock;
             const bodyRowClassName = [
               'thread-message-row',
               `thread-message-row--${row.role}`,
@@ -374,13 +388,16 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
                 key={row.message.id}
                 className={`thread-message-row-group thread-message-row-group--${row.role}`}
               >
-                <article className={`thread-message-row thread-message-row--${row.role} thread-message-row--meta`}>
-                  <div className="thread-message-row__shell">
-                    {messageHeader}
-                    {attachmentBlock}
-                    {mcpBlock}
-                  </div>
-                </article>
+                {metaBlock && (
+                  <article className={`thread-message-row thread-message-row--${row.role} thread-message-row--meta`}>
+                    <div className="thread-message-row__shell">
+                      {messageHeader}
+                      {emergingToolbar}
+                      {attachmentBlock}
+                      {mcpBlock}
+                    </div>
+                  </article>
+                )}
 
                 {bodyBlock && (
                   <article className={bodyRowClassName}>
