@@ -48,6 +48,10 @@
   position: relative;
 }
 
+.thread-message-row-group {
+  display: contents;
+}
+
 .thread-message-row--user {
   align-items: flex-end;
 }
@@ -62,7 +66,7 @@
   z-index: var(--z-sticky);
 }
 
-.thread-message-row--sticky-header-source + .thread-message-row--sticky-latest-user {
+.thread-message-row--meta + .thread-message-row--body {
   margin-top: calc(var(--spacing-sm) - var(--spacing-lg));
 }
 
@@ -116,8 +120,8 @@
   transition: opacity var(--transition-fast);
 }
 
-.thread-message-row:hover .thread-message-toolbar,
-.thread-message-row:focus-within .thread-message-toolbar {
+.thread-message-row-group:hover .thread-message-toolbar,
+.thread-message-row-group:focus-within .thread-message-toolbar {
   opacity: 1;
   pointer-events: auto;
 }

@@ -352,46 +352,49 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
                 />
               </Suspense>
             ) : null;
-            const splitStickyUserBubble = isStickyLatestUser && Boolean(contentBlock);
+
+            const memoryBoundaryBlock = thread?.memoryBoundaryMessageId === row.message.id ? (
+              <div className="thread-memory-boundary" role="separator" aria-label="Memory boundary">
+                <div className="thread-memory-boundary__line" />
+                <span className="thread-memory-boundary__label">Memory boundary</span>
+                <div className="thread-memory-boundary__line" />
+              </div>
+            ) : null;
+
+            const bodyBlock = thinkingBlock || contentBlock || toolCallsBlock || subAgentBlock;
+            const bodyRowClassName = [
+              'thread-message-row',
+              `thread-message-row--${row.role}`,
+              'thread-message-row--body',
+              isStickyLatestUser && contentBlock ? 'thread-message-row--sticky-latest-user' : '',
+            ].filter(Boolean).join(' ');
 
             return (
-              <React.Fragment key={row.message.id}>
-                {splitStickyUserBubble && (
-                  <article className="thread-message-row thread-message-row--user thread-message-row--sticky-header-source">
+              <div
+                key={row.message.id}
+                className={`thread-message-row-group thread-message-row-group--${row.role}`}
+              >
+                <article className={`thread-message-row thread-message-row--${row.role} thread-message-row--meta`}>
+                  <div className="thread-message-row__shell">
+                    {messageHeader}
+                    {attachmentBlock}
+                    {mcpBlock}
+                  </div>
+                </article>
+
+                {bodyBlock && (
+                  <article className={bodyRowClassName}>
                     <div className="thread-message-row__shell">
-                      {messageHeader}
-                      {attachmentBlock}
-                      {mcpBlock}
+                      {thinkingBlock}
+                      {contentBlock}
+                      {toolCallsBlock}
+                      {subAgentBlock}
                     </div>
                   </article>
                 )}
 
-                <article
-                  className={[
-                    'thread-message-row',
-                    `thread-message-row--${row.role}`,
-                    splitStickyUserBubble ? 'thread-message-row--sticky-latest-user' : '',
-                  ].filter(Boolean).join(' ')}
-                >
-                  <div className="thread-message-row__shell">
-                    {!splitStickyUserBubble && messageHeader}
-                    {!splitStickyUserBubble && attachmentBlock}
-                    {!splitStickyUserBubble && mcpBlock}
-                    {thinkingBlock}
-                    {contentBlock}
-                    {toolCallsBlock}
-                    {subAgentBlock}
-                  </div>
-                </article>
-
-                {thread?.memoryBoundaryMessageId === row.message.id && (
-                  <div className="thread-memory-boundary" role="separator" aria-label="Memory boundary">
-                    <div className="thread-memory-boundary__line" />
-                    <span className="thread-memory-boundary__label">Memory boundary</span>
-                    <div className="thread-memory-boundary__line" />
-                  </div>
-                )}
-              </React.Fragment>
+                {memoryBoundaryBlock}
+              </div>
             );
           })}
 
