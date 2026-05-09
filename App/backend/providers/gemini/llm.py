@@ -1,3 +1,4 @@
+import base64
 import copy
 import inspect
 import json
@@ -14,6 +15,9 @@ from ..shared.parsing.native_tool_calls_parser import NativeToolCallsStreamParse
 from ..shared.parsing.thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 from ...services.prompt_cache_service import gemini_ttl_seconds
 from ...utils.outbound_http import validate_outbound_base_url
+
+GEMINI_THOUGHT_SIGNATURE_EXTRA_KEY = "gemini_thought_signature"
+
 
 class GeminiProvider(BaseProvider):
     """Google Gemini provider with thought summaries / thinking support."""
@@ -140,6 +144,73 @@ class GeminiProvider(BaseProvider):
             if isinstance(text, str):
                 return text
         return parts
+
+    @staticmethod
+    def _normalize_thought_signature(value: Any) -> Optional[str]:
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        if isinstance(value, (bytes, bytearray)):
+            return base64.b64encode(bytes(value)).decode("utf-8")
+        return None
+
+    @classmethod
+    def _part_thought_signature(cls, part: Any) -> Optional[str]:
+        signature = getattr(part, "thought_signature", None)
+        normalized = cls._normalize_thought_signature(signature)
+        if normalized:
+            return normalized
+
+        raw: Dict[str, Any] = {}
+        if isinstance(part, dict):
+            raw = part
+        elif hasattr(part, "model_dump"):
+            dumped = part.model_dump()
+            if isinstance(dumped, dict):
+                raw = dumped
+
+        return cls._normalize_thought_signature(
+            raw.get("thought_signature") or raw.get("thoughtSignature")
+        )
+
+    @classmethod
+    def _function_call_part_with_signature(cls, part: types.Part, signature: Optional[str]) -> types.Part:
+        normalized = cls._normalize_thought_signature(signature)
+        if not normalized:
+            return part
+
+        raw_part = _to_raw_dict(part)
+        if raw_part:
+            raw_part = dict(raw_part)
+            raw_part["thought_signature"] = normalized
+            try:
+                return types.Part.model_validate(raw_part)
+            except Exception:
+                pass
+
+        try:
+            setattr(part, "thought_signature", normalized)
+        except Exception:
+            pass
+        return part
+
+    @classmethod
+    def _function_call_delta_from_part(cls, *, part: Any, function_call: Any, index: int) -> Dict[str, Any]:
+        arguments = getattr(function_call, "args", None) or {}
+        tool_call_id = getattr(function_call, "id", None) or f"tool_call_{index + 1}"
+        delta: Dict[str, Any] = {
+            "index": index,
+            "id": str(tool_call_id),
+            "type": "function",
+            "function": {
+                "name": getattr(function_call, "name", None) or "",
+                "arguments": json.dumps(arguments, ensure_ascii=False),
+            },
+        }
+        signature = cls._part_thought_signature(part)
+        if signature:
+            delta["extra_content"] = {GEMINI_THOUGHT_SIGNATURE_EXTRA_KEY: signature}
+        return delta
 
     # ------------------------------------------------------------------ #
     # Thinking config mapping
@@ -271,7 +342,8 @@ class GeminiProvider(BaseProvider):
                         if isinstance(text_value, str) and text_value:
                             kwargs["text"] = text_value
                         thought_signature = part.get("thought_signature")
-                        if isinstance(thought_signature, str) and thought_signature:
+                        thought_signature = self._normalize_thought_signature(thought_signature)
+                        if thought_signature:
                             kwargs["thought_signature"] = thought_signature
                         if "thought" in part:
                             kwargs["thought"] = bool(part.get("thought"))
@@ -303,7 +375,10 @@ class GeminiProvider(BaseProvider):
                         args = json.loads(args_str) if isinstance(args_str, str) else args_str
                     except json.JSONDecodeError:
                         args = {}
-                    parts.append(types.Part.from_function_call(name=tc_function.get("name", ""), args=args))
+                    function_part = types.Part.from_function_call(name=tc_function.get("name", ""), args=args)
+                    extra_content = tc.get("extra_content") if isinstance(tc.get("extra_content"), dict) else {}
+                    thought_signature = extra_content.get(GEMINI_THOUGHT_SIGNATURE_EXTRA_KEY)
+                    parts.append(self._function_call_part_with_signature(function_part, thought_signature))
                 if parts:
                     contents.append(types.Content(role=mapped_role, parts=parts))
                 if text:
@@ -549,6 +624,24 @@ class GeminiProvider(BaseProvider):
 
                     parts = getattr(content, "parts", None) or []
                     for part in parts:
+                        if getattr(part, "function_call", None):
+                            fc = part.function_call
+                            tool_call_counter += 1
+
+                            yield ProviderEvent(
+                                kind="delta",
+                                delta=DeltaPayload(
+                                    tool_call_deltas=[
+                                        self._function_call_delta_from_part(
+                                            part=part,
+                                            function_call=fc,
+                                            index=tool_call_counter - 1,
+                                        )
+                                    ]
+                                ),
+                            )
+                            continue
+
                         if getattr(part, "thought", False):
                             thought_text = getattr(part, "text", None) or ""
                             if thought_text:
@@ -557,15 +650,7 @@ class GeminiProvider(BaseProvider):
                                     delta=DeltaPayload(thinking_delta=thought_text),
                                 )
 
-                            signature = getattr(part, "thought_signature", None)
-                            if signature is None and hasattr(part, "model_dump"):
-                                signature = part.model_dump().get("thought_signature")
-
-                            if signature:
-                                if isinstance(signature, (bytes, bytearray)):
-                                    import base64
-
-                                    signature = base64.b64encode(signature).decode("utf-8")
+                            signature = self._part_thought_signature(part)
                             thought_detail: Dict[str, Any] = {"thought": True}
                             if thought_text:
                                 thought_detail["text"] = thought_text
@@ -578,30 +663,6 @@ class GeminiProvider(BaseProvider):
                                         reasoning_detail_delta=[thought_detail]
                                     ),
                                 )
-                            continue
-
-                        if getattr(part, "function_call", None):
-                            fc = part.function_call
-                            arguments = fc.args or {}
-                            tool_call_counter += 1
-                            tool_call_id = getattr(fc, "id", None) or f"tool_call_{tool_call_counter}"
-
-                            yield ProviderEvent(
-                                kind="delta",
-                                delta=DeltaPayload(
-                                    tool_call_deltas=[
-                                        {
-                                            "index": tool_call_counter - 1,
-                                            "id": str(tool_call_id),
-                                            "type": "function",
-                                            "function": {
-                                                "name": fc.name or "",
-                                                "arguments": json.dumps(arguments, ensure_ascii=False),
-                                            },
-                                        }
-                                    ]
-                                ),
-                            )
                             continue
 
                         text = getattr(part, "text", None)

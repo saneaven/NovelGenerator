@@ -242,6 +242,37 @@ def test_fallback_snapshot_assembler_merges_mixed_id_index_fragments_without_emp
     }
 
 
+def test_fallback_snapshot_assembler_preserves_tool_meta_and_gemini_signature() -> None:
+    assembler = FallbackSnapshotAssembler(provider="gemini", model="gemini-test")
+
+    assembler.apply_delta(
+        DeltaPayload(
+            tool_call_deltas=[
+                {
+                    "index": 0,
+                    "id": "call_1",
+                    "extra_content": {
+                        "__tool_meta": {"objectType": "story_entity"},
+                        "gemini_thought_signature": "sig-a",
+                    },
+                    "function": {
+                        "name": "patch_story_entity",
+                        "arguments": '{"id":"entity-1"}',
+                    },
+                }
+            ]
+        )
+    )
+
+    snapshot = assembler.finalize_or_raise()
+
+    assert len(snapshot.tool_calls) == 1
+    assert snapshot.tool_calls[0].extra_content == {
+        "__tool_meta": {"objectType": "story_entity"},
+        "gemini_thought_signature": "sig-a",
+    }
+
+
 def test_native_tool_call_extraction_happens_before_final_content_trim() -> None:
     snapshot = _snapshot(
         [

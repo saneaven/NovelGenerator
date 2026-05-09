@@ -107,6 +107,11 @@ def _ensure_provider_stubs() -> None:
         )
         sys.modules["App.backend.services.chat_attachment_service"] = fake_chat_attachment_service
 
+    if "App.backend.services.prompt_cache_service" not in sys.modules:
+        fake_prompt_cache_service = types.ModuleType("App.backend.services.prompt_cache_service")
+        fake_prompt_cache_service.gemini_ttl_seconds = lambda _ttl_preset: "3600s"
+        sys.modules["App.backend.services.prompt_cache_service"] = fake_prompt_cache_service
+
 
 def _load_providers():
     _ensure_provider_stubs()
@@ -142,6 +147,138 @@ def test_provider_stream_thinking_display_paths() -> None:
     assert custom.get_stream_thinking_display_path({}) == "text"
     assert custom.get_stream_thinking_display_path({"custom_kind": "openai_response"}) == "reasoning_text"
     assert custom.get_stream_thinking_display_path({"custom_kind": "claude"}) == "reasoning_text"
+
+
+def _patch_gemini_part_types(monkeypatch: Any) -> None:
+    from App.backend.providers.gemini import llm as gemini_llm
+
+    class _Part:
+        def __init__(self, **kwargs: object) -> None:
+            self.__dict__.update(kwargs)
+
+        @classmethod
+        def from_text(cls, *, text: str) -> "_Part":
+            return cls(text=text)
+
+        @classmethod
+        def from_bytes(cls, *, data: bytes, mime_type: str) -> "_Part":
+            return cls(data=data, mime_type=mime_type)
+
+        @classmethod
+        def from_function_response(cls, *, name: str, response: dict[str, object]) -> "_Part":
+            return cls(name=name, response=response)
+
+        @classmethod
+        def from_function_call(cls, *, name: str, args: dict[str, object]) -> "_Part":
+            return cls(name=name, args=args)
+
+        @classmethod
+        def model_validate(cls, payload: dict[str, object]) -> "_Part":
+            return cls(**payload)
+
+        def model_dump(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+            return dict(self.__dict__)
+
+    class _Content:
+        def __init__(self, role: str | None = None, parts: list[object] | None = None) -> None:
+            self.role = role
+            self.parts = parts or []
+
+    monkeypatch.setattr(gemini_llm.types, "Part", _Part)
+    monkeypatch.setattr(gemini_llm.types, "Content", _Content)
+
+
+def test_gemini_convert_messages_restores_function_call_thought_signature(monkeypatch: Any) -> None:
+    _, _, GeminiProvider, _, _, _ = _load_providers()
+    _patch_gemini_part_types(monkeypatch)
+    provider = GeminiProvider({})
+
+    converted = provider._convert_messages(
+        [
+            {
+                "role": "assistant",
+                "content_parts": [],
+                "tool_calls": [
+                    {
+                        "id": "tool_call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "patch_story_entity",
+                            "arguments": '{"id":"entity-1"}',
+                        },
+                        "extra_content": {
+                            "gemini_thought_signature": "sig-a",
+                            "__tool_meta": {"preview": True},
+                        },
+                    }
+                ],
+            }
+        ]
+    )
+
+    part = converted["contents"][0].parts[0]
+    assert part.name == "patch_story_entity"
+    assert part.args == {"id": "entity-1"}
+    assert part.thought_signature == "sig-a"
+
+
+def test_gemini_convert_messages_without_signature_keeps_existing_function_call_shape(monkeypatch: Any) -> None:
+    _, _, GeminiProvider, _, _, _ = _load_providers()
+    _patch_gemini_part_types(monkeypatch)
+    provider = GeminiProvider({})
+
+    converted = provider._convert_messages(
+        [
+            {
+                "role": "assistant",
+                "content_parts": [],
+                "tool_calls": [
+                    {
+                        "id": "tool_call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "patch_story_entity",
+                            "arguments": '{"id":"entity-1"}',
+                        },
+                    }
+                ],
+            }
+        ]
+    )
+
+    part = converted["contents"][0].parts[0]
+    assert part.name == "patch_story_entity"
+    assert part.args == {"id": "entity-1"}
+    assert not hasattr(part, "thought_signature")
+
+
+def test_gemini_function_call_delta_captures_thought_signature() -> None:
+    _, _, GeminiProvider, _, _, _ = _load_providers()
+    function_call = types.SimpleNamespace(id="call_1", name="patch_story_entity", args={"id": "entity-1"})
+    part = types.SimpleNamespace(function_call=function_call, thought_signature="sig-a")
+
+    delta = GeminiProvider._function_call_delta_from_part(
+        part=part,
+        function_call=function_call,
+        index=0,
+    )
+
+    assert delta["extra_content"] == {"gemini_thought_signature": "sig-a"}
+    assert delta["function"]["name"] == "patch_story_entity"
+
+
+def test_gemini_function_call_delta_base64_encodes_bytes_signature() -> None:
+    _, _, GeminiProvider, _, _, _ = _load_providers()
+    function_call = types.SimpleNamespace(id="call_1", name="patch_story_entity", args={"id": "entity-1"})
+    part = types.SimpleNamespace(function_call=function_call, thought_signature=b"sig-a")
+
+    delta = GeminiProvider._function_call_delta_from_part(
+        part=part,
+        function_call=function_call,
+        index=0,
+    )
+
+    assert delta["extra_content"] == {"gemini_thought_signature": "c2lnLWE="}
 
 
 def test_custom_template_stream_display_path_and_nested_data() -> None:
