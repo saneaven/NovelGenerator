@@ -1,0 +1,518 @@
+.thread-message-list {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  background: var(--color-surface-base);
+  isolation: isolate;
+}
+
+.thread-message-list__scroll {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: calc(var(--thread-message-list-top-overlay) + var(--spacing-xl))
+    var(--spacing-xl)
+    calc(var(--thread-message-list-bottom-overlay) + var(--spacing-xl));
+  scroll-padding-top: calc(var(--thread-message-list-top-overlay) + var(--spacing-xl));
+  scroll-padding-bottom: calc(var(--thread-message-list-bottom-overlay) + var(--spacing-xl));
+}
+
+.thread-message-list__content {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.thread-message-list__loading,
+.thread-message-list__empty,
+.thread-message-list__error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  min-height: var(--size-content-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.thread-message-list__error {
+  color: var(--color-error);
+}
+
+.thread-message-row {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.thread-message-row--user {
+  align-items: flex-end;
+}
+
+.thread-message-row--assistant {
+  align-items: flex-start;
+}
+
+.thread-message-row--sticky-latest-user {
+  position: sticky;
+  top: calc(var(--thread-message-list-top-overlay) + var(--spacing-sm));
+  z-index: var(--z-sticky);
+}
+
+.thread-message-row--sticky-header-source + .thread-message-row--sticky-latest-user {
+  margin-top: calc(var(--spacing-sm) - var(--spacing-lg));
+}
+
+.thread-message-row__shell {
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.thread-message-row--user .thread-message-row__shell {
+  max-width: 85%;
+}
+
+.thread-message-row--sticky-latest-user .thread-message-row__shell {
+  max-width: 100%;
+}
+
+.thread-message-row__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding-inline: var(--spacing-sm);
+  min-height: var(--spacing-2xl);
+}
+
+.thread-message-row__role {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-normal);
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.thread-message-row--user .thread-message-row__role {
+  color: var(--color-brand-primary);
+}
+
+.thread-message-row--assistant .thread-message-row__role {
+  color: var(--color-brand-secondary-hover);
+}
+
+.thread-message-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+
+.thread-message-row:hover .thread-message-toolbar,
+.thread-message-row:focus-within .thread-message-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.thread-message-row__content {
+  width: 100%;
+  padding: var(--spacing-lg) var(--spacing-xl);
+  color: var(--color-text-primary);
+  line-height: var(--line-height-relaxed);
+  font-size: var(--font-size-base);
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.thread-message-row--user .thread-message-row__content {
+  background: var(--color-surface-subtle);
+  border-radius: var(--border-radius-xl) var(--border-radius-xl) var(--border-radius-sm) var(--border-radius-xl);
+}
+
+.thread-message-row--assistant .thread-message-row__content {
+  background: var(--color-surface-elevated);
+  border-radius: var(--border-radius-lg);
+}
+
+.thread-message-row--sticky-latest-user .thread-message-row__content {
+  border: thin solid var(--color-border-default);
+  box-shadow: var(--shadow-md);
+}
+
+.thread-message-row__content .message-text {
+  color: inherit;
+  min-width: 0;
+}
+
+.thread-message-row__content .message-text p {
+  margin: var(--spacing-sm) 0;
+  color: inherit;
+}
+
+.thread-message-row__content .message-text p:first-child {
+  margin-top: 0;
+}
+
+.thread-message-row__content .message-text p:last-child {
+  margin-bottom: 0;
+}
+
+.thread-message-row__content .message-text ul,
+.thread-message-row__content .message-text ol {
+  margin: var(--spacing-sm) 0;
+  padding-left: var(--spacing-xl);
+}
+
+.thread-message-row__content .message-text ul {
+  list-style-type: disc;
+}
+
+.thread-message-row__content .message-text ol {
+  list-style-type: decimal;
+}
+
+.thread-message-row__content .message-text li {
+  margin: var(--spacing-xs) 0;
+  color: inherit;
+}
+
+.thread-message-row__content .message-text code {
+  background: var(--color-surface-muted);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-sm);
+}
+
+.thread-message-row__content .message-text pre {
+  background: var(--color-surface-muted);
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  overflow-x: auto;
+  margin: var(--spacing-sm) 0;
+}
+
+.thread-message-row__content .message-text pre code {
+  background: none;
+  padding: 0;
+}
+
+.thread-message-row__content .message-text blockquote {
+  border-left: var(--spacing-xs) solid var(--color-border-medium);
+  padding-left: var(--spacing-md);
+  margin: var(--spacing-sm) 0;
+  color: var(--color-text-secondary);
+}
+
+.thread-message-row__content .message-text h1,
+.thread-message-row__content .message-text h2,
+.thread-message-row__content .message-text h3,
+.thread-message-row__content .message-text h4,
+.thread-message-row__content .message-text h5,
+.thread-message-row__content .message-text h6 {
+  margin: var(--spacing-md) 0 var(--spacing-sm);
+  color: inherit;
+}
+
+.thread-message-row__content .message-text a {
+  color: var(--color-text-link);
+  text-decoration: underline;
+}
+
+.thread-message-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.thread-message-attachments__image-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+  width: min(100%, var(--size-content-sm));
+}
+
+.thread-message-attachments__image-grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.thread-message-attachment-image {
+  overflow: hidden;
+  border-radius: var(--border-radius-xl);
+  background: var(--color-surface-subtle);
+  border: thin solid var(--color-border-default);
+  box-shadow: var(--shadow-sm);
+}
+
+.thread-message-attachment-image__asset {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: var(--size-content-sm);
+  object-fit: contain;
+  background: var(--color-surface-subtle);
+}
+
+.thread-message-attachments__files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  width: min(100%, var(--size-content-sm));
+}
+
+.thread-message-attachment-file {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  width: 100%;
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-surface-elevated);
+  border: thin solid var(--color-border-default);
+  box-shadow: var(--shadow-sm);
+}
+
+.thread-message-attachment-file__icon {
+  width: var(--size-12);
+  height: var(--size-12);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.thread-message-attachment-file__meta {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.thread-message-attachment-file__name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thread-message-attachment-file__size {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.thread-message-attachment-file__link {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-link);
+  text-decoration: none;
+}
+
+.thread-message-attachment-file__link:hover,
+.thread-message-attachment-file__link:focus-visible {
+  text-decoration: underline;
+}
+
+.thread-message-mcp-chips {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.thread-message-mcp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  border-radius: var(--border-radius-full);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  border: thin solid var(--color-border-default);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+}
+
+.thread-message-mcp-chip__kind {
+  text-transform: uppercase;
+  opacity: var(--opacity-muted);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0;
+}
+
+.thread-message-mcp-chip__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-message-row__tool-calls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.thread-message-row__tool-call-anchor {
+  display: block;
+  height: 0;
+  overflow: hidden;
+}
+
+.thread-memory-boundary {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin: var(--spacing-sm) 0;
+  opacity: var(--opacity-hover);
+}
+
+.thread-memory-boundary__line {
+  flex: 1;
+  height: 0;
+  border-top: thin solid var(--color-border-default);
+}
+
+.thread-memory-boundary__label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.thread-message-typing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: var(--spacing-sm) 0;
+}
+
+.thread-message-typing--inline {
+  margin: var(--spacing-sm) 0 0;
+}
+
+.thread-message-typing__track {
+  width: 95%;
+  height: var(--spacing-xs);
+  background: var(--color-surface-muted);
+  border-radius: var(--border-radius-full);
+  position: relative;
+  overflow: hidden;
+}
+
+.thread-message-typing__bar {
+  position: absolute;
+  width: 40%;
+  height: 100%;
+  background: var(--color-text-tertiary);
+  border-radius: var(--border-radius-full);
+  animation: threadMessageTypingSlide var(--transition-slower) infinite;
+}
+
+@keyframes threadMessageTypingSlide {
+  0% {
+    left: 0;
+  }
+  50% {
+    left: 60%;
+  }
+  100% {
+    left: 0;
+  }
+}
+
+.thread-message-list__stage {
+  width: 100%;
+  margin: var(--spacing-xs) 0 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+  text-align: center;
+}
+
+.thread-message-list__run-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border: thin solid var(--color-error);
+  border-radius: var(--border-radius-md);
+  background: var(--color-error-light);
+  color: var(--color-error-dark);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-normal);
+}
+
+.thread-message-list__run-error-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--spacing-lg);
+  height: var(--spacing-lg);
+  flex-shrink: 0;
+  border-radius: var(--border-radius-full);
+  background: var(--color-error);
+  color: var(--color-text-inverse);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-normal);
+}
+
+.thread-message-list__live-notice {
+  margin-top: var(--spacing-sm);
+}
+
+.thread-message-list__scroll-button {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--thread-message-list-bottom-overlay) + var(--spacing-lg));
+  transform: translateX(-50%);
+  z-index: var(--z-elevated);
+}
+
+.thread-message-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.thread-message-edit textarea {
+  width: 100%;
+  min-height: calc(var(--spacing-6xl) + var(--spacing-4xl));
+  max-height: 50dvh;
+  padding: var(--spacing-lg);
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  border: thin solid var(--color-border-default);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-sm);
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+  resize: vertical;
+  outline: none;
+  transition:
+    border-color var(--transition-base),
+    box-shadow var(--transition-base),
+    background var(--transition-base);
+}
+
+.thread-message-edit textarea:focus {
+  border-color: var(--color-brand-accent);
+  box-shadow: var(--shadow-focus);
+}

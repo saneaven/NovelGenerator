@@ -1,11 +1,7 @@
 .preexisting-live-run-notice {
-  border: 1px solid var(--color-border-default);
+  border: thin solid var(--color-border-default);
   background: var(--color-surface-elevated);
   border-radius: var(--border-radius-lg);
-  padding: var(--spacing-md) var(--spacing-lg);
-}
-
-.preexisting-live-run-notice--compact {
   padding: var(--spacing-sm) var(--spacing-md);
 }
 
@@ -17,13 +13,13 @@
 }
 
 .preexisting-live-run-notice__title {
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
 
 .preexisting-live-run-notice__body {
-  font-size: 0.82rem;
-  line-height: 1.45;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
   color: var(--color-text-secondary);
 }

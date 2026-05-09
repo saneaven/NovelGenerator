@@ -84,7 +84,6 @@ export const NotificationModals: React.FC = () => {
         label={notification.label}
         status={notification.status}
         message={notification.message}
-        warning={notification.warning}
         projectId={resolvedProjectId}
         onClose={closeDetail}
       />

@@ -399,7 +399,12 @@ export function toImageModelInfo(model: PublicImageModelDescriptor) {
     default_image_size: model.geometry.default_resolution,
     ui_resolution_mode: model.geometry.resolution_mode,
     supported_geometry_pairs: model.geometry.supported_geometry_pairs ?? null,
-    architecture: model.architecture ?? null,
+    architecture: model.architecture
+      ? {
+          input_modalities: model.architecture.input_modalities ?? undefined,
+          output_modalities: model.architecture.output_modalities ?? undefined,
+        }
+      : null,
     pricing: model.pricing ?? null,
     capabilities: model.capabilities ?? null,
     supported_parameters: model.supported_parameters ?? null,

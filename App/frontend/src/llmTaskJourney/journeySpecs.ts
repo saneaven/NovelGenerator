@@ -31,6 +31,7 @@ export interface MessageTranslationInput {
   projectId: string;
   sourceThreadId: string;
   sourceMessageId: string;
+  sourceRole: 'user' | 'assistant';
   sourceLanguage: string;
   targetLanguage: string;
 }

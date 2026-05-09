@@ -371,7 +371,7 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                         {/* Thinking display during streaming */}
                         {isStreamingNatural && streamingStatus && (
                             isSuppressedStreaming ? (
-                                <PreexistingLiveRunNotice compact />
+                                <PreexistingLiveRunNotice />
                             ) : (
                                 <ThinkingDisplay
                                     messageId={streamingSessionId!}
@@ -423,7 +423,7 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                         {/* Thinking display during streaming */}
                         {isStreamingPositive && streamingStatus && (
                             isSuppressedStreaming ? (
-                                <PreexistingLiveRunNotice compact />
+                                <PreexistingLiveRunNotice />
                             ) : (
                                 <ThinkingDisplay
                                     messageId={streamingSessionId!}
@@ -475,7 +475,7 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                         {/* Thinking display during streaming */}
                         {isStreamingNegative && streamingStatus && (
                             isSuppressedStreaming ? (
-                                <PreexistingLiveRunNotice compact />
+                                <PreexistingLiveRunNotice />
                             ) : (
                                 <ThinkingDisplay
                                     messageId={streamingSessionId!}

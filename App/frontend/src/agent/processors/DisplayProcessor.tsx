@@ -4,14 +4,10 @@ import type {
   DisplayProcessor,
   DisplayProcessingResult,
   ProcessedChatMessage,
-  LLMRequestPipelineContext
 } from '../types';
 
 export class DefaultDisplayProcessor implements DisplayProcessor {
-  process(
-    message: ProcessedChatMessage,
-    _context: LLMRequestPipelineContext
-  ): DisplayProcessingResult {
+  process(message: ProcessedChatMessage): DisplayProcessingResult {
     const displayContent = this.processMessageContent(message);
 
     return {
@@ -37,4 +33,3 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
     );
   }
 }
-

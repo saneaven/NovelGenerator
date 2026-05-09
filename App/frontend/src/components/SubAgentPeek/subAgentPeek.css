@@ -1,27 +1,26 @@
 .sub-agent-peek-dock {
+  position: relative;
   display: flex;
   flex-direction: column;
   margin-inline: calc(var(--spacing-xl) * -1);
-  border-top: 1px solid var(--color-border-default);
-  border-bottom: 1px solid var(--color-border-default);
+  border-top: thin solid var(--color-border-default);
+  border-bottom: thin solid var(--color-border-default);
   background: var(--color-surface-subtle);
 }
 
 .sub-agent-peek-header {
-  position: sticky;
-  top: calc(var(--spacing-xl) * -1);
-  z-index: var(--z-sticky);
   padding: var(--spacing-sm) var(--spacing-xl);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
   background: var(--color-surface-base);
-  border-bottom: 1px solid var(--color-border-default);
+  border-bottom: thin solid var(--color-border-default);
+  box-shadow: var(--shadow-xs);
 }
 
 .sub-agent-peek-header__main {
   width: 100%;
-  border: 0;
+  border: none;
   padding: var(--spacing-sm);
   background: transparent;
   display: flex;
@@ -50,8 +49,8 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--border-radius-full);
-  padding: 2px var(--spacing-sm);
-  border: 1px solid var(--color-border-subtle);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: thin solid var(--color-border-subtle);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
 }
@@ -102,11 +101,11 @@
 }
 
 .sub-agent-peek-switch {
-  border: 1px solid var(--color-border-subtle);
+  border: thin solid var(--color-border-subtle);
   background: var(--color-surface-base);
   color: var(--color-text-secondary);
   border-radius: var(--border-radius-md);
-  padding: 4px var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
@@ -121,31 +120,33 @@
 }
 
 .sub-agent-peek-switch__label {
-  max-width: 180px;
+  max-width: var(--size-content-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .sub-agent-peek-switch__badge {
-  min-width: 1.2rem;
-  height: 1.2rem;
+  min-width: var(--spacing-xl);
+  height: var(--spacing-xl);
   border-radius: var(--border-radius-full);
-  border: 1px solid var(--color-warning);
+  border: thin solid var(--color-warning);
   background: var(--color-warning-light);
   color: var(--color-warning-dark);
   font-weight: var(--font-weight-semibold);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 4px;
+  padding-inline: var(--spacing-xs);
 }
 
 .sub-agent-peek-dock__body {
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
-  transition: grid-template-rows 0.25s ease, opacity 0.2s ease;
+  transition:
+    grid-template-rows var(--transition-slow),
+    opacity var(--transition-base);
 }
 
 .sub-agent-peek-dock__body--open {
@@ -154,89 +155,61 @@
 }
 
 .sub-agent-peek-dock__body-inner {
-  overflow-y: auto;
+  position: relative;
+  overflow: hidden;
   min-height: 0;
+  height: min(75dvh, calc(var(--size-content-sm) + var(--size-content-sm)));
 }
 
-.sub-agent-peek-dock__body-content {
-  min-height: 100%;
+.sub-agent-peek-dock__body-inner .thread-message-list {
+  background: var(--color-surface-subtle);
 }
 
-/* Timeline container — body flows seamlessly from header within
-   the single .sub-agent-peek-dock card. */
-.sub-agent-peek-timeline {
+.sub-agent-peek-dock__header-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-elevated);
+}
+
+.sub-agent-peek-dock__collapsed-header {
+  position: relative;
+  z-index: var(--z-elevated);
+}
+
+.sub-agent-peek-dock__footer-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-elevated);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
-  padding: var(--spacing-lg) var(--spacing-xl) var(--spacing-xl);
-}
-
-.sub-agent-peek-timeline > .agent-message.same-role-as-previous {
-  margin-top: calc(var(--spacing-md) * -1);
-}
-
-.sub-agent-peek-alert {
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: var(--border-radius-md);
-  border: 1px solid var(--color-border-subtle);
-  font-size: var(--font-size-sm);
-}
-
-.sub-agent-peek-alert--error {
-  background: var(--color-feedback-error-soft);
-  color: var(--color-feedback-error-strong);
-  border-color: var(--color-feedback-error-base);
-}
-
-/* Override AgentMessages.css hover leak — the peek is nested inside a parent
-   .agent-message, so the generic .agent-message:hover .message-actions rule
-   would expand ALL peek actions at once. These higher-specificity rules ensure
-   only the directly-hovered message shows its actions. */
-.sub-agent-peek-timeline > .agent-message .message-wrapper > .message-actions {
-  max-height: 0;
-  opacity: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-}
-
-.sub-agent-peek-timeline > .agent-message:hover > .message-wrapper > .message-actions {
-  max-height: 3rem;
-  opacity: 1;
-  padding-top: var(--spacing-xs);
-  padding-bottom: var(--spacing-sm);
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-xl);
+  border-top: thin solid var(--color-border-subtle);
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow-inner-top);
 }
 
 .sub-agent-peek-dock__footer {
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-xs);
-  padding: var(--spacing-md) var(--spacing-xl);
-  border-top: 1px solid var(--color-border-subtle);
-  background: var(--color-surface-elevated);
 }
 
-.sub-agent-peek-scroll-button {
-  z-index: 2;
-}
-
-@media (max-width: 768px) {
+@media (max-width: 48rem) {
   .sub-agent-peek-dock {
     margin-inline: calc(var(--spacing-lg) * -1);
   }
 
-  .sub-agent-peek-header {
+  .sub-agent-peek-header,
+  .sub-agent-peek-dock__footer-overlay {
     padding-inline: var(--spacing-lg);
   }
 
   .sub-agent-peek-switch__label {
-    max-width: 120px;
-  }
-
-  .sub-agent-peek-timeline {
-    padding-inline: var(--spacing-lg);
-  }
-
-  .sub-agent-peek-dock__footer {
-    padding-inline: var(--spacing-lg);
+    max-width: calc(var(--size-content-sm) / 2);
   }
 }

@@ -1,5 +1,4 @@
 import type { ChatMessage, ContentPart } from '../types/chat';
-import type { WorkspaceSurface } from '../types/agentRuntime';
 
 
 /**
@@ -19,19 +18,10 @@ export interface DisplayProcessingResult {
 }
 
 /**
- * Context for display processing
- */
-export interface LLMRequestPipelineContext {
-  projectId: string;
-  surface: WorkspaceSurface;
-}
-
-/**
  * Display processor interface
  */
 export interface DisplayProcessor {
   process(
-    message: ProcessedChatMessage,
-    context: LLMRequestPipelineContext
+    message: ProcessedChatMessage
   ): DisplayProcessingResult;
 }

@@ -6,6 +6,7 @@ export interface MessageTranslationInput {
   projectId: string;
   sourceThreadId: string;
   sourceMessageId: string;
+  sourceRole: 'user' | 'assistant';
   sourceLanguage: string;
   targetLanguage: string;
   sourceContent: string;
@@ -25,6 +26,7 @@ export async function runMessageTranslation(
     projectId: input.projectId,
     sourceThreadId: input.sourceThreadId,
     sourceMessageId: input.sourceMessageId,
+    sourceRole: input.sourceRole,
     sourceLanguage: input.sourceLanguage,
     targetLanguage: input.targetLanguage,
   };
@@ -40,7 +42,7 @@ export async function runMessageTranslation(
       messages: [
         {
           messageId: input.sourceMessageId,
-          role: 'assistant' as const,
+          role: input.sourceRole,
           content: input.sourceContent,
         },
       ],

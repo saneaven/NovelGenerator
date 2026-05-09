@@ -12,39 +12,24 @@ import { useMcpStore } from '../../../store/mcpStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
 import { useThreadStore } from '../../../store/threadStore';
-import { threadService } from '../../../api/threadService';
-import { runMessageTranslation } from '../../../agent/messageTranslation';
-import { isUuid } from '../../../utils/idUtils';
 import { computeParentClosure } from '../../../utils/parentClosure';
 import {
   cancelThread,
   sendThreadMessage,
 } from '../../../runtime/threadCommands';
-import { useToolCallDecisions } from '../../../toolCall/useToolCallDecisions';
 import ObjectPicker from '../../../components/ObjectPicker/ObjectPicker';
 import AgentSidebar from '../../../components/Agent/AgentSidebar';
-import { DefaultDisplayProcessor } from '../../../agent/processors/DisplayProcessor';
 import type { AgentRunMode } from '../../../types/agentRuntime';
-import type { ChatMessage, ToolCallMetadata } from '../../../types/chat';
-import { resolveRunMessageDisplay, type ThreadMessage, type ThreadToolCall } from '../../../types/thread';
-import ThinkingDisplay from '../../../components/common/ThinkingDisplay';
-import PreexistingLiveRunNotice from '../../../components/common/PreexistingLiveRunNotice';
-import { FunctionCallsThread } from '../../../toolCall/ui';
-import { SubAgentPeekDock } from '../../../components/SubAgentPeek';
+import type { ThreadMessage, ThreadToolCall } from '../../../types/thread';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
-import StageIndicator from './StageIndicator';
 import AuthenticatedImage from '../../../components/common/AuthenticatedImage';
+import ThreadMessageList from '../../../components/ThreadConversation/ThreadMessageList';
 import AgentRunModeToggle from '../../../components/ui/AgentRunModeToggle';
 import { DropdownItem, DropdownMenu } from '../../../components/ui/DropdownMenu';
 import { BaseModal } from '../../../components/BaseModal';
-import { buildEditCardsFromToolCallMetadata } from '../../../toolCall';
 import {
   Settings,
-  Edit,
-  Trash,
-  Globe,
-  CircularArrow,
   ChevronDown,
   Send,
   Stop,
@@ -57,15 +42,9 @@ import {
 } from '../../../components/icons';
 import '../../../pages/workspace/styles/AgentPanel.css';
 import '../../../pages/workspace/styles/AgentHeader.css';
-import '../../../pages/workspace/styles/AgentMessages.css';
-import '../../../pages/workspace/styles/MessageEdit.css';
-import { confirm, alert as showAlert } from '../../../store/dialogStore';
+import { alert as showAlert } from '../../../store/dialogStore';
 import '../../../pages/workspace/styles/AgentInput.css';
 import { useThreadLiveViewState } from '../../../hooks/useThreadLiveViewState';
-import { useAutoScrollLock } from '../../../hooks/useAutoScrollLock';
-import { hasRenderableAssistantOutput } from '../../../runtime/messageVisibility';
-import { fetchAndReplaceThreadSnapshot } from '../../../runtime/threadHydration';
-import { applyOptimisticDeletePause, getThreadDeletePauseContext } from '../../../runtime/threadDeleteState';
 import {
   CHAT_ATTACHMENT_ACCEPT,
   CHAT_ATTACHMENT_MAX_FILES,
@@ -77,7 +56,7 @@ import {
   revokeAttachmentPreview,
   type PendingAttachment,
 } from '../../../utils/threadAttachments';
-import type { McpCatalogPrompt, McpCatalogResource, McpSelection, McpSelectionAudit, McpServerResponse } from '../../../types/mcp';
+import type { McpCatalogPrompt, McpCatalogResource, McpSelection, McpServerResponse } from '../../../types/mcp';
 
 const EMPTY_MESSAGES: ThreadMessage[] = [];
 
@@ -87,26 +66,10 @@ interface AgentPanelProps {
   displayLanguage: string;
 }
 
-interface DisplayMessageInfo {
-  source: ThreadMessage;
-  chatMessage: ChatMessage;
-  requestedLanguage: string;
-  displayLanguage: string;
-}
-
 interface ToolCallBlockingSummary {
   count: number;
   firstMessageId?: string;
 }
-
-type DisplayItem =
-  | { kind: 'user_message'; info: DisplayMessageInfo }
-  | {
-      kind: 'assistant_block';
-      info: DisplayMessageInfo;
-      toolCalls: ThreadToolCall[];
-      toolCallMessageIds: string[];
-    };
 
 type SendBlockReason = 'missing_agent' | 'running' | 'pending_tool_calls' | null;
 
@@ -183,31 +146,6 @@ function summarizeToolCallBlocking(
   return { count, firstMessageId };
 }
 
-function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
-  return {
-    id: toolCall.id,
-    tool_name: toolCall.toolName,
-    arguments: toolCall.arguments,
-    extra_content: toolCall.extraContent ?? undefined,
-    status: toolCall.status as any,
-    reason: toolCall.reason ?? undefined,
-    imageRunId: toolCall.imageRunId ?? undefined,
-    failureType: toolCall.status === 'failed'
-      ? (toolCall.reason?.startsWith('VALIDATION::') ? 'validation' : 'execution')
-      : undefined,
-    result: (toolCall.result ?? undefined) as any,
-    acceptedAt: toolCall.acceptedAt ? new Date(toolCall.acceptedAt) : undefined,
-  };
-}
-
-function collapseContent(parts: Array<{ type: string; text: string }>): string {
-  return parts
-    .filter((part) => part.type === 'content')
-    .map((part) => part.text)
-    .join('')
-    .trim();
-}
-
 const AgentContextTrigger: React.FC<AgentContextTriggerProps> = React.memo(({
   selectedCount,
   totalCount,
@@ -279,16 +217,6 @@ function selectionSummaryLabel(selection: McpSelection): string {
   return selection.kind === 'prompt' ? selection.prompt_name : selection.resource_uri;
 }
 
-function getMessageMcpSelections(message: ThreadMessage): McpSelectionAudit[] {
-  for (const entry of Object.values(message.data)) {
-    const selections = entry.meta?.mcpSelections;
-    if (Array.isArray(selections) && selections.length > 0) {
-      return selections;
-    }
-  }
-  return [];
-}
-
 const ComposerMcpChipRow: React.FC<{
   selections: McpSelection[];
   onRemove: (selectionId: string) => void;
@@ -309,120 +237,6 @@ const ComposerMcpChipRow: React.FC<{
           <span className="agent-composer-mcp-chip__remove">x</span>
         </button>
       ))}
-    </div>
-  );
-});
-
-const MessageMcpChipRow: React.FC<{
-  selections: McpSelectionAudit[];
-}> = React.memo(({ selections }) => {
-  if (selections.length === 0) return null;
-  return (
-    <div className="agent-message-mcp-chips">
-      {selections.map((selection) => (
-        <div key={selection.selection_id} className="agent-message-mcp-chip">
-          <span className="agent-message-mcp-chip__kind">{selection.kind}</span>
-          <span className="agent-message-mcp-chip__label">{selection.summary_label}</span>
-        </div>
-      ))}
-    </div>
-  );
-});
-
-const MessageAttachmentBlock: React.FC<{
-  attachments: ThreadMessage['attachments'];
-}> = React.memo(({ attachments }) => {
-  const { t } = useTranslation();
-  const sortedAttachments = [...attachments].sort((a, b) => a.sortOrder - b.sortOrder);
-  const imageAttachments = sortedAttachments.filter((attachment) => attachment.kind === 'image');
-  const documentAttachments = sortedAttachments.filter((attachment) => attachment.kind === 'document');
-  const textFileAttachments = sortedAttachments.filter((attachment) => attachment.kind === 'text_file');
-
-  if (sortedAttachments.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="message-attachments">
-      {imageAttachments.length > 0 && (
-        <div className={`message-attachments-grid ${imageAttachments.length === 1 ? 'single' : ''}`}>
-          {imageAttachments.map((attachment) => (
-            <div key={attachment.id} className="message-attachment-image-card">
-              <AuthenticatedImage
-                src={attachment.url}
-                alt={attachment.originalFilename}
-                className="message-attachment-image"
-              />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {documentAttachments.length > 0 && (
-        <div className="message-attachments-documents">
-          {documentAttachments.map((attachment) => (
-            <div key={attachment.id} className="message-attachment-document-card">
-              <div className="message-attachment-document-icon" aria-hidden="true">
-                <Document size="md" />
-              </div>
-              <div className="message-attachment-document-meta">
-                <div
-                  className="message-attachment-document-name"
-                  title={attachment.originalFilename}
-                >
-                  {attachment.originalFilename}
-                </div>
-                <div className="message-attachment-document-size">
-                  {formatAttachmentSize(attachment.fileSize)}
-                </div>
-              </div>
-              {attachment.url ? (
-                <a
-                  href={attachment.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="message-attachment-document-link"
-                >
-                  {t('agent.viewAttachment')}
-                </a>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {textFileAttachments.length > 0 && (
-        <div className="message-attachments-documents">
-          {textFileAttachments.map((attachment) => (
-            <div key={attachment.id} className="message-attachment-document-card">
-              <div className="message-attachment-document-icon" aria-hidden="true">
-                <Text size="md" />
-              </div>
-              <div className="message-attachment-document-meta">
-                <div
-                  className="message-attachment-document-name"
-                  title={attachment.originalFilename}
-                >
-                  {attachment.originalFilename}
-                </div>
-                <div className="message-attachment-document-size">
-                  {formatAttachmentSize(attachment.fileSize)}
-                </div>
-              </div>
-              {attachment.url ? (
-                <a
-                  href={attachment.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="message-attachment-document-link"
-                >
-                  {t('agent.viewAttachment')}
-                </a>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 });
@@ -583,15 +397,11 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
   );
 });
 
-export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, displayLanguage }) => {
+export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) => {
   const { t } = useTranslation();
   const settings = useSettings();
   const sidebarStore = useSidebarStore();
-  const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
   const sourceLanguage = settings.mainLanguage;
-  const secondaryDisplayLanguage = displayLanguage !== settings.mainLanguage
-    ? displayLanguage
-    : (settings.defaultSubLanguage ?? undefined);
 
   const selectedAgentId = useAgentStore((state) => state.selectedAgentByProject[projectId]);
   const selectedAgent = useAgentStore((state) => state.getSelectedAgent(projectId));
@@ -619,21 +429,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   const [isContextDropdownOpen, setIsContextDropdownOpen] = useState(false);
   const [isContextPickerLoading, setIsContextPickerLoading] = useState(false);
   const [selectedContextIds, setSelectedContextIds] = useState<string[]>([]);
-  const [messageLanguageView, setMessageLanguageView] = useState<Record<string, 'primary' | 'secondary'>>({});
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editingText, setEditingText] = useState('');
-  const [editingSaving, setEditingSaving] = useState(false);
-  const [translatingByMessageId, setTranslatingByMessageId] = useState<Record<string, boolean>>({});
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [selectedMcpSelections, setSelectedMcpSelections] = useState<McpSelection[]>([]);
   const [pendingPromptSelection, setPendingPromptSelection] = useState<PendingPromptSelection | null>(null);
+  const [composerOverlayHeight, setComposerOverlayHeight] = useState(0);
 
   const contextDropdownRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const inputContainerRef = useRef<HTMLDivElement | null>(null);
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const scrollContentRef = useRef<HTMLDivElement | null>(null);
-  const hydratedThreadIdsRef = useRef<Set<string>>(new Set());
+  const inputOverlayRef = useRef<HTMLDivElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const pendingAttachmentsRef = useRef<PendingAttachment[]>([]);
 
@@ -644,15 +447,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     thread,
     messages,
     toolCallsByMessageId,
-    toolCallsById,
-    toolCallIdsByAssistantMessageId,
   } = useThreadStore(
     useShallow((state) => ({
       thread: threadId ? state.threadsById[threadId] : undefined,
       messages: threadId ? state.messagesByThreadId[threadId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES,
       toolCallsByMessageId: state.toolCallsByMessageId,
-      toolCallsById: state.toolCallsById,
-      toolCallIdsByAssistantMessageId: state.toolCallIdsByAssistantMessageId,
     })),
   );
   const liveView = useThreadLiveViewState(threadId);
@@ -706,162 +505,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     [messages],
   );
 
-  const displayItems = useMemo(() => {
-    const items: DisplayItem[] = [];
-    let i = 0;
-
-    while (i < orderedMessages.length) {
-      const msg = orderedMessages[i];
-
-      if (msg.role === 'tool_call') {
-        i++;
-        continue;
-      }
-
-      const wantsSecondary = messageLanguageView[msg.id] === 'secondary' && Boolean(secondaryDisplayLanguage);
-      const requestedLanguage = wantsSecondary && secondaryDisplayLanguage ? secondaryDisplayLanguage : sourceLanguage;
-      const fallbackLanguage = wantsSecondary ? sourceLanguage : secondaryDisplayLanguage;
-      const assistantIndexedToolCalls = msg.role === 'assistant'
-        ? (toolCallIdsByAssistantMessageId[msg.id] ?? [])
-          .map((id) => toolCallsById[id])
-          .filter((toolCall): toolCall is ThreadToolCall => Boolean(toolCall))
-          .filter((toolCall) => toolCall.toolName.trim().length > 0)
-        : [];
-
-      let j = i + 1;
-      const toolCallMessageIds: string[] = [];
-      if (msg.role === 'assistant') {
-        while (j < orderedMessages.length && orderedMessages[j].role === 'tool_call') {
-          const nextToolCalls = toolCallsByMessageId[orderedMessages[j].id] ?? [];
-          const nextAssistantId = nextToolCalls[0]?.assistantMessageId ?? null;
-          if (nextAssistantId !== msg.id) break;
-          toolCallMessageIds.push(orderedMessages[j].id);
-          j++;
-        }
-      }
-
-      const messageScopedToolCalls = msg.role === 'assistant'
-        ? toolCallMessageIds
-          .flatMap((messageId) => toolCallsByMessageId[messageId] ?? [])
-          .filter((toolCall) => toolCall.toolName.trim().length > 0)
-        : [];
-
-      const attachedToolCalls = msg.role === 'assistant'
-        ? (() => {
-            const seen = new Set<string>();
-            const merged: ThreadToolCall[] = [];
-            for (const toolCall of [...messageScopedToolCalls, ...assistantIndexedToolCalls]) {
-              if (seen.has(toolCall.id)) continue;
-              seen.add(toolCall.id);
-              merged.push(toolCall);
-            }
-            return merged;
-          })()
-        : [];
-
-      if (msg.role === 'assistant') {
-        for (const toolCall of attachedToolCalls) {
-          if (!toolCall.messageId) continue;
-          if (toolCallMessageIds.includes(toolCall.messageId)) continue;
-          toolCallMessageIds.push(toolCall.messageId);
-        }
-      }
-
-      if (msg.role === 'assistant' && !hasRenderableAssistantOutput({
-        message: msg,
-        language: requestedLanguage,
-        fallbackLanguage: fallbackLanguage ?? undefined,
-        toolCalls: attachedToolCalls,
-      })) {
-        i = j;
-        continue;
-      }
-
-      const resolved = msg.isStreaming
-        ? {
-            contentParts: msg.streamingData?.contentParts ?? [],
-            reasoningDetail: msg.streamingData?.reasoningDetail,
-            displayLanguage: requestedLanguage,
-            isFallback: false,
-          }
-        : resolveRunMessageDisplay(msg, requestedLanguage, fallbackLanguage);
-
-      const chatMessage: ChatMessage = {
-        id: msg.id,
-        role: msg.role === 'assistant' ? 'assistant' : 'user',
-        contentParts: resolved.contentParts as any,
-        reasoning_detail: (resolved.reasoningDetail as any),
-        timestamp: new Date(msg.createdAt),
-      };
-
-      const info: DisplayMessageInfo = {
-        source: msg,
-        chatMessage,
-        requestedLanguage,
-        displayLanguage: resolved.displayLanguage,
-      };
-
-      if (msg.role === 'assistant') {
-        items.push({
-          kind: 'assistant_block',
-          info,
-          toolCalls: attachedToolCalls,
-          toolCallMessageIds,
-        });
-        i = j;
-        continue;
-      }
-
-      items.push({
-        kind: 'user_message',
-        info,
-      });
-      i++;
-    }
-
-    return items;
-  }, [
-    orderedMessages,
-    toolCallsById,
-    toolCallIdsByAssistantMessageId,
-    toolCallsByMessageId,
-    messageLanguageView,
-    sourceLanguage,
-    secondaryDisplayLanguage,
-  ]);
-
-  const lastAssistantMessageId = useMemo(() => {
-    for (let i = orderedMessages.length - 1; i >= 0; i--) {
-      const msg = orderedMessages[i];
-      if (msg.role === 'assistant' && !msg.isStreaming) {
-        return msg.id;
-      }
-    }
-    return null;
-  }, [orderedMessages]);
-
-  const hasStreamingMessage = liveView?.hasStreamingMessage ?? false;
   const runtimeUnresolvedToolCallCount = Number(thread?.unresolvedToolCallCount ?? 0);
 
   const isMessageRunActive = useMemo(() => (
     thread?.status === 'running'
+    || thread?.status === 'processing'
     || liveView?.noticeKind === 'preexisting_live_run'
   ), [thread?.status, liveView?.noticeKind]);
-
-  const {
-    showScrollButton,
-    scrollToBottom,
-    resetToBottom,
-  } = useAutoScrollLock({
-    scrollContainerRef,
-    contentRef: scrollContentRef,
-    active: isMessageRunActive,
-  });
-
-  useEffect(() => {
-    if (!threadId) return;
-    resetToBottom();
-  }, [threadId, resetToBottom]);
 
   const sendBlockingState: SendBlockingState = useMemo(() => {
     const missingAgent = !selectedAgentId;
@@ -910,12 +560,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     return 'Resolve pending operations before sending.';
   }, [sendBlockingState]);
 
-  const latestRunError = useMemo(() => {
-    if (thread?.status !== 'error') return undefined;
-    if (displayItems.length === 0) return undefined;
-    return thread.lastError || 'An error occurred during generation.';
-  }, [thread?.status, thread?.lastError, displayItems.length]);
-
   useEffect(() => {
     void useSubAgentStore.getState().ensureLoaded();
   }, []);
@@ -924,22 +568,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     if (!projectId || !selectedAgentId) return;
     markAgentViewed(projectId, selectedAgentId);
   }, [projectId, selectedAgentId, markAgentViewed]);
-
-  useEffect(() => {
-    setMessageLanguageView({});
-  }, [selectedAgentId]);
-
-  useEffect(() => {
-    setEditingMessageId(null);
-    setEditingText('');
-    setTranslatingByMessageId({});
-  }, [selectedAgentId, threadId]);
-
-  useEffect(() => {
-    if (!threadId || !hasStreamingMessage) return;
-    if (thread?.status === 'running') return;
-    void fetchAndReplaceThreadSnapshot(threadId);
-  }, [threadId, hasStreamingMessage, thread?.status]);
 
   useEffect(() => {
     pendingAttachmentsRef.current = pendingAttachments;
@@ -1027,62 +655,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   }, [appendMcpSelection]);
 
   useEffect(() => {
-    if (!secondaryDisplayLanguage) return;
-    setTranslatingByMessageId((prev) => {
-      const keys = Object.keys(prev).filter((k) => prev[k]);
-      if (keys.length === 0) return prev;
-      const next: Record<string, boolean> = {};
-      let changed = false;
-      for (const msgId of keys) {
-        const msg = orderedMessages.find((m) => m.id === msgId);
-        if (msg && msg.data[secondaryDisplayLanguage]) {
-          changed = true;
-        } else {
-          next[msgId] = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [orderedMessages, secondaryDisplayLanguage]);
-
-  useEffect(() => {
-    if (!editingMessageId || !secondaryDisplayLanguage) return;
-    if (messageLanguageView[editingMessageId] !== 'secondary') return;
-    setEditingMessageId(null);
-    setEditingText('');
-  }, [editingMessageId, messageLanguageView, secondaryDisplayLanguage]);
-
-  useEffect(() => {
-    hydratedThreadIdsRef.current.clear();
-  }, [projectId]);
-
-  useEffect(() => {
-    if (!threadId) return;
-
-    const store = useThreadStore.getState();
-    const existingMessages = store.getMessages(threadId);
-    if (hydratedThreadIdsRef.current.has(threadId) || existingMessages.length > 0) {
-      hydratedThreadIdsRef.current.add(threadId);
-      return;
-    }
-
-    let cancelled = false;
-    void fetchAndReplaceThreadSnapshot(threadId)
-      .then(() => {
-        if (cancelled) return;
-        hydratedThreadIdsRef.current.add(threadId);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        console.warn('Failed to hydrate thread messages', { threadId, error });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [threadId]);
-
-  useEffect(() => {
     if (selectedContextIds.length === 0) return;
     setSelectedContextIds((prev) => prev.filter((id) => contextIdSet.has(id)));
   }, [contextIdSet, selectedContextIds.length]);
@@ -1120,12 +692,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   }, []);
 
   useEffect(() => {
-    const panel = panelRef.current;
-    const container = inputContainerRef.current;
-    if (!panel || !container) return;
+    const container = inputOverlayRef.current;
+    if (!container) return;
 
     const apply = () => {
-      panel.style.setProperty('--agent-input-height', `${container.offsetHeight}px`);
+      setComposerOverlayHeight(container.offsetHeight);
     };
 
     apply();
@@ -1135,7 +706,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
 
     return () => {
       ro.disconnect();
-      panel.style.removeProperty('--agent-input-height');
     };
   }, []);
 
@@ -1162,18 +732,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isContextDropdownOpen]);
-
-  const scrollToFirstBlockedMessage = useCallback(() => {
-    const firstMessageId = sendBlockingState.unresolvedToolCalls.firstMessageId;
-    if (!firstMessageId || !scrollContainerRef.current) return;
-
-    const target = scrollContainerRef.current.querySelector(
-      `[data-function-call-message-id="${firstMessageId}"]`,
-    );
-    if (target instanceof HTMLElement) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [sendBlockingState.unresolvedToolCalls.firstMessageId]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent, inputText: string) => {
     e.preventDefault();
@@ -1256,7 +814,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     }
     if (sendBlockingState.blocked) {
       e.preventDefault();
-      scrollToFirstBlockedMessage();
       if (sendBlockedReason) {
         showAlert({ title: 'Cannot Send', message: sendBlockedReason });
       }
@@ -1266,7 +823,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   }, [
     isMessageRunActive,
     sendBlockingState.blocked,
-    scrollToFirstBlockedMessage,
     sendBlockedReason,
     handleSubmit,
   ]);
@@ -1361,147 +917,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     event.target.value = '';
   }, [pendingAttachments, t]);
 
-  const { commitDecisions, commitDecisionsAndPause } = useToolCallDecisions(threadId ?? null);
-
-  const handleStartMessageEdit = useCallback((messageId: string, currentText: string) => {
-    setEditingMessageId(messageId);
-    setEditingText(currentText);
-  }, []);
-
-  const handleCancelMessageEdit = useCallback(() => {
-    setEditingMessageId(null);
-    setEditingText('');
-  }, []);
-
-  const handleSaveMessageEdit = useCallback(async (message: ThreadMessage) => {
-    if (!threadId || !editingMessageId || editingSaving) return;
-    if (messageLanguageView[message.id] === 'secondary' && secondaryDisplayLanguage) return;
-    const content = editingText.trim();
-    if (!content) return;
-
-    setEditingSaving(true);
-    const state = useThreadStore.getState();
-    const existing = state.getMessages(threadId).find((m) => m.id === message.id);
-    const existingEntry = existing?.data?.[sourceLanguage]
-      ?? Object.values(existing?.data ?? {}).find((v) => v && typeof v === 'object');
-    const entry = {
-      contentParts: [
-        { type: 'content' as const, text: content },
-      ],
-      reasoningDetail: existingEntry?.reasoningDetail,
-    };
-
-    if (existing) {
-      state.patchMessage(threadId, message.id, {
-        data: {
-          ...(existing.data ?? {}),
-          [sourceLanguage]: entry,
-        },
-      });
-    }
-
-    try {
-      await threadService.updateMessage(threadId, message.id, {
-        language: sourceLanguage,
-        content_parts: entry.contentParts,
-        reasoning_detail: entry.reasoningDetail as any,
-      });
-      setEditingMessageId(null);
-      setEditingText('');
-    } catch (error: any) {
-      showAlert({ title: 'Edit Failed', message: error?.message ?? 'Failed to update message.' });
-    } finally {
-      setEditingSaving(false);
-    }
-  }, [threadId, editingMessageId, editingSaving, editingText, sourceLanguage, messageLanguageView, secondaryDisplayLanguage]);
-
-  const handleTranslateMessage = useCallback(async (message: ThreadMessage, sourceContent: string) => {
-    if (!threadId || !secondaryDisplayLanguage) return;
-    const text = sourceContent.trim();
-    if (!text) return;
-
-    let alreadyTranslating = false;
-    setTranslatingByMessageId((prev) => {
-      if (prev[message.id]) {
-        alreadyTranslating = true;
-        return prev;
-      }
-      return { ...prev, [message.id]: true };
-    });
-    if (alreadyTranslating) return;
-
-    try {
-      await runMessageTranslation({
-        projectId,
-        sourceThreadId: threadId,
-        sourceMessageId: message.id,
-        sourceLanguage,
-        targetLanguage: secondaryDisplayLanguage,
-        sourceContent: text,
-      });
-    } catch (error: any) {
-      showAlert({ title: 'Translation Failed', message: error?.message ?? 'Failed to translate message.' });
-      setTranslatingByMessageId((prev) => ({ ...prev, [message.id]: false }));
-    }
-  }, [threadId, projectId, sourceLanguage, secondaryDisplayLanguage]);
-
-  const handleDeleteMessage = useCallback(async (
-    messageId: string,
-    role: ThreadMessage['role'],
-    linkedToolCallCount: number = 0,
-  ) => {
-    if (!threadId) {
-      showAlert({ title: 'Delete Failed', message: 'Could not find the thread.' });
-      return;
-    }
-
-    const isAssistantResponse = role === 'assistant';
-    const confirmed = await confirm({
-      title: isAssistantResponse ? 'Delete Response' : 'Delete Message',
-      message: isAssistantResponse
-        ? (
-            linkedToolCallCount > 0
-              ? `Delete this response and its ${linkedToolCallCount} linked operation${linkedToolCallCount === 1 ? '' : 's'}?`
-              : 'Are you sure you want to delete this response?'
-          )
-        : 'Are you sure you want to delete this message?',
-      variant: 'danger',
-      confirmLabel: 'Delete',
-    });
-    if (!confirmed) return;
-
-    const state = useThreadStore.getState();
-    const deletePauseContext = getThreadDeletePauseContext(threadId);
-
-    // Find all tool calls linked to this message (via any of the three ID fields)
-    const linkedToolCalls = Object.values(state.toolCallsById)
-      .filter((tc): tc is ThreadToolCall => Boolean(tc))
-      .filter((tc) => tc.threadId === threadId && (
-        tc.assistantMessageId === messageId
-        || tc.messageId === messageId
-      ));
-
-    // Local cleanup first (optimistic)
-    for (const tc of linkedToolCalls) {
-      if (tc.messageId) state.removeMessage(threadId, tc.messageId);
-      state.removeToolCall(tc.id);
-    }
-    state.removeMessage(threadId, messageId);
-    applyOptimisticDeletePause(threadId, deletePauseContext);
-
-    // Backend — for assistant messages, DB cascade handles everything:
-    // assistant_message_id CASCADE → deletes tool calls → parent_tool_call_id CASCADE → deletes their messages
-    if (isUuid(messageId)) {
-      try {
-        await threadService.deleteMessage(threadId, messageId);
-        await fetchAndReplaceThreadSnapshot(threadId);
-      } catch (error) {
-        console.error('Failed to delete message:', error);
-        await fetchAndReplaceThreadSnapshot(threadId);
-      }
-    }
-  }, [threadId]);
-
   const handleCloseAgent = useCallback(() => {
     setIsOverlayClosing(true);
     setAgentVisible(projectId, false);
@@ -1542,462 +957,83 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
         </TextButton>
       </div>
 
-      <div className="agent-messages" ref={scrollContainerRef}>
-        <div className="agent-messages__content" ref={scrollContentRef}>
-          {displayItems.length === 0 && (
-            <div className="welcome-message">
-              <div className="ai-avatar">{t('agent.ai')}</div>
-              <div className="message-content">
-                <p>{t('agent.welcomeMessage')}</p>
-              </div>
-            </div>
-          )}
-
-          {displayItems.map((item, index) => {
-            const message = item.info;
-            const previousItem = index > 0 ? displayItems[index - 1] : null;
-            const previousRole = previousItem?.kind === 'assistant_block'
-              ? 'assistant'
-              : previousItem?.kind === 'user_message'
-                ? 'user'
-                : null;
-            const currentRole = item.kind === 'assistant_block' ? 'assistant' : 'user';
-            const isSameRoleAsPrevious = previousRole === currentRole;
-            const isStreamingMessage = message.source.isStreaming === true;
-            const showRunError = Boolean(latestRunError) && index === displayItems.length - 1;
-            const translationAvailable = secondaryDisplayLanguage
-              ? Boolean(message.source.data[secondaryDisplayLanguage])
-              : false;
-            const translating = Boolean(translatingByMessageId[message.source.id]);
-            const isEditing = editingMessageId === message.source.id;
-            const isSecondaryView = messageLanguageView[message.source.id] === 'secondary' && Boolean(secondaryDisplayLanguage);
-            const hasAttachments = message.source.attachments.length > 0;
-            const primaryEntry = message.source.data[sourceLanguage];
-            const primaryPlainContent = collapseContent(
-              primaryEntry?.contentParts ?? message.chatMessage.contentParts,
-            );
-            const mcpSelections = getMessageMcpSelections(message.source);
-            const processed = displayProcessor.process(
-              message.chatMessage as any,
-              { projectId, surface: (surface ?? 'story-entity') as any },
-            );
-
-            if (item.kind === 'assistant_block') {
-              const hasSubAgentCalls = item.toolCalls.some((tc) => (
-                tc.toolName.startsWith('call_') && Boolean(tc.childThreadId)
-              ));
-              const isActiveSubAgentParent = message.source.id === lastAssistantMessageId;
-              const cards = item.toolCalls.length > 0
-                ? buildEditCardsFromToolCallMetadata(item.toolCalls.map(toToolCallMetadata))
-                : [];
-              const hasAnyPending = item.toolCalls.some((tc) => isBlockingToolCallStatus(tc.status));
-              const groupMode = hasAnyPending ? 'pending' : 'confirmed';
-
-              const assistantActionButtons = (!isStreamingMessage && !isEditing) ? (
-                <div className="action-buttons">
-                  {translationAvailable && secondaryDisplayLanguage && (
-                    <IconButton
-                      icon={<Globe size="sm" />}
-                      variant="ghost"
-                      size="sm"
-                      isActive={isSecondaryView}
-                      onClick={() => setMessageLanguageView((prev) => ({
-                        ...prev,
-                        [message.source.id]: prev[message.source.id] === 'secondary' ? 'primary' : 'secondary',
-                      }))}
-                      title={isSecondaryView
-                        ? t('agent.switchToLanguage', { language: sourceLanguage })
-                        : t('agent.switchToLanguage', { language: secondaryDisplayLanguage })}
-                    />
-                  )}
-                  {secondaryDisplayLanguage && (
-                    <IconButton
-                      icon={translating ? <CircularArrow size="sm" /> : (translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />)}
-                      onClick={() => void handleTranslateMessage(message.source, primaryPlainContent)}
-                      title={translationAvailable
-                        ? t('agent.refreshTranslation', { language: secondaryDisplayLanguage })
-                        : t('agent.translateTo', { language: secondaryDisplayLanguage })}
-                      variant="ghost"
-                      size="sm"
-                      disabled={translating || !primaryPlainContent}
-                    />
-                  )}
-                  {!isSecondaryView && (
-                    <IconButton
-                      icon={<Edit size="sm" />}
-                      onClick={() => handleStartMessageEdit(message.source.id, primaryPlainContent)}
-                      disabled={!primaryPlainContent}
-                      title={t('agent.edit')}
-                      variant="ghost"
-                      size="sm"
-                    />
-                  )}
-                  <IconButton
-                    icon={<Trash size="sm" />}
-                    onClick={() => void handleDeleteMessage(message.chatMessage.id, 'assistant', item.toolCalls.length)}
-                    title="Delete response"
-                    variant="ghost"
-                    size="sm"
-                    className="icon-button--ghost-danger"
-                  />
-                </div>
-              ) : null;
-
-              return (
-                <React.Fragment key={message.chatMessage.id}>
-                  <div className={`agent-message assistant${isSameRoleAsPrevious ? ' same-role-as-previous' : ''}`}>
-                    <div className="message-wrapper">
-                      {!isSameRoleAsPrevious ? (
-                        <div className="message-header">
-                          <span className="message-role">{t('agent.ai')}</span>
-                          {assistantActionButtons && (
-                            <div className="message-actions">
-                              {assistantActionButtons}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        assistantActionButtons && (
-                          <div className="message-actions emerging">
-                            {assistantActionButtons}
-                          </div>
-                        )
-                      )}
-
-                      {!isEditing && (
-                        <ThinkingDisplay
-                          messageId={message.chatMessage.id}
-                          reasoningDetail={message.chatMessage.reasoning_detail as any}
-                          isStreaming={isStreamingMessage}
-                        />
-                      )}
-
-                      {hasAttachments && (
-                        <MessageAttachmentBlock attachments={message.source.attachments} />
-                      )}
-
-                      {mcpSelections.length > 0 && (
-                        <MessageMcpChipRow selections={mcpSelections} />
-                      )}
-
-                      {!isEditing && (primaryPlainContent || isStreamingMessage) && (
-                        <div className="message-content">
-                          {processed.displayContent}
-                          {isStreamingMessage && thread?.status === 'running' && (
-                            <div className="typing-indicator inline">
-                              <div className="loading-track">
-                                <div className="loading-bar" />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {isEditing && (
-                        <div className="message-edit">
-                          <textarea
-                            value={editingText}
-                            onChange={(event) => setEditingText(event.target.value)}
-                            autoFocus
-                          />
-                          <div className="edit-actions">
-                            <TextButton
-                              variant="secondary"
-                              onClick={handleCancelMessageEdit}
-                              disabled={editingSaving}
-                            >
-                              {t('agent.cancel')}
-                            </TextButton>
-                            <TextButton
-                              variant="primary"
-                              onClick={() => void handleSaveMessageEdit(message.source)}
-                              disabled={editingSaving || !editingText.trim()}
-                            >
-                              {editingSaving ? t('common.loading') : t('agent.save')}
-                            </TextButton>
-                          </div>
-                        </div>
-                      )}
-
-                      {cards.length > 0 && (
-                        <div className="message-function-calls">
-                          {item.toolCallMessageIds.map((mid) => (
-                            <span
-                              key={mid}
-                              className="message-function-call-anchor"
-                              data-function-call-message-id={mid}
-                            />
-                          ))}
-                          <FunctionCallsThread
-                            threadId={threadId ?? item.toolCalls[0]?.threadId ?? ''}
-                            scopeKey={`agent:${selectedAgentId ?? 'none'}:assistant:${message.source.id}`}
-                            mode={groupMode}
-                            cards={cards}
-                            onCommitDecisions={groupMode === 'pending' ? commitDecisions : undefined}
-                            onCommitDecisionsAndPause={groupMode === 'pending' ? commitDecisionsAndPause : undefined}
-                            projectId={projectId}
-                          />
-                        </div>
-                      )}
-
-                      {selectedAgentId && hasSubAgentCalls && threadId && (
-                        <SubAgentPeekDock
-                          parentThreadId={threadId}
-                          parentMessageId={message.source.id}
-                          projectId={projectId}
-                          isActiveParent={isActiveSubAgentParent}
-                        />
-                      )}
-
-                      {showRunError && (
-                        <div className="message-error">
-                          {latestRunError}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {thread?.memoryBoundaryMessageId === message.source.id && (
-                    <div className="agent-archive-divider" role="separator" aria-label="Memory boundary">
-                      <div className="agent-archive-divider-line" />
-                      <span className="agent-archive-divider-label">Memory boundary</span>
-                      <div className="agent-archive-divider-line" />
-                    </div>
-                  )}
-                </React.Fragment>
-              );
-            }
-
-            const userActionButtons = (!isStreamingMessage && !isEditing) ? (
-              <div className="action-buttons">
-                {translationAvailable && secondaryDisplayLanguage && (
-                  <IconButton
-                    icon={<Globe size="sm" />}
-                    variant="ghost"
-                    size="sm"
-                    isActive={isSecondaryView}
-                    onClick={() => setMessageLanguageView((prev) => ({
-                      ...prev,
-                      [message.source.id]: prev[message.source.id] === 'secondary' ? 'primary' : 'secondary',
-                    }))}
-                    title={isSecondaryView
-                      ? t('agent.switchToLanguage', { language: sourceLanguage })
-                      : t('agent.switchToLanguage', { language: secondaryDisplayLanguage })}
-                  />
-                )}
-                {!isSecondaryView && (
-                  <IconButton
-                    icon={<Edit size="sm" />}
-                    onClick={() => handleStartMessageEdit(message.source.id, primaryPlainContent)}
-                    disabled={!primaryPlainContent}
-                    title={t('agent.edit')}
-                    variant="ghost"
-                    size="sm"
-                  />
-                )}
-                <IconButton
-                  icon={<Trash size="sm" />}
-                  onClick={() => void handleDeleteMessage(message.chatMessage.id, 'user')}
-                  title={t('agent.delete')}
-                  variant="ghost"
-                  size="sm"
-                  className="icon-button--ghost-danger"
-                />
-              </div>
-            ) : null;
-
-            return (
-              <React.Fragment key={message.chatMessage.id}>
-                <div className={`agent-message user${isSameRoleAsPrevious ? ' same-role-as-previous' : ''}`}>
-                  <div className="message-wrapper">
-                    {!isSameRoleAsPrevious ? (
-                      <div className="message-header">
-                        <span className="message-role">{t('agent.you')}</span>
-                        {userActionButtons && (
-                          <div className="message-actions">
-                            {userActionButtons}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      userActionButtons && (
-                        <div className="message-actions emerging">
-                          {userActionButtons}
-                        </div>
-                      )
-                    )}
-
-                    {hasAttachments && (
-                      <MessageAttachmentBlock attachments={message.source.attachments} />
-                    )}
-
-                    {mcpSelections.length > 0 && (
-                      <MessageMcpChipRow selections={mcpSelections} />
-                    )}
-
-                    {!isEditing && (primaryPlainContent || isStreamingMessage) && (
-                      <div className="message-content">
-                        {processed.displayContent}
-                        {isStreamingMessage && thread?.status === 'running' && (
-                          <div className="typing-indicator inline">
-                            <div className="loading-track">
-                              <div className="loading-bar" />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {isEditing && (
-                      <div className="message-edit">
-                        <textarea
-                          value={editingText}
-                          onChange={(event) => setEditingText(event.target.value)}
-                          autoFocus
-                        />
-                        <div className="edit-actions">
-                          <TextButton
-                            variant="secondary"
-                            onClick={handleCancelMessageEdit}
-                            disabled={editingSaving}
-                          >
-                            {t('agent.cancel')}
-                          </TextButton>
-                          <TextButton
-                            variant="primary"
-                            onClick={() => void handleSaveMessageEdit(message.source)}
-                            disabled={editingSaving || !editingText.trim()}
-                          >
-                            {editingSaving ? t('common.loading') : t('agent.save')}
-                          </TextButton>
-                        </div>
-                      </div>
-                    )}
-
-                    {showRunError && (
-                      <div className="message-error">
-                        {latestRunError}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {thread?.memoryBoundaryMessageId === message.source.id && (
-                  <div className="agent-archive-divider" role="separator" aria-label="Memory boundary">
-                    <div className="agent-archive-divider-line" />
-                    <span className="agent-archive-divider-label">Memory boundary</span>
-                    <div className="agent-archive-divider-line" />
-                  </div>
-                )}
-              </React.Fragment>
-            );
-          })}
-
-          {isMessageRunActive && !hasStreamingMessage && liveView?.noticeKind === 'preexisting_live_run' && (
-            <PreexistingLiveRunNotice />
-          )}
-
-          {threadId && (
-            <StageIndicator
-              threadId={threadId}
-              isMessageRunActive={isMessageRunActive}
-              threadStatus={thread?.status}
-            />
-          )}
-
-          {isMessageRunActive
-            && !hasStreamingMessage
-            && liveView?.noticeKind !== 'preexisting_live_run'
-            && thread?.status === 'running' && (
-            <div className="typing-indicator">
-              <div className="loading-track">
-                <div className="loading-bar" />
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="agent-input-wrap">
-        {showScrollButton && (
-          <div className="agent-scroll-button-slot">
-            <IconButton
-              className="scroll-to-bottom-button"
-              icon={<ChevronDown size="sm" />}
-              onClick={() => scrollToBottom()}
-              title={t('agent.scrollToBottom')}
-              variant="secondary"
-            />
-          </div>
-        )}
-
-        <div
-          className="agent-input-container"
-          ref={(el) => {
-            contextDropdownRef.current = el;
-            inputContainerRef.current = el;
-          }}
-        >
-        {preflightToast && (
-          <div
-            className={`agent-preflight-toast ${preflightToast.type === 'error' ? 'agent-preflight-toast--error' : ''}`}
-            role={preflightToast.type === 'error' ? 'alert' : 'status'}
-          >
-            {preflightToast.message}
-          </div>
-        )}
-
-        <div className={`agent-context-dropdown-menu ${isContextDropdownOpen ? '' : 'hidden'}`}>
-          {isContextDropdownOpen && (
-            <ObjectPicker
-              mode="all"
-              selectionMode="multi"
-              selectedIds={selectedContextIds}
-              onChange={(ids) => setSelectedContextIds(ids as string[])}
-              projectId={projectId}
-              language={sourceLanguage}
-              loading={isContextPickerLoading}
-              maxHeight="350px"
-              showSearch={true}
-              showSelectAll={true}
-              showTokenCount={true}
-            />
-          )}
-        </div>
-
-        <div className="agent-controls-row">
-          <AgentRunModeToggle
-            currentRunMode={runMode as AgentRunMode}
-            onRunModeChange={(next) => setRunMode(projectId, next)}
-          />
-          <AgentContextTrigger
-            selectedCount={selectedContextIds.length}
-            totalCount={totalObjectCount}
-            isOpen={isContextDropdownOpen}
-            onClick={() => setIsContextDropdownOpen((prev) => !prev)}
-          />
-        </div>
-
-        <AgentInputForm
+      <div className="agent-panel-thread-pane">
+        <ThreadMessageList
+          threadId={threadId ?? ''}
           projectId={projectId}
-          hasSelectedAgent={Boolean(selectedAgentId && threadId)}
-          isMessageRunActive={isMessageRunActive}
-          isSendBlocked={sendBlockingState.blocked}
-          sendBlockedReason={sendBlockedReason}
-          pendingAttachments={pendingAttachments}
-          selectedMcpSelections={selectedMcpSelections}
-          fileInputRef={attachmentInputRef}
-          onPrepareMcpMenu={prepareMcpMenu}
-          onOpenAttachmentPicker={handleOpenAttachmentPicker}
-          onFileInputChange={handleAttachmentInputChange}
-          onRemoveAttachment={handleRemoveAttachment}
-          onRemoveMcpSelection={removeMcpSelection}
-          onSelectMcpPrompt={handleSelectMcpPrompt}
-          onSelectMcpResource={handleSelectMcpResource}
-          availableMcpServers={availableMcpServers}
-          onSubmit={handleSubmitFromInput}
-          onStop={handleStop}
+          roleLabels={{ user: t('agent.you'), assistant: t('agent.ai') }}
+          emptyState={t('agent.welcomeMessage')}
+          bottomOverlayHeight={composerOverlayHeight}
         />
+
+        <div className="agent-input-wrap" ref={inputOverlayRef}>
+          <div
+            className="agent-input-container"
+            ref={(el) => {
+              contextDropdownRef.current = el;
+            }}
+          >
+            {preflightToast && (
+              <div
+                className={`agent-preflight-toast ${preflightToast.type === 'error' ? 'agent-preflight-toast--error' : ''}`}
+                role={preflightToast.type === 'error' ? 'alert' : 'status'}
+              >
+                {preflightToast.message}
+              </div>
+            )}
+
+            <div className={`agent-context-dropdown-menu ${isContextDropdownOpen ? '' : 'hidden'}`}>
+              {isContextDropdownOpen && (
+                <ObjectPicker
+                  mode="all"
+                  selectionMode="multi"
+                  selectedIds={selectedContextIds}
+                  onChange={(ids) => setSelectedContextIds(ids as string[])}
+                  projectId={projectId}
+                  language={sourceLanguage}
+                  loading={isContextPickerLoading}
+                  maxHeight="var(--size-content-sm)"
+                  showSearch={true}
+                  showSelectAll={true}
+                  showTokenCount={true}
+                />
+              )}
+            </div>
+
+            <div className="agent-controls-row">
+              <AgentRunModeToggle
+                currentRunMode={runMode as AgentRunMode}
+                onRunModeChange={(next) => setRunMode(projectId, next)}
+              />
+              <AgentContextTrigger
+                selectedCount={selectedContextIds.length}
+                totalCount={totalObjectCount}
+                isOpen={isContextDropdownOpen}
+                onClick={() => setIsContextDropdownOpen((prev) => !prev)}
+              />
+            </div>
+
+            <AgentInputForm
+              projectId={projectId}
+              hasSelectedAgent={Boolean(selectedAgentId && threadId)}
+              isMessageRunActive={isMessageRunActive}
+              isSendBlocked={sendBlockingState.blocked}
+              sendBlockedReason={sendBlockedReason}
+              pendingAttachments={pendingAttachments}
+              selectedMcpSelections={selectedMcpSelections}
+              fileInputRef={attachmentInputRef}
+              onPrepareMcpMenu={prepareMcpMenu}
+              onOpenAttachmentPicker={handleOpenAttachmentPicker}
+              onFileInputChange={handleAttachmentInputChange}
+              onRemoveAttachment={handleRemoveAttachment}
+              onRemoveMcpSelection={removeMcpSelection}
+              onSelectMcpPrompt={handleSelectMcpPrompt}
+              onSelectMcpResource={handleSelectMcpResource}
+              availableMcpServers={availableMcpServers}
+              onSubmit={handleSubmitFromInput}
+              onStop={handleStop}
+            />
+          </div>
         </div>
       </div>
 

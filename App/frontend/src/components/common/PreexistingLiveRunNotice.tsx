@@ -5,17 +5,14 @@ import './PreexistingLiveRunNotice.css';
 
 interface PreexistingLiveRunNoticeProps {
   className?: string;
-  compact?: boolean;
 }
 
 const PreexistingLiveRunNotice: React.FC<PreexistingLiveRunNoticeProps> = ({
   className,
-  compact = false,
 }) => {
   const { t } = useTranslation();
   const classes = [
     'preexisting-live-run-notice',
-    compact ? 'preexisting-live-run-notice--compact' : '',
     className ?? '',
   ].filter(Boolean).join(' ');
 

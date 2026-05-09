@@ -186,7 +186,6 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         providerSettingsFlags,
         supportsImageInput,
         supportsMaskInput,
-        supportsMultiImageInput,
         isNativeExact,
         supportedImageSizes,
         generationBlocker,
@@ -713,7 +712,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                         {/* Thinking display during streaming */}
                         {isStreamingNatural && streamingStatus && (
                             isSuppressedStreaming ? (
-                                <PreexistingLiveRunNotice compact />
+                                <PreexistingLiveRunNotice />
                             ) : (
                                 <ThinkingDisplay
                                     messageId={streamingSessionId!}
@@ -751,7 +750,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                         {/* Thinking display during streaming */}
                         {(isStreamingPositive || isStreamingNegative) && streamingStatus && (
                             isSuppressedStreaming ? (
-                                <PreexistingLiveRunNotice compact />
+                                <PreexistingLiveRunNotice />
                             ) : (
                                 <ThinkingDisplay
                                     messageId={streamingSessionId!}

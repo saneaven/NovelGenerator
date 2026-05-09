@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useSubAgentStore } from '../../store/subAgentStore';
@@ -10,13 +10,9 @@ import {
   isBlockingThreadStatus,
 } from '../../types/thread';
 import { useFunctionCallUIStore } from '../../toolCall/ui/store';
-import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
-import { useAutoScrollLock } from '../../hooks/useAutoScrollLock';
 import { TextButton } from '../TextButton';
-import { IconButton } from '../IconButton';
-import { ChevronDown } from '../icons';
+import ThreadMessageList from '../ThreadConversation/ThreadMessageList';
 import { SubAgentPeekHeader } from './SubAgentPeekHeader';
-import { SubAgentPeekTimeline } from './SubAgentPeekTimeline';
 import { cancelThread, pauseThread, resumeThread } from '../../runtime/threadCommands';
 import './subAgentPeek.css';
 
@@ -31,14 +27,17 @@ interface ChildEntry {
 function countPendingDecisions(
   childThreadId: string,
   messagesByThreadId: Record<string, any[] | undefined>,
-  toolCallsByMessageId: Record<string, any[] | undefined>,
+  toolCallsById: Record<string, ThreadToolCall | undefined>,
+  toolCallIdsByAssistantMessageId: Record<string, string[] | undefined>,
 ): number {
   const messages = messagesByThreadId[childThreadId] ?? [];
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
     if (message?.role !== 'assistant') continue;
-    const toolCalls = toolCallsByMessageId[message.id] ?? [];
-    return toolCalls.filter((tc: any) => (
+    const toolCalls = (toolCallIdsByAssistantMessageId[message.id] ?? [])
+      .map((id) => toolCallsById[id])
+      .filter((tc): tc is ThreadToolCall => Boolean(tc));
+    return toolCalls.filter((tc) => (
       tc?.status === 'pending'
       || tc?.status === 'streaming'
       || tc?.status === 'validating'
@@ -52,6 +51,34 @@ function countPendingDecisions(
 function threadStatusToDisplay(status: ThreadInfo['status']): string {
   if (status === 'done') return 'completed';
   return status;
+}
+
+function useMeasuredHeight<T extends HTMLElement>() {
+  const observerRef = useRef<ResizeObserver | null>(null);
+  const [height, setHeight] = useState(0);
+
+  const ref = useCallback((element: T | null) => {
+    observerRef.current?.disconnect();
+    observerRef.current = null;
+
+    if (!element) {
+      setHeight(0);
+      return;
+    }
+
+    const apply = () => setHeight(element.offsetHeight);
+    apply();
+
+    const observer = new ResizeObserver(apply);
+    observer.observe(element);
+    observerRef.current = observer;
+  }, []);
+
+  useEffect(() => {
+    return () => observerRef.current?.disconnect();
+  }, []);
+
+  return [ref, height] as const;
 }
 
 export interface SubAgentPeekDockProps {
@@ -74,7 +101,6 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     messagesByThreadId,
     toolCallsById,
     toolCallIdsByAssistantMessageId,
-    toolCallsByMessageId,
     pendingToolCallIdsByThread,
   } = useThreadStore(
     useShallow((state) => ({
@@ -82,7 +108,6 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
       messagesByThreadId: state.messagesByThreadId,
       toolCallsById: state.toolCallsById,
       toolCallIdsByAssistantMessageId: state.toolCallIdsByAssistantMessageId,
-      toolCallsByMessageId: state.toolCallsByMessageId,
       pendingToolCallIdsByThread: state.pendingToolCallIdsByThread,
     })),
   );
@@ -146,11 +171,12 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
       map[entry.key] = countPendingDecisions(
         entry.childThreadId,
         messagesByThreadId,
-        toolCallsByMessageId,
+        toolCallsById,
+        toolCallIdsByAssistantMessageId,
       );
     }
     return map;
-  }, [childEntries, messagesByThreadId, toolCallsByMessageId]);
+  }, [childEntries, messagesByThreadId, toolCallIdsByAssistantMessageId, toolCallsById]);
 
   const orderedKeys = useMemo(() => childEntries.map((e) => e.key), [childEntries]);
 
@@ -234,16 +260,13 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
   const { t } = useTranslation();
   const [actionInFlight, setActionInFlight] = useState<'pause' | 'resume' | 'cancel' | null>(null);
+  const [headerRef, headerHeight] = useMeasuredHeight<HTMLDivElement>();
+  const [footerRef, footerHeight] = useMeasuredHeight<HTMLDivElement>();
 
   const selectedChildThreadId = selectedEntry?.childThreadId;
-  const selectedLiveView = useThreadLiveViewState(selectedChildThreadId);
   const dockRef = useRef<HTMLDivElement | null>(null);
-  const peekBodyRef = useRef<HTMLDivElement | null>(null);
-  const peekContentRef = useRef<HTMLDivElement | null>(null);
   const prevPeekOpenRef = useRef(peekOpen);
-  const [bodyMaxHeight, setBodyMaxHeight] = useState(600);
 
-  // Reset action state when switching threads
   useEffect(() => {
     setActionInFlight(null);
   }, [selectedChildThreadId]);
@@ -255,42 +278,9 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     ? runtimeUnresolvedToolCallCount
     : selectedPendingCount;
   const isBlocking = isBlockingThreadStatus(selectedThreadStatus);
-  const isPeekLive = selectedThreadStatus === 'running'
-    || selectedLiveView?.noticeKind === 'preexisting_live_run';
   const canPauseSelectedThread = canPauseThreadStatus(selectedThreadStatus);
   const canResumeSelectedThread = canResumeThreadStatus(selectedThreadStatus);
 
-  const {
-    showScrollButton,
-    scrollToBottom,
-    resetToBottom,
-  } = useAutoScrollLock({
-    scrollContainerRef: peekBodyRef,
-    contentRef: peekContentRef,
-    active: isPeekLive,
-  });
-
-  useEffect(() => {
-    if (!peekOpen) return;
-    resetToBottom();
-  }, [peekOpen, selectedChildThreadId, resetToBottom]);
-
-  // Dynamic max-height: 75% of agent panel viewport
-  useLayoutEffect(() => {
-    const dock = dockRef.current;
-    if (!dock) return;
-    const container = dock.closest('.agent-messages') as HTMLElement | null;
-    if (!container) return;
-
-    const update = () => setBodyMaxHeight(Math.round(container.clientHeight * 0.75));
-    update();
-
-    const ro = new ResizeObserver(update);
-    ro.observe(container);
-    return () => ro.disconnect();
-  }, []);
-
-  // Scroll-to-center on expand (false -> true transition only)
   useEffect(() => {
     const wasOpen = prevPeekOpenRef.current;
     prevPeekOpenRef.current = peekOpen;
@@ -341,71 +331,80 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   }));
 
   const showFooter = peekOpen && isBlocking;
+  const listFooterHeight = showFooter ? footerHeight : 0;
 
   return (
     <div className="sub-agent-peek-dock" ref={dockRef}>
-      <SubAgentPeekHeader
-        open={peekOpen}
-        onToggle={() => setPeekOpen(peekKey, !peekOpen)}
-        items={items}
-        onSelect={(key) => setSelectedPeekRun(peekKey, key)}
-      />
-
       <div className={`sub-agent-peek-dock__body${peekOpen ? ' sub-agent-peek-dock__body--open' : ''}`}>
-        <div className="sub-agent-peek-dock__body-inner" ref={peekBodyRef} style={{ maxHeight: bodyMaxHeight, minHeight: peekOpen ? bodyMaxHeight : undefined }}>
-          <div className="sub-agent-peek-dock__body-content" ref={peekContentRef}>
-            <SubAgentPeekTimeline
-              childThreadId={selectedEntry.childThreadId}
-              projectId={projectId}
+        <div className="sub-agent-peek-dock__body-inner">
+          <ThreadMessageList
+            threadId={selectedEntry.childThreadId}
+            projectId={projectId}
+            roleLabels={{ user: t('subAgent.parentAgent'), assistant: t('agent.ai') }}
+            emptyState="No messages yet."
+            topOverlayHeight={headerHeight}
+            bottomOverlayHeight={listFooterHeight}
+          />
+
+          <div className="sub-agent-peek-dock__header-overlay" ref={headerRef}>
+            <SubAgentPeekHeader
+              open={peekOpen}
+              onToggle={() => setPeekOpen(peekKey, !peekOpen)}
+              items={items}
+              onSelect={(key) => setSelectedPeekRun(peekKey, key)}
             />
           </div>
-          {showScrollButton && (
-            <IconButton
-              className="scroll-to-bottom-button sub-agent-peek-scroll-button"
-              icon={<ChevronDown size="sm" />}
-              onClick={() => scrollToBottom()}
-              title={t('agent.scrollToBottom')}
-              variant="secondary"
-            />
+
+          {showFooter && (
+            <div className="sub-agent-peek-dock__footer-overlay" ref={footerRef}>
+              <div className="sub-agent-peek-dock__footer">
+                {canPauseSelectedThread && (
+                  <TextButton
+                    size="sm"
+                    variant="secondary"
+                    onClick={handlePause}
+                    disabled={actionInFlight !== null}
+                    loading={actionInFlight === 'pause'}
+                  >
+                    {t('subAgent.pause')}
+                  </TextButton>
+                )}
+                {canResumeSelectedThread && (
+                  <>
+                    <TextButton
+                      size="sm"
+                      variant="primary"
+                      onClick={handleResume}
+                      disabled={actionInFlight !== null || selectedUnresolvedCount > 0}
+                      loading={actionInFlight === 'resume'}
+                    >
+                      {t('common.resume')}
+                    </TextButton>
+                    <TextButton
+                      size="sm"
+                      variant="warning"
+                      onClick={handleCancel}
+                      disabled={actionInFlight !== null}
+                      loading={actionInFlight === 'cancel'}
+                    >
+                      {t('common.cancel')}
+                    </TextButton>
+                  </>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      {showFooter && (
-        <div className="sub-agent-peek-dock__footer">
-          {canPauseSelectedThread && (
-            <TextButton
-              size="sm"
-              variant="secondary"
-              onClick={handlePause}
-              disabled={actionInFlight !== null}
-              loading={actionInFlight === 'pause'}
-            >
-              {t('subAgent.pause')}
-            </TextButton>
-          )}
-          {canResumeSelectedThread && (
-            <>
-              <TextButton
-                size="sm"
-                variant="primary"
-                onClick={handleResume}
-                disabled={actionInFlight !== null || selectedUnresolvedCount > 0}
-                loading={actionInFlight === 'resume'}
-              >
-                {t('common.resume')}
-              </TextButton>
-              <TextButton
-                size="sm"
-                variant="warning"
-                onClick={handleCancel}
-                disabled={actionInFlight !== null}
-                loading={actionInFlight === 'cancel'}
-              >
-                {t('common.cancel')}
-              </TextButton>
-            </>
-          )}
+      {!peekOpen && (
+        <div className="sub-agent-peek-dock__collapsed-header">
+          <SubAgentPeekHeader
+            open={peekOpen}
+            onToggle={() => setPeekOpen(peekKey, !peekOpen)}
+            items={items}
+            onSelect={(key) => setSelectedPeekRun(peekKey, key)}
+          />
         </div>
       )}
     </div>

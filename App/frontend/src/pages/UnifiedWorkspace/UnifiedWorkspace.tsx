@@ -36,8 +36,6 @@ import { useWorkspaceSubPage, type SubPageType } from './hooks/useWorkspaceSubPa
 import './UnifiedWorkspace.css';
 import '../workspace/styles/AgentPanel.css';
 import '../workspace/styles/AgentHeader.css';
-import '../workspace/styles/AgentMessages.css';
-import '../workspace/styles/MessageEdit.css';
 import '../workspace/styles/AgentInput.css';
 import '../../components/Agent/MobileAgent.css';
 

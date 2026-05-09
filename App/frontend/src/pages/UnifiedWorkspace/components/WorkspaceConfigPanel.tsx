@@ -1091,7 +1091,6 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
           label={selectedJourney.display_label || selectedJourney.kind || t('workspaceConfig.journeys.defaultLabel')}
           status={selectedJourney.status}
           message={selectedJourney.last_error || t('workspaceConfig.journeys.detailsFallback')}
-          warning={selectedJourney.last_error || undefined}
           onClose={() => setSelectedJourney(null)}
         />
       ) : null}

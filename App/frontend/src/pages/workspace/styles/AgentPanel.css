@@ -7,31 +7,37 @@
   display: flex;
   flex-direction: column;
   flex: 0 0 30%;
-  min-width: 350px;
-  max-width: 600px;
+  min-width: calc(var(--size-agent-panel) - var(--spacing-3xl));
+  max-width: calc(var(--size-agent-panel) + var(--size-content-sm) / 2);
   background: var(--color-surface-base);
-  border-right: 1px solid var(--color-border-default);
+  border-right: thin solid var(--color-border-default);
   transition: flex var(--transition-base), transform var(--transition-base);
   height: 100%;
   position: relative;
   box-shadow: var(--shadow-sm);
-  z-index: 1;
+  z-index: var(--z-content);
+}
+
+.agent-panel-thread-pane {
+  position: relative;
+  flex: 1;
+  min-height: 0;
 }
 
 /* Mobile styles are defined in MobileAgent.css */
 
 /* ===== Tablet Styles ===== */
-@media (min-width: 769px) and (max-width: 1024px) {
+@media (min-width: 48.0625rem) and (max-width: 64rem) {
   .agent-panel {
     flex: 0 0 30%;
-    min-width: 300px;
-    max-width: 500px;
+    min-width: calc(var(--size-agent-panel) - var(--spacing-5xl));
+    max-width: calc(var(--size-agent-panel) + var(--spacing-5xl));
   }
 
 }
 
 /* ===== Desktop Styles ===== */
-@media (min-width: 769px) {
+@media (min-width: 48.0625rem) {
   .agent-panel {
     z-index: auto;
     transform: none;
@@ -41,17 +47,3 @@
     transform: none;
   }
 }
-
-/* ===== Large Desktop ===== */
-/* @media (min-width: 1440px) {
-  .agent-panel {
-    flex: 0 0 30%;
-    min-width: 400px;
-    max-width: 700px;
-  }
-
-  .agent-panel.hidden {
-    flex: 0 0 0;
-    min-width: 0;
-  }
-} */
