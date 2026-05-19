@@ -1327,6 +1327,8 @@
     "ai": "AI",
     "edit": "Edit",
     "delete": "Delete",
+    "showMore": "Show more",
+    "showLess": "Show less",
     "scrollToBottom": "Scroll to bottom",
     "switchToLanguage": "Switch to {{language}}",
     "translateTo": "Translate to {{language}}",

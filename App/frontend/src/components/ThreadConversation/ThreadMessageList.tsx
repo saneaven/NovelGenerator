@@ -18,6 +18,7 @@ import { ChevronDown } from '../icons';
 import { Loading } from '../common/Loading';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
+import CollapsibleUserBubble from './CollapsibleUserBubble';
 import MessageAttachmentBlock from './MessageAttachmentBlock';
 import MessageMcpChipRow from './MessageMcpChipRow';
 import MessageRowToolbar from './MessageRowToolbar';
@@ -318,12 +319,16 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
             ) : null;
 
             const contentBlock = hasBody ? (
-              <div className="thread-message-row__content">
-                {row.displayContent}
-                {row.isStreaming && thread?.status === 'running' && (
-                  <TypingIndicator inline />
-                )}
-              </div>
+              isUser ? (
+                <CollapsibleUserBubble>{row.displayContent}</CollapsibleUserBubble>
+              ) : (
+                <div className="thread-message-row__content">
+                  {row.displayContent}
+                  {row.isStreaming && thread?.status === 'running' && (
+                    <TypingIndicator inline />
+                  )}
+                </div>
+              )
             ) : null;
 
             const toolCallsBlock = cards.length > 0 ? (

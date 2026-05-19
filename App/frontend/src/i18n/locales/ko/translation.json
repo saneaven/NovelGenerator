@@ -1327,6 +1327,8 @@
     "ai": "AI",
     "edit": "편집",
     "delete": "삭제",
+    "showMore": "더 보기",
+    "showLess": "접기",
     "scrollToBottom": "맨 아래로 스크롤",
     "switchToLanguage": "{{language}}(으)로 전환",
     "translateTo": "{{language}}(으)로 번역",
