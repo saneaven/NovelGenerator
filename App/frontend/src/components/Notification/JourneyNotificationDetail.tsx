@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
 import { BaseModal } from '../BaseModal';
@@ -51,34 +51,6 @@ function toLatestRunContext(responseLatestRun: ThreadMessagesResponse['latestRun
   };
 }
 
-function useMeasuredHeight<T extends HTMLElement>() {
-  const observerRef = useRef<ResizeObserver | null>(null);
-  const [height, setHeight] = useState(0);
-
-  const ref = useCallback((element: T | null) => {
-    observerRef.current?.disconnect();
-    observerRef.current = null;
-
-    if (!element) {
-      setHeight(0);
-      return;
-    }
-
-    const apply = () => setHeight(element.offsetHeight);
-    apply();
-
-    const observer = new ResizeObserver(apply);
-    observer.observe(element);
-    observerRef.current = observer;
-  }, []);
-
-  useEffect(() => {
-    return () => observerRef.current?.disconnect();
-  }, []);
-
-  return [ref, height] as const;
-}
-
 const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   threadId,
   label,
@@ -91,8 +63,6 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const [feedbackText, setFeedbackText] = useState('');
   const [footerActionInFlight, setFooterActionInFlight] = useState<'resume' | 'cancel' | 'feedback' | null>(null);
   const [latestRunContext, setLatestRunContext] = useState<LatestRunContext | null>(null);
-  const [headerRef, headerHeight] = useMeasuredHeight<HTMLDivElement>();
-  const [footerRef, footerHeight] = useMeasuredHeight<HTMLDivElement>();
 
   const {
     storedThreadStatus,
@@ -225,7 +195,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     unresolvedToolCallCount,
   ]);
 
-  const showFooterOverlay = Boolean(footerActions) || showFeedback;
+  const showFooter = Boolean(footerActions) || showFeedback;
 
   return (
     <BaseModal
@@ -236,17 +206,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
       className="journey-detail-modal"
     >
       <div className="journey-detail-pane">
-        <ThreadMessageList
-          threadId={threadId}
-          projectId={projectId}
-          roleLabels={{ user: 'You', assistant: 'AI' }}
-          emptyState="No messages yet."
-          onSnapshotLoaded={handleSnapshotLoaded}
-          topOverlayHeight={headerHeight}
-          bottomOverlayHeight={showFooterOverlay ? footerHeight : 0}
-        />
-
-        <div className="journey-detail-floating-header" ref={headerRef}>
+        <div className="journey-detail-floating-header">
           <div className="journey-detail-header-left">
             <div className="journey-detail-header-meta">
               <h3 className="journey-detail-title">{label}</h3>
@@ -265,8 +225,18 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
           </div>
         </div>
 
-        {showFooterOverlay && (
-          <div className="journey-detail-floating-footer" ref={footerRef}>
+        <div className="journey-detail-thread">
+          <ThreadMessageList
+            threadId={threadId}
+            projectId={projectId}
+            roleLabels={{ user: 'You', assistant: 'AI' }}
+            emptyState="No messages yet."
+            onSnapshotLoaded={handleSnapshotLoaded}
+          />
+        </div>
+
+        {showFooter && (
+          <div className="journey-detail-floating-footer">
             {footerActions && (
               <div className="journey-detail-footer-actions">
                 {footerActions}
