@@ -1,10 +1,25 @@
 import { threadService, type ThreadMessagesResponse } from '../api/threadService';
 import { useImageRunStore } from '../imageRun';
 import { useThreadStore } from '../store/threadStore';
+import type { LatestRunContext } from '../types/thread';
 import { isNonLiveThreadStatus } from './threadStreamLifecycle';
 
 const inFlightThreadSnapshotRefresh = new Set<string>();
 const UNRESOLVED_TOOL_CALL_STATUSES = new Set(['streaming', 'validating', 'pending', 'processing', 'working']);
+
+export function toLatestRunContext(
+  responseLatestRun: ThreadMessagesResponse['latestRun'],
+): LatestRunContext | null {
+  if (!responseLatestRun) return null;
+  return {
+    inputPayload: responseLatestRun.inputPayload,
+    contextObjectIds: responseLatestRun.contextObjectIds,
+    journeyTargetIds: responseLatestRun.journeyTargetIds,
+    language: responseLatestRun.language,
+    runMode: responseLatestRun.runMode,
+    surface: responseLatestRun.surface,
+  };
+}
 
 export function applyThreadSnapshot(response: ThreadMessagesResponse): void {
   const store = useThreadStore.getState();
@@ -23,6 +38,7 @@ export function applyThreadSnapshot(response: ThreadMessagesResponse): void {
     unresolvedToolCallCount,
     latestMessageAt: latestMessage?.createdAt ?? null,
     updatedAt: response.thread.updatedAt ?? latestMessage?.createdAt ?? null,
+    latestRunContext: toLatestRunContext(response.latestRun),
   });
 
   if (isNonLiveThreadStatus(response.thread.status)) {

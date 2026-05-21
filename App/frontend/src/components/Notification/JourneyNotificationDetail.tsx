@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
 import { BaseModal } from '../BaseModal';
 import { useThreadStore } from '../../store/threadStore';
-import type { ThreadMessagesResponse } from '../../api/threadService';
 import {
   cancelThread,
   resumeThread,
@@ -30,27 +29,6 @@ interface JourneyNotificationDetailProps {
   onClose: () => void;
 }
 
-type LatestRunContext = {
-  inputPayload: Record<string, any>;
-  contextObjectIds: string[];
-  journeyTargetIds: string[];
-  language: string;
-  runMode: 'planMode' | 'agentMode' | null;
-  surface: string | null;
-};
-
-function toLatestRunContext(responseLatestRun: ThreadMessagesResponse['latestRun']): LatestRunContext | null {
-  if (!responseLatestRun) return null;
-  return {
-    inputPayload: responseLatestRun.inputPayload,
-    contextObjectIds: responseLatestRun.contextObjectIds,
-    journeyTargetIds: responseLatestRun.journeyTargetIds,
-    language: responseLatestRun.language,
-    runMode: responseLatestRun.runMode,
-    surface: responseLatestRun.surface,
-  };
-}
-
 const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   threadId,
   label,
@@ -62,19 +40,20 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [footerActionInFlight, setFooterActionInFlight] = useState<'resume' | 'cancel' | 'feedback' | null>(null);
-  const [latestRunContext, setLatestRunContext] = useState<LatestRunContext | null>(null);
 
   const {
     storedThreadStatus,
     runtimeUnresolvedToolCallCount,
     pendingToolCallCount,
     messageCount,
+    latestRunContext,
   } = useThreadStore(
     useShallow((state) => ({
       storedThreadStatus: state.threadsById[threadId]?.status,
       runtimeUnresolvedToolCallCount: state.threadsById[threadId]?.unresolvedToolCallCount ?? 0,
       pendingToolCallCount: state.pendingToolCallIdsByThread[threadId]?.length ?? 0,
       messageCount: state.messagesByThreadId[threadId]?.length ?? 0,
+      latestRunContext: state.threadsById[threadId]?.latestRunContext ?? null,
     })),
   );
 
@@ -82,12 +61,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     setFeedbackOpen(false);
     setFeedbackText('');
     setFooterActionInFlight(null);
-    setLatestRunContext(null);
   }, [threadId]);
-
-  const handleSnapshotLoaded = useCallback((response: ThreadMessagesResponse) => {
-    setLatestRunContext(toLatestRunContext(response.latestRun));
-  }, []);
 
   const journeyStatus = (storedThreadStatus ?? status) as ThreadStatus;
   const statusText = formatNotificationStatusLabelFor('journey', journeyStatus as NotificationStatus);
@@ -231,7 +205,6 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
             projectId={projectId}
             roleLabels={{ user: 'You', assistant: 'AI' }}
             emptyState="No messages yet."
-            onSnapshotLoaded={handleSnapshotLoaded}
           />
         </div>
 

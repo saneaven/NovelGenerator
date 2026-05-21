@@ -6,7 +6,7 @@ import {
 } from '../api/threadService';
 import { useSettingsStore } from '../store/settingsStore';
 import { useThreadStore } from '../store/threadStore';
-import { nowIso, toThreadType, type ThreadInfo, type ThreadStatus } from '../types/thread';
+import { nowIso, toThreadType, type LatestRunContext, type ThreadInfo, type ThreadStatus } from '../types/thread';
 import { revokeMessageAttachmentObjectUrls, toOptimisticMessageAttachment } from '../utils/threadAttachments';
 
 interface ThreadContextParams {
@@ -130,6 +130,20 @@ function toResumeRunRequest(request?: Omit<StartRunCommand, 'input_text'>): Resu
   };
 }
 
+function toLatestRunContextFromRequest(
+  request: Omit<StartRunCommand, 'input_text'>,
+  fallbackLanguage: string,
+): LatestRunContext {
+  return {
+    inputPayload: request.input_payload ?? {},
+    contextObjectIds: request.context_object_ids ?? [],
+    journeyTargetIds: request.journey_target_ids ?? [],
+    language: request.language ?? fallbackLanguage,
+    runMode: request.run_mode ?? null,
+    surface: request.surface ?? null,
+  };
+}
+
 export async function sendThreadMessage(params: SendThreadMessageParams): Promise<boolean> {
   useThreadStore.getState().clearPreexistingLiveThread(params.threadId);
 
@@ -191,6 +205,11 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
       runId: response.runId,
       runStatus: response.status,
     });
+    if (params.request) {
+      useThreadStore.getState().setThreadRuntime(params.threadId, {
+        latestRunContext: toLatestRunContextFromRequest(params.request, lang),
+      });
+    }
     return true;
   } catch (error) {
     const messages = useThreadStore.getState().getMessages(params.threadId);

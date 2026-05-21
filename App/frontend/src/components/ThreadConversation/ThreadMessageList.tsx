@@ -1,7 +1,6 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import type { ThreadMessagesResponse } from '../../api/threadService';
 import { threadService } from '../../api/threadService';
 import { applyThreadSnapshot } from '../../runtime/threadHydration';
 import { useThreadStore } from '../../store/threadStore';
@@ -42,7 +41,6 @@ interface ThreadMessageListProps {
   roleLabels?: { user?: string; assistant?: string };
   emptyState?: React.ReactNode;
   className?: string;
-  onSnapshotLoaded?: (response: ThreadMessagesResponse) => void;
   topOverlayHeight?: number;
   bottomOverlayHeight?: number;
 }
@@ -75,7 +73,6 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
   roleLabels,
   emptyState,
   className,
-  onSnapshotLoaded,
   topOverlayHeight = 0,
   bottomOverlayHeight = 0,
 }) => {
@@ -157,7 +154,6 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
       .then((response) => {
         if (cancelled) return;
         applyThreadSnapshot(response);
-        onSnapshotLoaded?.(response);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -171,7 +167,7 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [onSnapshotLoaded, threadId]);
+  }, [threadId]);
 
   useEffect(() => {
     resetToBottom();

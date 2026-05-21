@@ -5,6 +5,15 @@ export type ThreadStatus = 'running' | 'waiting' | 'processing' | 'ready' | 'pau
 export type RunStatus = ThreadStatus;
 export type ToolCallStatus = 'streaming' | 'validating' | 'pending' | 'processing' | 'working' | 'failed' | 'rejected' | 'applied';
 
+export interface LatestRunContext {
+  inputPayload: Record<string, any>;
+  contextObjectIds: string[];
+  journeyTargetIds: string[];
+  language: string;
+  runMode: 'planMode' | 'agentMode' | null;
+  surface: string | null;
+}
+
 export interface ThreadInfo {
   id: string;
   projectId: string;
@@ -20,6 +29,7 @@ export interface ThreadInfo {
   latestRunStatus?: ThreadStatus | null;
   latestMessageAt?: string | null;
   unresolvedToolCallCount?: number;
+  latestRunContext?: LatestRunContext | null;
 }
 
 export interface ThreadMessage {
