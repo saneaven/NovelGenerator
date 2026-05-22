@@ -33,6 +33,7 @@ def _latest_run_for_thread(db: Session, *, thread_id: UUID) -> RunModel | None:
 
 
 def sync_run_thread_status(db: Session, *, run_id: UUID) -> RuntimeSyncResult:
+    db.flush()
     run = db.query(RunModel).filter(RunModel.id == run_id).first()
     if run is None:
         return RuntimeSyncResult(run=None, thread=None, notification=None, status=None)

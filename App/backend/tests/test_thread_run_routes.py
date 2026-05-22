@@ -909,6 +909,53 @@ async def _run_immediately(func, /, *args, **kwargs):
     return func(*args, **kwargs)
 
 
+class FakeRuntimeSyncQuery:
+    def __init__(self, session: "FakeRuntimeSyncSession", target: object) -> None:
+        self._session = session
+        self._target = target
+
+    def filter(self, *_args, **_kwargs) -> "FakeRuntimeSyncQuery":
+        return self
+
+    def order_by(self, *_args, **_kwargs) -> "FakeRuntimeSyncQuery":
+        return self
+
+    def first(self):
+        if self._target is thread_routes.RunModel:
+            return self._session.run
+        return None
+
+    def all(self):
+        self._session.status_query_saw_flush = self._session.flushed
+        return [("rejected" if self._session.flushed else "pending",)]
+
+
+class FakeRuntimeSyncSession:
+    def __init__(self, run: object) -> None:
+        self.run = run
+        self.flushed = False
+        self.status_query_saw_flush = False
+
+    def flush(self) -> None:
+        self.flushed = True
+
+    def query(self, target: object) -> FakeRuntimeSyncQuery:
+        return FakeRuntimeSyncQuery(self, target)
+
+
+def test_sync_run_thread_status_flushes_before_deriving_from_tool_statuses() -> None:
+    thread = SimpleNamespace(id=uuid4(), status="waiting", thread_type=None)
+    run = SimpleNamespace(id=uuid4(), status="waiting", thread=thread)
+    db = FakeRuntimeSyncSession(run)
+
+    result = thread_routes.sync_run_thread_status(db, run_id=run.id)
+
+    assert db.status_query_saw_flush is True
+    assert run.status == "paused"
+    assert thread.status == "paused"
+    assert result.status == "paused"
+
+
 def test_decide_tool_calls_batch_pause_after_apply_refreshes_sync_result_before_emit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
