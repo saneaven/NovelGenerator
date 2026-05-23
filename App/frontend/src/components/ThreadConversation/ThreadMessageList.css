@@ -62,7 +62,9 @@
 
 .thread-message-row--sticky-latest-user {
   position: sticky;
-  top: calc(var(--thread-message-list-top-overlay) + var(--spacing-sm));
+  /* Chromium adds the scroll container's padding-top to the sticky offset,
+     so subtract it to land spacing-sm below the overlay. */
+  top: calc(var(--spacing-sm) - var(--spacing-xl));
   z-index: var(--z-sticky);
 }
 
@@ -167,7 +169,7 @@
 }
 
 .thread-message-row__content--collapsed .thread-message-row__content-inner {
-  max-height: 200px;
+  max-height: 100px;
   overflow: hidden;
   mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
   -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
