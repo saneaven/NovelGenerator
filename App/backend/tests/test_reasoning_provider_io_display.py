@@ -6,6 +6,8 @@ import sys
 import types
 from typing import Any
 
+from App.backend.services.reasoning.normalize import normalize_reasoning_detail
+
 
 def _ensure_provider_stubs() -> None:
     if "openai" not in sys.modules:
@@ -27,6 +29,24 @@ def _ensure_provider_stubs() -> None:
         fake_anthropic = types.ModuleType("anthropic")
         fake_anthropic.AsyncAnthropic = object
         sys.modules["anthropic"] = fake_anthropic
+
+    if "httpx" not in sys.modules:
+        fake_httpx = types.ModuleType("httpx")
+
+        class _StubAsyncClient:
+            pass
+
+        class _StubHTTPStatusError(Exception):
+            pass
+
+        class _StubTimeout:
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                pass
+
+        fake_httpx.AsyncClient = _StubAsyncClient
+        fake_httpx.HTTPStatusError = _StubHTTPStatusError
+        fake_httpx.Timeout = _StubTimeout
+        sys.modules["httpx"] = fake_httpx
 
     google_module = sys.modules.setdefault("google", types.ModuleType("google"))
     if "google.genai" not in sys.modules:
@@ -147,6 +167,31 @@ def test_provider_stream_thinking_display_paths() -> None:
     assert custom.get_stream_thinking_display_path({}) == "text"
     assert custom.get_stream_thinking_display_path({"custom_kind": "openai_response"}) == "reasoning_text"
     assert custom.get_stream_thinking_display_path({"custom_kind": "claude"}) == "reasoning_text"
+
+
+def test_nanogpt_read_reasoning_detail_preserves_text_details_and_display() -> None:
+    _ensure_provider_stubs()
+    from App.backend.providers.nanogpt.llm import NanoGPTProvider
+
+    provider = NanoGPTProvider({})
+    snapshot = _Snapshot(
+        content_parts=[
+            {"type": "thinking", "text": "route analysis"},
+            {"type": "content", "text": "answer"},
+        ],
+        reasoning_details=[{"format": "native", "text": "route analysis"}],
+    )
+
+    detail = normalize_reasoning_detail(provider.read_reasoning_detail(snapshot, {}))
+
+    assert detail is not None
+    assert detail["type"] == "nanogpt"
+    assert detail["meta"] == {
+        "provider": "nanogpt",
+        "thinking_display": "reasoning_text",
+    }
+    assert detail["data"]["reasoning_text"] == "route analysis"
+    assert detail["data"]["reasoning_details"] == [{"format": "native", "text": "route analysis"}]
 
 
 def _patch_gemini_part_types(monkeypatch: Any) -> None:

@@ -23,6 +23,24 @@ if "anthropic" not in sys.modules:
     fake_anthropic.AsyncAnthropic = object
     sys.modules["anthropic"] = fake_anthropic
 
+if "httpx" not in sys.modules:
+    fake_httpx = types.ModuleType("httpx")
+
+    class _StubAsyncClient:
+        pass
+
+    class _StubHTTPStatusError(Exception):
+        pass
+
+    class _StubTimeout:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+    fake_httpx.AsyncClient = _StubAsyncClient
+    fake_httpx.HTTPStatusError = _StubHTTPStatusError
+    fake_httpx.Timeout = _StubTimeout
+    sys.modules["httpx"] = fake_httpx
+
 if "App.backend.database" not in sys.modules:
     from sqlalchemy.orm import declarative_base
 
@@ -52,8 +70,10 @@ if "App.backend.services.chat_attachment_service" not in sys.modules:
 
 from App.backend.providers.shared.async_openai_provider import AsyncOpenAIProvider
 from App.backend.providers.custom.llm import CustomProvider
+from App.backend.providers.nanogpt.llm import NanoGPTProvider
 from App.backend.providers.shared.contracts import DeltaPayload, merge_openai_tool_call_deltas
 from App.backend.providers.shared.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
+from App.backend.services.reasoning.normalize import normalize_reasoning_detail
 
 
 def test_chunk_to_events_extracts_reasoning_from_delta_thoughts() -> None:
@@ -120,6 +140,91 @@ def test_custom_openai_completion_non_template_ignores_reasoning_detail_items_wi
     reasoning_detail = CustomProvider({}).read_reasoning_detail(
         snapshot,
         {"custom_kind": "openai_completion"},
+    )
+
+    assert reasoning_detail is None
+
+
+def _normalized_nanogpt_reasoning_from_stream_chunk(
+    chunk: dict[str, object],
+    *,
+    thinking_mode: str = "model",
+) -> dict[str, object] | None:
+    provider = NanoGPTProvider({})
+    assembler = FallbackSnapshotAssembler(provider="nanogpt", model="test-model")
+
+    chunk_obj, extra_chunks = provider._mutate_chunk(chunk, thinking_mode)
+    chunks = ([chunk_obj] if chunk_obj is not None else []) + extra_chunks
+    for item in chunks:
+        if not provider._has_meaningful_payload(item):
+            continue
+        for event in provider._chunk_to_events(item):
+            if event.kind == "delta" and event.delta is not None:
+                assembler.apply_delta(event.delta)
+            elif event.kind == "meta" and event.meta is not None:
+                assembler.apply_meta(event.meta)
+
+    snapshot = assembler.finalize_or_raise()
+    return normalize_reasoning_detail(provider.read_reasoning_detail(snapshot, {"thinking_mode": "model"}))
+
+
+def test_nanogpt_model_reasoning_delta_persists_as_reasoning_detail() -> None:
+    reasoning_detail = _normalized_nanogpt_reasoning_from_stream_chunk(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "reasoning": "checked route ",
+                        "content": "answer",
+                    }
+                }
+            ]
+        }
+    )
+
+    assert reasoning_detail is not None
+    assert reasoning_detail["type"] == "nanogpt"
+    assert reasoning_detail["meta"] == {
+        "provider": "nanogpt",
+        "thinking_display": "reasoning_text",
+    }
+    assert reasoning_detail["data"]["reasoning_text"] == "checked route "
+
+
+def test_nanogpt_model_reasoning_content_delta_persists_as_reasoning_detail() -> None:
+    reasoning_detail = _normalized_nanogpt_reasoning_from_stream_chunk(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "reasoning_content": "legacy checked route ",
+                        "content": "answer",
+                    }
+                }
+            ]
+        }
+    )
+
+    assert reasoning_detail is not None
+    assert reasoning_detail["type"] == "nanogpt"
+    assert reasoning_detail["meta"]["provider"] == "nanogpt"
+    assert reasoning_detail["meta"]["thinking_display"] == "reasoning_text"
+    assert reasoning_detail["data"]["reasoning_text"] == "legacy checked route "
+
+
+def test_nanogpt_reasoning_delta_ignored_when_thinking_mode_off() -> None:
+    reasoning_detail = _normalized_nanogpt_reasoning_from_stream_chunk(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "reasoning": "hidden route ",
+                        "content": "answer",
+                    }
+                }
+            ]
+        },
+        thinking_mode="off",
     )
 
     assert reasoning_detail is None

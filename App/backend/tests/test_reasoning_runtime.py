@@ -28,6 +28,31 @@ def test_normalize_reasoning_detail_clamps_token_count() -> None:
     assert "ignored" not in out
 
 
+def test_normalize_reasoning_detail_allows_nanogpt_payload() -> None:
+    out = normalize_reasoning_detail(
+        {
+            "type": "nanogpt",
+            "meta": {
+                "provider": "nanogpt",
+                "thinking_display": "reasoning_text",
+            },
+            "data": {
+                "reasoning_text": "checked the route",
+                "reasoning_details": [{"format": "native", "text": "checked"}],
+            },
+            "token_count": 12,
+        }
+    )
+
+    assert out is not None
+    assert out["type"] == "nanogpt"
+    assert out["meta"]["provider"] == "nanogpt"
+    assert out["meta"]["thinking_display"] == "reasoning_text"
+    assert out["data"]["reasoning_text"] == "checked the route"
+    assert out["data"]["reasoning_details"] == [{"format": "native", "text": "checked"}]
+    assert out["token_count"] == 12
+
+
 def test_get_completed_runs_excludes_current_run() -> None:
     messages = [
         {"role": "assistant", "run_id": "r1"},
