@@ -12,6 +12,7 @@ import { useMcpStore } from '../../../store/mcpStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
 import { useThreadStore } from '../../../store/threadStore';
+import { useTimelineStore } from '../../../store/timelineStore';
 import { computeParentClosure } from '../../../utils/parentClosure';
 import {
   cancelThread,
@@ -21,6 +22,7 @@ import ObjectPicker from '../../../components/ObjectPicker/ObjectPicker';
 import AgentSidebar from '../../../components/Agent/AgentSidebar';
 import type { AgentRunMode } from '../../../types/agentRuntime';
 import type { ThreadMessage, ThreadToolCall } from '../../../types/thread';
+import type { TimelineTrack } from '../../../types/timeline';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
 import AuthenticatedImage from '../../../components/common/AuthenticatedImage';
@@ -114,6 +116,17 @@ interface AgentInputFormProps {
 }
 
 const BLOCKING_TOOL_CALL_STATUSES = new Set(['pending', 'streaming', 'validating', 'processing', 'working']);
+
+function collectTimelineEventIds(tracks: TimelineTrack[]): string[] {
+  const ids: string[] = [];
+
+  for (const track of tracks) {
+    ids.push(...track.events.map((event) => event.id));
+    ids.push(...collectTimelineEventIds(track.children));
+  }
+
+  return ids;
+}
 
 function isBlockingToolCallStatus(status: string | undefined): boolean {
   if (!status) return false;
@@ -420,6 +433,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   const setInput = useAgentUIStore((state) => state.setInput);
   const unifiedObjects = useUnifiedObjectStore((state) => state.objects);
   const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
+  const timeline = useTimelineStore((state) => (state.loadedProjectId === projectId ? state.timeline : null));
+  const fetchTimeline = useTimelineStore((state) => state.fetchTimeline);
   const selectedChapterId = useNovelEditorStore((state) => state.selectedChapterByProject[projectId]);
 
   const [isDesktop, setIsDesktop] = useState(() => (
@@ -462,26 +477,34 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     ))
   ), [mcpServers, runMode]);
 
+  const timelineEventIds = useMemo(
+    () => collectTimelineEventIds(timeline?.tracks ?? []),
+    [timeline],
+  );
+
   const totalObjectCount = useMemo(() => (
     Object.values(unifiedObjects).filter((obj) => (
       obj.metadata?.project_id === projectId
       && obj.type !== 'basic_info'
       && obj.type !== 'guidelines'
       && !(obj.type === 'outline' && obj.kind !== 'chapter')
-    )).length
-  ), [unifiedObjects, projectId]);
+    )).length + timelineEventIds.length
+  ), [unifiedObjects, projectId, timelineEventIds.length]);
 
   const contextIdSet = useMemo(() => (
     new Set(
-      Object.values(unifiedObjects)
+      [
+        ...Object.values(unifiedObjects)
         .filter((obj) => (
           obj.metadata?.project_id === projectId
           && obj.type !== 'basic_info'
           && obj.type !== 'guidelines'
         ))
         .map((obj) => obj.id),
+        ...timelineEventIds,
+      ],
     )
-  ), [unifiedObjects, projectId]);
+  ), [unifiedObjects, projectId, timelineEventIds]);
 
   const focusedManuscriptId = useMemo(() => {
     if (surface !== 'novel-editor') return null;
@@ -668,13 +691,18 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     let cancelled = false;
     setIsContextPickerLoading(true);
 
-    void refreshProjectObjects(projectId, [
-      'story_entity',
-      'outline',
-      'manuscript',
-    ]).catch((loadError) => {
-      console.error('Failed to preload agent context objects:', loadError);
-    }).finally(() => {
+    void Promise.all([
+      refreshProjectObjects(projectId, [
+        'story_entity',
+        'outline',
+        'manuscript',
+      ]).catch((loadError) => {
+        console.error('Failed to preload agent context objects:', loadError);
+      }),
+      fetchTimeline(projectId, sourceLanguage, { force: true }).catch((loadError) => {
+        console.error('Failed to preload agent timeline context:', loadError);
+      }),
+    ]).finally(() => {
       if (!cancelled) {
         setIsContextPickerLoading(false);
       }
@@ -683,7 +711,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     return () => {
       cancelled = true;
     };
-  }, [isContextDropdownOpen, projectId, refreshProjectObjects]);
+  }, [fetchTimeline, isContextDropdownOpen, projectId, refreshProjectObjects, sourceLanguage]);
 
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth > 768);
