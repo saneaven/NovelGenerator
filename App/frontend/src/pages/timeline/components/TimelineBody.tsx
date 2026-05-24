@@ -12,6 +12,7 @@ interface TimelineBodyProps {
   canvasWidth: number;
   rulerTicks: RulerTick[];
   scrollOffset: number;
+  originBase: number;
   scale: number;
   zoomVersion: number;
   onToggleExpand: (trackId: string) => void;
@@ -36,6 +37,7 @@ const TimelineBody: React.FC<TimelineBodyProps> = ({
   canvasWidth,
   rulerTicks,
   scrollOffset,
+  originBase,
   scale,
   zoomVersion,
   onToggleExpand,
@@ -73,7 +75,7 @@ const TimelineBody: React.FC<TimelineBodyProps> = ({
   useLayoutEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
-    const targetLeft = scrollOffset / scale;
+    const targetLeft = (scrollOffset - originBase) / scale;
     el.scrollLeft = targetLeft;
     if (rulerRef.current) {
       rulerRef.current.scrollLeft = targetLeft;

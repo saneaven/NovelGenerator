@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CalendarConfig } from '../../../types/timeline';
 import { toBaseUnits } from '../../../utils/timelineCalendar';
 import type { TimelineTrack } from '../../../types/timeline';
@@ -45,12 +45,31 @@ export function useTimelineLayout(calendar: CalendarConfig, tracks: TimelineTrac
     zoomVersion: 0,
   });
   const zoomIndexRef = useRef(DEFAULT_ZOOM_INDEX);
+  const initedRef = useRef(false);
 
-  /** Largest base-unit position across all events; drives content width. */
-  const contentMaxBase = useMemo(() => {
+  /** Earliest / latest base-unit positions across all events. */
+  const { contentMinBase, contentMaxBase } = useMemo(() => {
     const positions = collectAllPositions(tracks, calendar);
-    return positions.length > 0 ? Math.max(0, ...positions) : 0;
+    if (positions.length === 0) return { contentMinBase: 0, contentMaxBase: 0 };
+    return { contentMinBase: Math.min(...positions), contentMaxBase: Math.max(...positions) };
   }, [tracks, calendar]);
+
+  /**
+   * Base value mapped to canvas pixel 0. Sits a margin before the earliest event
+   * so the timeline opens just ahead of the first event instead of at base 0.
+   */
+  const originBase = useMemo(() => {
+    const range = contentMaxBase - contentMinBase;
+    const marginBase = range > 0 ? range * 0.05 : Math.max(contentMinBase * 0.05, 1);
+    return Math.max(0, contentMinBase - marginBase);
+  }, [contentMinBase, contentMaxBase]);
+
+  /** On first content load, home scrollOffset to the origin for correct tick culling. */
+  useEffect(() => {
+    if (initedRef.current || (contentMinBase === 0 && contentMaxBase === 0)) return;
+    initedRef.current = true;
+    setViewport((prev) => ({ ...prev, scrollOffset: originBase }));
+  }, [originBase, contentMinBase, contentMaxBase]);
 
   const setViewportWidth = useCallback((width: number) => {
     setViewport((prev) => (prev.viewportWidth === width ? prev : { ...prev, viewportWidth: width }));
@@ -69,9 +88,9 @@ export function useTimelineLayout(calendar: CalendarConfig, tracks: TimelineTrac
       // Keep center of viewport stable
       const center = prev.scrollOffset + (prev.viewportWidth * prev.scale) / 2;
       const newOffset = center - (prev.viewportWidth * newScale) / 2;
-      return { ...prev, scale: newScale, scrollOffset: Math.max(0, newOffset), zoomVersion: prev.zoomVersion + 1 };
+      return { ...prev, scale: newScale, scrollOffset: Math.max(originBase, newOffset), zoomVersion: prev.zoomVersion + 1 };
     });
-  }, []);
+  }, [originBase]);
 
   const zoomOut = useCallback(() => {
     const nextIndex = Math.min(ZOOM_STEPS.length - 1, zoomIndexRef.current + 1);
@@ -81,9 +100,9 @@ export function useTimelineLayout(calendar: CalendarConfig, tracks: TimelineTrac
       const newScale = ZOOM_STEPS[nextIndex];
       const center = prev.scrollOffset + (prev.viewportWidth * prev.scale) / 2;
       const newOffset = center - (prev.viewportWidth * newScale) / 2;
-      return { ...prev, scale: newScale, scrollOffset: Math.max(0, newOffset), zoomVersion: prev.zoomVersion + 1 };
+      return { ...prev, scale: newScale, scrollOffset: Math.max(originBase, newOffset), zoomVersion: prev.zoomVersion + 1 };
     });
-  }, []);
+  }, [originBase]);
 
   const zoomAtPoint = useCallback((direction: 'in' | 'out', pixelX: number) => {
     const nextIndex = direction === 'in'
@@ -96,9 +115,9 @@ export function useTimelineLayout(calendar: CalendarConfig, tracks: TimelineTrac
       // Keep the point under the cursor stable
       const pointInBaseUnits = prev.scrollOffset + pixelX * prev.scale;
       const newOffset = pointInBaseUnits - pixelX * newScale;
-      return { ...prev, scale: newScale, scrollOffset: Math.max(0, newOffset), zoomVersion: prev.zoomVersion + 1 };
+      return { ...prev, scale: newScale, scrollOffset: Math.max(originBase, newOffset), zoomVersion: prev.zoomVersion + 1 };
     });
-  }, []);
+  }, [originBase]);
 
   const fitAll = useCallback(() => {
     const positions = collectAllPositions(tracks, calendar);
@@ -124,9 +143,9 @@ export function useTimelineLayout(calendar: CalendarConfig, tracks: TimelineTrac
       zoomIndexRef.current = closest;
       const finalScale = ZOOM_STEPS[closest];
       const newOffset = minPos - padding * finalScale;
-      return { ...prev, scale: finalScale, scrollOffset: Math.max(0, newOffset), zoomVersion: prev.zoomVersion + 1 };
+      return { ...prev, scale: finalScale, scrollOffset: Math.max(originBase, newOffset), zoomVersion: prev.zoomVersion + 1 };
     });
-  }, [tracks, calendar]);
+  }, [tracks, calendar, originBase]);
 
   /** Human-readable label for current zoom level. */
   const zoomLabel = (() => {
@@ -140,6 +159,7 @@ export function useTimelineLayout(calendar: CalendarConfig, tracks: TimelineTrac
 
   return {
     viewport,
+    originBase,
     contentMaxBase,
     zoomLabel,
     zoomIn,

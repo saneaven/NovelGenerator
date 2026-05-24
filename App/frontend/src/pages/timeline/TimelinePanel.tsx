@@ -45,6 +45,7 @@ const TimelinePanel: React.FC<TimelinePanelProps> = ({ globalDisplayLanguage }) 
   // Layout & positioning
   const {
     viewport,
+    originBase,
     contentMaxBase,
     zoomLabel,
     zoomIn,
@@ -61,7 +62,7 @@ const TimelinePanel: React.FC<TimelinePanelProps> = ({ globalDisplayLanguage }) 
     canvasWidth,
     rulerTicks,
     pixelToDate,
-  } = useTimelinePositioning(calendar, viewport, contentMaxBase);
+  } = useTimelinePositioning(calendar, viewport, originBase, contentMaxBase);
 
   // UI state
   const [expandedTracks, setExpandedTracks] = useState<Set<string>>(() => new Set());
@@ -142,9 +143,9 @@ const TimelinePanel: React.FC<TimelinePanelProps> = ({ globalDisplayLanguage }) 
 
   const handleScroll = useCallback(
     (scrollLeft: number) => {
-      setScrollOffset(scrollLeft * viewport.scale);
+      setScrollOffset(originBase + scrollLeft * viewport.scale);
     },
-    [setScrollOffset, viewport.scale],
+    [setScrollOffset, originBase, viewport.scale],
   );
 
   const handleWheel = useCallback(
@@ -221,6 +222,7 @@ const TimelinePanel: React.FC<TimelinePanelProps> = ({ globalDisplayLanguage }) 
         canvasWidth={canvasWidth}
         rulerTicks={rulerTicks}
         scrollOffset={viewport.scrollOffset}
+        originBase={originBase}
         scale={viewport.scale}
         zoomVersion={viewport.zoomVersion}
         onToggleExpand={handleToggleExpand}
