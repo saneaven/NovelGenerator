@@ -119,6 +119,25 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   const verbosityField = visibleAdvancedFields.verbosity;
   const templateField = visibleAdvancedFields.custom_thinking_template_id;
   const temperatureValue = Number.isFinite(config.temperature) ? config.temperature : 0.7;
+  const contextWindowTokens = (
+    typeof config.context_window_tokens === 'number'
+    && Number.isFinite(config.context_window_tokens)
+    && config.context_window_tokens > 0
+  )
+    ? config.context_window_tokens
+    : null;
+  const configuredMaxOutputTokens = (
+    typeof config.max_output_tokens === 'number'
+    && Number.isFinite(config.max_output_tokens)
+  )
+    ? config.max_output_tokens
+    : null;
+  const reservedOutputTokens = configuredMaxOutputTokens ?? 0;
+  const finalInputBudget = contextWindowTokens === null
+    ? null
+    : contextWindowTokens - reservedOutputTokens;
+
+  const formatTokenCount = (value: number) => Math.trunc(value).toLocaleString();
 
   const handleProviderChange = (provider: ProviderType) => {
     setShowModelBrowser(false);
@@ -401,6 +420,16 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
             className="config-input"
           />
           <p className="field-hint">{t('settings.taskConfig.tokenLimits.max_output_tokensHint')}</p>
+          <p className={`field-hint input-token-budget ${finalInputBudget !== null && finalInputBudget <= 0 ? 'input-token-budget--warning' : ''}`}>
+            {finalInputBudget === null
+              ? t('settings.taskConfig.tokenLimits.input_budget_no_limit')
+              : t(
+                finalInputBudget <= 0
+                  ? 'settings.taskConfig.tokenLimits.input_budget_warning'
+                  : 'settings.taskConfig.tokenLimits.input_budget_inline',
+                { tokens: formatTokenCount(finalInputBudget) }
+              )}
+          </p>
         </div>
       </div>
 

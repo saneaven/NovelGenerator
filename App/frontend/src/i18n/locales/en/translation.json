@@ -795,7 +795,10 @@
         "context_window_tokensHint": "Used for local prompt budgeting preflight. Leave empty for no local limit. Does not change the model's actual context window.",
         "max_output_tokens": "Max Output Tokens",
         "max_output_tokensPlaceholder": "Default (provider)",
-        "max_output_tokensHint": "Limits the maximum tokens generated in the response. Leave empty to use the provider default."
+        "max_output_tokensHint": "Limits the maximum tokens generated in the response. Leave empty to use the provider default.",
+        "input_budget_inline": "Final input budget: {{tokens}} tokens",
+        "input_budget_no_limit": "Final input budget: no local limit",
+        "input_budget_warning": "Final input budget: {{tokens}} tokens. Output reservation is greater than or equal to the context window."
       },
       "nanogpt": {
         "billing": {

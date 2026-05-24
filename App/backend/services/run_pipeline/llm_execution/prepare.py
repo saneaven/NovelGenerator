@@ -26,8 +26,6 @@ from .stage_events import emit_stage
 
 
 MAX_ARCHIVE_LOOPS = 4
-ARCHIVE_SAFETY_MARGIN = 256
-DEFAULT_RESERVED_COMPLETION = 2048
 
 
 class ContextOverflowError(RuntimeError):
@@ -108,9 +106,9 @@ def _context_budget_tokens(task_config: Any) -> int:
     reserved_completion = (
         int(task_config.max_output_tokens)
         if task_config.max_output_tokens is not None
-        else DEFAULT_RESERVED_COMPLETION
+        else 0
     )
-    return context_window_tokens - reserved_completion - ARCHIVE_SAFETY_MARGIN
+    return context_window_tokens - reserved_completion
 
 
 def _current_run_user_message_id(db: Any, run: Any) -> UUID | None:

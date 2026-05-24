@@ -178,6 +178,27 @@ class _Provider:
         return None
 
 
+def test_context_budget_tokens_uses_full_window_without_safety_margin() -> None:
+    task_config = SimpleNamespace(context_window_tokens=256000, max_output_tokens=138744)
+
+    assert prepare_module._context_budget_tokens(task_config) == 117256
+
+
+def test_context_budget_tokens_uses_default_reserved_completion() -> None:
+    task_config = SimpleNamespace(context_window_tokens=32000, max_output_tokens=None)
+
+    assert prepare_module._context_budget_tokens(task_config) == 32000
+
+
+def test_context_budget_tokens_returns_zero_without_local_window() -> None:
+    assert prepare_module._context_budget_tokens(
+        SimpleNamespace(context_window_tokens=None, max_output_tokens=1000)
+    ) == 0
+    assert prepare_module._context_budget_tokens(
+        SimpleNamespace(context_window_tokens=0, max_output_tokens=1000)
+    ) == 0
+
+
 def test_prepare_execution_emits_summarizing_stage_per_archive_iteration(monkeypatch) -> None:
     run = _RunModel(
         id=uuid4(),
@@ -215,7 +236,7 @@ def test_prepare_execution_emits_summarizing_stage_per_archive_iteration(monkeyp
     reassemble_calls: list[dict[str, object]] = []
     archive_calls: list[object] = []
     boundaries = iter(["boundary-1", "boundary-2"])
-    token_counts = iter([900, 800, 100])
+    token_counts = iter([950, 925, 100])
 
     async def _emit_fn(*, event_name: str, data: dict[str, object], **_kwargs) -> None:
         emitted.append((event_name, data))

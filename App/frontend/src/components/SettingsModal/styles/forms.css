@@ -30,6 +30,10 @@
     margin-top: var(--spacing-xs);
 }
 
+.input-token-budget--warning {
+    color: var(--color-warning);
+}
+
 /* Text Inputs */
 input[type="text"],
 input[type="password"],
