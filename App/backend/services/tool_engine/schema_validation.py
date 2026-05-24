@@ -12,7 +12,9 @@ def validate_args_is_object(args: Any) -> ValidationResult:
     return invalid_result("validate_args_is_object", "Tool arguments must be a JSON object")
 
 
-def _matches_type(value: Any, expected: str) -> bool:
+def _matches_type(value: Any, expected: str | list[Any]) -> bool:
+    if isinstance(expected, list):
+        return any(isinstance(item, str) and _matches_type(value, item) for item in expected)
     if expected == "string":
         return isinstance(value, str)
     if expected == "integer":
@@ -30,6 +32,41 @@ def _matches_type(value: Any, expected: str) -> bool:
     return True
 
 
+def _type_label(expected: Any) -> str:
+    if isinstance(expected, list):
+        return "|".join(str(item) for item in expected)
+    return str(expected)
+
+
+def _schema_allows_null(prop_schema: dict[str, Any] | None) -> bool:
+    if not isinstance(prop_schema, dict):
+        return False
+    if prop_schema.get("nullable") is True:
+        return True
+    expected_type = prop_schema.get("type")
+    if expected_type == "null":
+        return True
+    return isinstance(expected_type, list) and "null" in expected_type
+
+
+def _schema_type_includes(prop_schema: dict[str, Any], expected: str) -> bool:
+    schema_type = prop_schema.get("type")
+    if isinstance(schema_type, str):
+        return schema_type == expected
+    if isinstance(schema_type, list):
+        return expected in schema_type
+    return False
+
+
+def _matches_schema_type(value: Any, prop_schema: dict[str, Any]) -> bool:
+    if value is None and _schema_allows_null(prop_schema):
+        return True
+    expected_type = prop_schema.get("type")
+    if isinstance(expected_type, str | list):
+        return _matches_type(value, expected_type)
+    return True
+
+
 def _validate_nested_object(
     key: str,
     value: dict[str, Any],
@@ -38,7 +75,9 @@ def _validate_nested_object(
     required = prop_schema.get("required")
     if isinstance(required, list):
         for req in required:
-            if req not in value:
+            nested_props = prop_schema.get("properties")
+            nested_schema = nested_props.get(req) if isinstance(nested_props, dict) else None
+            if req not in value or (value.get(req) is None and not _schema_allows_null(nested_schema)):
                 return invalid_result(
                     "validate_schema_required_enum_additional_properties",
                     f"Missing required nested parameter: {key}.{req}",
@@ -52,10 +91,10 @@ def _validate_nested_object(
                 continue
 
             nested_type = nested_schema.get("type")
-            if isinstance(nested_type, str) and not _matches_type(nv, nested_type):
+            if isinstance(nested_type, str | list) and not _matches_schema_type(nv, nested_schema):
                 return invalid_result(
                     "validate_schema_required_enum_additional_properties",
-                    f"Invalid type for {key}.{nk}: expected {nested_type}",
+                    f"Invalid type for {key}.{nk}: expected {_type_label(nested_type)}",
                 )
 
             enum_vals = nested_schema.get("enum")
@@ -80,8 +119,8 @@ def validate_schema_required_enum_additional_properties(
     prop_map = properties if isinstance(properties, dict) else {}
 
     for name in req_list:
-        value = args.get(name)
-        if value is None:
+        prop_schema = prop_map.get(name)
+        if name not in args or (args.get(name) is None and not _schema_allows_null(prop_schema)):
             return invalid_result(
                 "validate_schema_required_enum_additional_properties",
                 f"Missing required parameter: {name}",
@@ -101,10 +140,10 @@ def validate_schema_required_enum_additional_properties(
             continue
 
         expected_type = prop_schema.get("type")
-        if isinstance(expected_type, str) and not _matches_type(value, expected_type):
+        if isinstance(expected_type, str | list) and not _matches_schema_type(value, prop_schema):
             return invalid_result(
                 "validate_schema_required_enum_additional_properties",
-                f"Invalid type for {key}: expected {expected_type}",
+                f"Invalid type for {key}: expected {_type_label(expected_type)}",
             )
 
         enum_vals = prop_schema.get("enum")
@@ -114,19 +153,19 @@ def validate_schema_required_enum_additional_properties(
                 f"Invalid value for {key}: {value}",
             )
 
-        if expected_type == "array":
+        if _schema_type_includes(prop_schema, "array"):
             items_schema = prop_schema.get("items")
             if isinstance(items_schema, dict) and isinstance(value, list):
                 item_type = items_schema.get("type")
-                if isinstance(item_type, str):
+                if isinstance(item_type, str | list):
                     for idx, item in enumerate(value):
-                        if not _matches_type(item, item_type):
+                        if not _matches_schema_type(item, items_schema):
                             return invalid_result(
                                 "validate_schema_required_enum_additional_properties",
-                                f"Invalid type for {key}[{idx}]: expected {item_type}",
+                                f"Invalid type for {key}[{idx}]: expected {_type_label(item_type)}",
                             )
 
-        if expected_type == "object" and isinstance(value, dict):
+        if _schema_type_includes(prop_schema, "object") and isinstance(value, dict):
             nested = _validate_nested_object(key, value, prop_schema)
             if not nested.valid:
                 return nested

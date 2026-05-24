@@ -204,6 +204,49 @@ def test_validate_schema_rejects_additional_properties() -> None:
     assert result.validator == "validate_schema_required_enum_additional_properties"
 
 
+def test_validate_schema_accepts_nullable_null_values() -> None:
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "name": {"type": "string"},
+            "endDate": {
+                "type": "object",
+                "nullable": True,
+                "properties": {"year": {"type": "integer"}},
+                "required": ["year"],
+            },
+        },
+        "required": ["name"],
+    }
+
+    result = validate_schema_required_enum_additional_properties(
+        {"name": "Coronation", "endDate": None},
+        schema,
+    )
+
+    assert result.valid is True
+
+
+def test_validate_schema_checks_union_type_values() -> None:
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "folderId": {"type": ["string", "null"]},
+        },
+        "required": [],
+    }
+
+    assert validate_schema_required_enum_additional_properties({"folderId": None}, schema).valid is True
+    assert validate_schema_required_enum_additional_properties({"folderId": "folder-1"}, schema).valid is True
+
+    result = validate_schema_required_enum_additional_properties({"folderId": 123}, schema)
+
+    assert result.valid is False
+    assert result.reason == "Invalid type for folderId: expected string|null"
+
+
 def test_feature_apply_group_rejects_non_outcome_result() -> None:
     class _NonOutcomeModule(ToolFeatureModule):
         feature_key = "story_entity"
