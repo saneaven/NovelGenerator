@@ -12,8 +12,9 @@ REASONING_TYPES = {
     "openai_compatible_template",
     "xai",
     "nanogpt",
+    "ollama_cloud",
 }
-REASONING_PROVIDERS = {"openai", "gemini", "claude", "openrouter", "custom", "xai", "nanogpt"}
+REASONING_PROVIDERS = {"openai", "gemini", "claude", "openrouter", "custom", "xai", "nanogpt", "ollama_cloud"}
 
 
 def normalize_reasoning_detail(raw: Any) -> dict[str, Any] | None:

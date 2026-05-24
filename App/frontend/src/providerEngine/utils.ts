@@ -418,6 +418,7 @@ const iconMap = {
   claude: Claude,
   openrouter: OpenRouter,
   xai: XAI,
+  ollama_cloud: GenericProviderIcon,
   novelai: NovelAI,
   custom: CustomProvider,
 };

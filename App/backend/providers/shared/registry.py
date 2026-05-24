@@ -10,7 +10,17 @@ _PROVIDERS: dict[str, ProviderSpec] = {}
 _MODULES: dict[tuple[str, str], Any] = {}
 _LOADED = False
 
-_BUILTINS = ("openai", "nanogpt", "gemini", "claude", "openrouter", "xai", "novelai", "custom")
+_BUILTINS = (
+    "openai",
+    "nanogpt",
+    "gemini",
+    "claude",
+    "openrouter",
+    "xai",
+    "ollama_cloud",
+    "novelai",
+    "custom",
+)
 
 
 def _register_provider_spec(spec: ProviderSpec) -> None:

@@ -396,6 +396,11 @@
         "placeholder": "ngpt-...",
         "hint": "Get your API key from"
       },
+      "ollamaCloud": {
+        "title": "Ollama Cloud",
+        "placeholder": "ollama_...",
+        "hint": "Get your API key from"
+      },
       "novelai": {
         "title": "NovelAI",
         "placeholder": "eyJ...",
@@ -689,6 +694,7 @@
         "openrouter": "Access to 100+ AI models via OpenRouter",
         "xai": "xAI Grok models for text generation",
         "nanogpt": "NanoGPT personalized models with unified chat, embeddings, and image generation",
+        "ollamaCloud": "Ollama Cloud models with chat and embeddings",
         "custom": "Use your own OpenAI-compatible endpoint"
       },
       "thinkingTemplate": "Thinking Template",
