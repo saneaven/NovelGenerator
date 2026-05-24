@@ -169,10 +169,10 @@
 
 @keyframes landing-hero-pan {
   from {
-    background-position: 100% center;
+    background-position: 0% center;
   }
   to {
-    background-position: 0% center;
+    background-position: 100% center;
   }
 }
 

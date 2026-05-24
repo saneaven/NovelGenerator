@@ -1,7 +1,7 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-const COLLAPSE_THRESHOLD_PX = 200;
+const COLLAPSE_THRESHOLD_PX = 100;
 
 interface CollapsibleUserBubbleProps {
   children: React.ReactNode;
