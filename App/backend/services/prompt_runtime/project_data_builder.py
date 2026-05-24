@@ -16,7 +16,7 @@ from ...models.db_models import (
     TimelineTrack,
 )
 from ...models.translation_models import ObjectVersion, ObjectVersionLanguage
-from ...utils.timeline_calendar import default_calendar, format_date
+from ...utils.timeline_calendar import default_calendar, format_date, to_base_units
 from ...utils.story_entities import STORY_ENTITY_TYPE
 from ..basic_info_utils import basic_info_summary_text, normalize_basic_info_data
 from ..rich_text import tree_to_markdown
@@ -242,6 +242,26 @@ def _timeline_date_range_text(
     return f"{start_text} -> {format_date(end_date, calendar)}"
 
 
+def _timeline_date_sort_value(date_value: Any, calendar: dict[str, Any]) -> int:
+    if not isinstance(date_value, dict):
+        return 0
+    try:
+        return to_base_units(date_value, calendar)
+    except ValueError:
+        return 0
+
+
+def _timeline_event_sort_key(event: TimelineEvent, calendar: dict[str, Any]) -> tuple[int, int, str, str]:
+    return (
+        _timeline_date_sort_value(event.start_date, calendar),
+        _timeline_date_sort_value(event.end_date, calendar)
+        if isinstance(event.end_date, dict)
+        else _timeline_date_sort_value(event.start_date, calendar),
+        event.created_at.isoformat() if event.created_at else "",
+        str(event.id),
+    )
+
+
 def _build_timeline_payload(
     *,
     timeline: Timeline | None,
@@ -279,7 +299,9 @@ def _build_timeline_payload(
     for event in events:
         events_by_track_id.setdefault(event.track_id, []).append(event)
     for values in events_by_track_id.values():
-        values.sort(key=lambda row: (row.created_at, str(row.id)))
+        values.sort(key=lambda row: _timeline_event_sort_key(row, calendar))
+
+    sorted_events = sorted(events, key=lambda row: _timeline_event_sort_key(row, calendar))
 
     def event_payload(event: TimelineEvent) -> dict[str, Any]:
         lang_data = event_lang_data.get(event.id, {})
@@ -290,6 +312,7 @@ def _build_timeline_payload(
             "trackName": str(track_data.get("name") or ""),
             "name": str(lang_data.get("name") or ""),
             "description": str(lang_data.get("description") or ""),
+            "content": _render_rich_text(lang_data.get("content")),
             "startDate": dict(event.start_date) if isinstance(event.start_date, dict) else {},
             "endDate": dict(event.end_date) if isinstance(event.end_date, dict) else None,
             "tags": list(event.tags) if isinstance(event.tags, list) else [],
@@ -312,6 +335,7 @@ def _build_timeline_payload(
                     "color": track.color,
                     "name": str(lang_data.get("name") or ""),
                     "description": str(lang_data.get("description") or ""),
+                    "content": _render_rich_text(lang_data.get("content")),
                     "events": [event_payload(event) for event in events_by_track_id.get(track.id, [])],
                     "children": build_track_tree(track.id),
                 }
@@ -323,7 +347,7 @@ def _build_timeline_payload(
         "projectId": str(timeline.project_id),
         "calendar": calendar,
         "tracks": build_track_tree(None),
-        "events": [event_payload(event) for event in events],
+        "events": [event_payload(event) for event in sorted_events],
     }
 
 

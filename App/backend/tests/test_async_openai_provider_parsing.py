@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import sys
 import types
 
@@ -228,6 +229,229 @@ def test_nanogpt_reasoning_delta_ignored_when_thinking_mode_off() -> None:
     )
 
     assert reasoning_detail is None
+
+
+def test_nanogpt_final_aggregate_snapshot_prefers_final_message_text() -> None:
+    provider = NanoGPTProvider({})
+
+    snapshot = provider._final_snapshot_from_raw_accumulated(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "reasoning": "partial reason",
+                        "content": "partial answer",
+                    },
+                    "message": {
+                        "role": "assistant",
+                        "reasoning": "partial reason plus final reason",
+                        "content": "partial answer plus final answer",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 1,
+                "completion_tokens": 2,
+                "total_tokens": 3,
+            },
+        },
+        "test-model",
+    )
+
+    assert snapshot is not None
+    assert snapshot.final_source == "native"
+    assert snapshot.content_parts == [
+        {"type": "content", "text": "partial answer plus final answer"},
+        {"type": "thinking", "text": "partial reason plus final reason"},
+    ]
+    assert snapshot.usage == {
+        "prompt_tokens": 1,
+        "completion_tokens": 2,
+        "total_tokens": 3,
+    }
+
+
+def test_nanogpt_final_aggregate_snapshot_preserves_tool_calls() -> None:
+    provider = NanoGPTProvider({})
+
+    snapshot = provider._final_snapshot_from_raw_accumulated(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call_partial",
+                                "type": "function",
+                                "function": {
+                                    "name": "translate_story_entity",
+                                    "arguments": '{"id":"partial"',
+                                },
+                            }
+                        ]
+                    },
+                    "message": {
+                        "role": "assistant",
+                        "content": "",
+                        "tool_calls": [
+                            {
+                                "id": "call_final",
+                                "type": "function",
+                                "function": {
+                                    "name": "translate_story_entity",
+                                    "arguments": '{"id":"final","type":"character"}',
+                                },
+                            }
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ]
+        },
+        "test-model",
+    )
+
+    assert snapshot is not None
+    assert len(snapshot.tool_calls) == 1
+    assert snapshot.tool_calls[0].id == "call_final"
+    assert snapshot.tool_calls[0].tool_name == "translate_story_entity"
+    assert snapshot.tool_calls[0].arguments == {
+        "id": "final",
+        "type": "character",
+    }
+
+
+def test_nanogpt_final_aggregate_snapshot_keeps_reasoning_details() -> None:
+    provider = NanoGPTProvider({})
+
+    snapshot = provider._final_snapshot_from_raw_accumulated(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "answer",
+                        "reasoning": "full reasoning",
+                        "reasoning_details": [
+                            {
+                                "format": "native",
+                                "encrypted_content": "enc_123",
+                            }
+                        ],
+                    }
+                }
+            ]
+        },
+        "test-model",
+    )
+
+    assert snapshot is not None
+    assert snapshot.reasoning_details == [
+        {
+            "type": "reasoning.text",
+            "text": "full reasoning",
+        },
+        {
+            "format": "native",
+            "encrypted_content": "enc_123",
+        }
+    ]
+    assert snapshot.content_parts == [
+        {"type": "content", "text": "answer"},
+        {"type": "thinking", "text": "full reasoning"},
+    ]
+
+
+def test_nanogpt_final_aggregate_snapshot_absent_without_final_message() -> None:
+    provider = NanoGPTProvider({})
+
+    snapshot = provider._final_snapshot_from_raw_accumulated(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "reasoning": "streamed reason",
+                        "content": "streamed answer",
+                    },
+                    "finish_reason": "stop",
+                }
+            ]
+        },
+        "test-model",
+    )
+
+    assert snapshot is None
+
+
+def test_nanogpt_stream_emits_final_native_from_final_aggregate(monkeypatch) -> None:
+    class _StreamResponse:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        def raise_for_status(self) -> None:
+            return None
+
+        async def aiter_lines(self):
+            lines = [
+                'data: {"choices":[{"delta":{"reasoning":"partial reason "}}]}',
+                "",
+                'data: {"choices":[{"delta":{"content":"partial answer "}}]}',
+                "",
+                (
+                    'data: {"choices":[{"message":{"role":"assistant",'
+                    '"reasoning":"partial reason plus final reason",'
+                    '"content":"partial answer plus final answer"},'
+                    '"finish_reason":"stop"}],'
+                    '"usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}'
+                ),
+                "",
+                "data: [DONE]",
+                "",
+            ]
+            for line in lines:
+                yield line
+
+    class _AsyncClient:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        def stream(self, *_args, **_kwargs):
+            return _StreamResponse()
+
+    monkeypatch.setattr(NanoGPTProvider.stream_chat.__globals__["httpx"], "AsyncClient", _AsyncClient)
+    provider = NanoGPTProvider({"api_key": "test-key"})
+
+    async def _collect():
+        return [
+            event
+            async for event in provider.stream_chat(
+                messages=[],
+                model="test-model",
+                thinking_mode="model",
+            )
+        ]
+
+    events = asyncio.run(_collect())
+    final_events = [event for event in events if event.kind == "final_native"]
+
+    assert len(final_events) == 1
+    snapshot = final_events[0].final_native
+    assert snapshot is not None
+    assert snapshot.content_parts == [
+        {"type": "content", "text": "partial answer plus final answer"},
+        {"type": "thinking", "text": "partial reason plus final reason"},
+    ]
 
 
 def test_accumulate_raw_chunk_keeps_multiple_tool_calls_separate() -> None:

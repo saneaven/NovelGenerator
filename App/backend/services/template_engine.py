@@ -380,6 +380,16 @@ def _list_timeline_events(bucket: dict[str, Any]) -> list[dict[str, Any]]:
     return [value for value in values if isinstance(value, dict)]
 
 
+def _list_timeline_track_tree(bucket: dict[str, Any]) -> list[dict[str, Any]]:
+    timeline = bucket.get("timeline")
+    if not isinstance(timeline, dict):
+        return []
+    values = timeline.get("tracks")
+    if not isinstance(values, list):
+        return []
+    return [value for value in values if isinstance(value, dict)]
+
+
 def _outline_tree(bucket: dict[str, Any]) -> list[dict[str, Any]]:
     outline = bucket.get("outline")
     if not isinstance(outline, dict):
@@ -476,6 +486,14 @@ def _copy_outline_tree(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return copied
 
 
+def _copy_timeline_track_tree(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    copied: list[dict[str, Any]] = []
+    for node in nodes:
+        children = node.get("children") if isinstance(node.get("children"), list) else []
+        copied.append({**dict(node), "children": _copy_timeline_track_tree(children)})
+    return copied
+
+
 def _prune_outline_tree(nodes: list[dict[str, Any]], wanted: set[str] | None) -> list[dict[str, Any]]:
     if wanted is None:
         return _copy_outline_tree(nodes)
@@ -502,7 +520,7 @@ def _select_single(item: Any, wanted: set[str] | None) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
-# Exact helper — flat list of selected objects only, no tree, no parents
+# Exact helper — selected objects only, with timeline track ancestors for tree rendering
 # ---------------------------------------------------------------------------
 
 
@@ -552,6 +570,21 @@ def _collect_outline_items_by_id(
     return items
 
 
+def _collect_timeline_tracks_by_id(
+    nodes: list[dict[str, Any]], wanted: set[str]
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for node in nodes:
+        node_id = str(node.get("id") or "")
+        if node_id in wanted:
+            item = {k: v for k, v in node.items() if k != "children"}
+            items.append(item)
+        children = node.get("children")
+        if isinstance(children, list):
+            items.extend(_collect_timeline_tracks_by_id(children, wanted))
+    return items
+
+
 def _exact_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) -> dict[str, Any]:
     wanted = _ids_set(ids)
     if wanted is None:
@@ -562,6 +595,8 @@ def _exact_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) -
     )
     outline_items = _collect_outline_items_by_id(_outline_tree(bucket), wanted)
     manuscripts = _filter_selected(_list_manuscripts(bucket), wanted)
+    timeline_track_tree = _prune_and_mark_timeline_track_tree(_list_timeline_track_tree(bucket), wanted)
+    timeline_tracks = _collect_timeline_tracks_by_id(_list_timeline_track_tree(bucket), wanted)
     timeline_events = _filter_selected(_list_timeline_events(bucket), wanted)
 
     return {
@@ -571,6 +606,8 @@ def _exact_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) -
         "storyEntityFolders": story_entity_folders,
         "outlineItems": outline_items,
         "manuscripts": manuscripts,
+        "timelineTrackTree": timeline_track_tree,
+        "timelineTracks": timeline_tracks,
         "timelineEvents": timeline_events,
     }
 
@@ -647,11 +684,32 @@ def _prune_and_mark_outline_tree(
     return pruned
 
 
+def _prune_and_mark_timeline_track_tree(
+    nodes: list[dict[str, Any]], wanted: set[str] | None
+) -> list[dict[str, Any]]:
+    """Prune track branches with no selected tracks, preserving ancestor context."""
+    if wanted is None:
+        return _copy_timeline_track_tree(nodes)
+
+    pruned: list[dict[str, Any]] = []
+    for node in nodes:
+        node_id = str(node.get("id") or "")
+        children = _prune_and_mark_timeline_track_tree(
+            node.get("children") if isinstance(node.get("children"), list) else [],
+            wanted,
+        )
+        node_selected = node_id in wanted
+        if node_selected or children:
+            pruned.append({**dict(node), "children": children, "selected": node_selected})
+    return pruned
+
+
 def _tree_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) -> dict[str, Any]:
     wanted = _ids_set(ids)
     story_entity_tree = _prune_and_mark_story_entity_tree(_list_story_entity_tree(bucket), wanted)
     outline_tree = _prune_and_mark_outline_tree(_outline_tree(bucket), wanted)
     manuscripts = _filter_selected(_list_manuscripts(bucket), wanted)
+    timeline_track_tree = _prune_and_mark_timeline_track_tree(_list_timeline_track_tree(bucket), wanted)
     timeline_events = _filter_selected(_list_timeline_events(bucket), wanted)
 
     return {
@@ -661,6 +719,7 @@ def _tree_object_context_from_bucket(bucket: dict[str, Any], ids: Any = None) ->
         "storyEntities": _flatten_story_entity_tree(story_entity_tree),
         "outlineTree": outline_tree,
         "manuscripts": manuscripts,
+        "timelineTrackTree": timeline_track_tree,
         "timelineEvents": timeline_events,
     }
 

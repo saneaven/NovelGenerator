@@ -153,3 +153,13 @@ def test_default_prompt_outline_and_manuscript_fragments_include_number_attribut
     assert 'this.chapterNumber is defined' not in translation_reference
     assert 'this.actNumber is not none' in translation_reference
     assert 'this.chapterNumber is not none' in translation_reference
+
+    assert "render_timeline_track_nodes" in common_context
+    assert "render_timeline_events" in common_context
+    assert "<timeline-track" in common_context
+    assert "<timeline-event" in common_context
+    assert "ctx.timelineTrackTree" in common_context
+    assert "render_index_timeline_tracks" in common_index
+    assert "render_index_timeline_events" in common_index
+    assert "project.timeline.tracks" in common_index
+    assert "project.timeline.events" in common_index

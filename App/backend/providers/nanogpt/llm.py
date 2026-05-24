@@ -9,6 +9,7 @@ import httpx
 
 from ..shared.async_openai_provider import AsyncOpenAIProvider
 from ..shared.contracts import MetaPayload, ProviderErrorPayload, ProviderEvent
+from ..shared.parsing.final_mappers import map_chat_completion_to_snapshot
 from ...utils.outbound_http import filter_additional_body, merge_user_overrides
 
 
@@ -261,6 +262,24 @@ class NanoGPTProvider(AsyncOpenAIProvider):
 
         return chunk, []
 
+    def _final_snapshot_from_raw_accumulated(self, raw_accumulated: Dict[str, Any], model: str) -> Any | None:
+        choices = raw_accumulated.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return None
+
+        first_choice = choices[0]
+        if not isinstance(first_choice, dict) or not isinstance(first_choice.get("message"), dict):
+            return None
+
+        try:
+            return map_chat_completion_to_snapshot(
+                raw_accumulated,
+                provider=self.name,
+                model=model,
+            )
+        except Exception:
+            return None
+
     async def stream_chat(
         self,
         messages: List[Dict],
@@ -486,6 +505,10 @@ class NanoGPTProvider(AsyncOpenAIProvider):
         except Exception as exc:  # noqa: BLE001
             yield ProviderEvent(kind="error", error=ProviderErrorPayload(message=str(exc)))
             return
+
+        final_snapshot = self._final_snapshot_from_raw_accumulated(raw_accumulated, model)
+        if final_snapshot is not None:
+            yield ProviderEvent(kind="final_native", final_native=final_snapshot)
 
         if captured_usage:
             usage_payload = {

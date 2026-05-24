@@ -201,6 +201,73 @@ def _project_fixture() -> dict[str, object]:
                 "wordCount": 120,
             }
         ],
+        "timeline": {
+            "id": "timeline-1",
+            "projectId": "project-1",
+            "calendar": {"units": [{"name": "year", "label": "Year", "count": 12}, {"name": "month", "label": "Month"}]},
+            "tracks": [
+                {
+                    "id": "track-main",
+                    "parentId": None,
+                    "position": 0,
+                    "color": None,
+                    "name": "Main Track",
+                    "description": "Primary timeline lane",
+                    "content": "Main track content",
+                    "events": [],
+                    "children": [
+                        {
+                            "id": "track-child",
+                            "parentId": "track-main",
+                            "position": 0,
+                            "color": None,
+                            "name": "Child Track",
+                            "description": "Nested timeline lane",
+                            "content": "Child track content",
+                            "events": [],
+                            "children": [],
+                        }
+                    ],
+                },
+                {
+                    "id": "track-secondary",
+                    "parentId": None,
+                    "position": 1,
+                    "color": None,
+                    "name": "Secondary Track",
+                    "description": "Second timeline lane",
+                    "content": "Secondary track content",
+                    "events": [],
+                    "children": [],
+                },
+            ],
+            "events": [
+                {
+                    "id": "event-early",
+                    "trackId": "track-secondary",
+                    "trackName": "Secondary Track",
+                    "name": "Early Event",
+                    "description": "First in time",
+                    "content": "Early event content",
+                    "startDate": {"year": 0, "month": 2},
+                    "endDate": None,
+                    "tags": ["seed", "setup"],
+                    "formattedDate": "Year 0 / Month 2",
+                },
+                {
+                    "id": "event-late",
+                    "trackId": "track-child",
+                    "trackName": "Child Track",
+                    "name": "Late Event",
+                    "description": "Later in time",
+                    "content": "Late event content",
+                    "startDate": {"year": 1, "month": 0},
+                    "endDate": None,
+                    "tags": ["payoff"],
+                    "formattedDate": "Year 1 / Month 0",
+                },
+            ],
+        },
         "contentByLang": {
             "Korean": {
                 "basicInfo": {
@@ -582,6 +649,113 @@ def test_select_tree_object_context_story_entity_selected_flag() -> None:
 
     assert "folder_selected=False" in rendered
     assert "entity_selected=True" in rendered
+
+
+def test_select_tree_object_context_timeline_event_only_does_not_include_track_tree() -> None:
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% set ctx = select_tree_object_context(project, ["event-early"]) %}'
+        "tracks={{ ctx.timelineTrackTree|length }}"
+        ",events={{ ctx.timelineEvents|length }}"
+        ",event={{ ctx.timelineEvents[0].name }}"
+        ",content={{ ctx.timelineEvents[0].content }}"
+        ",tags={{ ctx.timelineEvents[0].tags|join('|') }}",
+        {"project": project},
+    )
+
+    assert "tracks=0" in rendered
+    assert "events=1" in rendered
+    assert "event=Early Event" in rendered
+    assert "content=Early event content" in rendered
+    assert "tags=seed|setup" in rendered
+
+
+def test_select_tree_object_context_timeline_track_preserves_ancestor_branch() -> None:
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% set ctx = select_tree_object_context(project, ["track-child"]) %}'
+        "root={{ ctx.timelineTrackTree[0].id }}"
+        ",root_selected={{ ctx.timelineTrackTree[0].selected }}"
+        ",child={{ ctx.timelineTrackTree[0].children[0].id }}"
+        ",child_selected={{ ctx.timelineTrackTree[0].children[0].selected }}"
+        ",child_content={{ ctx.timelineTrackTree[0].children[0].content }}"
+        ",events={{ ctx.timelineEvents|length }}",
+        {"project": project},
+    )
+
+    assert "root=track-main" in rendered
+    assert "root_selected=False" in rendered
+    assert "child=track-child" in rendered
+    assert "child_selected=True" in rendered
+    assert "child_content=Child track content" in rendered
+    assert "events=0" in rendered
+
+
+def test_render_template_timeline_context_uses_track_tree_and_flat_events() -> None:
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% macro render_timeline_track_nodes(nodes) -%}'
+        '{% for node in nodes %}'
+        '<timeline-track id="{{ node.id|e }}" name="{{ node.name|e }}"{% if node.parentId %} parent-id="{{ node.parentId|e }}"{% endif %} position="{{ node.position|e }}">'
+        '{% if node.selected is not defined or node.selected %}<description>{{ node.description|e }}</description><content>{{ node.content|e }}</content>{% endif %}'
+        '{{ render_timeline_track_nodes(node.children or []) }}'
+        '</timeline-track>'
+        '{% endfor %}'
+        '{%- endmacro %}'
+        '{% macro render_timeline_events(events) -%}'
+        '{% for ev in events %}'
+        '<timeline-event id="{{ ev.id|e }}" track-id="{{ ev.trackId|e }}" track="{{ ev.trackName|e }}">'
+        '<date>{{ ev.formattedDate|e }}</date><name>{{ ev.name|e }}</name><content>{{ ev.content|e }}</content>'
+        '{% if ev.tags|length > 0 %}<tags>{% for tag in ev.tags %}<tag>{{ tag|e }}</tag>{% endfor %}</tags>{% endif %}'
+        '</timeline-event>'
+        '{% endfor %}'
+        '{%- endmacro %}'
+        '{% set ctx = select_tree_object_context(project) %}'
+        '<timeline-tracks>{{ render_timeline_track_nodes(ctx.timelineTrackTree) }}</timeline-tracks>'
+        '<timeline-events>{{ render_timeline_events(ctx.timelineEvents) }}</timeline-events>',
+        {"project": project},
+    )
+
+    assert '<timeline-track id="track-main" name="Main Track" position="0">' in rendered
+    assert '<timeline-track id="track-child" name="Child Track" parent-id="track-main" position="0">' in rendered
+    assert rendered.index('<timeline-event id="event-early"') < rendered.index('<timeline-event id="event-late"')
+    assert "<content>Early event content</content>" in rendered
+    assert "<tag>seed</tag>" in rendered
+
+
+def test_render_template_timeline_index_omits_event_content() -> None:
+    env = create_environment()
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% macro render_index_timeline_tracks(nodes) -%}'
+        '{% for node in nodes %}'
+        '<timeline-track id="{{ node.id|e }}" name="{{ node.name|e }}">{% if node.description %}<description>{{ node.description|e }}</description>{% endif %}{{ render_index_timeline_tracks(node.children or []) }}</timeline-track>'
+        '{% endfor %}'
+        '{%- endmacro %}'
+        '{% macro render_index_timeline_events(events) -%}'
+        '{% for ev in events %}'
+        '<timeline-event id="{{ ev.id|e }}" track-id="{{ ev.trackId|e }}" track="{{ ev.trackName|e }}"><date>{{ ev.formattedDate|e }}</date><name>{{ ev.name|e }}</name>{% if ev.description %}<description>{{ ev.description|e }}</description>{% endif %}</timeline-event>'
+        '{% endfor %}'
+        '{%- endmacro %}'
+        '<timeline-tracks>{{ render_index_timeline_tracks(project.timeline.tracks) }}</timeline-tracks>'
+        '<timeline-events>{{ render_index_timeline_events(project.timeline.events) }}</timeline-events>',
+        {"project": project},
+    )
+
+    assert '<timeline-track id="track-main" name="Main Track">' in rendered
+    assert '<timeline-event id="event-early" track-id="track-secondary" track="Secondary Track">' in rendered
+    assert "Early event content" not in rendered
 
 
 def test_render_template_raises_fragment_not_found_for_bare_paths() -> None:

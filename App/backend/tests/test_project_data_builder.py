@@ -40,9 +40,18 @@ def _install_import_stubs() -> None:
 _install_import_stubs()
 
 import App.backend.services.prompt_runtime.project_data_builder as project_data_builder_module
-from App.backend.models.db_models import BasicInfo, Guidelines, Manuscript, Outline, StoryEntity
+from App.backend.models.db_models import (
+    BasicInfo,
+    Guidelines,
+    Manuscript,
+    Outline,
+    StoryEntity,
+    Timeline,
+    TimelineEvent,
+    TimelineTrack,
+)
 from App.backend.models.translation_models import ObjectVersion, ObjectVersionLanguage
-from App.backend.services.prompt_runtime.project_data_builder import _build_outline_numbering, build_project_data
+from App.backend.services.prompt_runtime.project_data_builder import _build_outline_numbering, _build_timeline_payload, build_project_data
 
 
 def _outline(
@@ -224,6 +233,79 @@ def test_build_outline_numbering_resets_per_root_outline_and_ignores_invalid_hie
     assert numbering[chapter_b1.id] == {"actNumber": 1, "chapterNumber": 1}
     assert invalid_direct_chapter.id not in numbering
     assert invalid_nested_act.id not in numbering
+
+
+def test_build_timeline_payload_uses_track_tree_order_and_flat_time_order() -> None:
+    project_id = uuid4()
+    timeline = Timeline(id=uuid4(), project_id=project_id, calendar={"units": [{"name": "year", "label": "Year", "count": 12}, {"name": "month", "label": "Month"}]})
+    created_at = datetime(2025, 1, 1, 12, 0, 0)
+
+    later_root = TimelineTrack(
+        id=uuid4(),
+        timeline_id=timeline.id,
+        parent_id=None,
+        position=1,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    earlier_root = TimelineTrack(
+        id=uuid4(),
+        timeline_id=timeline.id,
+        parent_id=None,
+        position=0,
+        created_at=created_at + timedelta(minutes=1),
+        updated_at=created_at + timedelta(minutes=1),
+    )
+    child = TimelineTrack(
+        id=uuid4(),
+        timeline_id=timeline.id,
+        parent_id=earlier_root.id,
+        position=0,
+        created_at=created_at + timedelta(minutes=2),
+        updated_at=created_at + timedelta(minutes=2),
+    )
+
+    late_event = TimelineEvent(
+        id=uuid4(),
+        track_id=earlier_root.id,
+        start_date={"year": 1, "month": 0},
+        end_date=None,
+        tags=["late"],
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    early_event = TimelineEvent(
+        id=uuid4(),
+        track_id=later_root.id,
+        start_date={"year": 0, "month": 3},
+        end_date=None,
+        tags=["early", "anchor"],
+        created_at=created_at + timedelta(minutes=3),
+        updated_at=created_at + timedelta(minutes=3),
+    )
+
+    version_data = {
+        ("timeline_track", earlier_root.id): {"English": {"name": "Earlier Root", "description": "First track", "content": "Track body"}},
+        ("timeline_track", later_root.id): {"English": {"name": "Later Root", "description": "Second track", "content": "Later body"}},
+        ("timeline_track", child.id): {"English": {"name": "Child Track", "description": "Nested", "content": "Child body"}},
+        ("timeline_event", late_event.id): {"English": {"name": "Late Event", "description": "Late", "content": "Late body"}},
+        ("timeline_event", early_event.id): {"English": {"name": "Early Event", "description": "Early", "content": "Early body"}},
+    }
+
+    payload = _build_timeline_payload(
+        timeline=timeline,
+        tracks=[later_root, child, earlier_root],
+        events=[late_event, early_event],
+        get_latest=lambda object_type, object_id: version_data[(object_type, object_id)],
+        language="English",
+    )
+
+    assert [track["id"] for track in payload["tracks"]] == [str(earlier_root.id), str(later_root.id)]
+    assert payload["tracks"][0]["content"] == "Track body"
+    assert payload["tracks"][0]["children"][0]["id"] == str(child.id)
+    assert [event["id"] for event in payload["events"]] == [str(early_event.id), str(late_event.id)]
+    assert payload["events"][0]["content"] == "Early body"
+    assert payload["events"][0]["tags"] == ["early", "anchor"]
 
 
 def test_build_project_data_adds_canonical_outline_and_manuscript_numbers(monkeypatch) -> None:
