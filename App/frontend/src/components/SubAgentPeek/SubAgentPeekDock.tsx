@@ -337,27 +337,28 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     <div className="sub-agent-peek-dock" ref={dockRef}>
       <div className={`sub-agent-peek-dock__body${peekOpen ? ' sub-agent-peek-dock__body--open' : ''}`}>
         <div className="sub-agent-peek-dock__body-inner">
-          <ThreadMessageList
-            threadId={selectedEntry.childThreadId}
-            projectId={projectId}
-            roleLabels={{ user: t('subAgent.parentAgent'), assistant: t('agent.ai') }}
-            emptyState="No messages yet."
-            topOverlayHeight={headerHeight}
-            bottomOverlayHeight={listFooterHeight}
-          />
-
-          <div className="sub-agent-peek-dock__header-overlay" ref={headerRef}>
-            <SubAgentPeekHeader
-              open={peekOpen}
-              onToggle={() => setPeekOpen(peekKey, !peekOpen)}
-              items={items}
-              onSelect={(key) => setSelectedPeekRun(peekKey, key)}
+          <div className="sub-agent-peek-dock__body-content">
+            <ThreadMessageList
+              threadId={selectedEntry.childThreadId}
+              projectId={projectId}
+              roleLabels={{ user: t('subAgent.parentAgent'), assistant: t('agent.ai') }}
+              emptyState="No messages yet."
+              topOverlayHeight={headerHeight}
+              bottomOverlayHeight={listFooterHeight}
             />
-          </div>
 
-          {showFooter && (
-            <div className="sub-agent-peek-dock__footer-overlay" ref={footerRef}>
-              <div className="sub-agent-peek-dock__footer">
+            <div className="sub-agent-peek-dock__header-overlay" ref={headerRef}>
+              <SubAgentPeekHeader
+                open={peekOpen}
+                onToggle={() => setPeekOpen(peekKey, !peekOpen)}
+                items={items}
+                onSelect={(key) => setSelectedPeekRun(peekKey, key)}
+              />
+            </div>
+
+            {showFooter && (
+              <div className="sub-agent-peek-dock__footer-overlay" ref={footerRef}>
+                <div className="sub-agent-peek-dock__footer">
                 {canPauseSelectedThread && (
                   <TextButton
                     size="sm"
@@ -393,7 +394,8 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
                 )}
               </div>
             </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 

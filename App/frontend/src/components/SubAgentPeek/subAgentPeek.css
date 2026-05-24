@@ -144,7 +144,6 @@
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
-  overflow: hidden;
   transition:
     grid-template-rows var(--transition-slow),
     opacity var(--transition-base);
@@ -156,13 +155,17 @@
 }
 
 .sub-agent-peek-dock__body-inner {
-  position: relative;
   overflow: hidden;
   min-height: 0;
+}
+
+.sub-agent-peek-dock__body-content {
+  position: relative;
+  overflow: hidden;
   height: min(75dvh, calc(var(--size-content-sm) + var(--size-content-sm)));
 }
 
-.sub-agent-peek-dock__body-inner .thread-message-list {
+.sub-agent-peek-dock__body-content .thread-message-list {
   background: var(--color-surface-subtle);
 }
 
